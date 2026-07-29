@@ -8,20 +8,31 @@ IPTV BURO é um player OTT/IPTV premium, local-first e multiplataforma, projetad
 
 Planejamento e fundação técnica. O primeiro alvo de desenvolvimento é Android TV/Google TV, com arquitetura preparada para Android, Fire TV, Windows, macOS, iOS/tvOS, Samsung Tizen e LG webOS.
 
+O produto está sendo desenvolvido em duas camadas complementares:
+
+- **GDD 1.0:** fundação técnica, reprodução, fontes, segurança, licenciamento e plataformas;
+- **GDD 2.0:** identidade cinematográfica, experiência premium, descoberta inteligente, TV ao vivo reinventada e continuidade entre dispositivos.
+
 ## Documentação
 
-- [GDD / PRD técnico completo](docs/GDD_IPTV_BURO.md)
-- [Prompt mestre para o Codex](docs/PROMPT_MESTRE_CODEX_IPTV_BURO.md)
+- [Índice geral dos GDDs](docs/GDD_IPTV_BURO.md)
+- [GDD 2.0 — Revolutionary Entertainment Experience](docs/GDD_2_REVOLUTIONARY_EXPERIENCE.md)
+- [Prompt mestre inicial para o Codex](docs/PROMPT_MESTRE_CODEX_IPTV_BURO.md)
+- [Prompt para o Codex continuar com o GDD 2.0](docs/PROMPT_CODEX_CONTINUE_GDD2.md)
 
 ## Produto
 
-- Interface cinematográfica própria inspirada em padrões modernos de streaming, sem copiar marcas concorrentes.
+- BURO Cinematic System com identidade visual própria.
+- Living Home contextual, detalhes cinematográficos e Minha BURO.
+- BURO Pulse para TV ao vivo, mini-guia, zapping e catch-up.
+- BURO Lens para busca universal e BURO Catalog Brain para organização e deduplicação.
+- BURO Quality Autopilot e Stream Health Engine para reprodução resiliente.
+- Perfis, controle parental, modo infantil, áudio, legendas e acessibilidade.
+- Continuidade entre aparelhos e controle pelo celular em fases posteriores.
 - Importação de M3U/M3U8, Xtream-compatible APIs e XMLTV/EPG.
-- TV ao vivo, filmes, séries, favoritos, perfis, controle parental, áudio e legendas.
-- Reprodução resiliente com Stream Health Engine.
 - Teste gratuito de 7 dias e licença vitalícia de € 9,99 por dispositivo.
 - Credenciais protegidas e processamento local-first.
 
-## Primeira etapa
+## Primeira continuação
 
-A Sprint 1 cria a fundação do aplicativo Android TV com Kotlin, Jetpack Compose for TV, AndroidX Media3, Room, DataStore, parser M3U, navegação completa por D-pad, testes e CI.
+O Codex deve auditar a implementação atual e criar a fundação do **BURO Cinematic System**: design tokens, foco premium, BURO Ribbon, hero, cards, performance tiers e uma Living Home navegável por D-pad, sem reiniciar o projeto existente.
