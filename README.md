@@ -1,60 +1,370 @@
+<div align="center">
+
 # IPTV BURO
 
-IPTV BURO é um player OTT/IPTV premium, local-first e multiplataforma, projetado para transformar fontes de mídia configuradas legalmente pelo usuário em uma experiência moderna para TV, celular e computador.
+### Uma nova experiência de entretenimento para TV, celular e computador
 
-> **Aviso legal:** este projeto é somente um reprodutor de mídia. Ele não fornece canais, filmes, séries, listas, assinaturas ou qualquer conteúdo protegido. O usuário deve possuir autorização legal para acessar as fontes adicionadas.
+Transforme fontes de mídia autorizadas pelo usuário em uma biblioteca organizada, cinematográfica, rápida e resiliente.
 
-## Estado do projeto
+![Status](https://img.shields.io/badge/status-em%20desenvolvimento-7c3aed)
+![Primeira plataforma](https://img.shields.io/badge/primeira%20plataforma-Android%20TV-3ddc84)
+![Especificação](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%204.0-2563eb)
+![Arquitetura](https://img.shields.io/badge/arquitetura-local--first-0f766e)
 
-Planejamento e fundação técnica. O primeiro alvo de desenvolvimento é Android TV/Google TV, com arquitetura preparada para Android, Fire TV, Windows, macOS, iOS/tvOS, Samsung Tizen e LG webOS.
+</div>
 
-O produto está sendo desenvolvido em quatro camadas complementares:
+> [!IMPORTANT]
+> **O IPTV BURO é exclusivamente um reprodutor e organizador de mídia.** O projeto não fornece canais, filmes, séries, playlists, assinaturas ou conteúdo protegido. Cada usuário é responsável por possuir autorização legal para acessar as fontes configuradas.
 
-- **GDD 1.0:** fundação técnica, reprodução, fontes, segurança, licenciamento e plataformas;
-- **GDD 2.0:** identidade cinematográfica, experiência premium, descoberta inteligente, TV ao vivo reinventada e continuidade entre dispositivos;
-- **GDD 3.0:** inteligência temporal para separar lançamentos reais de conteúdos antigos adicionados recentemente;
-- **GDD 4.0:** confiabilidade, diagnóstico, retry controlado, limite de conexões, integridade de importação e recuperação de falhas.
+---
 
-## Documentação
+## Visão do produto
 
-- [Índice geral dos GDDs](docs/GDD_IPTV_BURO.md)
+O **IPTV BURO** está sendo projetado para superar a experiência tradicional dos players IPTV. Em vez de apenas exibir categorias e links, o aplicativo deverá transformar uma fonte desorganizada em uma experiência comparável, em acabamento e facilidade de uso, às grandes plataformas modernas de streaming.
+
+O produto combina quatro pilares:
+
+1. **Design cinematográfico** — navegação premium pensada para televisão e controle remoto.
+2. **Organização inteligente** — catálogo limpo, deduplicado e classificado corretamente.
+3. **Reprodução resiliente** — diagnóstico e recuperação automática de falhas comuns.
+4. **Privacidade local-first** — credenciais e processamento sensível preservados no dispositivo sempre que possível.
+
+---
+
+## O problema que o IPTV BURO resolve
+
+Players tradicionais frequentemente apresentam:
+
+- interfaces genéricas e pouco intuitivas;
+- categorias duplicadas ou vazias;
+- filmes antigos misturados com lançamentos;
+- capas, nomes e temporadas desorganizados;
+- telas pretas e carregamentos infinitos;
+- mensagens de erro genéricas;
+- troca lenta de canais;
+- dificuldade para avançar conteúdos;
+- EPG incorreto ou fora do horário;
+- excesso de conexões abertas pelo próprio aplicativo;
+- diferenças de compatibilidade entre televisores.
+
+O IPTV BURO trata esses problemas como parte central do produto, não como detalhes posteriores.
+
+---
+
+## Diferenciais principais
+
+### BURO Cinematic System
+
+Sistema visual próprio para criar uma experiência premium:
+
+- **Living Home** contextual e personalizada;
+- hero cinematográfico com arte de fundo;
+- cards, fileiras e transições desenhados para TV;
+- navegação completa por D-pad;
+- foco sempre visível e previsível;
+- modos gráficos `Eco`, `Balanced` e `Cinematic`;
+- redução de movimento e recursos de acessibilidade;
+- trailers silenciosos e opcionais;
+- Story Page com detalhes completos do conteúdo.
+
+### BURO Catalog Brain
+
+Motor responsável por transformar listas desorganizadas em catálogo:
+
+- normalização de títulos;
+- agrupamento de duplicados;
+- identificação de filmes, séries, temporadas e episódios;
+- associação de capas, sinopses e metadados;
+- organização por gênero, idioma, país, qualidade, ano e década;
+- correções manuais com prioridade sobre inferências automáticas;
+- relatório de integridade da biblioteca.
+
+### BURO Temporal Intelligence
+
+Separa definitivamente duas informações diferentes:
+
+- quando o conteúdo foi adicionado à fonte;
+- quando a obra foi realmente lançada.
+
+Isso permite criar fileiras corretas como:
+
+- `Lançamentos {ano atual}`;
+- `Adicionados recentemente`;
+- `Clássicos que chegaram agora`;
+- `Filmes de 2025`;
+- `Por década`;
+- `Ano desconhecido`.
+
+Um filme antigo adicionado hoje nunca deverá aparecer como lançamento atual.
+
+### BURO Resilience Engine
+
+Sistema central de confiabilidade e recuperação:
+
+- classificação de falhas de rede, servidor, autenticação, formato, codec, decoder, EPG e armazenamento;
+- `RetryBudget` para impedir tentativas infinitas;
+- `SourceCircuitBreaker` para evitar bombardear fontes instáveis;
+- `ConnectionBudgetManager` para respeitar limites de conexões;
+- recuperação controlada de playback;
+- mensagens compreensíveis para o usuário;
+- diagnóstico seguro sem expor URLs completas ou credenciais;
+- importação transacional que preserva o último catálogo válido.
+
+### BURO Quality Autopilot
+
+Escolha automática da melhor forma de reprodução considerando:
+
+- capacidade do dispositivo;
+- resolução e HDR;
+- codec de vídeo e áudio;
+- decoder de hardware disponível;
+- qualidade da conexão;
+- estabilidade anterior da fonte;
+- idioma e legenda preferidos;
+- limite de conexões simultâneas.
+
+### BURO Pulse
+
+Experiência moderna para TV ao vivo:
+
+- mini-guia sobre o vídeo;
+- agora e próximo;
+- zapping rápido;
+- canal anterior;
+- EPG cinematográfico;
+- lembretes;
+- catch-up quando suportado;
+- multiview em dispositivos compatíveis;
+- eventos e esportes organizados.
+
+### BURO Lens
+
+Busca universal planejada para localizar conteúdo por:
+
+- nome, ator, diretor ou gênero;
+- idioma e país;
+- ano ou década;
+- duração;
+- qualidade e HDR;
+- canal ou programa ao vivo;
+- consultas naturais como “filme curto de ação em português”.
+
+---
+
+## Recursos do produto
+
+| Área | Recursos planejados |
+|---|---|
+| **Fontes** | M3U, M3U8, arquivo local, URL remota, Xtream-compatible APIs e XMLTV/EPG |
+| **TV ao vivo** | categorias, favoritos, EPG, mini-guia, zapping, catch-up, lembretes e multiview |
+| **Filmes** | capas, sinopses, trailers, anos, décadas, gêneros, idiomas, qualidade e continuar assistindo |
+| **Séries** | temporadas, episódios, progresso, próximo episódio e novas temporadas |
+| **Player** | seek por capacidade real, áudio, legendas, velocidade, HDR, qualidade e diagnóstico |
+| **Perfis** | múltiplos usuários, preferências, histórico e recomendações separadas |
+| **Kids** | PIN, conteúdo permitido, limites de horário e saída protegida |
+| **Sincronização** | progresso, favoritos, perfis, configurações e aparelhos autorizados |
+| **Portal web** | ativação, fontes, dispositivos, perfis, organização e backup de configurações |
+| **Comercial** | teste de 7 dias e licença vitalícia proposta de € 9,99 por dispositivo |
+
+---
+
+## Plataformas planejadas
+
+| Plataforma | Estratégia | Estado |
+|---|---|---|
+| **Android TV / Google TV** | Kotlin, Compose for TV e Media3 | 🚧 Primeira implementação |
+| **Fire TV** | Base Android adaptada para Fire OS | 🧭 Planejado |
+| **Android mobile** | Kotlin e Compose | 🧭 Planejado |
+| **iPhone / iPad / Apple TV** | SwiftUI e AVPlayer | 🧭 Planejado |
+| **Windows / macOS** | Aplicativo desktop com player nativo/adaptado | 🧭 Planejado |
+| **Samsung Tizen** | Aplicação própria com AVPlay | 🧭 Planejado |
+| **LG webOS** | Aplicação própria para webOS | 🧭 Planejado |
+| **Portal web** | Gerenciamento, ativação e dispositivos | 🧭 Planejado |
+
+---
+
+## Arquitetura-alvo
+
+```mermaid
+flowchart LR
+    A[Fontes autorizadas pelo usuário] --> B[Importação transacional]
+    B --> C[BURO Catalog Brain]
+    C --> D[BURO Temporal Intelligence]
+    D --> E[Universal Content Graph]
+
+    E --> F[Living Home]
+    E --> G[BURO Lens]
+    E --> H[BURO Pulse]
+    E --> I[Story Page]
+
+    F --> J[PlayerAdapter]
+    G --> J
+    H --> J
+    I --> J
+
+    J --> K[BURO Quality Autopilot]
+    K --> L[BURO Resilience Engine]
+    L --> M[Player nativo por plataforma]
+```
+
+### Princípios arquiteturais
+
+- domínio e contratos compartilhados;
+- player nativo ou adaptador específico por plataforma;
+- processamento local-first;
+- banco local com migrações seguras;
+- nenhuma atualização substitui um snapshot válido por dados vazios ou corrompidos;
+- nenhuma falha pode gerar spinner ou retry infinito;
+- nenhum log pode revelar credenciais;
+- desempenho e navegação por controle remoto são requisitos de produto.
+
+---
+
+## Estado real do desenvolvimento
+
+Legenda: ✅ concluído · 🚧 em andamento · 🧭 planejado
+
+| Entrega | Estado |
+|---|---|
+| Visão do produto e modelo comercial | ✅ Documentado |
+| Arquitetura técnica multiplataforma | ✅ Documentada |
+| GDD 1.0 — fundação técnica | ✅ Concluído |
+| GDD 2.0 — experiência cinematográfica | ✅ Concluído |
+| GDD 3.0 — inteligência temporal | ✅ Concluído |
+| GDD 4.0 — confiabilidade e recuperação | ✅ Concluído |
+| Prompts incrementais para o Codex | ✅ Concluídos |
+| Código Android TV na branch `main` | 🚧 Ainda não publicado na `main` |
+| Protótipo visual navegável | 🚧 Em implementação |
+| Player e importação de fontes | 🚧 Em implementação |
+| Portal web e licenciamento | 🧭 Planejado |
+| Aplicativos para outras plataformas | 🧭 Planejados |
+| Versão pública | 🧭 Ainda não lançada |
+
+> [!NOTE]
+> A branch `main` atualmente contém a especificação oficial do produto. O código desenvolvido pelo Codex deverá ser commitado e validado separadamente antes de qualquer recurso ser marcado como implementado.
+
+---
+
+## Roadmap resumido
+
+### Fase 1 — Fundação Android TV
+
+- estrutura do projeto;
+- navegação por D-pad;
+- design tokens e BURO Cinematic System;
+- banco local;
+- importação M3U/Xtream/XMLTV;
+- player Media3;
+- logs seguros, testes e CI.
+
+### Fase 2 — Catálogo premium
+
+- Living Home;
+- Story Page;
+- filmes, séries e episódios;
+- BURO Catalog Brain;
+- BURO Temporal Intelligence;
+- busca e filtros;
+- perfis e continuar assistindo.
+
+### Fase 3 — Confiabilidade
+
+- BURO Resilience Engine;
+- classificação normalizada de falhas;
+- retry controlado e circuit breaker;
+- orçamento de conexões;
+- importação transacional;
+- Failure Test Lab;
+- compatibilidade por modelo de TV.
+
+### Fase 4 — Produto comercial
+
+- teste gratuito;
+- licença por dispositivo;
+- portal web;
+- ativação e gerenciamento de aparelhos;
+- sincronização segura;
+- publicação e telemetria com privacidade.
+
+### Fase 5 — Expansão
+
+- Android mobile e Fire TV;
+- Apple TV e iOS;
+- Windows e macOS;
+- Samsung Tizen;
+- LG webOS;
+- companion mobile e controle remoto.
+
+---
+
+## Documentação oficial
+
+### Índice geral
+
+- [GDD / PRD completo](docs/GDD_IPTV_BURO.md)
+
+### GDDs
+
 - [GDD 2.0 — Revolutionary Entertainment Experience](docs/GDD_2_REVOLUTIONARY_EXPERIENCE.md)
 - [GDD 3.0 — Catalog Intelligence & Release Integrity](docs/GDD_3_CATALOG_RELEASE_INTELLIGENCE.md)
 - [GDD 4.0 — Reliability, Failure Recovery & Playback Integrity](docs/GDD_4_RELIABILITY_FAILURE_RECOVERY.md)
-- [Prompt mestre inicial para o Codex](docs/PROMPT_MESTRE_CODEX_IPTV_BURO.md)
-- [Prompt para o Codex continuar com o GDD 2.0](docs/PROMPT_CODEX_CONTINUE_GDD2.md)
-- [Prompt para o Codex implementar o GDD 3.0](docs/PROMPT_CODEX_CONTINUE_GDD3.md)
-- [Prompt para o Codex implementar o GDD 4.0](docs/PROMPT_CODEX_CONTINUE_GDD4.md)
 
-## Produto
+### Prompts para o Codex
 
-- BURO Cinematic System com identidade visual própria.
-- Living Home contextual, detalhes cinematográficos e Minha BURO.
-- BURO Pulse para TV ao vivo, mini-guia, zapping e catch-up.
-- BURO Lens para busca universal e BURO Catalog Brain para organização e deduplicação.
-- BURO Temporal Intelligence para separar data de lançamento, data de entrada na lista, anos e décadas.
-- BURO Resilience Engine para classificar erros, controlar retries e recuperar playback com segurança.
-- Connection Budget Manager para impedir que trailers, probes, prefetch ou multiview ultrapassem o limite da fonte.
-- Importação transacional para preservar a biblioteca quando playlist, Xtream ou EPG falharem.
-- Failure Test Lab para reproduzir erros de rede, HTTP, HLS, codec, playlist, EPG e banco.
-- BURO Quality Autopilot e Stream Health Engine para reprodução resiliente.
-- Perfis, controle parental, modo infantil, áudio, legendas e acessibilidade.
-- Continuidade entre aparelhos e controle pelo celular em fases posteriores.
-- Importação de M3U/M3U8, Xtream-compatible APIs e XMLTV/EPG.
-- Teste gratuito de 7 dias e licença vitalícia de € 9,99 por dispositivo.
-- Credenciais protegidas e processamento local-first.
+- [Prompt mestre — fundação inicial](docs/PROMPT_MESTRE_CODEX_IPTV_BURO.md)
+- [Continuação com GDD 2.0](docs/PROMPT_CODEX_CONTINUE_GDD2.md)
+- [Continuação com GDD 3.0](docs/PROMPT_CODEX_CONTINUE_GDD3.md)
+- [Continuação com GDD 4.0](docs/PROMPT_CODEX_CONTINUE_GDD4.md)
 
-## Continuação atual
+---
 
-O Codex deve preservar o trabalho existente e implementar progressivamente:
+## Ordem obrigatória para desenvolvimento com Codex
 
-1. a fundação do **BURO Cinematic System**;
-2. o **BURO Temporal Intelligence**;
-3. o **BURO Resilience Engine**;
-4. modelo normalizado de falhas e mensagens acionáveis;
-5. `RetryBudget`, `SourceCircuitBreaker` e `ConnectionBudgetManager`;
-6. importação transacional que nunca substitui um snapshot válido por resposta vazia ou corrompida;
-7. Failure Test Lab com cenários reproduzíveis;
-8. fileiras separadas para `Lançamentos {ano atual}`, `Adicionados recentemente` e `Clássicos que chegaram agora`;
-9. filtros por ano e década;
-10. Story Page mostrando separadamente a data real de lançamento e a data em que o item entrou na biblioteca.
+O Codex deve:
+
+1. ler `docs/GDD_IPTV_BURO.md`;
+2. ler todos os capítulos do GDD 1.0;
+3. ler o GDD 2.0 e `docs/gdd-v2/`;
+4. ler o GDD 3.0;
+5. ler o GDD 4.0 e `docs/gdd-v4/`;
+6. auditar o código existente antes de reescrever qualquer componente;
+7. implementar em commits pequenos e verificáveis;
+8. manter build, testes e documentação atualizados;
+9. nunca marcar uma função como concluída sem implementação e validação reproduzível.
+
+---
+
+## Segurança, privacidade e legalidade
+
+- credenciais nunca devem aparecer em logs;
+- URLs completas e tokens devem ser redigidos;
+- o backend não deve armazenar playlists privadas desnecessariamente;
+- o projeto não implementará bypass de DRM, autorização, certificados ou bloqueios contratuais;
+- fontes ilegais ou não autorizadas não fazem parte do produto;
+- o usuário controla suas fontes, dispositivos e dados;
+- diagnósticos exportados devem ser seguros e anônimos por padrão.
+
+---
+
+## Situação comercial proposta
+
+- **teste gratuito:** 7 dias;
+- **licença:** compra única por dispositivo;
+- **preço-alvo inicial:** € 9,99;
+- **conteúdo:** nunca incluído;
+- **ativação:** aplicativo + portal web;
+- **expansão:** pagamentos e regras adaptados às lojas de cada plataforma.
+
+O modelo comercial ainda deverá passar por validação jurídica, fiscal, técnica e pelas políticas das lojas antes do lançamento.
+
+---
+
+<div align="center">
+
+### IPTV BURO
+
+**Organização inteligente. Experiência cinematográfica. Reprodução confiável.**
+
+Projeto privado em desenvolvimento.
+
+</div>
