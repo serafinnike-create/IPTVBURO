@@ -4,6 +4,12 @@ Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
 ## [Unreleased]
 
+### Changed
+
+- O CI da `main` mantém `test`, `lint` e `assembleDebug` como gate, enquanto os
+  APKs para download ficam centralizados em GitHub Releases para não depender da
+  cota temporária de artefatos do Actions.
+
 ## [0.1.0-alpha.1] - 2026-07-31
 
 ### Added
@@ -41,10 +47,13 @@ Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 ### Release status
 
 - Implementação enviada à `main` no commit `2c9bd5b`.
-- Tag `v0.1.0-alpha.1` preparada; a GitHub Pre-release e seu APK serão criados
-  pelo workflow após o envio da tag.
-- O APK da Release será reconstruído pelo CI; tamanho e SHA-256 do artefato
-  publicado ainda precisam ser confirmados.
+- Tag `v0.1.0-alpha.1` publicada no commit `7e0b9ec`.
+- [GitHub Pre-release](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.1.0-alpha.1)
+  publicada pelo workflow
+  [`Publish Android preview` — run 30590918504](https://github.com/lucasserafin94/IPTVBURO/actions/runs/30590918504).
+- [APK publicado](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.1.0-alpha.1/IPTV-BURO-v0.1.0-alpha.1-android-debug.apk):
+  `IPTV-BURO-v0.1.0-alpha.1-android-debug.apk`, 24.864.542 bytes, SHA-256
+  `179537447d53ef062daf9cd100b5ed52416be796ceedb61cb64601a930965dc6`.
 
 ### Known limitations
 

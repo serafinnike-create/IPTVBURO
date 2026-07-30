@@ -32,10 +32,3 @@ jobs:
 
       - name: Verify
         run: ./gradlew test lint assembleDebug --stacktrace
-
-      - name: Upload installable preview
-        uses: actions/upload-artifact@v4
-        with:
-          name: IPTV-BURO-android-debug
-          path: apps/android-tv/build/outputs/apk/debug/*.apk
-          if-no-files-found: error

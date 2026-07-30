@@ -238,7 +238,7 @@ Legenda: ✅ concluído · 🚧 em andamento · 🧭 planejado
 | Player e importação de fontes | ✅ Vertical validada de ponta a ponta |
 | Portal web e licenciamento | 🧭 Planejado |
 | Aplicativos para outras plataformas | 🧭 Planejados |
-| Primeira prévia | 🚧 Tag `v0.1.0-alpha.1` preparada; Release aguarda o workflow |
+| Primeira prévia | ✅ `v0.1.0-alpha.1` publicada como Pre-release |
 
 > [!NOTE]
 > A especificação oficial permanece versionada em `main`. O código só é
@@ -248,8 +248,9 @@ Legenda: ✅ concluído · 🚧 em andamento · 🧭 planejado
 
 ## Implementação Android atual
 
-Prévia preparada: `v0.1.0-alpha.1`. A implementação está na `main`, no commit
-`2c9bd5b`.
+Prévia publicada: [`v0.1.0-alpha.1`](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.1.0-alpha.1).
+A implementação principal está na `main`, no commit `2c9bd5b`, e a tag aponta
+para `7e0b9ec`.
 
 O primeiro vertical slice inclui:
 
@@ -278,10 +279,10 @@ O fluxo E2E foi validado no Redmi A5 com Android 15 usando a playlist HLS
 pública Apple BipBop: importação, navegação até o canal, primeiro frame e
 áudio/vídeo sem crash.
 
-A tag `v0.1.0-alpha.1` está preparada. Depois de enviada, o workflow criará a
-GitHub Pre-release e produzirá o APK distribuível. Os tokens novos ainda não
-cobrem integralmente a Home e as telas legadas. Também permanecem pendentes
-testes instrumentados/golden, Busca e Perfis reais, catálogo de Filmes e Séries,
+A Pre-release `v0.1.0-alpha.1` foi publicada automaticamente pelo workflow
+**Publish Android preview**. Os tokens novos ainda não cobrem integralmente a
+Home e as telas legadas. Também permanecem pendentes testes
+instrumentados/golden, Busca e Perfis reais, catálogo de Filmes e Séries,
 Xtream, XMLTV/EPG, GDD 3.0, GDD 4.0 e proteção das URLs de stream atualmente
 armazenadas em texto simples no Room. Licença, portal, aplicativos mobile
 dedicados e desktop continuam em milestones posteriores.
@@ -327,11 +328,19 @@ apps/android-tv/build/outputs/apk/debug/android-tv-debug.apk
 
 ### Download
 
-A automação da tag `v0.1.0-alpha.1` publicará a
-[página prevista da Release](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.1.0-alpha.1)
-e o
-[APK previsto](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.1.0-alpha.1/IPTV-BURO-v0.1.0-alpha.1-android-debug.apk).
-Esses links só estarão disponíveis depois que o workflow concluir a publicação.
+Baixe a
+[Pre-release v0.1.0-alpha.1](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.1.0-alpha.1)
+ou diretamente o
+[APK Android/Android TV](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.1.0-alpha.1/IPTV-BURO-v0.1.0-alpha.1-android-debug.apk).
+
+Artefato oficial gerado pelo CI:
+
+- arquivo: `IPTV-BURO-v0.1.0-alpha.1-android-debug.apk`;
+- tamanho: 24.864.542 bytes;
+- SHA-256:
+  `179537447d53ef062daf9cd100b5ed52416be796ceedb61cb64601a930965dc6`;
+- workflow:
+  [`Publish Android preview` — run 30590918504](https://github.com/lucasserafin94/IPTVBURO/actions/runs/30590918504).
 
 A prévia inicial usa assinatura de desenvolvimento. Veja a
 [política da primeira versão](docs/release/first-release.md).

@@ -1,24 +1,29 @@
 # Primeira versão para download
 
-A primeira entrega está preparada como **prévia Android/Android TV**.
+A primeira entrega foi publicada como **prévia Android/Android TV**.
 
 ## Artefato inicial
 
-- versão/tag preparada: `v0.1.0-alpha.1`;
+- versão/tag publicada: `v0.1.0-alpha.1`;
+- commit da tag: `7e0b9ec`;
 - implementação de referência: `main@2c9bd5b`;
-- nome previsto: `IPTV-BURO-v0.1.0-alpha.1-android-debug.apk`;
+- nome: `IPTV-BURO-v0.1.0-alpha.1-android-debug.apk`;
+- tamanho: 24.864.542 bytes;
+- SHA-256:
+  `179537447d53ef062daf9cd100b5ed52416be796ceedb61cb64601a930965dc6`;
 - instalação direta em Android 6.0 ou superior;
 - otimizada para Android TV e navegação D-pad;
 - instalável no celular para validação, sem prometer layout mobile final;
 - nenhuma playlist ou conteúdo incluído.
 
-Páginas previstas após a conclusão do workflow:
+Links publicados:
 
 - [GitHub Pre-release v0.1.0-alpha.1](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.1.0-alpha.1);
 - [download do APK](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.1.0-alpha.1/IPTV-BURO-v0.1.0-alpha.1-android-debug.apk).
 
-Os links ainda não representam uma Release confirmada. O push da tag dispara o
-workflow, que reconstrói o APK e cria a Pre-release.
+O workflow
+[`Publish Android preview` — run 30590918504](https://github.com/lucasserafin94/IPTVBURO/actions/runs/30590918504)
+reconstruiu o APK, concluiu com sucesso e criou a Pre-release.
 
 ## Validação anterior à tag
 
@@ -31,8 +36,9 @@ workflow, que reconstrói o APK e cria a Pre-release.
 - instalação, abertura, navegação por D-pad e fluxo HLS validados no aparelho
   físico.
 
-O APK publicado será um novo artefato gerado pelo CI. Seu tamanho e SHA-256
-deverão ser registrados somente depois da conclusão do workflow.
+O APK local acima foi usado na validação anterior à tag. O arquivo oficial para
+download é o artefato separado gerado pelo CI, com 24.864.542 bytes e SHA-256
+`179537447d53ef062daf9cd100b5ed52416be796ceedb61cb64601a930965dc6`.
 
 O APK debug é assinado automaticamente e serve somente para testes. Como a
 chave debug do CI pode mudar, uma atualização futura pode exigir desinstalar a
@@ -46,8 +52,8 @@ de produção armazenada fora do repositório e copiada para GitHub Secrets.
 - [x] fluxo por D-pad verificado;
 - [x] nenhuma credencial conhecida versionada;
 - [x] implementação enviada à `main`;
-- [x] README e changelog preparados;
-- [ ] criar e enviar a tag `v0.1.0-alpha.1`;
-- [ ] confirmar a execução verde do workflow;
-- [ ] confirmar a GitHub Release marcada como pre-release;
-- [ ] registrar tamanho e SHA-256 do APK publicado pelo CI.
+- [x] README e changelog atualizados;
+- [x] tag `v0.1.0-alpha.1` criada e enviada;
+- [x] workflow concluído com sucesso;
+- [x] GitHub Release publicada como pre-release;
+- [x] tamanho e SHA-256 do APK publicado pelo CI registrados.

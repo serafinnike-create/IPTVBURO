@@ -18,8 +18,7 @@
 - JDK 21 disponível; o build do projeto usa bytecode Java 17.
 - Redmi A5 com Android 15 conectado, autorizado e visível pelo ADB.
 - Não existe AVD ou system image local no início da Sprint.
-- GitHub CLI instalado, mas a sessão precisa ser autenticada novamente antes
-  da publicação.
+- GitHub CLI instalado; a publicação final foi executada pelo GitHub Actions.
 
 ### Plano
 
@@ -30,7 +29,7 @@
 5. Reproduzir HLS com Media3 e refletir corretamente a capacidade de seek.
 6. Validar redaction de dados sensíveis.
 7. Executar testes, lint e build.
-8. Instalar no celular e preparar a primeira versão para o GitHub.
+8. Instalar no celular e publicar a primeira versão no GitHub.
 
 ### Decisões iniciais
 
@@ -40,8 +39,8 @@
   Studio 2025.3.1 instalado. Kotlin 2.3.21 é o corte estável compatível; versões
   Kotlin 2.4.x exigiriam uma combinação mais nova de AGP/R8.
 - Fixtures são dependências de teste e não entram no APK de produção.
-- A primeira versão distribuível será marcada como prévia até existir uma
-  chave privada de assinatura de produção.
+- A primeira versão distribuível foi publicada como prévia; uma versão estável
+  exigirá chave privada de assinatura de produção.
 
 ## 31 de julho de 2026
 
@@ -91,15 +90,23 @@
 - playlist HLS pública Apple BipBop importada e navegada até o player;
 - primeiro frame, áudio/vídeo e retorno ao aplicativo observados sem crash.
 
-#### Preparação da primeira prévia
+#### Publicação da primeira prévia
 
 - implementação confirmada em `main@2c9bd5b`;
-- tag `v0.1.0-alpha.1` preparada;
-- README, changelog, estado técnico e política de release atualizados;
-- a Pre-release e o APK distribuível ainda dependem do envio da tag e da
-  conclusão do workflow;
-- o hash local não será atribuído ao APK do CI até o artefato publicado ser
-  verificado.
+- tag `v0.1.0-alpha.1` publicada no commit `7e0b9ec`;
+- GitHub Release publicada como pre-release:
+  `https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.1.0-alpha.1`;
+- workflow `Publish Android preview`, run
+  [`30590918504`](https://github.com/lucasserafin94/IPTVBURO/actions/runs/30590918504),
+  concluído com sucesso;
+- [APK publicado](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.1.0-alpha.1/IPTV-BURO-v0.1.0-alpha.1-android-debug.apk):
+  `IPTV-BURO-v0.1.0-alpha.1-android-debug.apk`, 24.864.542 bytes;
+- SHA-256 do APK publicado:
+  `179537447d53ef062daf9cd100b5ed52416be796ceedb61cb64601a930965dc6`;
+- hash local preservado separadamente do artefato reconstruído pelo CI.
+- upload auxiliar de artefato removido do CI da `main` após a cota do Actions
+  ser atingida; o workflow continua validando build/test/lint e a distribuição
+  oficial permanece centralizada na GitHub Release.
 
 #### Pendências assumidas
 

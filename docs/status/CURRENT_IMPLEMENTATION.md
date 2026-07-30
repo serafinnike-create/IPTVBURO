@@ -3,7 +3,9 @@
 - Data da auditoria: 31 de julho de 2026
 - Branch: `main`
 - Commit da implementação: `origin/main@2c9bd5b`
-- Tag preparada: `v0.1.0-alpha.1`
+- Tag publicada: `v0.1.0-alpha.1` em `7e0b9ec`
+- Release:
+  `https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.1.0-alpha.1`
 - Plataforma implementada: Android TV
 - Versão do aplicativo: `0.1.0-alpha.1`
 
@@ -11,9 +13,9 @@
 
 A especificação oficial e a implementação Android descrita abaixo estão na
 branch remota `main`; o commit da implementação é `2c9bd5b`. Os GDDs oficiais
-foram preservados como fonte de verdade. A tag `v0.1.0-alpha.1` está preparada,
-mas a GitHub Pre-release e seu APK ainda serão criados pelo workflow após o
-envio da tag.
+foram preservados como fonte de verdade. A tag `v0.1.0-alpha.1`, em `7e0b9ec`,
+e a GitHub Pre-release com seu APK foram publicadas pelo workflow
+**Publish Android preview**.
 
 ## Stack e módulos
 
@@ -94,6 +96,20 @@ de campos antes de uma versão de produção.
   sem crash;
 - onboarding responsivo e navegação compacta em paisagem validados no aparelho.
 
+## Publicação
+
+- GitHub Pre-release:
+  `https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.1.0-alpha.1`;
+- APK: `IPTV-BURO-v0.1.0-alpha.1-android-debug.apk`;
+- download:
+  `https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.1.0-alpha.1/IPTV-BURO-v0.1.0-alpha.1-android-debug.apk`;
+- tamanho do APK do CI: 24.864.542 bytes;
+- SHA-256 do APK do CI:
+  `179537447d53ef062daf9cd100b5ed52416be796ceedb61cb64601a930965dc6`;
+- workflow `Publish Android preview`, run
+  [`30590918504`](https://github.com/lucasserafin94/IPTVBURO/actions/runs/30590918504):
+  passou.
+
 ## Lacunas e riscos
 
 - o GDD 2.0 não está integralmente concluído;
@@ -107,6 +123,4 @@ de campos antes de uma versão de produção.
 - não há modelos temporais do GDD 3.0;
 - não há Resilience Engine, `RetryBudget` ou `ConnectionBudget` do GDD 4.0;
 - URLs de stream continuam em texto simples no Room;
-- a Release ainda depende da tag e da conclusão do workflow;
-- tamanho e SHA-256 do APK reconstruído pelo CI ainda não estão confirmados;
 - o aplicativo é Android TV; o telefone é aparelho de validação nesta fase.
