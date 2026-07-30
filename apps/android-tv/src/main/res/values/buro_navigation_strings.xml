@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="buro_nav_home">Home</string>
+    <string name="buro_nav_live">Live</string>
+    <string name="buro_nav_movies">Movies</string>
+    <string name="buro_nav_series">Series</string>
+    <string name="buro_nav_discover">Discover</string>
+    <string name="buro_nav_my_buro">My BURO</string>
+    <string name="buro_nav_search">Search</string>
+    <string name="buro_nav_profile">Profile</string>
+</resources>

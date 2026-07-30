@@ -228,20 +228,129 @@ Legenda: ✅ concluído · 🚧 em andamento · 🧭 planejado
 |---|---|
 | Visão do produto e modelo comercial | ✅ Documentado |
 | Arquitetura técnica multiplataforma | ✅ Documentada |
-| GDD 1.0 — fundação técnica | ✅ Concluído |
-| GDD 2.0 — experiência cinematográfica | ✅ Concluído |
-| GDD 3.0 — inteligência temporal | ✅ Concluído |
-| GDD 4.0 — confiabilidade e recuperação | ✅ Concluído |
+| Especificação GDD 1.0 — fundação técnica | ✅ Documentada |
+| Especificação GDD 2.0 — experiência cinematográfica | ✅ Documentada |
+| Especificação GDD 3.0 — inteligência temporal | ✅ Documentada |
+| Especificação GDD 4.0 — confiabilidade e recuperação | ✅ Documentada |
 | Prompts incrementais para o Codex | ✅ Concluídos |
-| Código Android TV na branch `main` | 🚧 Ainda não publicado na `main` |
-| Protótipo visual navegável | 🚧 Em implementação |
-| Player e importação de fontes | 🚧 Em implementação |
+| Fundação Android TV | ✅ Vertical local funcional e validada |
+| BURO Cinematic Foundation | 🚧 Primeira milestone implementada; GDD 2.0 parcial |
+| Player e importação de fontes | ✅ Vertical local validada de ponta a ponta |
 | Portal web e licenciamento | 🧭 Planejado |
 | Aplicativos para outras plataformas | 🧭 Planejados |
 | Versão pública | 🧭 Ainda não lançada |
 
 > [!NOTE]
-> A branch `main` atualmente contém a especificação oficial do produto. O código desenvolvido pelo Codex deverá ser commitado e validado separadamente antes de qualquer recurso ser marcado como implementado.
+> A especificação oficial permanece versionada em `main`. O código só é
+> marcado como implementado depois de build, testes e validação reproduzível.
+
+---
+
+## Implementação Android atual
+
+Versão em desenvolvimento: `0.1.0-alpha.1`.
+
+O primeiro vertical slice inclui:
+
+- splash e onboarding legal;
+- importação local de M3U/M3U8;
+- fontes, categorias e canais persistidos com Room;
+- player HLS com Media3;
+- controles de seek apenas quando a mídia permite;
+- BURO Ribbon com Início, Ao Vivo, Filmes, Séries, Descobrir, Minha BURO,
+  Pesquisa e Perfil;
+- Living Home com hero, fileiras sintéticas marcadas como DEMO e uma fileira
+  separada para fontes reais, sem URLs na camada visual;
+- Story demonstrativa sem playback e placeholders explícitos para destinos que
+  ainda não possuem funcionalidade real;
+- design system com tokens semânticos, tiers
+  `Auto`/`Eco`/`Balanced`/`Cinematic`, reduced motion, high contrast e reduced
+  transparency;
+- restauração mínima do foco da Home e comportamento `Back → Ribbon`;
+- Configurações acessíveis pelo Perfil;
+- navegação por D-pad;
+- PT-BR, inglês, alemão e italiano;
+- logs com redaction de dados sensíveis;
+- 55 testes JVM aprovados, lint sem erros, build debug e CI configurada.
+
+O fluxo E2E foi validado no Redmi A5 com Android 15 usando a playlist HLS
+pública Apple BipBop: importação, navegação até o canal, primeiro frame e
+áudio/vídeo sem crash.
+
+Esta implementação ainda está no workspace, sem commit, push ou GitHub Release.
+Os tokens novos ainda não cobrem integralmente a Home e as telas legadas.
+Também permanecem pendentes testes instrumentados/golden, Busca e Perfis reais,
+catálogo de Filmes e Séries, Xtream, XMLTV/EPG, GDD 3.0, GDD 4.0 e proteção das
+URLs de stream atualmente armazenadas em texto simples no Room. Licença, portal,
+aplicativos mobile dedicados e desktop continuam em milestones posteriores.
+
+### Requisitos de desenvolvimento
+
+- JDK 17 ou superior;
+- Android SDK Platform 36;
+- Android SDK Build-Tools 36.0.0;
+- dispositivo Android/Android TV 6.0 (API 23) ou superior.
+
+O Gradle Wrapper já faz parte do repositório.
+
+### Build e testes
+
+No Windows:
+
+```powershell
+.\gradlew.bat test lint assembleDebug
+```
+
+No Linux/macOS:
+
+```bash
+./gradlew test lint assembleDebug
+```
+
+O APK debug é gerado em:
+
+```text
+apps/android-tv/build/outputs/apk/debug/android-tv-debug.apk
+```
+
+### Instalar por ADB
+
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r `
+  "apps\android-tv\build\outputs\apk\debug\android-tv-debug.apk"
+
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" shell am start `
+  -n com.lucasserafin94.iptvburo.debug/com.lucasserafin94.iptvburo.MainActivity
+```
+
+### Download
+
+Quando a primeira prévia for publicada, o APK ficará em
+[GitHub Releases](https://github.com/lucasserafin94/IPTVBURO/releases).
+
+A prévia inicial usa assinatura de desenvolvimento. Veja a
+[política da primeira versão](docs/release/first-release.md).
+
+### Estrutura do código
+
+```text
+apps/android-tv
+  ├─ Compose for TV e navegação D-pad
+  ├─ ViewModel, Room, DataStore e Hilt
+  └─ Media3 e OkHttp
+
+packages/domain-model
+packages/playlist-parser
+packages/test-fixtures
+```
+
+Estado detalhado:
+
+- [implementação atual](docs/status/CURRENT_IMPLEMENTATION.md);
+- [análise de lacunas do GDD 2.0](docs/status/GDD2_GAP_ANALYSIS.md);
+- [arquitetura inicial](docs/adr/ADR-001-initial-architecture.md);
+- [fundação cinematográfica](docs/adr/ADR-002-buro-cinematic-foundation.md);
+- [tratamento de credenciais](docs/security/credential-handling.md).
 
 ---
 

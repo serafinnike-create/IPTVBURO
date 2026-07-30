@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="buro_home_demo_notice">Visual demonstration · No media, channel, or stream is included</string>
+    <string name="buro_home_demo_rail_label">DEMONSTRATION</string>
+    <string name="buro_home_demo_badge">VISUAL DEMO</string>
+    <string name="buro_home_demo_live_badge">LIVE SIMULATION</string>
+    <string name="buro_home_demo_metadata">%1$d · Original concept · No media</string>
+    <string name="buro_home_demo_live_metadata">%1$d · Simulated schedule · No stream</string>
+    <string name="buro_home_demo_story_synopsis">A fictional visual card created only to demonstrate navigation, focus, and layout. It has no playable media.</string>
+    <string name="buro_home_demo_live_synopsis">A fictional schedule tile used only to preview the live layout. It does not represent or open a channel.</string>
+    <string name="buro_home_demo_editorial_synopsis">An original fictional concept made for this interface demonstration, without artwork or external media.</string>
+
+    <string name="buro_home_hero_title">Quiet Orbit</string>
+    <string name="buro_home_hero_subtitle">An original BURO visual concept</string>
+    <string name="buro_home_hero_synopsis">Explore a cinematic interface built from local gradients and fictional metadata. Add an authorized source when you are ready to use your own content.</string>
+    <string name="buro_home_hero_metadata">%1$d · Visual fiction · No media included</string>
+
+    <string name="buro_home_continue_title">Continue exploring · demonstration</string>
+    <string name="buro_home_continue_amber_title">Amber Archive</string>
+    <string name="buro_home_continue_amber_subtitle">Chapter three · fictional prototype</string>
+    <string name="buro_home_continue_prism_title">Prism City</string>
+    <string name="buro_home_continue_prism_subtitle">Chapter five · fictional prototype</string>
+    <string name="buro_home_continue_signal_title">Green Signal</string>
+    <string name="buro_home_continue_signal_subtitle">Chapter two · fictional prototype</string>
+    <string name="buro_home_continue_map_title">Violet Map</string>
+    <string name="buro_home_continue_map_subtitle">Chapter one · fictional prototype</string>
+
+    <string name="buro_home_live_title">Live now · simulated layout</string>
+    <string name="buro_home_live_north_title">North Studio</string>
+    <string name="buro_home_live_north_subtitle">Fictional bulletin · simulated</string>
+    <string name="buro_home_live_solar_title">Solar Room</string>
+    <string name="buro_home_live_solar_subtitle">Fictional conversation · simulated</string>
+    <string name="buro_home_live_field_title">Field Notes</string>
+    <string name="buro_home_live_field_subtitle">Fictional report · simulated</string>
+    <string name="buro_home_live_stage_title">Violet Stage</string>
+    <string name="buro_home_live_stage_subtitle">Fictional performance · simulated</string>
+
+    <string name="buro_home_editorial_title">Original concepts %1$d · demonstration</string>
+    <string name="buro_home_editorial_frequency_title">Blue Frequency</string>
+    <string name="buro_home_editorial_frequency_subtitle">Visual fiction</string>
+    <string name="buro_home_editorial_sun_title">Paper Sun</string>
+    <string name="buro_home_editorial_sun_subtitle">Visual fiction</string>
+    <string name="buro_home_editorial_forest_title">Forest Code</string>
+    <string name="buro_home_editorial_forest_subtitle">Visual fiction</string>
+    <string name="buro_home_editorial_ember_title">Ember Line</string>
+    <string name="buro_home_editorial_ember_subtitle">Visual fiction</string>
+    <string name="buro_home_editorial_axis_title">Soft Axis</string>
+    <string name="buro_home_editorial_axis_subtitle">Visual fiction</string>
+    <string name="buro_home_editorial_window_title">Plum Window</string>
+    <string name="buro_home_editorial_window_subtitle">Visual fiction</string>
+
+    <string name="buro_home_sources_title">Your imported sources</string>
+    <string name="buro_home_source_badge">LOCAL SOURCE</string>
+    <string name="buro_home_source_synopsis">A safe shortcut to the local source browser. Home does not start playback from this card.</string>
+    <string name="buro_home_source_metadata">Local source · Open to browse</string>
+    <plurals name="buro_home_source_channel_count">
+        <item quantity="one">%1$d channel catalogued</item>
+        <item quantity="other">%1$d channels catalogued</item>
+    </plurals>
+
+    <string name="buro_home_import_source">Import source</string>
+    <string name="buro_home_view_story">View story</string>
+    <string name="buro_home_view_sources">View sources</string>
+    <string name="buro_home_view_sources_count">View sources (%1$d)</string>
+    <string name="buro_home_back">Back</string>
+    <string name="buro_home_a11y_open_story">Open demonstration details for %1$s</string>
+    <string name="buro_home_a11y_open_source">Open sources from %1$s</string>
+
+    <string name="buro_home_loading">Preparing the Living Home…</string>
+    <string name="buro_home_empty_title">Nothing to show yet</string>
+    <string name="buro_home_empty_body">Import an authorized local source or review your source list. No external catalog is contacted.</string>
+    <string name="buro_home_error_title">Home is unavailable</string>
+    <string name="buro_home_error_body">The visual home could not be prepared. Your sources were not changed.</string>
+
+    <string name="buro_story_header">BURO Story</string>
+    <string name="buro_story_header_demo">Demonstration detail · no playback</string>
+    <string name="buro_story_add_source">Add an authorized source</string>
+    <string name="buro_story_no_playback">This is a fictional detail page for interface evaluation. It contains no trailer, URL, stream, remote image, or playback action.</string>
+    <string name="buro_story_missing_title">Demonstration item unavailable</string>
+    <string name="buro_story_missing_body">This identifier does not belong to the local visual catalog. Go back or add your own authorized source.</string>
+</resources>

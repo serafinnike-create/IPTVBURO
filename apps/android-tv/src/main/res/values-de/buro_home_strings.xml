@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="buro_home_demo_notice">Visuelle Demo · Keine Medien, Sender oder Streams enthalten</string>
+    <string name="buro_home_demo_rail_label">DEMONSTRATION</string>
+    <string name="buro_home_demo_badge">VISUELLE DEMO</string>
+    <string name="buro_home_demo_live_badge">LIVE-SIMULATION</string>
+    <string name="buro_home_demo_metadata">%1$d · Eigenes Konzept · Keine Medien</string>
+    <string name="buro_home_demo_live_metadata">%1$d · Simulierter Ablauf · Kein Stream</string>
+    <string name="buro_home_demo_story_synopsis">Eine fiktive visuelle Karte, die nur Navigation, Fokus und Layout demonstriert. Sie enthält keine abspielbaren Medien.</string>
+    <string name="buro_home_demo_live_synopsis">Eine fiktive Programmkachel zur reinen Vorschau des Live-Layouts. Sie stellt keinen Sender dar und öffnet keinen.</string>
+    <string name="buro_home_demo_editorial_synopsis">Ein eigenständiges fiktives Konzept für diese Oberflächen-Demo, ohne externe Bilder oder Medien.</string>
+
+    <string name="buro_home_hero_title">Stille Umlaufbahn</string>
+    <string name="buro_home_hero_subtitle">Ein eigenständiges visuelles BURO-Konzept</string>
+    <string name="buro_home_hero_synopsis">Entdecke eine filmische Oberfläche aus lokalen Verläufen und fiktiven Metadaten. Füge eine autorisierte Quelle hinzu, wenn du eigene Inhalte nutzen möchtest.</string>
+    <string name="buro_home_hero_metadata">%1$d · Visuelle Fiktion · Keine Medien enthalten</string>
+
+    <string name="buro_home_continue_title">Weiter entdecken · Demonstration</string>
+    <string name="buro_home_continue_amber_title">Bernsteinarchiv</string>
+    <string name="buro_home_continue_amber_subtitle">Kapitel drei · fiktiver Prototyp</string>
+    <string name="buro_home_continue_prism_title">Prismenstadt</string>
+    <string name="buro_home_continue_prism_subtitle">Kapitel fünf · fiktiver Prototyp</string>
+    <string name="buro_home_continue_signal_title">Grünes Signal</string>
+    <string name="buro_home_continue_signal_subtitle">Kapitel zwei · fiktiver Prototyp</string>
+    <string name="buro_home_continue_map_title">Violette Karte</string>
+    <string name="buro_home_continue_map_subtitle">Kapitel eins · fiktiver Prototyp</string>
+
+    <string name="buro_home_live_title">Jetzt live · simuliertes Layout</string>
+    <string name="buro_home_live_north_title">Studio Nord</string>
+    <string name="buro_home_live_north_subtitle">Fiktives Bulletin · simuliert</string>
+    <string name="buro_home_live_solar_title">Sonnenraum</string>
+    <string name="buro_home_live_solar_subtitle">Fiktives Gespräch · simuliert</string>
+    <string name="buro_home_live_field_title">Feldnotizen</string>
+    <string name="buro_home_live_field_subtitle">Fiktiver Bericht · simuliert</string>
+    <string name="buro_home_live_stage_title">Violette Bühne</string>
+    <string name="buro_home_live_stage_subtitle">Fiktive Aufführung · simuliert</string>
+
+    <string name="buro_home_editorial_title">Eigene Konzepte %1$d · Demonstration</string>
+    <string name="buro_home_editorial_frequency_title">Blaue Frequenz</string>
+    <string name="buro_home_editorial_frequency_subtitle">Visuelle Fiktion</string>
+    <string name="buro_home_editorial_sun_title">Papiersonne</string>
+    <string name="buro_home_editorial_sun_subtitle">Visuelle Fiktion</string>
+    <string name="buro_home_editorial_forest_title">Waldcode</string>
+    <string name="buro_home_editorial_forest_subtitle">Visuelle Fiktion</string>
+    <string name="buro_home_editorial_ember_title">Glutlinie</string>
+    <string name="buro_home_editorial_ember_subtitle">Visuelle Fiktion</string>
+    <string name="buro_home_editorial_axis_title">Sanfte Achse</string>
+    <string name="buro_home_editorial_axis_subtitle">Visuelle Fiktion</string>
+    <string name="buro_home_editorial_window_title">Pflaumenfenster</string>
+    <string name="buro_home_editorial_window_subtitle">Visuelle Fiktion</string>
+
+    <string name="buro_home_sources_title">Deine importierten Quellen</string>
+    <string name="buro_home_source_badge">LOKALE QUELLE</string>
+    <string name="buro_home_source_synopsis">Ein sicherer Kurzbefehl zum lokalen Quellenbrowser. Die Home startet über diese Karte keine Wiedergabe.</string>
+    <string name="buro_home_source_metadata">Lokale Quelle · Zum Durchsuchen öffnen</string>
+    <plurals name="buro_home_source_channel_count">
+        <item quantity="one">%1$d Sender katalogisiert</item>
+        <item quantity="other">%1$d Sender katalogisiert</item>
+    </plurals>
+
+    <string name="buro_home_import_source">Quelle importieren</string>
+    <string name="buro_home_view_story">Story ansehen</string>
+    <string name="buro_home_view_sources">Quellen ansehen</string>
+    <string name="buro_home_view_sources_count">Quellen ansehen (%1$d)</string>
+    <string name="buro_home_back">Zurück</string>
+    <string name="buro_home_a11y_open_story">Demo-Details für %1$s öffnen</string>
+    <string name="buro_home_a11y_open_source">Quellen von %1$s aus öffnen</string>
+
+    <string name="buro_home_loading">Living Home wird vorbereitet…</string>
+    <string name="buro_home_empty_title">Noch nichts anzuzeigen</string>
+    <string name="buro_home_empty_body">Importiere eine autorisierte lokale Quelle oder prüfe deine Quellenliste. Es wird kein externer Katalog kontaktiert.</string>
+    <string name="buro_home_error_title">Home ist nicht verfügbar</string>
+    <string name="buro_home_error_body">Die visuelle Home konnte nicht vorbereitet werden. Deine Quellen wurden nicht verändert.</string>
+
+    <string name="buro_story_header">BURO Story</string>
+    <string name="buro_story_header_demo">Demo-Detail · keine Wiedergabe</string>
+    <string name="buro_story_add_source">Autorisierte Quelle hinzufügen</string>
+    <string name="buro_story_no_playback">Dies ist eine fiktive Detailseite zur Bewertung der Oberfläche. Sie enthält weder Trailer, URL, Stream, Remote-Bild noch Wiedergabeaktion.</string>
+    <string name="buro_story_missing_title">Demo-Element nicht verfügbar</string>
+    <string name="buro_story_missing_body">Diese Kennung gehört nicht zum lokalen visuellen Katalog. Gehe zurück oder füge deine eigene autorisierte Quelle hinzu.</string>
+</resources>

@@ -1,0 +1,5 @@
+#EXTM3U playlist-name="IPTV BURO Synthetic Parser Fixture"
+#EXTINF:-1 tvg-id="synthetic-live" tvg-name="Synthetic Live" group-title="Synthetic",Synthetic Live
+https://example.invalid/live/master.m3u8
+#EXTINF:120 tvg-id="synthetic-vod" tvg-name="Synthetic VOD" group-title="Synthetic",Synthetic VOD
+https://example.invalid/vod/master.m3u8

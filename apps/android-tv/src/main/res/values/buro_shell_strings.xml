@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="buro_placeholder_title">%1$s is being prepared</string>
+    <string name="buro_placeholder_body">This area is already part of IPTV BURO navigation. Its complete experience will arrive in a future milestone; no catalogue or stream is being simulated here.</string>
+    <string name="buro_placeholder_sources_action">Open my sources</string>
+    <string name="buro_placeholder_settings_action">Open settings</string>
+</resources>

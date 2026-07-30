@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">IPTV BURO</string>
+    <string name="legal_title">Seu conteúdo. Sua responsabilidade.</string>
+    <string name="legal_body">O IPTV BURO é apenas um reprodutor de mídia. Ele não fornece canais, filmes, séries, listas ou assinaturas. Você deve possuir autorização legal para acessar todo conteúdo adicionado ao aplicativo.</string>
+    <string name="legal_accept">Entendi e concordo</string>
+    <string name="legal_privacy">As credenciais permanecem neste dispositivo e nunca entram nos logs de diagnóstico.</string>
+    <string name="nav_home">Início</string>
+    <string name="nav_live">TV ao vivo</string>
+    <string name="nav_sources">Fontes</string>
+    <string name="nav_settings">Configurações</string>
+    <string name="home_welcome">Bem-vindo ao IPTV BURO</string>
+    <string name="home_subtitle">Um player privado e local-first para conteúdo que você tem autorização para usar.</string>
+    <string name="home_action">Adicionar primeira fonte</string>
+    <plurals name="home_sources_count">
+        <item quantity="one">%1$d fonte configurada</item>
+        <item quantity="many">%1$d fontes configuradas</item>
+        <item quantity="other">%1$d fontes configuradas</item>
+    </plurals>
+    <plurals name="home_channels_count">
+        <item quantity="one">%1$d canal pronto</item>
+        <item quantity="many">%1$d canais prontos</item>
+        <item quantity="other">%1$d canais prontos</item>
+    </plurals>
+    <string name="sources_title">Suas fontes</string>
+    <string name="sources_empty">Nenhuma fonte adicionada</string>
+    <string name="sources_empty_body">Escolha um arquivo M3U ou M3U8 legal armazenado neste dispositivo.</string>
+    <string name="sources_import">Importar arquivo M3U</string>
+    <string name="sources_default_name">Lista importada</string>
+    <string name="sources_importing">Importando…</string>
+    <plurals name="sources_import_success">
+        <item quantity="one">%1$d canal importado</item>
+        <item quantity="many">%1$d canais importados</item>
+        <item quantity="other">%1$d canais importados</item>
+    </plurals>
+    <string name="sources_import_error">Não foi possível importar esta lista</string>
+    <string name="categories_all">Todos os canais</string>
+    <string name="channels_title">Canais</string>
+    <string name="channels_empty">Esta fonte não possui canais compatíveis.</string>
+    <string name="player_loading">Abrindo transmissão…</string>
+    <string name="player_error">Falha na reprodução</string>
+    <string name="player_retry">Tentar novamente</string>
+    <string name="player_back">Voltar aos canais</string>
+    <string name="player_seek_unavailable">Esta fonte não permite avançar ou retroceder.</string>
+    <string name="common_back">Voltar</string>
+    <string name="common_close">Fechar</string>
+    <string name="common_retry">Tentar novamente</string>
+    <string name="common_loading">Carregando…</string>
+    <string name="settings_title">Configurações</string>
+    <string name="settings_version">Versão %1$s</string>
+    <string name="settings_legal">O IPTV BURO não vende nem fornece conteúdo.</string>
+    <string name="settings_language">O aplicativo segue o idioma do dispositivo.</string>
+    <string name="a11y_app_logo">Logotipo IPTV BURO</string>
+    <string name="a11y_channel">Abrir %1$s</string>
+</resources>

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="buro_home_demo_notice">Dimostrazione visiva · Nessun media, canale o flusso incluso</string>
+    <string name="buro_home_demo_rail_label">DIMOSTRAZIONE</string>
+    <string name="buro_home_demo_badge">DEMO VISIVA</string>
+    <string name="buro_home_demo_live_badge">DIRETTA SIMULATA</string>
+    <string name="buro_home_demo_metadata">%1$d · Concetto originale · Nessun media</string>
+    <string name="buro_home_demo_live_metadata">%1$d · Palinsesto simulato · Nessun flusso</string>
+    <string name="buro_home_demo_story_synopsis">Una scheda visiva fittizia creata solo per mostrare navigazione, messa a fuoco e layout. Non contiene media riproducibili.</string>
+    <string name="buro_home_demo_live_synopsis">Un riquadro di palinsesto fittizio usato solo per mostrare il layout in diretta. Non rappresenta né apre un canale.</string>
+    <string name="buro_home_demo_editorial_synopsis">Un concetto fittizio originale creato per questa demo dell’interfaccia, senza immagini o media esterni.</string>
+
+    <string name="buro_home_hero_title">Orbita Silenziosa</string>
+    <string name="buro_home_hero_subtitle">Un concetto visivo originale BURO</string>
+    <string name="buro_home_hero_synopsis">Esplora un’interfaccia cinematografica costruita con gradienti locali e metadati fittizi. Aggiungi una fonte autorizzata quando vuoi usare i tuoi contenuti.</string>
+    <string name="buro_home_hero_metadata">%1$d · Finzione visiva · Nessun media incluso</string>
+
+    <string name="buro_home_continue_title">Continua a esplorare · dimostrazione</string>
+    <string name="buro_home_continue_amber_title">Archivio Ambra</string>
+    <string name="buro_home_continue_amber_subtitle">Capitolo tre · prototipo fittizio</string>
+    <string name="buro_home_continue_prism_title">Città Prisma</string>
+    <string name="buro_home_continue_prism_subtitle">Capitolo cinque · prototipo fittizio</string>
+    <string name="buro_home_continue_signal_title">Segnale Verde</string>
+    <string name="buro_home_continue_signal_subtitle">Capitolo due · prototipo fittizio</string>
+    <string name="buro_home_continue_map_title">Mappa Viola</string>
+    <string name="buro_home_continue_map_subtitle">Capitolo uno · prototipo fittizio</string>
+
+    <string name="buro_home_live_title">In diretta · layout simulato</string>
+    <string name="buro_home_live_north_title">Studio Nord</string>
+    <string name="buro_home_live_north_subtitle">Notiziario fittizio · simulato</string>
+    <string name="buro_home_live_solar_title">Sala Solare</string>
+    <string name="buro_home_live_solar_subtitle">Conversazione fittizia · simulata</string>
+    <string name="buro_home_live_field_title">Note dal Campo</string>
+    <string name="buro_home_live_field_subtitle">Servizio fittizio · simulato</string>
+    <string name="buro_home_live_stage_title">Palco Viola</string>
+    <string name="buro_home_live_stage_subtitle">Spettacolo fittizio · simulato</string>
+
+    <string name="buro_home_editorial_title">Concetti originali %1$d · dimostrazione</string>
+    <string name="buro_home_editorial_frequency_title">Frequenza Blu</string>
+    <string name="buro_home_editorial_frequency_subtitle">Finzione visiva</string>
+    <string name="buro_home_editorial_sun_title">Sole di Carta</string>
+    <string name="buro_home_editorial_sun_subtitle">Finzione visiva</string>
+    <string name="buro_home_editorial_forest_title">Codice Foresta</string>
+    <string name="buro_home_editorial_forest_subtitle">Finzione visiva</string>
+    <string name="buro_home_editorial_ember_title">Linea di Brace</string>
+    <string name="buro_home_editorial_ember_subtitle">Finzione visiva</string>
+    <string name="buro_home_editorial_axis_title">Asse Morbido</string>
+    <string name="buro_home_editorial_axis_subtitle">Finzione visiva</string>
+    <string name="buro_home_editorial_window_title">Finestra Prugna</string>
+    <string name="buro_home_editorial_window_subtitle">Finzione visiva</string>
+
+    <string name="buro_home_sources_title">Le tue fonti importate</string>
+    <string name="buro_home_source_badge">FONTE LOCALE</string>
+    <string name="buro_home_source_synopsis">Una scorciatoia sicura per esplorare le fonti locali. La Home non avvia la riproduzione da questa scheda.</string>
+    <string name="buro_home_source_metadata">Fonte locale · Apri per esplorare</string>
+    <plurals name="buro_home_source_channel_count">
+        <item quantity="one">%1$d canale catalogato</item>
+        <item quantity="many">%1$d canali catalogati</item>
+        <item quantity="other">%1$d canali catalogati</item>
+    </plurals>
+
+    <string name="buro_home_import_source">Importa fonte</string>
+    <string name="buro_home_view_story">Apri la storia</string>
+    <string name="buro_home_view_sources">Vedi fonti</string>
+    <string name="buro_home_view_sources_count">Vedi fonti (%1$d)</string>
+    <string name="buro_home_back">Indietro</string>
+    <string name="buro_home_a11y_open_story">Apri i dettagli dimostrativi di %1$s</string>
+    <string name="buro_home_a11y_open_source">Apri le fonti da %1$s</string>
+
+    <string name="buro_home_loading">Preparazione della Living Home…</string>
+    <string name="buro_home_empty_title">Ancora nulla da mostrare</string>
+    <string name="buro_home_empty_body">Importa una fonte locale autorizzata o controlla l’elenco delle fonti. Non verrà contattato alcun catalogo esterno.</string>
+    <string name="buro_home_error_title">La Home non è disponibile</string>
+    <string name="buro_home_error_body">Non è stato possibile preparare la Home visiva. Le tue fonti non sono state modificate.</string>
+
+    <string name="buro_story_header">BURO Story</string>
+    <string name="buro_story_header_demo">Dettaglio dimostrativo · nessuna riproduzione</string>
+    <string name="buro_story_add_source">Aggiungi una fonte autorizzata</string>
+    <string name="buro_story_no_playback">Questa è una pagina di dettaglio fittizia per valutare l’interfaccia. Non contiene trailer, URL, flussi, immagini remote o azioni di riproduzione.</string>
+    <string name="buro_story_missing_title">Elemento dimostrativo non disponibile</string>
+    <string name="buro_story_missing_body">Questo identificatore non appartiene al catalogo visivo locale. Torna indietro o aggiungi una fonte autorizzata.</string>
+</resources>

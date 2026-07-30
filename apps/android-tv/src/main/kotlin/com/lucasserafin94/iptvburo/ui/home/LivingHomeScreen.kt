@@ -1,0 +1,653 @@
+package com.lucasserafin94.iptvburo.ui.home
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Icon
+import androidx.tv.material3.Text
+import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.ui.components.FocusSurface
+import com.lucasserafin94.iptvburo.ui.theme.Blue
+import com.lucasserafin94.iptvburo.ui.theme.Ink
+import com.lucasserafin94.iptvburo.ui.theme.InkSoft
+import com.lucasserafin94.iptvburo.ui.theme.Muted
+import com.lucasserafin94.iptvburo.ui.theme.Surface
+import com.lucasserafin94.iptvburo.ui.theme.Teal
+import com.lucasserafin94.iptvburo.ui.theme.White
+
+@Composable
+fun LivingHomeScreen(
+    sources: List<HomeSourceSummary>,
+    onItemFocused: (String) -> Unit,
+    onOpenItem: (String) -> Unit,
+    onImportSource: () -> Unit,
+    onOpenSources: () -> Unit,
+    onOpenSource: (String) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    uiState: LivingHomeUiState = LivingHomeUiState.Ready,
+    initialFocusedItemId: String? = null,
+    interceptBack: Boolean = true,
+) {
+    BackHandler(
+        enabled = interceptBack,
+        onBack = onBack,
+    )
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                Brush.linearGradient(
+                    listOf(Ink, InkSoft, Ink),
+                ),
+            ),
+    ) {
+        val metrics = HomeLayoutMetrics.resolve(maxWidth, maxHeight)
+        when (uiState) {
+            LivingHomeUiState.Ready -> {
+                val section = DemoHomeCatalog.section(sources)
+                val resolvedInitialFocusedItemId =
+                    section.resolveInitialFocusId(initialFocusedItemId)
+                ReadyHome(
+                    section = section,
+                    sourceCount = sources.distinctBy(HomeSourceSummary::id).size,
+                    metrics = metrics,
+                    initialFocusedItemId = resolvedInitialFocusedItemId,
+                    onItemFocused = onItemFocused,
+                    onOpenItem = onOpenItem,
+                    onOpenSources = onOpenSources,
+                    onOpenSource = onOpenSource,
+                )
+            }
+
+            LivingHomeUiState.Loading -> HomeLoadingState(metrics)
+            LivingHomeUiState.Empty -> HomeEmptyState(
+                metrics = metrics,
+                onImportSource = onImportSource,
+                onOpenSources = onOpenSources,
+                onItemFocused = onItemFocused,
+            )
+
+            is LivingHomeUiState.Error -> HomeErrorState(
+                metrics = metrics,
+                message = uiState.message,
+                onImportSource = onImportSource,
+                onOpenSources = onOpenSources,
+                onItemFocused = onItemFocused,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReadyHome(
+    section: HomeSection,
+    sourceCount: Int,
+    metrics: HomeLayoutMetrics,
+    initialFocusedItemId: String?,
+    onItemFocused: (String) -> Unit,
+    onOpenItem: (String) -> Unit,
+    onOpenSources: () -> Unit,
+    onOpenSource: (String) -> Unit,
+) {
+    val columnState = rememberLazyListState()
+    val initialRailIndex = section.rails.indexOfFirst { rail ->
+        rail.items.any { item -> item.id == initialFocusedItemId }
+    }
+
+    LaunchedEffect(initialFocusedItemId, section.id) {
+        when {
+            initialFocusedItemId == section.hero.id -> columnState.scrollToItem(HERO_INDEX)
+            initialRailIndex >= 0 -> columnState.scrollToItem(
+                initialRailIndex + FIRST_RAIL_INDEX,
+            )
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        state = columnState,
+        contentPadding = PaddingValues(
+            start = metrics.horizontalPadding,
+            top = metrics.topPadding,
+            end = metrics.horizontalPadding,
+            bottom = 64.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(metrics.sectionSpacing),
+    ) {
+        item(key = "home:demonstration-notice") {
+            DemonstrationNotice()
+        }
+
+        item(key = section.hero.id) {
+            BuroHero(
+                item = section.hero,
+                sourceCount = sourceCount,
+                onItemFocused = onItemFocused,
+                onOpenItem = onOpenItem,
+                onOpenSources = onOpenSources,
+                requestFocus = initialFocusedItemId == section.hero.id,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(metrics.heroHeight),
+            )
+        }
+
+        items(
+            items = section.rails,
+            key = HomeRail::id,
+        ) { rail ->
+            HomeRailRow(
+                rail = rail,
+                metrics = metrics,
+                initialFocusedItemId = initialFocusedItemId,
+                onItemFocused = onItemFocused,
+                onOpenItem = onOpenItem,
+                onOpenSources = onOpenSources,
+                onOpenSource = onOpenSource,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeRailRow(
+    rail: HomeRail,
+    metrics: HomeLayoutMetrics,
+    initialFocusedItemId: String?,
+    onItemFocused: (String) -> Unit,
+    onOpenItem: (String) -> Unit,
+    onOpenSources: () -> Unit,
+    onOpenSource: (String) -> Unit,
+) {
+    val rowState = rememberLazyListState()
+    val initialItemIndex = rail.items.indexOfFirst { item ->
+        item.id == initialFocusedItemId
+    }
+
+    LaunchedEffect(initialFocusedItemId, rail.id) {
+        if (initialItemIndex >= 0) rowState.scrollToItem(initialItemIndex)
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = rail.title,
+                color = White,
+                fontSize = metrics.railTitleSize,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (rail.isDemonstration) {
+                DemoRailLabel()
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        LazyRow(
+            state = rowState,
+            contentPadding = PaddingValues(
+                start = 12.dp,
+                top = 5.dp,
+                end = metrics.horizontalPadding,
+                bottom = 8.dp,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(metrics.cardSpacing),
+        ) {
+            items(
+                items = rail.items,
+                key = HomeItem::id,
+            ) { item ->
+                val open: (String) -> Unit = { itemId ->
+                    if (item.kind == HomeItemKind.SOURCE) {
+                        DemoHomeCatalog.sourceIdFromItemId(itemId)
+                            ?.let(onOpenSource)
+                            ?: onOpenSources()
+                    } else {
+                        onOpenItem(itemId)
+                    }
+                }
+                when (rail.cardFormat) {
+                    HomeCardFormat.POSTER -> BuroPosterCard(
+                        item = item,
+                        onItemFocused = onItemFocused,
+                        onOpenItem = open,
+                        width = metrics.posterWidth,
+                        requestFocus = item.id == initialFocusedItemId,
+                    )
+
+                    HomeCardFormat.LANDSCAPE -> BuroLandscapeCard(
+                        item = item,
+                        onItemFocused = onItemFocused,
+                        onOpenItem = open,
+                        width = metrics.landscapeWidth,
+                        requestFocus = item.id == initialFocusedItemId,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DemonstrationNotice() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(Teal),
+        )
+        Text(
+            text = stringResource(R.string.buro_home_demo_notice),
+            color = Muted,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
+private fun DemoRailLabel() {
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(Blue.copy(alpha = 0.2f))
+            .border(
+                width = 1.dp,
+                color = Blue.copy(alpha = 0.5f),
+                shape = CircleShape,
+            )
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.buro_home_demo_rail_label),
+            color = Teal,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.6.sp,
+        )
+    }
+}
+
+@Composable
+private fun HomeLoadingState(metrics: HomeLayoutMetrics) {
+    val description = stringResource(R.string.buro_home_loading)
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .semantics { contentDescription = description },
+        contentPadding = PaddingValues(
+            horizontal = metrics.horizontalPadding,
+            vertical = metrics.topPadding,
+        ),
+        verticalArrangement = Arrangement.spacedBy(metrics.sectionSpacing),
+    ) {
+        item(key = "loading:label") {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.HourglassTop,
+                    contentDescription = null,
+                    tint = Teal,
+                )
+                Text(
+                    text = description,
+                    color = Muted,
+                    fontSize = 16.sp,
+                )
+            }
+        }
+        item(key = "loading:hero") {
+            SkeletonBlock(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(metrics.heroHeight),
+            )
+        }
+        items(
+            items = listOf("loading:rail:one", "loading:rail:two"),
+            key = { id -> id },
+        ) { railId ->
+            Column {
+                SkeletonBlock(
+                    modifier = Modifier
+                        .width(220.dp)
+                        .height(24.dp),
+                )
+                Spacer(Modifier.height(12.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(metrics.cardSpacing),
+                ) {
+                    items(
+                        count = 4,
+                        key = { index -> "$railId:item:$index" },
+                    ) {
+                        SkeletonBlock(
+                            modifier = Modifier
+                                .width(metrics.landscapeWidth)
+                                .height(metrics.landscapeWidth * 9f / 16f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkeletonBlock(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        Surface,
+                        Blue.copy(alpha = 0.12f),
+                        Surface,
+                    ),
+                ),
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.05f),
+                shape = RoundedCornerShape(18.dp),
+            ),
+    )
+}
+
+@Composable
+private fun HomeEmptyState(
+    metrics: HomeLayoutMetrics,
+    onImportSource: () -> Unit,
+    onOpenSources: () -> Unit,
+    onItemFocused: (String) -> Unit,
+) {
+    HomeStatePanel(
+        metrics = metrics,
+        icon = Icons.Default.Inbox,
+        title = stringResource(R.string.buro_home_empty_title),
+        body = stringResource(R.string.buro_home_empty_body),
+        primaryLabel = stringResource(R.string.buro_home_import_source),
+        primaryIcon = Icons.Default.Add,
+        onPrimary = onImportSource,
+        secondaryLabel = stringResource(R.string.buro_home_view_sources),
+        onSecondary = onOpenSources,
+        onItemFocused = onItemFocused,
+    )
+}
+
+@Composable
+private fun HomeErrorState(
+    metrics: HomeLayoutMetrics,
+    message: String?,
+    onImportSource: () -> Unit,
+    onOpenSources: () -> Unit,
+    onItemFocused: (String) -> Unit,
+) {
+    HomeStatePanel(
+        metrics = metrics,
+        icon = Icons.Default.ErrorOutline,
+        title = stringResource(R.string.buro_home_error_title),
+        body = message
+            ?.takeIf(String::isNotBlank)
+            ?: stringResource(R.string.buro_home_error_body),
+        primaryLabel = stringResource(R.string.buro_home_view_sources),
+        primaryIcon = Icons.Default.FolderOpen,
+        onPrimary = onOpenSources,
+        secondaryLabel = stringResource(R.string.buro_home_import_source),
+        onSecondary = onImportSource,
+        onItemFocused = onItemFocused,
+    )
+}
+
+@Composable
+private fun HomeStatePanel(
+    metrics: HomeLayoutMetrics,
+    icon: ImageVector,
+    title: String,
+    body: String,
+    primaryLabel: String,
+    primaryIcon: ImageVector,
+    onPrimary: () -> Unit,
+    secondaryLabel: String,
+    onSecondary: () -> Unit,
+    onItemFocused: (String) -> Unit,
+) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(metrics.horizontalPadding),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(if (metrics.compact) 0.88f else 0.66f)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Surface.copy(alpha = 0.94f))
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(28.dp),
+                )
+                .heightIn(max = maxHeight)
+                .verticalScroll(rememberScrollState())
+                .padding(if (metrics.compact) 32.dp else 48.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(Blue.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = Teal,
+                    modifier = Modifier.size(36.dp),
+                )
+            }
+            Spacer(Modifier.height(22.dp))
+            Text(
+                text = title,
+                color = White,
+                fontSize = if (metrics.compact) 26.sp else 32.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = body,
+                color = Muted,
+                fontSize = 16.sp,
+                lineHeight = 23.sp,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(28.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StateAction(
+                    label = primaryLabel,
+                    icon = primaryIcon,
+                    primary = true,
+                    onClick = onPrimary,
+                    requestFocus = true,
+                    onFocused = {
+                        onItemFocused(STATE_PRIMARY_ACTION_ID)
+                    },
+                )
+                StateAction(
+                    label = secondaryLabel,
+                    icon = Icons.Default.FolderOpen,
+                    primary = false,
+                    onClick = onSecondary,
+                    onFocused = {
+                        onItemFocused(STATE_SECONDARY_ACTION_ID)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StateAction(
+    label: String,
+    icon: ImageVector,
+    primary: Boolean,
+    onClick: () -> Unit,
+    onFocused: () -> Unit,
+    requestFocus: Boolean = false,
+) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(requestFocus) {
+        if (requestFocus) focusRequester.requestFocus()
+    }
+
+    FocusSurface(
+        onClick = onClick,
+        modifier = Modifier
+            .height(52.dp)
+            .focusRequester(focusRequester)
+            .onFocusChanged { focusState ->
+                if (focusState.isFocused) onFocused()
+            },
+        backgroundColor = if (primary) Teal else InkSoft,
+        focusedBackgroundColor = if (primary) Teal else Surface,
+        selectedBackgroundColor = if (primary) Teal else Surface,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (primary) Ink else Teal,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(9.dp))
+            Text(
+                text = label,
+                color = if (primary) Ink else White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+private data class HomeLayoutMetrics(
+    val compact: Boolean,
+    val horizontalPadding: Dp,
+    val topPadding: Dp,
+    val heroHeight: Dp,
+    val landscapeWidth: Dp,
+    val posterWidth: Dp,
+    val sectionSpacing: Dp,
+    val cardSpacing: Dp,
+    val railTitleSize: androidx.compose.ui.unit.TextUnit,
+) {
+    companion object {
+        fun resolve(maxWidth: Dp, maxHeight: Dp): HomeLayoutMetrics {
+            val compact = maxWidth < 1_000.dp || maxHeight < 680.dp
+            return if (compact) {
+                HomeLayoutMetrics(
+                    compact = true,
+                    horizontalPadding = 28.dp,
+                    topPadding = 22.dp,
+                    heroHeight = 340.dp,
+                    landscapeWidth = 248.dp,
+                    posterWidth = 144.dp,
+                    sectionSpacing = 22.dp,
+                    cardSpacing = 14.dp,
+                    railTitleSize = 22.sp,
+                )
+            } else {
+                HomeLayoutMetrics(
+                    compact = false,
+                    horizontalPadding = 44.dp,
+                    topPadding = 32.dp,
+                    heroHeight = 430.dp,
+                    landscapeWidth = 304.dp,
+                    posterWidth = 176.dp,
+                    sectionSpacing = 28.dp,
+                    cardSpacing = 18.dp,
+                    railTitleSize = 27.sp,
+                )
+            }
+        }
+    }
+}
+
+private const val HERO_INDEX = 1
+private const val FIRST_RAIL_INDEX = 2
+private const val STATE_PRIMARY_ACTION_ID = "home:state:primary"
+private const val STATE_SECONDARY_ACTION_ID = "home:state:secondary"

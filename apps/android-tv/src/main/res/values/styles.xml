@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.IPTVBURO" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">@color/aurora_ink</item>
+        <item name="android:colorAccent">@color/aurora_teal</item>
+        <item name="android:navigationBarColor">@color/aurora_ink</item>
+        <item name="android:statusBarColor">@color/aurora_ink</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <style name="Theme.IPTVBURO.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/aurora_ink</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.IPTVBURO</item>
+    </style>
+</resources>
