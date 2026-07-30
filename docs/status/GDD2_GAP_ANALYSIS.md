@@ -1,9 +1,9 @@
 # Análise de lacunas — GDD 2.0
 
 - Data: 31 de julho de 2026
-- Base auditada: `origin/main@8ad495e` mais implementação Android local
+- Base auditada: implementação em `origin/main@2c9bd5b`
 - Estado: primeira milestone da BURO Cinematic Foundation implementada
-  localmente; GDD 2.0 ainda parcial
+  e versionada; tag `v0.1.0-alpha.1` preparada; GDD 2.0 ainda parcial
 
 | Requirement | Existing | Partial | Missing | Notes / next action |
 |---|:---:|:---:|:---:|---|

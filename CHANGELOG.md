@@ -4,6 +4,8 @@ Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.1] - 2026-07-31
+
 ### Added
 
 - Fundação do monorepo Android TV.
@@ -31,10 +33,18 @@ Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
 - `./gradlew test lint assembleDebug` aprovado: 55 testes JVM, 0 falhas, lint
   com 0 erros e 18 warnings não bloqueantes.
-- APK debug com 25.433.893 bytes e SHA-256
+- APK debug local com 25.433.893 bytes e SHA-256
   `5af0c37258951343e55cb6b0c7a8c3d50d7e088e29d6a8d29db1095d9203ecb4`.
 - Fluxo E2E no Redmi A5 com Android 15 usando a playlist HLS pública Apple
   BipBop: importação, navegação, primeiro frame e áudio/vídeo sem crash.
+
+### Release status
+
+- Implementação enviada à `main` no commit `2c9bd5b`.
+- Tag `v0.1.0-alpha.1` preparada; a GitHub Pre-release e seu APK serão criados
+  pelo workflow após o envio da tag.
+- O APK da Release será reconstruído pelo CI; tamanho e SHA-256 do artefato
+  publicado ainda precisam ser confirmados.
 
 ### Known limitations
 
@@ -43,4 +53,6 @@ Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 - Sem testes instrumentados de D-pad ou testes de screenshot/golden.
 - Tokens ainda não cobrem integralmente a Home e telas legadas.
 - URLs de stream continuam armazenadas em texto simples no Room.
-- Alterações locais ainda sem commit, push ou GitHub Release.
+
+[Unreleased]: https://github.com/lucasserafin94/IPTVBURO/compare/v0.1.0-alpha.1...HEAD
+[0.1.0-alpha.1]: https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.1.0-alpha.1

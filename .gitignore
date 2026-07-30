@@ -12,6 +12,9 @@ local.properties
 *.iml
 captures/
 
+# Local editor settings
+.vscode/
+
 # Signing material and secrets
 *.jks
 *.keystore

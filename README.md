@@ -233,12 +233,12 @@ Legenda: ✅ concluído · 🚧 em andamento · 🧭 planejado
 | Especificação GDD 3.0 — inteligência temporal | ✅ Documentada |
 | Especificação GDD 4.0 — confiabilidade e recuperação | ✅ Documentada |
 | Prompts incrementais para o Codex | ✅ Concluídos |
-| Fundação Android TV | ✅ Vertical local funcional e validada |
+| Fundação Android TV | ✅ Enviada à `main` e validada |
 | BURO Cinematic Foundation | 🚧 Primeira milestone implementada; GDD 2.0 parcial |
-| Player e importação de fontes | ✅ Vertical local validada de ponta a ponta |
+| Player e importação de fontes | ✅ Vertical validada de ponta a ponta |
 | Portal web e licenciamento | 🧭 Planejado |
 | Aplicativos para outras plataformas | 🧭 Planejados |
-| Versão pública | 🧭 Ainda não lançada |
+| Primeira prévia | 🚧 Tag `v0.1.0-alpha.1` preparada; Release aguarda o workflow |
 
 > [!NOTE]
 > A especificação oficial permanece versionada em `main`. O código só é
@@ -248,7 +248,8 @@ Legenda: ✅ concluído · 🚧 em andamento · 🧭 planejado
 
 ## Implementação Android atual
 
-Versão em desenvolvimento: `0.1.0-alpha.1`.
+Prévia preparada: `v0.1.0-alpha.1`. A implementação está na `main`, no commit
+`2c9bd5b`.
 
 O primeiro vertical slice inclui:
 
@@ -277,12 +278,13 @@ O fluxo E2E foi validado no Redmi A5 com Android 15 usando a playlist HLS
 pública Apple BipBop: importação, navegação até o canal, primeiro frame e
 áudio/vídeo sem crash.
 
-Esta implementação ainda está no workspace, sem commit, push ou GitHub Release.
-Os tokens novos ainda não cobrem integralmente a Home e as telas legadas.
-Também permanecem pendentes testes instrumentados/golden, Busca e Perfis reais,
-catálogo de Filmes e Séries, Xtream, XMLTV/EPG, GDD 3.0, GDD 4.0 e proteção das
-URLs de stream atualmente armazenadas em texto simples no Room. Licença, portal,
-aplicativos mobile dedicados e desktop continuam em milestones posteriores.
+A tag `v0.1.0-alpha.1` está preparada. Depois de enviada, o workflow criará a
+GitHub Pre-release e produzirá o APK distribuível. Os tokens novos ainda não
+cobrem integralmente a Home e as telas legadas. Também permanecem pendentes
+testes instrumentados/golden, Busca e Perfis reais, catálogo de Filmes e Séries,
+Xtream, XMLTV/EPG, GDD 3.0, GDD 4.0 e proteção das URLs de stream atualmente
+armazenadas em texto simples no Room. Licença, portal, aplicativos mobile
+dedicados e desktop continuam em milestones posteriores.
 
 ### Requisitos de desenvolvimento
 
@@ -325,8 +327,11 @@ apps/android-tv/build/outputs/apk/debug/android-tv-debug.apk
 
 ### Download
 
-Quando a primeira prévia for publicada, o APK ficará em
-[GitHub Releases](https://github.com/lucasserafin94/IPTVBURO/releases).
+A automação da tag `v0.1.0-alpha.1` publicará a
+[página prevista da Release](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.1.0-alpha.1)
+e o
+[APK previsto](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.1.0-alpha.1/IPTV-BURO-v0.1.0-alpha.1-android-debug.apk).
+Esses links só estarão disponíveis depois que o workflow concluir a publicação.
 
 A prévia inicial usa assinatura de desenvolvimento. Veja a
 [política da primeira versão](docs/release/first-release.md).

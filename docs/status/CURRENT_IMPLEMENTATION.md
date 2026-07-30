@@ -2,16 +2,18 @@
 
 - Data da auditoria: 31 de julho de 2026
 - Branch: `main`
-- Base remota: `origin/main` em `8ad495e`
+- Commit da implementação: `origin/main@2c9bd5b`
+- Tag preparada: `v0.1.0-alpha.1`
 - Plataforma implementada: Android TV
 - Versão do aplicativo: `0.1.0-alpha.1`
 
 ## Estado do repositório
 
-A branch remota `main` contém a especificação oficial do produto. A implementação
-Android descrita abaixo existe no workspace sobre essa base, mas ainda não foi
-commitada, enviada ao GitHub ou publicada em uma Release. Os GDDs oficiais foram
-preservados como fonte de verdade.
+A especificação oficial e a implementação Android descrita abaixo estão na
+branch remota `main`; o commit da implementação é `2c9bd5b`. Os GDDs oficiais
+foram preservados como fonte de verdade. A tag `v0.1.0-alpha.1` está preparada,
+mas a GitHub Pre-release e seu APK ainda serão criados pelo workflow após o
+envio da tag.
 
 ## Stack e módulos
 
@@ -83,8 +85,8 @@ de campos antes de uma versão de produção.
 - `./gradlew test lint assembleDebug`: passou;
 - 55 testes JVM: 55 passaram, 0 falhas, 0 erros e 0 ignorados;
 - lint: 0 erros e 18 warnings não bloqueantes;
-- APK debug: 25.433.893 bytes;
-- SHA-256 do APK:
+- APK debug local: 25.433.893 bytes;
+- SHA-256 do APK local:
   `5af0c37258951343e55cb6b0c7a8c3d50d7e088e29d6a8d29db1095d9203ecb4`;
 - instalação e execução no Redmi A5, Android 15;
 - fluxo E2E com a playlist HLS pública Apple BipBop: importação, navegação por
@@ -105,5 +107,6 @@ de campos antes de uma versão de produção.
 - não há modelos temporais do GDD 3.0;
 - não há Resilience Engine, `RetryBudget` ou `ConnectionBudget` do GDD 4.0;
 - URLs de stream continuam em texto simples no Room;
-- a implementação ainda não foi commitada, enviada ao GitHub ou publicada;
+- a Release ainda depende da tag e da conclusão do workflow;
+- tamanho e SHA-256 do APK reconstruído pelo CI ainda não estão confirmados;
 - o aplicativo é Android TV; o telefone é aparelho de validação nesta fase.

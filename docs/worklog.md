@@ -48,8 +48,8 @@
 ### Integração com o repositório oficial
 
 - `origin` conectado a `lucasserafin94/IPTVBURO`;
-- `main` alinhada a `origin/main@8ad495e`, preservando os GDDs versionados;
-- implementação Android local identificada como ainda não versionada;
+- GDDs oficiais preservados na `main`;
+- implementação Android enviada à `main` no commit `2c9bd5b`;
 - branch de protótipo remoto auditada, mas não incorporada automaticamente.
 
 ### Validação em aparelho
@@ -85,13 +85,21 @@
 - `./gradlew test lint assembleDebug` concluído com sucesso;
 - 55 testes JVM aprovados, sem falhas, erros ou testes ignorados;
 - lint com 0 erros e 18 warnings não bloqueantes;
-- APK debug com 25.433.893 bytes e SHA-256
+- APK debug local com 25.433.893 bytes e SHA-256
   `5af0c37258951343e55cb6b0c7a8c3d50d7e088e29d6a8d29db1095d9203ecb4`;
 - Redmi A5 com Android 15 usado no fluxo E2E;
 - playlist HLS pública Apple BipBop importada e navegada até o player;
 - primeiro frame, áudio/vídeo e retorno ao aplicativo observados sem crash.
 
-A implementação continua sem commit, push ou GitHub Release.
+#### Preparação da primeira prévia
+
+- implementação confirmada em `main@2c9bd5b`;
+- tag `v0.1.0-alpha.1` preparada;
+- README, changelog, estado técnico e política de release atualizados;
+- a Pre-release e o APK distribuível ainda dependem do envio da tag e da
+  conclusão do workflow;
+- o hash local não será atribuído ao APK do CI até o artefato publicado ser
+  verificado.
 
 #### Pendências assumidas
 
