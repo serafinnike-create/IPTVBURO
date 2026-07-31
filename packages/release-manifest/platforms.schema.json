@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IPTV BURO Platform Release Manifest",
+  "type": "object",
+  "required": ["manifestVersion", "updatedAt", "platforms"],
+  "properties": {
+    "manifestVersion": {"type": "integer", "minimum": 1},
+    "updatedAt": {"type": "string"},
+    "platforms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "build", "hardware", "notes"],
+        "properties": {
+          "id": {"type": "string"},
+          "status": {"type": "string", "enum": ["NOT_STARTED", "SCAFFOLDED", "BUILDING", "TESTING", "HARDWARE_VALIDATION", "STORE_PREPARATION", "RELEASE_CANDIDATE", "RELEASE_READY", "PUBLISHED", "BLOCKED"]},
+          "version": {"type": ["string", "null"]},
+          "build": {"type": "string"},
+          "hardware": {"type": "string"},
+          "notes": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

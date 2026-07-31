@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IPTV BURO Platform Capabilities",
+  "type": "object",
+  "required": ["platformId", "navigation", "playback", "offline", "distribution"],
+  "properties": {
+    "platformId": { "type": "string" },
+    "navigation": {
+      "type": "object",
+      "required": ["dpad", "touch", "keyboard", "mouse"],
+      "properties": {
+        "dpad": { "type": "boolean" },
+        "touch": { "type": "boolean" },
+        "keyboard": { "type": "boolean" },
+        "mouse": { "type": "boolean" },
+        "voice": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "playback": {
+      "type": "object",
+      "required": ["engine", "hls", "dash", "seek"],
+      "properties": {
+        "engine": { "type": "string" },
+        "hls": { "type": "boolean" },
+        "dash": { "type": "boolean" },
+        "seek": { "type": "boolean" },
+        "pip": { "type": "boolean" },
+        "multiview": { "type": "boolean" },
+        "hdr": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "offline": {
+      "type": "object",
+      "required": ["supported"],
+      "properties": {
+        "supported": { "type": "boolean" },
+        "backgroundJobs": { "type": "boolean" },
+        "seasonQueue": { "type": "boolean" },
+        "smartDownloads": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "distribution": {
+      "type": "object",
+      "required": ["channel"],
+      "properties": {
+        "channel": { "type": "string" },
+        "nativePurchase": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

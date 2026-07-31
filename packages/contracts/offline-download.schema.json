@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IPTV BURO Mobile Offline Request",
+  "type": "object",
+  "required": ["schemaVersion", "requestId", "assetId", "profileId", "contentType", "qualityPolicy", "networkPolicy"],
+  "properties": {
+    "schemaVersion": {"type": "integer", "const": 1},
+    "requestId": {"type": "string", "minLength": 8, "maxLength": 128},
+    "assetId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "profileId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "contentType": {"type": "string", "enum": ["MOVIE", "EPISODE"]},
+    "qualityPolicy": {"type": "string", "enum": ["AUTO_RECOMMENDED", "ECONOMY", "HD", "FULL_HD", "BEST_AVAILABLE"]},
+    "networkPolicy": {"type": "string", "enum": ["WIFI_ONLY", "ASK_ON_MOBILE", "WIFI_OR_MOBILE"]},
+    "audioLanguages": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "subtitleLanguages": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "seasonBatchId": {"type": ["string", "null"]},
+    "estimatedBytes": {"type": ["integer", "null"], "minimum": 0}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,16 @@
+{
+  "manifestVersion": 1,
+  "updatedAt": "2026-07-31T10:23:00+02:00",
+  "platforms": [
+    {"id":"android-tv","status":"TESTING","version":"0.1.0-alpha.1","build":"PASSING","hardware":"TV_PENDING","notes":["55 JVM tests passing","M3U/HLS vertical works","GDD 3 and 4 runtime features pending"]},
+    {"id":"android-mobile","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":["GDD 5 and 6 documented"]},
+    {"id":"iphone-ipad","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":["GDD 5 and 6 documented"]},
+    {"id":"apple-tv-macos","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":[]},
+    {"id":"fire-tv","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":[]},
+    {"id":"samsung-tizen","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":[]},
+    {"id":"lg-webos","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":[]},
+    {"id":"philips-titan","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":["Official toolchain access pending"]},
+    {"id":"windows","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":["Stack requires ADR"]},
+    {"id":"web-portal","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_APPLICABLE","notes":["Management only"]}
+  ]
+}

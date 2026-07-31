@@ -1,10 +1,10 @@
 # GDD / PRD TÉCNICO — IPTV BURO
 
-**Versão:** 1.0 + extensões 2.0, 3.0 e 4.0  
-**Data:** 30 de julho de 2026  
+**Versão:** 1.0 + extensões 2.0, 3.0, 4.0, 5.0 e 6.0  
+**Data:** 31 de julho de 2026  
 **Status:** documentação obrigatória para desenvolvimento com Codex
 
-Este GDD foi dividido em camadas para facilitar leitura, manutenção e execução pelo Codex. **Todos os documentos fazem parte da especificação obrigatória.**
+Todos os documentos abaixo fazem parte da especificação oficial. O código existente deve ser preservado e evoluído incrementalmente.
 
 ## GDD 1.0 — Fundação técnica e comercial
 
@@ -17,50 +17,65 @@ Este GDD foi dividido em camadas para facilitar leitura, manutenção e execuç�
 
 ## GDD 2.0 — Experiência revolucionária
 
-O GDD 2.0 transforma a fundação em uma plataforma premium com identidade própria, design cinematográfico, descoberta inteligente, TV ao vivo reinventada e continuidade entre dispositivos.
+- [GDD 2.0 — Revolutionary Entertainment Experience](GDD_2_REVOLUTIONARY_EXPERIENCE.md)
+- [Prompt de continuação](PROMPT_CODEX_CONTINUE_GDD2.md)
 
-- [Índice e regras de precedência do GDD 2.0](GDD_2_REVOLUTIONARY_EXPERIENCE.md)
-- [Prompt para o Codex continuar sem reiniciar o projeto](PROMPT_CODEX_CONTINUE_GDD2.md)
+Fonte de verdade para design, UX, navegação, descoberta, TV ao vivo e experiência premium.
 
-## GDD 3.0 — Inteligência temporal do catálogo
-
-O GDD 3.0 separa a data em que um conteúdo entrou na playlist da data real em que a obra foi lançada. Ele impede que filmes antigos adicionados recentemente apareçam como lançamentos atuais e cria filtros confiáveis por ano, década, data de adição e confiança dos metadados.
+## GDD 3.0 — Inteligência temporal
 
 - [GDD 3.0 — Catalog Intelligence & Release Integrity](GDD_3_CATALOG_RELEASE_INTELLIGENCE.md)
-- [Prompt para o Codex implementar o BURO Temporal Intelligence](PROMPT_CODEX_CONTINUE_GDD3.md)
+- [Prompt de continuação](PROMPT_CODEX_CONTINUE_GDD3.md)
 
-## GDD 4.0 — Confiabilidade e recuperação de falhas
+Fonte de verdade para ano real, lançamentos, recém-adicionados, séries, temporadas e organização temporal.
 
-O GDD 4.0 cria o **BURO Resilience Engine** para normalizar erros, limitar retries, respeitar conexões simultâneas, proteger snapshots válidos, recuperar playback com segurança e gerar diagnósticos sem expor credenciais.
+## GDD 4.0 — Confiabilidade
 
-- [Índice do GDD 4.0 — Reliability, Failure Recovery & Playback Integrity](GDD_4_RELIABILITY_FAILURE_RECOVERY.md)
+- [GDD 4.0 — Reliability, Failure Recovery & Playback Integrity](GDD_4_RELIABILITY_FAILURE_RECOVERY.md)
 - [Taxonomia de falhas](gdd-v4/01-failure-taxonomy.md)
-- [Motor de recuperação, retry e conexões](gdd-v4/02-recovery-engine.md)
-- [Integridade de playlist, Xtream e EPG](gdd-v4/03-playlist-epg-data-integrity.md)
-- [Playback e compatibilidade por dispositivo](gdd-v4/04-playback-device-compatibility.md)
-- [Observabilidade e Failure Test Lab](gdd-v4/05-observability-test-lab.md)
-- [Roadmap e critérios de aceitação](gdd-v4/06-roadmap-acceptance.md)
-- [Prompt para o Codex implementar o GDD 4.0](PROMPT_CODEX_CONTINUE_GDD4.md)
+- [Motor de recuperação](gdd-v4/02-recovery-engine.md)
+- [Playlist e EPG](gdd-v4/03-playlist-epg-data-integrity.md)
+- [Compatibilidade de playback](gdd-v4/04-playback-device-compatibility.md)
+- [Observabilidade e testes](gdd-v4/05-observability-test-lab.md)
+- [Roadmap e aceitação](gdd-v4/06-roadmap-acceptance.md)
+- [Prompt de continuação](PROMPT_CODEX_CONTINUE_GDD4.md)
 
-## Instrução ao Codex
+Fonte de verdade para falhas, retries, recuperação, conexões, importação transacional e diagnóstico.
 
-Antes de implementar qualquer funcionalidade, leia:
+## GDD 5.0 — Entrega universal multiplataforma
 
-1. este índice;
-2. os seis capítulos do GDD 1.0;
-3. o índice e todos os capítulos do GDD 2.0;
-4. o GDD 3.0 completo;
-5. o índice e todos os capítulos do GDD 4.0;
-6. o prompt específico da etapa em execução.
+- [GDD 5.0 — Universal Multiplatform Delivery](GDD_5_UNIVERSAL_MULTIPLATFORM_DELIVERY.md)
+- [ADR da arquitetura multiplataforma](adr/ADR-0001-MULTIPLATFORM-DELIVERY-ARCHITECTURE.md)
+- [Prompt de continuação](PROMPT_CODEX_CONTINUE_GDD5.md)
 
-Em caso de conflito:
+Define o IPTV BURO como um produto único com aplicações próprias para Android TV, Fire TV, Android mobile, Apple, Samsung, LG, Titan OS, Windows e portal web.
 
-1. priorize legalidade, segurança e privacidade;
-2. preserve a arquitetura-base, migrações e contratos úteis existentes;
-3. use o GDD 2.0 como fonte de verdade para design, UX, navegação, descoberta, TV ao vivo e experiência premium;
-4. use o GDD 3.0 como fonte de verdade para datas, anos, lançamentos, recém-adicionados, séries, temporadas e organização temporal;
-5. use o GDD 4.0 como fonte de verdade para falhas, retries, recuperação, limite de conexões, importação transacional, diagnóstico e testes de caos;
-6. não reinicie nem apague o trabalho existente sem auditoria e ADR;
-7. nunca trate data de importação como data de lançamento;
-8. nunca desative TLS, contorne DRM/autorização ou registre credenciais para recuperar um stream;
-9. nenhuma correção de reliability está pronta sem fixture e teste reproduzível.
+## GDD 6.0 — BURO Offline Vault
+
+- [GDD 6.0 — Offline Vault](GDD_6_BURO_OFFLINE_VAULT.md)
+- [Prompt de continuação](PROMPT_CODEX_CONTINUE_GDD6.md)
+
+Define download e playback offline de filmes, episódios e temporadas elegíveis no Android mobile/tablet e iPhone/iPad. A função não deve ser exibida nas TVs durante o P0.
+
+## Ordem obrigatória para o Codex
+
+1. Ler este índice.
+2. Ler os GDDs 1.0 a 4.0.
+3. Ler o GDD 5.0 e o ADR multiplataforma.
+4. Ler o GDD 6.0 quando trabalhar em mobile/offline.
+5. Ler `docs/status/CURRENT_IMPLEMENTATION.md`.
+6. Auditar o código e os testes existentes.
+7. Executar o prompt específico da etapa.
+
+## Regras de precedência
+
+1. legalidade, segurança e privacidade;
+2. preservar código funcional, dados e migrações;
+3. GDD 2.0 para design e experiência;
+4. GDD 3.0 para datas e lançamentos;
+5. GDD 4.0 para confiabilidade;
+6. GDD 5.0 para plataformas e paridade;
+7. GDD 6.0 para offline mobile;
+8. nenhuma plataforma pode ser chamada de pronta sem build, testes e hardware;
+9. Android TV é a referência inicial, não o limite do produto;
+10. nenhuma função offline pode exportar arquivos ou ignorar restrições da fonte/plataforma.
