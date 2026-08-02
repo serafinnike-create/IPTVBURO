@@ -557,7 +557,7 @@ private fun XtreamCatalogCard(
 }
 
 @Composable
-private fun XtreamItemDetail(
+internal fun XtreamItemDetail(
     item: XtreamCatalogItem?,
     movieStatus: MovieDetailsStatus,
     seriesStatus: SeriesDetailsStatus,

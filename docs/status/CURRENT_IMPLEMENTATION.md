@@ -63,15 +63,20 @@ registra arquitetura e escopo, não declara aprovação E2E, hashes ou publicaç
   classificação seja apropriado;
 - o contrato EPG e a fonte privada autorizada passaram no teste de
   compatibilidade sem persistir ou imprimir credenciais.
+- a Home Windows deixou de reutilizar o catálogo administrativo: agora possui
+  destaque e fileiras editoriais que mudam deterministicamente a cada dia,
+  respeitam Kids e removem variantes duplicadas de qualidade/idioma da seleção;
+- catálogo completo, Home e Favoritos são destinos distintos; sinopse e ficha
+  só são carregadas após clique explícito no conteúdo.
 
 ### Gate local mais recente
 
-- 120 testes: 0 falhas, 0 erros e 2 ignorados por condição de plataforma;
+- 123 testes: 0 falhas, 0 erros e 2 ignorados por condição de plataforma;
 - Android lint: 0 erros;
 - APK debug: 32.113.725 bytes, SHA-256
   `463D9BB614E2207CE0A1FDD83F6722D2D0828A84018FEA11DE32489DB5911F90`;
-- MSI Windows preview: 81.437.024 bytes, SHA-256
-  `457C32A62D65A6E2FD1FBDDCA3429E39ABEA5EF5D060871F7E30D80EC5A1A88B`;
+- MSI Windows preview: 81.490.272 bytes, SHA-256
+  `B31DA07C3A04B15D3A5AEA5717A642B9A64A3B7A6E4301BE303A5B2184D2E27B`;
 - os três identificadores da fonte privada autorizada tiveram zero ocorrências
   no worktree publicável e em todo o histórico Git;
 - a build final foi instalada no Android 15 e iniciou sem crash; a validação

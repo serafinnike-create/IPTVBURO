@@ -35,6 +35,7 @@ import java.net.URI
 import java.nio.file.AccessDeniedException
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
+import java.time.LocalDate
 import java.util.Arrays
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
@@ -48,6 +49,14 @@ class DesktopAppState(
     private val rememberedXtreamStore: RememberedXtreamStore,
     private val userStore: DesktopUserStore = DesktopUserStore(),
 ) {
+    var destination by mutableStateOf(DesktopDestination.HOME)
+        private set
+
+    var dailyHomeStatus by mutableStateOf<DailyHomeStatus>(DailyHomeStatus.Idle)
+        private set
+
+    private var dailySelectedItem: XtreamCatalogItem? = null
+
     private val initialUserSnapshot = userStore.load()
     var profiles by mutableStateOf(initialUserSnapshot.profiles)
         private set
@@ -169,6 +178,7 @@ class DesktopAppState(
 
     suspend fun setFavoritesOnly(enabled: Boolean) {
         favoritesOnly = enabled
+        destination = if (enabled) DesktopDestination.FAVORITES else DesktopDestination.CATALOG
         if (isXtreamSelected) refreshXtreamPage(pageIndex = 0)
     }
 
@@ -252,9 +262,86 @@ class DesktopAppState(
                 ?: visibleChannels.firstOrNull()
 
     val selectedXtreamItem: XtreamCatalogItem?
-        get() =
+        get() = if (destination == DesktopDestination.HOME) {
+            dailySelectedItem
+        } else {
             xtreamPage.items.firstOrNull { it.providerId == selectedXtreamItemId }
                 ?: xtreamPage.items.firstOrNull()
+        }
+
+    fun openHome() {
+        destination = DesktopDestination.HOME
+        favoritesOnly = false
+        dailySelectedItem = null
+    }
+
+    suspend fun openCatalog(contentType: XtreamContentType) {
+        destination = DesktopDestination.CATALOG
+        favoritesOnly = false
+        selectXtreamContentType(contentType)
+    }
+
+    fun selectDailyItem(item: XtreamCatalogItem) {
+        dailySelectedItem = item
+        selectedXtreamItemId = item.providerId
+        seriesDetailsStatus = SeriesDetailsStatus.Idle
+        movieDetailsStatus = MovieDetailsStatus.Idle
+        liveEpgStatus = LiveEpgStatus.Idle
+    }
+
+    suspend fun loadDailyHome(date: LocalDate = LocalDate.now()) {
+        if (dailyHomeStatus is DailyHomeStatus.Loading) return
+        val existing = dailyHomeStatus as? DailyHomeStatus.Loaded
+        if (existing?.snapshot?.date == date && existing.snapshot.sourceId == xtreamSummary?.sourceId) return
+        val sourceId = xtreamSummary?.sourceId ?: return
+        dailyHomeStatus = DailyHomeStatus.Loading
+        runCatching {
+            withContext(Dispatchers.IO) {
+                var latestSummary = xtreamSummary
+                if (XtreamContentType.MOVIE !in latestSummary?.loadedContentTypes.orEmpty()) {
+                    latestSummary = xtreamRepository.loadCatalog(XtreamContentType.MOVIE)
+                }
+                if (XtreamContentType.SERIES !in latestSummary?.loadedContentTypes.orEmpty()) {
+                    latestSummary = xtreamRepository.loadCatalog(XtreamContentType.SERIES)
+                }
+                val kidsMode = activeProfile?.isKids == true
+                val movies = dailyPage(XtreamContentType.MOVIE, date.dayOfYear * 31 + date.year, kidsMode, 18)
+                val series = dailyPage(XtreamContentType.SERIES, date.dayOfYear * 17 + date.year, kidsMode, 18)
+                val live = dailyPage(XtreamContentType.LIVE, date.dayOfYear * 7 + date.year, kidsMode, 14)
+                val heroPool = (movies + series).filter { !it.artworkUrl.isNullOrBlank() }
+                DailyHomeSnapshot(
+                    sourceId = sourceId,
+                    date = date,
+                    hero = heroPool.getOrNull(Math.floorMod(date.toEpochDay(), heroPool.size.coerceAtLeast(1).toLong()).toInt()),
+                    movies = movies,
+                    series = series,
+                    live = live,
+                ) to latestSummary
+            }
+        }.onSuccess { (snapshot, latestSummary) ->
+            xtreamSummary = latestSummary
+            dailyHomeStatus = DailyHomeStatus.Loaded(snapshot)
+        }
+            .onFailure { error ->
+                error.rethrowIfCancellation()
+                dailyHomeStatus = DailyHomeStatus.Error(error.toSafeXtreamMessage())
+            }
+    }
+
+    private fun dailyPage(
+        type: XtreamContentType,
+        seed: Int,
+        kidsMode: Boolean,
+        pageSize: Int,
+    ): List<XtreamCatalogItem> {
+        val fetchSize = (pageSize * 4).coerceAtMost(80)
+        val first = xtreamRepository.page(type, null, "", 0, pageSize = fetchSize, kidsMode = kidsMode)
+        val pageIndex = rotatingPageIndex(seed, first.pageCount)
+        val candidates = if (pageIndex == 0) first.items else {
+            xtreamRepository.page(type, null, "", pageIndex, pageSize = fetchSize, kidsMode = kidsMode).items
+        }
+        return candidates.distinctBy { editorialCatalogKey(it.name) }.take(pageSize)
+    }
 
     suspend fun importLocalPlaylist(path: Path) {
         if (importStatus is ImportStatus.Loading) return
@@ -584,6 +671,8 @@ class DesktopAppState(
         val wasSelected = isXtreamSelected
         clearXtreamUiState()
         xtreamStatus = XtreamStatus.Disconnected
+        dailyHomeStatus = DailyHomeStatus.Idle
+        dailySelectedItem = null
         if (wasSelected) {
             selectedSourceId = catalogs.firstOrNull()?.source?.id
             selectedCategoryId = null
@@ -659,6 +748,8 @@ class DesktopAppState(
         movieAppearances.clear()
         selectedPerson = null
         favoritesOnly = false
+        dailyHomeStatus = DailyHomeStatus.Idle
+        dailySelectedItem = null
     }
 
     private fun visibleXtreamCategories(contentType: XtreamContentType): List<XtreamCategory> =
@@ -714,6 +805,38 @@ data class PersonFilmography(
     val name: String,
     val items: List<XtreamCatalogItem>,
 )
+
+enum class DesktopDestination { HOME, CATALOG, FAVORITES }
+
+data class DailyHomeSnapshot(
+    val sourceId: String,
+    val date: LocalDate,
+    val hero: XtreamCatalogItem?,
+    val movies: List<XtreamCatalogItem>,
+    val series: List<XtreamCatalogItem>,
+    val live: List<XtreamCatalogItem>,
+)
+
+sealed interface DailyHomeStatus {
+    data object Idle : DailyHomeStatus
+
+    data object Loading : DailyHomeStatus
+
+    data class Loaded(val snapshot: DailyHomeSnapshot) : DailyHomeStatus
+
+    data class Error(val message: String) : DailyHomeStatus
+}
+
+internal fun rotatingPageIndex(seed: Int, pageCount: Int): Int =
+    Math.floorMod(seed, pageCount.coerceAtLeast(1))
+
+internal fun editorialCatalogKey(title: String): String =
+    title
+        .lowercase(Locale.ROOT)
+        .replace(Regex("\\[[^]]{1,12}]"), " ")
+        .replace(Regex("\\b(4k|uhd|fhd|hd|sd|h\\.?265|hevc|multi|dual)\\b"), " ")
+        .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+        .trim()
 
 sealed interface ImportStatus {
     data object Idle : ImportStatus

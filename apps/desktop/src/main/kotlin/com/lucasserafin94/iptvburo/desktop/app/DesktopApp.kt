@@ -63,6 +63,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.awt.Frame
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
+import com.lucasserafin94.iptvburo.desktop.DesktopDestination
 import com.lucasserafin94.iptvburo.desktop.ImportStatus
 import com.lucasserafin94.iptvburo.desktop.XtreamStatus
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceKind
@@ -124,7 +125,7 @@ fun DesktopApp(
                                 Key.Three, Key.NumPad3 -> XtreamContentType.SERIES
                                 else -> return@onPreviewKeyEvent false
                             }
-                        scope.launch { appState.selectXtreamContentType(destination) }
+                        scope.launch { appState.openCatalog(destination) }
                         true
                     },
             color = BuroColors.Canvas,
@@ -142,13 +143,10 @@ fun DesktopApp(
                         },
                         onConnectXtream = { showXtreamLogin = true },
                         language = appState.language,
-                        favoritesSelected = appState.favoritesOnly,
-                        onHome = { scope.launch { appState.setFavoritesOnly(false) } },
+                        destination = appState.destination,
+                        onHome = appState::openHome,
                         onLive = {
-                            scope.launch {
-                                appState.setFavoritesOnly(false)
-                                appState.selectXtreamContentType(XtreamContentType.LIVE)
-                            }
+                            scope.launch { appState.openCatalog(XtreamContentType.LIVE) }
                         },
                         onFavorites = { scope.launch { appState.setFavoritesOnly(true) } },
                     )
@@ -170,6 +168,11 @@ fun DesktopApp(
                                     }
                                 },
                                 onConnectXtream = { showXtreamLogin = true },
+                            )
+                        } else if (appState.isXtreamSelected && appState.destination == DesktopDestination.HOME) {
+                            XtreamDailyHome(
+                                appState = appState,
+                                onOpenExternal = { pendingXtreamExternal = it },
                             )
                         } else if (appState.isXtreamSelected) {
                             XtreamWorkspace(
@@ -302,7 +305,7 @@ private fun SourceSidebar(
     onImport: () -> Unit,
     onConnectXtream: () -> Unit,
     language: DesktopLanguage,
-    favoritesSelected: Boolean,
+    destination: DesktopDestination,
     onHome: () -> Unit,
     onLive: () -> Unit,
     onFavorites: () -> Unit,
@@ -319,9 +322,9 @@ private fun SourceSidebar(
         Spacer(Modifier.height(30.dp))
         SectionLabel(desktopText(language, "library"))
         Spacer(Modifier.height(10.dp))
-        NavigationItem(desktopText(language, "home"), selected = !favoritesSelected, onClick = onHome)
-        NavigationItem(desktopText(language, "live"), selected = false, onClick = onLive)
-        NavigationItem(desktopText(language, "favorites"), selected = favoritesSelected, onClick = onFavorites)
+        NavigationItem(desktopText(language, "home"), selected = destination == DesktopDestination.HOME, onClick = onHome)
+        NavigationItem(desktopText(language, "live"), selected = destination == DesktopDestination.CATALOG, onClick = onLive)
+        NavigationItem(desktopText(language, "favorites"), selected = destination == DesktopDestination.FAVORITES, onClick = onFavorites)
         Spacer(Modifier.height(28.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
