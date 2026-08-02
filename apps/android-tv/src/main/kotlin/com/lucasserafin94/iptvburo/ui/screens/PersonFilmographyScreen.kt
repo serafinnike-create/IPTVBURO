@@ -32,11 +32,11 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.lucasserafin94.iptvburo.ui.ChannelUi
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.Muted
-import com.lucasserafin94.iptvburo.ui.theme.Surface
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 internal fun PersonFilmographyScreen(
@@ -46,24 +46,24 @@ internal fun PersonFilmographyScreen(
     onBack: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().background(Ink).padding(28.dp),
+        modifier = Modifier.fillMaxSize().background(BuroCanvas).padding(28.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             FocusSurface(
                 onClick = onBack,
                 modifier = Modifier.size(52.dp),
-                backgroundColor = Surface,
+                backgroundColor = BuroSurface,
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", tint = White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", tint = BuroTextPrimary)
                 }
             }
             Spacer(Modifier.width(18.dp))
             Column {
-                Text(personName, color = White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                Text(personName, color = BuroTextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
                 Text(
                     "Filmografia confirmada enquanto você navega nesta fonte",
-                    color = Muted,
+                    color = BuroTextSecondary,
                     fontSize = 14.sp,
                 )
             }
@@ -72,7 +72,7 @@ internal fun PersonFilmographyScreen(
         if (movies.isEmpty()) {
             Text(
                 "A fonte informou o nome, mas não forneceu um identificador de pessoa ou uma filmografia completa.",
-                color = Muted,
+                color = BuroTextSecondary,
                 fontSize = 17.sp,
             )
         } else {
@@ -81,7 +81,7 @@ internal fun PersonFilmographyScreen(
                     FocusSurface(
                         onClick = { onOpenMovie(movie) },
                         modifier = Modifier.fillMaxWidth().height(116.dp),
-                        backgroundColor = Surface,
+                        backgroundColor = BuroSurface,
                     ) {
                         Row(
                             modifier = Modifier.fillMaxSize().padding(12.dp),
@@ -96,17 +96,17 @@ internal fun PersonFilmographyScreen(
                                 )
                             } else {
                                 Box(
-                                    Modifier.size(62.dp).clip(CircleShape).background(Teal.copy(alpha = 0.15f)),
+                                    Modifier.size(62.dp).clip(CircleShape).background(BuroAccent.copy(alpha = 0.15f)),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    Text(movie.name.take(1), color = Teal, fontWeight = FontWeight.Black)
+                                    Text(movie.name.take(1), color = BuroAccent, fontWeight = FontWeight.Black)
                                 }
                             }
                             Spacer(Modifier.width(16.dp))
                             Column {
                                 Text(
                                     movie.name,
-                                    color = White,
+                                    color = BuroTextPrimary,
                                     fontSize = 19.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 2,
@@ -114,7 +114,7 @@ internal fun PersonFilmographyScreen(
                                 )
                                 Text(
                                     listOfNotNull(movie.year?.toString(), movie.rating?.let { "★ ${"%.1f".format(it)}" }).joinToString(" • "),
-                                    color = Muted,
+                                    color = BuroTextSecondary,
                                     fontSize = 14.sp,
                                 )
                             }

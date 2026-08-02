@@ -87,14 +87,14 @@ import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
 import com.lucasserafin94.iptvburo.ui.ChannelUi
 import com.lucasserafin94.iptvburo.ui.LiveProgramUi
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
-import com.lucasserafin94.iptvburo.ui.theme.Danger
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.Muted
-import com.lucasserafin94.iptvburo.ui.theme.Surface
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroDanger
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 fun PlayerScreen(
@@ -396,7 +396,7 @@ fun PlayerScreen(
                         controlsVisible = true
                     },
                     icon = {
-                        Icon(Icons.Default.LockOpen, contentDescription = "Desbloquear controles", tint = White)
+                        Icon(Icons.Default.LockOpen, contentDescription = "Desbloquear controles", tint = BuroTextPrimary)
                     },
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = 18.dp),
                 )
@@ -423,7 +423,7 @@ fun PlayerScreen(
 
                 !resumeChoiceResolved -> Text(
                     text = stringResource(R.string.player_loading),
-                    color = White,
+                    color = BuroTextPrimary,
                     modifier = Modifier.align(Alignment.Center),
                 )
 
@@ -442,12 +442,12 @@ fun PlayerScreen(
 
                 playbackState.isLoading -> Text(
                     text = stringResource(R.string.player_loading),
-                    color = White,
+                    color = BuroTextPrimary,
                     fontSize = 18.sp,
                     modifier = Modifier
                         .align(Alignment.Center)
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Ink.copy(alpha = 0.86f))
+                        .background(BuroCanvas.copy(alpha = 0.86f))
                         .padding(horizontal = 24.dp, vertical = 16.dp),
                 )
             }
@@ -464,28 +464,28 @@ private fun ResumeChoice(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.clip(RoundedCornerShape(22.dp)).background(Ink.copy(alpha = 0.96f)).padding(26.dp),
+        modifier = modifier.clip(RoundedCornerShape(22.dp)).background(BuroCanvas.copy(alpha = 0.96f)).padding(26.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Continuar assistindo?", color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("Continuar assistindo?", color = BuroTextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         FocusSurface(
             onClick = onContinue,
             modifier = Modifier.width(260.dp).height(54.dp),
-            backgroundColor = White,
-            focusedBackgroundColor = White,
+            backgroundColor = BuroTextPrimary,
+            focusedBackgroundColor = BuroTextPrimary,
             contentAlignment = Alignment.Center,
         ) {
-            Text("Continuar de ${formatResumeTime(positionMs)}", color = Ink, fontWeight = FontWeight.Bold)
+            Text("Continuar de ${formatResumeTime(positionMs)}", color = BuroCanvas, fontWeight = FontWeight.Bold)
         }
         FocusSurface(
             onClick = onStartOver,
             modifier = Modifier.width(260.dp).height(54.dp),
-            backgroundColor = Surface,
-            focusedBackgroundColor = Surface,
+            backgroundColor = BuroSurface,
+            focusedBackgroundColor = BuroSurface,
             contentAlignment = Alignment.Center,
         ) {
-            Text("Assistir do início", color = White, fontWeight = FontWeight.SemiBold)
+            Text("Assistir do início", color = BuroTextPrimary, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -570,7 +570,7 @@ private fun PlayerTopBar(
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = stringResource(R.string.player_back),
-                    tint = White,
+                    tint = BuroTextPrimary,
                 )
             },
         )
@@ -578,25 +578,25 @@ private fun PlayerTopBar(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "IPTV BURO",
-                color = Teal,
+                color = BuroAccent,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp,
             )
             Text(
                 text = channelName,
-                color = White,
+                color = BuroTextPrimary,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             when {
-                isEpgLoading -> Text("Carregando guia…", color = Muted, fontSize = 13.sp)
+                isEpgLoading -> Text("Carregando guia…", color = BuroTextSecondary, fontSize = 13.sp)
                 nowPlaying != null -> {
-                    Text("Agora · ${nowPlaying.title}", color = White.copy(alpha = 0.84f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("Agora · ${nowPlaying.title}", color = BuroTextPrimary.copy(alpha = 0.84f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     nextPlaying?.let { next ->
-                        Text("A seguir · ${next.title}", color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("A seguir · ${next.title}", color = BuroTextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -641,7 +641,7 @@ private fun PlayerControls(
                         Icon(
                             Icons.Default.FastRewind,
                             contentDescription = "-10s",
-                            tint = White,
+                            tint = BuroTextPrimary,
                         )
                     },
                 )
@@ -659,7 +659,7 @@ private fun PlayerControls(
                             Icons.Default.PlayArrow
                         },
                         contentDescription = null,
-                        tint = Ink,
+                        tint = BuroCanvas,
                         modifier = Modifier.size(34.dp),
                     )
                 },
@@ -672,7 +672,7 @@ private fun PlayerControls(
                         Icon(
                             Icons.Default.FastForward,
                             contentDescription = "+30s",
-                            tint = White,
+                            tint = BuroTextPrimary,
                         )
                     },
                 )
@@ -682,15 +682,15 @@ private fun PlayerControls(
                 onClick = onCycleSpeed,
                 icon = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Speed, contentDescription = "Velocidade", tint = White, modifier = Modifier.size(22.dp))
-                        Text("${speed}x", color = White, fontSize = 10.sp)
+                        Icon(Icons.Default.Speed, contentDescription = "Velocidade", tint = BuroTextPrimary, modifier = Modifier.size(22.dp))
+                        Text("${speed}x", color = BuroTextPrimary, fontSize = 10.sp)
                     }
                 },
             )
             if (canUsePictureInPicture) {
                 ControlButton(
                     onClick = onPictureInPicture,
-                    icon = { Icon(Icons.Default.PictureInPicture, contentDescription = "Picture-in-Picture", tint = White) },
+                    icon = { Icon(Icons.Default.PictureInPicture, contentDescription = "Picture-in-Picture", tint = BuroTextPrimary) },
                 )
             }
             ControlButton(
@@ -699,13 +699,13 @@ private fun PlayerControls(
                     Icon(
                         if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                         contentDescription = if (isFullscreen) "Sair da tela cheia" else "Tela cheia",
-                        tint = White,
+                        tint = BuroTextPrimary,
                     )
                 },
             )
             ControlButton(
                 onClick = onLock,
-                icon = { Icon(Icons.Default.Lock, contentDescription = "Bloquear controles", tint = White) },
+                icon = { Icon(Icons.Default.Lock, contentDescription = "Bloquear controles", tint = BuroTextPrimary) },
             )
         }
 
@@ -717,9 +717,9 @@ private fun PlayerControls(
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.BrightnessHigh, contentDescription = "Brilho", tint = White)
+                Icon(Icons.Default.BrightnessHigh, contentDescription = "Brilho", tint = BuroTextPrimary)
                 Slider(value = brightness, onValueChange = onBrightnessChanged, valueRange = 0.05f..1f, modifier = Modifier.weight(1f))
-                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Volume", tint = White)
+                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Volume", tint = BuroTextPrimary)
                 Slider(value = volume, onValueChange = onVolumeChanged, valueRange = 0f..1f, modifier = Modifier.weight(1f))
             }
         }
@@ -728,7 +728,7 @@ private fun PlayerControls(
             Spacer(Modifier.height(12.dp))
             Text(
                 text = stringResource(R.string.player_seek_unavailable),
-                color = Muted,
+                color = BuroTextSecondary,
                 fontSize = 13.sp,
             )
         }
@@ -753,9 +753,9 @@ private fun ControlButton(
         modifier = modifier
             .size(if (emphasized) 68.dp else 54.dp)
             .focusRequester(focusRequester),
-        backgroundColor = if (emphasized) White.copy(alpha = 0.94f) else Ink.copy(alpha = 0.58f),
-        focusedBackgroundColor = if (emphasized) White else Surface.copy(alpha = 0.88f),
-        selectedBackgroundColor = if (emphasized) White else Surface.copy(alpha = 0.88f),
+        backgroundColor = if (emphasized) BuroTextPrimary.copy(alpha = 0.94f) else BuroCanvas.copy(alpha = 0.58f),
+        focusedBackgroundColor = if (emphasized) BuroTextPrimary else BuroSurface.copy(alpha = 0.88f),
+        selectedBackgroundColor = if (emphasized) BuroTextPrimary else BuroSurface.copy(alpha = 0.88f),
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             icon()
@@ -786,13 +786,13 @@ private fun PlaybackError(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(Ink.copy(alpha = 0.94f))
+            .background(BuroCanvas.copy(alpha = 0.94f))
             .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = stringResource(R.string.player_error),
-            color = Danger,
+            color = BuroDanger,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
         )
@@ -806,7 +806,7 @@ private fun PlaybackError(
                         PlaybackFailure.UNKNOWN -> R.string.player_error_unknown
                     },
                 ),
-            color = Muted,
+            color = BuroTextSecondary,
             fontSize = 14.sp,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.width(320.dp),
@@ -822,7 +822,7 @@ private fun PlaybackError(
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     text = stringResource(R.string.player_retry),
-                    color = White,
+                    color = BuroTextPrimary,
                     fontWeight = FontWeight.SemiBold,
                 )
             }

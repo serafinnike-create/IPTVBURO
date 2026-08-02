@@ -59,13 +59,13 @@ import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroErrorState
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButtonStyle
-import com.lucasserafin94.iptvburo.ui.theme.Blue
-import com.lucasserafin94.iptvburo.ui.theme.Danger
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.Muted
-import com.lucasserafin94.iptvburo.ui.theme.Surface
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroDanger
+import com.lucasserafin94.iptvburo.ui.theme.BuroGold
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 internal fun SeriesDetailsScreen(
@@ -83,7 +83,7 @@ internal fun SeriesDetailsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(modifier = modifier.fillMaxSize().background(Ink)) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().background(BuroCanvas)) {
         val portrait = maxWidth < 600.dp && maxHeight >= maxWidth
         val columns = if (portrait) 1 else 2
         val padding = if (portrait) 16.dp else 42.dp
@@ -121,7 +121,7 @@ internal fun SeriesDetailsScreen(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color(0x3308090A), Color(0xD908090A), Ink),
+                        listOf(Color(0x3308090A), Color(0xD908090A), BuroCanvas),
                         endY = 820f,
                     ),
                 ),
@@ -156,7 +156,7 @@ internal fun SeriesDetailsScreen(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = stringResource(R.string.common_back),
-                                tint = Teal,
+                                tint = BuroAccent,
                             )
                         }
                     }
@@ -164,7 +164,7 @@ internal fun SeriesDetailsScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = details?.title ?: fallbackTitle,
-                            color = White,
+                            color = BuroTextPrimary,
                             fontSize = if (portrait) 25.sp else 31.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 2,
@@ -172,7 +172,7 @@ internal fun SeriesDetailsScreen(
                         )
                         Text(
                             text = stringResource(R.string.series_episodes_title),
-                            color = Teal,
+                            color = BuroAccent,
                             fontSize = 14.sp,
                         )
                     }
@@ -193,7 +193,7 @@ internal fun SeriesDetailsScreen(
                     if (facts.isNotEmpty()) {
                         Text(
                             text = facts.joinToString("  •  "),
-                            color = Teal,
+                            color = BuroAccent,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -231,7 +231,7 @@ internal fun SeriesDetailsScreen(
                                     R.string.playback_resolving
                                 },
                             ),
-                        color = if (hasPlaybackError) Danger else Teal,
+                        color = if (hasPlaybackError) BuroDanger else BuroAccent,
                         fontSize = 14.sp,
                     )
                 }
@@ -248,7 +248,7 @@ internal fun SeriesDetailsScreen(
                         ) {
                             Text(
                                 text = stringResource(R.string.series_loading),
-                                color = Muted,
+                                color = BuroTextSecondary,
                                 fontSize = 17.sp,
                             )
                         }
@@ -277,7 +277,7 @@ internal fun SeriesDetailsScreen(
                         ) {
                             Text(
                                 text = stringResource(R.string.series_empty),
-                                color = Muted,
+                                color = BuroTextSecondary,
                                 fontSize = 17.sp,
                             )
                         }
@@ -289,7 +289,7 @@ internal fun SeriesDetailsScreen(
                         item(key = "series:plot") {
                             Text(
                                 text = plot,
-                                color = Muted,
+                                color = BuroTextSecondary,
                                 fontSize = 16.sp,
                                 lineHeight = 23.sp,
                             )
@@ -305,14 +305,14 @@ internal fun SeriesDetailsScreen(
                                         .padding(18.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Text("Direção  •  ${details.director}", color = Muted, fontSize = 15.sp)
+                                Text("Direção  •  ${details.director}", color = BuroTextSecondary, fontSize = 15.sp)
                             }
                         }
                     }
                     details.cast?.toCastNames()?.takeIf(List<String>::isNotEmpty)?.let { cast ->
                         item(key = "series:cast") {
                             Column(modifier = Modifier.fillMaxWidth()) {
-                                Text("Elenco", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text("Elenco", color = BuroTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                 Spacer(Modifier.height(9.dp))
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     items(cast, key = { it.lowercase() }) { actor ->
@@ -333,7 +333,7 @@ internal fun SeriesDetailsScreen(
                                 FocusSurface(
                                     onClick = { expandedSeason = if (expandedSeason == season) null else season },
                                     modifier = Modifier.fillMaxWidth().height(64.dp),
-                                    backgroundColor = Surface,
+                                    backgroundColor = BuroSurface,
                                 ) {
                                     Row(
                                         Modifier.fillMaxSize().padding(horizontal = 18.dp),
@@ -341,14 +341,14 @@ internal fun SeriesDetailsScreen(
                                     ) {
                                         Text(
                                             text = stringResource(R.string.series_season, season),
-                                            color = White,
+                                            color = BuroTextPrimary,
                                             fontSize = 21.sp,
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier.weight(1f),
                                         )
                                         Text(
                                             text = "${episodes.size} episódios  ${if (expandedSeason == season) "▲" else "▼"}",
-                                            color = Teal,
+                                            color = BuroAccent,
                                             fontSize = 14.sp,
                                         )
                                     }
@@ -399,7 +399,7 @@ private fun EpisodeCard(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier.height(98.dp),
-        backgroundColor = Surface,
+        backgroundColor = BuroSurface,
     ) {
         Row(
             modifier = Modifier
@@ -409,7 +409,7 @@ private fun EpisodeCard(
         ) {
             Box(
                 modifier = Modifier.size(width = 86.dp, height = 56.dp).clip(RoundedCornerShape(10.dp))
-                    .background(Brush.linearGradient(listOf(Blue, Teal))),
+                    .background(Brush.linearGradient(listOf(BuroGold, BuroAccent))),
                 contentAlignment = Alignment.Center,
             ) {
                 episode.artworkUrl?.let { artwork ->
@@ -420,7 +420,7 @@ private fun EpisodeCard(
                         contentScale = ContentScale.Crop,
                     )
                 }
-                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = White)
+                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = BuroTextPrimary)
             }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -438,14 +438,14 @@ private fun EpisodeCard(
                                 episode.episodeNumber,
                             )
                         },
-                    color = Teal,
+                    color = BuroAccent,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = episode.title,
-                    color = White,
+                    color = BuroTextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
@@ -457,14 +457,14 @@ private fun EpisodeCard(
                     onClick = onDownload,
                     enabled = enabled,
                     modifier = Modifier.size(44.dp),
-                    backgroundColor = Ink.copy(alpha = 0.55f),
-                    focusedBackgroundColor = Teal,
+                    backgroundColor = BuroCanvas.copy(alpha = 0.55f),
+                    focusedBackgroundColor = BuroAccent,
                 ) { focused ->
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.Download,
                             contentDescription = "Baixar episódio",
-                            tint = if (focused) Ink else Teal,
+                            tint = if (focused) BuroCanvas else BuroAccent,
                         )
                     }
                 }

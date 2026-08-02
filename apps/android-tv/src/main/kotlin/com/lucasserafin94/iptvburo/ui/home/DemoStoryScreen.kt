@@ -43,13 +43,12 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
-import com.lucasserafin94.iptvburo.ui.theme.Blue
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.InkSoft
-import com.lucasserafin94.iptvburo.ui.theme.Muted
-import com.lucasserafin94.iptvburo.ui.theme.Surface
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroGold
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 fun DemoStoryScreen(
@@ -66,7 +65,7 @@ fun DemoStoryScreen(
             .fillMaxSize()
             .background(
                 Brush.linearGradient(
-                    colors = listOf(Ink, InkSoft, Ink),
+                    colors = listOf(BuroCanvas, BuroSurface, BuroCanvas),
                 ),
             ),
     ) {
@@ -162,7 +161,7 @@ private fun StoryHeader(
             modifier = Modifier
                 .size(52.dp)
                 .focusRequester(backRequester),
-            backgroundColor = Surface,
+            backgroundColor = BuroSurface,
         ) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -171,7 +170,7 @@ private fun StoryHeader(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = stringResource(R.string.buro_home_back),
-                    tint = Teal,
+                    tint = BuroAccent,
                     modifier = Modifier.size(24.dp),
                 )
             }
@@ -179,7 +178,7 @@ private fun StoryHeader(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = White,
+                color = BuroTextPrimary,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -187,7 +186,7 @@ private fun StoryHeader(
             )
             Text(
                 text = stringResource(R.string.buro_story_header_demo),
-                color = Muted,
+                color = BuroTextSecondary,
                 fontSize = 14.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -236,7 +235,7 @@ private fun StoryCopy(
         Spacer(Modifier.height(14.dp))
         Text(
             text = item.title,
-            color = White,
+            color = BuroTextPrimary,
             fontSize = if (compact) 34.sp else 46.sp,
             lineHeight = if (compact) 38.sp else 50.sp,
             fontWeight = FontWeight.Black,
@@ -246,7 +245,7 @@ private fun StoryCopy(
         Spacer(Modifier.height(9.dp))
         Text(
             text = item.subtitle,
-            color = Teal,
+            color = BuroAccent,
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 2,
@@ -255,7 +254,7 @@ private fun StoryCopy(
         Spacer(Modifier.height(12.dp))
         Text(
             text = item.metadata,
-            color = Muted,
+            color = BuroTextSecondary,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
         )
@@ -271,7 +270,7 @@ private fun StoryCopy(
         Spacer(Modifier.height(20.dp))
         Text(
             text = item.synopsis,
-            color = White.copy(alpha = 0.88f),
+            color = BuroTextPrimary.copy(alpha = 0.88f),
             fontSize = 17.sp,
             lineHeight = 25.sp,
             maxLines = 5,
@@ -285,9 +284,9 @@ private fun StoryCopy(
             modifier = Modifier
                 .fillMaxWidth(if (compact) 1f else 0.62f)
                 .height(54.dp),
-            backgroundColor = Teal,
-            focusedBackgroundColor = Teal,
-            selectedBackgroundColor = Teal,
+            backgroundColor = BuroAccent,
+            focusedBackgroundColor = BuroAccent,
+            selectedBackgroundColor = BuroAccent,
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 20.dp),
@@ -297,13 +296,13 @@ private fun StoryCopy(
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = null,
-                    tint = Ink,
+                    tint = BuroCanvas,
                     modifier = Modifier.size(21.dp),
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = stringResource(R.string.buro_story_add_source),
-                    color = Ink,
+                    color = BuroCanvas,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                 )
@@ -318,10 +317,10 @@ private fun StorySafetyNote() {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Blue.copy(alpha = 0.13f))
+            .background(BuroGold.copy(alpha = 0.13f))
             .border(
                 width = 1.dp,
-                color = Blue.copy(alpha = 0.3f),
+                color = BuroGold.copy(alpha = 0.3f),
                 shape = RoundedCornerShape(18.dp),
             )
             .padding(16.dp),
@@ -331,12 +330,12 @@ private fun StorySafetyNote() {
         Icon(
             imageVector = Icons.Default.Info,
             contentDescription = null,
-            tint = Teal,
+            tint = BuroAccent,
             modifier = Modifier.size(22.dp),
         )
         Text(
             text = stringResource(R.string.buro_story_no_playback),
-            color = Muted,
+            color = BuroTextSecondary,
             fontSize = 15.sp,
             lineHeight = 21.sp,
         )
@@ -348,17 +347,17 @@ private fun StoryDemoBadge(label: String) {
     Box(
         modifier = Modifier
             .clip(CircleShape)
-            .background(Teal.copy(alpha = 0.12f))
+            .background(BuroAccent.copy(alpha = 0.12f))
             .border(
                 width = 1.dp,
-                color = Teal.copy(alpha = 0.45f),
+                color = BuroAccent.copy(alpha = 0.45f),
                 shape = CircleShape,
             )
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
         Text(
             text = label,
-            color = Teal,
+            color = BuroAccent,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.8.sp,
@@ -375,7 +374,7 @@ private fun MissingStory(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(26.dp))
-            .background(Surface)
+            .background(BuroSurface)
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.08f),
@@ -387,29 +386,29 @@ private fun MissingStory(
         Icon(
             imageVector = Icons.Default.Info,
             contentDescription = null,
-            tint = Teal,
+            tint = BuroAccent,
             modifier = Modifier.size(44.dp),
         )
         Spacer(Modifier.height(18.dp))
         Text(
             text = stringResource(R.string.buro_story_missing_title),
-            color = White,
+            color = BuroTextPrimary,
             fontSize = 27.sp,
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.buro_story_missing_body),
-            color = Muted,
+            color = BuroTextSecondary,
             fontSize = 16.sp,
         )
         Spacer(Modifier.height(24.dp))
         FocusSurface(
             onClick = onImportSource,
             modifier = Modifier.height(52.dp),
-            backgroundColor = Teal,
-            focusedBackgroundColor = Teal,
-            selectedBackgroundColor = Teal,
+            backgroundColor = BuroAccent,
+            focusedBackgroundColor = BuroAccent,
+            selectedBackgroundColor = BuroAccent,
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 20.dp),
@@ -418,12 +417,12 @@ private fun MissingStory(
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = null,
-                    tint = Ink,
+                    tint = BuroCanvas,
                 )
                 Spacer(Modifier.width(9.dp))
                 Text(
                     text = stringResource(R.string.buro_story_add_source),
-                    color = Ink,
+                    color = BuroCanvas,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                 )

@@ -50,14 +50,13 @@ import com.lucasserafin94.iptvburo.ui.XtreamImportStageUi
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButtonStyle
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroProgressBar
-import com.lucasserafin94.iptvburo.ui.theme.Danger
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.InkSoft
-import com.lucasserafin94.iptvburo.ui.theme.Muted
-import com.lucasserafin94.iptvburo.ui.theme.Surface
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
 import com.lucasserafin94.iptvburo.xtream.XtreamEndpointParser
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroDanger
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 internal fun XtreamSourceDialog(
@@ -124,7 +123,7 @@ internal fun XtreamSourceDialog(
         BoxWithConstraints(
             modifier = modifier
                 .fillMaxSize()
-                .background(Ink.copy(alpha = 0.98f))
+                .background(BuroCanvas.copy(alpha = 0.98f))
                 .safeDrawingPadding(),
         ) {
             val stackActions = maxWidth < 600.dp
@@ -148,24 +147,24 @@ internal fun XtreamSourceDialog(
                                 .widthIn(max = 680.dp)
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(24.dp))
-                                .background(Surface)
+                                .background(BuroSurface)
                                 .border(
                                     width = 1.dp,
-                                    color = White.copy(alpha = 0.1f),
+                                    color = BuroTextPrimary.copy(alpha = 0.1f),
                                     shape = RoundedCornerShape(24.dp),
                                 )
                                 .padding(if (stackActions) 20.dp else 30.dp),
                         ) {
                         Text(
                             text = stringResource(R.string.sources_xtream_title),
-                            color = White,
+                            color = BuroTextPrimary,
                             fontSize = if (stackActions) 26.sp else 31.sp,
                             fontWeight = FontWeight.Bold,
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
                             text = stringResource(R.string.sources_xtream_body),
-                            color = Muted,
+                            color = BuroTextSecondary,
                             fontSize = 15.sp,
                             lineHeight = 21.sp,
                         )
@@ -191,7 +190,7 @@ internal fun XtreamSourceDialog(
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 text = stringResource(R.string.sources_xtream_http_warning),
-                                color = Danger,
+                                color = BuroDanger,
                                 fontSize = 13.sp,
                                 lineHeight = 18.sp,
                             )
@@ -217,7 +216,7 @@ internal fun XtreamSourceDialog(
                         Spacer(Modifier.height(12.dp))
                         Text(
                             text = stringResource(R.string.sources_xtream_privacy),
-                            color = Teal,
+                            color = BuroAccent,
                             fontSize = 13.sp,
                             lineHeight = 18.sp,
                         )
@@ -225,7 +224,7 @@ internal fun XtreamSourceDialog(
                             Spacer(Modifier.height(12.dp))
                             Text(
                                 text = stringResource(R.string.sources_xtream_error),
-                                color = Danger,
+                                color = BuroDanger,
                                 fontSize = 14.sp,
                                 lineHeight = 19.sp,
                             )
@@ -325,7 +324,7 @@ private fun XtreamTextField(
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = label,
-            color = White,
+            color = BuroTextPrimary,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -338,10 +337,10 @@ private fun XtreamTextField(
                 .height(54.dp)
                 .onFocusChanged { focused = it.isFocused }
                 .clip(RoundedCornerShape(14.dp))
-                .background(InkSoft)
+                .background(BuroSurface)
                 .border(
                     width = if (focused) 2.dp else 1.dp,
-                    color = if (focused) Teal else White.copy(alpha = 0.12f),
+                    color = if (focused) BuroAccent else BuroTextPrimary.copy(alpha = 0.12f),
                     shape = RoundedCornerShape(14.dp),
                 )
                 .padding(horizontal = 16.dp, vertical = 15.dp),
@@ -349,10 +348,10 @@ private fun XtreamTextField(
             singleLine = true,
             textStyle =
                 TextStyle(
-                    color = if (enabled) White else Muted,
+                    color = if (enabled) BuroTextPrimary else BuroTextSecondary,
                     fontSize = 16.sp,
                 ),
-            cursorBrush = SolidColor(Teal),
+            cursorBrush = SolidColor(BuroAccent),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             visualTransformation = visualTransformation,
             decorationBox = { innerTextField ->
@@ -363,7 +362,7 @@ private fun XtreamTextField(
                     if (value.isEmpty()) {
                         Text(
                             text = placeholder,
-                            color = Muted.copy(alpha = 0.72f),
+                            color = BuroTextSecondary.copy(alpha = 0.72f),
                             fontSize = 15.sp,
                             maxLines = 1,
                         )
@@ -410,19 +409,19 @@ private fun XtreamImportProgress(stage: XtreamImportStageUi?) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(InkSoft)
+            .background(BuroSurface)
             .padding(16.dp),
     ) {
         Text(
             text = stringResource(R.string.sources_xtream_progress_title),
-            color = White,
+            color = BuroTextPrimary,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(6.dp))
         Text(
             text = resolvedStage.localizedLabel(),
-            color = Teal,
+            color = BuroAccent,
             fontSize = 14.sp,
         )
         Spacer(Modifier.height(12.dp))

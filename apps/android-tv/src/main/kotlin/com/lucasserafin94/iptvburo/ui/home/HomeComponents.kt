@@ -55,12 +55,12 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
-import com.lucasserafin94.iptvburo.ui.theme.Blue
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.Muted
-import com.lucasserafin94.iptvburo.ui.theme.Surface
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroGold
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 fun BuroHero(
@@ -75,7 +75,7 @@ fun BuroHero(
     BoxWithConstraints(
         modifier = modifier
             .clip(RoundedCornerShape(28.dp))
-            .background(Ink)
+            .background(BuroCanvas)
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.09f),
@@ -122,19 +122,19 @@ fun BuroHero(
                         Brush.horizontalGradient(
                             colorStops =
                                 arrayOf(
-                                    0f to Ink.copy(alpha = 0.98f),
-                                    0.42f to Ink.copy(alpha = 0.84f),
-                                    0.72f to Ink.copy(alpha = 0.26f),
-                                    1f to Ink.copy(alpha = 0.08f),
+                                    0f to BuroCanvas.copy(alpha = 0.98f),
+                                    0.42f to BuroCanvas.copy(alpha = 0.84f),
+                                    0.72f to BuroCanvas.copy(alpha = 0.26f),
+                                    1f to BuroCanvas.copy(alpha = 0.08f),
                                 ),
                         ),
                     )
                     .background(
                         Brush.verticalGradient(
                             listOf(
-                                Ink.copy(alpha = 0.14f),
+                                BuroCanvas.copy(alpha = 0.14f),
                                 Color.Transparent,
-                                Ink.copy(alpha = 0.48f),
+                                BuroCanvas.copy(alpha = 0.48f),
                             ),
                         ),
                     ),
@@ -162,7 +162,7 @@ fun BuroHero(
             Spacer(Modifier.height(14.dp))
             Text(
                 text = item.title,
-                color = White,
+                color = BuroTextPrimary,
                 fontSize = titleSize,
                 lineHeight = titleSize * 1.03f,
                 fontWeight = FontWeight.Black,
@@ -172,7 +172,7 @@ fun BuroHero(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = item.metadata,
-                color = Teal,
+                color = BuroAccent,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -181,7 +181,7 @@ fun BuroHero(
             Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
             Text(
                 text = item.synopsis,
-                color = White.copy(alpha = 0.86f),
+                color = BuroTextPrimary.copy(alpha = 0.86f),
                 fontSize = bodySize,
                 lineHeight = bodySize * 1.35f,
                 maxLines = if (phonePortrait) 3 else if (compact) 2 else 3,
@@ -316,7 +316,9 @@ fun BuroHomeProgress(
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(safeProgress)
-                .background(Brush.horizontalGradient(listOf(Teal, Blue))),
+                // Solid gold, matching the Windows progress bar. The ivory-to-gold gradient read as
+                // a different component on each platform.
+                .background(BuroGold),
         )
     }
 }
@@ -399,7 +401,7 @@ private fun ArtworkFallback(
                     colors = listOf(
                         palette.first,
                         palette.second,
-                        Ink,
+                        BuroCanvas,
                     ),
                 ),
             ),
@@ -446,7 +448,7 @@ private fun ArtworkFallback(
             ) {
                 Text(
                     text = item.title.firstOrNull()?.uppercase() ?: "B",
-                    color = White.copy(alpha = 0.82f),
+                    color = BuroTextPrimary.copy(alpha = 0.82f),
                     fontSize = if (compactTitle) 34.sp else 42.sp,
                     fontWeight = FontWeight.Black,
                 )
@@ -460,7 +462,7 @@ private fun ArtworkFallback(
                 .align(Alignment.BottomCenter)
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color.Transparent, Ink.copy(alpha = 0.97f)),
+                        listOf(Color.Transparent, BuroCanvas.copy(alpha = 0.97f)),
                     ),
                 ),
         )
@@ -477,7 +479,7 @@ private fun ArtworkFallback(
         ) {
             Text(
                 text = item.badge,
-                color = Teal,
+                color = BuroAccent,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.7.sp,
@@ -486,7 +488,7 @@ private fun ArtworkFallback(
             Spacer(Modifier.height(4.dp))
             Text(
                 text = item.title,
-                color = White,
+                color = BuroTextPrimary,
                 fontSize = if (compactTitle) 17.sp else 19.sp,
                 lineHeight = if (compactTitle) 20.sp else 22.sp,
                 fontWeight = FontWeight.Bold,
@@ -497,7 +499,7 @@ private fun ArtworkFallback(
                 Spacer(Modifier.height(3.dp))
                 Text(
                     text = item.subtitle,
-                    color = Muted,
+                    color = BuroTextSecondary,
                     fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -506,7 +508,7 @@ private fun ArtworkFallback(
                     Spacer(Modifier.height(3.dp))
                     Text(
                         text = item.metadata,
-                        color = White.copy(alpha = 0.82f),
+                        color = BuroTextPrimary.copy(alpha = 0.82f),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -563,6 +565,8 @@ private fun HeroAction(
         if (requestFocus) focusRequester.requestFocus()
     }
 
+    // Gold, not ivory. The Windows primary button is gold, and a product whose main call to action
+    // changes brand colour between platforms does not read as one product.
     FocusSurface(
         onClick = onClick,
         modifier = modifier
@@ -571,9 +575,9 @@ private fun HeroAction(
             .onFocusChanged { focusState ->
                 if (focusState.isFocused) onFocused()
             },
-        backgroundColor = if (primary) Teal else Surface.copy(alpha = 0.88f),
-        focusedBackgroundColor = if (primary) Teal else Surface,
-        selectedBackgroundColor = if (primary) Teal else Surface,
+        backgroundColor = if (primary) BuroGold else BuroSurface.copy(alpha = 0.88f),
+        focusedBackgroundColor = if (primary) BuroGold else BuroSurface,
+        selectedBackgroundColor = if (primary) BuroGold else BuroSurface,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 18.dp),
@@ -583,13 +587,13 @@ private fun HeroAction(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (primary) Ink else Teal,
+                tint = if (primary) BuroCanvas else BuroGold,
                 modifier = Modifier.size(20.dp),
             )
             Spacer(Modifier.width(9.dp))
             Text(
                 text = label,
-                color = if (primary) Ink else White,
+                color = if (primary) BuroCanvas else BuroTextPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -603,17 +607,17 @@ private fun DemoBadge(text: String) {
     Box(
         modifier = Modifier
             .clip(CircleShape)
-            .background(Ink.copy(alpha = 0.62f))
+            .background(BuroCanvas.copy(alpha = 0.62f))
             .border(
                 width = 1.dp,
-                color = Teal.copy(alpha = 0.5f),
+                color = BuroAccent.copy(alpha = 0.5f),
                 shape = CircleShape,
             )
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
         Text(
             text = text,
-            color = Teal,
+            color = BuroAccent,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp,

@@ -25,11 +25,11 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.localization.AppLanguage
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.InkSoft
-import com.lucasserafin94.iptvburo.ui.theme.Muted
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 fun LanguageSelectionScreen(
@@ -40,7 +40,7 @@ fun LanguageSelectionScreen(
         modifier =
             Modifier
                 .fillMaxSize()
-                .background(Brush.linearGradient(listOf(Ink, InkSoft, Ink)))
+                .background(Brush.linearGradient(listOf(BuroCanvas, BuroSurface, BuroCanvas)))
                 .safeDrawingPadding()
                 .padding(24.dp),
         contentAlignment = Alignment.Center,
@@ -49,10 +49,10 @@ fun LanguageSelectionScreen(
             modifier = Modifier.fillMaxWidth().widthIn(max = 760.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("IPTV  BURO", color = White, fontSize = 28.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
+            Text("IPTV  BURO", color = BuroTextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
             Spacer(Modifier.height(16.dp))
-            Text("Escolha seu idioma", color = White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-            Text("Choose your language", color = Muted, fontSize = 16.sp)
+            Text("Escolha seu idioma", color = BuroTextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Text("Choose your language", color = BuroTextSecondary, fontSize = 16.sp)
             Spacer(Modifier.height(30.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -67,13 +67,13 @@ fun LanguageSelectionScreen(
                             modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(language.displayName, color = White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text(language.displayName, color = BuroTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
             }
             Spacer(Modifier.height(18.dp))
-            Text("Você poderá alterar isso em Configurações.", color = Teal, fontSize = 13.sp)
+            Text("Você poderá alterar isso em Configurações.", color = BuroAccent, fontSize = 13.sp)
         }
     }
 }

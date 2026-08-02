@@ -107,19 +107,18 @@ import com.lucasserafin94.iptvburo.ui.home.HomeSourceSummary
 import com.lucasserafin94.iptvburo.ui.home.LivingHomeScreen
 import com.lucasserafin94.iptvburo.ui.navigation.BuroRibbon
 import com.lucasserafin94.iptvburo.ui.security.SecureActivityWindowEffect
-import com.lucasserafin94.iptvburo.ui.theme.Blue
-import com.lucasserafin94.iptvburo.ui.theme.Danger
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.InkSoft
-import com.lucasserafin94.iptvburo.ui.theme.Muted
-import com.lucasserafin94.iptvburo.ui.theme.Surface
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroDanger
+import com.lucasserafin94.iptvburo.ui.theme.BuroGold
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 fun AppShellScreen(
@@ -169,7 +168,7 @@ fun AppShellScreen(
             .safeDrawingPadding()
             .background(
                 Brush.linearGradient(
-                    colors = listOf(Ink, InkSoft, Ink),
+                    colors = listOf(BuroCanvas, BuroSurface, BuroCanvas),
                 ),
             ),
     ) {
@@ -508,17 +507,17 @@ private fun Sidebar(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Brush.linearGradient(listOf(Teal, Blue))),
+                    .background(Brush.linearGradient(listOf(BuroAccent, BuroGold))),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("▶", color = Ink, fontSize = 20.sp)
+                Text("▶", color = BuroCanvas, fontSize = 20.sp)
             }
             Spacer(Modifier.width(12.dp))
             Column {
-                Text("IPTV", color = Teal, fontSize = 11.sp, letterSpacing = 3.sp)
+                Text("IPTV", color = BuroAccent, fontSize = 11.sp, letterSpacing = 3.sp)
                 Text(
                     "BURO",
-                    color = White,
+                    color = BuroTextPrimary,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 1.sp,
@@ -571,7 +570,7 @@ private fun SidebarItem(
             .fillMaxWidth()
             .padding(vertical = 5.dp)
             .height(54.dp),
-        backgroundColor = if (selected) Blue.copy(alpha = 0.24f) else Color.Transparent,
+        backgroundColor = if (selected) BuroGold.copy(alpha = 0.24f) else Color.Transparent,
     ) {
         Row(
             modifier = Modifier
@@ -582,13 +581,13 @@ private fun SidebarItem(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (selected) Teal else Muted,
+                tint = if (selected) BuroAccent else BuroTextSecondary,
                 modifier = Modifier.size(22.dp),
             )
             Spacer(Modifier.width(14.dp))
             Text(
                 text = label,
-                color = if (selected) White else Muted,
+                color = if (selected) BuroTextPrimary else BuroTextSecondary,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             )
         }
@@ -607,14 +606,14 @@ private fun HomeContent(
     ) {
         Text(
             text = stringResource(R.string.home_welcome),
-            color = White,
+            color = BuroTextPrimary,
             fontSize = 34.sp,
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.home_subtitle),
-            color = Muted,
+            color = BuroTextSecondary,
             fontSize = 17.sp,
         )
         Spacer(Modifier.height(32.dp))
@@ -630,7 +629,7 @@ private fun HomeContent(
                     state.sources.size,
                     state.sources.size,
                 ),
-                accent = Teal,
+                accent = BuroAccent,
                 modifier = Modifier.weight(1f),
             )
             MetricCard(
@@ -640,7 +639,7 @@ private fun HomeContent(
                     state.sources.sumOf { it.channelCount },
                     state.sources.sumOf { it.channelCount },
                 ),
-                accent = Blue,
+                accent = BuroGold,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -652,7 +651,7 @@ private fun HomeContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            backgroundColor = Surface,
+            backgroundColor = BuroSurface,
         ) {
             Row(
                 modifier = Modifier
@@ -665,27 +664,27 @@ private fun HomeContent(
                     modifier = Modifier
                         .size(94.dp)
                         .clip(CircleShape)
-                        .background(Brush.linearGradient(listOf(Teal, Blue))),
+                        .background(Brush.linearGradient(listOf(BuroAccent, BuroGold))),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = null,
-                        tint = Ink,
+                        tint = BuroCanvas,
                         modifier = Modifier.size(48.dp),
                     )
                 }
                 Column {
                     Text(
                         text = stringResource(R.string.home_action),
-                        color = White,
+                        color = BuroTextPrimary,
                         fontSize = 27.sp,
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = stringResource(R.string.sources_empty_body),
-                        color = Muted,
+                        color = BuroTextSecondary,
                         fontSize = 17.sp,
                     )
                 }
@@ -705,7 +704,7 @@ private fun MetricCard(
         modifier = modifier
             .height(100.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(Surface)
+            .background(BuroSurface)
             .padding(22.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -718,7 +717,7 @@ private fun MetricCard(
         Spacer(Modifier.width(18.dp))
         Text(
             text = label,
-            color = Muted,
+            color = BuroTextSecondary,
             fontSize = 15.sp,
         )
     }
@@ -844,7 +843,7 @@ private fun SourcesHeading(
     Column(modifier = modifier) {
         Text(
             text = stringResource(R.string.sources_title),
-            color = White,
+            color = BuroTextPrimary,
             fontSize = if (compact) 27.sp else 32.sp,
             fontWeight = FontWeight.Bold,
         )
@@ -859,7 +858,7 @@ private fun SourcesHeading(
                     } else {
                         stringResource(R.string.sources_importing)
                     },
-                color = Teal,
+                color = BuroAccent,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -887,7 +886,7 @@ private fun SourcesHeading(
                             lastImportedChannelCount ?: 0,
                         )
                     },
-                color = if (hasImportError) Danger else Teal,
+                color = if (hasImportError) BuroDanger else BuroAccent,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -978,13 +977,13 @@ private fun EmptySources() {
         Icon(
             imageVector = Icons.Default.Folder,
             contentDescription = null,
-            tint = Teal,
+            tint = BuroAccent,
             modifier = Modifier.size(58.dp),
         )
         Spacer(Modifier.height(20.dp))
         Text(
             text = stringResource(R.string.sources_empty),
-            color = White,
+            color = BuroTextPrimary,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
@@ -992,7 +991,7 @@ private fun EmptySources() {
         Spacer(Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.sources_empty_body),
-            color = Muted,
+            color = BuroTextSecondary,
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
         )
@@ -1021,16 +1020,16 @@ private fun SourceCard(
                 modifier = Modifier
                     .size(54.dp)
                     .clip(RoundedCornerShape(15.dp))
-                    .background(Blue.copy(alpha = 0.25f)),
+                    .background(BuroGold.copy(alpha = 0.25f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Default.Folder, contentDescription = null, tint = Teal)
+                Icon(Icons.Default.Folder, contentDescription = null, tint = BuroAccent)
             }
             Spacer(Modifier.width(20.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = source.name,
-                    color = White,
+                    color = BuroTextPrimary,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -1042,11 +1041,11 @@ private fun SourceCard(
                         source.channelCount,
                         source.channelCount,
                     ),
-                    color = Muted,
+                    color = BuroTextSecondary,
                     fontSize = 14.sp,
                 )
             }
-            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Teal)
+            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = BuroAccent)
         }
     }
 }
@@ -1127,9 +1126,9 @@ private fun CategoriesContent(
                                             .background(
                                                 Brush.verticalGradient(
                                                     listOf(
-                                                        Ink.copy(alpha = 0.12f),
-                                                        Ink.copy(alpha = 0.58f),
-                                                        Ink.copy(alpha = 0.96f),
+                                                        BuroCanvas.copy(alpha = 0.12f),
+                                                        BuroCanvas.copy(alpha = 0.58f),
+                                                        BuroCanvas.copy(alpha = 0.96f),
                                                     ),
                                                 ),
                                             ),
@@ -1148,20 +1147,20 @@ private fun CategoriesContent(
                                         Icon(
                                             imageVector = category.categoryIcon(contentType),
                                             contentDescription = null,
-                                            tint = Teal,
+                                            tint = BuroAccent,
                                             modifier = Modifier.size(if (compactPortrait) 22.dp else 26.dp),
                                         )
                                         Spacer(Modifier.weight(1f))
                                         category.providerBadge()?.let { badge ->
                                             Text(
                                                 text = badge.monogram,
-                                                color = White,
+                                                color = BuroTextPrimary,
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Black,
                                                 modifier =
                                                     Modifier
                                                         .clip(CircleShape)
-                                                        .background(Ink.copy(alpha = 0.68f))
+                                                        .background(BuroCanvas.copy(alpha = 0.68f))
                                                         .padding(horizontal = 9.dp, vertical = 5.dp),
                                             )
                                         }
@@ -1180,7 +1179,7 @@ private fun CategoriesContent(
                                             } else {
                                                 category.name
                                             },
-                                        color = White,
+                                        color = BuroTextPrimary,
                                         fontSize = if (compactPortrait) 16.sp else 19.sp,
                                         fontWeight = FontWeight.Bold,
                                         maxLines = 2,
@@ -1193,7 +1192,7 @@ private fun CategoriesContent(
                                                 category.channelCount,
                                                 category.channelCount,
                                             ),
-                                        color = Teal,
+                                        color = BuroAccent,
                                         fontSize = 12.sp,
                                     )
                                 }
@@ -1320,7 +1319,7 @@ private fun ChannelsContent(
                                 R.string.playback_resolving
                             },
                         ),
-                    color = if (hasPlaybackError) Danger else Teal,
+                    color = if (hasPlaybackError) BuroDanger else BuroAccent,
                     fontSize = 14.sp,
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
@@ -1477,8 +1476,8 @@ private fun ChannelCard(
         onClick = { onOpenChannel(channel) },
         enabled = enabled,
         modifier = Modifier.aspectRatio(if (isPoster) 2f / 3f else 16f / 9f),
-        backgroundColor = InkSoft,
-        focusedBackgroundColor = Surface,
+        backgroundColor = BuroSurface,
+        focusedBackgroundColor = BuroSurface,
     ) { isFocused ->
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
@@ -1487,9 +1486,9 @@ private fun ChannelCard(
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                Blue.copy(alpha = 0.48f),
-                                Teal.copy(alpha = 0.2f),
-                                Ink,
+                                BuroGold.copy(alpha = 0.48f),
+                                BuroAccent.copy(alpha = 0.2f),
+                                BuroCanvas,
                             ),
                         ),
                     ),
@@ -1497,7 +1496,7 @@ private fun ChannelCard(
             ) {
                 Text(
                     text = channel.name.firstOrNull()?.uppercase() ?: "▶",
-                    color = White.copy(alpha = 0.74f),
+                    color = BuroTextPrimary.copy(alpha = 0.74f),
                     fontSize = if (isPoster) 42.sp else 32.sp,
                     fontWeight = FontWeight.Black,
                 )
@@ -1526,14 +1525,14 @@ private fun ChannelCard(
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Transparent, Ink.copy(alpha = 0.96f)),
+                            listOf(Color.Transparent, BuroCanvas.copy(alpha = 0.96f)),
                         ),
                     ),
             )
 
             Text(
                 text = channel.contentType.catalogLabel(),
-                color = if (channel.contentType == CatalogContentType.LIVE) Teal else White,
+                color = if (channel.contentType == CatalogContentType.LIVE) BuroAccent else BuroTextPrimary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.8.sp,
@@ -1541,7 +1540,7 @@ private fun ChannelCard(
                     .align(Alignment.TopStart)
                     .padding(12.dp)
                     .clip(CircleShape)
-                    .background(Ink.copy(alpha = 0.74f))
+                    .background(BuroCanvas.copy(alpha = 0.74f))
                     .padding(horizontal = 9.dp, vertical = 5.dp),
             )
 
@@ -1553,7 +1552,7 @@ private fun ChannelCard(
             ) {
                 Text(
                     text = channel.name,
-                    color = White,
+                    color = BuroTextPrimary,
                     fontSize = if (isPoster) 17.sp else 15.sp,
                     lineHeight = if (isPoster) 21.sp else 18.sp,
                     fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
@@ -1564,7 +1563,7 @@ private fun ChannelCard(
                     Spacer(Modifier.height(3.dp))
                     Text(
                         text = it,
-                        color = Muted,
+                        color = BuroTextSecondary,
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -1604,14 +1603,14 @@ private fun CatalogLoadingState() {
         Spacer(Modifier.height(18.dp))
         Text(
             text = stringResource(R.string.catalog_loading),
-            color = White,
+            color = BuroTextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(6.dp))
         Text(
             text = "BURO  •  CATÁLOGO LOCAL",
-            color = Muted,
+            color = BuroTextSecondary,
             fontSize = 12.sp,
             letterSpacing = 1.2.sp,
         )
@@ -1645,7 +1644,7 @@ private fun ScreenHeader(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = stringResource(R.string.common_back),
-                        tint = Teal,
+                        tint = BuroAccent,
                     )
                 }
             }
@@ -1653,7 +1652,7 @@ private fun ScreenHeader(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    color = White,
+                    color = BuroTextPrimary,
                     fontSize = if (compact) 24.sp else 30.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -1662,7 +1661,7 @@ private fun ScreenHeader(
                 subtitle?.let {
                     Text(
                         text = it,
-                        color = Muted,
+                        color = BuroTextSecondary,
                         fontSize = 14.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -1693,7 +1692,7 @@ private fun SettingsContent(
         ) {
             Text(
                 text = stringResource(R.string.settings_title),
-                color = White,
+                color = BuroTextPrimary,
                 fontSize = if (compact) 28.sp else 32.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -1718,7 +1717,7 @@ private fun SettingsContent(
                 compact = compact,
             )
             Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
-            Text(stringResource(R.string.settings_language), color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.settings_language), color = BuroTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppLocaleController.supportedLanguages.forEach { language ->
@@ -1727,7 +1726,7 @@ private fun SettingsContent(
                         modifier = Modifier.weight(1f).height(if (compact) 48.dp else 56.dp),
                     ) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(language.displayName, color = White, fontSize = if (compact) 12.sp else 14.sp)
+                            Text(language.displayName, color = BuroTextPrimary, fontSize = if (compact) 12.sp else 14.sp)
                         }
                     }
                 }
@@ -1735,8 +1734,8 @@ private fun SettingsContent(
             Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
             FocusSurface(onClick = onChangeProfile, modifier = Modifier.fillMaxWidth().height(if (compact) 62.dp else 72.dp)) {
                 Row(Modifier.fillMaxSize().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Perfil ativo", color = Muted, modifier = Modifier.weight(1f))
-                    Text(activeProfile?.name ?: "Selecionar perfil", color = Teal, fontWeight = FontWeight.Bold)
+                    Text("Perfil ativo", color = BuroTextSecondary, modifier = Modifier.weight(1f))
+                    Text(activeProfile?.name ?: "Selecionar perfil", color = BuroAccent, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1753,19 +1752,19 @@ private fun SettingsRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Surface)
+            .background(BuroSurface)
             .padding(if (compact) 16.dp else 24.dp),
     ) {
         Text(
             text = title,
-            color = White,
+            color = BuroTextPrimary,
             fontSize = if (compact) 17.sp else 19.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(if (compact) 4.dp else 6.dp))
         Text(
             text = body,
-            color = Muted,
+            color = BuroTextSecondary,
             fontSize = if (compact) 13.sp else 14.sp,
         )
     }

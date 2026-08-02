@@ -49,7 +49,7 @@ fun XtreamLoginDialog(
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor = BuroColors.Primary,
-                        contentColor = Color(0xFF03201D),
+                        contentColor = BuroColors.OnPrimary,
                     ),
             ) {
                 Text("Conectar")

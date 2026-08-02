@@ -20,10 +20,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -69,7 +75,14 @@ import com.lucasserafin94.iptvburo.desktop.SeriesDetailsStatus
 import com.lucasserafin94.iptvburo.desktop.XtreamStatus
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
+import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
+import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
+import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
+import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
+import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
@@ -135,10 +148,12 @@ fun XtreamWorkspace(
         return
     }
 
+    val text = strings
     Column(
         modifier =
             Modifier
                 .fillMaxSize()
+                .background(BuroColors.Canvas)
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown || !event.isCtrlPressed) {
                         return@onPreviewKeyEvent false
@@ -167,38 +182,34 @@ fun XtreamWorkspace(
             selectedYear = appState.selectedXtreamYear,
             onYearSelected = { year -> scope.launch { appState.selectXtreamYear(year) } },
         )
+        XtreamCategoryRail(
+            categories = appState.xtreamCategories,
+            contentType = appState.xtreamContentType,
+            selectedCategoryId = appState.selectedXtreamCategoryId,
+            onSelected = { categoryId ->
+                detailsOpen = false
+                scope.launch { appState.selectXtreamCategory(categoryId) }
+            },
+        )
         HorizontalDivider(color = BuroColors.BorderSoft)
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val compact = maxWidth < 1_350.dp
-            Row(modifier = Modifier.fillMaxSize()) {
-                XtreamCategoryPane(
-                    categories = appState.xtreamCategories,
-                    contentType = appState.xtreamContentType,
-                    selectedCategoryId = appState.selectedXtreamCategoryId,
-                    onSelected = { categoryId ->
-                        detailsOpen = false
-                        scope.launch { appState.selectXtreamCategory(categoryId) }
-                    },
-                    modifier = Modifier.width(if (compact) 190.dp else 220.dp),
-                )
-                XtreamPaneDivider()
-                XtreamItemsPane(
-                    appState = appState,
-                    onItemSelected = { providerId ->
-                        appState.selectXtreamItem(providerId)
-                        detailsOpen = true
-                    },
-                    onPreviousPage = {
-                        detailsOpen = false
-                        scope.launch { appState.previousXtreamPage() }
-                    },
-                    onNextPage = {
-                        detailsOpen = false
-                        scope.launch { appState.nextXtreamPage() }
-                    },
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            XtreamCatalogGrid(
+                appState = appState,
+                text = text,
+                wide = maxWidth >= 1_280.dp,
+                onItemSelected = { providerId ->
+                    appState.selectXtreamItem(providerId)
+                    detailsOpen = true
+                },
+                onPreviousPage = {
+                    detailsOpen = false
+                    scope.launch { appState.previousXtreamPage() }
+                },
+                onNextPage = {
+                    detailsOpen = false
+                    scope.launch { appState.nextXtreamPage() }
+                },
+            )
             if (
                 appState.xtreamStatus is XtreamStatus.Connecting ||
                 appState.xtreamStatus is XtreamStatus.LoadingCatalog
@@ -208,6 +219,10 @@ fun XtreamWorkspace(
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Toolbar
+// ---------------------------------------------------------------------------------------------
 
 @Composable
 private fun XtreamToolbar(
@@ -220,38 +235,42 @@ private fun XtreamToolbar(
     selectedYear: Int?,
     onYearSelected: (Int?) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            XtreamContentType.entries.forEach { type ->
-                ContentTypeButton(
-                    contentType = type,
-                    selected = type == selectedType,
-                    onClick = { onTypeSelected(type) },
-                )
-                Spacer(Modifier.width(8.dp))
-            }
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(
-                onClick = onDisconnect,
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
+    val text = strings
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = BuroSpacing.GutterCompact, vertical = BuroSpacing.Md),
+        verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // Segmented control rather than three filled buttons: only one type can be active, and
+            // three competing gold buttons made every state read as "selected".
+            Row(
+                modifier =
+                    Modifier
+                        .clip(BuroRadius.Pill)
+                        .background(BuroColors.SurfaceRaised)
+                        .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Text("Encerrar sessão")
+                XtreamContentType.entries.forEach { type ->
+                    ContentTypeButton(
+                        label = type.label(text),
+                        selected = type == selectedType,
+                        onClick = { onTypeSelected(type) },
+                    )
+                }
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.width(BuroSpacing.Md))
             OutlinedTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                modifier = Modifier.width(420.dp),
+                modifier = Modifier.weight(1f).widthIn(max = 460.dp),
                 singleLine = true,
-                placeholder = { Text("Buscar neste catálogo…") },
+                placeholder = { Text(text.searchCatalog) },
                 leadingIcon = { Text("⌕", color = BuroColors.TextSubtle) },
-                shape = RoundedCornerShape(12.dp),
+                shape = BuroRadius.Small,
                 colors =
                     OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = BuroColors.Primary,
@@ -260,146 +279,223 @@ private fun XtreamToolbar(
                         unfocusedContainerColor = BuroColors.Surface,
                     ),
             )
-            Spacer(Modifier.width(14.dp))
-            Text(
-                when (status) {
-                    XtreamStatus.Connected -> "Sessão ativa • conexão protegida no Windows"
-                    is XtreamStatus.Error -> status.message
-                    XtreamStatus.Connecting -> "Autenticando…"
-                    is XtreamStatus.LoadingCatalog -> "Carregando catálogo…"
-                    XtreamStatus.Disconnected -> "Sessão encerrada"
-                },
-                color = if (status is XtreamStatus.Error) BuroColors.Error else BuroColors.TextSubtle,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (selectedType != XtreamContentType.LIVE) {
-            Spacer(Modifier.height(10.dp))
-            val currentYear = Year.now().value
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf<Int?>(null, currentYear, currentYear - 1).forEach { year ->
-                    OutlinedButton(
-                        onClick = { onYearSelected(year) },
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = if (selectedYear == year) BuroColors.Primary else BuroColors.TextMuted,
-                        ),
-                    ) {
-                        Text(if (year == null) "Todos os anos" else "Lançamentos $year")
-                    }
-                }
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(
+                onClick = onDisconnect,
+                shape = BuroRadius.Small,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
+            ) {
+                Text(text.endSession, maxLines = 1)
             }
         }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (selectedType != XtreamContentType.LIVE) {
+                val currentYear = Year.now().value
+                Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
+                    listOf<Int?>(null, currentYear, currentYear - 1).forEach { year ->
+                        FilterChip(
+                            label =
+                                if (year == null) {
+                                    text.allYears
+                                } else {
+                                    "${text.releasesIn} $year"
+                                },
+                            selected = selectedYear == year,
+                            onClick = { onYearSelected(year) },
+                        )
+                    }
+                }
+                Spacer(Modifier.width(BuroSpacing.Md))
+            }
+            Spacer(Modifier.weight(1f))
+            SessionStatusLabel(status = status, text = text)
+        }
+    }
+}
+
+@Composable
+private fun SessionStatusLabel(
+    status: XtreamStatus,
+    text: DesktopStrings,
+) {
+    val message =
+        when (status) {
+            XtreamStatus.Connected -> text.sessionActive
+            is XtreamStatus.Error -> status.message
+            XtreamStatus.Connecting -> text.authenticating
+            is XtreamStatus.LoadingCatalog -> text.loadingCatalog
+            XtreamStatus.Disconnected -> text.sessionClosed
+        }
+    val tint = if (status is XtreamStatus.Error) BuroColors.Error else BuroColors.Success
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(6.dp).clip(CircleShape).background(tint))
+        Spacer(Modifier.width(BuroSpacing.Xs))
+        Text(
+            text = message,
+            color = if (status is XtreamStatus.Error) BuroColors.Error else BuroColors.TextSubtle,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
 @Composable
 private fun ContentTypeButton(
-    contentType: XtreamContentType,
+    label: String,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val label =
-        when (contentType) {
-            XtreamContentType.LIVE -> "Ao vivo"
-            XtreamContentType.MOVIE -> "Filmes"
-            XtreamContentType.SERIES -> "Séries"
-        }
-    Button(
+    BuroInteractiveRow(
         onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        colors =
-            ButtonDefaults.buttonColors(
-                containerColor =
-                    if (selected) {
-                        BuroColors.Primary
-                    } else {
-                        BuroColors.SurfaceRaised
-                    },
-                contentColor =
-                    if (selected) {
-                        Color(0xFF03201D)
-                    } else {
-                        BuroColors.TextMuted
-                    },
-            ),
+        selected = selected,
+        shape = BuroRadius.Pill,
+        contentDescription = label,
     ) {
-        Text(label, fontWeight = FontWeight.SemiBold)
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs),
+            color = if (selected) BuroColors.Primary else BuroColors.TextMuted,
+            style = MaterialTheme.typography.labelLarge,
+        )
     }
 }
 
 @Composable
-private fun XtreamCategoryPane(
+private fun FilterChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    BuroInteractiveRow(
+        onClick = onClick,
+        selected = selected,
+        shape = BuroRadius.Pill,
+        contentDescription = label,
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .border(
+                        width = 1.dp,
+                        color =
+                            if (selected) {
+                                BuroColors.Primary.copy(alpha = 0.55f)
+                            } else {
+                                BuroColors.BorderSoft
+                            },
+                        shape = BuroRadius.Pill,
+                    ).padding(horizontal = 14.dp, vertical = 7.dp),
+        ) {
+            Text(
+                text = label,
+                color = if (selected) BuroColors.Primary else BuroColors.TextMuted,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Categories
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Horizontal category rail.
+ *
+ * This replaced a permanent 220 dp side pane. The GDD rules out both the administrative-panel look
+ * and spending fixed width on a menu, and the pane cost the same width on every screen while being
+ * used momentarily. Search covers precise lookup; the rail covers browsing.
+ */
+@Composable
+private fun XtreamCategoryRail(
     categories: List<XtreamCategory>,
     contentType: XtreamContentType,
     selectedCategoryId: String?,
     onSelected: (String?) -> Unit,
-    modifier: Modifier,
 ) {
-    Column(modifier = modifier.fillMaxHeight().padding(16.dp)) {
-        Text(
-            "CATEGORIAS",
-            color = BuroColors.TextSubtle,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Spacer(Modifier.height(12.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            item {
-                XtreamCategoryItem(
-                    label = "Todos",
-                    artworkResource = categoryArtworkResource("", contentType),
-                    selected = selectedCategoryId == null,
-                    onClick = { onSelected(null) },
-                )
-            }
-            items(categories, key = XtreamCategory::providerId) { category ->
-                XtreamCategoryItem(
-                    label = category.name,
-                    artworkResource = categoryArtworkResource(category.name, contentType),
-                    selected = category.providerId == selectedCategoryId,
-                    onClick = { onSelected(category.providerId) },
-                )
-            }
+    val text = strings
+    val listState = rememberLazyListState()
+
+    // Jump back to the start when the content type changes, otherwise the rail keeps the scroll
+    // offset of a category list that no longer exists.
+    LaunchedEffect(contentType) { listState.scrollToItem(0) }
+
+    LazyRow(
+        state = listState,
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding =
+            PaddingValues(
+                horizontal = BuroSpacing.GutterCompact,
+                vertical = BuroSpacing.Xs,
+            ),
+        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        item(key = "category:all") {
+            XtreamCategoryChip(
+                label = text.allCategories,
+                artworkResource = categoryArtworkResource("", contentType),
+                selected = selectedCategoryId == null,
+                onClick = { onSelected(null) },
+            )
+        }
+        items(categories, key = XtreamCategory::providerId) { category ->
+            XtreamCategoryChip(
+                label = category.name,
+                artworkResource = categoryArtworkResource(category.name, contentType),
+                selected = category.providerId == selectedCategoryId,
+                onClick = { onSelected(category.providerId) },
+            )
         }
     }
 }
 
 @Composable
-private fun XtreamCategoryItem(
+private fun XtreamCategoryChip(
     label: String,
     artworkResource: String,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(9.dp))
-                .background(if (selected) BuroColors.Primary.copy(alpha = 0.11f) else Color.Transparent)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 11.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    BuroInteractiveRow(
+        onClick = onClick,
+        selected = selected,
+        shape = BuroRadius.Pill,
+        contentDescription = label,
     ) {
-        Image(
-            painter = painterResource(artworkResource),
-            contentDescription = null,
-            modifier = Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)),
-            contentScale = ContentScale.Crop,
-        )
-        Spacer(Modifier.width(9.dp))
-        if (selected) {
-            Box(Modifier.size(3.dp, 20.dp).clip(CircleShape).background(BuroColors.Primary))
-            Spacer(Modifier.width(9.dp))
+        Row(
+            modifier =
+                Modifier
+                    .border(
+                        width = 1.dp,
+                        color =
+                            if (selected) {
+                                BuroColors.Primary.copy(alpha = 0.55f)
+                            } else {
+                                BuroColors.BorderSoft
+                            },
+                        shape = BuroRadius.Pill,
+                    ).padding(start = 4.dp, end = 14.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Image(
+                painter = painterResource(artworkResource),
+                contentDescription = null,
+                modifier = Modifier.size(26.dp).clip(CircleShape),
+                contentScale = ContentScale.Crop,
+            )
+            Spacer(Modifier.width(BuroSpacing.Xs))
+            Text(
+                text = label,
+                color = if (selected) BuroColors.Text else BuroColors.TextMuted,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        Text(
-            label,
-            color = if (selected) BuroColors.Text else BuroColors.TextMuted,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 
@@ -420,172 +516,224 @@ private fun categoryArtworkResource(
     return "brand/buro-category-$name.png"
 }
 
+// ---------------------------------------------------------------------------------------------
+// Grid
+// ---------------------------------------------------------------------------------------------
+
 @Composable
-private fun XtreamItemsPane(
+private fun XtreamCatalogGrid(
     appState: DesktopAppState,
+    text: DesktopStrings,
+    wide: Boolean,
     onItemSelected: (String) -> Unit,
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
-    modifier: Modifier,
 ) {
-    Column(modifier = modifier.fillMaxHeight().padding(16.dp)) {
+    val page = appState.xtreamPage
+    val live = appState.xtreamContentType == XtreamContentType.LIVE
+    val gutter = if (wide) BuroSpacing.GutterWide else BuroSpacing.GutterCompact
+    val gridState = rememberLazyGridState()
+
+    // A new page reuses the same list; without this the grid keeps the previous scroll offset and
+    // the first row of the new page opens already scrolled past.
+    LaunchedEffect(page.pageIndex, appState.xtreamContentType, appState.selectedXtreamCategoryId) {
+        gridState.scrollToItem(0)
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = gutter,
+                        end = gutter,
+                        top = BuroSpacing.Md,
+                        bottom = BuroSpacing.Xs,
+                    ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "CATÁLOGO",
-                color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.labelLarge,
+                text = text.catalog,
+                color = BuroColors.Text,
+                style = MaterialTheme.typography.headlineSmall,
             )
             Spacer(Modifier.weight(1f))
             Text(
-                "${appState.xtreamPage.totalMatches} itens",
+                text = "${page.totalMatches} ${text.items}",
                 color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.labelLarge,
             )
         }
-        Spacer(Modifier.height(12.dp))
-        if (appState.xtreamPage.items.isEmpty()) {
-            Text(
-                "Nenhum item corresponde ao filtro.",
-                color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(10.dp),
-            )
+
+        if (page.items.isEmpty()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = text.noMatch,
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
         } else {
             LazyVerticalGrid(
+                state = gridState,
                 modifier = Modifier.weight(1f),
-                columns = GridCells.Adaptive(minSize = 150.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                columns = GridCells.Adaptive(minSize = if (live) 250.dp else 172.dp),
+                contentPadding = PaddingValues(horizontal = gutter, vertical = BuroSpacing.Sm),
+                horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Md),
+                verticalArrangement = Arrangement.spacedBy(BuroSpacing.Lg),
             ) {
                 gridItems(
-                    items = appState.xtreamPage.items,
+                    items = page.items,
                     key = XtreamCatalogItem::providerId,
                 ) { item ->
                     XtreamCatalogCard(
                         item = item,
+                        text = text,
                         selected = item.providerId == appState.selectedXtreamItem?.providerId,
                         onClick = { onItemSelected(item.providerId) },
                     )
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            OutlinedButton(
-                onClick = onPreviousPage,
-                enabled = appState.xtreamPage.hasPrevious,
+
+        if (page.pageCount > 1) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = gutter, vertical = BuroSpacing.Sm),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
             ) {
-                Text("Anterior")
-            }
-            Text(
-                "${appState.xtreamPage.pageIndex + 1} / ${appState.xtreamPage.pageCount}",
-                color = BuroColors.TextMuted,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            OutlinedButton(
-                onClick = onNextPage,
-                enabled = appState.xtreamPage.hasNext,
-            ) {
-                Text("Próxima")
+                OutlinedButton(
+                    onClick = onPreviousPage,
+                    enabled = page.hasPrevious,
+                    shape = BuroRadius.Small,
+                    colors =
+                        ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
+                ) {
+                    Text("←  ${text.previous}")
+                }
+                Text(
+                    text = "${text.page} ${page.pageIndex + 1} / ${page.pageCount}",
+                    modifier = Modifier.padding(horizontal = BuroSpacing.Md),
+                    color = BuroColors.TextMuted,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                OutlinedButton(
+                    onClick = onNextPage,
+                    enabled = page.hasNext,
+                    shape = BuroRadius.Small,
+                    colors =
+                        ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
+                ) {
+                    Text("${text.next}  →")
+                }
             }
         }
     }
 }
 
+/**
+ * Catalogue card.
+ *
+ * Deliberately the same shape as the Home rail card — artwork, then title and facts underneath —
+ * so moving between Home and the catalogue does not feel like moving between two products.
+ */
 @Composable
 private fun XtreamCatalogCard(
     item: XtreamCatalogItem,
+    text: DesktopStrings,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val posterLike = item.contentType != XtreamContentType.LIVE
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(if (posterLike) 2f / 3f else 16f / 10f)
-                .clip(RoundedCornerShape(14.dp))
-                .background(BuroColors.SurfaceRaised)
-                .border(
-                    width = if (selected) 2.dp else 1.dp,
-                    color = if (selected) BuroColors.Primary else BuroColors.BorderSoft,
-                    shape = RoundedCornerShape(14.dp),
-                )
-                .clickable(onClick = onClick)
-    ) {
-        BuroRemoteArtwork(
-            artworkUrl = item.artworkUrl,
-            contentDescription = item.name,
-            modifier = Modifier.fillMaxSize(),
-            contentScale =
-                if (item.contentType == XtreamContentType.LIVE) {
-                    ContentScale.Fit
-                } else {
-                    ContentScale.Crop
-                },
-        ) {
+    val live = item.contentType == XtreamContentType.LIVE
+    BuroInteractiveSurface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = BuroRadius.Medium,
+        compact = !live,
+        contentDescription = item.name,
+        ringColor = if (selected) BuroColors.Primary else BuroColors.Focus,
+    ) { state ->
+        Column {
             Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(if (live) 16f / 9f else 2f / 3f)
+                        .clip(BuroRadius.Medium)
+                        .background(BuroColors.SurfaceRaised)
+                        .border(
+                            width = if (selected) 2.dp else 0.dp,
+                            color =
+                                if (selected) BuroColors.Primary else androidx.compose.ui.graphics.Color.Transparent,
+                            shape = BuroRadius.Medium,
+                        ),
             ) {
-                XtreamMonogram(item.name, if (posterLike) 62 else 52)
+                BuroRemoteArtwork(
+                    artworkUrl = item.artworkUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = if (live) ContentScale.Fit else ContentScale.Crop,
+                ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        XtreamMonogram(item.name, if (live) 52 else 62)
+                    }
+                }
+                item.rating?.takeIf { it > 0.0 }?.let { rating ->
+                    Box(
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(BuroSpacing.Xs)
+                                .clip(BuroRadius.Pill)
+                                .background(BuroColors.Canvas.copy(alpha = 0.78f))
+                                .padding(horizontal = BuroSpacing.Xs, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = "★ %.1f".format(rating),
+                            color = BuroColors.Primary,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+                Box(
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .fillMaxHeight(0.4f)
+                            .alpha(if (state.active) 1f else 0f)
+                            .background(BuroScrim.cardFooter()),
+                )
             }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(if (posterLike) 0.55f else 0.72f)
-                .align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, BuroColors.Canvas.copy(alpha = 0.97f)),
-                    ),
-                ),
-        )
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .padding(13.dp),
-        ) {
+            Spacer(Modifier.height(BuroSpacing.Xs))
             Text(
-                item.name,
-                color = BuroColors.Text,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
+                text = item.name,
+                color = if (selected) BuroColors.Primary else BuroColors.Text,
+                style = MaterialTheme.typography.titleMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(3.dp))
             Text(
-                itemMetadata(item),
+                text = itemMetadata(item).ifBlank { if (live) text.onAir else "" },
                 color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (selected) {
-            Box(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(10.dp)
-                    .size(9.dp)
-                    .clip(CircleShape)
-                    .background(BuroColors.Primary),
-            )
-        }
     }
 }
 
+private fun XtreamContentType.label(text: DesktopStrings): String =
+    when (this) {
+        XtreamContentType.LIVE -> text.live
+        XtreamContentType.MOVIE -> text.movies
+        XtreamContentType.SERIES -> text.series
+    }
 @Composable
 internal fun XtreamInternalDetailsPage(
     appState: DesktopAppState,
@@ -621,9 +769,15 @@ internal fun XtreamInternalDetailsPage(
                 modifier = Modifier.fillMaxWidth().height(62.dp).background(BuroColors.Canvas.copy(alpha = 0.86f)).padding(horizontal = 20.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onBack) { Text("← Voltar ao catálogo", color = BuroColors.Text) }
+                TextButton(onClick = onBack) {
+                    Text("←  ${strings.backToCatalog}", color = BuroColors.Text)
+                }
                 Spacer(Modifier.weight(1f))
-                Text("IPTV BURO", color = BuroColors.Primary, fontWeight = FontWeight.Black)
+                Text(
+                    text = "IPTV BURO",
+                    color = BuroColors.Primary,
+                    style = MaterialTheme.typography.labelSmall,
+                )
             }
             XtreamItemDetail(
                 item = item,
@@ -662,12 +816,16 @@ internal fun XtreamItemDetail(
     compact: Boolean,
     modifier: Modifier,
 ) {
+    val text = strings
     Box(
-        modifier = modifier.fillMaxHeight().padding(if (compact) 16.dp else 24.dp),
-        contentAlignment = Alignment.Center,
+        modifier = modifier.fillMaxHeight().padding(if (compact) BuroSpacing.Md else BuroSpacing.Lg),
     ) {
         if (item == null) {
-            Text("Selecione um item", color = BuroColors.TextSubtle)
+            Text(
+                text = text.selectItem,
+                color = BuroColors.TextSubtle,
+                modifier = Modifier.align(Alignment.Center),
+            )
             return@Box
         }
         Column(
@@ -675,14 +833,10 @@ internal fun XtreamItemDetail(
                 Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(BuroColors.SurfaceRaised, BuroColors.Surface),
-                        ),
-                    ).verticalScroll(rememberScrollState())
-                    .padding(if (compact) 18.dp else 26.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                    .verticalScroll(rememberScrollState()),
+            // Left-aligned. The previous centred card put the poster, the title and every action
+            // on the vertical axis, which reads as a dialog rather than a page about a title.
+            horizontalAlignment = Alignment.Start,
         ) {
             val richArtwork =
                 when {
@@ -694,57 +848,55 @@ internal fun XtreamItemDetail(
                             ?: seriesStatus.details.artworkUrl
                     else -> null
                 }
-            val posterLike = item.contentType != XtreamContentType.LIVE && richArtwork == null
-            BuroRemoteArtwork(
-                artworkUrl = richArtwork ?: item.artworkUrl,
-                contentDescription = item.name,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(
-                        max =
-                            if (posterLike) {
-                                if (compact) 118.dp else 154.dp
-                            } else {
-                                if (compact) 260.dp else 390.dp
-                            },
-                    )
-                    .height(
-                        if (posterLike) {
-                            if (compact) 177.dp else 231.dp
-                        } else {
-                            if (compact) 150.dp else 190.dp
-                        },
-                    )
-                    .clip(RoundedCornerShape(18.dp)),
-                contentScale = if (posterLike) ContentScale.Crop else ContentScale.Fit,
+            val posterUrl = item.artworkUrl ?: richArtwork
+
+            // Poster beside the copy on a wide window, stacked when compact. The GDD's "decisão
+            // rápida" list has to be readable before any scrolling happens.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    XtreamMonogram(item.name, if (compact) 64 else 86)
+                if (!compact) {
+                    BuroRemoteArtwork(
+                        artworkUrl = posterUrl,
+                        contentDescription = item.name,
+                        modifier =
+                            Modifier
+                                .width(208.dp)
+                                .aspectRatio(2f / 3f)
+                                .clip(BuroRadius.Large)
+                                .background(BuroColors.SurfaceRaised),
+                        contentScale = ContentScale.Crop,
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            XtreamMonogram(item.name, 86)
+                        }
+                    }
+                    Spacer(Modifier.width(BuroSpacing.Lg))
                 }
-            }
-            Spacer(Modifier.height(18.dp))
-            Text(
-                item.name,
-                color = BuroColors.Text,
-                style =
-                    if (compact) {
-                        MaterialTheme.typography.titleLarge
-                    } else {
-                        MaterialTheme.typography.headlineMedium
-                    },
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                itemMetadata(item),
-                color = BuroColors.TextMuted,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Spacer(Modifier.height(20.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        item.name,
+                        color = BuroColors.Text,
+                        style =
+                            if (compact) {
+                                MaterialTheme.typography.headlineSmall
+                            } else {
+                                MaterialTheme.typography.displaySmall
+                            },
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(BuroSpacing.Xs))
+                    Text(
+                        itemMetadata(item).ifBlank { item.contentType.label(text) },
+                        color = BuroColors.Accent,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.height(BuroSpacing.Md))
             if (item.contentType == XtreamContentType.SERIES) {
                 SeriesDetailContent(
                     status = seriesStatus,
@@ -775,45 +927,76 @@ internal fun XtreamItemDetail(
                     contentType = item.contentType,
                     containerExtension = item.containerExtension,
                 )
-                Button(
-                    onClick = {
-                        onOpenExternal(
-                            PendingXtreamExternal(
-                                displayName = item.name,
-                                target = mediaTarget,
-                                startPositionMillis = resumeStartPosition(resumeDecisionFor(mediaTarget)),
-                            ),
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor = BuroColors.Primary,
-                            contentColor = Color(0xFF03201D),
-                        ),
-                    shape = RoundedCornerShape(12.dp),
+                // Actions sit on one line at their natural width. Full-width stacked buttons made
+                // a page about a film look like a settings form.
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+                    verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
                 ) {
-                    Text(playbackButtonLabel(resumeDecisionFor(mediaTarget)), fontWeight = FontWeight.Bold)
-                }
-                if (resumeDecisionFor(mediaTarget) is ResumeDecision.ResumeFrom) {
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
+                    Button(
                         onClick = {
-                            onOpenExternal(PendingXtreamExternal(item.name, mediaTarget, startPositionMillis = 0L))
+                            onOpenExternal(
+                                PendingXtreamExternal(
+                                    displayName = item.name,
+                                    target = mediaTarget,
+                                    startPositionMillis =
+                                        resumeStartPosition(resumeDecisionFor(mediaTarget)),
+                                ),
+                            )
                         },
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                    ) { Text("Assistir do início") }
-                }
-                if (item.contentType == XtreamContentType.MOVIE) {
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = onToggleFavorite,
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        modifier = Modifier.height(48.dp),
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = BuroColors.Primary,
+                                contentColor = BuroColors.OnPrimary,
+                            ),
+                        shape = BuroRadius.Small,
+                        contentPadding = PaddingValues(horizontal = BuroSpacing.Lg),
                     ) {
-                        Text(if (isFavorite) "♥ Nos favoritos" else "♡ Adicionar aos favoritos", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "▶  ${playbackButtonLabel(resumeDecisionFor(mediaTarget))}",
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    if (resumeDecisionFor(mediaTarget) is ResumeDecision.ResumeFrom) {
+                        OutlinedButton(
+                            onClick = {
+                                onOpenExternal(
+                                    PendingXtreamExternal(
+                                        item.name,
+                                        mediaTarget,
+                                        startPositionMillis = 0L,
+                                    ),
+                                )
+                            },
+                            modifier = Modifier.height(48.dp),
+                            shape = BuroRadius.Small,
+                            colors =
+                                ButtonDefaults.outlinedButtonColors(
+                                    contentColor = BuroColors.Text,
+                                ),
+                        ) { Text("Assistir do início") }
+                    }
+                    if (item.contentType == XtreamContentType.MOVIE) {
+                        OutlinedButton(
+                            onClick = onToggleFavorite,
+                            modifier = Modifier.height(48.dp),
+                            shape = BuroRadius.Small,
+                            colors =
+                                ButtonDefaults.outlinedButtonColors(
+                                    contentColor =
+                                        if (isFavorite) BuroColors.Primary else BuroColors.Text,
+                                ),
+                        ) {
+                            Text(
+                                if (isFavorite) "♥  Nos favoritos" else "♡  Favoritos",
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
                     }
                 }
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(BuroSpacing.Lg))
                 if (item.contentType == XtreamContentType.LIVE) {
                     LiveEpgContent(liveEpgStatus)
                     Spacer(Modifier.height(18.dp))
@@ -828,12 +1011,14 @@ internal fun XtreamItemDetail(
                     Spacer(Modifier.height(18.dp))
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(BuroSpacing.Sm))
             Text(
-                "Player VLC integrado para H.264, H.265/HEVC, AAC, MP4, MKV e HLS.",
+                "Player VLC · H.264, H.265/HEVC, AAC, MP4, MKV, HLS",
                 color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
             )
+                }
+            }
         }
     }
 }
@@ -1064,7 +1249,7 @@ private fun SeriesDetailContent(
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor = BuroColors.Primary,
-                        contentColor = Color(0xFF03201D),
+                        contentColor = BuroColors.OnPrimary,
                     ),
             ) {
                 Text("Carregar episódios", fontWeight = FontWeight.Bold)

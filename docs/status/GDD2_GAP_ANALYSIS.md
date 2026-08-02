@@ -65,3 +65,29 @@
 
 GDD 3.0 e GDD 4.0 permanecem na sequência. Modelos temporais, retry, circuit
 breaker e connection budget não fazem parte desta milestone visual.
+
+## Revisão de 2 de agosto de 2026 — camada visual Windows
+
+Alterações desde a tabela acima. Detalhes em
+[`design-system.md`](../ux/design-system.md).
+
+| Requirement | Antes | Agora | Nota |
+|---|---|---|---|
+| High contrast/reduced transparency | Parcial | Corrigido | A preferência era resolvida mas não chegava a nenhuma tela; os atalhos eram `val` estáticos |
+| Foco sempre visível (Windows) | Ausente | Existente | `BuroInteractiveSurface`/`Row`; cards e navegação passaram a ser focáveis por `Tab` |
+| Física de foco 1.045/1.06, 140–180 ms | Ausente | Existente | Somente Windows; Android já possuía `FocusSurface` |
+| Hero 42–58% da altura (Windows) | Ausente | Existente | Era altura fixa de 330 dp |
+| Spacing em base 8 | Parcial | Existente no Windows | `BuroSpacing`; gutter único para título e fileira |
+| Loading componentizado (Windows) | Parcial | Existente | Esqueleto com o formato da tela final |
+| Escala tipográfica (Windows) | Parcial | Existente | `BuroTypography` completa; telas deixaram de inventar tamanhos |
+| Localização da interface Windows | Parcial | Parcial | Shell e Home em 4 idiomas; `XtreamWorkspace` e `XtreamLoginDialog` ainda fixos em português |
+| Catálogo sem cara de painel admin | Ausente | Existente no caminho Xtream | Rail de categorias + grid editorial; `CatalogWorkspace` do M3U local ainda tem três painéis |
+| Story Page com hierarquia editorial | Parcial | Existente | Ficha alinhada à esquerda com pôster, fatos e ações em linha |
+| Cards com proporções por tipo | Parcial | Existente | 2:3 para filme/série, 16:9 para ao vivo, no mesmo formato da Home |
+| BURO Ribbon no Windows | Ausente | Ausente | O desktop mantém barra lateral |
+| Screenshot/golden | Ausente | Ausente | Não introduzido nesta revisão |
+| Testes de foco/D-pad | Ausente | Ausente | Não introduzido nesta revisão |
+
+A Home Windows redesenhada foi verificada por compilação, gate de testes e
+execução do aplicativo com sessão vazia. **Não** foi validada com um catálogo
+real; essa medição continua pendente.

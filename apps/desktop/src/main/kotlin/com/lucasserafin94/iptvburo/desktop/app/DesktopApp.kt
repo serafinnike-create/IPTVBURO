@@ -39,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -77,7 +78,13 @@ import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackRequest
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlayerOverlay
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroDesktopTheme
+import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
+import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
+import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
+import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.LocalDesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
@@ -113,6 +120,10 @@ fun DesktopApp(
     }
 
     BuroDesktopTheme {
+        CompositionLocalProvider(
+            LocalDesktopStrings provides DesktopStrings.of(appState.language),
+        ) {
+        val text = strings
         Surface(
             modifier =
                 Modifier
@@ -149,7 +160,6 @@ fun DesktopApp(
                             }
                         },
                         onConnectXtream = { showXtreamLogin = true },
-                        language = appState.language,
                         destination = appState.destination,
                         onHome = appState::openHome,
                         onLive = {
@@ -171,10 +181,10 @@ fun DesktopApp(
                                 if (!updateBusy) {
                                     scope.launch {
                                         updateBusy = true
-                                        updateMessage = "Verificando atualização…"
+                                        updateMessage = text.checkingUpdate
                                         when (val result = releaseUpdater.check()) {
                                             UpdateCheckResult.UpToDate -> {
-                                                updateMessage = "Você já está na versão mais recente."
+                                                updateMessage = text.upToDate
                                                 updateBusy = false
                                             }
                                             is UpdateCheckResult.Failed -> {
@@ -182,13 +192,13 @@ fun DesktopApp(
                                                 updateBusy = false
                                             }
                                             is UpdateCheckResult.Available -> {
-                                                updateMessage = "Baixando ${result.release.displayName}…"
+                                                updateMessage = "${text.downloading} ${result.release.displayName}…"
                                                 releaseUpdater.downloadAndLaunch(result.release)
                                                     .onSuccess {
-                                                        updateMessage = "Instalador verificado. Atualizando…"
+                                                        updateMessage = text.installerVerified
                                                         onExitForUpdate()
                                                     }.onFailure {
-                                                        updateMessage = "A atualização não pôde ser instalada."
+                                                        updateMessage = text.updateFailed
                                                         updateBusy = false
                                                     }
                                             }
@@ -292,9 +302,9 @@ fun DesktopApp(
                     LoadingOverlay(
                         message =
                             if (appState.xtreamStatus is XtreamStatus.Connecting) {
-                                "Autenticando e preparando o catálogo…"
+                                text.authenticating
                             } else {
-                                "Organizando sua playlist…"
+                                text.organizingPlaylist
                             },
                     )
                 }
@@ -328,7 +338,7 @@ fun DesktopApp(
                         onDismissRequest = { externalOpenResult = null },
                         confirmButton = {
                             TextButton(onClick = { externalOpenResult = null }) {
-                                Text("Entendi")
+                                Text(strings.understood)
                             }
                         },
                         title = { Text("Não foi possível abrir") },
@@ -344,6 +354,7 @@ fun DesktopApp(
                     )
                 }
         }
+        }
     }
 }
 
@@ -354,12 +365,12 @@ private fun SourceSidebar(
     onSourceSelected: (String) -> Unit,
     onImport: () -> Unit,
     onConnectXtream: () -> Unit,
-    language: DesktopLanguage,
     destination: DesktopDestination,
     onHome: () -> Unit,
     onLive: () -> Unit,
     onFavorites: () -> Unit,
 ) {
+    val text = strings
     Column(
         modifier =
             Modifier
@@ -370,18 +381,18 @@ private fun SourceSidebar(
     ) {
         Brand()
         Spacer(Modifier.height(30.dp))
-        SectionLabel(desktopText(language, "library"))
+        SectionLabel(text.library)
         Spacer(Modifier.height(10.dp))
-        NavigationItem(desktopText(language, "home"), selected = destination == DesktopDestination.HOME, onClick = onHome)
-        NavigationItem(desktopText(language, "live"), selected = destination == DesktopDestination.CATALOG, onClick = onLive)
-        NavigationItem(desktopText(language, "favorites"), selected = destination == DesktopDestination.FAVORITES, onClick = onFavorites)
+        NavigationItem(text.home, selected = destination == DesktopDestination.HOME, onClick = onHome)
+        NavigationItem(text.live, selected = destination == DesktopDestination.CATALOG, onClick = onLive)
+        NavigationItem(text.favorites, selected = destination == DesktopDestination.FAVORITES, onClick = onFavorites)
         Spacer(Modifier.height(28.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            SectionLabel(desktopText(language, "sources"))
+            SectionLabel(text.sources)
             Text(
                 text = sources.size.toString(),
                 color = BuroColors.TextSubtle,
@@ -406,26 +417,26 @@ private fun SourceSidebar(
         OutlinedButton(
             onClick = onConnectXtream,
             modifier = Modifier.fillMaxWidth().height(42.dp),
-            shape = RoundedCornerShape(12.dp),
+            shape = BuroRadius.Small,
             colors =
                 ButtonDefaults.outlinedButtonColors(
                     contentColor = BuroColors.Primary,
                 ),
         ) {
-            Text(desktopText(language, "connect"), fontWeight = FontWeight.SemiBold)
+            Text(text.connectXtream, fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.height(8.dp))
         Button(
             onClick = onImport,
             modifier = Modifier.fillMaxWidth().height(46.dp),
-            shape = RoundedCornerShape(12.dp),
+            shape = BuroRadius.Small,
             colors =
                 ButtonDefaults.buttonColors(
                     containerColor = BuroColors.Primary,
-                    contentColor = Color(0xFF03201D),
+                    contentColor = BuroColors.OnPrimary,
                 ),
         ) {
-            Text("+  ${desktopText(language, "import")}", fontWeight = FontWeight.Bold)
+            Text("+  ${text.importM3u}", fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -447,7 +458,7 @@ private fun Brand() {
         ) {
             Text(
                 text = "B",
-                color = Color(0xFF071019),
+                color = BuroColors.OnPrimary,
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleLarge,
             )
@@ -484,26 +495,35 @@ private fun NavigationItem(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val background = if (selected) BuroColors.SurfaceHover else Color.Transparent
-    val foreground = if (selected) BuroColors.Text else BuroColors.TextMuted
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(background)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .size(7.dp)
-                .clip(CircleShape)
-                .background(if (selected) BuroColors.Primary else BuroColors.TextSubtle),
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(label, color = foreground, style = MaterialTheme.typography.labelLarge)
+    BuroInteractiveRow(
+        onClick = onClick,
+        selected = selected,
+        modifier = Modifier.fillMaxWidth(),
+        contentDescription = label,
+    ) { state ->
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(
+                        when {
+                            selected -> BuroColors.Primary
+                            state.active -> BuroColors.TextMuted
+                            else -> BuroColors.TextSubtle
+                        },
+                    ),
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = label,
+                color = if (selected || state.active) BuroColors.Text else BuroColors.TextMuted,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
     }
 }
 
@@ -513,15 +533,14 @@ private fun SourceItem(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val background = if (selected) BuroColors.SurfaceHover else Color.Transparent
+    BuroInteractiveRow(
+        onClick = onClick,
+        selected = selected,
+        modifier = Modifier.fillMaxWidth(),
+        contentDescription = source.name,
+    ) {
     Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(background)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 11.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -547,11 +566,12 @@ private fun SourceItem(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${source.itemCount} itens",
+                "${source.itemCount} ${strings.items}",
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
+    }
     }
 }
 
@@ -575,7 +595,7 @@ private fun PrivacyNote() {
         )
         Spacer(Modifier.width(9.dp))
         Text(
-            "Cofre protegido\nCredenciais cifradas pelo Windows",
+            "${strings.vaultProtected}\n${strings.credentialsEncrypted}",
             color = BuroColors.TextMuted,
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -594,43 +614,145 @@ private fun TopBar(
     updateMessage: String?,
     onUpdate: () -> Unit,
 ) {
+    val text = strings
+    // A Row does not shrink unweighted children: once their intrinsic widths exceed the space they
+    // simply overflow off-screen. The trailing controls are therefore dropped by priority as the
+    // window narrows instead of being allowed to run past the right edge.
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(74.dp)) {
+        // Thresholds are the width of the header itself, not the window: the sidebar has already
+        // been subtracted by the time this measures. Measured against the longest translation.
+        val showPrivacyPill = maxWidth >= 1_060.dp
+        val showUpdateLabel = maxWidth >= 860.dp
+        val showProfile = maxWidth >= 700.dp
+
+        Row(
+            modifier = Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 26.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text.yourLibrary,
+                    color = BuroColors.Text,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // Version and counts share one quiet line so the header carries a single strong
+                // element instead of five competing pills.
+                Text(
+                    updateMessage
+                        ?: "$sourceCount ${text.sourcesCount}  ·  $channelCount ${text.items}  ·  " +
+                        "v$DESKTOP_VERSION",
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(BuroSpacing.Md))
+            LanguagePicker(language = language, onSelect = onSelectLanguage)
+            Spacer(Modifier.width(BuroSpacing.Sm))
+            OutlinedButton(
+                onClick = onUpdate,
+                enabled = !updateBusy,
+                shape = BuroRadius.Small,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
+                contentPadding =
+                    if (showUpdateLabel) {
+                        PaddingValues(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs)
+                    } else {
+                        PaddingValues(BuroSpacing.Xs)
+                    },
+            ) {
+                Text(
+                    text = if (updateBusy) "…" else if (showUpdateLabel) text.checkUpdate else "↻",
+                    maxLines = 1,
+                )
+            }
+            if (showProfile) {
+                Spacer(Modifier.width(BuroSpacing.Sm))
+                ProfileChip(name = activeProfile?.name ?: text.profile, onClick = onChangeProfile)
+            }
+            if (showPrivacyPill) {
+                Spacer(Modifier.width(BuroSpacing.Sm))
+                StatusPill(text.privateSession, BuroColors.Success)
+            }
+        }
+    }
+}
+
+/** Compact segmented control. Four loose text buttons read as debug UI at this size. */
+@Composable
+private fun LanguagePicker(
+    language: DesktopLanguage,
+    onSelect: (DesktopLanguage) -> Unit,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().height(74.dp).padding(horizontal = 26.dp),
+        modifier =
+            Modifier
+                .clip(BuroRadius.Pill)
+                .background(BuroColors.SurfaceRaised)
+                .padding(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                desktopText(language, "your_library"),
-                color = BuroColors.Text,
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text(
-                updateMessage ?: "$sourceCount fontes  •  $channelCount itens",
-                color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        OutlinedButton(onClick = onUpdate, enabled = !updateBusy) {
-            Text(if (updateBusy) "Aguarde…" else "Verificar atualização")
-        }
-        Spacer(Modifier.width(8.dp))
-        StatusPill("v$DESKTOP_VERSION", BuroColors.TextSubtle)
-        Spacer(Modifier.width(8.dp))
-        TextButton(onClick = onChangeProfile) {
-            Text(activeProfile?.name ?: desktopText(language, "profile"), color = BuroColors.Text)
-        }
         DesktopLanguage.entries.forEach { option ->
-            TextButton(onClick = { onSelectLanguage(option) }) {
+            val active = option == language
+            BuroInteractiveRow(
+                onClick = { onSelect(option) },
+                selected = active,
+                shape = BuroRadius.Pill,
+                contentDescription = option.tag,
+            ) {
                 Text(
-                    option.tag.substringBefore('-').uppercase(),
-                    color = if (option == language) BuroColors.Primary else BuroColors.TextSubtle,
-                    fontWeight = if (option == language) FontWeight.Bold else FontWeight.Normal,
+                    text = option.tag.substringBefore('-').uppercase(),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    color = if (active) BuroColors.Primary else BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.labelMedium,
                 )
             }
         }
-        StatusPill("BURO DESKTOP", BuroColors.Accent)
-        Spacer(Modifier.width(10.dp))
-        StatusPill("LOCAL & PRIVADO", BuroColors.Success)
+    }
+}
+
+@Composable
+private fun ProfileChip(
+    name: String,
+    onClick: () -> Unit,
+) {
+    BuroInteractiveRow(
+        onClick = onClick,
+        selected = false,
+        shape = BuroRadius.Pill,
+        contentDescription = name,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(BuroColors.Primary.copy(alpha = 0.22f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = name.firstOrNull()?.uppercase() ?: "B",
+                    color = BuroColors.Primary,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = name,
+                color = BuroColors.Text,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.width(6.dp))
+        }
     }
 }
 
@@ -658,6 +780,7 @@ private fun EmptyLibrary(
     onImport: () -> Unit,
     onConnectXtream: () -> Unit,
 ) {
+    val text = strings
     Box(
         modifier = Modifier.fillMaxSize().padding(24.dp).clip(RoundedCornerShape(24.dp)),
     ) {
@@ -712,7 +835,7 @@ private fun EmptyLibrary(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    "BURO NOCTURNE  •  BIBLIOTECA PRIVADA",
+                    text.emptyBadge,
                     color = BuroColors.Primary,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelLarge,
@@ -720,13 +843,13 @@ private fun EmptyLibrary(
             }
             Spacer(Modifier.height(22.dp))
             Text(
-                "Toda a sua biblioteca.\nSem ruído.",
+                text.emptyHeadline,
                 color = BuroColors.Text,
                 style = MaterialTheme.typography.displaySmall,
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                "Importe sua fonte autorizada e deixe o IPTV BURO organizar canais, filmes e séries numa experiência única em todas as telas.",
+                text.emptyBody,
                 color = BuroColors.TextMuted,
                 style = MaterialTheme.typography.bodyLarge,
             )
@@ -738,11 +861,11 @@ private fun EmptyLibrary(
                     colors =
                         ButtonDefaults.buttonColors(
                             containerColor = BuroColors.Primary,
-                            contentColor = Color(0xFF08110F),
+                            contentColor = BuroColors.OnPrimary,
                         ),
                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
                 ) {
-                    Text("Conectar Xtream", fontWeight = FontWeight.Bold)
+                    Text(text.connectXtream, fontWeight = FontWeight.Bold)
                 }
                 OutlinedButton(
                     onClick = onImport,
@@ -753,12 +876,12 @@ private fun EmptyLibrary(
                         ),
                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
                 ) {
-                    Text("Importar M3U", fontWeight = FontWeight.SemiBold)
+                    Text(text.importM3u, fontWeight = FontWeight.SemiBold)
                 }
             }
             Spacer(Modifier.height(14.dp))
             Text(
-                "A fonte é reconectada com o cofre protegido deste usuário.",
+                text.credentialsStayLocal,
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -771,6 +894,7 @@ private fun CatalogWorkspace(
     appState: DesktopAppState,
     onOpenExternal: (Channel) -> Unit,
 ) {
+    val text = strings
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier =
@@ -784,7 +908,7 @@ private fun CatalogWorkspace(
                 onValueChange = appState::updateSearch,
                 modifier = Modifier.width(360.dp),
                 singleLine = true,
-                placeholder = { Text("Buscar canal…") },
+                placeholder = { Text(text.searchChannel) },
                 leadingIcon = {
                     Text("⌕", color = BuroColors.TextSubtle)
                 },
@@ -799,7 +923,7 @@ private fun CatalogWorkspace(
             )
             Spacer(Modifier.weight(1f))
             Text(
-                "${appState.visibleChannels.size} resultados",
+                "${appState.visibleChannels.size} ${text.results}",
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -812,7 +936,7 @@ private fun CatalogWorkspace(
                         contentColor = BuroColors.TextMuted,
                     ),
             ) {
-                Text("Esquecer fonte")
+                Text(text.forgetSource)
             }
         }
         HorizontalDivider(color = BuroColors.BorderSoft)
@@ -1005,7 +1129,7 @@ private fun ChannelDetail(
         contentAlignment = Alignment.Center,
     ) {
         if (channel == null) {
-            Text("Selecione um canal", color = BuroColors.TextSubtle)
+            Text(strings.selectChannel, color = BuroColors.TextSubtle)
             return@Box
         }
         Column(
@@ -1056,7 +1180,7 @@ private fun ChannelDetail(
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor = BuroColors.Primary,
-                        contentColor = Color(0xFF03201D),
+                        contentColor = BuroColors.OnPrimary,
                     ),
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
@@ -1084,7 +1208,7 @@ private fun CompactChannelDetail(
         verticalArrangement = Arrangement.Center,
     ) {
         if (channel == null) {
-            Text("Selecione um canal", color = BuroColors.TextSubtle)
+            Text(strings.selectChannel, color = BuroColors.TextSubtle)
             return@Column
         }
         BuroRemoteArtwork(
@@ -1120,7 +1244,7 @@ private fun CompactChannelDetail(
             colors =
                 ButtonDefaults.buttonColors(
                     containerColor = BuroColors.Primary,
-                    contentColor = Color(0xFF03201D),
+                    contentColor = BuroColors.OnPrimary,
                 ),
         ) {
             Text("Abrir", fontWeight = FontWeight.Bold)
@@ -1234,7 +1358,7 @@ private fun ImportStatusBanner(
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = onDismiss) {
-                Text("Fechar")
+                Text(strings.close)
             }
         }
     }
@@ -1265,7 +1389,7 @@ private fun XtreamStatusBanner(
             modifier = Modifier.weight(1f),
         )
         TextButton(onClick = onDismiss) {
-            Text("Fechar")
+            Text(strings.close)
         }
     }
 }
@@ -1300,7 +1424,7 @@ private fun LoadingOverlay(message: String) {
             )
             Spacer(Modifier.height(5.dp))
             Text(
-                "Nenhum dado sensível será salvo.",
+                strings.noSensitiveData,
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -1325,7 +1449,7 @@ private fun ExternalPlaybackDialog(
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor = BuroColors.Primary,
-                        contentColor = Color(0xFF03201D),
+                        contentColor = BuroColors.OnPrimary,
                     ),
             ) {
                 Text("Assistir agora", fontWeight = FontWeight.Bold)
@@ -1333,7 +1457,7 @@ private fun ExternalPlaybackDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancelar")
+                Text(strings.cancel)
             }
         },
         title = { Text("Reproduzir no IPTV BURO?") },
@@ -1358,7 +1482,7 @@ private fun DesktopProfileGate(
     var newName by remember { mutableStateOf("") }
     var kids by remember { mutableStateOf(false) }
     Box(
-        modifier = Modifier.fillMaxSize().background(Color(0xF207090C)),
+        modifier = Modifier.fillMaxSize().background(BuroColors.Scrim),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -1367,7 +1491,7 @@ private fun DesktopProfileGate(
         ) {
             Text("IPTV BURO", color = BuroColors.Primary, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
             Spacer(Modifier.height(12.dp))
-            Text("Quem está assistindo?", color = BuroColors.Text, style = MaterialTheme.typography.headlineLarge)
+            Text(strings.whoIsWatching, color = BuroColors.Text, style = MaterialTheme.typography.headlineLarge)
             Spacer(Modifier.height(24.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 profiles.forEach { profile ->
@@ -1388,25 +1512,15 @@ private fun DesktopProfileGate(
                 OutlinedTextField(
                     value = newName,
                     onValueChange = { newName = it.take(24) },
-                    label = { Text("Novo perfil") },
+                    label = { Text(strings.newProfile) },
                     singleLine = true,
                     modifier = Modifier.width(360.dp),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { kids = !kids }) { Text(if (kids) "Perfil infantil ✓" else "Perfil adulto") }
-                    Button(onClick = { if (newName.isNotBlank()) { onCreate(newName, kids); newName = "" } }) { Text("Adicionar") }
+                    TextButton(onClick = { kids = !kids }) { Text(if (kids) "${strings.kidsProfile} ✓" else strings.adultProfile) }
+                    Button(onClick = { if (newName.isNotBlank()) { onCreate(newName, kids); newName = "" } }) { Text(strings.addProfile) }
                 }
             }
         }
     }
-}
-
-private fun desktopText(language: DesktopLanguage, key: String): String {
-    val values = when (language) {
-        DesktopLanguage.PORTUGUESE_BRAZIL -> mapOf("library" to "BIBLIOTECA", "home" to "Início", "live" to "Ao vivo", "favorites" to "Favoritos", "sources" to "FONTES", "connect" to "Conectar Xtream", "import" to "Importar M3U", "your_library" to "Sua biblioteca", "profile" to "Perfil")
-        DesktopLanguage.ENGLISH -> mapOf("library" to "LIBRARY", "home" to "Home", "live" to "Live TV", "favorites" to "Favorites", "sources" to "SOURCES", "connect" to "Connect Xtream", "import" to "Import M3U", "your_library" to "Your library", "profile" to "Profile")
-        DesktopLanguage.GERMAN -> mapOf("library" to "BIBLIOTHEK", "home" to "Start", "live" to "Live-TV", "favorites" to "Favoriten", "sources" to "QUELLEN", "connect" to "Xtream verbinden", "import" to "M3U importieren", "your_library" to "Deine Bibliothek", "profile" to "Profil")
-        DesktopLanguage.ITALIAN -> mapOf("library" to "LIBRERIA", "home" to "Home", "live" to "TV in diretta", "favorites" to "Preferiti", "sources" to "FONTI", "connect" to "Connetti Xtream", "import" to "Importa M3U", "your_library" to "La tua libreria", "profile" to "Profilo")
-    }
-    return values.getValue(key)
 }

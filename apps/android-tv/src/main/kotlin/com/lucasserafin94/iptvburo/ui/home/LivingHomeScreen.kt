@@ -59,13 +59,12 @@ import com.lucasserafin94.iptvburo.ui.ChannelUi
 import com.lucasserafin94.iptvburo.ui.adaptive.BuroWindowClass
 import com.lucasserafin94.iptvburo.ui.adaptive.resolveBuroWindowClass
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
-import com.lucasserafin94.iptvburo.ui.theme.Blue
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.InkSoft
-import com.lucasserafin94.iptvburo.ui.theme.Muted
-import com.lucasserafin94.iptvburo.ui.theme.Surface
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroGold
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 fun LivingHomeScreen(
@@ -92,7 +91,7 @@ fun LivingHomeScreen(
             .fillMaxSize()
             .background(
                 Brush.linearGradient(
-                    listOf(Ink, InkSoft, Ink),
+                    listOf(BuroCanvas, BuroSurface, BuroCanvas),
                 ),
             ),
     ) {
@@ -245,7 +244,7 @@ private fun HomeRailRow(
         ) {
             Text(
                 text = rail.title,
-                color = White,
+                color = BuroTextPrimary,
                 fontSize = metrics.railTitleSize,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -312,11 +311,11 @@ private fun DemonstrationNotice() {
             modifier = Modifier
                 .size(8.dp)
                 .clip(CircleShape)
-                .background(Teal),
+                .background(BuroAccent),
         )
         Text(
             text = stringResource(R.string.buro_home_demo_notice),
-            color = Muted,
+            color = BuroTextSecondary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
         )
@@ -328,17 +327,17 @@ private fun DemoRailLabel() {
     Box(
         modifier = Modifier
             .clip(CircleShape)
-            .background(Blue.copy(alpha = 0.2f))
+            .background(BuroGold.copy(alpha = 0.2f))
             .border(
                 width = 1.dp,
-                color = Blue.copy(alpha = 0.5f),
+                color = BuroGold.copy(alpha = 0.5f),
                 shape = CircleShape,
             )
             .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(
             text = stringResource(R.string.buro_home_demo_rail_label),
-            color = Teal,
+            color = BuroAccent,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.6.sp,
@@ -367,11 +366,11 @@ private fun HomeLoadingState(metrics: HomeLayoutMetrics) {
                 Icon(
                     imageVector = Icons.Default.HourglassTop,
                     contentDescription = null,
-                    tint = Teal,
+                    tint = BuroAccent,
                 )
                 Text(
                     text = description,
-                    color = Muted,
+                    color = BuroTextSecondary,
                     fontSize = 16.sp,
                 )
             }
@@ -421,9 +420,9 @@ private fun SkeletonBlock(modifier: Modifier = Modifier) {
             .background(
                 Brush.linearGradient(
                     listOf(
-                        Surface,
-                        Blue.copy(alpha = 0.12f),
-                        Surface,
+                        BuroSurface,
+                        BuroGold.copy(alpha = 0.12f),
+                        BuroSurface,
                     ),
                 ),
             )
@@ -503,7 +502,7 @@ private fun HomeStatePanel(
             modifier = Modifier
                 .fillMaxWidth(if (metrics.compact) 0.88f else 0.66f)
                 .clip(RoundedCornerShape(28.dp))
-                .background(Surface.copy(alpha = 0.94f))
+                .background(BuroSurface.copy(alpha = 0.94f))
                 .border(
                     width = 1.dp,
                     color = Color.White.copy(alpha = 0.08f),
@@ -518,27 +517,27 @@ private fun HomeStatePanel(
                 modifier = Modifier
                     .size(72.dp)
                     .clip(CircleShape)
-                    .background(Blue.copy(alpha = 0.2f)),
+                    .background(BuroGold.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = Teal,
+                    tint = BuroAccent,
                     modifier = Modifier.size(36.dp),
                 )
             }
             Spacer(Modifier.height(22.dp))
             Text(
                 text = title,
-                color = White,
+                color = BuroTextPrimary,
                 fontSize = if (metrics.compact) 26.sp else 32.sp,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(10.dp))
             Text(
                 text = body,
-                color = Muted,
+                color = BuroTextSecondary,
                 fontSize = 16.sp,
                 lineHeight = 23.sp,
                 maxLines = 4,
@@ -625,9 +624,9 @@ private fun StateAction(
             .onFocusChanged { focusState ->
                 if (focusState.isFocused) onFocused()
             },
-        backgroundColor = if (primary) Teal else InkSoft,
-        focusedBackgroundColor = if (primary) Teal else Surface,
-        selectedBackgroundColor = if (primary) Teal else Surface,
+        backgroundColor = if (primary) BuroGold else BuroSurface,
+        focusedBackgroundColor = if (primary) BuroGold else BuroSurface,
+        selectedBackgroundColor = if (primary) BuroGold else BuroSurface,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 18.dp),
@@ -636,13 +635,13 @@ private fun StateAction(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (primary) Ink else Teal,
+                tint = if (primary) BuroCanvas else BuroGold,
                 modifier = Modifier.size(20.dp),
             )
             Spacer(Modifier.width(9.dp))
             Text(
                 text = label,
-                color = if (primary) Ink else White,
+                color = if (primary) BuroCanvas else BuroTextPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,

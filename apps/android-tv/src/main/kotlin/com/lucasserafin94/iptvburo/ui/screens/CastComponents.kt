@@ -20,10 +20,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.Surface
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
 
 @Composable
 internal fun CastPersonChip(
@@ -33,7 +33,7 @@ internal fun CastPersonChip(
     FocusSurface(
         onClick = onClick,
         modifier = Modifier.width(116.dp).height(116.dp),
-        backgroundColor = Surface,
+        backgroundColor = BuroSurface,
     ) {
         Column(
             modifier = Modifier.fillMaxSize().padding(10.dp),
@@ -42,19 +42,19 @@ internal fun CastPersonChip(
         ) {
             Box(
                 modifier = Modifier.width(48.dp).height(48.dp).clip(CircleShape)
-                    .background(Teal.copy(alpha = 0.16f)),
+                    .background(BuroAccent.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = name.personInitials(),
-                    color = Teal,
+                    color = BuroAccent,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Black,
                 )
             }
             Text(
                 text = name,
-                color = White,
+                color = BuroTextPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,

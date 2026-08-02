@@ -52,12 +52,12 @@ import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButtonStyle
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroErrorState
-import com.lucasserafin94.iptvburo.ui.theme.Danger
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.Muted
-import com.lucasserafin94.iptvburo.ui.theme.Surface
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroDanger
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 internal fun MovieDetailsScreen(
@@ -91,7 +91,7 @@ internal fun MovieDetailsScreen(
             }
         }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize().background(Ink)) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().background(BuroCanvas)) {
         val portrait = maxWidth < 600.dp && maxHeight >= maxWidth
         val horizontalPadding = if (portrait) 18.dp else 52.dp
         val heroHeight = if (portrait) 310.dp else 390.dp
@@ -117,7 +117,7 @@ internal fun MovieDetailsScreen(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color(0x22090A0D), Color(0xAA090A0D), Ink),
+                        listOf(Color(0x22090A0D), Color(0xAA090A0D), BuroCanvas),
                         endY = if (portrait) 760f else 900f,
                     ),
                 ),
@@ -128,7 +128,7 @@ internal fun MovieDetailsScreen(
                     .fillMaxSize()
                     .background(
                         Brush.horizontalGradient(
-                            listOf(Ink, Color(0xE6090A0D), Color.Transparent),
+                            listOf(BuroCanvas, Color(0xE6090A0D), Color.Transparent),
                             endX = 1_250f,
                         ),
                     ),
@@ -151,13 +151,13 @@ internal fun MovieDetailsScreen(
                     onClick = onBack,
                     modifier = Modifier.size(50.dp).focusRequester(backFocusRequester),
                     backgroundColor = Color(0xA6111319),
-                    focusedBackgroundColor = Surface,
+                    focusedBackgroundColor = BuroSurface,
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Voltar",
-                            tint = White,
+                            tint = BuroTextPrimary,
                         )
                     }
                 }
@@ -169,7 +169,7 @@ internal fun MovieDetailsScreen(
                 Column(modifier = Modifier.width(contentWidth)) {
                     Text(
                         text = details?.title ?: fallbackTitle,
-                        color = White,
+                        color = BuroTextPrimary,
                         fontSize = if (portrait) 30.sp else 44.sp,
                         lineHeight = if (portrait) 35.sp else 49.sp,
                         fontWeight = FontWeight.Bold,
@@ -187,7 +187,7 @@ internal fun MovieDetailsScreen(
                         Spacer(Modifier.height(8.dp))
                         Text(
                             text = facts.joinToString("  •  "),
-                            color = Teal,
+                            color = BuroAccent,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -199,7 +199,7 @@ internal fun MovieDetailsScreen(
                 item("playback-state") {
                     Text(
                         text = if (hasPlaybackError) "Não foi possível abrir este vídeo." else "Preparando reprodução…",
-                        color = if (hasPlaybackError) Danger else Teal,
+                        color = if (hasPlaybackError) BuroDanger else BuroAccent,
                     )
                 }
             }
@@ -221,7 +221,7 @@ internal fun MovieDetailsScreen(
                         Icon(
                             if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             contentDescription = null,
-                            tint = if (isFavorite) Color(0xFFE46C7A) else White,
+                            tint = if (isFavorite) Color(0xFFE46C7A) else BuroTextPrimary,
                         )
                         Text(if (isFavorite) "Na Minha BURO" else "Minha BURO")
                     }
@@ -252,7 +252,7 @@ internal fun MovieDetailsScreen(
             }
 
             when {
-                isLoading -> item("loading") { Text("Carregando ficha completa…", color = Muted) }
+                isLoading -> item("loading") { Text("Carregando ficha completa…", color = BuroTextSecondary) }
                 hasError -> item("error") {
                     BuroErrorState(
                         title = "Ficha indisponível",
@@ -266,7 +266,7 @@ internal fun MovieDetailsScreen(
                         item("plot") {
                             Text(
                                 text = plot,
-                                color = White,
+                                color = BuroTextPrimary,
                                 fontSize = if (portrait) 16.sp else 18.sp,
                                 lineHeight = if (portrait) 24.sp else 28.sp,
                                 modifier = Modifier.width(contentWidth),
@@ -278,7 +278,7 @@ internal fun MovieDetailsScreen(
                             Column(modifier = Modifier.width(contentWidth)) {
                                 Text(
                                     text = "Elenco",
-                                    color = White,
+                                    color = BuroTextPrimary,
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
                                 )
@@ -323,7 +323,7 @@ private fun DetailFact(
     if (!value.isNullOrBlank()) {
         Text(
             text = "$label  •  $value",
-            color = Muted,
+            color = BuroTextSecondary,
             fontSize = 15.sp,
             lineHeight = 22.sp,
         )

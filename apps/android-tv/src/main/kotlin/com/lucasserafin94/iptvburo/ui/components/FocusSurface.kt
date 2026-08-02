@@ -30,18 +30,18 @@ import com.lucasserafin94.iptvburo.ui.designsystem.BuroMotionTokens
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroOpacity
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroShapes
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroTheme
-import com.lucasserafin94.iptvburo.ui.theme.Surface
-import com.lucasserafin94.iptvburo.ui.theme.SurfaceRaised
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurfaceRaised
 
 @Composable
 fun FocusSurface(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    backgroundColor: Color = Surface,
+    backgroundColor: Color = BuroSurface,
     selected: Boolean = false,
-    focusedBackgroundColor: Color = SurfaceRaised,
-    selectedBackgroundColor: Color = SurfaceRaised,
+    focusedBackgroundColor: Color = BuroSurfaceRaised,
+    selectedBackgroundColor: Color = BuroSurfaceRaised,
     shape: Shape = BuroShapes.Medium,
     contentAlignment: Alignment = Alignment.TopStart,
     content: @Composable BoxScope.(isFocused: Boolean) -> Unit,

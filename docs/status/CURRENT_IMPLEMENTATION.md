@@ -89,6 +89,75 @@ classificar o produto como uma versão estável.
   em escala de 125%; HEVC real foi reproduzido pelo VLC incluído. O MSI permanece
   pré-release até completar a matriz pública de hardware, faixas e HDR.
 
+### Revisão da camada visual — 2 de agosto de 2026
+
+Detalhamento em [`design-system.md`](../ux/design-system.md).
+
+Correções de defeito:
+
+- os atalhos de cor do Android (`Ink`, `Teal`, `Blue`, `White`, `Muted`, …) eram
+  `val` de topo capturados do esquema padrão na inicialização da classe. O
+  esquema resolvido por `resolveBuroColorScheme` existia e era publicado em
+  `LocalBuroColors`, mas nenhuma tela o lia: **alto contraste e transparência
+  reduzida não produziam efeito visual em nenhuma parte do aplicativo**. Agora
+  são getters `@Composable` que leem `BuroTheme.colors`;
+- os mesmos atalhos foram renomeados para nomes semânticos. `Teal` apontava para
+  o marfim e `Blue` para o dourado, o que tornava impossível prever o que uma
+  tela pintaria. A renomeação não altera nenhum pixel no tema padrão;
+- as fileiras da Home Windows alinhavam o título em 34 dp e o primeiro card em
+  22 dp, então cada fileira ficava visivelmente deslocada do próprio título.
+  Título e `contentPadding` agora usam o mesmo `gutter`;
+- havia três valores distintos de "cor sobre o dourado" (`0xFF03201D`,
+  `0xFF08110F`, `0xFF071019`), nenhum pertencente à paleta. Todos passaram a
+  `BuroColors.OnPrimary`;
+- a barra superior Windows não encolhia: uma `Row` não reduz filhos sem peso,
+  então em janelas estreitas os controles à direita saíam da tela. Agora são
+  descartados por prioridade.
+
+Evoluções:
+
+- `BuroInteractiveSurface`/`BuroInteractiveRow` implementam a física de foco do
+  GDD 2.0 no Windows: escala 1.045/1.06, anel luminoso, 160 ms. Hover e foco de
+  teclado compartilham a mesma `MutableInteractionSource`, então todo card, item
+  de navegação e fonte passou a ser navegável por `Tab`;
+- a Home Windows recebeu hero responsivo (52% da altura útil, limitado a
+  300–560 dp), scrim duplo, faixa de fatos, ação `Assistir` direta para filme e
+  ao vivo, chips de nota e AO VIVO sobre a arte, e esqueleto com o formato da
+  tela final em vez de um indicador centralizado;
+- `DesktopStrings` substituiu a tabela anterior de nove chaves por uma
+  `data class` com pt-BR, en, de e it cobrindo shell, Home, estados, diálogos e
+  banners. `XtreamWorkspace` e `XtreamLoginDialog` continuam em português fixo.
+
+Segunda rodada — catálogo e ficha Windows:
+
+- o painel lateral fixo de categorias virou rail horizontal de chips; o catálogo
+  virou grid editorial adaptativo com o mesmo card da Home, chip de nota sobre a
+  arte e hover/foco por teclado;
+- grid e rail voltam ao início quando tipo, categoria ou página mudam. Antes a
+  lista reaproveitava o deslocamento e a página nova abria já rolada;
+- a ficha deixou de ser card centralizado: pôster à esquerda, título, fatos e
+  ações à direita, alinhados à esquerda. As ações passaram de botões empilhados
+  em largura total para uma linha com largura natural;
+- os três seletores de tipo viraram um controle segmentado. Como três botões
+  dourados lado a lado, todo estado lia como "selecionado";
+- as últimas duas ocorrências de `Color(0xFF03201D)` foram removidas;
+- Android teve a ação primária e a barra de progresso unificadas no dourado da
+  marca. A ação primária era marfim no Android e dourada no Windows.
+
+Gate desta revisão:
+
+- `test`, `:apps:android-tv:assembleDebug`, `:apps:android-tv:lintDebug` e
+  `:apps:desktop:test` passaram; 25 suítes JVM sem falha;
+- o executável Windows foi aberto e inspecionado; captura em
+  `artifacts/desktop/buro-cinematic-shell.png`;
+- a janela é per-monitor DPI aware: a 125% o `containerSize` medido foi
+  1920×991 px físicos com `density = 1.25`. Capturas de validação precisam
+  chamar `SetProcessDPIAware`, caso contrário gravam cerca de 80% da largura sem
+  sinalizar o corte — as capturas anteriores deste diretório têm esse viés;
+- **a Home Windows redesenhada não foi validada com catálogo real.** A execução
+  verificada usou a sessão vazia. A validação com fonte autorizada continua
+  pendente para esta mudança.
+
 ### Continuação de 1 de agosto de 2026
 
 - auditoria honesta dos GDDs 1–5 registrada em

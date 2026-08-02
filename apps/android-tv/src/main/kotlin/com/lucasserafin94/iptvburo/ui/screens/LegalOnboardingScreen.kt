@@ -36,12 +36,12 @@ import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.ui.adaptive.BuroWindowClass
 import com.lucasserafin94.iptvburo.ui.adaptive.resolveBuroWindowClass
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
-import com.lucasserafin94.iptvburo.ui.theme.Blue
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.Muted
-import com.lucasserafin94.iptvburo.ui.theme.Surface
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroGold
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 fun LegalOnboardingScreen(
@@ -59,7 +59,7 @@ fun LegalOnboardingScreen(
             .safeDrawingPadding()
             .background(
                 Brush.radialGradient(
-                    colors = listOf(Blue.copy(alpha = 0.2f), Ink, Color.Black),
+                    colors = listOf(BuroGold.copy(alpha = 0.2f), BuroCanvas, Color.Black),
                     radius = 1_400f,
                 ),
             ),
@@ -136,12 +136,12 @@ private fun LegalCard(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(if (compact) 22.dp else 28.dp))
-            .background(Surface.copy(alpha = 0.94f))
+            .background(BuroSurface.copy(alpha = 0.94f))
             .padding(if (compact) 22.dp else 40.dp),
     ) {
         Text(
             text = stringResource(R.string.legal_title),
-            color = White,
+            color = BuroTextPrimary,
             fontSize = if (compact) 24.sp else 32.sp,
             lineHeight = if (compact) 29.sp else 38.sp,
             fontWeight = FontWeight.Bold,
@@ -149,14 +149,14 @@ private fun LegalCard(
         Spacer(Modifier.height(if (compact) 8.dp else 18.dp))
         Text(
             text = stringResource(R.string.legal_body),
-            color = Muted,
+            color = BuroTextSecondary,
             fontSize = if (compact) 14.sp else 18.sp,
             lineHeight = if (compact) 20.sp else 27.sp,
         )
         Spacer(Modifier.height(if (compact) 10.dp else 20.dp))
         Text(
             text = stringResource(R.string.legal_privacy),
-            color = Teal,
+            color = BuroAccent,
             fontSize = if (compact) 12.sp else 15.sp,
             lineHeight = if (compact) 17.sp else 22.sp,
         )
@@ -194,14 +194,14 @@ private fun BrandMark(
                 .clip(RoundedCornerShape(if (compact) 26.dp else 36.dp))
                 .background(
                     Brush.linearGradient(
-                        listOf(Teal.copy(alpha = 0.95f), Blue),
+                        listOf(BuroAccent.copy(alpha = 0.95f), BuroGold),
                     ),
                 ),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = "▶",
-                color = Ink,
+                color = BuroCanvas,
                 fontSize = if (compact) 48.sp else 70.sp,
                 textAlign = TextAlign.Center,
             )
@@ -209,14 +209,14 @@ private fun BrandMark(
         Spacer(Modifier.height(if (compact) 12.dp else 24.dp))
         Text(
             text = "IPTV",
-            color = Teal,
+            color = BuroAccent,
             fontSize = if (compact) 16.sp else 21.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = if (compact) 4.sp else 6.sp,
         )
         Text(
             text = "BURO",
-            color = White,
+            color = BuroTextPrimary,
             fontSize = if (compact) 30.sp else 42.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = if (compact) 3.sp else 4.sp,

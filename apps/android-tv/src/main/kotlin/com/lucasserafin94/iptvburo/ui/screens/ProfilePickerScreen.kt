@@ -36,11 +36,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lucasserafin94.iptvburo.ui.ProfileUi
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
-import com.lucasserafin94.iptvburo.ui.theme.Ink
-import com.lucasserafin94.iptvburo.ui.theme.InkSoft
-import com.lucasserafin94.iptvburo.ui.theme.Muted
-import com.lucasserafin94.iptvburo.ui.theme.Teal
-import com.lucasserafin94.iptvburo.ui.theme.White
+import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 fun ProfilePickerScreen(
@@ -56,7 +56,7 @@ fun ProfilePickerScreen(
         modifier =
             modifier
                 .fillMaxSize()
-                .background(Brush.linearGradient(listOf(Ink, InkSoft, Ink)))
+                .background(Brush.linearGradient(listOf(BuroCanvas, BuroSurface, BuroCanvas)))
                 .safeDrawingPadding()
                 .padding(24.dp),
         contentAlignment = Alignment.Center,
@@ -65,10 +65,10 @@ fun ProfilePickerScreen(
             modifier = Modifier.fillMaxWidth().widthIn(max = 920.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("IPTV  BURO", color = White, fontSize = 24.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
+            Text("IPTV  BURO", color = BuroTextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
             Spacer(Modifier.height(18.dp))
-            Text("Quem está assistindo?", color = White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-            Text("Cada pessoa mantém seus favoritos, idioma e progresso.", color = Muted, fontSize = 15.sp)
+            Text("Quem está assistindo?", color = BuroTextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+            Text("Cada pessoa mantém seus favoritos, idioma e progresso.", color = BuroTextSecondary, fontSize = 15.sp)
             Spacer(Modifier.height(30.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally)) {
                 for (profile in profiles) {
@@ -77,8 +77,8 @@ fun ProfilePickerScreen(
                 if (profiles.size < 5) {
                     FocusSurface(onClick = { adding = true }, modifier = Modifier.size(128.dp)) {
                         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = Teal, modifier = Modifier.size(42.dp))
-                            Text("Adicionar", color = White, fontSize = 13.sp)
+                            Icon(Icons.Default.Add, contentDescription = null, tint = BuroAccent, modifier = Modifier.size(42.dp))
+                            Text("Adicionar", color = BuroTextPrimary, fontSize = 13.sp)
                         }
                     }
                 }
@@ -100,8 +100,8 @@ fun ProfilePickerScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         FocusSurface(onClick = { isKids = !isKids }, modifier = Modifier.height(52.dp).weight(1f)) {
                             Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.ChildCare, null, tint = if (isKids) Teal else Muted)
-                                Text(if (isKids) " Infantil" else " Adulto", color = White)
+                                Icon(Icons.Default.ChildCare, null, tint = if (isKids) BuroAccent else BuroTextSecondary)
+                                Text(if (isKids) " Infantil" else " Adulto", color = BuroTextPrimary)
                             }
                         }
                         FocusSurface(
@@ -115,7 +115,7 @@ fun ProfilePickerScreen(
                             modifier = Modifier.height(52.dp).weight(1f),
                         ) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text("Criar perfil", color = White, fontWeight = FontWeight.Bold)
+                                Text("Criar perfil", color = BuroTextPrimary, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -141,8 +141,8 @@ private fun ProfileCard(profile: ProfileUi, onClick: () -> Unit) {
                 )
             }
             Spacer(Modifier.height(8.dp))
-            Text(profile.name, color = White, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            if (profile.isKids) Text("Kids", color = Teal, fontSize = 11.sp)
+            Text(profile.name, color = BuroTextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            if (profile.isKids) Text("Kids", color = BuroAccent, fontSize = 11.sp)
         }
     }
 }
