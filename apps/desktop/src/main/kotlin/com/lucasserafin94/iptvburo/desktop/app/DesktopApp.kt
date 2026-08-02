@@ -83,6 +83,7 @@ import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
+import com.lucasserafin94.iptvburo.desktop.update.DESKTOP_VERSION
 import com.lucasserafin94.iptvburo.desktop.update.GitHubReleaseUpdater
 import com.lucasserafin94.iptvburo.desktop.update.UpdateCheckResult
 import kotlinx.coroutines.launch
@@ -612,6 +613,8 @@ private fun TopBar(
         OutlinedButton(onClick = onUpdate, enabled = !updateBusy) {
             Text(if (updateBusy) "Aguarde…" else "Verificar atualização")
         }
+        Spacer(Modifier.width(8.dp))
+        StatusPill("v$DESKTOP_VERSION", BuroColors.TextSubtle)
         Spacer(Modifier.width(8.dp))
         TextButton(onClick = onChangeProfile) {
             Text(activeProfile?.name ?: desktopText(language, "profile"), color = BuroColors.Text)

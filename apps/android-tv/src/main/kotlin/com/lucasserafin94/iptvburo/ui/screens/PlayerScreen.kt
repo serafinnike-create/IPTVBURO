@@ -6,8 +6,8 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.app.PictureInPictureParams
 import android.content.res.Configuration
+import android.media.AudioManager
 import android.os.Build
-import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
@@ -31,6 +31,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.BrightnessHigh
@@ -54,6 +56,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -88,6 +94,7 @@ import com.lucasserafin94.iptvburo.ui.theme.Surface
 import com.lucasserafin94.iptvburo.ui.theme.Teal
 import com.lucasserafin94.iptvburo.ui.theme.White
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 @Composable
 fun PlayerScreen(
@@ -119,15 +126,34 @@ fun PlayerScreen(
     var controlsLocked by remember(player) { mutableStateOf(false) }
     var playbackSpeed by remember(player) { mutableFloatStateOf(1f) }
     val lifecycleOwner = LocalLifecycleOwner.current
-    val activity = (androidx.compose.ui.platform.LocalContext.current).findActivity()
+    val context = LocalContext.current
+    val activity = context.findActivity()
+    val audioManager = remember(context) { context.getSystemService(AudioManager::class.java) }
     val isTelevision =
         androidx.compose.ui.platform.LocalConfiguration.current.uiMode and
             Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
-    var playerVolume by remember(player) { mutableFloatStateOf(player.volume) }
+    var playerVolume by remember(player, audioManager) {
+        val maximum = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        mutableFloatStateOf(
+            audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / maximum.toFloat(),
+        )
+    }
+    val isFullscreen = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var screenBrightness by remember(activity) {
         mutableFloatStateOf(
             activity?.window?.attributes?.screenBrightness?.takeIf { it >= 0f } ?: 0.65f,
         )
+    }
+
+    LaunchedEffect(player) {
+        player.volume = 1f
+    }
+
+    LaunchedEffect(controlsVisible, controlsLocked, playbackState.isPlaying) {
+        if (controlsVisible && !controlsLocked && playbackState.isPlaying) {
+            delay(4_500)
+            controlsVisible = false
+        }
     }
 
     LaunchedEffect(player, progressIdentity) {
@@ -254,12 +280,15 @@ fun PlayerScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color.Black)
+            .pointerInput(controlsLocked) {
+                detectTapGestures {
+                    if (!controlsLocked) controlsVisible = !controlsVisible
+                }
+            },
     ) {
         VideoSurface(
             player = player,
-            controllerEnabled = !controlsLocked,
-            onControlsVisibilityChanged = { controlsVisible = it },
         )
 
         if (controlsVisible) {
@@ -299,6 +328,7 @@ fun PlayerScreen(
                     volume = playerVolume,
                     brightness = screenBrightness,
                     speed = playbackSpeed,
+                    isFullscreen = isFullscreen,
                     showMobileControls = !isTelevision,
                     canUsePictureInPicture = !isTelevision && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O,
                     onPlayPause = { if (player.isPlaying) player.pause() else player.play() },
@@ -319,7 +349,12 @@ fun PlayerScreen(
                     },
                     onVolumeChanged = { value ->
                         playerVolume = value
-                        player.volume = value
+                        val maximum = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                        audioManager.setStreamVolume(
+                            AudioManager.STREAM_MUSIC,
+                            (value.coerceIn(0f, 1f) * maximum).roundToInt(),
+                            0,
+                        )
                     },
                     onBrightnessChanged = { value ->
                         screenBrightness = value
@@ -337,6 +372,14 @@ fun PlayerScreen(
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             activity?.enterPictureInPictureMode(PictureInPictureParams.Builder().build())
                         }
+                    },
+                    onToggleFullscreen = {
+                        activity?.requestedOrientation =
+                            if (isFullscreen) {
+                                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                            } else {
+                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                            }
                     },
                     onLock = {
                         controlsLocked = true
@@ -477,8 +520,6 @@ private fun formatResumeTime(positionMs: Long): String {
 @OptIn(markerClass = [UnstableApi::class])
 private fun VideoSurface(
     player: ExoPlayer,
-    controllerEnabled: Boolean,
-    onControlsVisibilityChanged: (Boolean) -> Unit,
 ) {
     AndroidView(
         factory = { context ->
@@ -487,29 +528,7 @@ private fun VideoSurface(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 )
-                useController = controllerEnabled
-                controllerShowTimeoutMs = 4_500
-                controllerAutoShow = true
-                controllerHideOnTouch = true
-                setShowRewindButton(true)
-                setShowFastForwardButton(true)
-                setShowPreviousButton(false)
-                setShowNextButton(false)
-                setShowShuffleButton(false)
-                setShowSubtitleButton(true)
-                setControllerVisibilityListener(
-                    PlayerView.ControllerVisibilityListener { visibility ->
-                        onControlsVisibilityChanged(visibility == View.VISIBLE)
-                    },
-                )
-                setFullscreenButtonClickListener { fullscreen ->
-                    context.findActivity()?.requestedOrientation =
-                        if (fullscreen) {
-                            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                        } else {
-                            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                        }
-                }
+                useController = false
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 keepScreenOn = true
                 this.player = player
@@ -517,7 +536,7 @@ private fun VideoSurface(
         },
         update = {
             it.player = player
-            it.useController = controllerEnabled
+            it.useController = false
         },
         modifier = Modifier.fillMaxSize(),
     )
@@ -591,6 +610,7 @@ private fun PlayerControls(
     volume: Float,
     brightness: Float,
     speed: Float,
+    isFullscreen: Boolean,
     showMobileControls: Boolean,
     canUsePictureInPicture: Boolean,
     onPlayPause: () -> Unit,
@@ -600,6 +620,7 @@ private fun PlayerControls(
     onBrightnessChanged: (Float) -> Unit,
     onCycleSpeed: () -> Unit,
     onPictureInPicture: () -> Unit,
+    onToggleFullscreen: () -> Unit,
     onLock: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -672,6 +693,16 @@ private fun PlayerControls(
                     icon = { Icon(Icons.Default.PictureInPicture, contentDescription = "Picture-in-Picture", tint = White) },
                 )
             }
+            ControlButton(
+                onClick = onToggleFullscreen,
+                icon = {
+                    Icon(
+                        if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                        contentDescription = if (isFullscreen) "Sair da tela cheia" else "Tela cheia",
+                        tint = White,
+                    )
+                },
+            )
             ControlButton(
                 onClick = onLock,
                 icon = { Icon(Icons.Default.Lock, contentDescription = "Bloquear controles", tint = White) },

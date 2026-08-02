@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "com.lucasserafin94.iptvburo"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 
 val vlcVersion = "3.0.23"
 val vlcArchiveSha256 = "992d19dbd0b8a7cde9167d2f7780b1ef6f92acc8a71acfa736101a21f35181e1"
@@ -110,7 +110,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "IPTVBURO"
-            packageVersion = "0.2.1"
+            packageVersion = "0.2.2"
             description = "IPTV BURO desktop player"
             vendor = "IPTV BURO"
             appResourcesRootDir.set(generatedAppResources)

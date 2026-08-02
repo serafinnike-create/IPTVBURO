@@ -1060,19 +1060,23 @@ class MainViewModel @Inject constructor(
                     contentType = CatalogContentType.SERIES,
                     limit = HOME_ITEM_LIMIT,
                 ).items
-                (releasesCurrent + releasesPrevious + recent + movies + series)
-                    .filter { it.logoUri != null }
-                    .distinctBy(Channel::id)
-                    .distinctBy { channel -> dailyCatalogTitleKey(channel.name) }
+                (
+                    releasesCurrent.map { it to "Lançamento $currentYear" } +
+                        releasesPrevious.map { it to "Lançamento ${currentYear - 1}" } +
+                        recent.map { it to "Adicionado recentemente" } +
+                        movies.map { it to "Filme" } +
+                        series.map { it to "Série" }
+                )
+                    .filter { (channel, _) -> channel.logoUri != null }
+                    .distinctBy { (channel, _) -> channel.id }
+                    .distinctBy { (channel, _) -> dailyCatalogTitleKey(channel.name) }
                     .sortedWith(
-                        compareBy<Channel> { channel ->
+                        compareBy<Pair<Channel, String>> { (channel, _) ->
                             dailyEditorialRank(channel.id, localEditorialDay())
-                        }.thenBy(Channel::id),
+                        }.thenBy { (channel, _) -> channel.id },
                     )
-                    .map { channel ->
-                        channel.toCatalogUi(
-                            if (channel.contentType == CatalogContentType.MOVIE) "Filme" else "Série",
-                        )
+                    .map { (channel, editorialLabel) ->
+                        channel.toCatalogUi(editorialLabel)
                     }
             }.onSuccess { items ->
                 mutableState.update { state ->

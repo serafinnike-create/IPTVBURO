@@ -38,7 +38,11 @@ class GitHubReleaseUpdaterTest {
                     """.trimIndent(),
                 ),
             )
-            val updater = GitHubReleaseUpdater(releasesUrl = server.url("/releases").toString())
+            val updater =
+                GitHubReleaseUpdater(
+                    releasesUrl = server.url("/releases").toString(),
+                    currentVersion = "0.2.0-alpha.2",
+                )
             val result = updater.check()
             assertIs<UpdateCheckResult.Available>(result)
             assertTrue(result.release.version == "0.2.0-alpha.3")

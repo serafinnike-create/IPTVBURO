@@ -8,8 +8,8 @@ Transforma fontes de mídia autorizadas pelo usuário em uma biblioteca organiza
 
 ![Status](https://img.shields.io/badge/status-em%20desenvolvimento-7c3aed)
 ![GDD](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%207.0-2563eb)
-![Android TV](https://img.shields.io/badge/Android%20TV-v0.2.0--alpha.2-3ddc84)
-![Windows](https://img.shields.io/badge/Windows-v0.2.0--alpha.2-e2b458)
+![Android TV](https://img.shields.io/badge/Android%20TV-v0.2.0--alpha.3-3ddc84)
+![Windows](https://img.shields.io/badge/Windows-v0.2.0--alpha.3-e2b458)
 ![Multiplataforma](https://img.shields.io/badge/escopo-universal-0f766e)
 ![Offline Mobile](https://img.shields.io/badge/Offline%20Vault-planejado-f59e0b)
 
@@ -42,7 +42,7 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 | Entrega | Estado |
 |---|---|
 | GDDs 1.0 a 7.0 | ✅ Documentados na `main` |
-| Aplicação Android/Android TV | 🧪 Prévia `v0.2.0-alpha.2` |
+| Aplicação Android/Android TV | 🧪 Prévia `v0.2.0-alpha.3` |
 | Importação local M3U/M3U8 | ✅ Vertical funcional |
 | Xtream: ao vivo, filmes, séries e episódios | ✅ Vertical funcional |
 | Room, parser em lotes e transação de catálogo | ✅ Implementados |
@@ -84,7 +84,7 @@ A primeira vertical slice está na `main` e possui:
 - PT-BR, inglês, alemão e italiano;
 - logs com redaction;
 - backup e transferência de dados desabilitados;
-- 134 testes unitários aprovados no gate local mais recente e 1 teste conectado de migração aprovado em Android físico;
+- 137 testes aprovados no gate local mais recente e 1 teste conectado de migração aprovado em Android físico;
 - lint sem erros bloqueantes;
 - build debug aprovada e workflow multiplataforma preparado.
 
@@ -100,7 +100,7 @@ O fluxo importação → categoria → canal → primeiro frame foi validado em 
 
 A prévia usa assinatura de desenvolvimento e não é uma versão de loja.
 
-### Preview multiplataforma v0.2.0-alpha.2
+### Preview multiplataforma v0.2.0-alpha.3
 
 O Windows restaura a fonte via DPAPI e oferece perfis, idiomas, favoritos,
 catálogo paginado, detalhes e filmografia na mesma janela, continuidade por
@@ -109,15 +109,20 @@ H.264/H.265/HEVC, AAC, MP4, MKV e HLS, com play/pause, seek, volume, velocidade 
 tela cheia. O botão `Verificar atualização` baixa somente um MSI mais novo do
 GitHub Releases e valida o digest SHA-256 antes de executá-lo.
 
+Nesta revisão, o Android usa apenas um painel de controles, altera o volume real
+de mídia do aparelho e oferece rotação/tela cheia. A Home separa o ano real de
+lançamento da data de entrada na fonte. No Windows, a versão fica visível no
+topo e o player aceita F11, Escape e Espaço além dos controles na tela.
+
 Esta continua sendo uma prévia: download offline depende de autorização explícita
 da fonte/backend; HDR forçado, brilho global do monitor e seleção completa de
 faixas ainda não são anunciados como funções estáveis.
 
-- [GitHub Pre-release v0.2.0-alpha.2](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.2.0-alpha.2)
-- [Instalador Windows x64](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.2/IPTVBURO-0.2.1.msi)
-- [APK Android/Android TV](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.2/android-tv-debug.apk)
-- MSI: 161.352.759 bytes — SHA-256 `102D1E06F732FC726BFB5F639BB3B3CB87B5D6C3DBC3E70BB760ABF066B3F4F0`;
-- APK: 32.975.540 bytes — SHA-256 `6A63B20B9E9DAF79F5330A7972B8BAF6C808AE6E6E92EE24B2B0E59DDE474B51`.
+- [GitHub Pre-release v0.2.0-alpha.3](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.2.0-alpha.3)
+- [Instalador Windows x64](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.3/IPTVBURO-0.2.2.msi)
+- [APK Android/Android TV](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.3/android-tv-debug.apk)
+- MSI: 161.356.857 bytes — SHA-256 `E712F600362AB4FDD6F04063FAE3F7FA17CB88E39F1EA56D7582CD782797081A`;
+- APK: 32.090.831 bytes — SHA-256 `9CF813F900C3A5EA57C3C1F4C13CCEDBEE60051AF307A7759390EB3A8BC1B3F9`.
 
 ### Build
 
@@ -149,7 +154,7 @@ apps/android-tv/build/outputs/apk/debug/android-tv-debug.apk
 MSI local:
 
 ```text
-apps/desktop/build/compose/binaries/main/msi/IPTVBURO-0.2.1.msi
+apps/desktop/build/compose/binaries/main/msi/IPTVBURO-0.2.2.msi
 ```
 
 Documentação do estado atual:

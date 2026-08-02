@@ -143,6 +143,20 @@ Nenhum dado identificável de fonte privada pertence ao diário, às fixtures ou
 publicada e links de download serão acrescentados apenas quando reproduzidos e
 confirmados.
 
+# 2026-08-02 — player único, volume real e organização temporal
+
+- removida a sobreposição de dois painéis de player no Android;
+- volume Android passou a controlar o fluxo de mídia do sistema, mantendo o
+  brilho restrito à janela do aplicativo;
+- adicionados rotação/tela cheia e ocultação automática dos controles mobile;
+- player Windows recebeu atalhos F11, Escape e Espaço, volume percentual e
+  identificação visível da versão instalada;
+- Home real passou a separar lançamento pelo ano canônico de obra antiga
+  adicionada recentemente, com teste unitário de regressão;
+- 137 testes e lint Android aprovados; APK instalado e iniciado no Android 15;
+- MSI instalado no Windows, atalho atualizado e aplicativo iniciado pela pasta
+  de instalação do usuário.
+
 # 2026-08-02 — reconexão e metadados reais
 
 - conexão Xtream Android preservada pelo Keystore e validada após `force-stop`;
