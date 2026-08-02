@@ -4,6 +4,7 @@ import com.lucasserafin94.iptvburo.desktop.model.XtreamCatalogPage
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.desktop.model.XtreamSessionSummary
 import com.lucasserafin94.iptvburo.desktop.security.XtreamLoginInput
+import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
 import com.lucasserafin94.iptvburo.xtream.XtreamAccount
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
@@ -13,6 +14,7 @@ import com.lucasserafin94.iptvburo.xtream.XtreamCredentials
 import com.lucasserafin94.iptvburo.xtream.XtreamClientException
 import com.lucasserafin94.iptvburo.xtream.XtreamFailureReason
 import com.lucasserafin94.iptvburo.xtream.XtreamMovieDetails
+import com.lucasserafin94.iptvburo.xtream.XtreamShortEpg
 import com.lucasserafin94.iptvburo.xtream.XtreamSeriesDetails
 import java.net.URI
 import java.util.Arrays
@@ -111,6 +113,7 @@ class SessionXtreamRepository(
         pageSize: Int = DEFAULT_PAGE_SIZE,
         releaseYear: Int? = null,
         allowedProviderIds: Set<String>? = null,
+        kidsMode: Boolean = false,
     ): XtreamCatalogPage {
         require(pageSize in 1..MAX_PAGE_SIZE) { "Invalid page size." }
         val catalogItems =
@@ -122,11 +125,19 @@ class SessionXtreamRepository(
         val requestedStart = safeRequestedPage * pageSize
         val pageItems = ArrayList<XtreamCatalogItem>(pageSize)
         var totalMatches = 0
+        val categoryNames = synchronized(lock) { categories[contentType].orEmpty().associate { it.providerId to it.name } }
 
         repeat(catalogItems.size) { index ->
             if (catalogItems.matches(index, categoryId, normalizedQuery, releaseYear, allowedProviderIds)) {
+                val item = catalogItems.itemAt(index)
+                val allowedForKids =
+                    !kidsMode || FamilyContentPolicy.isAllowedForKids(
+                        item.name,
+                        item.categoryIds.map(categoryNames::get),
+                    )
+                if (!allowedForKids) return@repeat
                 if (totalMatches in requestedStart until requestedStart + pageSize) {
-                    pageItems += catalogItems.itemAt(index)
+                    pageItems += item
                 }
                 totalMatches += 1
             }
@@ -147,6 +158,7 @@ class SessionXtreamRepository(
                 pageSize = pageSize,
                 releaseYear = releaseYear,
                 allowedProviderIds = allowedProviderIds,
+                kidsMode = kidsMode,
             )
         }
         return XtreamCatalogPage(
@@ -165,6 +177,11 @@ class SessionXtreamRepository(
     fun movieDetails(movieId: String): XtreamMovieDetails =
         withCredentials { credentials ->
             client.movieDetails(credentials, movieId)
+        }
+
+    fun shortEpg(streamId: String): XtreamShortEpg =
+        withCredentials { credentials ->
+            client.shortEpg(credentials, streamId)
         }
 
     /**

@@ -211,7 +211,7 @@ fun DesktopApp(
                 if (appState.activeProfile == null) {
                     DesktopProfileGate(
                         profiles = appState.profiles,
-                        onSelect = appState::selectProfile,
+                        onSelect = { profileId -> scope.launch { appState.selectProfileAndRefresh(profileId) } },
                         onCreate = appState::createProfile,
                     )
                 }

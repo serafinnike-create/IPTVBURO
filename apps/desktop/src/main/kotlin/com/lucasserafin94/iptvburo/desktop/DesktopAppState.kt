@@ -22,12 +22,14 @@ import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
+import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
 import com.lucasserafin94.iptvburo.xtream.XtreamClientException
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.xtream.XtreamFailureReason
 import com.lucasserafin94.iptvburo.xtream.XtreamMovieDetails
+import com.lucasserafin94.iptvburo.xtream.XtreamEpgProgram
 import com.lucasserafin94.iptvburo.xtream.XtreamSeriesDetails
 import java.net.URI
 import java.nio.file.AccessDeniedException
@@ -111,6 +113,9 @@ class DesktopAppState(
     var movieDetailsStatus by mutableStateOf<MovieDetailsStatus>(MovieDetailsStatus.Idle)
         private set
 
+    var liveEpgStatus by mutableStateOf<LiveEpgStatus>(LiveEpgStatus.Idle)
+        private set
+
     var selectedPerson by mutableStateOf<PersonFilmography?>(null)
         private set
 
@@ -122,6 +127,15 @@ class DesktopAppState(
         activeProfileId = id?.takeIf { candidate -> profiles.any { it.id == candidate } }
         userStore.setActiveProfile(activeProfileId)
         favoriteKeys = userStore.favoritesForProfile(activeProfileId)
+        xtreamCategories = visibleXtreamCategories(xtreamContentType)
+        if (selectedXtreamCategoryId !in xtreamCategories.map(XtreamCategory::providerId)) {
+            selectedXtreamCategoryId = null
+        }
+    }
+
+    suspend fun selectProfileAndRefresh(id: String?) {
+        selectProfile(id)
+        if (xtreamSummary != null) refreshXtreamPage(pageIndex = 0)
     }
 
     fun createProfile(name: String, isKids: Boolean) {
@@ -303,7 +317,7 @@ class DesktopAppState(
                 xtreamSummary = summary
                 selectedSourceId = summary.sourceId
                 xtreamContentType = XtreamContentType.LIVE
-                xtreamCategories = xtreamRepository.categories(XtreamContentType.LIVE)
+                xtreamCategories = visibleXtreamCategories(XtreamContentType.LIVE)
                 selectedXtreamCategoryId = null
                 selectedXtreamYear = null
                 xtreamSearchQuery = ""
@@ -353,7 +367,7 @@ class DesktopAppState(
         }.onSuccess { summary ->
             xtreamSummary = summary
             xtreamContentType = contentType
-            xtreamCategories = xtreamRepository.categories(contentType)
+            xtreamCategories = visibleXtreamCategories(contentType)
             selectedXtreamCategoryId = null
             selectedXtreamYear = null
             xtreamSearchQuery = ""
@@ -408,6 +422,27 @@ class DesktopAppState(
             selectedXtreamItemId = providerId
             seriesDetailsStatus = SeriesDetailsStatus.Idle
             movieDetailsStatus = MovieDetailsStatus.Idle
+            liveEpgStatus = LiveEpgStatus.Idle
+        }
+    }
+
+    suspend fun loadSelectedLiveEpg() {
+        val selected = selectedXtreamItem ?: return
+        if (selected.contentType != XtreamContentType.LIVE) return
+        if (liveEpgStatus is LiveEpgStatus.Loading) return
+        liveEpgStatus = LiveEpgStatus.Loading
+        runCatching {
+            withContext(Dispatchers.IO) { xtreamRepository.shortEpg(selected.providerId) }
+        }.onSuccess { epg ->
+            if (selectedXtreamItemId == selected.providerId) {
+                val (now, next) = epg.nowAndNext(System.currentTimeMillis() / 1_000L)
+                liveEpgStatus = LiveEpgStatus.Loaded(now, next)
+            }
+        }.onFailure { error ->
+            error.rethrowIfCancellation()
+            if (selectedXtreamItemId == selected.providerId) {
+                liveEpgStatus = LiveEpgStatus.Unavailable
+            }
         }
     }
 
@@ -599,6 +634,7 @@ class DesktopAppState(
                     requestedPage = pageIndex,
                     releaseYear = releaseYear,
                     allowedProviderIds = allowedProviderIds,
+                    kidsMode = activeProfile?.isKids == true,
                 )
             }
         if (requestGeneration == xtreamPageRequestGeneration) {
@@ -619,10 +655,20 @@ class DesktopAppState(
         selectedXtreamItemId = null
         seriesDetailsStatus = SeriesDetailsStatus.Idle
         movieDetailsStatus = MovieDetailsStatus.Idle
+        liveEpgStatus = LiveEpgStatus.Idle
         movieAppearances.clear()
         selectedPerson = null
         favoritesOnly = false
     }
+
+    private fun visibleXtreamCategories(contentType: XtreamContentType): List<XtreamCategory> =
+        xtreamRepository.categories(contentType).let { categories ->
+            if (activeProfile?.isKids == true) {
+                categories.filterNot { FamilyContentPolicy.isExplicitAdultLabel(it.name) }
+            } else {
+                categories
+            }
+        }
 
     private fun Throwable.toSafeImportMessage(): String =
         when (this) {
@@ -726,4 +772,18 @@ sealed interface MovieDetailsStatus {
     data class Error(
         val message: String,
     ) : MovieDetailsStatus
+}
+
+sealed interface LiveEpgStatus {
+    data object Idle : LiveEpgStatus
+
+    data object Loading : LiveEpgStatus
+
+    data class Loaded(
+        val now: XtreamEpgProgram?,
+        val next: XtreamEpgProgram?,
+    ) : LiveEpgStatus
+
+    /** EPG is optional and must never block channel playback. */
+    data object Unavailable : LiveEpgStatus
 }

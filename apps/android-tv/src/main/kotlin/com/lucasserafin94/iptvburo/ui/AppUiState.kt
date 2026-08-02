@@ -82,6 +82,11 @@ data class EpisodeUi(
     val artworkUrl: String? = null,
 )
 
+data class LiveProgramUi(
+    val title: String,
+    val description: String? = null,
+)
+
 enum class SourceImportMethod {
     M3U_FILE,
     XTREAM,
@@ -193,6 +198,9 @@ data class AppUiState(
     val hasCatalogError: Boolean = false,
     val isResolvingPlayback: Boolean = false,
     val hasPlaybackError: Boolean = false,
+    val liveNow: LiveProgramUi? = null,
+    val liveNext: LiveProgramUi? = null,
+    val isLiveEpgLoading: Boolean = false,
     val movieDetails: MovieDetailsUi? = null,
     val isMovieLoading: Boolean = false,
     val hasMovieError: Boolean = false,

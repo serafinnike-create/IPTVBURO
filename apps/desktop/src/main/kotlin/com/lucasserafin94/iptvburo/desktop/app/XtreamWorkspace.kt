@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.MovieDetailsStatus
+import com.lucasserafin94.iptvburo.desktop.LiveEpgStatus
 import com.lucasserafin94.iptvburo.desktop.PersonFilmography
 import com.lucasserafin94.iptvburo.desktop.SeriesDetailsStatus
 import com.lucasserafin94.iptvburo.desktop.XtreamStatus
@@ -89,6 +90,7 @@ fun XtreamWorkspace(
         when (appState.selectedXtreamItem?.contentType) {
             XtreamContentType.MOVIE -> appState.loadSelectedMovieDetails()
             XtreamContentType.SERIES -> appState.loadSelectedSeriesDetails()
+            XtreamContentType.LIVE -> appState.loadSelectedLiveEpg()
             else -> Unit
         }
     }
@@ -156,6 +158,7 @@ fun XtreamWorkspace(
                     item = appState.selectedXtreamItem,
                     movieStatus = appState.movieDetailsStatus,
                     seriesStatus = appState.seriesDetailsStatus,
+                    liveEpgStatus = appState.liveEpgStatus,
                     onLoadMovie = {
                         scope.launch { appState.loadSelectedMovieDetails() }
                     },
@@ -543,6 +546,7 @@ private fun XtreamItemDetail(
     item: XtreamCatalogItem?,
     movieStatus: MovieDetailsStatus,
     seriesStatus: SeriesDetailsStatus,
+    liveEpgStatus: LiveEpgStatus,
     onLoadMovie: () -> Unit,
     onLoadSeries: () -> Unit,
     onOpenTrailer: (String) -> Unit,
@@ -651,6 +655,10 @@ private fun XtreamItemDetail(
                     },
                 )
             } else {
+                if (item.contentType == XtreamContentType.LIVE) {
+                    LiveEpgContent(liveEpgStatus)
+                    Spacer(Modifier.height(18.dp))
+                }
                 if (item.contentType == XtreamContentType.MOVIE) {
                     MovieDetailContent(
                         status = movieStatus,
@@ -700,6 +708,39 @@ private fun XtreamItemDetail(
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.bodyMedium,
             )
+        }
+    }
+}
+
+@Composable
+private fun LiveEpgContent(status: LiveEpgStatus) {
+    when (status) {
+        LiveEpgStatus.Idle,
+        LiveEpgStatus.Loading,
+        -> Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(color = BuroColors.Primary, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Carregando agora e próximo…", color = BuroColors.TextMuted)
+        }
+        LiveEpgStatus.Unavailable ->
+            Text("Guia indisponível; o canal continua acessível.", color = BuroColors.TextSubtle)
+        is LiveEpgStatus.Loaded -> {
+            if (status.now == null && status.next == null) {
+                Text("Sem programação informada pela fonte.", color = BuroColors.TextSubtle)
+            } else {
+                status.now?.let { program ->
+                    Text("AGORA", color = BuroColors.Primary, fontWeight = FontWeight.Black)
+                    Text(program.title, color = BuroColors.Text, style = MaterialTheme.typography.titleMedium)
+                    program.description?.let { description ->
+                        Text(description, color = BuroColors.TextMuted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                status.next?.let { program ->
+                    Spacer(Modifier.height(12.dp))
+                    Text("A SEGUIR", color = BuroColors.TextSubtle, fontWeight = FontWeight.Bold)
+                    Text(program.title, color = BuroColors.Text, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
         }
     }
 }

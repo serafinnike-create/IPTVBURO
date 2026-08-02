@@ -83,6 +83,9 @@ interface CatalogRepository {
 
     suspend fun loadRecentlyAdded(sourceId: String, limit: Int = 24): List<Channel> = emptyList()
 
+    /** Optional now/next data; an empty result must never block live playback. */
+    suspend fun loadShortEpg(sourceId: String, providerStreamId: String): LiveEpg = LiveEpg()
+
     suspend fun importPlaylist(
         displayName: String,
         inputStream: InputStream,
@@ -110,6 +113,18 @@ interface CatalogRepository {
      */
     suspend fun resolveEpisode(episode: Episode): Channel
 }
+
+data class LiveProgram(
+    val title: String,
+    val description: String? = null,
+    val startEpochSeconds: Long? = null,
+    val endEpochSeconds: Long? = null,
+)
+
+data class LiveEpg(
+    val now: LiveProgram? = null,
+    val next: LiveProgram? = null,
+)
 
 data class PlaylistImportResult(
     val sourceId: String,

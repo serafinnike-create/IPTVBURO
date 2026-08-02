@@ -74,6 +74,7 @@ import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.playback.PlaybackSessionFactory
 import com.lucasserafin94.iptvburo.ui.ChannelUi
+import com.lucasserafin94.iptvburo.ui.LiveProgramUi
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.theme.Danger
 import com.lucasserafin94.iptvburo.ui.theme.Ink
@@ -85,6 +86,9 @@ import com.lucasserafin94.iptvburo.ui.theme.White
 @Composable
 fun PlayerScreen(
     channel: ChannelUi,
+    nowPlaying: LiveProgramUi?,
+    nextPlaying: LiveProgramUi?,
+    isEpgLoading: Boolean,
     playbackSessionFactory: PlaybackSessionFactory,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -230,6 +234,9 @@ fun PlayerScreen(
             if (controlsVisible && !controlsLocked) {
                 PlayerTopBar(
                     channelName = channel.name,
+                    nowPlaying = nowPlaying,
+                    nextPlaying = nextPlaying,
+                    isEpgLoading = isEpgLoading,
                     onBack = onBack,
                     modifier = Modifier.align(Alignment.TopStart),
                 )
@@ -383,6 +390,9 @@ private tailrec fun Context.findActivity(): Activity? =
 @Composable
 private fun PlayerTopBar(
     channelName: String,
+    nowPlaying: LiveProgramUi?,
+    nextPlaying: LiveProgramUi?,
+    isEpgLoading: Boolean,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -419,6 +429,15 @@ private fun PlayerTopBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            when {
+                isEpgLoading -> Text("Carregando guia…", color = Muted, fontSize = 13.sp)
+                nowPlaying != null -> {
+                    Text("Agora · ${nowPlaying.title}", color = White.copy(alpha = 0.84f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    nextPlaying?.let { next ->
+                        Text("A seguir · ${next.title}", color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
         }
     }
 }

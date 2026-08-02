@@ -17,10 +17,10 @@ Cofre Offline do GDD 6 permanece P0 somente no Android mobile elegível.
 
 | GDD | Estado | Evidência existente | Lacuna bloqueante |
 |---|---|---|---|
-| 1 — produto, dados e player | `PARTIAL` | M3U streaming; Room; Media3; D-pad; perfis/favoritos; quatro idiomas; segurança básica | EPG/XMLTV, conta/sincronização e cobertura de dispositivos |
+| 1 — produto, dados e player | `PARTIAL` | M3U streaming; Room; Media3; D-pad; perfis/favoritos; quatro idiomas; EPG curto Xtream; segurança básica | XMLTV/guia completo, conta/sincronização e cobertura de dispositivos |
 | 2 — experiência revolucionária | `PARTIAL` | Ribbon, Home real, tokens, foco, hero, artes/capas, Minha BURO, perfis e detalhes nas duas UIs | Story/Pulse reais, goldens, fotos licenciadas do elenco e consistência integral |
 | 3 — inteligência temporal | `PARTIAL` | `year`/`addedAt`, índices e fileiras 2026/2025 | proveniência, confiança, classificação canônica e correção manual |
-| 4 — confiabilidade | `MISSING` | redaction, limites básicos, alguns estados de erro | Failure Normalizer, Recovery Planner, Retry/Connection Budget, circuit breaker e Failure Lab |
+| 4 — confiabilidade | `PARTIAL` | redaction, limites básicos, estados de erro e retry transitório estritamente limitado | Failure Normalizer completo, Recovery Planner, Connection Budget, circuit breaker e Failure Lab |
 | 5 — multiplataforma | `PARTIAL` | Android adaptativo; Compose Desktop; tokens, perfis, idiomas e favoritos; player JavaFX embutido | adapter nativo Windows, persistência paginada, manifest real e auditoria de paridade |
 | 6 — Cofre Offline | `FOUNDATION` | contrato de capacidade e armazenamento privado experimental | autorização/licença, Media3 DownloadManager/Index, retomada/expiração/Kids e testes E2E; recurso corretamente oculto |
 
@@ -32,10 +32,10 @@ Cofre Offline do GDD 6 permanece P0 somente no Android mobile elegível.
 | Catálogo acima de 305 mil itens | `PASS SYNTHETIC` | parser e índice validados com 500 mil itens; falta novo ensaio E2E Windows com uma fonte real dessa escala |
 | Playback Android | `PARTIAL` | live, VOD e episódio compatíveis validados; matriz ampla de codecs/dispositivos ainda incompleta |
 | Playback Windows | `PARTIAL/BLOCKED` | JavaFX embutido cobre H.264/AAC MP4 e HLS compatível; adapter nativo amplo, áudio/legenda e HEVC/HDR ainda bloqueiam paridade |
-| EPG/XMLTV e BURO Pulse | `MISSING` | sem guia, agora/próximo, lembretes, catch-up ou mini-guia |
-| Perfis, Kids e controle parental | `PARTIAL` | até cinco perfis e favoritos isolados existem; PIN, política Kids e sincronização ainda faltam |
+| EPG/XMLTV e BURO Pulse | `PARTIAL` | Agora/próximo Xtream funciona sob demanda nas duas plataformas; faltam XMLTV persistido, guia, lembretes e catch-up |
+| Perfis, Kids e controle parental | `PARTIAL` | até cinco perfis, favoritos isolados e bloqueio conservador de rótulos adultos existem; PIN e sincronização ainda faltam |
 | BURO Temporal Intelligence | `PARTIAL` | fileiras/consulta anual existem; faltam evidências, confiança, correção manual e índice anual canônico |
-| BURO Resilience Engine | `MISSING` | mensagem de codec melhorou, mas não há RetryBudget, ConnectionBudget, circuit breaker ou planner |
+| BURO Resilience Engine | `PARTIAL` | rede, 408/429 e 5xx recebem retry único; senha/4xx não repetem; faltam ConnectionBudget, circuit breaker e planner completo |
 | Acessibilidade e foco | `PARTIAL` | D-pad, reduced motion/contrast/transparency e semântica básica; faltam leitor de tela e goldens completos |
 | Segurança | `PARTIAL` | redaction e Keystore para Xtream; M3U ainda pode persistir URL/header sensível em texto no Room |
 | Observabilidade e Failure Lab | `MISSING` | não há laboratório de caos nem diagnóstico seguro exportável |

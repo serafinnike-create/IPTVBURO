@@ -53,15 +53,25 @@ registra arquitetura e escopo, não declara aprovação E2E, hashes ou publicaç
   adicionados; pagamento real aguarda backend, Stripe e Google Play Billing;
 - ADRs de licenciamento/player e auditorias de playback, importação e logging
   documentam os gates que ainda bloqueiam a primeira versão Windows estável.
+- EPG curto Xtream agora é consultado sob demanda e apresenta **Agora/A seguir**
+  no player Android e no painel de TV ao vivo do Windows; EPG ausente nunca
+  bloqueia a reprodução;
+- respostas transitórias de rede, HTTP 408/429 e HTTP 5xx possuem uma tentativa
+  automática limitada; autenticação e demais erros 4xx não são repetidos;
+- perfis Kids ocultam categorias e itens explicitamente adultos nas duas
+  plataformas. A lista local é conservadora e não afirma que conteúdo sem
+  classificação seja apropriado;
+- o contrato EPG e a fonte privada autorizada passaram no teste de
+  compatibilidade sem persistir ou imprimir credenciais.
 
 ### Gate local mais recente
 
-- 114 testes: 0 falhas, 0 erros e 2 ignorados por condição de plataforma;
+- 120 testes: 0 falhas, 0 erros e 2 ignorados por condição de plataforma;
 - Android lint: 0 erros;
-- APK debug: 32.304.018 bytes, SHA-256
-  `7B0881E7FEC32A90BC10DC2574467A680E1972F8771F36B9FE6D43880B60A253`;
-- MSI Windows preview: 81.408.352 bytes, SHA-256
-  `714E8D84477F578FBBBDB2049C1BFAE09A2B0AF0360A38760203CD6ED3395B8C`;
+- APK debug: 32.113.725 bytes, SHA-256
+  `463D9BB614E2207CE0A1FDD83F6722D2D0828A84018FEA11DE32489DB5911F90`;
+- MSI Windows preview: 81.428.832 bytes, SHA-256
+  `07FF7551616994B24AA3C8846E490DE1338AAFC629AC9EB278F012C76A91F82D`;
 - os três identificadores da fonte privada autorizada tiveram zero ocorrências
   no worktree publicável e em todo o histórico Git;
 - a build final foi instalada no Android 15 e iniciou sem crash; a validação

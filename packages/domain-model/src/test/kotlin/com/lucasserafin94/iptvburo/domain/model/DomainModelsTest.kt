@@ -103,4 +103,13 @@ class DomainModelsTest {
         assertTrue(representation.contains("epgUrlCount=1"))
         assertTrue(representation.contains("Authorization"))
     }
+
+    @Test
+    fun `kids policy blocks explicit adult labels in multiple languages`() {
+        assertFalse(FamilyContentPolicy.isAllowedForKids("Canal XXX"))
+        assertFalse(FamilyContentPolicy.isAllowedForKids("Filme", listOf("Conteúdo erótico 18+")))
+        assertFalse(FamilyContentPolicy.isAllowedForKids("Adult Movies"))
+        assertTrue(FamilyContentPolicy.isAllowedForKids("Aventura em família", listOf("Infantil")))
+        assertTrue(FamilyContentPolicy.isAllowedForKids("Adulting Together", listOf("Drama")))
+    }
 }

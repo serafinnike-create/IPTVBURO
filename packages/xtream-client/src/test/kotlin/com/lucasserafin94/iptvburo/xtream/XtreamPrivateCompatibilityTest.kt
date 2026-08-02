@@ -30,10 +30,14 @@ class XtreamPrivateCompatibilityTest {
         val client = XtreamClient()
 
         assertTrue(client.authenticate(credentials).authenticated)
+        var firstLiveId: String? = null
         XtreamContentType.entries.forEach { contentType ->
             assertTrue(client.categories(credentials, contentType).items.isNotEmpty())
-            assertTrue(client.catalog(credentials, contentType).items.isNotEmpty())
+            val catalog = client.catalog(credentials, contentType)
+            assertTrue(catalog.items.isNotEmpty())
+            if (contentType == XtreamContentType.LIVE) firstLiveId = catalog.items.first().providerId
         }
+        firstLiveId?.let { streamId -> client.shortEpg(credentials, streamId) }
     }
 
     private companion object {

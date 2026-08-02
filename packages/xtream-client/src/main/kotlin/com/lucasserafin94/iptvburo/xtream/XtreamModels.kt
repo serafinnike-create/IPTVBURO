@@ -137,6 +137,33 @@ data class XtreamStreamSummary(
     val skippedItemCount: Int,
 )
 
+/** A bounded now/next programme returned by Xtream's short EPG endpoint. */
+data class XtreamEpgProgram(
+    val title: String,
+    val description: String?,
+    val startEpochSeconds: Long?,
+    val endEpochSeconds: Long?,
+)
+
+data class XtreamShortEpg(
+    val programs: List<XtreamEpgProgram>,
+    val skippedProgramCount: Int,
+) {
+    fun nowAndNext(nowEpochSeconds: Long): Pair<XtreamEpgProgram?, XtreamEpgProgram?> {
+        val ordered = programs.sortedWith(compareBy<XtreamEpgProgram> { it.startEpochSeconds ?: Long.MAX_VALUE })
+        val current = ordered.lastOrNull { program ->
+            val start = program.startEpochSeconds ?: return@lastOrNull false
+            val end = program.endEpochSeconds ?: return@lastOrNull false
+            nowEpochSeconds in start until end
+        }
+        val next = ordered.firstOrNull { program ->
+            val start = program.startEpochSeconds ?: return@firstOrNull false
+            start > (current?.startEpochSeconds ?: nowEpochSeconds)
+        }
+        return current to next
+    }
+}
+
 class XtreamEndpoint internal constructor(
     val baseUrl: HttpUrl,
 ) {

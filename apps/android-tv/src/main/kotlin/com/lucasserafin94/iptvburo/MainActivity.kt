@@ -132,6 +132,9 @@ private fun IptvBuroRoot(
             val playerContent = state.content as AppContent.Player
             PlayerScreen(
                 channel = playerContent.channel,
+                nowPlaying = state.liveNow,
+                nextPlaying = state.liveNext,
+                isEpgLoading = state.isLiveEpgLoading,
                 playbackSessionFactory = playbackSessionFactory,
                 onBack = { viewModel.goBack() },
             )

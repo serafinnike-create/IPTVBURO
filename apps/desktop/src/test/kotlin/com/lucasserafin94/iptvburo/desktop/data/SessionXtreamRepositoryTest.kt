@@ -101,6 +101,42 @@ class SessionXtreamRepositoryTest {
         assertNull(repository.summary())
     }
 
+    @Test
+    fun `kids page excludes explicit adult categories and titles`() {
+        enqueueAuthentication()
+        server.enqueue(
+            jsonResponse(
+                """
+                [
+                  {"category_id":"family","category_name":"Família"},
+                  {"category_id":"adult","category_name":"Adult 18+"}
+                ]
+                """.trimIndent(),
+            ),
+        )
+        enqueueCategories("movie")
+        enqueueCategories("series")
+        server.enqueue(
+            jsonResponse(
+                """
+                [
+                  {"stream_id":"1","name":"Aventura legal","category_id":"family"},
+                  {"stream_id":"2","name":"Canal comum","category_id":"adult"},
+                  {"stream_id":"3","name":"XXX privado","category_id":"family"}
+                ]
+                """.trimIndent(),
+            ),
+        )
+        repository.authenticateAndLoadInitial(loginInput())
+
+        val unrestricted = repository.page(XtreamContentType.LIVE, null, "", 0)
+        val kids = repository.page(XtreamContentType.LIVE, null, "", 0, kidsMode = true)
+
+        assertEquals(3, unrestricted.totalMatches)
+        assertEquals(listOf("Aventura legal"), kids.items.map { it.name })
+        assertEquals(1, kids.totalMatches)
+    }
+
     private fun enqueueAuthentication(
         allowedFormatsJson: String = """["ts", "m3u8"]""",
     ) {

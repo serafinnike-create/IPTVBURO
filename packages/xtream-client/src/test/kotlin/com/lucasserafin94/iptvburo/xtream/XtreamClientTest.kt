@@ -341,6 +341,59 @@ class XtreamClientTest {
     }
 
     @Test
+    fun `short epg decodes provider text and selects now and next`() {
+        server.enqueue(
+            MockResponse()
+                .setBody(
+                    """
+                    {
+                      "epg_listings": [
+                        {
+                          "title": "UHJvZ3JhbWEgYXR1YWw=",
+                          "description": "RGVzY3Jpw6fDo28gc2VndXJh",
+                          "start_timestamp": "1760000000",
+                          "stop_timestamp": "1760003600"
+                        },
+                        {
+                          "title": "Próximo programa",
+                          "start_timestamp": 1760003600,
+                          "stop_timestamp": 1760007200
+                        },
+                        {"title": ""}
+                      ]
+                    }
+                    """.trimIndent(),
+                )
+                .setHeader("Content-Type", "application/json"),
+        )
+
+        val epg = client.shortEpg(credentials(), "42")
+        val (now, next) = epg.nowAndNext(1760000100)
+
+        assertEquals(2, epg.programs.size)
+        assertEquals(1, epg.skippedProgramCount)
+        assertEquals("Programa atual", now?.title)
+        assertEquals("Descrição segura", now?.description)
+        assertEquals("Próximo programa", next?.title)
+        val recorded = server.takeRequest()
+        assertEquals("get_short_epg", recorded.requestUrl?.queryParameter("action"))
+        assertEquals("42", recorded.requestUrl?.queryParameter("stream_id"))
+        assertEquals("8", recorded.requestUrl?.queryParameter("limit"))
+    }
+
+    @Test
+    fun `short epg rejects unsafe limits and ignores invalid rows`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            client.shortEpg(credentials(), "42", limit = 0)
+        }
+        server.enqueue(MockResponse().setBody("false").setHeader("Content-Type", "application/json"))
+
+        val epg = client.shortEpg(credentials(), "42")
+
+        assertTrue(epg.programs.isEmpty())
+    }
+
+    @Test
     fun `copied playlist URL is normalized and playback path is encoded`() {
         val credentials =
             XtreamCredentials(
@@ -398,6 +451,42 @@ class XtreamClientTest {
         assertEquals(XtreamFailureReason.HTTP, error.reason)
         assertFalse(error.message.orEmpty().contains("sample-user"))
         assertFalse(error.message.orEmpty().contains("sample-pass"))
+    }
+
+    @Test
+    fun `transient server failure is retried within a strict budget`() {
+        client =
+            XtreamClient(
+                httpClient = OkHttpClient.Builder().readTimeout(5, TimeUnit.SECONDS).build(),
+                maximumTransientRetries = 1,
+                retryDelayMillis = 0,
+            )
+        server.enqueue(MockResponse().setResponseCode(503).setBody("temporarily unavailable"))
+        server.enqueue(
+            MockResponse()
+                .setBody("""{"user_info":{"auth":"1","status":"Active"}}""")
+                .setHeader("Content-Type", "application/json"),
+        )
+
+        val account = client.authenticate(credentials())
+
+        assertTrue(account.authenticated)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `authentication style http failures are never retried`() {
+        client =
+            XtreamClient(
+                httpClient = OkHttpClient.Builder().readTimeout(5, TimeUnit.SECONDS).build(),
+                maximumTransientRetries = 2,
+                retryDelayMillis = 0,
+            )
+        server.enqueue(MockResponse().setResponseCode(401).setBody("unauthorized"))
+
+        assertThrows(XtreamClientException::class.java) { client.authenticate(credentials()) }
+
+        assertEquals(1, server.requestCount)
     }
 
     private fun credentials(): XtreamCredentials =

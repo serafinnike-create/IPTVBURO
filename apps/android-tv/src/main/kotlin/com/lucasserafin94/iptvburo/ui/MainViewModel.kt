@@ -23,6 +23,7 @@ import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.domain.model.Episode
+import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
 import com.lucasserafin94.iptvburo.domain.model.MovieDetails
 import com.lucasserafin94.iptvburo.domain.model.SeriesDetails
 import com.lucasserafin94.iptvburo.domain.model.Source
@@ -293,9 +294,17 @@ class MainViewModel @Inject constructor(
                             it.copy(
                                 isResolvingPlayback = false,
                                 hasPlaybackError = false,
+                                liveNow = null,
+                                liveNext = null,
+                                isLiveEpgLoading = resolved.contentType == CatalogContentType.LIVE,
                             )
                         }
-                        navigate(resolved.toPlaybackUi(categoryName))
+                        val playbackChannel = resolved.toPlaybackUi(categoryName)
+                        navigate(playbackChannel)
+                        val providerStreamId = resolved.providerItemId
+                        if (resolved.contentType == CatalogContentType.LIVE && providerStreamId != null) {
+                            loadLiveEpg(playbackChannel, providerStreamId)
+                        }
                     }
                 }.onFailure { error ->
                     if (error is CancellationException) return@onFailure
@@ -308,6 +317,23 @@ class MainViewModel @Inject constructor(
                     }
                 }
             }
+    }
+
+    private fun loadLiveEpg(channel: ChannelUi, providerStreamId: String) {
+        viewModelScope.launch {
+            val epg = runCatching {
+                catalogRepository.loadShortEpg(channel.sourceId, providerStreamId)
+            }.getOrNull()
+            val currentPlayer = mutableState.value.content as? AppContent.Player
+            if (currentPlayer?.channel?.id != channel.id) return@launch
+            mutableState.update { state ->
+                state.copy(
+                    liveNow = epg?.now?.let { LiveProgramUi(it.title, it.description) },
+                    liveNext = epg?.next?.let { LiveProgramUi(it.title, it.description) },
+                    isLiveEpgLoading = false,
+                )
+            }
+        }
     }
 
     fun openEpisode(episode: EpisodeUi) {
@@ -784,16 +810,21 @@ class MainViewModel @Inject constructor(
                         contentType = content.contentType,
                     ),
                 ) { categories, counts ->
+                    val kidsMode = mutableState.value.activeProfile?.isKids == true
+                    val visibleCategories =
+                        if (kidsMode) categories.filterNot { FamilyContentPolicy.isExplicitAdultLabel(it.name) } else categories
                     buildList {
-                        add(
-                            CategoryUi(
-                                id = null,
-                                name = "",
-                                channelCount = counts.values.sum(),
-                            ),
-                        )
+                        if (!kidsMode) {
+                            add(
+                                CategoryUi(
+                                    id = null,
+                                    name = "",
+                                    channelCount = counts.values.sum(),
+                                ),
+                            )
+                        }
                         addAll(
-                            categories.map { category ->
+                            visibleCategories.map { category ->
                                 category.toUi(counts[category.id] ?: 0)
                             },
                         )
@@ -866,7 +897,7 @@ class MainViewModel @Inject constructor(
                         val incoming =
                             page.items.map { channel ->
                                 channel.toCatalogUi(content.categoryName)
-                            }
+                            }.filterKidsContentIfNeeded(state.activeProfile)
                         state.copy(
                             channels =
                                 if (append) {
@@ -968,7 +999,9 @@ class MainViewModel @Inject constructor(
                 .onSuccess { items ->
                     mutableState.update {
                         it.copy(
-                            favoriteItems = items.map { channel -> channel.toCatalogUi("Minha BURO") },
+                            favoriteItems =
+                                items.map { channel -> channel.toCatalogUi("Minha BURO") }
+                                    .filterKidsContentIfNeeded(it.activeProfile),
                             isCatalogLoading = false,
                         )
                     }
@@ -1030,7 +1063,9 @@ class MainViewModel @Inject constructor(
                         )
                     }
             }.onSuccess { items ->
-                mutableState.update { it.copy(homeItems = items) }
+                mutableState.update { state ->
+                    state.copy(homeItems = items.filterKidsContentIfNeeded(state.activeProfile))
+                }
             }.onFailure { error ->
                 if (error is CancellationException) return@onFailure
                 logger.error(TAG, "Could not compose the local home catalog", error)
@@ -1204,6 +1239,13 @@ class MainViewModel @Inject constructor(
             year = year,
             rating = rating,
         )
+
+    private fun List<ChannelUi>.filterKidsContentIfNeeded(profile: ProfileUi?): List<ChannelUi> =
+        if (profile?.isKids == true) {
+            filter { item -> FamilyContentPolicy.isAllowedForKids(item.name, listOf(item.categoryName)) }
+        } else {
+            this
+        }
 
     private fun SeriesDetails.toUi(): SeriesDetailsUi =
         SeriesDetailsUi(

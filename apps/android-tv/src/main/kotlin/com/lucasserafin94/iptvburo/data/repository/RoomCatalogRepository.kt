@@ -199,6 +199,21 @@ class RoomCatalogRepository @Inject constructor(
             channelDao.loadRecentlyAdded(sourceId, limit).map(ChannelEntity::toDomain)
         }
 
+    override suspend fun loadShortEpg(sourceId: String, providerStreamId: String): LiveEpg =
+        withContext(ioDispatcher) {
+            require(providerStreamId.isNotBlank()) { "Provider stream ID is required." }
+            val source = sourceDao.getById(sourceId) ?: return@withContext LiveEpg()
+            if (source.type != SourceType.XTREAM.name) return@withContext LiveEpg()
+            val credentials = sourceConnectionStore.readXtream(sourceId) ?: return@withContext LiveEpg()
+            val (now, next) =
+                xtreamClient.shortEpg(credentials, providerStreamId)
+                    .nowAndNext(System.currentTimeMillis() / 1_000L)
+            LiveEpg(
+                now = now?.let { LiveProgram(it.title, it.description, it.startEpochSeconds, it.endEpochSeconds) },
+                next = next?.let { LiveProgram(it.title, it.description, it.startEpochSeconds, it.endEpochSeconds) },
+            )
+        }
+
     override suspend fun importPlaylist(
         displayName: String,
         inputStream: InputStream,

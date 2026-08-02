@@ -6,6 +6,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -25,6 +26,7 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 
 class XtreamClient(
     private val httpClient: OkHttpClient =
@@ -38,10 +40,14 @@ class XtreamClient(
             .build(),
     private val userAgent: String = DEFAULT_USER_AGENT,
     private val maximumResponseBytes: Int = DEFAULT_MAXIMUM_RESPONSE_BYTES,
+    private val maximumTransientRetries: Int = DEFAULT_MAXIMUM_TRANSIENT_RETRIES,
+    private val retryDelayMillis: Long = DEFAULT_RETRY_DELAY_MILLIS,
 ) {
     init {
         require(userAgent.isNotBlank()) { "userAgent cannot be blank" }
         require(maximumResponseBytes > 0) { "maximumResponseBytes must be positive" }
+        require(maximumTransientRetries in 0..MAXIMUM_TRANSIENT_RETRIES) { "maximumTransientRetries is outside the safe range" }
+        require(retryDelayMillis in 0..MAXIMUM_RETRY_DELAY_MILLIS) { "retryDelayMillis is outside the safe range" }
     }
 
     fun authenticate(credentials: XtreamCredentials): XtreamAccount {
@@ -206,6 +212,51 @@ class XtreamClient(
         )
     }
 
+    fun shortEpg(
+        credentials: XtreamCredentials,
+        streamId: String,
+        limit: Int = DEFAULT_SHORT_EPG_LIMIT,
+    ): XtreamShortEpg {
+        require(streamId.isNotBlank()) { "streamId cannot be blank" }
+        require(limit in 1..MAXIMUM_SHORT_EPG_LIMIT) { "limit must be between 1 and $MAXIMUM_SHORT_EPG_LIMIT" }
+        val root =
+            request(
+                credentials = credentials,
+                action = "get_short_epg",
+                additionalQuery = mapOf("stream_id" to streamId, "limit" to limit.toString()),
+            )
+        val listings =
+            when (root) {
+                is JsonObject -> root.arrayOrNull("epg_listings").orEmpty()
+                is JsonArray -> root
+                else -> emptyList()
+            }
+        var skipped = 0
+        val programs =
+            listings.take(MAXIMUM_SHORT_EPG_LIMIT).mapNotNull { element ->
+                val value = element as? JsonObject
+                val title = value?.firstString("title", "name")?.decodeProviderText()
+                if (title.isNullOrBlank()) {
+                    skipped += 1
+                    null
+                } else {
+                    val start = value.flexibleLong("start_timestamp") ?: value.flexibleLong("start")
+                    val end = value.flexibleLong("stop_timestamp") ?: value.flexibleLong("end_timestamp")
+                        ?: value.flexibleLong("stop")
+                    XtreamEpgProgram(
+                        title = title.take(MAXIMUM_EPG_TEXT_LENGTH),
+                        description =
+                            value.firstString("description", "desc")
+                                ?.decodeProviderText()
+                                ?.take(MAXIMUM_EPG_DESCRIPTION_LENGTH),
+                        startEpochSeconds = start?.takeIf(::isPlausibleEpochSeconds),
+                        endEpochSeconds = end?.takeIf(::isPlausibleEpochSeconds),
+                    )
+                }
+            }
+        return XtreamShortEpg(programs, skipped + (listings.size - MAXIMUM_SHORT_EPG_LIMIT).coerceAtLeast(0))
+    }
+
     fun buildPlaybackUrl(
         credentials: XtreamCredentials,
         contentType: XtreamContentType,
@@ -278,15 +329,7 @@ class XtreamClient(
                 .header("Accept", "application/json")
                 .get()
                 .build()
-        val response =
-            try {
-                httpClient.newCall(request).execute()
-            } catch (error: IOException) {
-                throw XtreamClientException(
-                    XtreamFailureReason.NETWORK,
-                    "The Xtream server could not be reached.",
-                )
-            }
+        val response = executeWithTransientRetry(request)
         response.use {
             if (!response.isSuccessful) {
                 throw XtreamClientException(
@@ -359,15 +402,7 @@ class XtreamClient(
                 .header("Accept", "application/json")
                 .get()
                 .build()
-        val response =
-            try {
-                httpClient.newCall(request).execute()
-            } catch (_: IOException) {
-                throw XtreamClientException(
-                    XtreamFailureReason.NETWORK,
-                    "The Xtream server could not be reached.",
-                )
-            }
+        val response = executeWithTransientRetry(request)
 
         response.use {
             if (!response.isSuccessful) {
@@ -599,6 +634,68 @@ class XtreamClient(
         return id?.takeIf { it.matches(YOUTUBE_ID_PATTERN) }
     }
 
+    /**
+     * Retries only failures that are normally transient, with a strict operation budget.
+     * Authentication, malformed responses and ordinary 4xx responses are never retried.
+     */
+    private fun executeWithTransientRetry(request: Request): Response {
+        var attempt = 0
+        var lastNetworkError: IOException? = null
+        while (attempt <= maximumTransientRetries) {
+            val response =
+                try {
+                    httpClient.newCall(request).execute()
+                } catch (error: IOException) {
+                    lastNetworkError = error
+                    null
+                }
+            if (response != null && (!response.code.isTransientHttpCode() || attempt == maximumTransientRetries)) {
+                return response
+            }
+            response?.close()
+            if (attempt == maximumTransientRetries) break
+            val delay = (retryDelayMillis * (attempt + 1L)).coerceAtMost(MAXIMUM_RETRY_DELAY_MILLIS)
+            if (delay > 0) {
+                try {
+                    Thread.sleep(delay)
+                } catch (interrupted: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw XtreamClientException(
+                        XtreamFailureReason.NETWORK,
+                        "The Xtream request was interrupted.",
+                        interrupted,
+                    )
+                }
+            }
+            attempt += 1
+        }
+        throw XtreamClientException(
+            XtreamFailureReason.NETWORK,
+            "The Xtream server could not be reached.",
+            lastNetworkError,
+        )
+    }
+
+    private fun Int.isTransientHttpCode(): Boolean = this == 408 || this == 429 || this in 500..504
+
+    private fun String.decodeProviderText(): String {
+        val clean = trim()
+        if (clean.isEmpty() || clean.length > MAXIMUM_ENCODED_EPG_TEXT_LENGTH) return clean
+        if (!clean.matches(BASE64_TEXT_PATTERN) || clean.length % 4 != 0) return clean
+        return runCatching {
+            val bytes = Base64.getDecoder().decode(clean)
+            val decoded = STRICT_UTF8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(java.nio.ByteBuffer.wrap(bytes))
+                .toString()
+                .trim()
+            decoded.takeIf { value -> value.isNotBlank() && value.none(Char::isISOControl) } ?: clean
+        }.getOrDefault(clean)
+    }
+
+    private fun isPlausibleEpochSeconds(value: Long): Boolean = value in MINIMUM_EPG_EPOCH_SECONDS..MAXIMUM_EPG_EPOCH_SECONDS
+
     private fun invalidResponse(message: String): XtreamClientException =
         XtreamClientException(XtreamFailureReason.INVALID_RESPONSE, message)
 
@@ -606,6 +703,17 @@ class XtreamClient(
         const val DEFAULT_USER_AGENT = "IPTV BURO/0.2"
         const val DEFAULT_MAXIMUM_RESPONSE_BYTES = 512 * 1024 * 1024
         const val DEFAULT_MAXIMUM_CATALOG_ITEMS = 1_000_000
+        const val DEFAULT_MAXIMUM_TRANSIENT_RETRIES = 1
+        const val MAXIMUM_TRANSIENT_RETRIES = 2
+        const val DEFAULT_RETRY_DELAY_MILLIS = 250L
+        const val MAXIMUM_RETRY_DELAY_MILLIS = 2_000L
+        const val DEFAULT_SHORT_EPG_LIMIT = 8
+        const val MAXIMUM_SHORT_EPG_LIMIT = 50
+        const val MAXIMUM_EPG_TEXT_LENGTH = 240
+        const val MAXIMUM_EPG_DESCRIPTION_LENGTH = 2_000
+        const val MAXIMUM_ENCODED_EPG_TEXT_LENGTH = 16_384
+        const val MINIMUM_EPG_EPOCH_SECONDS = 946_684_800L
+        const val MAXIMUM_EPG_EPOCH_SECONDS = 4_102_444_800L
         const val DEFAULT_CONNECT_TIMEOUT_SECONDS = 15L
         const val DEFAULT_READ_TIMEOUT_SECONDS = 60L
         const val DEFAULT_WRITE_TIMEOUT_SECONDS = 30L
@@ -617,6 +725,7 @@ class XtreamClient(
         val EXTENSION_PATTERN = Regex("[a-z0-9]{1,10}")
         val ALLOWED_ARTWORK_SCHEMES = setOf("http", "https")
         val YOUTUBE_ID_PATTERN = Regex("[A-Za-z0-9_-]{6,32}")
+        val BASE64_TEXT_PATTERN = Regex("[A-Za-z0-9+/]+={0,2}")
     }
 }
 
