@@ -40,8 +40,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +60,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogWindow
+import androidx.compose.ui.window.rememberDialogState
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.MovieDetailsStatus
 import com.lucasserafin94.iptvburo.desktop.LiveEpgStatus
@@ -80,13 +85,15 @@ fun XtreamWorkspace(
     onOpenExternal: (PendingXtreamExternal) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    var detailsOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(appState.xtreamSearchQuery, appState.xtreamContentType) {
         delay(SEARCH_DEBOUNCE_MILLIS)
         appState.applyXtreamSearch()
     }
 
-    LaunchedEffect(appState.selectedXtreamItem?.providerId) {
+    LaunchedEffect(appState.selectedXtreamItem?.providerId, detailsOpen) {
+        if (!detailsOpen) return@LaunchedEffect
         when (appState.selectedXtreamItem?.contentType) {
             XtreamContentType.MOVIE -> appState.loadSelectedMovieDetails()
             XtreamContentType.SERIES -> appState.loadSelectedSeriesDetails()
@@ -120,6 +127,7 @@ fun XtreamWorkspace(
             status = appState.xtreamStatus,
             onQueryChange = appState::updateXtreamSearch,
             onTypeSelected = { type ->
+                detailsOpen = false
                 scope.launch { appState.selectXtreamContentType(type) }
             },
             onDisconnect = appState::disconnectXtream,
@@ -128,52 +136,33 @@ fun XtreamWorkspace(
         )
         HorizontalDivider(color = BuroColors.BorderSoft)
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            // The application keeps a persistent 300 dp source rail outside this workspace.
-            // Switch to the narrower catalog columns early enough to preserve a useful details
-            // pane on common 1366/1440/1600-wide notebook displays.
             val compact = maxWidth < 1_350.dp
             Row(modifier = Modifier.fillMaxSize()) {
                 XtreamCategoryPane(
                     categories = appState.xtreamCategories,
                     selectedCategoryId = appState.selectedXtreamCategoryId,
                     onSelected = { categoryId ->
+                        detailsOpen = false
                         scope.launch { appState.selectXtreamCategory(categoryId) }
                     },
-                    modifier = Modifier.width(if (compact) 140.dp else 230.dp),
+                    modifier = Modifier.width(if (compact) 150.dp else 220.dp),
                 )
                 XtreamPaneDivider()
                 XtreamItemsPane(
                     appState = appState,
-                    onItemSelected = appState::selectXtreamItem,
+                    onItemSelected = { providerId ->
+                        appState.selectXtreamItem(providerId)
+                        detailsOpen = true
+                    },
                     onPreviousPage = {
+                        detailsOpen = false
                         scope.launch { appState.previousXtreamPage() }
                     },
                     onNextPage = {
+                        detailsOpen = false
                         scope.launch { appState.nextXtreamPage() }
                     },
-                    modifier = Modifier.width(if (compact) 280.dp else 560.dp),
-                )
-                XtreamPaneDivider()
-                XtreamItemDetail(
-                    item = appState.selectedXtreamItem,
-                    movieStatus = appState.movieDetailsStatus,
-                    seriesStatus = appState.seriesDetailsStatus,
-                    liveEpgStatus = appState.liveEpgStatus,
-                    onLoadMovie = {
-                        scope.launch { appState.loadSelectedMovieDetails() }
-                    },
-                    onLoadSeries = {
-                        scope.launch { appState.loadSelectedSeriesDetails() }
-                    },
-                    onOpenTrailer = appState::openPublicTrailer,
-                    onOpenExternal = onOpenExternal,
-                    onOpenPerson = appState::openPerson,
-                    isFavorite = appState.selectedXtreamItem?.let(appState::isFavorite) == true,
-                    onToggleFavorite = {
-                        appState.selectedXtreamItem?.let(appState::toggleFavorite)
-                    },
-                    compact = compact,
-                    modifier = Modifier.weight(1f).padding(end = if (compact) 18.dp else 0.dp),
+                    modifier = Modifier.weight(1f),
                 )
             }
             if (
@@ -181,6 +170,32 @@ fun XtreamWorkspace(
                 appState.xtreamStatus is XtreamStatus.LoadingCatalog
             ) {
                 XtreamLoadingOverlay(status = appState.xtreamStatus)
+            }
+        }
+    }
+    if (detailsOpen && appState.selectedXtreamItem != null) {
+        DialogWindow(
+            onCloseRequest = { detailsOpen = false },
+            title = appState.selectedXtreamItem?.name ?: "Detalhes",
+            state = rememberDialogState(width = 900.dp, height = 720.dp),
+            resizable = true,
+        ) {
+            Box(Modifier.fillMaxSize().background(BuroColors.Canvas)) {
+                XtreamItemDetail(
+                    item = appState.selectedXtreamItem,
+                    movieStatus = appState.movieDetailsStatus,
+                    seriesStatus = appState.seriesDetailsStatus,
+                    liveEpgStatus = appState.liveEpgStatus,
+                    onLoadMovie = { scope.launch { appState.loadSelectedMovieDetails() } },
+                    onLoadSeries = { scope.launch { appState.loadSelectedSeriesDetails() } },
+                    onOpenTrailer = appState::openPublicTrailer,
+                    onOpenExternal = onOpenExternal,
+                    onOpenPerson = appState::openPerson,
+                    isFavorite = appState.selectedXtreamItem?.let(appState::isFavorite) == true,
+                    onToggleFavorite = { appState.selectedXtreamItem?.let(appState::toggleFavorite) },
+                    compact = false,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
     }

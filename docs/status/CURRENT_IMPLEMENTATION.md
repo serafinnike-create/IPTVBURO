@@ -70,8 +70,8 @@ registra arquitetura e escopo, não declara aprovação E2E, hashes ou publicaç
 - Android lint: 0 erros;
 - APK debug: 32.113.725 bytes, SHA-256
   `463D9BB614E2207CE0A1FDD83F6722D2D0828A84018FEA11DE32489DB5911F90`;
-- MSI Windows preview: 81.428.832 bytes, SHA-256
-  `07FF7551616994B24AA3C8846E490DE1338AAFC629AC9EB278F012C76A91F82D`;
+- MSI Windows preview: 81.437.024 bytes, SHA-256
+  `457C32A62D65A6E2FD1FBDDCA3429E39ABEA5EF5D060871F7E30D80EC5A1A88B`;
 - os três identificadores da fonte privada autorizada tiveram zero ocorrências
   no worktree publicável e em todo o histórico Git;
 - a build final foi instalada no Android 15 e iniciou sem crash; a validação
