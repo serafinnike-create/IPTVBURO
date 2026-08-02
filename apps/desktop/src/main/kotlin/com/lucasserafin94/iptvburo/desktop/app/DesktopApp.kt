@@ -208,6 +208,10 @@ fun DesktopApp(
                 activePlayback?.let { request ->
                     DesktopPlayerOverlay(
                         request = request,
+                        onCheckpoint = { positionMs, durationMs ->
+                            appState.checkpointPlayback(request, positionMs, durationMs)
+                        },
+                        onEnded = { durationMs -> appState.completePlayback(request, durationMs) },
                         onClose = { activePlayback = null },
                     )
                 }
@@ -264,7 +268,11 @@ fun DesktopApp(
                     onDismiss = { pendingXtreamExternal = null },
                     onConfirm = {
                         activePlayback =
-                            appState.prepareXtreamPlayback(pending.target, pending.displayName)
+                            appState.prepareXtreamPlayback(
+                                pending.target,
+                                pending.displayName,
+                                pending.startPositionMillis,
+                            )
                         if (activePlayback == null) externalOpenResult = ExternalOpenResult.Failed
                         pendingXtreamExternal = null
                     },

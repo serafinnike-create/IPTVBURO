@@ -100,6 +100,7 @@ sealed interface XtreamPlaybackTarget {
     }
 
     class Episode(
+        val seriesId: String,
         val episode: XtreamEpisode,
     ) : XtreamPlaybackTarget {
         override fun toString(): String = "XtreamPlaybackTarget.Episode(<redacted>)"

@@ -23,7 +23,7 @@ class PlaybackSessionFactory @Inject constructor(
     @ApplicationContext private val context: Context,
     private val okHttpClient: OkHttpClient,
 ) {
-    fun create(channel: ChannelUi): ExoPlayer {
+    fun create(channel: ChannelUi, autoPlay: Boolean = true): ExoPlayer {
         val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             .setUserAgent(USER_AGENT)
             .setDefaultRequestProperties(channel.requestHeaders)
@@ -53,7 +53,7 @@ class PlaybackSessionFactory @Inject constructor(
                         )
                         .build(),
                 )
-                playWhenReady = true
+                playWhenReady = autoPlay
                 prepare()
             }
     }

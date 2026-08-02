@@ -73,6 +73,11 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.playback.PlaybackSessionFactory
+import com.lucasserafin94.iptvburo.playback.AndroidPlaybackProgressCoordinator
+import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
+import com.lucasserafin94.iptvburo.domain.model.PlaybackContentType
+import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressIdentity
+import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
 import com.lucasserafin94.iptvburo.ui.ChannelUi
 import com.lucasserafin94.iptvburo.ui.LiveProgramUi
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
@@ -82,6 +87,7 @@ import com.lucasserafin94.iptvburo.ui.theme.Muted
 import com.lucasserafin94.iptvburo.ui.theme.Surface
 import com.lucasserafin94.iptvburo.ui.theme.Teal
 import com.lucasserafin94.iptvburo.ui.theme.White
+import kotlinx.coroutines.delay
 
 @Composable
 fun PlayerScreen(
@@ -90,12 +96,19 @@ fun PlayerScreen(
     nextPlaying: LiveProgramUi?,
     isEpgLoading: Boolean,
     playbackSessionFactory: PlaybackSessionFactory,
+    playbackProgressCoordinator: AndroidPlaybackProgressCoordinator,
+    activeProfileId: String?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val player = remember(channel.id) {
-        playbackSessionFactory.create(channel)
+    val progressIdentity = remember(channel.id, activeProfileId) {
+        playbackProgressIdentity(activeProfileId, channel)
     }
+    val player = remember(channel.id, activeProfileId) {
+        playbackSessionFactory.create(channel, autoPlay = progressIdentity == null)
+    }
+    var resumeDecision by remember(player) { mutableStateOf<ResumeDecision?>(null) }
+    var resumeChoiceResolved by remember(player) { mutableStateOf(progressIdentity == null) }
     var playbackState by remember(channel.id) {
         mutableStateOf(PlaybackUiState(isLoading = true))
     }
@@ -117,6 +130,26 @@ fun PlayerScreen(
         )
     }
 
+    LaunchedEffect(player, progressIdentity) {
+        if (progressIdentity == null) return@LaunchedEffect
+        val decision = playbackProgressCoordinator.resumeDecision(progressIdentity)
+        resumeDecision = decision
+        if (decision !is ResumeDecision.ResumeFrom) {
+            resumeChoiceResolved = true
+            player.play()
+        }
+    }
+
+    LaunchedEffect(player, progressIdentity, resumeChoiceResolved) {
+        if (progressIdentity == null || !resumeChoiceResolved) return@LaunchedEffect
+        while (true) {
+            delay(12_000)
+            if (player.isPlaying && player.duration > 0L) {
+                playbackProgressCoordinator.checkpointAsync(progressIdentity, player.currentPosition, player.duration)
+            }
+        }
+    }
+
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -128,6 +161,9 @@ fun PlayerScreen(
                         isSeekable = player.isCurrentMediaItemSeekable,
                     ),
                 )
+                if (state == Player.STATE_ENDED && player.duration > 0L) {
+                    playbackProgressCoordinator.endedAsync(progressIdentity, player.duration)
+                }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -138,6 +174,9 @@ fun PlayerScreen(
                         isSeekable = player.isCurrentMediaItemSeekable,
                     ),
                 )
+                if (!isPlaying && resumeChoiceResolved && player.duration > 0L) {
+                    playbackProgressCoordinator.checkpointAsync(progressIdentity, player.currentPosition, player.duration)
+                }
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -162,6 +201,9 @@ fun PlayerScreen(
         player.addListener(listener)
 
         onDispose {
+            if (player.duration > 0L) {
+                playbackProgressCoordinator.checkpointAsync(progressIdentity, player.currentPosition, player.duration)
+            }
             player.removeListener(listener)
             player.stop()
             player.release()
@@ -172,6 +214,9 @@ fun PlayerScreen(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_STOP -> {
+                    if (player.duration > 0L) {
+                        playbackProgressCoordinator.checkpointAsync(progressIdentity, player.currentPosition, player.duration)
+                    }
                     val transition = onPlaybackStopped(
                         current = lifecycleState,
                         wasPlaying = player.isPlaying,
@@ -198,7 +243,13 @@ fun PlayerScreen(
         }
     }
 
-    BackHandler(onBack = onBack)
+    val closePlayer = {
+        if (player.duration > 0L) {
+            playbackProgressCoordinator.checkpointAsync(progressIdentity, player.currentPosition, player.duration)
+        }
+        onBack()
+    }
+    BackHandler(onBack = closePlayer)
 
     Box(
         modifier = modifier
@@ -237,7 +288,7 @@ fun PlayerScreen(
                     nowPlaying = nowPlaying,
                     nextPlaying = nextPlaying,
                     isEpgLoading = isEpgLoading,
-                    onBack = onBack,
+                    onBack = closePlayer,
                     modifier = Modifier.align(Alignment.TopStart),
                 )
             }
@@ -251,12 +302,20 @@ fun PlayerScreen(
                     showMobileControls = !isTelevision,
                     canUsePictureInPicture = !isTelevision && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O,
                     onPlayPause = { if (player.isPlaying) player.pause() else player.play() },
-                    onSeekBack = { player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L)) },
+                    onSeekBack = {
+                        player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L))
+                        if (player.duration > 0L) {
+                            playbackProgressCoordinator.checkpointAsync(progressIdentity, player.currentPosition, player.duration)
+                        }
+                    },
                     onSeekForward = {
                         val target = player.currentPosition + 30_000L
                         player.seekTo(
                             if (player.duration > 0) target.coerceAtMost(player.duration) else target,
                         )
+                        if (player.duration > 0L) {
+                            playbackProgressCoordinator.checkpointAsync(progressIdentity, player.currentPosition, player.duration)
+                        }
                     },
                     onVolumeChanged = { value ->
                         playerVolume = value
@@ -301,6 +360,30 @@ fun PlayerScreen(
             }
 
             when {
+                !resumeChoiceResolved && resumeDecision is ResumeDecision.ResumeFrom -> {
+                    val decision = resumeDecision as ResumeDecision.ResumeFrom
+                    ResumeChoice(
+                        positionMs = decision.positionMs,
+                        onContinue = {
+                            player.seekTo(decision.positionMs)
+                            resumeChoiceResolved = true
+                            player.play()
+                        },
+                        onStartOver = {
+                            player.seekTo(0L)
+                            resumeChoiceResolved = true
+                            player.play()
+                        },
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                }
+
+                !resumeChoiceResolved -> Text(
+                    text = stringResource(R.string.player_loading),
+                    color = White,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+
                 playbackState.hasError -> PlaybackError(
                     failure = playbackState.failure ?: PlaybackFailure.UNKNOWN,
                     onRetry = {
@@ -328,6 +411,66 @@ fun PlayerScreen(
 
         }
     }
+}
+
+@Composable
+private fun ResumeChoice(
+    positionMs: Long,
+    onContinue: () -> Unit,
+    onStartOver: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.clip(RoundedCornerShape(22.dp)).background(Ink.copy(alpha = 0.96f)).padding(26.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Continuar assistindo?", color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        FocusSurface(
+            onClick = onContinue,
+            modifier = Modifier.width(260.dp).height(54.dp),
+            backgroundColor = White,
+            focusedBackgroundColor = White,
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Continuar de ${formatResumeTime(positionMs)}", color = Ink, fontWeight = FontWeight.Bold)
+        }
+        FocusSurface(
+            onClick = onStartOver,
+            modifier = Modifier.width(260.dp).height(54.dp),
+            backgroundColor = Surface,
+            focusedBackgroundColor = Surface,
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Assistir do início", color = White, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+internal fun playbackProgressIdentity(profileId: String?, channel: ChannelUi): PlaybackProgressIdentity? {
+    val safeProfileId = profileId?.takeIf(String::isNotBlank) ?: return null
+    val contentType = when (channel.contentType) {
+        CatalogContentType.MOVIE -> PlaybackContentType.MOVIE
+        CatalogContentType.EPISODE -> PlaybackContentType.EPISODE
+        else -> return null
+    }
+    return PlaybackProgressIdentity(
+        profileId = safeProfileId,
+        sourceId = channel.sourceId,
+        contentId = channel.providerItemId ?: channel.id,
+        contentType = contentType,
+        seriesId = channel.seriesId,
+        seasonNumber = channel.seasonNumber,
+        episodeNumber = channel.episodeNumber,
+    )
+}
+
+private fun formatResumeTime(positionMs: Long): String {
+    val seconds = positionMs.coerceAtLeast(0L) / 1_000L
+    val hours = seconds / 3_600L
+    val minutes = (seconds % 3_600L) / 60L
+    val remainder = seconds % 60L
+    return if (hours > 0L) "%d:%02d:%02d".format(hours, minutes, remainder) else "%02d:%02d".format(minutes, remainder)
 }
 
 @Composable

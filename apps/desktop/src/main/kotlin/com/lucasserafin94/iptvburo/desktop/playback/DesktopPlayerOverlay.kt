@@ -32,16 +32,44 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import kotlinx.coroutines.delay
 
 @Composable
-fun DesktopPlayerOverlay(request: DesktopPlaybackRequest, onClose: () -> Unit) {
+fun DesktopPlayerOverlay(
+    request: DesktopPlaybackRequest,
+    onCheckpoint: (Long, Long) -> Unit,
+    onEnded: (Long) -> Unit,
+    onClose: () -> Unit,
+) {
     val controller = remember(request) { JavaFxDesktopPlayer() }
     var state by remember(request) { mutableStateOf(DesktopPlaybackSnapshot()) }
 
-    DisposableEffect(controller) { onDispose(controller::dispose) }
+    DisposableEffect(controller) {
+        onDispose {
+            val latest = controller.snapshot()
+            if (latest.durationMillis > 0.0) onCheckpoint(latest.positionMillis.toLong(), latest.durationMillis.toLong())
+            controller.dispose()
+        }
+    }
     LaunchedEffect(controller) {
         while (true) {
             state = controller.snapshot()
             delay(250)
         }
+    }
+    LaunchedEffect(controller) {
+        while (true) {
+            delay(12_000)
+            val latest = controller.snapshot()
+            if (latest.playing && latest.durationMillis > 0.0) {
+                onCheckpoint(latest.positionMillis.toLong(), latest.durationMillis.toLong())
+            }
+        }
+    }
+    LaunchedEffect(state.playing, state.ready) {
+        if (state.ready && !state.playing && !state.ended && state.durationMillis > 0.0) {
+            onCheckpoint(state.positionMillis.toLong(), state.durationMillis.toLong())
+        }
+    }
+    LaunchedEffect(state.ended) {
+        if (state.ended && state.durationMillis > 0.0) onEnded(state.durationMillis.toLong())
     }
 
     Column(Modifier.fillMaxSize().background(Color.Black)) {
@@ -49,7 +77,12 @@ fun DesktopPlayerOverlay(request: DesktopPlaybackRequest, onClose: () -> Unit) {
             modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = onClose) { Text("Voltar") }
+            TextButton(
+                onClick = {
+                    if (state.durationMillis > 0.0) onCheckpoint(state.positionMillis.toLong(), state.durationMillis.toLong())
+                    onClose()
+                },
+            ) { Text("Voltar") }
             Spacer(Modifier.width(16.dp))
             Text(request.title, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text("PLAYER WINDOWS", color = BuroColors.Primary)

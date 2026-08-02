@@ -38,10 +38,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogWindow
-import androidx.compose.ui.window.rememberDialogState
 import com.lucasserafin94.iptvburo.desktop.DailyHomeStatus
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
+import com.lucasserafin94.iptvburo.desktop.DesktopContinueWatchingEntry
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
@@ -59,6 +58,7 @@ fun XtreamDailyHome(
     val scope = rememberCoroutineScope()
     var today by remember { mutableStateOf(LocalDate.now()) }
     var detailsOpen by remember { mutableStateOf(false) }
+    var personOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -78,6 +78,38 @@ fun XtreamDailyHome(
             XtreamContentType.LIVE -> appState.loadSelectedLiveEpg()
             null -> Unit
         }
+    }
+
+    if (personOpen) {
+        val person = appState.selectedPerson
+        if (person != null) {
+            PersonFilmographyPage(
+                person = person,
+                onBack = {
+                    personOpen = false
+                    appState.closePerson()
+                },
+                onOpenItem = { item ->
+                    appState.selectDailyItem(item)
+                    personOpen = false
+                    appState.closePerson()
+                },
+            )
+            return
+        }
+    }
+
+    if (detailsOpen && appState.selectedXtreamItem != null) {
+        XtreamInternalDetailsPage(
+            appState = appState,
+            onBack = { detailsOpen = false },
+            onOpenExternal = onOpenExternal,
+            onOpenPerson = { name ->
+                appState.openPerson(name)
+                personOpen = true
+            },
+        )
+        return
     }
 
     when (val status = appState.dailyHomeStatus) {
@@ -100,6 +132,14 @@ fun XtreamDailyHome(
                             detailsOpen = true
                         },
                     )
+                }
+                if (appState.continueWatchingEntries.isNotEmpty()) {
+                    item(key = "continue-watching") {
+                        ContinueWatchingRow(appState.continueWatchingEntries) { entry ->
+                            appState.selectDailyItem(entry.item)
+                            detailsOpen = true
+                        }
+                    }
                 }
                 item(key = "daily-movies") {
                     DailyRow("Filmes escolhidos para hoje", snapshot.movies) { item ->
@@ -124,30 +164,55 @@ fun XtreamDailyHome(
         }
     }
 
-    if (detailsOpen && appState.selectedXtreamItem != null) {
-        DialogWindow(
-            onCloseRequest = { detailsOpen = false },
-            title = appState.selectedXtreamItem?.name ?: "Detalhes",
-            state = rememberDialogState(width = 900.dp, height = 720.dp),
-            resizable = true,
-        ) {
-            Box(Modifier.fillMaxSize().background(BuroColors.Canvas)) {
-                XtreamItemDetail(
-                    item = appState.selectedXtreamItem,
-                    movieStatus = appState.movieDetailsStatus,
-                    seriesStatus = appState.seriesDetailsStatus,
-                    liveEpgStatus = appState.liveEpgStatus,
-                    onLoadMovie = { scope.launch { appState.loadSelectedMovieDetails() } },
-                    onLoadSeries = { scope.launch { appState.loadSelectedSeriesDetails() } },
-                    onOpenTrailer = appState::openPublicTrailer,
-                    onOpenExternal = onOpenExternal,
-                    onOpenPerson = appState::openPerson,
-                    isFavorite = appState.selectedXtreamItem?.let(appState::isFavorite) == true,
-                    onToggleFavorite = { appState.selectedXtreamItem?.let(appState::toggleFavorite) },
-                    compact = false,
-                    modifier = Modifier.fillMaxSize(),
-                )
+}
+
+@Composable
+private fun ContinueWatchingRow(
+    entries: List<DesktopContinueWatchingEntry>,
+    onClick: (DesktopContinueWatchingEntry) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            "Continuar assistindo",
+            modifier = Modifier.padding(horizontal = 34.dp),
+            color = BuroColors.Text,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            item { Spacer(Modifier.width(22.dp)) }
+            items(entries, key = { "${it.progress.identity.contentType}:${it.progress.identity.contentId}" }) { entry ->
+                Column(
+                    modifier = Modifier.width(180.dp).clickable { onClick(entry) },
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    Box(Modifier.fillMaxWidth().height(102.dp).clip(RoundedCornerShape(14.dp)).background(BuroColors.SurfaceRaised)) {
+                        BuroRemoteArtwork(
+                            artworkUrl = entry.item.artworkUrl,
+                            contentDescription = entry.item.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        ) { Box(Modifier.fillMaxSize().background(BuroColors.SurfaceRaised)) }
+                        Box(
+                            Modifier.align(Alignment.BottomStart).fillMaxWidth().height(5.dp).background(BuroColors.Surface),
+                        ) {
+                            Box(
+                                Modifier.fillMaxWidth(entry.progress.progressPercent.toFloat().coerceIn(0f, 1f))
+                                    .height(5.dp).background(BuroColors.Primary),
+                            )
+                        }
+                    }
+                    Text(entry.item.name.editorialDisplayTitle(), color = BuroColors.Text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val identity = entry.progress.identity
+                    Text(
+                        identity.seasonNumber?.let { season -> "T$season · E${identity.episodeNumber ?: "—"}" }
+                            ?: "${(entry.progress.progressPercent * 100).toInt()}% assistido",
+                        color = BuroColors.TextSubtle,
+                        maxLines = 1,
+                    )
+                }
             }
+            item { Spacer(Modifier.width(22.dp)) }
         }
     }
 }

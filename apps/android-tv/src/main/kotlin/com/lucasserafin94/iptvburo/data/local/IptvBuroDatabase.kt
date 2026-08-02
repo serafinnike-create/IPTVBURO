@@ -8,11 +8,13 @@ import com.lucasserafin94.iptvburo.data.local.dao.CategoryDao
 import com.lucasserafin94.iptvburo.data.local.dao.ChannelDao
 import com.lucasserafin94.iptvburo.data.local.dao.FavoriteDao
 import com.lucasserafin94.iptvburo.data.local.dao.ProfileDao
+import com.lucasserafin94.iptvburo.data.local.dao.PlaybackProgressDao
 import com.lucasserafin94.iptvburo.data.local.dao.SourceDao
 import com.lucasserafin94.iptvburo.data.local.entity.CategoryEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ChannelEntity
 import com.lucasserafin94.iptvburo.data.local.entity.FavoriteEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ProfileEntity
+import com.lucasserafin94.iptvburo.data.local.entity.PlaybackProgressEntity
 import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
 
 @Database(
@@ -22,8 +24,9 @@ import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
         ChannelEntity::class,
         ProfileEntity::class,
         FavoriteEntity::class,
+        PlaybackProgressEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class IptvBuroDatabase : RoomDatabase() {
@@ -36,6 +39,8 @@ abstract class IptvBuroDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
 
     abstract fun favoriteDao(): FavoriteDao
+
+    abstract fun playbackProgressDao(): PlaybackProgressDao
 
     companion object {
         val MIGRATION_1_2: Migration =
@@ -134,6 +139,39 @@ abstract class IptvBuroDatabase : RoomDatabase() {
                     )
                     db.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_profile_id ON favorites(profile_id)")
                     db.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_channel_id ON favorites(channel_id)")
+                }
+            }
+
+        val MIGRATION_4_5: Migration =
+            object : Migration(4, 5) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS playback_progress (
+                            profile_id TEXT NOT NULL,
+                            source_id TEXT NOT NULL,
+                            content_id TEXT NOT NULL,
+                            content_type TEXT NOT NULL,
+                            series_id TEXT,
+                            season_number INTEGER,
+                            episode_number INTEGER,
+                            position_ms INTEGER NOT NULL,
+                            duration_ms INTEGER NOT NULL,
+                            progress_percent REAL NOT NULL,
+                            last_watched_at_epoch_millis INTEGER NOT NULL,
+                            completed_at_epoch_millis INTEGER,
+                            updated_at_epoch_millis INTEGER NOT NULL,
+                            revision INTEGER NOT NULL,
+                            PRIMARY KEY(profile_id, source_id, content_id, content_type),
+                            FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+                            FOREIGN KEY(source_id) REFERENCES sources(id) ON DELETE CASCADE
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_playback_progress_profile_id_completed_at_epoch_millis_last_watched_at_epoch_millis ON playback_progress(profile_id, completed_at_epoch_millis, last_watched_at_epoch_millis)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_playback_progress_profile_id_content_type_last_watched_at_epoch_millis ON playback_progress(profile_id, content_type, last_watched_at_epoch_millis)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_playback_progress_source_id_content_id ON playback_progress(source_id, content_id)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_playback_progress_profile_id_series_id_season_number_episode_number ON playback_progress(profile_id, series_id, season_number, episode_number)")
                 }
             }
     }

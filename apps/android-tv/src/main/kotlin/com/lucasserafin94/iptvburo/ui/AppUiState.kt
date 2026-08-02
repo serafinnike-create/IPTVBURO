@@ -33,6 +33,9 @@ data class ChannelUi(
     val requestHeaders: Map<String, String> = emptyMap(),
     val contentType: CatalogContentType = CatalogContentType.UNKNOWN,
     val providerItemId: String? = null,
+    val seriesId: String? = null,
+    val seasonNumber: Int? = null,
+    val episodeNumber: Int? = null,
     val year: Int? = null,
     val rating: Double? = null,
 ) {

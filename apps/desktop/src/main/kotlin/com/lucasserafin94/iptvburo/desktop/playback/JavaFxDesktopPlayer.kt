@@ -42,11 +42,22 @@ class JavaFxDesktopPlayer {
                         durationMillis = player.totalDuration.toMillis().finiteOrZero(),
                         errorMessage = null,
                     )
+                    if (request.startPositionMillis > 0L) {
+                        val safeStart = request.startPositionMillis.coerceAtMost(player.totalDuration.toMillis().finiteOrZero().toLong())
+                        player.seek(Duration.millis(safeStart.toDouble()))
+                    }
                     player.play()
                 }
                 player.setOnPlaying { snapshot = snapshot.copy(playing = true, ready = true) }
                 player.setOnPaused { snapshot = snapshot.copy(playing = false) }
                 player.setOnStopped { snapshot = snapshot.copy(playing = false) }
+                player.setOnEndOfMedia {
+                    snapshot = snapshot.copy(
+                        playing = false,
+                        ended = true,
+                        positionMillis = player.totalDuration.toMillis().finiteOrZero(),
+                    )
+                }
                 player.currentTimeProperty().addListener { _, _, value ->
                     snapshot = snapshot.copy(positionMillis = value.toMillis().finiteOrZero())
                 }

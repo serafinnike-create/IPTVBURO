@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.playback.PlaybackSessionFactory
+import com.lucasserafin94.iptvburo.playback.AndroidPlaybackProgressCoordinator
 import com.lucasserafin94.iptvburo.ui.AppContent
 import com.lucasserafin94.iptvburo.ui.MainViewModel
 import com.lucasserafin94.iptvburo.ui.screens.AppShellScreen
@@ -59,6 +60,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var playbackSessionFactory: PlaybackSessionFactory
+
+    @Inject
+    lateinit var playbackProgressCoordinator: AndroidPlaybackProgressCoordinator
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLocaleController.wrapBaseContext(newBase))
@@ -89,6 +93,7 @@ class MainActivity : ComponentActivity() {
                 IptvBuroRoot(
                     viewModel = viewModel,
                     playbackSessionFactory = playbackSessionFactory,
+                    playbackProgressCoordinator = playbackProgressCoordinator,
                 )
             }
         }
@@ -99,6 +104,7 @@ class MainActivity : ComponentActivity() {
 private fun IptvBuroRoot(
     viewModel: MainViewModel,
     playbackSessionFactory: PlaybackSessionFactory,
+    playbackProgressCoordinator: AndroidPlaybackProgressCoordinator,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val activity = LocalActivity.current as MainActivity
@@ -136,6 +142,8 @@ private fun IptvBuroRoot(
                 nextPlaying = state.liveNext,
                 isEpgLoading = state.isLiveEpgLoading,
                 playbackSessionFactory = playbackSessionFactory,
+                playbackProgressCoordinator = playbackProgressCoordinator,
+                activeProfileId = state.activeProfile?.id,
                 onBack = { viewModel.goBack() },
             )
         }

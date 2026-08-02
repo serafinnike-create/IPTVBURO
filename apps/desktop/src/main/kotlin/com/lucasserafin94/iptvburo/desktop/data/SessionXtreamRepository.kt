@@ -17,9 +17,10 @@ import com.lucasserafin94.iptvburo.xtream.XtreamMovieDetails
 import com.lucasserafin94.iptvburo.xtream.XtreamShortEpg
 import com.lucasserafin94.iptvburo.xtream.XtreamSeriesDetails
 import java.net.URI
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.util.Arrays
 import java.util.EnumMap
-import java.util.UUID
 
 /**
  * Session-only Xtream storage.
@@ -55,7 +56,7 @@ class SessionXtreamRepository(
             synchronized(lock) {
                 generation += 1
                 credentialVault = nextVault
-                sourceId = UUID.randomUUID().toString()
+                sourceId = nextVault.stableSourceId()
                 generation
             }
 
@@ -101,6 +102,9 @@ class SessionXtreamRepository(
         synchronized(lock) {
             categories[contentType].orEmpty()
         }
+
+    fun itemByProviderId(contentType: XtreamContentType, providerId: String): XtreamCatalogItem? =
+        synchronized(lock) { catalogs[contentType]?.itemByProviderId(providerId) }
 
     /**
      * Returns one small page without allocating a complete filtered copy of a large catalog.
@@ -341,6 +345,15 @@ class SessionXtreamRepository(
                     )
                 }
             return block(credentials)
+        }
+
+        fun stableSourceId(): String = synchronized(lock) {
+            check(!cleared) { "The Xtream credential session was cleared." }
+            val digest = MessageDigest.getInstance("SHA-256")
+            digest.update(serverChars.concatToString().trim().lowercase().toByteArray(StandardCharsets.UTF_8))
+            digest.update(0)
+            digest.update(usernameChars.concatToString().toByteArray(StandardCharsets.UTF_8))
+            "xtream-" + digest.digest().take(16).joinToString("") { "%02x".format(it) }
         }
 
         fun clear() {

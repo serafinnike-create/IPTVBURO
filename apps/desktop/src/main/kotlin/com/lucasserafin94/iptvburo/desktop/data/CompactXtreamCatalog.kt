@@ -81,6 +81,11 @@ internal class CompactXtreamCatalog(
         )
     }
 
+    fun itemByProviderId(providerId: String): XtreamCatalogItem? {
+        val index = providerIds.indexOf(providerId)
+        return index.takeIf { it >= 0 }?.let(::itemAt)
+    }
+
     private fun ensurePrimitiveCapacity(required: Int) {
         if (required <= years.size) return
         val nextCapacity = maxOf(required, years.size.coerceAtLeast(1) * 2)

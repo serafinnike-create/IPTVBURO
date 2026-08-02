@@ -7,6 +7,7 @@ import com.lucasserafin94.iptvburo.data.local.dao.CategoryDao
 import com.lucasserafin94.iptvburo.data.local.dao.ChannelDao
 import com.lucasserafin94.iptvburo.data.local.dao.FavoriteDao
 import com.lucasserafin94.iptvburo.data.local.dao.ProfileDao
+import com.lucasserafin94.iptvburo.data.local.dao.PlaybackProgressDao
 import com.lucasserafin94.iptvburo.data.local.dao.SourceDao
 import dagger.Module
 import dagger.Provides
@@ -32,6 +33,7 @@ object DatabaseModule {
                 IptvBuroDatabase.MIGRATION_1_2,
                 IptvBuroDatabase.MIGRATION_2_3,
                 IptvBuroDatabase.MIGRATION_3_4,
+                IptvBuroDatabase.MIGRATION_4_5,
             )
             .build()
 
@@ -49,6 +51,9 @@ object DatabaseModule {
 
     @Provides
     fun provideFavoriteDao(database: IptvBuroDatabase): FavoriteDao = database.favoriteDao()
+
+    @Provides
+    fun providePlaybackProgressDao(database: IptvBuroDatabase): PlaybackProgressDao = database.playbackProgressDao()
 
     private const val DATABASE_NAME = "iptv-buro.db"
 }

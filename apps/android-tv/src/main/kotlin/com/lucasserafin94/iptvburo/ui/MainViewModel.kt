@@ -371,7 +371,13 @@ class MainViewModel @Inject constructor(
                                 hasPlaybackError = false,
                             )
                         }
-                        navigate(playback.toPlaybackUi(episode.seasonLabel()))
+                        navigate(
+                            playback.toPlaybackUi(episode.seasonLabel()).copy(
+                                seriesId = originContent.providerSeriesId,
+                                seasonNumber = episode.seasonNumber,
+                                episodeNumber = episode.episodeNumber,
+                            ),
+                        )
                     }
                 }.onFailure { error ->
                     if (error is CancellationException) return@onFailure
@@ -1057,6 +1063,12 @@ class MainViewModel @Inject constructor(
                 (releasesCurrent + releasesPrevious + recent + movies + series)
                     .filter { it.logoUri != null }
                     .distinctBy(Channel::id)
+                    .distinctBy { channel -> dailyCatalogTitleKey(channel.name) }
+                    .sortedWith(
+                        compareBy<Channel> { channel ->
+                            dailyEditorialRank(channel.id, localEditorialDay())
+                        }.thenBy(Channel::id),
+                    )
                     .map { channel ->
                         channel.toCatalogUi(
                             if (channel.contentType == CatalogContentType.MOVIE) "Filme" else "Série",
@@ -1333,3 +1345,24 @@ class MainViewModel @Inject constructor(
             .replace(Regex("\\s+"), " ")
             .trim()
 }
+
+private fun localEditorialDay(): Long =
+    Calendar.getInstance().let { calendar ->
+        calendar.get(Calendar.YEAR).toLong() * 400L + calendar.get(Calendar.DAY_OF_YEAR)
+    }
+
+internal fun dailyEditorialRank(itemId: String, epochDay: Long): Long {
+    var value = itemId.hashCode().toLong() xor (epochDay * -7046029254386353131L)
+    value = value xor (value ushr 30)
+    value *= -4658895280553007687L
+    value = value xor (value ushr 27)
+    return value xor (value ushr 31)
+}
+
+internal fun dailyCatalogTitleKey(title: String): String =
+    title
+        .lowercase(Locale.ROOT)
+        .replace(Regex("\\[[^]]{1,12}]"), " ")
+        .replace(Regex("\\b(4k|uhd|fhd|hd|sd|h\\.?265|hevc|multi|dual)\\b"), " ")
+        .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+        .trim()

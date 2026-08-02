@@ -29,7 +29,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -60,8 +59,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogWindow
-import androidx.compose.ui.window.rememberDialogState
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.MovieDetailsStatus
 import com.lucasserafin94.iptvburo.desktop.LiveEpgStatus
@@ -75,6 +72,7 @@ import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.xtream.XtreamEpisode
+import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Year
@@ -86,6 +84,7 @@ fun XtreamWorkspace(
 ) {
     val scope = rememberCoroutineScope()
     var detailsOpen by remember { mutableStateOf(false) }
+    var personOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(appState.xtreamSearchQuery, appState.xtreamContentType) {
         delay(SEARCH_DEBOUNCE_MILLIS)
@@ -100,6 +99,38 @@ fun XtreamWorkspace(
             XtreamContentType.LIVE -> appState.loadSelectedLiveEpg()
             else -> Unit
         }
+    }
+
+    if (personOpen) {
+        val person = appState.selectedPerson
+        if (person != null) {
+            PersonFilmographyPage(
+                person = person,
+                onBack = {
+                    personOpen = false
+                    appState.closePerson()
+                },
+                onOpenItem = { item ->
+                    appState.selectDailyItem(item)
+                    personOpen = false
+                    appState.closePerson()
+                },
+            )
+            return
+        }
+    }
+
+    if (detailsOpen && appState.selectedXtreamItem != null) {
+        XtreamInternalDetailsPage(
+            appState = appState,
+            onBack = { detailsOpen = false },
+            onOpenExternal = onOpenExternal,
+            onOpenPerson = { name ->
+                appState.openPerson(name)
+                personOpen = true
+            },
+        )
+        return
     }
 
     Column(
@@ -172,38 +203,6 @@ fun XtreamWorkspace(
                 XtreamLoadingOverlay(status = appState.xtreamStatus)
             }
         }
-    }
-    if (detailsOpen && appState.selectedXtreamItem != null) {
-        DialogWindow(
-            onCloseRequest = { detailsOpen = false },
-            title = appState.selectedXtreamItem?.name ?: "Detalhes",
-            state = rememberDialogState(width = 900.dp, height = 720.dp),
-            resizable = true,
-        ) {
-            Box(Modifier.fillMaxSize().background(BuroColors.Canvas)) {
-                XtreamItemDetail(
-                    item = appState.selectedXtreamItem,
-                    movieStatus = appState.movieDetailsStatus,
-                    seriesStatus = appState.seriesDetailsStatus,
-                    liveEpgStatus = appState.liveEpgStatus,
-                    onLoadMovie = { scope.launch { appState.loadSelectedMovieDetails() } },
-                    onLoadSeries = { scope.launch { appState.loadSelectedSeriesDetails() } },
-                    onOpenTrailer = appState::openPublicTrailer,
-                    onOpenExternal = onOpenExternal,
-                    onOpenPerson = appState::openPerson,
-                    isFavorite = appState.selectedXtreamItem?.let(appState::isFavorite) == true,
-                    onToggleFavorite = { appState.selectedXtreamItem?.let(appState::toggleFavorite) },
-                    compact = false,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        }
-    }
-    appState.selectedPerson?.let { person ->
-        PersonFilmographyDialog(
-            person = person,
-            onDismiss = appState::closePerson,
-        )
     }
 }
 
@@ -557,6 +556,65 @@ private fun XtreamCatalogCard(
 }
 
 @Composable
+internal fun XtreamInternalDetailsPage(
+    appState: DesktopAppState,
+    onBack: () -> Unit,
+    onOpenExternal: (PendingXtreamExternal) -> Unit,
+    onOpenPerson: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val item = appState.selectedXtreamItem ?: return
+    val movie = appState.movieDetailsStatus as? MovieDetailsStatus.Loaded
+    val series = appState.seriesDetailsStatus as? SeriesDetailsStatus.Loaded
+    val backdrop = movie?.details?.backdropUrls?.firstOrNull()
+        ?: movie?.details?.artworkUrl
+        ?: series?.details?.backdropUrls?.firstOrNull()
+        ?: series?.details?.artworkUrl
+        ?: item.artworkUrl
+    Box(Modifier.fillMaxSize().background(BuroColors.Canvas)) {
+        BuroRemoteArtwork(
+            artworkUrl = backdrop,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        ) { Box(Modifier.fillMaxSize().background(BuroColors.Canvas)) }
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    listOf(BuroColors.Canvas.copy(alpha = 0.3f), BuroColors.Canvas.copy(alpha = 0.82f), BuroColors.Canvas),
+                ),
+            ),
+        )
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(62.dp).background(BuroColors.Canvas.copy(alpha = 0.86f)).padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onBack) { Text("← Voltar ao catálogo", color = BuroColors.Text) }
+                Spacer(Modifier.weight(1f))
+                Text("IPTV BURO", color = BuroColors.Primary, fontWeight = FontWeight.Black)
+            }
+            XtreamItemDetail(
+                item = item,
+                movieStatus = appState.movieDetailsStatus,
+                seriesStatus = appState.seriesDetailsStatus,
+                liveEpgStatus = appState.liveEpgStatus,
+                onLoadMovie = { scope.launch { appState.loadSelectedMovieDetails() } },
+                onLoadSeries = { scope.launch { appState.loadSelectedSeriesDetails() } },
+                onOpenTrailer = appState::openPublicTrailer,
+                onOpenExternal = onOpenExternal,
+                onOpenPerson = onOpenPerson,
+                isFavorite = appState.isFavorite(item),
+                onToggleFavorite = { appState.toggleFavorite(item) },
+                resumeDecisionFor = appState::resumeDecision,
+                compact = false,
+                modifier = Modifier.weight(1f).widthIn(max = 980.dp).align(Alignment.CenterHorizontally),
+            )
+        }
+    }
+}
+
+@Composable
 internal fun XtreamItemDetail(
     item: XtreamCatalogItem?,
     movieStatus: MovieDetailsStatus,
@@ -569,6 +627,7 @@ internal fun XtreamItemDetail(
     onOpenPerson: (String) -> Unit,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
+    resumeDecisionFor: (XtreamPlaybackTarget) -> ResumeDecision,
     compact: Boolean,
     modifier: Modifier,
 ) {
@@ -660,11 +719,21 @@ internal fun XtreamItemDetail(
                     status = seriesStatus,
                     onLoadSeries = onLoadSeries,
                     onOpenTrailer = onOpenTrailer,
-                    onOpenEpisode = { episode ->
+                    resumeDecisionForEpisode = { episode ->
+                        resumeDecisionFor(
+                            XtreamPlaybackTarget.Episode(seriesId = item.providerId, episode = episode),
+                        )
+                    },
+                    onOpenEpisode = { episode, startPositionMillis ->
+                        val target = XtreamPlaybackTarget.Episode(
+                            seriesId = item.providerId,
+                            episode = episode,
+                        )
                         onOpenExternal(
                             PendingXtreamExternal(
                                 displayName = episode.title,
-                                target = XtreamPlaybackTarget.Episode(episode),
+                                target = target,
+                                startPositionMillis = startPositionMillis,
                             ),
                         )
                     },
@@ -685,15 +754,16 @@ internal fun XtreamItemDetail(
                 }
                 Button(
                     onClick = {
+                        val target = XtreamPlaybackTarget.CatalogItem(
+                            providerId = item.providerId,
+                            contentType = item.contentType,
+                            containerExtension = item.containerExtension,
+                        )
                         onOpenExternal(
                             PendingXtreamExternal(
                                 displayName = item.name,
-                                target =
-                                    XtreamPlaybackTarget.CatalogItem(
-                                        providerId = item.providerId,
-                                        contentType = item.contentType,
-                                        containerExtension = item.containerExtension,
-                                    ),
+                                target = target,
+                                startPositionMillis = resumeStartPosition(resumeDecisionFor(target)),
                             ),
                         )
                     },
@@ -705,7 +775,26 @@ internal fun XtreamItemDetail(
                         ),
                     shape = RoundedCornerShape(12.dp),
                 ) {
-                    Text("Assistir no IPTV BURO", fontWeight = FontWeight.Bold)
+                    val target = XtreamPlaybackTarget.CatalogItem(
+                        providerId = item.providerId,
+                        contentType = item.contentType,
+                        containerExtension = item.containerExtension,
+                    )
+                    Text(playbackButtonLabel(resumeDecisionFor(target)), fontWeight = FontWeight.Bold)
+                }
+                val movieTarget = XtreamPlaybackTarget.CatalogItem(
+                    providerId = item.providerId,
+                    contentType = item.contentType,
+                    containerExtension = item.containerExtension,
+                )
+                if (resumeDecisionFor(movieTarget) is ResumeDecision.ResumeFrom) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            onOpenExternal(PendingXtreamExternal(item.name, movieTarget, startPositionMillis = 0L))
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                    ) { Text("Assistir do início") }
                 }
                 if (item.contentType == XtreamContentType.MOVIE) {
                     Spacer(Modifier.height(8.dp))
@@ -872,27 +961,48 @@ private fun CastButtons(
 }
 
 @Composable
-private fun PersonFilmographyDialog(
+internal fun PersonFilmographyPage(
     person: PersonFilmography,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit,
+    onOpenItem: (XtreamCatalogItem) -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Fechar") }
-        },
-        title = { Text(person.name) },
-        text = {
+    Column(Modifier.fillMaxSize().background(BuroColors.Canvas)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(64.dp).background(BuroColors.Surface).padding(horizontal = 22.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = onBack) { Text("← Voltar aos detalhes", color = BuroColors.Text) }
+            Spacer(Modifier.weight(1f))
+            Text("ELENCO", color = BuroColors.Primary, fontWeight = FontWeight.Black)
+        }
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(44.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(92.dp).clip(CircleShape).background(BuroColors.Primary.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(person.name.take(2).uppercase(), color = BuroColors.Primary, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                }
+                Spacer(Modifier.width(20.dp))
+                Column {
+                    Text(person.name, color = BuroColors.Text, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text("Foto indisponível na fonte · filmografia confirmada nesta sessão", color = BuroColors.TextMuted)
+                }
+            }
+            Spacer(Modifier.height(24.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "Filmografia confirmada enquanto vocÃª navega nesta fonte.",
+                    "Filmografia confirmada enquanto você navega nesta fonte.",
                     color = BuroColors.TextMuted,
                 )
                 if (person.items.isEmpty()) {
-                    Text("Nenhum outro tÃ­tulo confirmado nesta sessÃ£o.")
+                    Text("Nenhum outro título confirmado nesta sessão.")
                 } else {
                     person.items.take(20).forEach { item ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onOpenItem(item) }.padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             BuroRemoteArtwork(
                                 artworkUrl = item.artworkUrl,
                                 contentDescription = null,
@@ -912,8 +1022,8 @@ private fun PersonFilmographyDialog(
                     }
                 }
             }
-        },
-    )
+        }
+    }
 }
 
 @Composable
@@ -921,7 +1031,8 @@ private fun SeriesDetailContent(
     status: SeriesDetailsStatus,
     onLoadSeries: () -> Unit,
     onOpenTrailer: (String) -> Unit,
-    onOpenEpisode: (XtreamEpisode) -> Unit,
+    resumeDecisionForEpisode: (XtreamEpisode) -> ResumeDecision,
+    onOpenEpisode: (XtreamEpisode, Long) -> Unit,
 ) {
     when (status) {
         SeriesDetailsStatus.Idle -> {
@@ -1000,13 +1111,14 @@ private fun SeriesDetailContent(
                     verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
                     items(episodes, key = XtreamEpisode::providerId) { episode ->
+                        val decision = resumeDecisionForEpisode(episode)
                         Row(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(9.dp))
                                     .background(BuroColors.SurfaceHover)
-                                    .clickable { onOpenEpisode(episode) }
+                                    .clickable { onOpenEpisode(episode, resumeStartPosition(decision)) }
                                     .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -1024,6 +1136,17 @@ private fun SeriesDetailContent(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
                             )
+                            if (decision is ResumeDecision.ResumeFrom) {
+                                Text(
+                                    "Continuar ${formatPlaybackTime(decision.positionMs)}",
+                                    color = BuroColors.Primary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                TextButton(onClick = { onOpenEpisode(episode, 0L) }) {
+                                    Text("Do início")
+                                }
+                            }
                         }
                     }
                 }
@@ -1133,8 +1256,27 @@ private fun itemMetadata(item: XtreamCatalogItem): String =
 class PendingXtreamExternal(
     val displayName: String,
     val target: XtreamPlaybackTarget,
+    val startPositionMillis: Long = 0L,
 ) {
     override fun toString(): String = "PendingXtreamExternal(<redacted>)"
+}
+
+private fun resumeStartPosition(decision: ResumeDecision): Long =
+    (decision as? ResumeDecision.ResumeFrom)?.positionMs ?: 0L
+
+private fun playbackButtonLabel(decision: ResumeDecision): String =
+    when (decision) {
+        is ResumeDecision.ResumeFrom -> "Continuar de ${formatPlaybackTime(decision.positionMs)}"
+        ResumeDecision.WatchAgain -> "Assistir novamente"
+        ResumeDecision.StartFromBeginning -> "Assistir no IPTV BURO"
+    }
+
+private fun formatPlaybackTime(positionMs: Long): String {
+    val totalSeconds = positionMs.coerceAtLeast(0L) / 1_000L
+    val hours = totalSeconds / 3_600L
+    val minutes = (totalSeconds % 3_600L) / 60L
+    val seconds = totalSeconds % 60L
+    return if (hours > 0L) "%d:%02d:%02d".format(hours, minutes, seconds) else "%02d:%02d".format(minutes, seconds)
 }
 
 private const val SEARCH_DEBOUNCE_MILLIS = 280L

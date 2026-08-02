@@ -15,6 +15,7 @@ import com.lucasserafin94.iptvburo.desktop.model.XtreamSessionSummary
 import com.lucasserafin94.iptvburo.desktop.platform.ExternalOpenResult
 import com.lucasserafin94.iptvburo.desktop.platform.openUriExternally
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackRequest
+import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackProgressCoordinator
 import com.lucasserafin94.iptvburo.desktop.security.XtreamLoginInput
 import com.lucasserafin94.iptvburo.desktop.security.RememberedXtreamStore
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
@@ -23,6 +24,10 @@ import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
+import com.lucasserafin94.iptvburo.domain.model.PlaybackContentType
+import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressIdentity
+import com.lucasserafin94.iptvburo.domain.model.PlaybackProgress
+import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
 import com.lucasserafin94.iptvburo.xtream.XtreamClientException
@@ -48,6 +53,7 @@ class DesktopAppState(
     private val xtreamRepository: SessionXtreamRepository,
     private val rememberedXtreamStore: RememberedXtreamStore,
     private val userStore: DesktopUserStore = DesktopUserStore(),
+    private val playbackProgressCoordinator: DesktopPlaybackProgressCoordinator = DesktopPlaybackProgressCoordinator(),
 ) {
     var destination by mutableStateOf(DesktopDestination.HOME)
         private set
@@ -262,11 +268,30 @@ class DesktopAppState(
                 ?: visibleChannels.firstOrNull()
 
     val selectedXtreamItem: XtreamCatalogItem?
-        get() = if (destination == DesktopDestination.HOME) {
-            dailySelectedItem
+        get() = dailySelectedItem ?: if (destination == DesktopDestination.HOME) {
+            null
         } else {
             xtreamPage.items.firstOrNull { it.providerId == selectedXtreamItemId }
                 ?: xtreamPage.items.firstOrNull()
+        }
+
+    val continueWatchingEntries: List<DesktopContinueWatchingEntry>
+        get() {
+            val profileId = activeProfileId ?: return emptyList()
+            val sourceId = xtreamSummary?.sourceId ?: return emptyList()
+            return playbackProgressCoordinator.continueWatching(profileId)
+                .asSequence()
+                .filter { it.identity.sourceId == sourceId }
+                .mapNotNull { progress ->
+                    val item = when (progress.identity.contentType) {
+                        PlaybackContentType.MOVIE ->
+                            xtreamRepository.itemByProviderId(XtreamContentType.MOVIE, progress.identity.contentId)
+                        PlaybackContentType.EPISODE ->
+                            progress.identity.seriesId?.let { xtreamRepository.itemByProviderId(XtreamContentType.SERIES, it) }
+                    }
+                    item?.let { DesktopContinueWatchingEntry(it, progress) }
+                }
+                .toList()
         }
 
     fun openHome() {
@@ -505,6 +530,7 @@ class DesktopAppState(
     }
 
     fun selectXtreamItem(providerId: String) {
+        dailySelectedItem = null
         if (selectedXtreamItemId != providerId) {
             selectedXtreamItemId = providerId
             seriesDetailsStatus = SeriesDetailsStatus.Idle
@@ -583,13 +609,55 @@ class DesktopAppState(
             openUriExternally(oneTimeUri)
         }.getOrDefault(ExternalOpenResult.Failed)
 
-    fun prepareXtreamPlayback(target: XtreamPlaybackTarget, title: String): DesktopPlaybackRequest? =
+    fun resumeDecision(target: XtreamPlaybackTarget): ResumeDecision =
+        playbackProgressCoordinator.resumeDecision(playbackIdentity(target))
+
+    fun prepareXtreamPlayback(
+        target: XtreamPlaybackTarget,
+        title: String,
+        startPositionMillis: Long = 0L,
+    ): DesktopPlaybackRequest? =
         runCatching {
             DesktopPlaybackRequest(
                 title = title.take(180),
                 uri = xtreamRepository.buildConfirmedPlaybackUri(target),
+                progressIdentity = playbackIdentity(target),
+                startPositionMillis = startPositionMillis.coerceAtLeast(0L),
             )
         }.getOrNull()
+
+    fun checkpointPlayback(request: DesktopPlaybackRequest, positionMs: Long, durationMs: Long) {
+        playbackProgressCoordinator.checkpoint(request.progressIdentity, positionMs, durationMs)
+    }
+
+    fun completePlayback(request: DesktopPlaybackRequest, durationMs: Long) {
+        playbackProgressCoordinator.ended(request.progressIdentity, durationMs)
+    }
+
+    private fun playbackIdentity(target: XtreamPlaybackTarget): PlaybackProgressIdentity? {
+        val profileId = activeProfileId ?: return null
+        val sourceId = xtreamSummary?.sourceId ?: return null
+        return when (target) {
+            is XtreamPlaybackTarget.CatalogItem -> {
+                if (target.contentType != XtreamContentType.MOVIE) return null
+                PlaybackProgressIdentity(
+                    profileId = profileId,
+                    sourceId = sourceId,
+                    contentId = target.providerId,
+                    contentType = PlaybackContentType.MOVIE,
+                )
+            }
+            is XtreamPlaybackTarget.Episode -> PlaybackProgressIdentity(
+                profileId = profileId,
+                sourceId = sourceId,
+                contentId = target.episode.providerId,
+                contentType = PlaybackContentType.EPISODE,
+                seriesId = target.seriesId,
+                seasonNumber = target.episode.seasonNumber,
+                episodeNumber = target.episode.episodeNumber,
+            )
+        }
+    }
 
     fun prepareLocalPlayback(channel: Channel): DesktopPlaybackRequest? =
         runCatching {
@@ -804,6 +872,11 @@ private fun String?.castNames(): List<String> =
 data class PersonFilmography(
     val name: String,
     val items: List<XtreamCatalogItem>,
+)
+
+data class DesktopContinueWatchingEntry(
+    val item: XtreamCatalogItem,
+    val progress: PlaybackProgress,
 )
 
 enum class DesktopDestination { HOME, CATALOG, FAVORITES }

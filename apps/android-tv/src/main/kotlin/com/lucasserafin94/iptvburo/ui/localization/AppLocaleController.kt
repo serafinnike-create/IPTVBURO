@@ -29,6 +29,9 @@ object AppLocaleController {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             activity.getSystemService(LocaleManager::class.java).applicationLocales =
                 LocaleList.forLanguageTags(languageTag)
+            // Selecting the already-active system locale may not trigger a platform recreation.
+            // Recreate explicitly so the one-time gate observes the persisted selection now.
+            activity.recreate()
         } else {
             activity.recreate()
         }

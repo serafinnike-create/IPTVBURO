@@ -7,7 +7,7 @@
 Transforma fontes de mídia autorizadas pelo usuário em uma biblioteca organizada, cinematográfica, resiliente e, no mobile, disponível offline.
 
 ![Status](https://img.shields.io/badge/status-em%20desenvolvimento-7c3aed)
-![GDD](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%206.0-2563eb)
+![GDD](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%207.0-2563eb)
 ![Android TV](https://img.shields.io/badge/Android%20TV-v0.1.0--alpha.1-3ddc84)
 ![Windows](https://img.shields.io/badge/Windows-0.2%20preview-e2b458)
 ![Multiplataforma](https://img.shields.io/badge/escopo-universal-0f766e)
@@ -41,7 +41,7 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 
 | Entrega | Estado |
 |---|---|
-| GDDs 1.0 a 6.0 | ✅ Documentados na `main` |
+| GDDs 1.0 a 7.0 | ✅ Documentados na `main` |
 | Aplicação Android/Android TV | 🧪 Prévia `v0.1.0-alpha.1` publicada |
 | Importação local M3U/M3U8 | ✅ Vertical funcional |
 | Xtream: ao vivo, filmes, séries e episódios | ✅ Vertical funcional |
@@ -53,6 +53,7 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 | Resilience Engine no código | 🧭 Pendente |
 | Android mobile | 🧪 Mesma build adaptativa instalada em Android 15 |
 | Windows | 🧪 Compose Desktop, player compatível e MSI local aprovados |
+| Continuidade de reprodução por perfil | 🧪 Android e Windows implementados; migração Android validada em aparelho físico |
 | XMLTV/EPG e Offline Vault autorizado | 🧭 Pendentes |
 | Samsung, LG, Titan OS e plataformas Apple | 🧭 Planejados |
 | Publicação em lojas | 🧭 Não iniciada |
@@ -83,7 +84,7 @@ A primeira vertical slice está na `main` e possui:
 - PT-BR, inglês, alemão e italiano;
 - logs com redaction;
 - backup e transferência de dados desabilitados;
-- 114 testes aprovados no gate local mais recente;
+- 134 testes unitários aprovados no gate local mais recente e 1 teste conectado de migração aprovado em Android físico;
 - lint sem erros bloqueantes;
 - build debug aprovada e workflow multiplataforma preparado.
 
@@ -102,10 +103,16 @@ A prévia usa assinatura de desenvolvimento e não é uma versão de loja.
 ### Preview Windows 0.2
 
 O repositório já gera `IPTVBURO-0.2.0.msi`. O preview usa o mesmo shell visual,
-restaura a fonte via DPAPI, suporta perfis, idiomas, favoritos, catálogo paginado
-e reprodução embutida de MP4/H.264/AAC e HLS compatível. HEVC, HDR, seleção
+restaura a fonte via DPAPI, suporta perfis, idiomas, favoritos, catálogo paginado,
+detalhes e filmografia dentro da janela principal e continuidade por perfil. A Home
+inclui `Continuar assistindo` e a reprodução embutida aceita MP4/H.264/AAC e HLS compatível. HEVC, HDR, seleção
 ampla de faixas e download offline ainda bloqueiam a promoção a versão estável.
 Por isso o MSI local ainda não é anunciado como release final.
+
+Artefatos locais do branch de desenvolvimento:
+
+- MSI: 81.568.096 bytes — SHA-256 `c902eb92d455ea54daca0bda020e912f47c0d8dc59513278adcbf95e0060698c`;
+- APK debug: 32.197.196 bytes — SHA-256 `1c0db9974bd1be6e8517f9cc74b673e37160ce18707c37433d7527e7851ea717`.
 
 ### Build
 
@@ -146,6 +153,7 @@ Documentação do estado atual:
 - [Análise de lacunas do GDD 2.0](docs/status/GDD2_GAP_ANALYSIS.md)
 - [Arquitetura inicial](docs/adr/ADR-001-initial-architecture.md)
 - [Fundação cinematográfica](docs/adr/ADR-002-buro-cinematic-foundation.md)
+- [Continuidade de reprodução no Windows](docs/adr/ADR-006-windows-playback-progress.md)
 - [Tratamento de credenciais](docs/security/credential-handling.md)
 
 ---
@@ -299,6 +307,7 @@ Princípios:
 - [GDD 4.0 — confiabilidade](docs/GDD_4_RELIABILITY_FAILURE_RECOVERY.md)
 - [GDD 5.0 — entrega universal](docs/GDD_5_UNIVERSAL_MULTIPLATFORM_DELIVERY.md)
 - [GDD 6.0 — BURO Offline Vault](docs/GDD_6_BURO_OFFLINE_VAULT.md)
+- [GDD 7.0 — continuidade e progresso de reprodução](docs/GDD_7_PLAYBACK_CONTINUITY_AND_WATCH_PROGRESS.md)
 - [ADR multiplataforma](docs/adr/ADR-0001-MULTIPLATFORM-DELIVERY-ARCHITECTURE.md)
 - [Prompt Codex GDD 5](docs/PROMPT_CODEX_CONTINUE_GDD5.md)
 - [Prompt Codex GDD 6](docs/PROMPT_CODEX_CONTINUE_GDD6.md)
