@@ -1,22 +1,21 @@
 # ADR-005 — Player Windows, HDR e capacidades offline
 
-- Estado: aceito; integração nativa ampla ainda pendente
+- Estado: aceito; decisões de player substituídas pelo ADR-007 em `v0.2.0-alpha.2`
 - Data: 2 de agosto de 2026
 
 ## Contexto
 
-O preview Windows precisava reproduzir dentro do produto. JavaFX Media fornece
+O preview Windows precisava reproduzir dentro do produto. Na primeira etapa,
+JavaFX Media fornecia
 um primeiro player embutido, mas não cobre a matriz profissional completa de
 HEVC, Dolby Vision, HDR, áudio e legendas. O Cofre Offline do GDD 6 também proíbe
 um downloader genérico para a pasta pública do usuário.
 
 ## Decisão
 
-1. O preview Windows usa o player JavaFX embutido apenas para formatos que ele
-   realmente suporta, principalmente MP4/H.264/AAC e HLS compatível.
-2. A versão estável do Windows terá `PlayerAdapter` nativo respaldado por um
-   spike de libmpv/Media Foundation e uma matriz verificável de codecs, GPU,
-   legendas, faixas de áudio, seek e HDR.
+1. A decisão JavaFX foi substituída pelo VLC oficial incluído, conforme ADR-007.
+2. A versão estável ainda exige uma matriz verificável de codecs, GPU, legendas,
+   faixas de áudio, seek e HDR.
 3. Não haverá chave universal "HDR ligado/desligado". O controle só aparece
    quando o manifesto oferece uma variante SDR real ou o adaptador comprova
    tone mapping em reprodução. Caso contrário, o app informa a capacidade.

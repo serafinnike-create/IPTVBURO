@@ -12,12 +12,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -43,9 +46,7 @@ private val ribbonDestinations =
         RibbonDestination(AppSection.LIVE, R.string.buro_nav_live),
         RibbonDestination(AppSection.MOVIES, R.string.buro_nav_movies),
         RibbonDestination(AppSection.SERIES, R.string.buro_nav_series),
-        RibbonDestination(AppSection.DISCOVER, R.string.buro_nav_discover),
         RibbonDestination(AppSection.MY_BURO, R.string.buro_nav_my_buro),
-        RibbonDestination(AppSection.SEARCH, R.string.buro_nav_search),
         RibbonDestination(AppSection.PROFILE, R.string.buro_nav_profile),
     )
 
@@ -62,6 +63,8 @@ fun BuroRibbon(
     modifier: Modifier = Modifier,
     selectedItemFocusRequester: FocusRequester? = null,
     onItemFocused: (AppSection) -> Unit = {},
+    activeProfileName: String? = null,
+    isKidsProfile: Boolean = false,
 ) {
     val colors = BuroTheme.colors
     val ribbonSelection =
@@ -123,6 +126,35 @@ fun BuroRibbon(
                                     }
                                 },
                         )
+                    }
+                }
+                activeProfileName?.let { profileName ->
+                    Row(
+                        modifier = Modifier.padding(end = if (compact) BuroSpacing.Sm else BuroSpacing.Lg),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+                    ) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isKidsProfile) colors.brandPrimary else colors.brandSecondary),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = profileName.firstOrNull()?.uppercase() ?: "B",
+                                color = colors.onBrand,
+                                fontWeight = FontWeight.Black,
+                            )
+                        }
+                        if (!compact) {
+                            Text(
+                                text = profileName,
+                                color = colors.textPrimary,
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
                     }
                 }
             }

@@ -739,6 +739,50 @@ internal fun XtreamItemDetail(
                     },
                 )
             } else {
+                val mediaTarget = XtreamPlaybackTarget.CatalogItem(
+                    providerId = item.providerId,
+                    contentType = item.contentType,
+                    containerExtension = item.containerExtension,
+                )
+                Button(
+                    onClick = {
+                        onOpenExternal(
+                            PendingXtreamExternal(
+                                displayName = item.name,
+                                target = mediaTarget,
+                                startPositionMillis = resumeStartPosition(resumeDecisionFor(mediaTarget)),
+                            ),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = BuroColors.Primary,
+                            contentColor = Color(0xFF03201D),
+                        ),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text(playbackButtonLabel(resumeDecisionFor(mediaTarget)), fontWeight = FontWeight.Bold)
+                }
+                if (resumeDecisionFor(mediaTarget) is ResumeDecision.ResumeFrom) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            onOpenExternal(PendingXtreamExternal(item.name, mediaTarget, startPositionMillis = 0L))
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                    ) { Text("Assistir do início") }
+                }
+                if (item.contentType == XtreamContentType.MOVIE) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onToggleFavorite,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                    ) {
+                        Text(if (isFavorite) "♥ Nos favoritos" else "♡ Adicionar aos favoritos", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
                 if (item.contentType == XtreamContentType.LIVE) {
                     LiveEpgContent(liveEpgStatus)
                     Spacer(Modifier.height(18.dp))
@@ -752,63 +796,10 @@ internal fun XtreamItemDetail(
                     )
                     Spacer(Modifier.height(18.dp))
                 }
-                Button(
-                    onClick = {
-                        val target = XtreamPlaybackTarget.CatalogItem(
-                            providerId = item.providerId,
-                            contentType = item.contentType,
-                            containerExtension = item.containerExtension,
-                        )
-                        onOpenExternal(
-                            PendingXtreamExternal(
-                                displayName = item.name,
-                                target = target,
-                                startPositionMillis = resumeStartPosition(resumeDecisionFor(target)),
-                            ),
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor = BuroColors.Primary,
-                            contentColor = Color(0xFF03201D),
-                        ),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    val target = XtreamPlaybackTarget.CatalogItem(
-                        providerId = item.providerId,
-                        contentType = item.contentType,
-                        containerExtension = item.containerExtension,
-                    )
-                    Text(playbackButtonLabel(resumeDecisionFor(target)), fontWeight = FontWeight.Bold)
-                }
-                val movieTarget = XtreamPlaybackTarget.CatalogItem(
-                    providerId = item.providerId,
-                    contentType = item.contentType,
-                    containerExtension = item.containerExtension,
-                )
-                if (resumeDecisionFor(movieTarget) is ResumeDecision.ResumeFrom) {
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = {
-                            onOpenExternal(PendingXtreamExternal(item.name, movieTarget, startPositionMillis = 0L))
-                        },
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                    ) { Text("Assistir do início") }
-                }
-                if (item.contentType == XtreamContentType.MOVIE) {
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = onToggleFavorite,
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                    ) {
-                        Text(if (isFavorite) "♥ Na Minha BURO" else "♡ Adicionar à Minha BURO", fontWeight = FontWeight.SemiBold)
-                    }
-                }
             }
             Spacer(Modifier.height(12.dp))
             Text(
-                "Player interno ativo para H.264/AAC, MP4 e HLS. Outros codecs mostram uma limitação clara.",
+                "Player VLC integrado para H.264, H.265/HEVC, AAC, MP4, MKV e HLS.",
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.bodyMedium,
             )

@@ -5,6 +5,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.lucasserafin94.iptvburo.desktop.app.DesktopApp
@@ -49,6 +50,20 @@ fun main() {
             DesktopApp(
                 appState = appState,
                 ownerWindow = window,
+                isFullScreen = windowState.placement == WindowPlacement.Fullscreen,
+                onToggleFullScreen = {
+                    windowState.placement =
+                        if (windowState.placement == WindowPlacement.Fullscreen) {
+                            WindowPlacement.Floating
+                        } else {
+                            WindowPlacement.Fullscreen
+                        }
+                },
+                onExitForUpdate = {
+                    xtreamRepository.clear()
+                    localRepository.clear()
+                    exitApplication()
+                },
             )
         }
     }

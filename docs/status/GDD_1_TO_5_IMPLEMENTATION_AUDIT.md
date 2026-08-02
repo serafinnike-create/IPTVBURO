@@ -31,7 +31,7 @@ Cofre Offline do GDD 6 permanece P0 somente no Android mobile elegível.
 | Identidade visual própria e consistente | `PARTIAL` | BURO Nocturne, três artes originais, tokens comuns e cards editoriais; telas legadas ainda precisam convergir |
 | Catálogo acima de 305 mil itens | `PASS SYNTHETIC` | parser e índice validados com 500 mil itens; falta novo ensaio E2E Windows com uma fonte real dessa escala |
 | Playback Android | `PARTIAL` | live, VOD e episódio compatíveis validados; matriz ampla de codecs/dispositivos ainda incompleta |
-| Playback Windows | `PARTIAL/BLOCKED` | JavaFX embutido cobre H.264/AAC MP4 e HLS compatível; adapter nativo amplo, áudio/legenda e HEVC/HDR ainda bloqueiam paridade |
+| Playback Windows | `PARTIAL` | VLC oficial embutido cobre H.264/H.265/HEVC, AAC, MP4, MKV e HLS; seleção completa de faixas e HDR por dispositivo ainda bloqueiam paridade |
 | EPG/XMLTV e BURO Pulse | `PARTIAL` | Agora/próximo Xtream funciona sob demanda nas duas plataformas; faltam XMLTV persistido, guia, lembretes e catch-up |
 | Perfis, Kids e controle parental | `PARTIAL` | até cinco perfis, favoritos isolados e bloqueio conservador de rótulos adultos existem; PIN e sincronização ainda faltam |
 | BURO Temporal Intelligence | `PARTIAL` | fileiras/consulta anual existem; faltam evidências, confiança, correção manual e índice anual canônico |
@@ -64,7 +64,7 @@ Cofre Offline do GDD 6 permanece P0 somente no Android mobile elegível.
 - substituir paginação profunda por cursor/keyset;
 - pesquisa executada no índice local, nunca filtrando 500 mil objetos na UI;
 - Windows possui agora índice colunar de sessão validado com 500 mil registros,
-  mas ainda precisa de player interno e medição E2E para ser declarado paridade.
+  e agora possui player VLC interno; medição E2E ampla e faixas/HDR ainda são necessárias para declarar paridade.
 
 ## Visual e consistência
 

@@ -502,6 +502,17 @@ private fun ArtworkFallback(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (item.metadata.isNotBlank()) {
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = item.metadata,
+                        color = White.copy(alpha = 0.82f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             item.progress?.let { progress ->
                 Spacer(Modifier.height(9.dp))

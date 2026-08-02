@@ -27,7 +27,10 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,6 +86,7 @@ internal fun SeriesDetailsScreen(
         val columns = if (portrait) 1 else 2
         val padding = if (portrait) 16.dp else 42.dp
         val backFocusRequester = remember(fallbackTitle) { FocusRequester() }
+        var expandedSeason by remember(details?.title) { mutableStateOf<Int?>(null) }
         LaunchedEffect(fallbackTitle) {
             backFocusRequester.requestFocus()
         }
@@ -313,33 +317,52 @@ internal fun SeriesDetailsScreen(
                         .toSortedMap()
                         .forEach { (season, episodes) ->
                             item(key = "series:season:$season") {
-                                Text(
-                                    text = stringResource(R.string.series_season, season),
-                                    color = White,
-                                    fontSize = 21.sp,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                            items(
-                                items = episodes.chunked(columns),
-                                key = { row -> row.joinToString(":") { it.id } },
-                            ) { rowEpisodes ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                FocusSurface(
+                                    onClick = { expandedSeason = if (expandedSeason == season) null else season },
+                                    modifier = Modifier.fillMaxWidth().height(64.dp),
+                                    backgroundColor = Surface,
                                 ) {
-                                    rowEpisodes.forEach { episode ->
-                                        EpisodeCard(
-                                            episode = episode,
-                                            onClick = { onOpenEpisode(episode) },
-                                            onDownload = { onDownloadEpisode(episode) },
-                                            canDownloadOffline = canDownloadOffline,
-                                            enabled = !isResolvingPlayback,
+                                    Row(
+                                        Modifier.fillMaxSize().padding(horizontal = 18.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.series_season, season),
+                                            color = White,
+                                            fontSize = 21.sp,
+                                            fontWeight = FontWeight.Bold,
                                             modifier = Modifier.weight(1f),
                                         )
+                                        Text(
+                                            text = "${episodes.size} episódios  ${if (expandedSeason == season) "▲" else "▼"}",
+                                            color = Teal,
+                                            fontSize = 14.sp,
+                                        )
                                     }
-                                    repeat(columns - rowEpisodes.size) {
-                                        Spacer(Modifier.weight(1f))
+                                }
+                            }
+                            if (expandedSeason == season) {
+                                items(
+                                    items = episodes.chunked(columns),
+                                    key = { row -> row.joinToString(":") { it.id } },
+                                ) { rowEpisodes ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    ) {
+                                        rowEpisodes.forEach { episode ->
+                                            EpisodeCard(
+                                                episode = episode,
+                                                onClick = { onOpenEpisode(episode) },
+                                                onDownload = { onDownloadEpisode(episode) },
+                                                canDownloadOffline = canDownloadOffline,
+                                                enabled = !isResolvingPlayback,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                        }
+                                        repeat(columns - rowEpisodes.size) {
+                                            Spacer(Modifier.weight(1f))
+                                        }
                                     }
                                 }
                             }

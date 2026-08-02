@@ -1,19 +1,19 @@
 # Implementação atual do IPTV BURO
 
-- Data da auditoria: 31 de julho de 2026
-- Branch: `main`
-- Baseline publicada: `origin/main@2c9bd5b`
-- Tag publicada: `v0.1.0-alpha.1` em `7e0b9ec`
+- Data da auditoria: 2 de agosto de 2026
+- Branch: `agent/iptv-buro-0.2-preview`
+- Baseline anterior: `v0.1.0-alpha.1`
+- Tag da prévia atual: `v0.2.0-alpha.2`
 - Release:
-  `https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.1.0-alpha.1`
-- Versão pública atual: `0.1.0-alpha.1`, Android/Android TV
-- Milestone em implementação: `0.2`, Android adaptativo e Compose Desktop
+  `https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.2.0-alpha.2`
+- Versão pública atual: `0.2.0-alpha.2`, Android/Android TV e Windows x64
+- Milestone em validação: `0.2`, Android adaptativo e Compose Desktop
 
 ## Estado da milestone 0.2
 
-A milestone `0.2` amplia o vertical funcional sem alterar a release pública
-descrita abaixo. Código, testes e empacotamento estão em validação; esta seção
-registra arquitetura e escopo, não declara aprovação E2E, hashes ou publicação.
+A milestone `0.2` amplia o vertical funcional publicado como prévia. Esta seção
+registra arquitetura, escopo, gates, hashes e as limitações que ainda impedem
+classificar o produto como uma versão estável.
 
 - cliente Xtream compartilhado para autenticação, categorias, TV ao vivo,
   filmes, séries e episódios;
@@ -25,12 +25,11 @@ registra arquitetura e escopo, não declara aprovação E2E, hashes ou publicaç
 - consultas Android paginadas por fonte, tipo e categoria;
 - interface Android sem bloqueio de orientação, com layouts para retrato
   compacto, paisagem compacta e janelas expandidas;
-- preview Compose Desktop para M3U local e Xtream, com catálogo e credenciais
-  somente durante a sessão;
+- preview Compose Desktop para M3U local e Xtream, com catálogo em sessão e
+  credenciais opcionais cifradas pelo DPAPI do usuário Windows;
 - paginação e carregamento sob demanda no desktop;
-- reprodução desktop entregue a um aplicativo externo somente após
-  confirmação no legado; a implementação atual prepara reprodução no player
-  JavaFX interno quando o formato é suportado.
+- reprodução desktop embutida pelo executável oficial do VLC, iniciado sem URI
+  privada na linha de comando e controlado apenas por loopback autenticado.
 
 ### Continuação de 2 de agosto de 2026
 
@@ -44,8 +43,13 @@ registra arquitetura e escopo, não declara aprovação E2E, hashes ou publicaç
   de artwork quando a fonte fornece imagem;
 - o player Android ganhou controles reais de volume, brilho, velocidade,
   retrocesso/avanço, bloqueio e PiP mobile, mantendo áudio/legenda do Media3;
-- o preview Windows reproduz internamente H.264/AAC MP4 e HLS compatível por
-  JavaFX, com play/pause, seek e volume;
+- o preview Windows reproduz H.264, H.265/HEVC, AAC, MP4, MKV e HLS pelo VLC
+  oficial incluído, com play/pause, seek, volume, velocidade e tela cheia;
+- `Verificar atualização` consulta pré-releases e releases do GitHub, exige uma
+  versão mais nova e valida o digest SHA-256 do MSI antes de abrir o instalador;
+- o play Windows agora abre diretamente e fica acima da sinopse na ficha para
+  continuar acessível em escala de 125%; detalhes, ator e filmografia permanecem
+  dentro da mesma janela;
 - o downloader genérico Windows foi removido. Download permanece oculto em
   Android, TV e Windows até a fonte/backend autorizar o item e a implementação
   cumprir integralmente o Cofre Offline do GDD 6;
@@ -71,18 +75,19 @@ registra arquitetura e escopo, não declara aprovação E2E, hashes ou publicaç
 
 ### Gate local mais recente
 
-- 123 testes: 0 falhas, 0 erros e 2 ignorados por condição de plataforma;
+- 136 testes: 0 falhas, 0 erros e 2 ignorados por condição de plataforma;
 - Android lint: 0 erros;
-- APK debug: 32.113.725 bytes, SHA-256
-  `463D9BB614E2207CE0A1FDD83F6722D2D0828A84018FEA11DE32489DB5911F90`;
-- MSI Windows preview: 81.490.272 bytes, SHA-256
-  `B31DA07C3A04B15D3A5AEA5717A642B9A64A3B7A6E4301BE303A5B2184D2E27B`;
+- APK debug: 32.975.540 bytes, SHA-256
+  `6A63B20B9E9DAF79F5330A7972B8BAF6C808AE6E6E92EE24B2B0E59DDE474B51`;
+- MSI Windows preview: 161.352.759 bytes, SHA-256
+  `102D1E06F732FC726BFB5F639BB3B3CB87B5D6C3DBC3E70BB760ABF066B3F4F0`;
 - os três identificadores da fonte privada autorizada tiveram zero ocorrências
   no worktree publicável e em todo o histórico Git;
 - a build final foi instalada no Android 15 e iniciou sem crash; a validação
   visual/toque desta rodada aguarda o desbloqueio físico do aparelho;
 - o preview Windows restaurou a sessão DPAPI, abriu, respondeu e foi inspecionado
-  em escala de 125%; o MSI não é promovido a estável por causa do player nativo.
+  em escala de 125%; HEVC real foi reproduzido pelo VLC incluído. O MSI permanece
+  pré-release até completar a matriz pública de hardware, faixas e HDR.
 
 ### Continuação de 1 de agosto de 2026
 

@@ -1,8 +1,6 @@
 package com.lucasserafin94.iptvburo.ui.home
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.res.pluralStringResource
-import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import com.lucasserafin94.iptvburo.ui.ChannelUi
 import java.util.Calendar
@@ -23,12 +21,29 @@ object RealHomeCatalog {
         remaining.removeAll(currentReleases.toSet())
         val previousReleases = remaining.filter { it.year == currentYear - 1 }.take(12)
         remaining.removeAll(previousReleases.toSet())
-        val movies = remaining.filter { it.contentType == CatalogContentType.MOVIE }
-        val series = remaining.filter { it.contentType == CatalogContentType.SERIES }
         val rails = buildList {
-            sourceRail(sources)?.let(::add)
             releaseRail(currentYear, currentReleases)?.let(::add)
             releaseRail(currentYear - 1, previousReleases)?.let(::add)
+            remaining
+                .filter { it.rating != null }
+                .sortedByDescending { it.rating }
+                .take(12)
+                .takeIf(List<ChannelUi>::isNotEmpty)
+                ?.let { items ->
+                    add(
+                        HomeRail(
+                            id = "real:rail:top-rated",
+                            title = "Melhores avaliações",
+                            kind = HomeRailKind.EDITORIAL,
+                            cardFormat = HomeCardFormat.POSTER,
+                            items = items.map { it.toHomeItem(HomeCardFormat.POSTER, "★ DESTAQUE") },
+                            isDemonstration = false,
+                        ),
+                    )
+                    remaining.removeAll(items.toSet())
+                }
+            val movies = remaining.filter { it.contentType == CatalogContentType.MOVIE }
+            val series = remaining.filter { it.contentType == CatalogContentType.SERIES }
             movies.take(12).takeIf(List<ChannelUi>::isNotEmpty)?.let { items ->
                 add(
                     HomeRail(
@@ -95,34 +110,4 @@ object RealHomeCatalog {
             isDemonstration = false,
         )
 
-    @Composable
-    private fun sourceRail(sources: List<HomeSourceSummary>): HomeRail? {
-        val unique = sources.distinctBy(HomeSourceSummary::id)
-        if (unique.isEmpty()) return null
-        return HomeRail(
-            id = DemoHomeCatalog.SOURCE_RAIL_ID,
-            title = "Suas fontes",
-            kind = HomeRailKind.SOURCES,
-            cardFormat = HomeCardFormat.LANDSCAPE,
-            isDemonstration = false,
-            items = unique.mapIndexed { index, source ->
-                HomeItem(
-                    id = DemoHomeCatalog.sourceItemId(source.id),
-                    title = source.name,
-                    subtitle = pluralStringResource(
-                        R.plurals.buro_home_source_channel_count,
-                        source.channelCount,
-                        source.channelCount,
-                    ),
-                    synopsis = "Conteúdo organizado localmente a partir da sua fonte autorizada.",
-                    metadata = "FONTE CONECTADA",
-                    badge = "BIBLIOTECA",
-                    kind = HomeItemKind.SOURCE,
-                    cardFormat = HomeCardFormat.LANDSCAPE,
-                    palette = HomeArtworkPalette.entries[index % HomeArtworkPalette.entries.size],
-                    isDemonstration = false,
-                )
-            },
-        )
-    }
 }

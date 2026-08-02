@@ -11,8 +11,11 @@ com Compose Desktop. A escolha técnica e suas fronteiras estão registradas no
 - categorias, busca e paginação;
 - carregamento inicial de TV ao vivo;
 - filmes, séries, detalhes e episódios carregados sob demanda;
-- catálogo e credenciais mantidos somente durante a sessão;
-- confirmação antes de entregar uma mídia ao aplicativo externo.
+- Home editorial diária, perfis, favoritos e continuidade por perfil;
+- credenciais lembradas opcionalmente e cifradas pelo DPAPI do usuário Windows;
+- player VLC incluído para H.264, H.265/HEVC, AAC, MP4, MKV e HLS;
+- play/pause, seek, volume, velocidade e tela cheia;
+- verificação de atualização pelo GitHub Releases com validação SHA-256.
 
 O desktop não inclui conteúdo, servidor ou credenciais de demonstração.
 
@@ -54,33 +57,35 @@ consultados sob demanda.
 
 A interface apresenta páginas pequenas, com filtro por categoria e busca, sem
 criar uma segunda cópia completa do catálogo filtrado. Fechar a aplicação
-descarta fontes, catálogos e estado da sessão.
+descarta o catálogo em memória. Quando o usuário escolhe lembrar a fonte, apenas
+o envelope cifrado pelo DPAPI permanece no perfil local.
 
 ## Segurança da sessão
 
-O módulo não persiste caminhos de arquivo, URLs, headers HTTP, servidores,
-usuários ou senhas. Campos Xtream usam buffers apagáveis controlados pelo
-aplicativo e não usam `rememberSaveable`. O repositório limpa esses buffers ao
-encerrar ou substituir a sessão.
+O módulo não grava URLs de reprodução, headers HTTP ou credenciais em texto
+claro. Campos Xtream usam buffers apagáveis controlados pelo aplicativo e não
+usam `rememberSaveable`. A opção de lembrar a fonte usa DPAPI e pode ser apagada
+por `Encerrar sessão`.
 
 Essa limpeza é uma defesa de redução de exposição, não uma garantia de memória
 forense: Compose, a JVM e bibliotecas de rede podem criar strings transitórias.
 Endereços sem esquema usam HTTPS por padrão. Quando o usuário informa `http://`,
 a interface alerta que servidor, usuário e senha trafegam sem proteção TLS.
 
-## Limite honesto de reprodução
+## Reprodução e atualização no Windows
 
-Esta etapa não possui player desktop interno multi-codec. A ação de reprodução:
+O instalador Windows inclui o executável oficial do VLC 3.0.23 e o controla por
+uma interface HTTP vinculada apenas a `127.0.0.1`, com porta e senha aleatórias.
+A URL privada é enviada somente depois que o player inicia; não aparece na linha
+de comando, nos logs ou na persistência do aplicativo. O vídeo é incorporado à
+janela do IPTV BURO e recebe controles reais de volume, seek, velocidade e tela
+cheia.
 
-1. pede confirmação;
-2. monta a URI final somente quando necessário;
-3. entrega a URI ao handler externo registrado no sistema;
-4. não guarda a URI no repositório desktop.
+`Verificar atualização` consulta os releases do repositório, aceita apenas uma
+versão semanticamente mais nova e um MSI publicado pelo GitHub, exige o digest
+`sha256:` do asset, verifica o arquivo local e só então abre o instalador.
 
-A integração usa `java.awt.Desktop`, sem montar uma linha de comando. Ainda
-assim, depois da entrega, o sistema operacional ou o aplicativo externo pode
-reter a URI em histórico, cache ou logs. Canais M3U que exigem headers especiais
-também podem não funcionar no handler padrão.
-
-Essas limitações devem permanecer visíveis na interface e nas notas de release
-até existir um player interno validado.
+Download offline continua oculto até a fonte ou o backend declarar autorização
+para o item. Brilho global do monitor e HDR forçado também não são simulados: são
+capacidades de hardware/sistema e só serão expostos quando houver suporte
+confiável por dispositivo.

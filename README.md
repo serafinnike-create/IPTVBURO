@@ -8,8 +8,8 @@ Transforma fontes de mídia autorizadas pelo usuário em uma biblioteca organiza
 
 ![Status](https://img.shields.io/badge/status-em%20desenvolvimento-7c3aed)
 ![GDD](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%207.0-2563eb)
-![Android TV](https://img.shields.io/badge/Android%20TV-v0.1.0--alpha.1-3ddc84)
-![Windows](https://img.shields.io/badge/Windows-0.2%20preview-e2b458)
+![Android TV](https://img.shields.io/badge/Android%20TV-v0.2.0--alpha.2-3ddc84)
+![Windows](https://img.shields.io/badge/Windows-v0.2.0--alpha.2-e2b458)
 ![Multiplataforma](https://img.shields.io/badge/escopo-universal-0f766e)
 ![Offline Mobile](https://img.shields.io/badge/Offline%20Vault-planejado-f59e0b)
 
@@ -42,7 +42,7 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 | Entrega | Estado |
 |---|---|
 | GDDs 1.0 a 7.0 | ✅ Documentados na `main` |
-| Aplicação Android/Android TV | 🧪 Prévia `v0.1.0-alpha.1` publicada |
+| Aplicação Android/Android TV | 🧪 Prévia `v0.2.0-alpha.2` |
 | Importação local M3U/M3U8 | ✅ Vertical funcional |
 | Xtream: ao vivo, filmes, séries e episódios | ✅ Vertical funcional |
 | Room, parser em lotes e transação de catálogo | ✅ Implementados |
@@ -100,19 +100,24 @@ O fluxo importação → categoria → canal → primeiro frame foi validado em 
 
 A prévia usa assinatura de desenvolvimento e não é uma versão de loja.
 
-### Preview Windows 0.2
+### Preview multiplataforma v0.2.0-alpha.2
 
-O repositório já gera `IPTVBURO-0.2.0.msi`. O preview usa o mesmo shell visual,
-restaura a fonte via DPAPI, suporta perfis, idiomas, favoritos, catálogo paginado,
-detalhes e filmografia dentro da janela principal e continuidade por perfil. A Home
-inclui `Continuar assistindo` e a reprodução embutida aceita MP4/H.264/AAC e HLS compatível. HEVC, HDR, seleção
-ampla de faixas e download offline ainda bloqueiam a promoção a versão estável.
-Por isso o MSI local ainda não é anunciado como release final.
+O Windows restaura a fonte via DPAPI e oferece perfis, idiomas, favoritos,
+catálogo paginado, detalhes e filmografia na mesma janela, continuidade por
+perfil e Home editorial diária. O instalador inclui o VLC oficial para reprodução
+H.264/H.265/HEVC, AAC, MP4, MKV e HLS, com play/pause, seek, volume, velocidade e
+tela cheia. O botão `Verificar atualização` baixa somente um MSI mais novo do
+GitHub Releases e valida o digest SHA-256 antes de executá-lo.
 
-Artefatos locais do branch de desenvolvimento:
+Esta continua sendo uma prévia: download offline depende de autorização explícita
+da fonte/backend; HDR forçado, brilho global do monitor e seleção completa de
+faixas ainda não são anunciados como funções estáveis.
 
-- MSI: 81.568.096 bytes — SHA-256 `c902eb92d455ea54daca0bda020e912f47c0d8dc59513278adcbf95e0060698c`;
-- APK debug: 32.197.196 bytes — SHA-256 `1c0db9974bd1be6e8517f9cc74b673e37160ce18707c37433d7527e7851ea717`.
+- [GitHub Pre-release v0.2.0-alpha.2](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.2.0-alpha.2)
+- [Instalador Windows x64](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.2/IPTVBURO-0.2.1.msi)
+- [APK Android/Android TV](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.2/android-tv-debug.apk)
+- MSI: 161.352.759 bytes — SHA-256 `102D1E06F732FC726BFB5F639BB3B3CB87B5D6C3DBC3E70BB760ABF066B3F4F0`;
+- APK: 32.975.540 bytes — SHA-256 `6A63B20B9E9DAF79F5330A7972B8BAF6C808AE6E6E92EE24B2B0E59DDE474B51`.
 
 ### Build
 
@@ -144,7 +149,7 @@ apps/android-tv/build/outputs/apk/debug/android-tv-debug.apk
 MSI local:
 
 ```text
-apps/desktop/build/compose/binaries/main/msi/IPTVBURO-0.2.0.msi
+apps/desktop/build/compose/binaries/main/msi/IPTVBURO-0.2.1.msi
 ```
 
 Documentação do estado atual:
@@ -154,6 +159,7 @@ Documentação do estado atual:
 - [Arquitetura inicial](docs/adr/ADR-001-initial-architecture.md)
 - [Fundação cinematográfica](docs/adr/ADR-002-buro-cinematic-foundation.md)
 - [Continuidade de reprodução no Windows](docs/adr/ADR-006-windows-playback-progress.md)
+- [Player VLC e atualização segura no Windows](docs/adr/ADR-007-windows-vlc-and-release-updater.md)
 - [Tratamento de credenciais](docs/security/credential-handling.md)
 
 ---

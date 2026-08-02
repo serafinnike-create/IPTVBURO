@@ -223,6 +223,8 @@ fun AppShellScreen(
                             homeContentOwnsBack = false
                         }
                     },
+                    activeProfileName = state.activeProfile?.name,
+                    isKidsProfile = state.activeProfile?.isKids == true,
                 )
 
                 Box(

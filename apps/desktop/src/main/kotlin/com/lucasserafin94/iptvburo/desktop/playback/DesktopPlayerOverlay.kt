@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,9 +38,11 @@ fun DesktopPlayerOverlay(
     request: DesktopPlaybackRequest,
     onCheckpoint: (Long, Long) -> Unit,
     onEnded: (Long) -> Unit,
+    isFullScreen: Boolean,
+    onToggleFullScreen: () -> Unit,
     onClose: () -> Unit,
 ) {
-    val controller = remember(request) { JavaFxDesktopPlayer() }
+    val controller = remember(request) { VlcDesktopPlayer() }
     var state by remember(request) { mutableStateOf(DesktopPlaybackSnapshot()) }
 
     DisposableEffect(controller) {
@@ -85,7 +89,11 @@ fun DesktopPlayerOverlay(
             ) { Text("Voltar") }
             Spacer(Modifier.width(16.dp))
             Text(request.title, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Text("PLAYER WINDOWS", color = BuroColors.Primary)
+            Text("${state.engineName} • HEVC/H.264", color = BuroColors.Primary)
+            Spacer(Modifier.width(12.dp))
+            OutlinedButton(onClick = onToggleFullScreen) {
+                Text(if (isFullScreen) "Sair da tela cheia" else "Tela cheia")
+            }
         }
         Box(Modifier.fillMaxWidth().weight(1f)) {
             SwingPanel(
@@ -93,8 +101,25 @@ fun DesktopPlayerOverlay(
                 modifier = Modifier.fillMaxSize(),
             )
             state.errorMessage?.let { message ->
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.82f)), contentAlignment = Alignment.Center) {
-                    Text(message, color = Color.White, modifier = Modifier.padding(32.dp))
+                Column(
+                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(message, color = Color.White)
+                    Spacer(Modifier.height(16.dp))
+                    Button(onClick = { controller.retry(request) }) { Text("Tentar novamente") }
+                }
+            }
+            if (state.loading && state.errorMessage == null) {
+                Column(
+                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    CircularProgressIndicator(color = BuroColors.Primary)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Preparando vídeo…", color = Color.White)
                 }
             }
         }
@@ -113,7 +138,23 @@ fun DesktopPlayerOverlay(
                 Button(onClick = { controller.seekBy(-10_000.0) }, enabled = state.ready) { Text("-10 s") }
                 Button(onClick = controller::togglePlayback, enabled = state.ready) { Text(if (state.playing) "Pausar" else "Reproduzir") }
                 Button(onClick = { controller.seekBy(30_000.0) }, enabled = state.ready) { Text("+30 s") }
+                Text(
+                    "${formatPlaybackTime(state.positionMillis)} / ${formatPlaybackTime(state.durationMillis)}",
+                    color = Color.White,
+                )
                 Spacer(Modifier.weight(1f))
+                OutlinedButton(
+                    onClick = {
+                        val next = when (state.playbackRate) {
+                            in 0.0..1.0 -> 1.25
+                            in 1.01..1.25 -> 1.5
+                            in 1.26..1.5 -> 2.0
+                            else -> 1.0
+                        }
+                        controller.setPlaybackRate(next)
+                    },
+                    enabled = state.ready,
+                ) { Text("${state.playbackRate}x") }
                 Text("Volume", color = Color.White)
                 Slider(
                     value = state.volume.toFloat(),
@@ -123,4 +164,12 @@ fun DesktopPlayerOverlay(
             }
         }
     }
+}
+
+private fun formatPlaybackTime(valueMillis: Double): String {
+    val totalSeconds = (valueMillis.coerceAtLeast(0.0) / 1_000.0).toLong()
+    val hours = totalSeconds / 3_600
+    val minutes = (totalSeconds % 3_600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%02d:%02d".format(minutes, seconds)
 }

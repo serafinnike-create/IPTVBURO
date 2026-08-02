@@ -115,7 +115,7 @@ class MainViewModel @Inject constructor(
                 loadFavorites()
             }
 
-            AppSection.PROFILE -> updateDestination(section, AppContent.Profiles)
+            AppSection.PROFILE -> updateDestination(section, AppContent.Settings)
 
             AppSection.DISCOVER,
             AppSection.SEARCH,

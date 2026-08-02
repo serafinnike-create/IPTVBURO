@@ -83,24 +83,30 @@ import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
+import com.lucasserafin94.iptvburo.desktop.update.GitHubReleaseUpdater
+import com.lucasserafin94.iptvburo.desktop.update.UpdateCheckResult
 import kotlinx.coroutines.launch
 
 @Composable
 fun DesktopApp(
     appState: DesktopAppState,
     ownerWindow: Frame?,
+    isFullScreen: Boolean,
+    onToggleFullScreen: () -> Unit,
+    onExitForUpdate: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var pendingExternalChannel by remember { mutableStateOf<Channel?>(null) }
-    var pendingXtreamExternal by remember { mutableStateOf<PendingXtreamExternal?>(null) }
     var externalOpenResult by remember { mutableStateOf<ExternalOpenResult?>(null) }
     var activePlayback by remember { mutableStateOf<DesktopPlaybackRequest?>(null) }
     var showXtreamLogin by remember { mutableStateOf(false) }
+    val releaseUpdater = remember { GitHubReleaseUpdater() }
+    var updateBusy by remember { mutableStateOf(false) }
+    var updateMessage by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(Unit) {
         onDispose {
             pendingExternalChannel = null
-            pendingXtreamExternal = null
             appState.clearSensitiveData()
         }
     }
@@ -158,6 +164,37 @@ fun DesktopApp(
                             language = appState.language,
                             onChangeProfile = { appState.selectProfile(null) },
                             onSelectLanguage = appState::updateLanguage,
+                            updateBusy = updateBusy,
+                            updateMessage = updateMessage,
+                            onUpdate = {
+                                if (!updateBusy) {
+                                    scope.launch {
+                                        updateBusy = true
+                                        updateMessage = "Verificando atualização…"
+                                        when (val result = releaseUpdater.check()) {
+                                            UpdateCheckResult.UpToDate -> {
+                                                updateMessage = "Você já está na versão mais recente."
+                                                updateBusy = false
+                                            }
+                                            is UpdateCheckResult.Failed -> {
+                                                updateMessage = result.userMessage
+                                                updateBusy = false
+                                            }
+                                            is UpdateCheckResult.Available -> {
+                                                updateMessage = "Baixando ${result.release.displayName}…"
+                                                releaseUpdater.downloadAndLaunch(result.release)
+                                                    .onSuccess {
+                                                        updateMessage = "Instalador verificado. Atualizando…"
+                                                        onExitForUpdate()
+                                                    }.onFailure {
+                                                        updateMessage = "A atualização não pôde ser instalada."
+                                                        updateBusy = false
+                                                    }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
                         )
                         HorizontalDivider(color = BuroColors.BorderSoft)
                         if (!appState.hasSelectedSource) {
@@ -172,12 +209,28 @@ fun DesktopApp(
                         } else if (appState.isXtreamSelected && appState.destination == DesktopDestination.HOME) {
                             XtreamDailyHome(
                                 appState = appState,
-                                onOpenExternal = { pendingXtreamExternal = it },
+                                onOpenExternal = { pending ->
+                                    activePlayback =
+                                        appState.prepareXtreamPlayback(
+                                            pending.target,
+                                            pending.displayName,
+                                            pending.startPositionMillis,
+                                        )
+                                    if (activePlayback == null) externalOpenResult = ExternalOpenResult.Failed
+                                },
                             )
                         } else if (appState.isXtreamSelected) {
                             XtreamWorkspace(
                                 appState = appState,
-                                onOpenExternal = { pendingXtreamExternal = it },
+                                onOpenExternal = { pending ->
+                                    activePlayback =
+                                        appState.prepareXtreamPlayback(
+                                            pending.target,
+                                            pending.displayName,
+                                            pending.startPositionMillis,
+                                        )
+                                    if (activePlayback == null) externalOpenResult = ExternalOpenResult.Failed
+                                },
                             )
                         } else {
                             CatalogWorkspace(
@@ -212,7 +265,12 @@ fun DesktopApp(
                             appState.checkpointPlayback(request, positionMs, durationMs)
                         },
                         onEnded = { durationMs -> appState.completePlayback(request, durationMs) },
-                        onClose = { activePlayback = null },
+                        isFullScreen = isFullScreen,
+                        onToggleFullScreen = onToggleFullScreen,
+                        onClose = {
+                            if (isFullScreen) onToggleFullScreen()
+                            activePlayback = null
+                        },
                     )
                 }
                 if (appState.activeProfile == null) {
@@ -258,23 +316,6 @@ fun DesktopApp(
                         activePlayback = appState.prepareLocalPlayback(channel)
                         if (activePlayback == null) externalOpenResult = ExternalOpenResult.Failed
                         pendingExternalChannel = null
-                    },
-                )
-            }
-
-            pendingXtreamExternal?.let { pending ->
-                XtreamExternalPlaybackDialog(
-                    displayName = pending.displayName,
-                    onDismiss = { pendingXtreamExternal = null },
-                    onConfirm = {
-                        activePlayback =
-                            appState.prepareXtreamPlayback(
-                                pending.target,
-                                pending.displayName,
-                                pending.startPositionMillis,
-                            )
-                        if (activePlayback == null) externalOpenResult = ExternalOpenResult.Failed
-                        pendingXtreamExternal = null
                     },
                 )
             }
@@ -548,6 +589,9 @@ private fun TopBar(
     language: DesktopLanguage,
     onChangeProfile: () -> Unit,
     onSelectLanguage: (DesktopLanguage) -> Unit,
+    updateBusy: Boolean,
+    updateMessage: String?,
+    onUpdate: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().height(74.dp).padding(horizontal = 26.dp),
@@ -560,11 +604,15 @@ private fun TopBar(
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                "$sourceCount fontes  •  $channelCount itens",
+                updateMessage ?: "$sourceCount fontes  •  $channelCount itens",
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
+        OutlinedButton(onClick = onUpdate, enabled = !updateBusy) {
+            Text(if (updateBusy) "Aguarde…" else "Verificar atualização")
+        }
+        Spacer(Modifier.width(8.dp))
         TextButton(onClick = onChangeProfile) {
             Text(activeProfile?.name ?: desktopText(language, "profile"), color = BuroColors.Text)
         }
@@ -1291,48 +1339,8 @@ private fun ExternalPlaybackDialog(
                 if (requiresHeaders) {
                     "Este canal exige cabeçalhos HTTP que o player Windows atual ainda não consegue aplicar. A reprodução foi desativada para não apresentar um botão que falhará."
                 } else {
-                    "O vídeo será aberto no player interno. H.264/AAC, MP4 e HLS são suportados nesta etapa; outros codecs mostrarão uma limitação clara."
+                    "O vídeo será aberto no player VLC integrado, com suporte a H.264, H.265/HEVC, AAC, MP4, MKV e HLS."
                 },
-            )
-        },
-    )
-}
-
-@Composable
-private fun XtreamExternalPlaybackDialog(
-    displayName: String,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = BuroColors.Primary,
-                        contentColor = Color(0xFF03201D),
-                    ),
-            ) {
-                Text("Assistir no IPTV BURO", fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
-        },
-        title = {
-            Text(
-                displayName,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-        text = {
-            Text(
-                "Somente ao confirmar o IPTV BURO montará a URL temporária na memória e abrirá o player interno. A URL não será copiada nem registrada.",
             )
         },
     )

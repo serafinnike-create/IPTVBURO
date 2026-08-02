@@ -5,7 +5,7 @@
     <string name="buro_nav_movies">Filmes</string>
     <string name="buro_nav_series">Séries</string>
     <string name="buro_nav_discover">Descobrir</string>
-    <string name="buro_nav_my_buro">Minha BURO</string>
+    <string name="buro_nav_my_buro">Favoritos</string>
     <string name="buro_nav_search">Pesquisa</string>
-    <string name="buro_nav_profile">Perfil</string>
+    <string name="buro_nav_profile">Configurações</string>
 </resources>
