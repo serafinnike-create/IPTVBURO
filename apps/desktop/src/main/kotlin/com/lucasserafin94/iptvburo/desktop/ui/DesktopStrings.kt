@@ -90,6 +90,15 @@ data class DesktopStrings(
     val sessionClosed: String,
     val backToCatalog: String,
     val selectItem: String,
+    val download: String,
+    val downloadInProgress: String,
+    val downloaded: String,
+    val downloadFailed: String,
+    val removeDownload: String,
+    val downloads: String,
+    val resetSettings: String,
+    val resetConfirm: String,
+    val resetWarning: String,
 ) {
     companion object {
         fun of(language: DesktopLanguage): DesktopStrings =
@@ -179,6 +188,15 @@ data class DesktopStrings(
                 sessionClosed = "Sessão encerrada",
                 backToCatalog = "Voltar ao catálogo",
                 selectItem = "Selecione um item",
+                download = "Baixar",
+                downloadInProgress = "Baixando",
+                downloaded = "Baixado",
+                downloadFailed = "Falha no download",
+                removeDownload = "Remover download",
+                downloads = "Downloads",
+                resetSettings = "Redefinir configuracoes",
+                resetConfirm = "Apagar tudo",
+                resetWarning = "Isso apaga perfis, favoritos e progresso. Os arquivos baixados sao mantidos.",
             )
 
         private val En =
@@ -260,6 +278,15 @@ data class DesktopStrings(
                 sessionClosed = "Session ended",
                 backToCatalog = "Back to catalogue",
                 selectItem = "Select an item",
+                download = "Download",
+                downloadInProgress = "Downloading",
+                downloaded = "Downloaded",
+                downloadFailed = "Download failed",
+                removeDownload = "Remove download",
+                downloads = "Downloads",
+                resetSettings = "Reset settings",
+                resetConfirm = "Erase everything",
+                resetWarning = "This erases profiles, favourites and progress. Downloaded files are kept.",
             )
 
         private val De =
@@ -342,6 +369,15 @@ data class DesktopStrings(
                 sessionClosed = "Sitzung beendet",
                 backToCatalog = "Zurück zum Katalog",
                 selectItem = "Wähle einen Eintrag",
+                download = "Herunterladen",
+                downloadInProgress = "Wird geladen",
+                downloaded = "Geladen",
+                downloadFailed = "Download fehlgeschlagen",
+                removeDownload = "Download entfernen",
+                downloads = "Downloads",
+                resetSettings = "Einstellungen zuruecksetzen",
+                resetConfirm = "Alles loeschen",
+                resetWarning = "Loescht Profile, Favoriten und Fortschritt. Heruntergeladene Dateien bleiben.",
             )
 
         private val It =
@@ -424,6 +460,15 @@ data class DesktopStrings(
                 sessionClosed = "Sessione terminata",
                 backToCatalog = "Torna al catalogo",
                 selectItem = "Seleziona un elemento",
+                download = "Scarica",
+                downloadInProgress = "Scaricamento",
+                downloaded = "Scaricato",
+                downloadFailed = "Download non riuscito",
+                removeDownload = "Rimuovi download",
+                downloads = "Download",
+                resetSettings = "Reimposta impostazioni",
+                resetConfirm = "Cancella tutto",
+                resetWarning = "Cancella profili, preferiti e avanzamento. I file scaricati restano.",
             )
     }
 }

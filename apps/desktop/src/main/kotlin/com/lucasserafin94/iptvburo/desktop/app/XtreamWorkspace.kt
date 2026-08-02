@@ -1,5 +1,12 @@
 package com.lucasserafin94.iptvburo.desktop.app
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -68,6 +75,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
+import com.lucasserafin94.iptvburo.desktop.DownloadState
 import com.lucasserafin94.iptvburo.desktop.MovieDetailsStatus
 import com.lucasserafin94.iptvburo.desktop.LiveEpgStatus
 import com.lucasserafin94.iptvburo.desktop.PersonFilmography
@@ -747,16 +755,44 @@ internal fun XtreamInternalDetailsPage(
     val item = appState.selectedXtreamItem ?: return
     val movie = appState.movieDetailsStatus as? MovieDetailsStatus.Loaded
     val series = appState.seriesDetailsStatus as? SeriesDetailsStatus.Loaded
+    // Only VOD is downloadable. A live stream has no end, so a download would grow until the
+    // disk fills.
+    val downloadTarget =
+        if (item.contentType == XtreamContentType.MOVIE) {
+            XtreamPlaybackTarget.CatalogItem(
+                providerId = item.providerId,
+                contentType = item.contentType,
+                containerExtension = item.containerExtension,
+                contentKey = item.contentIdentity().key,
+            )
+        } else {
+            null
+        }
     val backdrop = movie?.details?.backdropUrls?.firstOrNull()
         ?: movie?.details?.artworkUrl
         ?: series?.details?.backdropUrls?.firstOrNull()
         ?: series?.details?.artworkUrl
         ?: item.artworkUrl
     Box(Modifier.fillMaxSize().background(BuroColors.Canvas)) {
+        // Slow Ken Burns drift on the backdrop. The GDD asks for a living detail page; a muted
+        // trailer needs a trailer field the provider rarely supplies, and a static backdrop would
+        // sit dead behind the copy. A very slow scale reads as depth without competing for
+        // attention, and it costs one animated float.
+        val drift = rememberInfiniteTransition(label = "backdrop-drift")
+        val backdropScale by drift.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.08f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(22_000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+            label = "backdrop-scale",
+        )
         BuroRemoteArtwork(
             artworkUrl = backdrop,
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().scale(backdropScale),
             contentScale = ContentScale.Crop,
         ) { Box(Modifier.fillMaxSize().background(BuroColors.Canvas)) }
         Box(
@@ -795,7 +831,16 @@ internal fun XtreamInternalDetailsPage(
                 onToggleFavorite = { appState.toggleFavorite(item) },
                 resumeDecisionFor = appState::resumeDecision,
                 compact = false,
-                modifier = Modifier.weight(1f).widthIn(max = 980.dp).align(Alignment.CenterHorizontally),
+                modifier = Modifier.weight(1f).widthIn(max = 1_040.dp).align(Alignment.CenterHorizontally),
+                downloadState = downloadTarget?.let { appState.downloadState(it.contentKey) },
+                onDownload =
+                    downloadTarget?.let { target ->
+                        { scope.launch { appState.startDownload(target, item.name) } }
+                    },
+                onCancelDownload =
+                    downloadTarget?.let { target -> { appState.cancelDownload(target.contentKey) } },
+                onRemoveDownload =
+                    downloadTarget?.let { target -> { appState.deleteDownload(target.contentKey) } },
             )
         }
     }
@@ -817,6 +862,10 @@ internal fun XtreamItemDetail(
     resumeDecisionFor: (XtreamPlaybackTarget) -> ResumeDecision,
     compact: Boolean,
     modifier: Modifier,
+    downloadState: DownloadState? = null,
+    onDownload: (() -> Unit)? = null,
+    onCancelDownload: (() -> Unit)? = null,
+    onRemoveDownload: (() -> Unit)? = null,
 ) {
     val text = strings
     Box(
@@ -1002,6 +1051,15 @@ internal fun XtreamItemDetail(
                                 fontWeight = FontWeight.SemiBold,
                             )
                         }
+                    }
+                    if (downloadState != null && onDownload != null) {
+                        DownloadButton(
+                            state = downloadState,
+                            text = text,
+                            onDownload = onDownload,
+                            onCancel = onCancelDownload ?: {},
+                            onRemove = onRemoveDownload ?: {},
+                        )
                     }
                 }
                 Spacer(Modifier.height(BuroSpacing.Lg))
@@ -1495,3 +1553,50 @@ private fun formatPlaybackTime(positionMs: Long): String {
 }
 
 private const val SEARCH_DEBOUNCE_MILLIS = 280L
+
+/**
+ * Download control.
+ *
+ * One button that reflects the four states rather than a separate control per state, so the action
+ * stays in the same place as it changes meaning.
+ */
+@Composable
+private fun DownloadButton(
+    state: DownloadState,
+    text: DesktopStrings,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val label =
+        when (state) {
+            DownloadState.Idle -> "↓  ${text.download}"
+            is DownloadState.Running ->
+                if (state.fraction >= 0f) {
+                    "${text.downloadInProgress} ${(state.fraction * 100).toInt()}%"
+                } else {
+                    "${text.downloadInProgress}…"
+                }
+            DownloadState.Completed -> "✓  ${text.downloaded}"
+            DownloadState.Failed -> text.downloadFailed
+        }
+    val tint =
+        when (state) {
+            DownloadState.Completed -> BuroColors.Success
+            DownloadState.Failed -> BuroColors.Error
+            else -> BuroColors.Text
+        }
+    OutlinedButton(
+        onClick =
+            when (state) {
+                DownloadState.Idle, DownloadState.Failed -> onDownload
+                is DownloadState.Running -> onCancel
+                DownloadState.Completed -> onRemove
+            },
+        modifier = Modifier.height(48.dp),
+        shape = BuroRadius.Small,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = tint),
+    ) {
+        Text(label, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}

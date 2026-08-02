@@ -21,6 +21,8 @@ import com.lucasserafin94.iptvburo.desktop.security.RememberedXtreamStore
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
+import com.lucasserafin94.iptvburo.desktop.download.DesktopDownloadManager
+import com.lucasserafin94.iptvburo.desktop.download.DownloadResult
 import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.data.migrateFavoriteKeys
 import com.lucasserafin94.iptvburo.domain.model.Category
@@ -57,6 +59,7 @@ class DesktopAppState(
     private val rememberedXtreamStore: RememberedXtreamStore,
     private val userStore: DesktopUserStore = DesktopUserStore(),
     private val playbackProgressCoordinator: DesktopPlaybackProgressCoordinator = DesktopPlaybackProgressCoordinator(),
+    private val downloadManager: DesktopDownloadManager = DesktopDownloadManager(),
 ) {
     var destination by mutableStateOf(DesktopDestination.HOME)
         private set
@@ -156,17 +159,51 @@ class DesktopAppState(
         if (xtreamSummary != null) refreshXtreamPage(pageIndex = 0)
     }
 
-    fun createProfile(name: String, isKids: Boolean) {
+    fun createProfile(name: String, isKids: Boolean, avatarIndex: Int = 0) {
         if (profiles.size >= 5) return
         val clean = name.trim().take(24)
         if (clean.isBlank()) return
-        profiles = profiles + DesktopProfile(java.util.UUID.randomUUID().toString(), clean, isKids)
+        profiles =
+            profiles +
+            DesktopProfile(
+                id = java.util.UUID.randomUUID().toString(),
+                name = clean,
+                isKids = isKids,
+                avatarIndex = avatarIndex,
+            )
         userStore.saveProfiles(profiles)
     }
+
+    /**
+     * Restores the application to a first-run state.
+     *
+     * Clears profiles, favourites, language and the active profile, and disconnects the current
+     * source so nothing from the previous session survives in memory. Downloaded files are kept —
+     * they are the user's own media, not a setting.
+     */
+    fun resetEverything() {
+        userStore.resetAll()
+        favoriteKeys = emptySet()
+        downloads = emptyMap()
+        profiles = emptyList()
+        activeProfileId = null
+        forgetSelectedSource()
+    }
+
+    /**
+     * True until the user has picked a language for the first time.
+     *
+     * Drives the first-run language step. Without it the app silently defaults to Portuguese and
+     * the only way to change it was a control in the header, which a first-time user has no reason
+     * to look at.
+     */
+    var needsLanguageSetup by mutableStateOf(!userStore.hasChosenLanguage())
+        private set
 
     fun updateLanguage(value: DesktopLanguage) {
         language = value
         userStore.setLanguage(value)
+        needsLanguageSetup = false
     }
 
     fun isFavorite(item: XtreamCatalogItem): Boolean = favoriteKey(item) in favoriteKeys
@@ -641,6 +678,71 @@ class DesktopAppState(
             )
         }.getOrNull()
 
+    // ---------------------------------------------------------------------------------------
+    // Downloads
+    // ---------------------------------------------------------------------------------------
+
+    var downloads by mutableStateOf<Map<String, DownloadState>>(emptyMap())
+        private set
+
+    fun isDownloadable(target: XtreamPlaybackTarget): Boolean = downloadManager.isDownloadable(target)
+
+    fun downloadState(contentKey: String): DownloadState =
+        downloads[contentKey]
+            ?: if (downloadManager.isDownloaded(contentKey)) DownloadState.Completed else DownloadState.Idle
+
+    fun cancelDownload(contentKey: String) {
+        downloadManager.cancel(contentKey)
+    }
+
+    fun deleteDownload(contentKey: String) {
+        downloadManager.delete(contentKey)
+        downloads = downloads - contentKey
+    }
+
+    /**
+     * Starts an offline copy of a VOD target.
+     *
+     * The signed URL is resolved here and handed straight to the downloader; it is never stored in
+     * state, so it cannot leak into a recomposition dump or a crash report.
+     */
+    suspend fun startDownload(
+        target: XtreamPlaybackTarget,
+        title: String,
+    ) {
+        if (!downloadManager.isDownloadable(target)) return
+        val contentKey = target.contentKey
+        if (downloads[contentKey] is DownloadState.Running) return
+
+        val uri = runCatching { xtreamRepository.buildConfirmedPlaybackUri(target) }.getOrNull()
+        if (uri == null) {
+            downloads = downloads + (contentKey to DownloadState.Failed)
+            return
+        }
+        downloads = downloads + (contentKey to DownloadState.Running(0f))
+
+        val containerExtension = (target as? XtreamPlaybackTarget.CatalogItem)?.containerExtension
+        val result =
+            downloadManager.download(
+                contentKey = contentKey,
+                displayName = title,
+                uri = uri,
+                containerExtension = containerExtension,
+            ) { read, total ->
+                val fraction = if (total != null && total > 0L) read.toFloat() / total else -1f
+                downloads = downloads + (contentKey to DownloadState.Running(fraction))
+            }
+        downloads =
+            downloads + (
+                contentKey to
+                    when (result) {
+                        is DownloadResult.Completed -> DownloadState.Completed
+                        DownloadResult.Cancelled -> DownloadState.Idle
+                        is DownloadResult.Failed -> DownloadState.Failed
+                    }
+            )
+    }
+
     fun checkpointPlayback(request: DesktopPlaybackRequest, positionMs: Long, durationMs: Long) {
         playbackProgressCoordinator.checkpoint(request.progressIdentity, positionMs, durationMs)
     }
@@ -1001,4 +1103,16 @@ sealed interface LiveEpgStatus {
 
     /** EPG is optional and must never block channel playback. */
     data object Unavailable : LiveEpgStatus
+}
+
+/** UI-facing state of an offline copy. */
+sealed interface DownloadState {
+    data object Idle : DownloadState
+
+    /** [fraction] is negative when the server did not report a content length. */
+    data class Running(val fraction: Float) : DownloadState
+
+    data object Completed : DownloadState
+
+    data object Failed : DownloadState
 }

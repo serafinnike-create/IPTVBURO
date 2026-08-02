@@ -80,6 +80,7 @@ import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlayerOverlay
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroDesktopTheme
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
+import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
@@ -91,6 +92,7 @@ import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
+import com.lucasserafin94.iptvburo.desktop.user.PROFILE_AVATARS
 import com.lucasserafin94.iptvburo.desktop.update.DESKTOP_VERSION
 import com.lucasserafin94.iptvburo.desktop.update.GitHubReleaseUpdater
 import com.lucasserafin94.iptvburo.desktop.update.UpdateCheckResult
@@ -296,7 +298,14 @@ fun DesktopApp(
                         },
                     )
                 }
-                if (appState.activeProfile == null || showProfileGate) {
+                // Language comes before the profile gate: the profile screen is itself translated,
+                // so asking "who's watching?" in the wrong language defeats the point.
+                if (appState.needsLanguageSetup) {
+                    LanguageSetupGate(
+                        current = appState.language,
+                        onSelect = appState::updateLanguage,
+                    )
+                } else if (appState.activeProfile == null || showProfileGate) {
                     DesktopProfileGate(
                         profiles = appState.profiles,
                         onSelect = { profileId ->
@@ -304,6 +313,7 @@ fun DesktopApp(
                             scope.launch { appState.selectProfileAndRefresh(profileId) }
                         },
                         onCreate = appState::createProfile,
+                        onReset = appState::resetEverything,
                         // Dismissable only when a profile is already active. On first launch there
                         // is nothing to fall back to, so the gate stays modal.
                         onDismiss =
@@ -1510,11 +1520,14 @@ private fun ExternalPlaybackDialog(
 private fun DesktopProfileGate(
     profiles: List<DesktopProfile>,
     onSelect: (String?) -> Unit,
-    onCreate: (String, Boolean) -> Unit,
+    onCreate: (String, Boolean, Int) -> Unit,
+    onReset: () -> Unit,
     onDismiss: (() -> Unit)?,
 ) {
     var newName by remember { mutableStateOf("") }
     var kids by remember { mutableStateOf(false) }
+    var avatar by remember { mutableStateOf(0) }
+    var confirmingReset by remember { mutableStateOf(false) }
     Box(
         modifier = Modifier.fillMaxSize().background(BuroColors.Scrim),
         contentAlignment = Alignment.Center,
@@ -1552,20 +1565,62 @@ private fun DesktopProfileGate(
             Spacer(Modifier.height(24.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 profiles.forEach { profile ->
-                    Button(
+                    BuroInteractiveSurface(
                         onClick = { onSelect(profile.id) },
-                        modifier = Modifier.width(130.dp).height(96.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = BuroColors.SurfaceRaised),
+                        modifier = Modifier.width(130.dp),
+                        shape = BuroRadius.Large,
+                        background = BuroColors.SurfaceRaised,
+                        activeBackground = BuroColors.SurfaceHover,
+                        contentDescription = profile.name,
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(if (profile.isKids) "KIDS" else "BURO", color = BuroColors.Primary, fontWeight = FontWeight.Black)
-                            Text(profile.name, color = BuroColors.Text, maxLines = 1)
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = BuroSpacing.Md),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = PROFILE_AVATARS.getOrElse(profile.avatarIndex) { PROFILE_AVATARS.first() },
+                                style = MaterialTheme.typography.displaySmall,
+                            )
+                            Spacer(Modifier.height(BuroSpacing.Xs))
+                            Text(
+                                text = profile.name,
+                                color = BuroColors.Text,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (profile.isKids) {
+                                Text(
+                                    text = "KIDS",
+                                    color = BuroColors.Primary,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
                         }
                     }
                 }
             }
             if (profiles.size < 5) {
                 Spacer(Modifier.height(24.dp))
+                // Avatar is chosen before the name so the row reads left to right as one action.
+                Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
+                    PROFILE_AVATARS.forEachIndexed { index, glyph ->
+                        BuroInteractiveRow(
+                            onClick = { avatar = index },
+                            selected = avatar == index,
+                            shape = CircleShape,
+                            contentDescription = glyph,
+                        ) {
+                            Box(
+                                modifier = Modifier.size(44.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(glyph, style = MaterialTheme.typography.headlineSmall)
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(BuroSpacing.Sm))
                 OutlinedTextField(
                     value = newName,
                     onValueChange = { newName = it.take(24) },
@@ -1575,9 +1630,119 @@ private fun DesktopProfileGate(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { kids = !kids }) { Text(if (kids) "${strings.kidsProfile} ✓" else strings.adultProfile) }
-                    Button(onClick = { if (newName.isNotBlank()) { onCreate(newName, kids); newName = "" } }) { Text(strings.addProfile) }
+                    Button(
+                        onClick = {
+                            if (newName.isNotBlank()) {
+                                onCreate(newName, kids, avatar)
+                                newName = ""
+                            }
+                        },
+                    ) { Text(strings.addProfile) }
+                }
+            }
+
+            Spacer(Modifier.height(BuroSpacing.Xl))
+            // Reset is deliberately two-step. It erases profiles, favourites and progress, and
+            // there is no undo.
+            if (confirmingReset) {
+                Text(
+                    text = strings.resetWarning,
+                    color = BuroColors.TextMuted,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(BuroSpacing.Xs))
+                Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm)) {
+                    TextButton(onClick = { confirmingReset = false }) { Text(strings.cancel) }
+                    Button(
+                        onClick = {
+                            confirmingReset = false
+                            onReset()
+                        },
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = BuroColors.Error,
+                                contentColor = BuroColors.OnPrimary,
+                            ),
+                    ) { Text(strings.resetConfirm, fontWeight = FontWeight.Bold) }
+                }
+            } else {
+                TextButton(onClick = { confirmingReset = true }) {
+                    Text(strings.resetSettings, color = BuroColors.TextSubtle)
                 }
             }
         }
     }
 }
+
+/**
+ * First-run language step.
+ *
+ * Each option is written in its own language rather than translated into the current one, because
+ * the user cannot read the current one yet — that is the whole reason this screen exists.
+ */
+@Composable
+private fun LanguageSetupGate(
+    current: DesktopLanguage,
+    onSelect: (DesktopLanguage) -> Unit,
+) {
+    Box(
+        modifier = Modifier.fillMaxSize().background(BuroColors.Canvas),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier.widthIn(max = 560.dp).padding(BuroSpacing.Xl),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = "IPTV BURO",
+                color = BuroColors.Primary,
+                style = MaterialTheme.typography.labelSmall,
+            )
+            Spacer(Modifier.height(BuroSpacing.Sm))
+            Text(
+                text = "Idioma · Language · Sprache · Lingua",
+                color = BuroColors.Text,
+                style = MaterialTheme.typography.headlineMedium,
+            )
+            Spacer(Modifier.height(BuroSpacing.Xl))
+            DesktopLanguage.entries.forEach { option ->
+                BuroInteractiveRow(
+                    onClick = { onSelect(option) },
+                    selected = option == current,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = BuroRadius.Medium,
+                    contentDescription = option.nativeName(),
+                ) {
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = BuroSpacing.Lg, vertical = BuroSpacing.Md),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = option.tag.substringBefore('-').uppercase(),
+                            color = BuroColors.Primary,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Spacer(Modifier.width(BuroSpacing.Md))
+                        Text(
+                            text = option.nativeName(),
+                            color = BuroColors.Text,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(BuroSpacing.Xs))
+            }
+        }
+    }
+}
+
+private fun DesktopLanguage.nativeName(): String =
+    when (this) {
+        DesktopLanguage.PORTUGUESE_BRAZIL -> "Português (Brasil)"
+        DesktopLanguage.ENGLISH -> "English"
+        DesktopLanguage.GERMAN -> "Deutsch"
+        DesktopLanguage.ITALIAN -> "Italiano"
+    }

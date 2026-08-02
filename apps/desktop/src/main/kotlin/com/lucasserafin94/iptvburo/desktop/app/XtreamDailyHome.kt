@@ -606,23 +606,63 @@ private fun ContinueWatchingRow(
 // Small parts
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * Placeholder for content the provider ships without artwork.
+ *
+ * A single grey letter reads as a broken image. Tinting the gradient from the title makes each
+ * placeholder distinct and deliberate, and the title is repeated inside the frame so the card is
+ * still identifiable at a glance.
+ */
 @Composable
 private fun CardArtFallback(title: String) {
+    val tint = remember(title) { placeholderTint(title) }
     Box(
         modifier =
             Modifier.fillMaxSize().background(
                 Brush.linearGradient(
-                    listOf(BuroColors.SurfaceHover, BuroColors.SurfaceRaised),
+                    listOf(
+                        tint.copy(alpha = 0.55f),
+                        BuroColors.SurfaceRaised,
+                        BuroColors.Canvas,
+                    ),
                 ),
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = title.firstOrNull()?.uppercase() ?: "B",
-            color = BuroColors.TextSubtle,
-            style = MaterialTheme.typography.displaySmall,
-        )
+        Column(
+            modifier = Modifier.padding(BuroSpacing.Sm),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+        ) {
+            Text(
+                text = title.firstOrNull()?.uppercase() ?: "B",
+                color = BuroColors.Text.copy(alpha = 0.85f),
+                style = MaterialTheme.typography.displaySmall,
+            )
+            Text(
+                text = title,
+                color = BuroColors.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
     }
+}
+
+/** Stable hue per title, so the same item always gets the same placeholder. */
+private fun placeholderTint(title: String): Color {
+    val palette =
+        listOf(
+            Color(0xFF2E3A59),
+            Color(0xFF4A2E3A),
+            Color(0xFF2E4A3F),
+            Color(0xFF473A2E),
+            Color(0xFF3A2E4A),
+            Color(0xFF2E4550),
+        )
+    return palette[(title.hashCode().toUInt() % palette.size.toUInt()).toInt()]
 }
 
 @Composable

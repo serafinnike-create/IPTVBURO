@@ -5,7 +5,19 @@ import java.util.Base64
 import java.util.UUID
 import java.util.prefs.Preferences
 
-data class DesktopProfile(val id: String, val name: String, val isKids: Boolean)
+/**
+ * [avatarIndex] selects one of [PROFILE_AVATARS]. Stored as an index rather than an image so the
+ * choice survives a reinstall and costs nothing on disk.
+ */
+data class DesktopProfile(
+    val id: String,
+    val name: String,
+    val isKids: Boolean,
+    val avatarIndex: Int = 0,
+)
+
+/** Fixed avatar set. Emoji keep this dependency-free and render on every Windows build. */
+val PROFILE_AVATARS = listOf("🎬", "🍿", "🚀", "🦊", "🌙", "⚽", "🎸", "🐱")
 
 enum class DesktopLanguage(val tag: String) {
     PORTUGUESE_BRAZIL("pt-BR"), ENGLISH("en"), GERMAN("de"), ITALIAN("it");
@@ -38,7 +50,12 @@ class DesktopUserStore(
     fun saveProfiles(profiles: List<DesktopProfile>) {
         require(profiles.size in 1..5)
         preferences.put(KEY_PROFILES, profiles.joinToString(";") { profile ->
-            listOf(profile.id, encode(profile.name), if (profile.isKids) "1" else "0").joinToString(":")
+            listOf(
+                profile.id,
+                encode(profile.name),
+                if (profile.isKids) "1" else "0",
+                profile.avatarIndex.toString(),
+            ).joinToString(":")
         })
     }
 
@@ -47,6 +64,21 @@ class DesktopUserStore(
     }
 
     fun setLanguage(language: DesktopLanguage) = preferences.put(KEY_LANGUAGE, language.tag)
+
+    /** Whether the user has ever picked a language, used to decide if first-run setup is needed. */
+    fun hasChosenLanguage(): Boolean = preferences.get(KEY_LANGUAGE, null) != null
+
+    /**
+     * Clears every stored preference for this user: profiles, favourites, language and the active
+     * profile.
+     *
+     * Downloaded files are deliberately left alone. They are the user's own media, and removing
+     * them from a settings reset would be a surprise.
+     */
+    fun resetAll() {
+        preferences.removeNode()
+        preferences.flush()
+    }
 
     fun favoritesForProfile(profileId: String?): Set<String> =
         profileId
@@ -72,8 +104,17 @@ class DesktopUserStore(
     private fun decodeProfiles(raw: String): List<DesktopProfile> =
         raw.split(';').mapNotNull { encoded ->
             val parts = encoded.split(':')
-            if (parts.size != 3) return@mapNotNull null
-            runCatching { DesktopProfile(parts[0], decode(parts[1]), parts[2] == "1") }.getOrNull()
+            // Rows written before avatars existed have three fields; they decode with avatar 0.
+            if (parts.size !in 3..4) return@mapNotNull null
+            runCatching {
+                DesktopProfile(
+                    id = parts[0],
+                    name = decode(parts[1]),
+                    isKids = parts[2] == "1",
+                    avatarIndex =
+                        parts.getOrNull(3)?.toIntOrNull()?.coerceIn(0, PROFILE_AVATARS.lastIndex) ?: 0,
+                )
+            }.getOrNull()
         }.take(5)
 
     private fun encode(value: String): String =

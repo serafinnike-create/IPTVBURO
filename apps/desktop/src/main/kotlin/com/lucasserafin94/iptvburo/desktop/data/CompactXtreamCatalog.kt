@@ -49,7 +49,11 @@ internal class CompactXtreamCatalog(
         encodedCategoryIds += item.categoryIds.encodeCategoryIds()
         containerExtensions += item.containerExtension
         storeArtwork(index, item.artworkUrl)
-        item.year?.let { value ->
+        // Fall back to a year written into the title. Providers frequently leave the `year` field
+        // empty while naming the item "Movie (1998)", and without this those films were invisible
+        // to the release-year filter — or, worse, indistinguishable from an actual new release.
+        val resolvedYear = item.year ?: ContentIdentity.yearFromTitle(item.name)
+        resolvedYear?.let { value ->
             years[index] = value
             hasYear[index] = true
         }
