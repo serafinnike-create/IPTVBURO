@@ -1,7 +1,7 @@
 # GDD / PRD TÉCNICO — IPTV BURO
 
-**Versão:** 1.0 + extensões 2.0, 3.0, 4.0, 5.0 e 6.0  
-**Data:** 31 de julho de 2026  
+**Versão:** 1.0 + extensões 2.0, 3.0, 4.0, 5.0, 6.0 e 7.0  
+**Data:** 2 de agosto de 2026  
 **Status:** documentação obrigatória para desenvolvimento com Codex
 
 Todos os documentos abaixo fazem parte da especificação oficial. O código existente deve ser preservado e evoluído incrementalmente.
@@ -57,15 +57,25 @@ Define o IPTV BURO como um produto único com aplicações próprias para Androi
 
 Define download e playback offline de filmes, episódios e temporadas elegíveis no Android mobile/tablet e iPhone/iPad. A função não deve ser exibida nas TVs durante o P0.
 
+## GDD 7.0 — Playback Continuity & Watch Progress
+
+- [GDD 7.0 — Continuar assistindo e progresso](GDD_7_PLAYBACK_CONTINUITY_AND_WATCH_PROGRESS.md)
+- [Revisão técnica da milestone 0.2](reviews/REVIEW_0_2_ARCHITECTURE_AND_NEXT_GATES.md)
+- [Prompt de estabilização e implementação](PROMPT_CODEX_STABILIZE_0_2_AND_IMPLEMENT_GDD7.md)
+
+Define progresso persistente por perfil, barra nos cards, fileira `Continuar assistindo`, retomada de filmes/episódios, conclusão, migrations e paridade entre plataformas compatíveis.
+
 ## Ordem obrigatória para o Codex
 
 1. Ler este índice.
 2. Ler os GDDs 1.0 a 4.0.
 3. Ler o GDD 5.0 e o ADR multiplataforma.
 4. Ler o GDD 6.0 quando trabalhar em mobile/offline.
-5. Ler `docs/status/CURRENT_IMPLEMENTATION.md`.
-6. Auditar o código e os testes existentes.
-7. Executar o prompt específico da etapa.
+5. Ler o GDD 7.0 antes de modificar player, progresso, Home ou Minha BURO.
+6. Ler `docs/status/CURRENT_IMPLEMENTATION.md`.
+7. Ler a revisão técnica da milestone em andamento.
+8. Auditar o código e os testes existentes.
+9. Executar o prompt específico da etapa.
 
 ## Regras de precedência
 
@@ -76,6 +86,8 @@ Define download e playback offline de filmes, episódios e temporadas elegíveis
 5. GDD 4.0 para confiabilidade;
 6. GDD 5.0 para plataformas e paridade;
 7. GDD 6.0 para offline mobile;
-8. nenhuma plataforma pode ser chamada de pronta sem build, testes e hardware;
-9. Android TV é a referência inicial, não o limite do produto;
-10. nenhuma função offline pode exportar arquivos ou ignorar restrições da fonte/plataforma.
+8. GDD 7.0 para progresso, retomada e continuidade por perfil;
+9. nenhuma plataforma pode ser chamada de pronta sem build, testes e hardware;
+10. Android TV é a referência inicial, não o limite do produto;
+11. nenhuma função offline pode exportar arquivos ou ignorar restrições da fonte/plataforma;
+12. nenhuma nova preview pode ser publicada com migration não testada ou CI incompleto.
