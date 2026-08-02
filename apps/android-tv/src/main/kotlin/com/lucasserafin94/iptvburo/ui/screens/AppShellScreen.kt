@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.ui.screens
 
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
@@ -42,9 +43,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
@@ -52,6 +56,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -184,6 +190,7 @@ fun AppShellScreen(
                 onOpenEpisode = onOpenEpisode,
                 onDownloadEpisode = {},
                 canDownloadOffline = supportsOfflineVault,
+                onOpenPerson = onOpenPerson,
                 onRetry = onRetryCatalog,
                 onBack = onBack,
             )
@@ -1106,83 +1113,90 @@ private fun CategoriesContent(
                     ) { category ->
                         FocusSurface(
                             onClick = { onOpenCategory(category) },
-                            modifier = Modifier.height(if (compactPortrait) 108.dp else 120.dp),
+                            modifier = Modifier.height(if (compactPortrait) 132.dp else 150.dp),
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(if (compactPortrait) 16.dp else 22.dp),
-                                verticalArrangement = Arrangement.Center,
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                CategoryArtwork(
+                                    tile = category.categoryArtworkTile(contentType),
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    listOf(
+                                                        Ink.copy(alpha = 0.12f),
+                                                        Ink.copy(alpha = 0.58f),
+                                                        Ink.copy(alpha = 0.96f),
+                                                    ),
+                                                ),
+                                            ),
+                                )
+                                Column(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .padding(if (compactPortrait) 14.dp else 18.dp),
+                                    verticalArrangement = Arrangement.Bottom,
                                 ) {
-                                    Icon(
-                                        imageVector = category.categoryIcon(),
-                                        contentDescription = null,
-                                        tint = Teal,
-                                        modifier = Modifier.size(if (compactPortrait) 24.dp else 28.dp),
-                                    )
-                                    Spacer(Modifier.weight(1f))
-                                category.providerBadge()?.let { badge ->
                                     Row(
-                                        modifier =
-                                            Modifier
-                                                .clip(CircleShape)
-                                                .background(Teal.copy(alpha = 0.13f))
-                                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                                        modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(7.dp),
                                     ) {
-                                        Text(
-                                            text = badge.monogram,
-                                            color = Teal,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Black,
+                                        Icon(
+                                            imageVector = category.categoryIcon(contentType),
+                                            contentDescription = null,
+                                            tint = Teal,
+                                            modifier = Modifier.size(if (compactPortrait) 22.dp else 26.dp),
                                         )
-                                        Text(
-                                            text = badge.label,
-                                            color = Muted,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
+                                        Spacer(Modifier.weight(1f))
+                                        category.providerBadge()?.let { badge ->
+                                            Text(
+                                                text = badge.monogram,
+                                                color = White,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Black,
+                                                modifier =
+                                                    Modifier
+                                                        .clip(CircleShape)
+                                                        .background(Ink.copy(alpha = 0.68f))
+                                                        .padding(horizontal = 9.dp, vertical = 5.dp),
+                                            )
+                                        }
                                     }
                                     Spacer(Modifier.height(7.dp))
+                                    Text(
+                                        text =
+                                            if (category.id == null) {
+                                                stringResource(
+                                                    if (contentType == CatalogContentType.LIVE) {
+                                                        R.string.categories_all
+                                                    } else {
+                                                        R.string.categories_all_items
+                                                    },
+                                                )
+                                            } else {
+                                                category.name
+                                            },
+                                        color = White,
+                                        fontSize = if (compactPortrait) 16.sp else 19.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text =
+                                            pluralStringResource(
+                                                R.plurals.catalog_items_count,
+                                                category.channelCount,
+                                                category.channelCount,
+                                            ),
+                                        color = Teal,
+                                        fontSize = 12.sp,
+                                    )
                                 }
-                                }
-                                Spacer(Modifier.height(7.dp))
-                                Text(
-                                    text =
-                                        if (category.id == null) {
-                                            stringResource(
-                                                if (
-                                                    contentType == CatalogContentType.LIVE
-                                                ) {
-                                                    R.string.categories_all
-                                                } else {
-                                                    R.string.categories_all_items
-                                                },
-                                            )
-                                        } else {
-                                            category.name
-                                        },
-                                    color = White,
-                                    fontSize = if (compactPortrait) 16.sp else 19.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Spacer(Modifier.height(7.dp))
-                                Text(
-                                    text = pluralStringResource(
-                                        R.plurals.catalog_items_count,
-                                        category.channelCount,
-                                        category.channelCount,
-                                    ),
-                                    color = Teal,
-                                    fontSize = 13.sp,
-                                )
                             }
                         }
                     }
@@ -1192,7 +1206,42 @@ private fun CategoriesContent(
     }
 }
 
-private fun CategoryUi.categoryIcon(): ImageVector {
+@Composable
+private fun CategoryArtwork(
+    tile: CategoryArtworkTile,
+    modifier: Modifier = Modifier,
+) {
+    val atlas = ImageBitmap.imageResource(R.drawable.buro_category_atlas_v1)
+    val tileWidth = atlas.width / 3
+    val tileHeight = atlas.height / 2
+    Image(
+        painter =
+            BitmapPainter(
+                image = atlas,
+                srcOffset = IntOffset(tile.column * tileWidth, tile.row * tileHeight),
+                srcSize = IntSize(tileWidth, tileHeight),
+            ),
+        contentDescription = null,
+        modifier = modifier,
+        contentScale = ContentScale.Crop,
+    )
+}
+
+private data class CategoryArtworkTile(val column: Int, val row: Int)
+
+private fun CategoryUi.categoryArtworkTile(contentType: CatalogContentType?): CategoryArtworkTile {
+    val normalized = name.lowercase()
+    return when {
+        "4k" in normalized || "uhd" in normalized || "hevc" in normalized -> CategoryArtworkTile(2, 1)
+        "sport" in normalized || "futebol" in normalized -> CategoryArtworkTile(0, 1)
+        "infantil" in normalized || "kids" in normalized || "family" in normalized -> CategoryArtworkTile(1, 1)
+        contentType == CatalogContentType.LIVE -> CategoryArtworkTile(0, 0)
+        contentType == CatalogContentType.SERIES -> CategoryArtworkTile(2, 0)
+        else -> CategoryArtworkTile(1, 0)
+    }
+}
+
+private fun CategoryUi.categoryIcon(contentType: CatalogContentType?): ImageVector {
     val normalized = name.lowercase()
     return when {
         id == null -> Icons.Default.Folder
@@ -1203,6 +1252,7 @@ private fun CategoryUi.categoryIcon(): ImageVector {
         "document" in normalized || "história" in normalized -> Icons.Default.HistoryEdu
         "lançamento" in normalized || Regex("\b20(2[4-9]|3[0-9])\b").containsMatchIn(normalized) -> Icons.Default.NewReleases
         "internacional" in normalized || "world" in normalized -> Icons.Default.Public
+        contentType == CatalogContentType.LIVE -> Icons.Default.LiveTv
         else -> Icons.Default.Movie
     }
 }

@@ -3,6 +3,7 @@ package com.lucasserafin94.iptvburo.desktop.app
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
@@ -56,6 +57,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -171,12 +173,13 @@ fun XtreamWorkspace(
             Row(modifier = Modifier.fillMaxSize()) {
                 XtreamCategoryPane(
                     categories = appState.xtreamCategories,
+                    contentType = appState.xtreamContentType,
                     selectedCategoryId = appState.selectedXtreamCategoryId,
                     onSelected = { categoryId ->
                         detailsOpen = false
                         scope.launch { appState.selectXtreamCategory(categoryId) }
                     },
-                    modifier = Modifier.width(if (compact) 150.dp else 220.dp),
+                    modifier = Modifier.width(if (compact) 190.dp else 220.dp),
                 )
                 XtreamPaneDivider()
                 XtreamItemsPane(
@@ -329,6 +332,7 @@ private fun ContentTypeButton(
 @Composable
 private fun XtreamCategoryPane(
     categories: List<XtreamCategory>,
+    contentType: XtreamContentType,
     selectedCategoryId: String?,
     onSelected: (String?) -> Unit,
     modifier: Modifier,
@@ -344,6 +348,7 @@ private fun XtreamCategoryPane(
             item {
                 XtreamCategoryItem(
                     label = "Todos",
+                    artworkResource = categoryArtworkResource("", contentType),
                     selected = selectedCategoryId == null,
                     onClick = { onSelected(null) },
                 )
@@ -351,6 +356,7 @@ private fun XtreamCategoryPane(
             items(categories, key = XtreamCategory::providerId) { category ->
                 XtreamCategoryItem(
                     label = category.name,
+                    artworkResource = categoryArtworkResource(category.name, contentType),
                     selected = category.providerId == selectedCategoryId,
                     onClick = { onSelected(category.providerId) },
                 )
@@ -362,6 +368,7 @@ private fun XtreamCategoryPane(
 @Composable
 private fun XtreamCategoryItem(
     label: String,
+    artworkResource: String,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
@@ -375,6 +382,13 @@ private fun XtreamCategoryItem(
                 .padding(horizontal = 11.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Image(
+            painter = painterResource(artworkResource),
+            contentDescription = null,
+            modifier = Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)),
+            contentScale = ContentScale.Crop,
+        )
+        Spacer(Modifier.width(9.dp))
         if (selected) {
             Box(Modifier.size(3.dp, 20.dp).clip(CircleShape).background(BuroColors.Primary))
             Spacer(Modifier.width(9.dp))
@@ -387,6 +401,23 @@ private fun XtreamCategoryItem(
             overflow = TextOverflow.Ellipsis,
         )
     }
+}
+
+private fun categoryArtworkResource(
+    label: String,
+    contentType: XtreamContentType,
+): String {
+    val normalized = label.lowercase()
+    val name =
+        when {
+            "4k" in normalized || "uhd" in normalized || "hevc" in normalized -> "4k"
+            "sport" in normalized || "futebol" in normalized -> "sports"
+            "infantil" in normalized || "kids" in normalized || "family" in normalized -> "kids"
+            contentType == XtreamContentType.LIVE -> "live"
+            contentType == XtreamContentType.SERIES -> "series"
+            else -> "cinema"
+        }
+    return "brand/buro-category-$name.png"
 }
 
 @Composable

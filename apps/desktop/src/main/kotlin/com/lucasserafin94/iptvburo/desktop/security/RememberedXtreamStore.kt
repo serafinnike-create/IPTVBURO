@@ -20,9 +20,12 @@ import java.util.Arrays
  * Nothing is persisted on unsupported platforms, and [clear] is called by the explicit
  * "Encerrar sessao" action.
  */
-class RememberedXtreamStore(
-    private val file: Path = defaultFile(),
+class RememberedXtreamStore internal constructor(
+    private val file: Path,
+    private val legacyFile: Path? = null,
 ) {
+    constructor() : this(defaultFile(), legacyDefaultFile())
+
     fun save(
         server: CharArray,
         username: CharArray,
@@ -57,6 +60,7 @@ class RememberedXtreamStore(
             } catch (_: AtomicMoveNotSupportedException) {
                 Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING)
             }
+            legacyFile?.takeIf { it != file }?.let { runCatching { Files.deleteIfExists(it) } }
         } finally {
             Arrays.fill(plaintext, ZERO_BYTE)
             Arrays.fill(protected, ZERO_BYTE)
@@ -64,8 +68,9 @@ class RememberedXtreamStore(
     }
 
     fun load(): XtreamLoginInput? {
-        if (!Platform.isWindows() || !Files.isRegularFile(file)) return null
-        val protected = runCatching { Files.readAllBytes(file) }.getOrNull() ?: return null
+        if (!Platform.isWindows()) return null
+        val sourceFile = sourceFileAfterMigration() ?: return null
+        val protected = runCatching { Files.readAllBytes(sourceFile) }.getOrNull() ?: return null
         if (protected.isEmpty() || protected.size > MAX_PROTECTED_BYTES) {
             Arrays.fill(protected, ZERO_BYTE)
             clear()
@@ -87,6 +92,25 @@ class RememberedXtreamStore(
 
     fun clear() {
         runCatching { Files.deleteIfExists(file) }
+        legacyFile?.takeIf { it != file }?.let { runCatching { Files.deleteIfExists(it) } }
+    }
+
+    private fun sourceFileAfterMigration(): Path? {
+        if (Files.isRegularFile(file)) return file
+        val legacy = legacyFile?.takeIf(Files::isRegularFile) ?: return null
+        runCatching {
+            Files.createDirectories(file.parent)
+            try {
+                Files.move(legacy, file, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(legacy, file, StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
+        return when {
+            Files.isRegularFile(file) -> file
+            Files.isRegularFile(legacy) -> legacy
+            else -> null
+        }
     }
 
     private fun encode(
@@ -127,6 +151,14 @@ class RememberedXtreamStore(
         const val ZERO_BYTE: Byte = 0
 
         fun defaultFile(): Path {
+            val localAppData = System.getenv("LOCALAPPDATA")?.takeIf(String::isNotBlank)
+            val root =
+                localAppData?.let(Path::of)
+                    ?: Path.of(System.getProperty("user.home"), "AppData", "Local")
+            return root.resolve("lucasserafin94").resolve("IPTVBURO").resolve("remembered-source.dpapi")
+        }
+
+        fun legacyDefaultFile(): Path {
             val localAppData = System.getenv("LOCALAPPDATA")?.takeIf(String::isNotBlank)
             val root =
                 localAppData?.let(Path::of)

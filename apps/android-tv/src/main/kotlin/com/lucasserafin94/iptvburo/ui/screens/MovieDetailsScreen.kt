@@ -285,12 +285,10 @@ internal fun MovieDetailsScreen(
                                 Spacer(Modifier.height(9.dp))
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     items(cast, key = { it.lowercase() }) { actor ->
-                                        BuroButton(
+                                        CastPersonChip(
+                                            name = actor,
                                             onClick = { onOpenPerson(actor) },
-                                            style = BuroButtonStyle.Secondary,
-                                        ) {
-                                            Text(actor, maxLines = 1)
-                                        }
+                                        )
                                     }
                                 }
                             }
@@ -316,13 +314,6 @@ internal fun MovieDetailsScreen(
         }
     }
 }
-
-private fun String.toCastNames(): List<String> =
-    split(Regex("[,;]|\\s/\\s"))
-        .map(String::trim)
-        .filter { it.length in 2..100 }
-        .distinctBy(String::lowercase)
-        .take(24)
 
 @Composable
 private fun DetailFact(

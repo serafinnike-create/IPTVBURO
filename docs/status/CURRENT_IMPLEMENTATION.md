@@ -3,10 +3,10 @@
 - Data da auditoria: 2 de agosto de 2026
 - Branch: `agent/iptv-buro-0.2-preview`
 - Baseline anterior: `v0.1.0-alpha.1`
-- Tag da prévia atual: `v0.2.0-alpha.4`
+- Tag da prévia atual: `v0.2.0-alpha.5`
 - Release:
-  `https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.2.0-alpha.4`
-- Versão pública atual: `0.2.0-alpha.4`, Android/Android TV e Windows x64
+  `https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.2.0-alpha.5`
+- Versão pública atual: `0.2.0-alpha.5`, Android/Android TV e Windows x64
 - Milestone em validação: `0.2`, Android adaptativo e Compose Desktop
 
 ## Estado da milestone 0.2
@@ -75,12 +75,12 @@ classificar o produto como uma versão estável.
 
 ### Gate local mais recente
 
-- 137 testes: 0 falhas, 0 erros e 2 ignorados por condição de plataforma;
+- 139 testes: 0 falhas, 0 erros e 2 ignorados por condição de plataforma;
 - Android lint: 0 erros;
-- APK debug: 32.288.286 bytes, SHA-256
-  `6E4A5D53ADF06150F3FF93DEAA05DE1F2BEF8A9ECFDA87015F4CA8B9D6CE5296`;
-- MSI Windows preview: 161.352.759 bytes, SHA-256
-  `2368190AA94FDA53CAF183D3DA715C8D2B1346B750A1800BBDBBC67DED533F2F`;
+- APK debug: 34.253.491 bytes, SHA-256
+  `C34C24CFA7DBF49A82E70C3D494D396C6062484E31D40D173FD4735EFC9CD18D`;
+- MSI Windows preview: 163.982.391 bytes, SHA-256
+  `25A2BFB33C4FE8EC860686992F8988FDF62DA6E0383429A9DC60ED5326C9A846`;
 - os três identificadores da fonte privada autorizada tiveram zero ocorrências
   no worktree publicável e em todo o histórico Git;
 - a build final foi instalada no Android 15 e iniciou sem crash; a validação

@@ -160,6 +160,13 @@ confirmados.
   restauração que pulava o hero quando não havia aviso demonstrativo;
 - navegação compacta agora mantém Início, TV, Filmes, Séries e BURO visíveis,
   com o avatar como acesso direto ao perfil.
+- a geração de imagem produziu um atlas original em seis cenas para categorias;
+  Android e Windows usam a mesma direção visual sem copiar marcas de terceiros;
+- elenco de filmes e séries passou a usar cartões de pessoa clicáveis, com
+  iniciais quando a fonte não fornece uma foto autorizada;
+- 139 testes e lint Android aprovados para a prévia `v0.2.0-alpha.5`.
+- o cofre DPAPI foi movido para dados permanentes do usuário, fora da pasta
+  atualizável do MSI, com migração coberta por teste e sem plaintext;
 
 # 2026-08-02 — reconexão e metadados reais
 

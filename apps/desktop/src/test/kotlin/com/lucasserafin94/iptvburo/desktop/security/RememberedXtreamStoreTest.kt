@@ -48,6 +48,37 @@ class RememberedXtreamStoreTest {
         }
     }
 
+    @Test
+    fun `legacy blob migrates outside the installer directory`() {
+        if (!Platform.isWindows()) return
+        val directory = createTempDirectory("iptvburo-dpapi-migration-test")
+        val legacy = directory.resolve("installed-app").resolve("remembered-source.dpapi")
+        val current = directory.resolve("user-data").resolve("remembered-source.dpapi")
+        val server = "https://provider.invalid".toCharArray()
+        val username = "migration-user".toCharArray()
+        val password = "migration-password".toCharArray()
+        val legacyStore = RememberedXtreamStore(legacy)
+        val migratingStore = RememberedXtreamStore(current, legacy)
+        var restored: XtreamLoginInput? = null
+
+        try {
+            legacyStore.save(server, username, password)
+            restored = assertNotNull(migratingStore.load())
+            assertTrue(Files.isRegularFile(current))
+            assertFalse(Files.exists(legacy))
+            assertContentEquals(username, restored.copyUsername())
+        } finally {
+            restored?.clear()
+            migratingStore.clear()
+            Files.deleteIfExists(legacy.parent)
+            Files.deleteIfExists(current.parent)
+            Files.deleteIfExists(directory)
+            Arrays.fill(server, ZERO_CHAR)
+            Arrays.fill(username, ZERO_CHAR)
+            Arrays.fill(password, ZERO_CHAR)
+        }
+    }
+
     private companion object {
         const val ZERO_CHAR = '\u0000'
     }

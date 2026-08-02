@@ -26,11 +26,11 @@ class GitHubReleaseUpdaterTest {
                     """
                     [{
                       "draft": false,
-                      "tag_name": "v0.2.0-alpha.4",
-                      "name": "Preview 0.2 alpha 4",
+                      "tag_name": "v0.2.0-alpha.5",
+                      "name": "Preview 0.2 alpha 5",
                       "assets": [{
-                        "name": "IPTVBURO-0.2.3.msi",
-                        "browser_download_url": "https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.4/IPTVBURO-0.2.3.msi",
+                        "name": "IPTVBURO-0.2.6.msi",
+                        "browser_download_url": "https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.5/IPTVBURO-0.2.6.msi",
                         "size": 1234,
                         "digest": "sha256:${"0".repeat(64)}"
                       }]
@@ -41,11 +41,11 @@ class GitHubReleaseUpdaterTest {
             val updater =
                 GitHubReleaseUpdater(
                     releasesUrl = server.url("/releases").toString(),
-                    currentVersion = "0.2.0-alpha.3",
+                    currentVersion = "0.2.0-alpha.4",
                 )
             val result = updater.check()
             assertIs<UpdateCheckResult.Available>(result)
-            assertTrue(result.release.version == "0.2.0-alpha.4")
+            assertTrue(result.release.version == "0.2.0-alpha.5")
         }
     }
 }

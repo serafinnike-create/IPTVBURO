@@ -575,7 +575,7 @@ private fun PrivacyNote() {
         )
         Spacer(Modifier.width(9.dp))
         Text(
-            "Sessão privada\nNada sensível é salvo",
+            "Cofre protegido\nCredenciais cifradas pelo Windows",
             color = BuroColors.TextMuted,
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -758,7 +758,7 @@ private fun EmptyLibrary(
             }
             Spacer(Modifier.height(14.dp))
             Text(
-                "Credenciais permanecem somente nesta sessão.",
+                "A fonte é reconectada com o cofre protegido deste usuário.",
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.bodyMedium,
             )

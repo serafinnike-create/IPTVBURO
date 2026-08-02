@@ -72,7 +72,7 @@ fun XtreamLoginDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    "Aceita o endereço do servidor ou uma URL completa get.php/player_api.php. Os três campos vivem apenas nesta sessão.",
+                    "Aceita o endereço do servidor ou uma URL completa get.php/player_api.php. Ao conectar, os dados são cifrados pelo Windows para este usuário.",
                     color = BuroColors.TextMuted,
                     style = MaterialTheme.typography.bodyMedium,
                 )

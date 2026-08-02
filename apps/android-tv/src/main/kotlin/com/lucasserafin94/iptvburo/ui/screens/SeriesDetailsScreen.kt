@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -77,6 +78,7 @@ internal fun SeriesDetailsScreen(
     onOpenEpisode: (EpisodeUi) -> Unit,
     onDownloadEpisode: (EpisodeUi) -> Unit,
     canDownloadOffline: Boolean,
+    onOpenPerson: (String) -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -293,7 +295,7 @@ internal fun SeriesDetailsScreen(
                             )
                         }
                     }
-                    if (!details.director.isNullOrBlank() || !details.cast.isNullOrBlank()) {
+                    if (!details.director.isNullOrBlank()) {
                         item(key = "series:credits") {
                             Column(
                                 modifier =
@@ -303,11 +305,22 @@ internal fun SeriesDetailsScreen(
                                         .padding(18.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                details.director?.takeIf(String::isNotBlank)?.let {
-                                    Text("Direção  •  $it", color = Muted, fontSize = 15.sp)
-                                }
-                                details.cast?.takeIf(String::isNotBlank)?.let {
-                                    Text("Elenco  •  $it", color = Muted, fontSize = 15.sp)
+                                Text("Direção  •  ${details.director}", color = Muted, fontSize = 15.sp)
+                            }
+                        }
+                    }
+                    details.cast?.toCastNames()?.takeIf(List<String>::isNotEmpty)?.let { cast ->
+                        item(key = "series:cast") {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text("Elenco", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(9.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    items(cast, key = { it.lowercase() }) { actor ->
+                                        CastPersonChip(
+                                            name = actor,
+                                            onClick = { onOpenPerson(actor) },
+                                        )
+                                    }
                                 }
                             }
                         }
