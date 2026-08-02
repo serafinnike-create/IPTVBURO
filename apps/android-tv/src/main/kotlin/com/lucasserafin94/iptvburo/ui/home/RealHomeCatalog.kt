@@ -58,7 +58,7 @@ object RealHomeCatalog {
                     remaining.removeAll(items.toSet())
                 }
             remaining
-                .filter { it.rating != null }
+                .filter { (it.rating ?: 0.0) > 0.0 }
                 .sortedByDescending { it.rating }
                 .take(12)
                 .takeIf(List<ChannelUi>::isNotEmpty)
@@ -140,7 +140,7 @@ object RealHomeCatalog {
             metadata =
                 listOfNotNull(
                     year?.toString(),
-                    rating?.let { "★ ${"%.1f".format(it)}" },
+                    rating?.takeIf { it > 0.0 }?.let { "★ ${"%.1f".format(it)}" },
                 ).joinToString("  •  ").ifBlank { badge },
             badge = badge,
             kind = HomeItemKind.CATALOG,

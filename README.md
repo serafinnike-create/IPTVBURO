@@ -8,8 +8,8 @@ Transforma fontes de mídia autorizadas pelo usuário em uma biblioteca organiza
 
 ![Status](https://img.shields.io/badge/status-em%20desenvolvimento-7c3aed)
 ![GDD](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%207.0-2563eb)
-![Android TV](https://img.shields.io/badge/Android%20TV-v0.2.0--alpha.3-3ddc84)
-![Windows](https://img.shields.io/badge/Windows-v0.2.0--alpha.3-e2b458)
+![Android TV](https://img.shields.io/badge/Android%20TV-v0.2.0--alpha.4-3ddc84)
+![Windows](https://img.shields.io/badge/Windows-v0.2.0--alpha.4-e2b458)
 ![Multiplataforma](https://img.shields.io/badge/escopo-universal-0f766e)
 ![Offline Mobile](https://img.shields.io/badge/Offline%20Vault-planejado-f59e0b)
 
@@ -42,7 +42,7 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 | Entrega | Estado |
 |---|---|
 | GDDs 1.0 a 7.0 | ✅ Documentados na `main` |
-| Aplicação Android/Android TV | 🧪 Prévia `v0.2.0-alpha.3` |
+| Aplicação Android/Android TV | 🧪 Prévia `v0.2.0-alpha.4` |
 | Importação local M3U/M3U8 | ✅ Vertical funcional |
 | Xtream: ao vivo, filmes, séries e episódios | ✅ Vertical funcional |
 | Room, parser em lotes e transação de catálogo | ✅ Implementados |
@@ -100,7 +100,7 @@ O fluxo importação → categoria → canal → primeiro frame foi validado em 
 
 A prévia usa assinatura de desenvolvimento e não é uma versão de loja.
 
-### Preview multiplataforma v0.2.0-alpha.3
+### Preview multiplataforma v0.2.0-alpha.4
 
 O Windows restaura a fonte via DPAPI e oferece perfis, idiomas, favoritos,
 catálogo paginado, detalhes e filmografia na mesma janela, continuidade por
@@ -111,18 +111,19 @@ GitHub Releases e valida o digest SHA-256 antes de executá-lo.
 
 Nesta revisão, o Android usa apenas um painel de controles, altera o volume real
 de mídia do aparelho e oferece rotação/tela cheia. A Home separa o ano real de
-lançamento da data de entrada na fonte. No Windows, a versão fica visível no
-topo e o player aceita F11, Escape e Espaço além dos controles na tela.
+lançamento da data de entrada na fonte, restaura o hero corretamente com uma
+fonte real e mantém os cinco destinos visíveis no celular. No Windows, a versão
+fica visível no topo e o player aceita F11, Escape e Espaço além dos controles.
 
 Esta continua sendo uma prévia: download offline depende de autorização explícita
 da fonte/backend; HDR forçado, brilho global do monitor e seleção completa de
 faixas ainda não são anunciados como funções estáveis.
 
-- [GitHub Pre-release v0.2.0-alpha.3](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.2.0-alpha.3)
-- [Instalador Windows x64](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.3/IPTVBURO-0.2.2.msi)
-- [APK Android/Android TV](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.3/android-tv-debug.apk)
-- MSI: 161.356.857 bytes — SHA-256 `E712F600362AB4FDD6F04063FAE3F7FA17CB88E39F1EA56D7582CD782797081A`;
-- APK: 32.090.831 bytes — SHA-256 `9CF813F900C3A5EA57C3C1F4C13CCEDBEE60051AF307A7759390EB3A8BC1B3F9`.
+- [GitHub Pre-release v0.2.0-alpha.4](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.2.0-alpha.4)
+- [Instalador Windows x64](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.4/IPTVBURO-0.2.3.msi)
+- [APK Android/Android TV](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.4/android-tv-debug.apk)
+- MSI: 161.352.759 bytes — SHA-256 `2368190AA94FDA53CAF183D3DA715C8D2B1346B750A1800BBDBBC67DED533F2F`;
+- APK: 32.288.286 bytes — SHA-256 `6E4A5D53ADF06150F3FF93DEAA05DE1F2BEF8A9ECFDA87015F4CA8B9D6CE5296`.
 
 ### Build
 
@@ -154,7 +155,7 @@ apps/android-tv/build/outputs/apk/debug/android-tv-debug.apk
 MSI local:
 
 ```text
-apps/desktop/build/compose/binaries/main/msi/IPTVBURO-0.2.2.msi
+apps/desktop/build/compose/binaries/main/msi/IPTVBURO-0.2.3.msi
 ```
 
 Documentação do estado atual:

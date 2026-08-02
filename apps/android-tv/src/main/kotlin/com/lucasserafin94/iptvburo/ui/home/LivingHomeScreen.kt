@@ -155,12 +155,14 @@ private fun ReadyHome(
     val initialRailIndex = section.rails.indexOfFirst { rail ->
         rail.items.any { item -> item.id == initialFocusedItemId }
     }
+    val heroIndex = if (showDemonstrationNotice) 1 else 0
+    val firstRailIndex = heroIndex + 1
 
-    LaunchedEffect(initialFocusedItemId, section.id) {
+    LaunchedEffect(initialFocusedItemId, section.id, showDemonstrationNotice) {
         when {
-            initialFocusedItemId == section.hero.id -> columnState.scrollToItem(HERO_INDEX)
+            initialFocusedItemId == section.hero.id -> columnState.scrollToItem(heroIndex)
             initialRailIndex >= 0 -> columnState.scrollToItem(
-                initialRailIndex + FIRST_RAIL_INDEX,
+                initialRailIndex + firstRailIndex,
             )
         }
     }
@@ -189,7 +191,9 @@ private fun ReadyHome(
                 onItemFocused = onItemFocused,
                 onOpenItem = onOpenItem,
                 onOpenSources = onOpenSources,
-                requestFocus = initialFocusedItemId == section.hero.id,
+                // Touch phones must open at the beginning of the hero. Requesting focus
+                // on its lower action button makes LazyColumn scroll the title offscreen.
+                requestFocus = !metrics.compactPortrait && initialFocusedItemId == section.hero.id,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(metrics.heroHeight),
@@ -710,7 +714,5 @@ private data class HomeLayoutMetrics(
     }
 }
 
-private const val HERO_INDEX = 1
-private const val FIRST_RAIL_INDEX = 2
 private const val STATE_PRIMARY_ACTION_ID = "home:state:primary"
 private const val STATE_SECONDARY_ACTION_ID = "home:state:secondary"

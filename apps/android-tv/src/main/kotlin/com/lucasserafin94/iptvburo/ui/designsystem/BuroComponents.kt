@@ -244,6 +244,7 @@ fun BuroChip(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     selected: Boolean = false,
+    compact: Boolean = false,
 ) {
     val colors = BuroTheme.colors
     val preferences = BuroTheme.preferences
@@ -276,7 +277,7 @@ fun BuroChip(
             modifier =
                 Modifier
                     .padding(
-                        horizontal = BuroSpacing.Sm,
+                        horizontal = if (compact) BuroSpacing.Xs else BuroSpacing.Sm,
                         vertical = BuroSpacing.Xs,
                     ),
             contentAlignment = Alignment.Center,
@@ -284,7 +285,12 @@ fun BuroChip(
             Text(
                 text = label,
                 color = if (enabled) colors.textPrimary else colors.textMuted,
-                style = MaterialTheme.typography.labelLarge,
+                style =
+                    if (compact) {
+                        MaterialTheme.typography.labelMedium
+                    } else {
+                        MaterialTheme.typography.labelLarge
+                    },
                 maxLines = 1,
             )
         }

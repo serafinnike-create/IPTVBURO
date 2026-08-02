@@ -156,6 +156,10 @@ confirmados.
 - 137 testes e lint Android aprovados; APK instalado e iniciado no Android 15;
 - MSI instalado no Windows, atalho atualizado e aplicativo iniciado pela pasta
   de instalação do usuário.
+- inspeção por capturas reais em retrato e paisagem encontrou e corrigiu a
+  restauração que pulava o hero quando não havia aviso demonstrativo;
+- navegação compacta agora mantém Início, TV, Filmes, Séries e BURO visíveis,
+  com o avatar como acesso direto ao perfil.
 
 # 2026-08-02 — reconexão e metadados reais
 

@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.ui.navigation
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -16,8 +17,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,6 +83,17 @@ fun BuroRibbon(
                 .background(colors.overlay),
     ) {
         val compact = maxWidth < 600.dp
+        val visibleDestinations =
+            if (compact) {
+                ribbonDestinations.filterNot { it.section == AppSection.PROFILE }
+            } else {
+                ribbonDestinations
+            }
+        val ribbonState = rememberLazyListState()
+        LaunchedEffect(compact, focusTarget) {
+            val destinationIndex = visibleDestinations.indexOfFirst { it.section == focusTarget }
+            if (destinationIndex >= 0) ribbonState.scrollToItem(destinationIndex)
+        }
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier =
@@ -95,6 +109,7 @@ fun BuroRibbon(
                 }
                 LazyRow(
                     modifier = Modifier.weight(1f),
+                    state = ribbonState,
                     contentPadding =
                         PaddingValues(
                             end = if (compact) BuroSpacing.Sm else BuroSpacing.Lg,
@@ -103,7 +118,7 @@ fun BuroRibbon(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     items(
-                        items = ribbonDestinations,
+                        items = visibleDestinations,
                         key = { destination -> destination.section.name },
                     ) { destination ->
                         val focusRequesterModifier =
@@ -116,9 +131,15 @@ fun BuroRibbon(
                                 Modifier
                             }
                         BuroChip(
-                            label = stringResource(destination.labelResource),
+                            label =
+                                when {
+                                    compact && destination.section == AppSection.LIVE -> "TV"
+                                    compact && destination.section == AppSection.MY_BURO -> "BURO"
+                                    else -> stringResource(destination.labelResource)
+                                },
                             onClick = { onSelect(destination.section) },
                             selected = ribbonSelection == destination.section,
+                            compact = compact,
                             modifier =
                                 focusRequesterModifier.onFocusChanged { focusState ->
                                     if (focusState.isFocused) {
@@ -130,7 +151,10 @@ fun BuroRibbon(
                 }
                 activeProfileName?.let { profileName ->
                     Row(
-                        modifier = Modifier.padding(end = if (compact) BuroSpacing.Sm else BuroSpacing.Lg),
+                        modifier =
+                            Modifier
+                                .clickable { onSelect(AppSection.PROFILE) }
+                                .padding(end = if (compact) BuroSpacing.Sm else BuroSpacing.Lg),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
                     ) {
