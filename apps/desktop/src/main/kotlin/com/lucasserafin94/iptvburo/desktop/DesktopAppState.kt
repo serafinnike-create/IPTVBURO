@@ -21,7 +21,10 @@ import com.lucasserafin94.iptvburo.desktop.security.RememberedXtreamStore
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
+import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
+import com.lucasserafin94.iptvburo.desktop.data.migrateFavoriteKeys
 import com.lucasserafin94.iptvburo.domain.model.Category
+import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
 import com.lucasserafin94.iptvburo.domain.model.PlaybackContentType
@@ -173,7 +176,7 @@ class DesktopAppState(
         val key = favoriteKey(item)
         favoriteKeys = if (key in favoriteKeys) favoriteKeys - key else favoriteKeys + key
         userStore.setFavorites(profileId, favoriteKeys)
-        if (favoritesOnly && key !in favoriteKeys) {
+        if (favoritesOnly && favoriteKey(item) !in favoriteKeys) {
             xtreamPage =
                 xtreamPage.copy(
                     items = xtreamPage.items.filterNot { visible -> visible.providerId == item.providerId },
@@ -188,7 +191,19 @@ class DesktopAppState(
         if (isXtreamSelected) refreshXtreamPage(pageIndex = 0)
     }
 
-    private fun favoriteKey(item: XtreamCatalogItem): String = "${item.contentType.name}:${item.providerId}"
+    /**
+     * Favourite key, derived from what the content *is*.
+     *
+     * This used to be `contentType:providerId`. Provider ids are per-list numbering, so after the
+     * user replaced their playlist the stored keys still matched — but matched unrelated titles,
+     * silently marking the wrong films as favourite.
+     */
+    private fun favoriteKey(item: XtreamCatalogItem): String = item.contentIdentity().key
+
+    private fun favoriteIdentities(): Set<ContentIdentity> =
+        favoriteKeys.mapNotNullTo(LinkedHashSet()) { key ->
+            runCatching { ContentIdentity(key) }.getOrNull()
+        }
 
     val sourceSummaries: List<DesktopSourceSummary>
         get() =
@@ -636,21 +651,23 @@ class DesktopAppState(
 
     private fun playbackIdentity(target: XtreamPlaybackTarget): PlaybackProgressIdentity? {
         val profileId = activeProfileId ?: return null
-        val sourceId = xtreamSummary?.sourceId ?: return null
+        // Deliberately not the per-source hash. sourceId used to be SHA-256(server + username), so
+        // a new playlist produced a new hash and every progress row was orphaned on disk. Progress
+        // belongs to the user's library, not to whichever list is currently connected.
         return when (target) {
             is XtreamPlaybackTarget.CatalogItem -> {
                 if (target.contentType != XtreamContentType.MOVIE) return null
                 PlaybackProgressIdentity(
                     profileId = profileId,
-                    sourceId = sourceId,
-                    contentId = target.providerId,
+                    sourceId = LIBRARY_SCOPE,
+                    contentId = target.contentKey,
                     contentType = PlaybackContentType.MOVIE,
                 )
             }
             is XtreamPlaybackTarget.Episode -> PlaybackProgressIdentity(
                 profileId = profileId,
-                sourceId = sourceId,
-                contentId = target.episode.providerId,
+                sourceId = LIBRARY_SCOPE,
+                contentId = target.contentKey,
                 contentType = PlaybackContentType.EPISODE,
                 seriesId = target.seriesId,
                 seasonNumber = target.episode.seasonNumber,
@@ -775,13 +792,7 @@ class DesktopAppState(
         val category = selectedXtreamCategoryId
         val query = xtreamSearchQuery
         val releaseYear = selectedXtreamYear
-        val allowedProviderIds =
-            if (favoritesOnly) {
-                val prefix = "${type.name}:"
-                favoriteKeys.mapNotNullTo(LinkedHashSet()) { key -> key.removePrefix(prefix).takeIf { key.startsWith(prefix) } }
-            } else {
-                null
-            }
+        val allowedIdentities = if (favoritesOnly) favoriteIdentities() else null
         val page =
             withContext(Dispatchers.Default) {
                 xtreamRepository.page(
@@ -790,7 +801,7 @@ class DesktopAppState(
                     query = query,
                     requestedPage = pageIndex,
                     releaseYear = releaseYear,
-                    allowedProviderIds = allowedProviderIds,
+                    allowedIdentities = allowedIdentities,
                     kidsMode = activeProfile?.isKids == true,
                 )
             }
@@ -857,6 +868,14 @@ class DesktopAppState(
 
     private companion object {
         const val MAX_SEARCH_LENGTH = 120
+
+        /**
+         * Scope for stored watch progress.
+         *
+         * A fixed value, because progress is scoped to the user library rather than to the
+         * playlist that happened to be connected when they watched something.
+         */
+        const val LIBRARY_SCOPE = "buro-library"
         const val ZERO_CHAR = '\u0000'
     }
 }

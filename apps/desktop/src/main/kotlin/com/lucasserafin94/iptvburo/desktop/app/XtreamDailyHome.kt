@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.DailyHomeStatus
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.DesktopContinueWatchingEntry
+import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
@@ -206,6 +207,7 @@ fun XtreamDailyHome(
                                                 providerId = item.providerId,
                                                 contentType = item.contentType,
                                                 containerExtension = item.containerExtension,
+                                                contentKey = item.contentIdentity().key,
                                             ),
                                     ),
                                 )

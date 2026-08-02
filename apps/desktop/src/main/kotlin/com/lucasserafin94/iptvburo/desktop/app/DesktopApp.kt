@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -108,6 +109,7 @@ fun DesktopApp(
     var externalOpenResult by remember { mutableStateOf<ExternalOpenResult?>(null) }
     var activePlayback by remember { mutableStateOf<DesktopPlaybackRequest?>(null) }
     var showXtreamLogin by remember { mutableStateOf(false) }
+    var showProfileGate by remember { mutableStateOf(false) }
     val releaseUpdater = remember { GitHubReleaseUpdater() }
     var updateBusy by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
@@ -154,14 +156,15 @@ fun DesktopApp(
                         sources = appState.sourceSummaries,
                         selectedSourceId = appState.selectedSourceId,
                         onSourceSelected = appState::selectSource,
-                        onImport = {
-                            chooseLocalPlaylist(ownerWindow)?.let { path ->
-                                scope.launch { appState.importLocalPlaylist(path) }
-                            }
-                        },
-                        onConnectXtream = { showXtreamLogin = true },
                         destination = appState.destination,
+                        catalogType = appState.xtreamContentType,
                         onHome = appState::openHome,
+                        onMovies = {
+                            scope.launch { appState.openCatalog(XtreamContentType.MOVIE) }
+                        },
+                        onSeries = {
+                            scope.launch { appState.openCatalog(XtreamContentType.SERIES) }
+                        },
                         onLive = {
                             scope.launch { appState.openCatalog(XtreamContentType.LIVE) }
                         },
@@ -173,7 +176,10 @@ fun DesktopApp(
                             sourceCount = appState.sourceSummaries.size,
                             activeProfile = appState.activeProfile,
                             language = appState.language,
-                            onChangeProfile = { appState.selectProfile(null) },
+                            // Opening the picker must not clear the active profile. It used to
+                            // call selectProfile(null), which left no way back if you opened it
+                            // by accident.
+                            onChangeProfile = { showProfileGate = true },
                             onSelectLanguage = appState::updateLanguage,
                             updateBusy = updateBusy,
                             updateMessage = updateMessage,
@@ -208,6 +214,11 @@ fun DesktopApp(
                             },
                         )
                         HorizontalDivider(color = BuroColors.BorderSoft)
+                        // The content screen must be weighted. A Column measures an unweighted
+                        // child with unbounded height, so the Home's LazyColumn believed it had
+                        // infinite space: it laid every rail out at once, overflowed past the
+                        // window and never became scrollable.
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         if (!appState.hasSelectedSource) {
                             EmptyLibrary(
                                 onImport = {
@@ -249,6 +260,7 @@ fun DesktopApp(
                                 onOpenExternal = { pendingExternalChannel = it },
                             )
                         }
+                        }
                     }
                 }
 
@@ -284,11 +296,22 @@ fun DesktopApp(
                         },
                     )
                 }
-                if (appState.activeProfile == null) {
+                if (appState.activeProfile == null || showProfileGate) {
                     DesktopProfileGate(
                         profiles = appState.profiles,
-                        onSelect = { profileId -> scope.launch { appState.selectProfileAndRefresh(profileId) } },
+                        onSelect = { profileId ->
+                            showProfileGate = false
+                            scope.launch { appState.selectProfileAndRefresh(profileId) }
+                        },
                         onCreate = appState::createProfile,
+                        // Dismissable only when a profile is already active. On first launch there
+                        // is nothing to fall back to, so the gate stays modal.
+                        onDismiss =
+                            if (appState.activeProfile != null) {
+                                { showProfileGate = false }
+                            } else {
+                                null
+                            },
                     )
                 }
 
@@ -363,10 +386,11 @@ private fun SourceSidebar(
     sources: List<DesktopSourceSummary>,
     selectedSourceId: String?,
     onSourceSelected: (String) -> Unit,
-    onImport: () -> Unit,
-    onConnectXtream: () -> Unit,
     destination: DesktopDestination,
+    catalogType: XtreamContentType,
     onHome: () -> Unit,
+    onMovies: () -> Unit,
+    onSeries: () -> Unit,
     onLive: () -> Unit,
     onFavorites: () -> Unit,
 ) {
@@ -383,61 +407,74 @@ private fun SourceSidebar(
         Spacer(Modifier.height(30.dp))
         SectionLabel(text.library)
         Spacer(Modifier.height(10.dp))
-        NavigationItem(text.home, selected = destination == DesktopDestination.HOME, onClick = onHome)
-        NavigationItem(text.live, selected = destination == DesktopDestination.CATALOG, onClick = onLive)
-        NavigationItem(text.favorites, selected = destination == DesktopDestination.FAVORITES, onClick = onFavorites)
-        Spacer(Modifier.height(28.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            SectionLabel(text.sources)
-            Text(
-                text = sources.size.toString(),
-                color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.labelLarge,
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            items(sources, key = DesktopSourceSummary::id) { source ->
-                SourceItem(
-                    source = source,
-                    selected = source.id == selectedSourceId,
-                    onClick = { onSourceSelected(source.id) },
+        NavigationItem(
+            label = text.home,
+            selected = destination == DesktopDestination.HOME,
+            onClick = onHome,
+        )
+        NavigationItem(
+            label = text.movies,
+            selected =
+                destination == DesktopDestination.CATALOG &&
+                    catalogType == XtreamContentType.MOVIE,
+            onClick = onMovies,
+        )
+        NavigationItem(
+            label = text.series,
+            selected =
+                destination == DesktopDestination.CATALOG &&
+                    catalogType == XtreamContentType.SERIES,
+            onClick = onSeries,
+        )
+        NavigationItem(
+            label = text.live,
+            selected =
+                destination == DesktopDestination.CATALOG &&
+                    catalogType == XtreamContentType.LIVE,
+            onClick = onLive,
+        )
+        NavigationItem(
+            label = text.favorites,
+            selected = destination == DesktopDestination.FAVORITES,
+            onClick = onFavorites,
+        )
+
+        // The source list used to own the whole remaining column even with one source. It is a
+        // rarely-used switch, so it now takes only the height it needs and the section disappears
+        // entirely when there is nothing to switch between.
+        if (sources.size > 1) {
+            Spacer(Modifier.height(28.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                SectionLabel(text.sources)
+                Text(
+                    text = sources.size.toString(),
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.labelLarge,
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 220.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(sources, key = DesktopSourceSummary::id) { source ->
+                    SourceItem(
+                        source = source,
+                        selected = source.id == selectedSourceId,
+                        onClick = { onSourceSelected(source.id) },
+                    )
+                }
+            }
         }
+
+        Spacer(Modifier.weight(1f))
+        // Connect/Import are not repeated here. They are the two actions of the empty state, and
+        // once a source exists they are dead weight in permanent view.
         PrivacyNote()
-        Spacer(Modifier.height(14.dp))
-        OutlinedButton(
-            onClick = onConnectXtream,
-            modifier = Modifier.fillMaxWidth().height(42.dp),
-            shape = BuroRadius.Small,
-            colors =
-                ButtonDefaults.outlinedButtonColors(
-                    contentColor = BuroColors.Primary,
-                ),
-        ) {
-            Text(text.connectXtream, fontWeight = FontWeight.SemiBold)
-        }
-        Spacer(Modifier.height(8.dp))
-        Button(
-            onClick = onImport,
-            modifier = Modifier.fillMaxWidth().height(46.dp),
-            shape = BuroRadius.Small,
-            colors =
-                ButtonDefaults.buttonColors(
-                    containerColor = BuroColors.Primary,
-                    contentColor = BuroColors.OnPrimary,
-                ),
-        ) {
-            Text("+  ${text.importM3u}", fontWeight = FontWeight.Bold)
-        }
     }
 }
 
@@ -642,7 +679,7 @@ private fun TopBar(
                 Text(
                     updateMessage
                         ?: "$sourceCount ${text.sourcesCount}  ·  $channelCount ${text.items}  ·  " +
-                        "v$DESKTOP_VERSION",
+                        "v${DESKTOP_VERSION.substringBefore('-')}",
                     color = BuroColors.TextSubtle,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
@@ -672,10 +709,6 @@ private fun TopBar(
             if (showProfile) {
                 Spacer(Modifier.width(BuroSpacing.Sm))
                 ProfileChip(name = activeProfile?.name ?: text.profile, onClick = onChangeProfile)
-            }
-            if (showPrivacyPill) {
-                Spacer(Modifier.width(BuroSpacing.Sm))
-                StatusPill(text.privateSession, BuroColors.Success)
             }
         }
     }
@@ -1478,6 +1511,7 @@ private fun DesktopProfileGate(
     profiles: List<DesktopProfile>,
     onSelect: (String?) -> Unit,
     onCreate: (String, Boolean) -> Unit,
+    onDismiss: (() -> Unit)?,
 ) {
     var newName by remember { mutableStateOf("") }
     var kids by remember { mutableStateOf(false) }
@@ -1485,6 +1519,29 @@ private fun DesktopProfileGate(
         modifier = Modifier.fillMaxSize().background(BuroColors.Scrim),
         contentAlignment = Alignment.Center,
     ) {
+        if (onDismiss != null) {
+            BuroInteractiveRow(
+                onClick = onDismiss,
+                selected = false,
+                shape = CircleShape,
+                contentDescription = strings.close,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(BuroSpacing.Lg),
+            ) {
+                Box(
+                    modifier = Modifier.size(44.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "✕",
+                        color = BuroColors.TextMuted,
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                }
+            }
+        }
         Column(
             modifier = Modifier.widthIn(max = 820.dp).padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

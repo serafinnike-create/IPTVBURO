@@ -73,6 +73,8 @@ import com.lucasserafin94.iptvburo.desktop.LiveEpgStatus
 import com.lucasserafin94.iptvburo.desktop.PersonFilmography
 import com.lucasserafin94.iptvburo.desktop.SeriesDetailsStatus
 import com.lucasserafin94.iptvburo.desktop.XtreamStatus
+import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
+import com.lucasserafin94.iptvburo.desktop.data.episodeContentKey
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
@@ -904,13 +906,18 @@ internal fun XtreamItemDetail(
                     onOpenTrailer = onOpenTrailer,
                     resumeDecisionForEpisode = { episode ->
                         resumeDecisionFor(
-                            XtreamPlaybackTarget.Episode(seriesId = item.providerId, episode = episode),
+                            XtreamPlaybackTarget.Episode(
+                                seriesId = item.providerId,
+                                episode = episode,
+                                contentKey = item.episodeContentKey(episode),
+                            ),
                         )
                     },
                     onOpenEpisode = { episode, startPositionMillis ->
                         val target = XtreamPlaybackTarget.Episode(
                             seriesId = item.providerId,
                             episode = episode,
+                            contentKey = item.episodeContentKey(episode),
                         )
                         onOpenExternal(
                             PendingXtreamExternal(
@@ -926,6 +933,7 @@ internal fun XtreamItemDetail(
                     providerId = item.providerId,
                     contentType = item.contentType,
                     containerExtension = item.containerExtension,
+                    contentKey = item.contentIdentity().key,
                 )
                 // Actions sit on one line at their natural width. Full-width stacked buttons made
                 // a page about a film look like a settings form.

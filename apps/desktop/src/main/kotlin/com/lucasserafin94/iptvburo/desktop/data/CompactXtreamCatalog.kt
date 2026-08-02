@@ -1,8 +1,18 @@
 package com.lucasserafin94.iptvburo.desktop.data
 
+import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
+import com.lucasserafin94.iptvburo.domain.model.ContentKind
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import java.nio.charset.StandardCharsets
+
+/** Maps the provider's content type onto the identity namespace. */
+internal fun XtreamContentType.toContentKind(): ContentKind =
+    when (this) {
+        XtreamContentType.LIVE -> ContentKind.LIVE
+        XtreamContentType.MOVIE -> ContentKind.MOVIE
+        XtreamContentType.SERIES -> ContentKind.SERIES
+    }
 
 /**
  * Session-only, columnar catalog index for the desktop application.
@@ -54,16 +64,29 @@ internal class CompactXtreamCatalog(
         categoryId: String?,
         normalizedQuery: String,
         releaseYear: Int? = null,
-        allowedProviderIds: Set<String>? = null,
+        allowedIdentities: Set<ContentIdentity>? = null,
     ): Boolean {
         require(index in 0 until size)
         val matchesCategory =
             categoryId == null ||
                 encodedCategoryIds[index]?.contains("$CATEGORY_SEPARATOR$categoryId$CATEGORY_SEPARATOR") == true
         val matchesYear = releaseYear == null || hasYear[index] && years[index] == releaseYear
-        val matchesLibrary = allowedProviderIds == null || providerIds[index] in allowedProviderIds
+        // Matched on content identity rather than provider id. Provider ids are per-list numbering,
+        // so filtering favourites by them showed the wrong titles once the user changed list.
+        val matchesLibrary = allowedIdentities == null || identityAt(index) in allowedIdentities
         return matchesCategory && matchesYear && matchesLibrary &&
             (normalizedQuery.isEmpty() || names[index].contains(normalizedQuery, ignoreCase = true))
+    }
+
+    /** Identity of the row, derived from the title and year the provider supplied. */
+    fun identityAt(index: Int): ContentIdentity {
+        require(index in 0 until size)
+        val name = names[index]
+        return ContentIdentity.of(
+            kind = contentType.toContentKind(),
+            title = name,
+            year = years[index].takeIf { hasYear[index] } ?: ContentIdentity.yearFromTitle(name),
+        )
     }
 
     fun itemAt(index: Int): XtreamCatalogItem {

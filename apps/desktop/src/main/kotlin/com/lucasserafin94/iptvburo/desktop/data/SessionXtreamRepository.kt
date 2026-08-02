@@ -4,6 +4,7 @@ import com.lucasserafin94.iptvburo.desktop.model.XtreamCatalogPage
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.desktop.model.XtreamSessionSummary
 import com.lucasserafin94.iptvburo.desktop.security.XtreamLoginInput
+import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
 import com.lucasserafin94.iptvburo.xtream.XtreamAccount
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
@@ -116,7 +117,7 @@ class SessionXtreamRepository(
         requestedPage: Int,
         pageSize: Int = DEFAULT_PAGE_SIZE,
         releaseYear: Int? = null,
-        allowedProviderIds: Set<String>? = null,
+        allowedIdentities: Set<ContentIdentity>? = null,
         kidsMode: Boolean = false,
     ): XtreamCatalogPage {
         require(pageSize in 1..MAX_PAGE_SIZE) { "Invalid page size." }
@@ -132,7 +133,7 @@ class SessionXtreamRepository(
         val categoryNames = synchronized(lock) { categories[contentType].orEmpty().associate { it.providerId to it.name } }
 
         repeat(catalogItems.size) { index ->
-            if (catalogItems.matches(index, categoryId, normalizedQuery, releaseYear, allowedProviderIds)) {
+            if (catalogItems.matches(index, categoryId, normalizedQuery, releaseYear, allowedIdentities)) {
                 val item = catalogItems.itemAt(index)
                 val allowedForKids =
                     !kidsMode || FamilyContentPolicy.isAllowedForKids(
@@ -161,7 +162,7 @@ class SessionXtreamRepository(
                 requestedPage = pageCount - 1,
                 pageSize = pageSize,
                 releaseYear = releaseYear,
-                allowedProviderIds = allowedProviderIds,
+                allowedIdentities = allowedIdentities,
                 kidsMode = kidsMode,
             )
         }

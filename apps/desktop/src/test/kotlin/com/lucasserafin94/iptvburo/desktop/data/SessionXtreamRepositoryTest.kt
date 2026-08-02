@@ -90,6 +90,7 @@ class SessionXtreamRepositoryTest {
                 providerId = item.providerId,
                 contentType = item.contentType,
                 containerExtension = null,
+                contentKey = item.contentIdentity().key,
             )
         val playbackUri = repository.buildConfirmedPlaybackUri(target)
 

@@ -90,10 +90,19 @@ data class XtreamCatalogPage(
  * the external handoff.
  */
 sealed interface XtreamPlaybackTarget {
+    /**
+     * Provider-independent key for the content behind this target.
+     *
+     * Watch progress is stored against this rather than the provider id, so replacing the playlist
+     * keeps "continue watching" pointing at the same title instead of orphaning every entry.
+     */
+    val contentKey: String
+
     class CatalogItem(
         val providerId: String,
         val contentType: XtreamContentType,
         val containerExtension: String?,
+        override val contentKey: String,
     ) : XtreamPlaybackTarget {
         override fun toString(): String =
             "XtreamPlaybackTarget.CatalogItem(providerId=<redacted>, contentType=$contentType)"
@@ -102,6 +111,7 @@ sealed interface XtreamPlaybackTarget {
     class Episode(
         val seriesId: String,
         val episode: XtreamEpisode,
+        override val contentKey: String,
     ) : XtreamPlaybackTarget {
         override fun toString(): String = "XtreamPlaybackTarget.Episode(<redacted>)"
     }
