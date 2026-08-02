@@ -2,11 +2,18 @@ package com.lucasserafin94.iptvburo.playlist
 
 import com.lucasserafin94.iptvburo.domain.model.PlaylistHeader
 import java.io.BufferedReader
+import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.io.InputStreamReader
+import java.io.Reader
+import java.io.SequenceInputStream
 import java.net.URI
 import java.net.URISyntaxException
-import java.net.URLDecoder
+import java.nio.ByteBuffer
+import java.nio.CharBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.Charset
+import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 import kotlin.math.min
@@ -34,6 +41,7 @@ class M3uParser(
             channels = channels,
             warnings = summary.warnings,
             bytesRead = summary.bytesRead,
+            suppressedWarningCount = summary.suppressedWarningCount,
         )
     }
 
@@ -42,12 +50,12 @@ class M3uParser(
         onChannel: (ParsedChannel) -> Unit,
     ): M3uParseSummary {
         val boundedInput = ByteLimitedInputStream(input, limits.maxBytes)
+        val warnings = CappedWarningList(limits.maxWarnings)
         val reader =
             BufferedReader(
-                InputStreamReader(boundedInput, StandardCharsets.UTF_8),
+                decodedReader(boundedInput, warnings),
                 READER_BUFFER_SIZE,
             )
-        val warnings = mutableListOf<M3uWarning>()
         var playlistHeader = PlaylistHeader()
         var headerSeen = false
         var meaningfulLineSeen = false
@@ -250,8 +258,7 @@ class M3uParser(
                 )
         }
         if (!headerSeen) {
-            warnings.add(
-                0,
+            warnings.addPriority(
                 warning(
                     M3uWarningCode.MISSING_PLAYLIST_HEADER,
                     null,
@@ -273,8 +280,134 @@ class M3uParser(
             channelCount = channelCount,
             warnings = warnings.toList(),
             bytesRead = boundedInput.bytesRead,
+            suppressedWarningCount = warnings.suppressedWarningCount,
         )
     }
+
+    private fun decodedReader(
+        input: InputStream,
+        warnings: CappedWarningList,
+    ): Reader {
+        val probe = ByteArray(ENCODING_PROBE_SIZE)
+        var probeLength = 0
+        var reachedEndOfInput = false
+        while (probeLength < probe.size) {
+            val count = input.read(probe, probeLength, probe.size - probeLength)
+            if (count == -1) {
+                reachedEndOfInput = true
+                break
+            }
+            if (count == 0) {
+                val value = input.read()
+                if (value == -1) {
+                    reachedEndOfInput = true
+                    break
+                }
+                probe[probeLength] = value.toByte()
+                probeLength += 1
+            } else {
+                probeLength += count
+            }
+        }
+        var remainderInput = input
+        if (!reachedEndOfInput && probeLength == probe.size) {
+            val lookahead = input.read()
+            if (lookahead == -1) {
+                reachedEndOfInput = true
+            } else {
+                remainderInput =
+                    SequenceInputStream(
+                        ByteArrayInputStream(byteArrayOf(lookahead.toByte())),
+                        input,
+                    )
+            }
+        }
+
+        val bom =
+            when {
+                probe.hasPrefix(probeLength, UTF8_BOM_BYTES) ->
+                    BomEncoding(UTF8_BOM_BYTES.size, StandardCharsets.UTF_8)
+
+                probe.hasPrefix(probeLength, UTF16_LE_BOM_BYTES) ->
+                    BomEncoding(UTF16_LE_BOM_BYTES.size, StandardCharsets.UTF_16LE)
+
+                probe.hasPrefix(probeLength, UTF16_BE_BOM_BYTES) ->
+                    BomEncoding(UTF16_BE_BOM_BYTES.size, StandardCharsets.UTF_16BE)
+
+                else -> null
+            }
+        if (bom != null) {
+            return strictReader(
+                input = replay(probe, bom.byteCount, probeLength, remainderInput),
+                charset = bom.charset,
+            )
+        }
+
+        val replayInput = replay(probe, 0, probeLength, remainderInput)
+        return if (isStrictUtf8(probe, probeLength, reachedEndOfInput)) {
+            strictReader(replayInput, StandardCharsets.UTF_8)
+        } else {
+            warnings.addPriority(
+                warning(
+                    code = M3uWarningCode.WINDOWS_1252_FALLBACK,
+                    lineNumber = null,
+                    message =
+                        "The input was not valid UTF-8 and was decoded as Windows-1252.",
+                ),
+            )
+            InputStreamReader(replayInput, WINDOWS_1252)
+        }
+    }
+
+    private fun strictReader(
+        input: InputStream,
+        charset: Charset,
+    ): Reader =
+        InputStreamReader(
+            input,
+            charset.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT),
+        )
+
+    private fun replay(
+        prefix: ByteArray,
+        startIndex: Int,
+        endIndex: Int,
+        remainder: InputStream,
+    ): InputStream =
+        SequenceInputStream(
+            ByteArrayInputStream(prefix, startIndex, endIndex - startIndex),
+            remainder,
+        )
+
+    private fun isStrictUtf8(
+        bytes: ByteArray,
+        length: Int,
+        endOfInput: Boolean,
+    ): Boolean {
+        val decoder =
+            StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+        val input = ByteBuffer.wrap(bytes, 0, length)
+        val output = CharBuffer.allocate(UTF8_VALIDATION_BUFFER_SIZE)
+        while (true) {
+            val result = decoder.decode(input, output, endOfInput)
+            when {
+                result.isError -> return false
+                result.isOverflow -> output.clear()
+                result.isUnderflow -> return true
+            }
+        }
+    }
+
+    private fun ByteArray.hasPrefix(
+        availableLength: Int,
+        expected: ByteArray,
+    ): Boolean =
+        availableLength >= expected.size &&
+            expected.indices.all { index -> this[index] == expected[index] }
 
     private fun parsePlaylistHeader(
         line: String,
@@ -562,10 +695,7 @@ class M3uParser(
             }
             val rawName =
                 try {
-                    URLDecoder.decode(
-                        pair.substring(0, separator),
-                        StandardCharsets.UTF_8.name(),
-                    )
+                    percentDecodePreservingPlus(pair.substring(0, separator))
                 } catch (_: IllegalArgumentException) {
                     warnings +=
                         warning(
@@ -577,10 +707,7 @@ class M3uParser(
                 }
             val value =
                 try {
-                    URLDecoder.decode(
-                        pair.substring(separator + 1),
-                        StandardCharsets.UTF_8.name(),
-                    )
+                    percentDecodePreservingPlus(pair.substring(separator + 1))
                 } catch (_: IllegalArgumentException) {
                     warnings +=
                         warning(
@@ -602,6 +729,48 @@ class M3uParser(
                 destination[canonicalName] = value
             }
         }
+    }
+
+    private fun percentDecodePreservingPlus(value: String): String {
+        if ('%' !in value) return value
+
+        val decoded = StringBuilder(value.length)
+        var index = 0
+        while (index < value.length) {
+            if (value[index] != '%') {
+                decoded.append(value[index])
+                index += 1
+                continue
+            }
+
+            val runBytes = ByteArray((value.length - index + 2) / 3)
+            var runLength = 0
+            while (index < value.length && value[index] == '%') {
+                if (index + 2 >= value.length) {
+                    throw IllegalArgumentException("Incomplete percent encoding")
+                }
+                val high = value[index + 1].digitToIntOrNull(16)
+                    ?: throw IllegalArgumentException("Invalid percent encoding")
+                val low = value[index + 2].digitToIntOrNull(16)
+                    ?: throw IllegalArgumentException("Invalid percent encoding")
+                runBytes[runLength] = ((high shl 4) or low).toByte()
+                runLength += 1
+                index += 3
+            }
+
+            val runText =
+                try {
+                    StandardCharsets.UTF_8.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT)
+                        .decode(ByteBuffer.wrap(runBytes, 0, runLength))
+                        .toString()
+                } catch (error: CharacterCodingException) {
+                    throw IllegalArgumentException("Invalid UTF-8 percent encoding", error)
+                }
+            decoded.append(runText)
+        }
+        return decoded.toString()
     }
 
     private fun collectTag(
@@ -749,8 +918,15 @@ class M3uParser(
         val malformed: Boolean,
     )
 
+    private data class BomEncoding(
+        val byteCount: Int,
+        val charset: Charset,
+    )
+
     private companion object {
         const val READER_BUFFER_SIZE = 8 * 1024
+        const val ENCODING_PROBE_SIZE = 1024 * 1024
+        const val UTF8_VALIDATION_BUFFER_SIZE = 4 * 1024
         const val UTF8_BOM = "\uFEFF"
         const val EXTM3U = "#EXTM3U"
         const val EXTINF = "#EXTINF:"
@@ -771,10 +947,68 @@ class M3uParser(
         const val TVG_SHIFT = "tvg-shift"
 
         val SAFE_STREAM_SCHEMES = setOf("http", "https")
+        val WINDOWS_1252: Charset = Charset.forName("windows-1252")
+        val UTF8_BOM_BYTES =
+            byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
+        val UTF16_LE_BOM_BYTES =
+            byteArrayOf(0xFF.toByte(), 0xFE.toByte())
+        val UTF16_BE_BOM_BYTES =
+            byteArrayOf(0xFE.toByte(), 0xFF.toByte())
         val JSON_STRING_PAIR =
             Regex(
                 """"((?:\\.|[^"\\])*)"\s*:\s*"((?:\\.|[^"\\])*)"""",
             )
+    }
+}
+
+private class CappedWarningList(
+    private val maxSize: Int,
+) : AbstractMutableList<M3uWarning>() {
+    private val delegate =
+        ArrayList<M3uWarning>(min(maxSize, INITIAL_WARNING_CAPACITY))
+
+    var suppressedWarningCount: Int = 0
+        private set
+
+    override val size: Int
+        get() = delegate.size
+
+    override fun get(index: Int): M3uWarning = delegate[index]
+
+    override fun add(
+        index: Int,
+        element: M3uWarning,
+    ) {
+        if (delegate.size < maxSize) {
+            delegate.add(index, element)
+        } else {
+            incrementSuppressedCount()
+        }
+    }
+
+    override fun set(
+        index: Int,
+        element: M3uWarning,
+    ): M3uWarning = delegate.set(index, element)
+
+    override fun removeAt(index: Int): M3uWarning = delegate.removeAt(index)
+
+    fun addPriority(element: M3uWarning) {
+        if (delegate.size == maxSize) {
+            delegate.removeAt(delegate.lastIndex)
+            incrementSuppressedCount()
+        }
+        delegate.add(0, element)
+    }
+
+    private fun incrementSuppressedCount() {
+        if (suppressedWarningCount < Int.MAX_VALUE) {
+            suppressedWarningCount += 1
+        }
+    }
+
+    private companion object {
+        const val INITIAL_WARNING_CAPACITY = 16
     }
 }
 

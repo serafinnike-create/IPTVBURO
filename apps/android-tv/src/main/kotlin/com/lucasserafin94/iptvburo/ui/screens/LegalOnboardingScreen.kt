@@ -11,9 +11,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -29,9 +31,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.ui.adaptive.BuroWindowClass
+import com.lucasserafin94.iptvburo.ui.adaptive.resolveBuroWindowClass
+import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
 import com.lucasserafin94.iptvburo.ui.theme.Blue
 import com.lucasserafin94.iptvburo.ui.theme.Ink
 import com.lucasserafin94.iptvburo.ui.theme.Muted
@@ -52,6 +56,7 @@ fun LegalOnboardingScreen(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
+            .safeDrawingPadding()
             .background(
                 Brush.radialGradient(
                     colors = listOf(Blue.copy(alpha = 0.2f), Ink, Color.Black),
@@ -60,72 +65,116 @@ fun LegalOnboardingScreen(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        val compact = maxHeight < 480.dp || maxWidth < 900.dp
-        val horizontalPadding = if (compact) 32.dp else 96.dp
-        val verticalPadding = if (compact) 16.dp else 52.dp
-        val contentSpacing = if (compact) 32.dp else 72.dp
-        val cardPadding = if (compact) 24.dp else 40.dp
+        val windowClass = resolveBuroWindowClass(maxWidth.value, maxHeight.value)
+        val compact = windowClass != BuroWindowClass.Expanded
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = horizontalPadding,
-                    vertical = verticalPadding,
-                ),
-            horizontalArrangement = Arrangement.spacedBy(contentSpacing),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BrandMark(
-                compact = compact,
-                modifier = Modifier.weight(if (compact) 0.72f else 0.8f),
-            )
-
+        if (windowClass == BuroWindowClass.CompactPortrait) {
             Column(
                 modifier = Modifier
-                    .weight(if (compact) 1.28f else 1.2f)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Surface.copy(alpha = 0.94f))
-                    .padding(cardPadding),
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
             ) {
-                Text(
-                    text = stringResource(R.string.legal_title),
-                    color = White,
-                    fontSize = if (compact) 26.sp else 32.sp,
-                    lineHeight = if (compact) 30.sp else 38.sp,
-                    fontWeight = FontWeight.Bold,
+                BrandMark(
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                Spacer(Modifier.height(if (compact) 8.dp else 18.dp))
-                Text(
-                    text = stringResource(R.string.legal_body),
-                    color = Muted,
-                    fontSize = if (compact) 14.sp else 18.sp,
-                    lineHeight = if (compact) 19.sp else 27.sp,
-                )
-                Spacer(Modifier.height(if (compact) 10.dp else 20.dp))
-                Text(
-                    text = stringResource(R.string.legal_privacy),
-                    color = Teal,
-                    fontSize = if (compact) 12.sp else 15.sp,
-                    lineHeight = if (compact) 17.sp else 22.sp,
-                )
-                Spacer(Modifier.height(if (compact) 12.dp else 30.dp))
-                Button(
-                    onClick = onAccept,
+                Spacer(Modifier.height(20.dp))
+                LegalCard(
+                    compact = true,
+                    onAccept = onAccept,
+                    focusRequester = focusRequester,
                     modifier = Modifier
-                        .focusRequester(focusRequester)
                         .fillMaxWidth(),
-                ) {
-                    Text(
-                        text = stringResource(R.string.legal_accept),
-                        modifier = Modifier.padding(
-                            vertical = if (compact) 2.dp else 6.dp,
-                        ),
-                        fontSize = if (compact) 14.sp else 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
+                )
             }
+        } else {
+            val horizontalPadding = if (compact) 24.dp else 96.dp
+            val verticalPadding = if (compact) 12.dp else 52.dp
+            val contentSpacing = if (compact) 24.dp else 72.dp
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (compact) {
+                            Modifier.verticalScroll(rememberScrollState())
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .padding(
+                        horizontal = horizontalPadding,
+                        vertical = verticalPadding,
+                    ),
+                horizontalArrangement = Arrangement.spacedBy(contentSpacing),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BrandMark(
+                    compact = compact,
+                    modifier = Modifier.weight(if (compact) 0.72f else 0.8f),
+                )
+                LegalCard(
+                    compact = compact,
+                    onAccept = onAccept,
+                    focusRequester = focusRequester,
+                    modifier = Modifier.weight(if (compact) 1.28f else 1.2f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LegalCard(
+    compact: Boolean,
+    onAccept: () -> Unit,
+    focusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(if (compact) 22.dp else 28.dp))
+            .background(Surface.copy(alpha = 0.94f))
+            .padding(if (compact) 22.dp else 40.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.legal_title),
+            color = White,
+            fontSize = if (compact) 24.sp else 32.sp,
+            lineHeight = if (compact) 29.sp else 38.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(if (compact) 8.dp else 18.dp))
+        Text(
+            text = stringResource(R.string.legal_body),
+            color = Muted,
+            fontSize = if (compact) 14.sp else 18.sp,
+            lineHeight = if (compact) 20.sp else 27.sp,
+        )
+        Spacer(Modifier.height(if (compact) 10.dp else 20.dp))
+        Text(
+            text = stringResource(R.string.legal_privacy),
+            color = Teal,
+            fontSize = if (compact) 12.sp else 15.sp,
+            lineHeight = if (compact) 17.sp else 22.sp,
+        )
+        Spacer(Modifier.height(if (compact) 16.dp else 30.dp))
+        BuroButton(
+            onClick = onAccept,
+            modifier = Modifier
+                .focusRequester(focusRequester)
+                .fillMaxWidth(),
+        ) {
+            Text(
+                text = stringResource(R.string.legal_accept),
+                modifier = Modifier.padding(
+                    vertical = if (compact) 4.dp else 6.dp,
+                ),
+                fontSize = if (compact) 14.sp else 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }

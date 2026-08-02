@@ -15,7 +15,7 @@
     <string name="buro_home_hero_synopsis">Explore a cinematic interface built from local gradients and fictional metadata. Add an authorized source when you are ready to use your own content.</string>
     <string name="buro_home_hero_metadata">%1$d · Visual fiction · No media included</string>
 
-    <string name="buro_home_continue_title">Continue exploring · demonstration</string>
+    <string name="buro_home_continue_title">Continue exploring</string>
     <string name="buro_home_continue_amber_title">Amber Archive</string>
     <string name="buro_home_continue_amber_subtitle">Chapter three · fictional prototype</string>
     <string name="buro_home_continue_prism_title">Prism City</string>

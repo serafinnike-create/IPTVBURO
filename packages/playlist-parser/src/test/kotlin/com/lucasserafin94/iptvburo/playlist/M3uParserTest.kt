@@ -1,6 +1,9 @@
 package com.lucasserafin94.iptvburo.playlist
 
 import java.io.ByteArrayInputStream
+import java.io.InputStream
+import java.nio.charset.Charset
+import java.nio.charset.MalformedInputException
 import java.nio.charset.StandardCharsets
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -238,6 +241,147 @@ class M3uParserTest {
     }
 
     @Test
+    fun `supports UTF-16 little and big endian BOM input`() {
+        val playlist =
+            """
+            #EXTM3U
+            #EXTINF:-1 group-title="Notícias",Ação e Café
+            https://stream.provider.example/live/channel-1.m3u8
+            """.trimIndent()
+        val encodings =
+            listOf(
+                byteArrayOf(0xFF.toByte(), 0xFE.toByte()) to StandardCharsets.UTF_16LE,
+                byteArrayOf(0xFE.toByte(), 0xFF.toByte()) to StandardCharsets.UTF_16BE,
+            )
+
+        encodings.forEach { (bom, charset) ->
+            val payload = bom + playlist.toByteArray(charset)
+            val result = M3uParser().parse(ByteArrayInputStream(payload))
+
+            assertEquals("Ação e Café", result.channels.single().name)
+            assertEquals("Notícias", result.channels.single().groupTitle)
+            assertTrue(result.warnings.isEmpty())
+            assertEquals(payload.size.toLong(), result.bytesRead)
+        }
+    }
+
+    @Test
+    fun `falls back to Windows-1252 with an explicit warning`() {
+        val playlist =
+            """
+            #EXTM3U
+            #EXTINF:-1 group-title="News",Â£ Café
+            https://stream.provider.example/live/channel-2.ts
+            """.trimIndent()
+        val windows1252 = Charset.forName("windows-1252")
+
+        val result =
+            M3uParser().parse(
+                ByteArrayInputStream(playlist.toByteArray(windows1252)),
+            )
+
+        assertEquals("Â£ Café", result.channels.single().name)
+        assertEquals("News", result.channels.single().groupTitle)
+        assertEquals(
+            1,
+            result.warnings.count {
+                it.code == M3uWarningCode.WINDOWS_1252_FALLBACK
+            },
+        )
+        assertEquals(0, result.suppressedWarningCount)
+    }
+
+    @Test
+    fun `treats a UTF-8 BOM as authoritative and reports malformed bytes`() {
+        val malformedUtf8 =
+            byteArrayOf(
+                0xEF.toByte(),
+                0xBB.toByte(),
+                0xBF.toByte(),
+                '#'.code.toByte(),
+                0xE9.toByte(),
+            )
+
+        assertThrows(MalformedInputException::class.java) {
+            M3uParser().parse(ByteArrayInputStream(malformedUtf8))
+        }
+    }
+
+    @Test
+    fun `caps warnings and reports how many were suppressed`() {
+        val playlist =
+            (1..10).joinToString(separator = "\n") { index ->
+                "javascript://unsafe.example/channel-$index"
+            }
+        val parser = M3uParser(M3uParserLimits(maxWarnings = 3))
+        val playlistBytes = playlist.toByteArray(StandardCharsets.UTF_8)
+
+        val result = parser.parse(
+            ByteArrayInputStream(playlistBytes),
+        )
+        val summary =
+            parser.parseStreaming(ByteArrayInputStream(playlistBytes)) {
+                throw AssertionError("The unsafe input must not emit channels")
+            }
+
+        assertEquals(3, result.warnings.size)
+        assertEquals(9, result.suppressedWarningCount)
+        assertEquals(3, summary.warnings.size)
+        assertEquals(9, summary.suppressedWarningCount)
+        assertTrue(
+            result.warnings.any {
+                it.code == M3uWarningCode.MISSING_PLAYLIST_HEADER
+            },
+        )
+    }
+
+    @Test
+    fun `preserves literal plus characters while decoding percent encoded headers`() {
+        val playlist =
+            """
+            #EXTM3U
+            #EXTINF:-1,Encoded headers
+            https://stream.provider.example/live/channel-3.m3u8|Authorization=Token+literal%2Bencoded&User-Agent=Agent+Literal%20Space
+            """.trimIndent()
+
+        val channel = parse(playlist).channels.single()
+
+        assertEquals(
+            "Token+literal+encoded",
+            channel.requestHeaders["Authorization"],
+        )
+        assertEquals(
+            "Agent+Literal Space",
+            channel.requestHeaders["User-Agent"],
+        )
+    }
+
+    @Test(timeout = 120_000)
+    fun `default limits stream more than legacy bytes and channel counts`() {
+        val legacyMaxBytes = 25L * 1024L * 1024L
+        val legacyMaxChannels = 100_000
+        val generatedInput =
+            GeneratedPlaylistInputStream(
+                channelCount = legacyMaxChannels + 1,
+                channelNamePadding = 200,
+            )
+        var emittedChannelCount = 0
+
+        val summary =
+            M3uParser().parseStreaming(generatedInput) {
+                emittedChannelCount += 1
+            }
+
+        assertEquals(legacyMaxChannels + 1, emittedChannelCount)
+        assertEquals(legacyMaxChannels + 1, summary.channelCount)
+        assertTrue(summary.bytesRead > legacyMaxBytes)
+        assertTrue(summary.warnings.isEmpty())
+        assertEquals(0, summary.suppressedWarningCount)
+        assertEquals(256L * 1024L * 1024L, M3uParserLimits.DEFAULT_MAX_BYTES)
+        assertEquals(500_000, M3uParserLimits.DEFAULT_MAX_CHANNELS)
+    }
+
+    @Test
     fun `empty input produces header and playlist warnings`() {
         val result = parse("")
         val codes = result.warnings.map(M3uWarning::code)
@@ -322,4 +466,70 @@ class M3uParserTest {
         checkNotNull(javaClass.getResourceAsStream("/fixtures/$name")) {
             "Missing test fixture: $name"
         }
+
+    private class GeneratedPlaylistInputStream(
+        private val channelCount: Int,
+        channelNamePadding: Int,
+    ) : InputStream() {
+        private val padding = "x".repeat(channelNamePadding)
+        private var currentChunk =
+            "#EXTM3U\n".toByteArray(StandardCharsets.UTF_8)
+        private var currentOffset = 0
+        private var nextChannelIndex = 0
+
+        override fun read(): Int {
+            if (!ensureChunk()) return -1
+            return currentChunk[currentOffset++].toInt() and 0xFF
+        }
+
+        override fun read(
+            buffer: ByteArray,
+            offset: Int,
+            length: Int,
+        ): Int {
+            require(offset >= 0 && length >= 0 && offset + length <= buffer.size)
+            if (length == 0) return 0
+
+            var written = 0
+            while (written < length && ensureChunk()) {
+                val count =
+                    minOf(
+                        length - written,
+                        currentChunk.size - currentOffset,
+                    )
+                currentChunk.copyInto(
+                    destination = buffer,
+                    destinationOffset = offset + written,
+                    startIndex = currentOffset,
+                    endIndex = currentOffset + count,
+                )
+                currentOffset += count
+                written += count
+            }
+            return if (written == 0) -1 else written
+        }
+
+        private fun ensureChunk(): Boolean {
+            if (currentOffset < currentChunk.size) return true
+            if (nextChannelIndex >= channelCount) return false
+
+            val channelNumber = nextChannelIndex + 1
+            currentChunk =
+                buildString {
+                    append("#EXTINF:-1 tvg-id=\"synthetic-")
+                    append(channelNumber)
+                    append("\" group-title=\"Scale\",Channel ")
+                    append(channelNumber)
+                    append(' ')
+                    append(padding)
+                    append('\n')
+                    append("https://stream.provider.example/live/channel-")
+                    append(channelNumber)
+                    append(".ts\n")
+                }.toByteArray(StandardCharsets.UTF_8)
+            currentOffset = 0
+            nextChannelIndex += 1
+            return true
+        }
+    }
 }

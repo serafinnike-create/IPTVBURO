@@ -6,10 +6,13 @@ import com.lucasserafin94.iptvburo.data.preferences.DataStoreOnboardingPreferenc
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
 import com.lucasserafin94.iptvburo.data.repository.RoomCatalogRepository
+import com.lucasserafin94.iptvburo.data.security.AndroidKeystoreSourceConnectionStore
+import com.lucasserafin94.iptvburo.data.security.SourceConnectionStore
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -26,4 +29,10 @@ abstract class DataBindingsModule {
     abstract fun bindCatalogRepository(
         implementation: RoomCatalogRepository,
     ): CatalogRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSourceConnectionStore(
+        implementation: AndroidKeystoreSourceConnectionStore,
+    ): SourceConnectionStore
 }

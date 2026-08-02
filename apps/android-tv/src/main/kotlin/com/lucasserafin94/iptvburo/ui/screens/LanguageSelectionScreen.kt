@@ -1,0 +1,79 @@
+package com.lucasserafin94.iptvburo.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Text
+import com.lucasserafin94.iptvburo.ui.components.FocusSurface
+import com.lucasserafin94.iptvburo.ui.localization.AppLanguage
+import com.lucasserafin94.iptvburo.ui.theme.Ink
+import com.lucasserafin94.iptvburo.ui.theme.InkSoft
+import com.lucasserafin94.iptvburo.ui.theme.Muted
+import com.lucasserafin94.iptvburo.ui.theme.Teal
+import com.lucasserafin94.iptvburo.ui.theme.White
+
+@Composable
+fun LanguageSelectionScreen(
+    languages: List<AppLanguage>,
+    onSelect: (String) -> Unit,
+) {
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Brush.linearGradient(listOf(Ink, InkSoft, Ink)))
+                .safeDrawingPadding()
+                .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().widthIn(max = 760.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("IPTV  BURO", color = White, fontSize = 28.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
+            Spacer(Modifier.height(16.dp))
+            Text("Escolha seu idioma", color = White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Text("Choose your language", color = Muted, fontSize = 16.sp)
+            Spacer(Modifier.height(30.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+            ) {
+                for (language in languages) {
+                    FocusSurface(
+                        onClick = { onSelect(language.tag) },
+                        modifier = Modifier.weight(1f).height(76.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(language.displayName, color = White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            Text("Você poderá alterar isso em Configurações.", color = Teal, fontSize = 13.sp)
+        }
+    }
+}

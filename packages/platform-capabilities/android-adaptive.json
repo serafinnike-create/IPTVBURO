@@ -1,0 +1,33 @@
+{
+  "platformId": "android-adaptive",
+  "navigation": {
+    "dpad": true,
+    "touch": true,
+    "keyboard": true,
+    "mouse": false,
+    "voice": false
+  },
+  "playback": {
+    "engine": "AndroidX Media3 ExoPlayer",
+    "hls": true,
+    "dash": true,
+    "seek": true,
+    "pip": true,
+    "multiview": false,
+    "hdr": false
+  },
+  "offline": {
+    "supported": false,
+    "backgroundJobs": false,
+    "seasonQueue": false,
+    "smartDownloads": false
+  },
+  "distribution": {
+    "channel": "GitHub preview",
+    "nativePurchase": false
+  },
+  "notes": [
+    "HDR follows the device and selected media track; there is no fake universal toggle.",
+    "Offline remains hidden until provider eligibility and backend entitlement are implemented."
+  ]
+}

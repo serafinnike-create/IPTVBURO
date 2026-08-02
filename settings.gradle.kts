@@ -17,8 +17,10 @@ dependencyResolutionManagement {
 rootProject.name = "IPTVBURO"
 
 include(
+    ":apps:desktop",
     ":apps:android-tv",
     ":packages:domain-model",
     ":packages:playlist-parser",
     ":packages:test-fixtures",
+    ":packages:xtream-client",
 )

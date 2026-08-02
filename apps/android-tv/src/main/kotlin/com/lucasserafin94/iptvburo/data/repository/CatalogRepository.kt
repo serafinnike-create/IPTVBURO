@@ -1,7 +1,11 @@
 package com.lucasserafin94.iptvburo.data.repository
 
+import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
+import com.lucasserafin94.iptvburo.domain.model.Episode
+import com.lucasserafin94.iptvburo.domain.model.MovieDetails
+import com.lucasserafin94.iptvburo.domain.model.SeriesDetails
 import com.lucasserafin94.iptvburo.domain.model.Source
 import java.io.InputStream
 import kotlinx.coroutines.flow.Flow
@@ -9,19 +13,102 @@ import kotlinx.coroutines.flow.Flow
 interface CatalogRepository {
     fun observeSources(): Flow<List<Source>>
 
-    fun observeCategories(sourceId: String): Flow<List<Category>>
+    fun observeCategories(
+        sourceId: String,
+        contentType: CatalogContentType? = null,
+    ): Flow<List<Category>>
+
+    fun observeCategoryItemCounts(
+        sourceId: String,
+        contentType: CatalogContentType? = null,
+    ): Flow<Map<String?, Int>>
 
     fun observeChannels(
         sourceId: String,
         categoryId: String? = null,
+        contentType: CatalogContentType? = null,
     ): Flow<List<Channel>>
 
+    suspend fun loadChannelsPage(
+        sourceId: String,
+        categoryId: String? = null,
+        contentType: CatalogContentType? = null,
+        offset: Int = 0,
+        limit: Int = 200,
+    ): CatalogPage
+
+    /**
+     * Cursor-based page used by production catalogs. The default keeps test doubles and older
+     * repository implementations compatible while Room overrides it with a true keyset query.
+     */
+    suspend fun loadChannelsPageAfter(
+        sourceId: String,
+        categoryId: String? = null,
+        contentType: CatalogContentType? = null,
+        cursor: CatalogCursor? = null,
+        limit: Int = 200,
+    ): CatalogPage {
+        val offset = cursor?.loadedItemCount ?: 0
+        val page =
+            loadChannelsPage(
+                sourceId = sourceId,
+                categoryId = categoryId,
+                contentType = contentType,
+                offset = offset,
+                limit = limit,
+            )
+        return page.copy(
+            nextCursor =
+                if (page.hasMore) {
+                    CatalogCursor(
+                        sortOrder = null,
+                        itemId = null,
+                        loadedItemCount = offset + page.items.size,
+                    )
+                } else {
+                    null
+                },
+        )
+    }
+
     suspend fun getChannel(id: String): Channel?
+
+    suspend fun findCompatibleMovieAlternative(
+        sourceId: String,
+        titlePrefix: String,
+        excludeChannelId: String,
+    ): Channel? = null
+
+    suspend fun loadForReleaseYear(sourceId: String, releaseYear: Int, limit: Int = 24): List<Channel> = emptyList()
+
+    suspend fun loadRecentlyAdded(sourceId: String, limit: Int = 24): List<Channel> = emptyList()
 
     suspend fun importPlaylist(
         displayName: String,
         inputStream: InputStream,
     ): PlaylistImportResult
+
+    suspend fun importXtream(
+        request: XtreamImportRequest,
+        onProgress: (XtreamImportStage) -> Unit = {},
+    ): XtreamImportResult
+
+    suspend fun loadSeriesDetails(
+        sourceId: String,
+        providerSeriesId: String,
+    ): SeriesDetails
+
+    suspend fun loadMovieDetails(
+        sourceId: String,
+        providerMovieId: String,
+    ): MovieDetails = throw UnsupportedOperationException("Movie details are unavailable.")
+
+    /**
+     * Resolves a short-lived playback target only after the user chooses an episode.
+     *
+     * [Episode] carries provider metadata, never a credential-bearing playback URL.
+     */
+    suspend fun resolveEpisode(episode: Episode): Channel
 }
 
 data class PlaylistImportResult(
@@ -31,3 +118,52 @@ data class PlaylistImportResult(
     val parserWarningCount: Int,
     val skippedChannelCount: Int,
 )
+
+data class CatalogPage(
+    val items: List<Channel>,
+    val offset: Int,
+    val totalCount: Int,
+    val nextCursor: CatalogCursor? = null,
+) {
+    val hasMore: Boolean
+        get() = offset + items.size < totalCount
+}
+
+data class CatalogCursor(
+    val sortOrder: Int?,
+    val itemId: String?,
+    val loadedItemCount: Int,
+)
+
+data class XtreamImportRequest(
+    val displayName: String,
+    val serverUrl: String,
+    val username: String,
+    val password: String,
+) {
+    override fun toString(): String =
+        "XtreamImportRequest(" +
+            "displayName=$displayName, serverUrl=<redacted>, " +
+            "username=<redacted>, password=<redacted>)"
+}
+
+data class XtreamImportResult(
+    val sourceId: String,
+    val liveCount: Int,
+    val movieCount: Int,
+    val seriesCount: Int,
+    val categoryCount: Int,
+    val skippedItemCount: Int,
+) {
+    val totalItemCount: Int
+        get() = liveCount + movieCount + seriesCount
+}
+
+enum class XtreamImportStage {
+    AUTHENTICATING,
+    CATEGORIES,
+    LIVE,
+    MOVIES,
+    SERIES,
+    SAVING,
+}

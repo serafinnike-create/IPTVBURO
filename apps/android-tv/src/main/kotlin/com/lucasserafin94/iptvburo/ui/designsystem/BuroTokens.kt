@@ -32,18 +32,18 @@ data class BuroColorScheme(
 )
 
 object BuroColors {
-    val Canvas = Color(0xFF090A0D)
-    val Surface = Color(0xFF111319)
-    val Elevated = Color(0xFF191C24)
+    val Canvas = Color(0xFF08090A)
+    val Surface = Color(0xFF111214)
+    val Elevated = Color(0xFF1A1C1F)
     val Overlay = Color(0xB8050609)
-    val TextPrimary = Color(0xFFF6F7FA)
-    val TextSecondary = Color(0xFFB6BAC5)
-    val TextMuted = Color(0xFF7E8492)
+    val TextPrimary = Color(0xFFF4F1EA)
+    val TextSecondary = Color(0xFFB8B4AC)
+    val TextMuted = Color(0xFF85827C)
     val BorderSubtle = Color(0x1AFFFFFF)
     val Focus = Color(0xFFF6F7FA)
-    val BrandPrimary = Color(0xFF8B7CFF)
-    val BrandSecondary = Color(0xFF55D6C2)
-    val OnBrand = Color(0xFF090A0D)
+    val BrandPrimary = Color(0xFFD6A956)
+    val BrandSecondary = Color(0xFFE7E2D8)
+    val OnBrand = Color(0xFF08090A)
     val Success = Color(0xFF4ED59B)
     val Warning = Color(0xFFF3BD56)
     val Error = Color(0xFFFF6B6B)
@@ -76,8 +76,8 @@ object BuroColors {
             textSecondary = Color(0xFFE2E4EA),
             textMuted = Color(0xFFC5C8D0),
             borderSubtle = Color(0x8AFFFFFF),
-            brandPrimary = Color(0xFFA99FFF),
-            brandSecondary = Color(0xFF73F0DA),
+            brandPrimary = Color(0xFFF0C877),
+            brandSecondary = Color(0xFFFFFFFF),
         )
 }
 

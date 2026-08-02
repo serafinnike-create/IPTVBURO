@@ -18,7 +18,12 @@ import androidx.room.PrimaryKey
     ],
     indices = [
         Index(value = ["source_id"]),
-        Index(value = ["source_id", "name"], unique = true),
+        Index(value = ["source_id", "name"]),
+        Index(value = ["source_id", "content_type"]),
+        Index(
+            value = ["source_id", "content_type", "provider_category_id"],
+            unique = true,
+        ),
     ],
 )
 data class CategoryEntity(
@@ -29,4 +34,8 @@ data class CategoryEntity(
     val name: String,
     @ColumnInfo(name = "sort_order")
     val sortOrder: Int,
+    @ColumnInfo(name = "content_type", defaultValue = "'UNKNOWN'")
+    val contentType: String = "UNKNOWN",
+    @ColumnInfo(name = "provider_category_id")
+    val providerCategoryId: String? = null,
 )

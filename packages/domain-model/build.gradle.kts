@@ -16,4 +16,5 @@ java {
 
 dependencies {
     testImplementation(libs.junit)
+    testImplementation(kotlin("test"))
 }

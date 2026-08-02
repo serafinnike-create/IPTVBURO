@@ -55,6 +55,9 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.ui.ChannelUi
+import com.lucasserafin94.iptvburo.ui.adaptive.BuroWindowClass
+import com.lucasserafin94.iptvburo.ui.adaptive.resolveBuroWindowClass
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.theme.Blue
 import com.lucasserafin94.iptvburo.ui.theme.Ink
@@ -67,6 +70,7 @@ import com.lucasserafin94.iptvburo.ui.theme.White
 @Composable
 fun LivingHomeScreen(
     sources: List<HomeSourceSummary>,
+    catalogItems: List<ChannelUi> = emptyList(),
     onItemFocused: (String) -> Unit,
     onOpenItem: (String) -> Unit,
     onImportSource: () -> Unit,
@@ -95,7 +99,12 @@ fun LivingHomeScreen(
         val metrics = HomeLayoutMetrics.resolve(maxWidth, maxHeight)
         when (uiState) {
             LivingHomeUiState.Ready -> {
-                val section = DemoHomeCatalog.section(sources)
+                val section =
+                    if (catalogItems.isEmpty()) {
+                        DemoHomeCatalog.section(sources)
+                    } else {
+                        RealHomeCatalog.section(sources, catalogItems)
+                    }
                 val resolvedInitialFocusedItemId =
                     section.resolveInitialFocusId(initialFocusedItemId)
                 ReadyHome(
@@ -107,6 +116,7 @@ fun LivingHomeScreen(
                     onOpenItem = onOpenItem,
                     onOpenSources = onOpenSources,
                     onOpenSource = onOpenSource,
+                    showDemonstrationNotice = catalogItems.isEmpty(),
                 )
             }
 
@@ -139,6 +149,7 @@ private fun ReadyHome(
     onOpenItem: (String) -> Unit,
     onOpenSources: () -> Unit,
     onOpenSource: (String) -> Unit,
+    showDemonstrationNotice: Boolean,
 ) {
     val columnState = rememberLazyListState()
     val initialRailIndex = section.rails.indexOfFirst { rail ->
@@ -165,8 +176,10 @@ private fun ReadyHome(
         ),
         verticalArrangement = Arrangement.spacedBy(metrics.sectionSpacing),
     ) {
-        item(key = "home:demonstration-notice") {
-            DemonstrationNotice()
+        if (showDemonstrationNotice) {
+            item(key = "home:demonstration-notice") {
+                DemonstrationNotice()
+            }
         }
 
         item(key = section.hero.id) {
@@ -528,29 +541,58 @@ private fun HomeStatePanel(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(28.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                StateAction(
-                    label = primaryLabel,
-                    icon = primaryIcon,
-                    primary = true,
-                    onClick = onPrimary,
-                    requestFocus = true,
-                    onFocused = {
-                        onItemFocused(STATE_PRIMARY_ACTION_ID)
-                    },
-                )
-                StateAction(
-                    label = secondaryLabel,
-                    icon = Icons.Default.FolderOpen,
-                    primary = false,
-                    onClick = onSecondary,
-                    onFocused = {
-                        onItemFocused(STATE_SECONDARY_ACTION_ID)
-                    },
-                )
+            if (metrics.compactPortrait) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    StateAction(
+                        label = primaryLabel,
+                        icon = primaryIcon,
+                        primary = true,
+                        onClick = onPrimary,
+                        requestFocus = true,
+                        onFocused = {
+                            onItemFocused(STATE_PRIMARY_ACTION_ID)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    StateAction(
+                        label = secondaryLabel,
+                        icon = Icons.Default.FolderOpen,
+                        primary = false,
+                        onClick = onSecondary,
+                        onFocused = {
+                            onItemFocused(STATE_SECONDARY_ACTION_ID)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StateAction(
+                        label = primaryLabel,
+                        icon = primaryIcon,
+                        primary = true,
+                        onClick = onPrimary,
+                        requestFocus = true,
+                        onFocused = {
+                            onItemFocused(STATE_PRIMARY_ACTION_ID)
+                        },
+                    )
+                    StateAction(
+                        label = secondaryLabel,
+                        icon = Icons.Default.FolderOpen,
+                        primary = false,
+                        onClick = onSecondary,
+                        onFocused = {
+                            onItemFocused(STATE_SECONDARY_ACTION_ID)
+                        },
+                    )
+                }
             }
         }
     }
@@ -563,6 +605,7 @@ private fun StateAction(
     primary: Boolean,
     onClick: () -> Unit,
     onFocused: () -> Unit,
+    modifier: Modifier = Modifier,
     requestFocus: Boolean = false,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -572,7 +615,7 @@ private fun StateAction(
 
     FocusSurface(
         onClick = onClick,
-        modifier = Modifier
+        modifier = modifier
             .height(52.dp)
             .focusRequester(focusRequester)
             .onFocusChanged { focusState ->
@@ -606,6 +649,7 @@ private fun StateAction(
 
 private data class HomeLayoutMetrics(
     val compact: Boolean,
+    val compactPortrait: Boolean,
     val horizontalPadding: Dp,
     val topPadding: Dp,
     val heroHeight: Dp,
@@ -617,31 +661,50 @@ private data class HomeLayoutMetrics(
 ) {
     companion object {
         fun resolve(maxWidth: Dp, maxHeight: Dp): HomeLayoutMetrics {
-            val compact = maxWidth < 1_000.dp || maxHeight < 680.dp
-            return if (compact) {
-                HomeLayoutMetrics(
-                    compact = true,
-                    horizontalPadding = 28.dp,
-                    topPadding = 22.dp,
-                    heroHeight = 340.dp,
-                    landscapeWidth = 248.dp,
-                    posterWidth = 144.dp,
-                    sectionSpacing = 22.dp,
-                    cardSpacing = 14.dp,
-                    railTitleSize = 22.sp,
-                )
-            } else {
-                HomeLayoutMetrics(
-                    compact = false,
-                    horizontalPadding = 44.dp,
-                    topPadding = 32.dp,
-                    heroHeight = 430.dp,
-                    landscapeWidth = 304.dp,
-                    posterWidth = 176.dp,
-                    sectionSpacing = 28.dp,
-                    cardSpacing = 18.dp,
-                    railTitleSize = 27.sp,
-                )
+            return when (resolveBuroWindowClass(maxWidth.value, maxHeight.value)) {
+                BuroWindowClass.CompactPortrait ->
+                    HomeLayoutMetrics(
+                        compact = true,
+                        compactPortrait = true,
+                        horizontalPadding = 16.dp,
+                        topPadding = 16.dp,
+                        heroHeight = 430.dp,
+                        landscapeWidth =
+                            minOf(304.dp, maxOf(220.dp, maxWidth - 48.dp)),
+                        posterWidth =
+                            minOf(152.dp, maxOf(128.dp, (maxWidth - 48.dp) * 0.48f)),
+                        sectionSpacing = 20.dp,
+                        cardSpacing = 12.dp,
+                        railTitleSize = 20.sp,
+                    )
+
+                BuroWindowClass.CompactLandscape ->
+                    HomeLayoutMetrics(
+                        compact = true,
+                        compactPortrait = false,
+                        horizontalPadding = 20.dp,
+                        topPadding = 16.dp,
+                        heroHeight = 300.dp,
+                        landscapeWidth = 236.dp,
+                        posterWidth = 138.dp,
+                        sectionSpacing = 20.dp,
+                        cardSpacing = 12.dp,
+                        railTitleSize = 20.sp,
+                    )
+
+                BuroWindowClass.Expanded ->
+                    HomeLayoutMetrics(
+                        compact = false,
+                        compactPortrait = false,
+                        horizontalPadding = 44.dp,
+                        topPadding = 32.dp,
+                        heroHeight = 430.dp,
+                        landscapeWidth = 304.dp,
+                        posterWidth = 176.dp,
+                        sectionSpacing = 28.dp,
+                        cardSpacing = 18.dp,
+                        railTitleSize = 27.sp,
+                    )
             }
         }
     }

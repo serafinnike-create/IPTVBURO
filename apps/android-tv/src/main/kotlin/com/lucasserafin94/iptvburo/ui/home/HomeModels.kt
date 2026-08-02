@@ -33,7 +33,9 @@ data class HomeSection(
 
         val allIds = buildList {
             add(hero.id)
-            rails.forEach { rail -> addAll(rail.items.map(HomeItem::id)) }
+            for (rail in rails) {
+                addAll(rail.items.map(HomeItem::id))
+            }
         }
         require(allIds.distinct().size == allIds.size) {
             "Home item ids must be unique inside a section."
@@ -86,6 +88,8 @@ data class HomeItem(
     val kind: HomeItemKind,
     val cardFormat: HomeCardFormat,
     val palette: HomeArtworkPalette,
+    val artwork: HomeArtwork? = null,
+    val remoteArtworkUrl: String? = null,
     val progress: Float? = null,
     val isDemonstration: Boolean,
 ) {
@@ -100,6 +104,10 @@ data class HomeItem(
             "A real source shortcut cannot be marked as demonstration content."
         }
     }
+
+    override fun toString(): String =
+        "HomeItem(id=$id, title=$title, kind=$kind, " +
+            "remoteArtworkUrl=${if (remoteArtworkUrl == null) "null" else "<redacted>"})"
 }
 
 enum class HomeRailKind {
@@ -113,6 +121,7 @@ enum class HomeItemKind {
     DEMO_STORY,
     DEMO_LIVE_STORY,
     SOURCE,
+    CATALOG,
 }
 
 enum class HomeCardFormat {
@@ -127,6 +136,11 @@ enum class HomeArtworkPalette {
     FOREST,
     PLUM,
     SOLAR,
+}
+
+enum class HomeArtwork {
+    PAPER_SUN,
+    FOREST_SIGNAL,
 }
 
 @Immutable

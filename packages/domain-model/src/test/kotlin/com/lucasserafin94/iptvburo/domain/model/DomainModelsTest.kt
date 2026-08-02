@@ -65,6 +65,25 @@ class DomainModelsTest {
     }
 
     @Test
+    fun `episode catalog metadata does not retain a playback uri`() {
+        val episode =
+            Episode(
+                id = "episode-1",
+                sourceId = "source-1",
+                providerEpisodeId = "provider-episode-1",
+                title = "Synthetic episode",
+                seasonNumber = 1,
+                episodeNumber = 2,
+                artworkUri = "https://images.example/episode.jpg?token=synthetic-secret",
+                containerExtension = "mp4",
+            )
+
+        assertFalse(Episode::class.java.declaredFields.any { it.name == "streamUri" })
+        assertFalse(episode.toString().contains("synthetic-secret"))
+        assertTrue(episode.toString().contains("providerEpisodeId=provider-episode-1"))
+    }
+
+    @Test
     fun `playlist header string representation redacts urls and header values`() {
         val header =
             PlaylistHeader(

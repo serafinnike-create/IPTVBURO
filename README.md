@@ -9,6 +9,7 @@ Transforma fontes de mídia autorizadas pelo usuário em uma biblioteca organiza
 ![Status](https://img.shields.io/badge/status-em%20desenvolvimento-7c3aed)
 ![GDD](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%206.0-2563eb)
 ![Android TV](https://img.shields.io/badge/Android%20TV-v0.1.0--alpha.1-3ddc84)
+![Windows](https://img.shields.io/badge/Windows-0.2%20preview-e2b458)
 ![Multiplataforma](https://img.shields.io/badge/escopo-universal-0f766e)
 ![Offline Mobile](https://img.shields.io/badge/Offline%20Vault-planejado-f59e0b)
 
@@ -40,19 +41,20 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 
 | Entrega | Estado |
 |---|---|
-| GDDs 1.0 a 6.0 | ✅ Documentados neste PR |
+| GDDs 1.0 a 6.0 | ✅ Documentados na `main` |
 | Aplicação Android/Android TV | 🧪 Prévia `v0.1.0-alpha.1` publicada |
 | Importação local M3U/M3U8 | ✅ Vertical funcional |
+| Xtream: ao vivo, filmes, séries e episódios | ✅ Vertical funcional |
 | Room, parser em lotes e transação de catálogo | ✅ Implementados |
 | Player HLS Media3 | ✅ Vertical funcional |
-| BURO Ribbon e Living Home | 🚧 Fundação cinematográfica parcial |
-| Filmes, séries, busca e perfis reais | 🧭 Pendentes |
-| Xtream e XMLTV/EPG | 🧭 Pendentes |
-| Temporal Intelligence no código | 🧭 Pendente |
+| BURO Ribbon, Home real, capas e detalhes | 🧪 Fundação cinematográfica em teste |
+| Busca, quatro idiomas, perfis e favoritos | 🧪 Implementados; paridade em evolução |
+| Temporal Intelligence no código | 🚧 Fileiras 2026/2025; domínio completo pendente |
 | Resilience Engine no código | 🧭 Pendente |
-| Android mobile e iPhone/iPad | 🧭 Planejados pelo GDD 5.0 |
-| BURO Offline Vault | 🧭 Especificado; ainda sem código mobile |
-| Samsung, LG, Titan OS, Apple TV e Windows | 🧭 Planejados |
+| Android mobile | 🧪 Mesma build adaptativa instalada em Android 15 |
+| Windows | 🧪 Compose Desktop, player compatível e MSI local aprovados |
+| XMLTV/EPG e Offline Vault autorizado | 🧭 Pendentes |
+| Samsung, LG, Titan OS e plataformas Apple | 🧭 Planejados |
 | Publicação em lojas | 🧭 Não iniciada |
 
 > [!NOTE]
@@ -72,13 +74,18 @@ A primeira vertical slice está na `main` e possui:
 - loading, primeiro frame, play/pause e seek quando suportado;
 - navegação por D-pad;
 - BURO Ribbon;
-- Living Home com hero e fileiras demonstrativas identificadas como `DEMO`;
+- Living Home alimentada pelo catálogo real, com lançamentos do ano atual e anterior;
+- Xtream com credenciais cifradas pelo Android Keystore;
+- capas, backdrop, sinopse, avaliação, elenco, temporadas e episódios quando fornecidos;
+- até cinco perfis, inclusive Kids, e favoritos isolados por perfil;
+- retrato, paisagem, TV e janelas expandidas;
+- controles de volume, brilho, velocidade, bloqueio, PiP, áudio e legenda quando disponíveis;
 - PT-BR, inglês, alemão e italiano;
 - logs com redaction;
 - backup e transferência de dados desabilitados;
-- 55 testes JVM aprovados;
+- 114 testes aprovados no gate local mais recente;
 - lint sem erros bloqueantes;
-- build debug e GitHub Actions.
+- build debug aprovada e workflow multiplataforma preparado.
 
 O fluxo importação → categoria → canal → primeiro frame foi validado em aparelho Android físico usando uma playlist HLS pública de teste.
 
@@ -92,6 +99,14 @@ O fluxo importação → categoria → canal → primeiro frame foi validado em 
 
 A prévia usa assinatura de desenvolvimento e não é uma versão de loja.
 
+### Preview Windows 0.2
+
+O repositório já gera `IPTVBURO-0.2.0.msi`. O preview usa o mesmo shell visual,
+restaura a fonte via DPAPI, suporta perfis, idiomas, favoritos, catálogo paginado
+e reprodução embutida de MP4/H.264/AAC e HLS compatível. HEVC, HDR, seleção
+ampla de faixas e download offline ainda bloqueiam a promoção a versão estável.
+Por isso o MSI local ainda não é anunciado como release final.
+
 ### Build
 
 Requisitos:
@@ -104,7 +119,7 @@ Requisitos:
 Windows:
 
 ```powershell
-.\gradlew.bat test lint assembleDebug
+.\gradlew.bat test :apps:android-tv:lintDebug :apps:android-tv:assembleDebug :apps:desktop:packageMsi
 ```
 
 Linux/macOS:
@@ -117,6 +132,12 @@ APK local:
 
 ```text
 apps/android-tv/build/outputs/apk/debug/android-tv-debug.apk
+```
+
+MSI local:
+
+```text
+apps/desktop/build/compose/binaries/main/msi/IPTVBURO-0.2.0.msi
 ```
 
 Documentação do estado atual:
@@ -180,14 +201,14 @@ A função não será exibida nas aplicações de TV durante o P0.
 | Android TV / Google TV | Kotlin, Compose for TV e Media3 | 🧪 Alpha funcional |
 | Sony e Philips Android/Google TV | mesma aplicação validada por modelo | 🧭 Pendente |
 | Fire TV | variante Android | 🧭 Planejado |
-| Android mobile/tablet | Kotlin, Compose e Media3 | 🧭 Planejado |
+| Android mobile/tablet | Kotlin, Compose e Media3 | 🧪 Preview adaptativo |
 | Apple TV | SwiftUI e AVPlayer | 🧭 Planejado |
 | iPhone/iPad | SwiftUI, AVFoundation e Offline Vault | 🧭 Planejado |
 | macOS | SwiftUI/AppKit e AVPlayer | 🧭 Planejado |
 | Samsung Tizen | aplicação própria com AVPlay | 🧭 Planejado |
 | LG webOS | aplicação própria | 🧭 Planejado |
 | Philips Titan OS | aplicação compatível com SDK oficial | 🧭 Planejado |
-| Windows | aplicação desktop definida por ADR | 🧭 Planejado |
+| Windows | Compose Desktop; adapter nativo futuro | 🧪 Preview MSI |
 | Portal web | ativação, licença e gerenciamento | 🧭 Planejado |
 
 > Um único produto não significa um único executável. Cada plataforma terá player, lifecycle, armazenamento e distribuição adequados ao sistema.

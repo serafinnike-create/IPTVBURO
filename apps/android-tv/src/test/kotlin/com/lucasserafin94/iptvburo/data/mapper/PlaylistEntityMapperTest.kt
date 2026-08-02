@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.data.mapper
 
 import com.lucasserafin94.iptvburo.playlist.ParsedChannel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -81,6 +82,33 @@ class PlaylistEntityMapperTest {
 
         assertEquals(0, mapped.categories.size)
         assertNull(mapped.channels.single().categoryId)
+    }
+
+    @Test
+    fun `mapped persistence models redact playback values from diagnostics`() {
+        val secretMarker = "synthetic-private-marker"
+        val mapped =
+            mapper.map(
+                sourceId = "source-1",
+                channels = listOf(
+                    ParsedChannel(
+                        name = "Diagnostic safety",
+                        streamUri = "https://media.example/live.m3u8?token=$secretMarker",
+                        logoUri = "https://media.example/logo.png?token=$secretMarker",
+                        requestHeaders =
+                            mapOf(
+                                "User-Agent" to secretMarker,
+                                "Referer" to "https://portal.example/$secretMarker",
+                                "Origin" to "https://$secretMarker.example",
+                            ),
+                    ),
+                ),
+            )
+
+        val channel = mapped.channels.single()
+        assertFalse(channel.toString().contains(secretMarker))
+        assertFalse(MappedChannel(null, channel).toString().contains(secretMarker))
+        assertFalse(mapped.toString().contains(secretMarker))
     }
 
     private fun channel(

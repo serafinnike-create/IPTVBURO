@@ -70,8 +70,14 @@ fun DemoStoryScreen(
                 ),
             ),
     ) {
+        val phonePortrait = maxWidth < 600.dp && maxHeight >= maxWidth
         val compact = maxWidth < 850.dp || maxHeight < 620.dp
-        val horizontalPadding = if (compact) 28.dp else 48.dp
+        val horizontalPadding =
+            when {
+                phonePortrait -> 16.dp
+                compact -> 24.dp
+                else -> 48.dp
+            }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -170,17 +176,21 @@ private fun StoryHeader(
                 )
             }
         }
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
                 color = White,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = stringResource(R.string.buro_story_header_demo),
                 color = Muted,
                 fontSize = 14.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -204,12 +214,14 @@ private fun StoryArtwork(
             ratio = 16f / 9f
         }
     }
-    BuroStaticArtwork(
-        item = item,
-        modifier = Modifier
-            .width(width)
-            .aspectRatio(ratio),
-    )
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        BuroStaticArtwork(
+            item = item,
+            modifier = Modifier
+                .width(minOf(width, maxWidth))
+                .aspectRatio(ratio),
+        )
+    }
 }
 
 @Composable
@@ -270,7 +282,9 @@ private fun StoryCopy(
         Spacer(Modifier.height(24.dp))
         FocusSurface(
             onClick = onImportSource,
-            modifier = Modifier.height(54.dp),
+            modifier = Modifier
+                .fillMaxWidth(if (compact) 1f else 0.62f)
+                .height(54.dp),
             backgroundColor = Teal,
             focusedBackgroundColor = Teal,
             selectedBackgroundColor = Teal,

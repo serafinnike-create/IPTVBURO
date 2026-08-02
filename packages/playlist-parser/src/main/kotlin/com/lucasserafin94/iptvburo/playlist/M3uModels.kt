@@ -3,36 +3,41 @@ package com.lucasserafin94.iptvburo.playlist
 import com.lucasserafin94.iptvburo.domain.model.PlaylistHeader
 import java.io.IOException
 
-data class M3uParserLimits(
+data class M3uParserLimits @JvmOverloads constructor(
     val maxBytes: Long = DEFAULT_MAX_BYTES,
     val maxChannels: Int = DEFAULT_MAX_CHANNELS,
     val maxLineLength: Int = DEFAULT_MAX_LINE_LENGTH,
+    val maxWarnings: Int = DEFAULT_MAX_WARNINGS,
 ) {
     init {
         require(maxBytes > 0) { "maxBytes must be positive" }
         require(maxChannels > 0) { "maxChannels must be positive" }
         require(maxLineLength > 0) { "maxLineLength must be positive" }
+        require(maxWarnings > 0) { "maxWarnings must be positive" }
     }
 
     companion object {
-        const val DEFAULT_MAX_BYTES: Long = 25L * 1024L * 1024L
-        const val DEFAULT_MAX_CHANNELS: Int = 100_000
+        const val DEFAULT_MAX_BYTES: Long = 256L * 1024L * 1024L
+        const val DEFAULT_MAX_CHANNELS: Int = 500_000
         const val DEFAULT_MAX_LINE_LENGTH: Int = 64 * 1024
+        const val DEFAULT_MAX_WARNINGS: Int = 1_000
     }
 }
 
-data class M3uParseResult(
+data class M3uParseResult @JvmOverloads constructor(
     val header: PlaylistHeader,
     val channels: List<ParsedChannel>,
     val warnings: List<M3uWarning>,
     val bytesRead: Long,
+    val suppressedWarningCount: Int = 0,
 )
 
-data class M3uParseSummary(
+data class M3uParseSummary @JvmOverloads constructor(
     val header: PlaylistHeader,
     val channelCount: Int,
     val warnings: List<M3uWarning>,
     val bytesRead: Long,
+    val suppressedWarningCount: Int = 0,
 )
 
 /**
@@ -89,6 +94,7 @@ enum class M3uWarningCode {
     MALFORMED_HEADER,
     UNSUPPORTED_HEADER,
     EMPTY_PLAYLIST,
+    WINDOWS_1252_FALLBACK,
 }
 
 open class M3uParseException(

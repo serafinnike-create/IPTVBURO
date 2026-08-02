@@ -3,6 +3,7 @@ package com.lucasserafin94.iptvburo.data.mapper
 import com.lucasserafin94.iptvburo.data.local.entity.CategoryEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ChannelEntity
 import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
+import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.domain.model.Source
@@ -24,6 +25,10 @@ fun CategoryEntity.toDomain(): Category =
         sourceId = sourceId,
         name = name,
         sortOrder = sortOrder,
+        contentType =
+            runCatching { CatalogContentType.valueOf(contentType) }
+                .getOrDefault(CatalogContentType.UNKNOWN),
+        providerCategoryId = providerCategoryId,
     )
 
 fun ChannelEntity.toDomain(): Channel =
@@ -41,4 +46,11 @@ fun ChannelEntity.toDomain(): Channel =
             referer?.let { put("Referer", it) }
             origin?.let { put("Origin", it) }
         },
+        contentType =
+            runCatching { CatalogContentType.valueOf(contentType) }
+                .getOrDefault(CatalogContentType.UNKNOWN),
+        providerItemId = providerItemId,
+        containerExtension = containerExtension,
+        year = year,
+        rating = rating,
     )

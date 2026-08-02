@@ -1,0 +1,33 @@
+{
+  "platformId": "windows-preview",
+  "navigation": {
+    "dpad": false,
+    "touch": false,
+    "keyboard": true,
+    "mouse": true,
+    "voice": false
+  },
+  "playback": {
+    "engine": "JavaFX Media preview adapter",
+    "hls": true,
+    "dash": false,
+    "seek": true,
+    "pip": false,
+    "multiview": false,
+    "hdr": false
+  },
+  "offline": {
+    "supported": false,
+    "backgroundJobs": false,
+    "seasonQueue": false,
+    "smartDownloads": false
+  },
+  "distribution": {
+    "channel": "GitHub preview MSI",
+    "nativePurchase": false
+  },
+  "notes": [
+    "Broad HEVC, Dolby Vision, audio and subtitle parity requires the native player ADR.",
+    "Payment and device entitlement require the future HTTPS backend and portal."
+  ]
+}

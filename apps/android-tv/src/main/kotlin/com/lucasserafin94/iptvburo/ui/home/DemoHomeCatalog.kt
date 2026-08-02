@@ -71,6 +71,7 @@ object DemoHomeCatalog {
                         metadata = demoMetadata,
                         badge = demoBadge,
                         palette = HomeArtworkPalette.EMBER,
+                        artwork = HomeArtwork.PAPER_SUN,
                         progress = 0.68f,
                     ),
                     demoItem(
@@ -91,6 +92,7 @@ object DemoHomeCatalog {
                         metadata = demoMetadata,
                         badge = demoBadge,
                         palette = HomeArtworkPalette.FOREST,
+                        artwork = HomeArtwork.FOREST_SIGNAL,
                         progress = 0.81f,
                     ),
                     demoItem(
@@ -131,6 +133,7 @@ object DemoHomeCatalog {
                         metadata = liveMetadata,
                         badge = stringResource(R.string.buro_home_demo_live_badge),
                         palette = HomeArtworkPalette.SOLAR,
+                        artwork = HomeArtwork.PAPER_SUN,
                         progress = 0.57f,
                         kind = HomeItemKind.DEMO_LIVE_STORY,
                     ),
@@ -142,6 +145,7 @@ object DemoHomeCatalog {
                         metadata = liveMetadata,
                         badge = stringResource(R.string.buro_home_demo_live_badge),
                         palette = HomeArtworkPalette.FOREST,
+                        artwork = HomeArtwork.FOREST_SIGNAL,
                         progress = 0.74f,
                         kind = HomeItemKind.DEMO_LIVE_STORY,
                     ),
@@ -186,6 +190,7 @@ object DemoHomeCatalog {
                         metadata = demoMetadata,
                         badge = demoBadge,
                         palette = HomeArtworkPalette.SOLAR,
+                        artwork = HomeArtwork.PAPER_SUN,
                         cardFormat = HomeCardFormat.POSTER,
                     ),
                     demoItem(
@@ -196,6 +201,7 @@ object DemoHomeCatalog {
                         metadata = demoMetadata,
                         badge = demoBadge,
                         palette = HomeArtworkPalette.FOREST,
+                        artwork = HomeArtwork.FOREST_SIGNAL,
                         cardFormat = HomeCardFormat.POSTER,
                     ),
                     demoItem(
@@ -248,6 +254,7 @@ object DemoHomeCatalog {
         metadata: String,
         badge: String,
         palette: HomeArtworkPalette,
+        artwork: HomeArtwork? = null,
         progress: Float? = null,
         kind: HomeItemKind = HomeItemKind.DEMO_STORY,
         cardFormat: HomeCardFormat = HomeCardFormat.LANDSCAPE,
@@ -261,6 +268,7 @@ object DemoHomeCatalog {
         kind = kind,
         cardFormat = cardFormat,
         palette = palette,
+        artwork = artwork,
         progress = progress,
         isDemonstration = true,
     )

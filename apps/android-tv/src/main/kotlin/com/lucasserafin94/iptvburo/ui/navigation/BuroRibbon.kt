@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -33,7 +34,7 @@ import com.lucasserafin94.iptvburo.ui.designsystem.BuroTheme
 
 private data class RibbonDestination(
     val section: AppSection,
-    @StringRes val labelResource: Int,
+    @param:StringRes val labelResource: Int,
 )
 
 private val ribbonDestinations =
@@ -69,62 +70,70 @@ fun BuroRibbon(
         }
     val focusTarget = ribbonSelection ?: AppSection.HOME
 
-    Column(
+    BoxWithConstraints(
         modifier =
             modifier
                 .fillMaxWidth()
                 .background(colors.overlay),
     ) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(ribbonHeight)
-                    .padding(start = BuroSpacing.Lg),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BuroBrand()
-            Spacer(Modifier.width(BuroSpacing.Lg))
-            LazyRow(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(end = BuroSpacing.Lg),
-                horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+        val compact = maxWidth < 600.dp
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(if (compact) compactRibbonHeight else ribbonHeight)
+                        .padding(start = if (compact) BuroSpacing.Sm else BuroSpacing.Lg),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                items(
-                    items = ribbonDestinations,
-                    key = { destination -> destination.section.name },
-                ) { destination ->
-                    val focusRequesterModifier =
-                        if (
-                            destination.section == focusTarget &&
-                            selectedItemFocusRequester != null
-                        ) {
-                            Modifier.focusRequester(selectedItemFocusRequester)
-                        } else {
-                            Modifier
-                        }
-                    BuroChip(
-                        label = stringResource(destination.labelResource),
-                        onClick = { onSelect(destination.section) },
-                        selected = ribbonSelection == destination.section,
-                        modifier =
-                            focusRequesterModifier.onFocusChanged { focusState ->
-                                if (focusState.isFocused) {
-                                    onItemFocused(destination.section)
-                                }
-                            },
-                    )
+                if (!compact) {
+                    BuroBrand()
+                    Spacer(Modifier.width(BuroSpacing.Lg))
+                }
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    contentPadding =
+                        PaddingValues(
+                            end = if (compact) BuroSpacing.Sm else BuroSpacing.Lg,
+                        ),
+                    horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    items(
+                        items = ribbonDestinations,
+                        key = { destination -> destination.section.name },
+                    ) { destination ->
+                        val focusRequesterModifier =
+                            if (
+                                destination.section == focusTarget &&
+                                selectedItemFocusRequester != null
+                            ) {
+                                Modifier.focusRequester(selectedItemFocusRequester)
+                            } else {
+                                Modifier
+                            }
+                        BuroChip(
+                            label = stringResource(destination.labelResource),
+                            onClick = { onSelect(destination.section) },
+                            selected = ribbonSelection == destination.section,
+                            modifier =
+                                focusRequesterModifier.onFocusChanged { focusState ->
+                                    if (focusState.isFocused) {
+                                        onItemFocused(destination.section)
+                                    }
+                                },
+                        )
+                    }
                 }
             }
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(colors.borderSubtle),
+            )
         }
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(colors.borderSubtle),
-        )
     }
 }
 
@@ -150,3 +159,4 @@ private fun BuroBrand() {
 }
 
 private val ribbonHeight = 64.dp
+private val compactRibbonHeight = 58.dp

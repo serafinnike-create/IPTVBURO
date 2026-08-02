@@ -23,4 +23,6 @@ data class SourceEntity(
     val updatedAtEpochMillis: Long,
     @ColumnInfo(name = "channel_count")
     val channelCount: Int,
+    @ColumnInfo(name = "preferred_live_extension")
+    val preferredLiveExtension: String? = null,
 )

@@ -117,3 +117,66 @@
   filmes/séries;
 - GDD 3.0 e GDD 4.0;
 - proteção de URLs atualmente armazenadas em texto simples no Room.
+
+### Milestone 0.2 — compatibilidade e novas plataformas
+
+Escopo técnico em implementação, ainda sem registrar aprovação final, artefatos
+ou publicação:
+
+- novo módulo compartilhado para fontes compatíveis com Xtream;
+- importação estruturada de categorias, TV ao vivo, filmes e séries;
+- detalhes e episódios de séries consultados sob demanda;
+- catálogo Android paginado por fonte, tipo e categoria;
+- credenciais Xtream Android fora do Room, cifradas com AES-GCM e chave
+  protegida pelo Android Keystore;
+- locators Xtream persistidos sem servidor, usuário, senha ou URL final;
+- resolução da URL de reprodução apenas em memória;
+- layouts Android adaptativos para retrato, paisagem e janelas expandidas, sem
+  orientação bloqueada;
+- aplicação Compose Desktop com catálogo M3U/Xtream somente durante a sessão e
+  conexão Xtream lembrada no Windows por um blob DPAPI apagável;
+- playback desktop externo, precedido de confirmação, enquanto o player interno
+  permanece pendente.
+
+Nenhum dado identificável de fonte privada pertence ao diário, às fixtures ou
+às notas públicas. Validação E2E, limpeza de dados de teste, hashes, versão
+publicada e links de download serão acrescentados apenas quando reproduzidos e
+confirmados.
+
+# 2026-08-02 — reconexão e metadados reais
+
+- conexão Xtream Android preservada pelo Keystore e validada após `force-stop`;
+- conexão Xtream Windows preservada por DPAPI e validada após duas reaberturas;
+- carregador de imagens desktop migrado para OkHttp, alinhado ao Android;
+- capas, backdrops, sinopse, direção e elenco validados nas duas plataformas;
+- painel de detalhes Windows reservado em larguras comuns de notebook;
+- catálogo autorizado de teste permaneceu somente nos dispositivos, sem valores
+  identificáveis em código, documentação ou artefatos distribuíveis.
+# 2026-08-01 — GDD 1–5, BURO Nocturne e catálogo 500k
+
+- auditados GDDs 1–5 contra código executável, sem considerar placeholders como
+  implementação;
+- confirmada e documentada a lacuna dos GDDs 3, 4 e da paridade do GDD 5;
+- gerada arte original BURO Nocturne e integrada no Android/Windows;
+- unificados tokens de cor, foco e movimento entre as duas plataformas;
+- Xtream convertido para parsing streaming e persistência Android em lotes;
+- Android convertido para paginação keyset com migração Room v3;
+- teste streaming de 500.000 itens aprovado;
+- APK, testes, lint, MSI e executável distribuível aprovados;
+- app Windows aberto maximizado para inspeção; celular ausente no ADB.
+
+## 2026-08-01 — compatibilidade privada e correções em hardware
+
+- corrigido onboarding móvel que aceitava D-pad, mas ignorava toque;
+- toque e D-pad validados no Redmi A5, em retrato e paisagem;
+- corrigida reatividade do formulário Xtream Windows que mantinha Conectar
+  desabilitado mesmo com os três campos preenchidos;
+- fonte privada autorizada validada sem registrar endpoint ou credenciais;
+- Android validado em TV ao vivo, filme, episódio, paginação, rotação e
+  background/resume;
+- falhas de decoder agora distinguem mídia 4K/HEVC incompatível de rede e erro
+  desconhecido;
+- Windows convertido de objetos completos por item para índice colunar de
+  sessão; teste de 500 mil linhas aprovado;
+- dados privados removidos do Android e da sessão Windows;
+- varredura exata no workspace: zero ocorrências dos valores privados.

@@ -21,7 +21,7 @@ class PlaylistEntityMapper @Inject constructor() {
         val categories = mutableListOf<CategoryEntity>()
         val channelEntities =
             buildList {
-                channels.forEach { channel ->
+                for (channel in channels) {
                     session.mapChannel(channel)?.let { mapped ->
                         mapped.newCategory?.let(categories::add)
                         add(mapped.channel)
@@ -135,10 +135,20 @@ class PlaylistEntityMapper @Inject constructor() {
 data class MappedChannel(
     val newCategory: CategoryEntity?,
     val channel: ChannelEntity,
-)
+) {
+    override fun toString(): String =
+        "MappedChannel(" +
+            "newCategory=${if (newCategory == null) "null" else newCategory.id}, " +
+            "channelId=${channel.id})"
+}
 
 data class MappedPlaylist(
     val categories: List<CategoryEntity>,
     val channels: List<ChannelEntity>,
     val skippedChannelCount: Int,
-)
+) {
+    override fun toString(): String =
+        "MappedPlaylist(" +
+            "categoryCount=${categories.size}, channelCount=${channels.size}, " +
+            "skippedChannelCount=$skippedChannelCount)"
+}

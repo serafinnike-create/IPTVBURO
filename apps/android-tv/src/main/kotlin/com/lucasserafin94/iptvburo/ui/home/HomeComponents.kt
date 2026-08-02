@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +35,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
@@ -45,6 +49,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.theme.Blue
@@ -64,46 +72,87 @@ fun BuroHero(
     modifier: Modifier = Modifier,
     requestFocus: Boolean = false,
 ) {
-    require(item.isDemonstration) {
-        "BuroHero expects the explicitly labelled local demonstration fixture."
-    }
-
-    val palette = item.palette.colors()
     BoxWithConstraints(
         modifier = modifier
             .clip(RoundedCornerShape(28.dp))
-            .background(
-                Brush.horizontalGradient(
-                    colors = listOf(
-                        palette.first,
-                        palette.second.copy(alpha = 0.84f),
-                        Ink,
-                    ),
-                ),
-            )
+            .background(Ink)
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.09f),
                 shape = RoundedCornerShape(28.dp),
             ),
     ) {
+        val phonePortrait = maxWidth < 600.dp
         val compact = maxWidth < 900.dp
-        val horizontalPadding = if (compact) 28.dp else 48.dp
-        val titleSize = if (compact) 36.sp else 50.sp
-        val bodySize = if (compact) 15.sp else 18.sp
+        val horizontalPadding =
+            when {
+                phonePortrait -> 18.dp
+                compact -> 28.dp
+                else -> 48.dp
+            }
+        val titleSize =
+            when {
+                phonePortrait -> 30.sp
+                compact -> 36.sp
+                else -> 50.sp
+            }
+        val bodySize = if (phonePortrait) 14.sp else if (compact) 15.sp else 18.sp
 
-        HeroMotif(
-            palette = palette,
-            compact = compact,
-            modifier = Modifier.align(Alignment.CenterEnd),
+        if (item.remoteArtworkUrl != null) {
+            RemoteHomeArtwork(
+                url = item.remoteArtworkUrl,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Image(
+                painter = painterResource(R.drawable.buro_nocturne_hero),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                alignment = Alignment.CenterEnd,
+                contentScale = ContentScale.Crop,
+            )
+        }
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colorStops =
+                                arrayOf(
+                                    0f to Ink.copy(alpha = 0.98f),
+                                    0.42f to Ink.copy(alpha = 0.84f),
+                                    0.72f to Ink.copy(alpha = 0.26f),
+                                    1f to Ink.copy(alpha = 0.08f),
+                                ),
+                        ),
+                    )
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Ink.copy(alpha = 0.14f),
+                                Color.Transparent,
+                                Ink.copy(alpha = 0.48f),
+                            ),
+                        ),
+                    ),
         )
 
         Column(
             modifier = Modifier
                 .fillMaxHeight()
-                .fillMaxWidth(if (compact) 0.74f else 0.62f)
+                .fillMaxWidth(
+                    when {
+                        phonePortrait -> 1f
+                        compact -> 0.74f
+                        else -> 0.62f
+                    },
+                )
                 .padding(
                     start = horizontalPadding,
+                    end = if (phonePortrait) horizontalPadding else 0.dp,
                     top = if (compact) 28.dp else 40.dp,
                     bottom = if (compact) 28.dp else 40.dp,
                 ),
@@ -135,36 +184,63 @@ fun BuroHero(
                 color = White.copy(alpha = 0.86f),
                 fontSize = bodySize,
                 lineHeight = bodySize * 1.35f,
-                maxLines = if (compact) 2 else 3,
+                maxLines = if (phonePortrait) 3 else if (compact) 2 else 3,
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(if (compact) 18.dp else 24.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                HeroAction(
-                    label = stringResource(R.string.buro_home_view_story),
-                    icon = Icons.Default.Info,
-                    primary = true,
-                    onClick = { onOpenItem(item.id) },
-                    onFocused = { onItemFocused(item.id) },
-                    requestFocus = requestFocus,
-                )
-                HeroAction(
-                    label = if (sourceCount == 0) {
-                        stringResource(R.string.buro_home_view_sources)
-                    } else {
-                        stringResource(
-                            R.string.buro_home_view_sources_count,
-                            sourceCount,
-                        )
-                    },
-                    icon = Icons.Default.FolderOpen,
-                    primary = false,
-                    onClick = onOpenSources,
-                    onFocused = { onItemFocused(item.id) },
-                )
+            val sourcesLabel =
+                if (sourceCount == 0) {
+                    stringResource(R.string.buro_home_view_sources)
+                } else {
+                    stringResource(
+                        R.string.buro_home_view_sources_count,
+                        sourceCount,
+                    )
+                }
+            if (phonePortrait) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    HeroAction(
+                        label = if (item.isDemonstration) stringResource(R.string.buro_home_view_story) else "Ver detalhes",
+                        icon = Icons.Default.Info,
+                        primary = true,
+                        onClick = { onOpenItem(item.id) },
+                        onFocused = { onItemFocused(item.id) },
+                        requestFocus = requestFocus,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    HeroAction(
+                        label = sourcesLabel,
+                        icon = Icons.Default.FolderOpen,
+                        primary = false,
+                        onClick = onOpenSources,
+                        onFocused = { onItemFocused(item.id) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    HeroAction(
+                        label = if (item.isDemonstration) stringResource(R.string.buro_home_view_story) else "Ver detalhes",
+                        icon = Icons.Default.Info,
+                        primary = true,
+                        onClick = { onOpenItem(item.id) },
+                        onFocused = { onItemFocused(item.id) },
+                        requestFocus = requestFocus,
+                    )
+                    HeroAction(
+                        label = sourcesLabel,
+                        icon = Icons.Default.FolderOpen,
+                        primary = false,
+                        onClick = onOpenSources,
+                        onFocused = { onItemFocused(item.id) },
+                    )
+                }
             }
         }
     }
@@ -314,6 +390,7 @@ private fun ArtworkFallback(
     compactTitle: Boolean,
 ) {
     val palette = item.palette.colors()
+    val artworkResource = item.artwork.drawableResource()
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -327,32 +404,53 @@ private fun ArtworkFallback(
                 ),
             ),
     ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 18.dp, end = 18.dp)
-                .size(if (compactTitle) 64.dp else 76.dp)
-                .rotate(18f)
-                .border(
-                    width = if (isFocused) 3.dp else 2.dp,
-                    color = Color.White.copy(alpha = if (isFocused) 0.32f else 0.17f),
-                    shape = RoundedCornerShape(22.dp),
-                ),
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .size(if (compactTitle) 78.dp else 92.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = if (isFocused) 0.13f else 0.08f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = item.title.firstOrNull()?.uppercase() ?: "B",
-                color = White.copy(alpha = 0.82f),
-                fontSize = if (compactTitle) 34.sp else 42.sp,
-                fontWeight = FontWeight.Black,
+        if (item.remoteArtworkUrl != null) {
+            RemoteHomeArtwork(
+                url = item.remoteArtworkUrl,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
             )
+        } else if (artworkResource != null) {
+            Image(
+                painter = painterResource(artworkResource),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(palette.first.copy(alpha = if (isFocused) 0.04f else 0.1f)),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 18.dp, end = 18.dp)
+                    .size(if (compactTitle) 64.dp else 76.dp)
+                    .rotate(18f)
+                    .border(
+                        width = if (isFocused) 3.dp else 2.dp,
+                        color = Color.White.copy(alpha = if (isFocused) 0.32f else 0.17f),
+                        shape = RoundedCornerShape(22.dp),
+                    ),
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(if (compactTitle) 78.dp else 92.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = if (isFocused) 0.13f else 0.08f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = item.title.firstOrNull()?.uppercase() ?: "B",
+                    color = White.copy(alpha = 0.82f),
+                    fontSize = if (compactTitle) 34.sp else 42.sp,
+                    fontWeight = FontWeight.Black,
+                )
+            }
         }
 
         Box(
@@ -417,12 +515,36 @@ private fun ArtworkFallback(
 }
 
 @Composable
+private fun RemoteHomeArtwork(
+    url: String,
+    contentDescription: String?,
+    modifier: Modifier,
+    contentScale: ContentScale,
+) {
+    val context = LocalPlatformContext.current
+    val request =
+        remember(url, context) {
+            ImageRequest.Builder(context)
+                .data(url)
+                .diskCachePolicy(CachePolicy.DISABLED)
+                .build()
+        }
+    AsyncImage(
+        model = request,
+        contentDescription = contentDescription,
+        modifier = modifier,
+        contentScale = contentScale,
+    )
+}
+
+@Composable
 private fun HeroAction(
     label: String,
     icon: ImageVector,
     primary: Boolean,
     onClick: () -> Unit,
     onFocused: () -> Unit,
+    modifier: Modifier = Modifier,
     requestFocus: Boolean = false,
 ) {
     val focusRequester = androidx.compose.runtime.remember { FocusRequester() }
@@ -432,7 +554,7 @@ private fun HeroAction(
 
     FocusSurface(
         onClick = onClick,
-        modifier = Modifier
+        modifier = modifier
             .height(52.dp)
             .focusRequester(focusRequester)
             .onFocusChanged { focusState ->
@@ -488,52 +610,6 @@ private fun DemoBadge(text: String) {
     }
 }
 
-@Composable
-private fun HeroMotif(
-    palette: Pair<Color, Color>,
-    compact: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .width(if (compact) 250.dp else 420.dp)
-            .fillMaxHeight(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(if (compact) 176.dp else 280.dp)
-                .rotate(-18f)
-                .border(
-                    width = 2.dp,
-                    color = palette.first.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(54.dp),
-                ),
-        )
-        Box(
-            modifier = Modifier
-                .size(if (compact) 116.dp else 184.dp)
-                .rotate(28f)
-                .clip(RoundedCornerShape(46.dp))
-                .background(palette.second.copy(alpha = 0.24f)),
-        )
-        Box(
-            modifier = Modifier
-                .size(if (compact) 62.dp else 96.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "B",
-                color = White.copy(alpha = 0.72f),
-                fontSize = if (compact) 27.sp else 40.sp,
-                fontWeight = FontWeight.Black,
-            )
-        }
-    }
-}
-
 internal fun HomeArtworkPalette.colors(): Pair<Color, Color> = when (this) {
     HomeArtworkPalette.AURORA -> Color(0xFF126E75) to Color(0xFF293B85)
     HomeArtworkPalette.COBALT -> Color(0xFF173C7A) to Color(0xFF251A56)
@@ -542,3 +618,10 @@ internal fun HomeArtworkPalette.colors(): Pair<Color, Color> = when (this) {
     HomeArtworkPalette.PLUM -> Color(0xFF6B326E) to Color(0xFF26245C)
     HomeArtworkPalette.SOLAR -> Color(0xFF8C6524) to Color(0xFF713545)
 }
+
+private fun HomeArtwork?.drawableResource(): Int? =
+    when (this) {
+        HomeArtwork.PAPER_SUN -> R.drawable.buro_paper_sun
+        HomeArtwork.FOREST_SIGNAL -> R.drawable.buro_forest_signal
+        null -> null
+    }
