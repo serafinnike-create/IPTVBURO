@@ -26,7 +26,11 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            isMinifyEnabled = false
+            // R8 was disabled, so the shipping build carried every unused class and method from
+            // Compose, Media3, Room and Hilt. Enabling it is the single largest win available on
+            // install size and class-loading time at startup.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
