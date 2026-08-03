@@ -95,6 +95,30 @@ data class LiveProgramUi(
 enum class SourceImportMethod {
     M3U_FILE,
     XTREAM,
+    STALKER,
+}
+
+/**
+ * Why a Stalker portal connection failed, kept separate from the generic import error flag.
+ *
+ * A portal rejecting the MAC and a portal being unreachable need very different advice, so the
+ * reason survives as far as the screen instead of collapsing into "could not connect".
+ */
+enum class StalkerFailureUi {
+    /** The portal answered but did not recognise the MAC: it is not registered there. */
+    UNAUTHORISED,
+
+    /** The subscription exists but the portal marked it blocked or expired. */
+    BLOCKED,
+
+    /** Network, DNS or TLS failure: the portal was never reached. */
+    NETWORK,
+
+    /** The portal answered with something the client cannot parse. */
+    MALFORMED,
+
+    /** The MAC or portal URL did not pass local validation, or the portal returned nothing. */
+    INVALID_INPUT,
 }
 
 /** UI-facing state of an offline copy. Mirrors the desktop `DownloadState`. */
@@ -251,6 +275,7 @@ data class AppUiState(
     val lastImportedChannelCount: Int? = null,
     val hasImportError: Boolean = false,
     val lastImportMethod: SourceImportMethod? = null,
+    val stalkerFailure: StalkerFailureUi? = null,
     val xtreamImportStage: XtreamImportStageUi? = null,
     val importSuccessVersion: Long = 0L,
     val isCatalogLoading: Boolean = false,

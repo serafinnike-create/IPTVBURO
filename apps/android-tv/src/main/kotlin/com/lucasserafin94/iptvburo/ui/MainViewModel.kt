@@ -18,8 +18,12 @@ import com.lucasserafin94.iptvburo.data.repository.BuroProfile
 import com.lucasserafin94.iptvburo.data.repository.ProfileType
 import com.lucasserafin94.iptvburo.data.repository.UserLibraryRepository
 import com.lucasserafin94.iptvburo.data.repository.toProfile
+import com.lucasserafin94.iptvburo.data.repository.StalkerImportRequest
 import com.lucasserafin94.iptvburo.data.repository.XtreamImportRequest
 import com.lucasserafin94.iptvburo.data.repository.XtreamImportStage
+import com.lucasserafin94.iptvburo.stalker.StalkerClientException
+import com.lucasserafin94.iptvburo.stalker.StalkerFailureReason
+import com.lucasserafin94.iptvburo.stalker.StalkerMacAddress
 import com.lucasserafin94.iptvburo.di.IoDispatcher
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import com.lucasserafin94.iptvburo.domain.model.Category
@@ -750,6 +754,124 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Connects a Stalker/Ministra portal.
+     *
+     * [macAddress] is the whole credential on such a portal, so it is never logged and never
+     * echoed into an error: only the failure *reason* travels back to the screen.
+     */
+    fun importStalkerSource(
+        displayName: String,
+        portalUrl: String,
+        macAddress: String,
+        username: String,
+        password: String,
+    ) {
+        if (mutableState.value.isImporting) return
+        if (displayName.isBlank() || portalUrl.isBlank()) {
+            finishFailedImport(SourceImportMethod.STALKER, StalkerFailureUi.INVALID_INPUT)
+            return
+        }
+        val normalisedMac = StalkerMacAddress.normalise(macAddress)
+        if (normalisedMac == null) {
+            finishFailedImport(SourceImportMethod.STALKER, StalkerFailureUi.INVALID_INPUT)
+            return
+        }
+
+        mutableState.update {
+            it.copy(
+                isImporting = true,
+                lastImportedChannelCount = null,
+                hasImportError = false,
+                lastImportMethod = SourceImportMethod.STALKER,
+                stalkerFailure = null,
+                xtreamImportStage = XtreamImportStageUi.AUTHENTICATING,
+            )
+        }
+
+        importJob =
+            viewModelScope.launch {
+                val runningJob = currentCoroutineContext()[Job]
+                try {
+                    val result =
+                        catalogRepository.importStalker(
+                            request =
+                                StalkerImportRequest(
+                                    displayName = displayName.trim(),
+                                    portalUrl = portalUrl.trim(),
+                                    macAddress = normalisedMac,
+                                    username = username.trim().ifBlank { null },
+                                    password = password.ifBlank { null },
+                                ),
+                            onProgress = { stage ->
+                                mutableState.update { state ->
+                                    if (
+                                        state.isImporting &&
+                                        state.lastImportMethod == SourceImportMethod.STALKER
+                                    ) {
+                                        state.copy(xtreamImportStage = stage.toUi())
+                                    } else {
+                                        state
+                                    }
+                                }
+                            },
+                        )
+                    finishSuccessfulImport(
+                        importedItemCount = result.totalItemCount,
+                        method = SourceImportMethod.STALKER,
+                    )
+                } catch (cancelled: CancellationException) {
+                    mutableState.update { state ->
+                        if (
+                            state.isImporting &&
+                            state.lastImportMethod == SourceImportMethod.STALKER
+                        ) {
+                            state.copy(
+                                isImporting = false,
+                                lastImportedChannelCount = null,
+                                hasImportError = false,
+                                stalkerFailure = null,
+                                xtreamImportStage = null,
+                            )
+                        } else {
+                            state
+                        }
+                    }
+                    throw cancelled
+                } catch (error: Exception) {
+                    // Logged by reason only: the message of a wrapped failure could carry the
+                    // portal URL, and the MAC must never reach a log at all.
+                    val failure = error.toStalkerFailureUi()
+                    logger.error(TAG, "Stalker portal import failed: $failure")
+                    finishFailedImport(SourceImportMethod.STALKER, failure)
+                } finally {
+                    if (importJob === runningJob) importJob = null
+                }
+            }
+    }
+
+    fun cancelStalkerImport() {
+        val current = mutableState.value
+        if (
+            !current.isImporting ||
+            current.lastImportMethod != SourceImportMethod.STALKER
+        ) {
+            return
+        }
+        val runningJob = importJob
+        importJob = null
+        runningJob?.cancel(CancellationException("Stalker import cancelled by user."))
+        mutableState.update {
+            it.copy(
+                isImporting = false,
+                lastImportedChannelCount = null,
+                hasImportError = false,
+                stalkerFailure = null,
+                xtreamImportStage = null,
+            )
+        }
+    }
+
     private fun openPrimaryCatalog(section: AppSection) {
         val sources = mutableState.value.sources
         val source =
@@ -1241,6 +1363,7 @@ class MainViewModel @Inject constructor(
                 lastImportedChannelCount = importedItemCount,
                 hasImportError = false,
                 lastImportMethod = method,
+                stalkerFailure = null,
                 xtreamImportStage = null,
                 importSuccessVersion = it.importSuccessVersion + 1,
                 section = AppSection.SOURCES,
@@ -1249,13 +1372,17 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    private fun finishFailedImport(method: SourceImportMethod) {
+    private fun finishFailedImport(
+        method: SourceImportMethod,
+        stalkerFailure: StalkerFailureUi? = null,
+    ) {
         mutableState.update {
             it.copy(
                 isImporting = false,
                 lastImportedChannelCount = null,
                 hasImportError = true,
                 lastImportMethod = method,
+                stalkerFailure = stalkerFailure,
                 xtreamImportStage = null,
             )
         }
@@ -1461,6 +1588,32 @@ class MainViewModel @Inject constructor(
                 append(it)
             }
         }
+
+    /**
+     * Maps a portal failure onto the reason the screen shows.
+     *
+     * The repository validates locally before it reaches the network, so an
+     * [IllegalArgumentException] here means the form got past validation with something the
+     * portal contract rejects, not that the portal refused the subscription.
+     */
+    private fun Throwable.toStalkerFailureUi(): StalkerFailureUi {
+        val stalkerFailure = generateSequence(this, Throwable::cause)
+            .filterIsInstance<StalkerClientException>()
+            .firstOrNull()
+        if (stalkerFailure != null) {
+            return when (stalkerFailure.reason) {
+                StalkerFailureReason.UNAUTHORISED -> StalkerFailureUi.UNAUTHORISED
+                StalkerFailureReason.BLOCKED -> StalkerFailureUi.BLOCKED
+                StalkerFailureReason.NETWORK -> StalkerFailureUi.NETWORK
+                StalkerFailureReason.MALFORMED -> StalkerFailureUi.MALFORMED
+            }
+        }
+        return if (this is IllegalArgumentException || this is IllegalStateException) {
+            StalkerFailureUi.INVALID_INPUT
+        } else {
+            StalkerFailureUi.NETWORK
+        }
+    }
 
     private fun XtreamImportStage.toUi(): XtreamImportStageUi =
         when (this) {
