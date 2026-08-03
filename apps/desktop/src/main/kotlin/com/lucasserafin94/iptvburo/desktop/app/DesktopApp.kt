@@ -98,6 +98,7 @@ import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.PROFILE_AVATARS
 import com.lucasserafin94.iptvburo.desktop.update.DESKTOP_VERSION
+import com.lucasserafin94.iptvburo.desktop.update.DesktopRelease
 import com.lucasserafin94.iptvburo.desktop.update.GitHubReleaseUpdater
 import com.lucasserafin94.iptvburo.desktop.update.UpdateCheckResult
 import kotlinx.coroutines.launch
@@ -119,6 +120,9 @@ fun DesktopApp(
     val releaseUpdater = remember { GitHubReleaseUpdater() }
     var updateBusy by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
+    var updateProgress by remember { mutableStateOf(0f) }
+    var updateRelease by remember { mutableStateOf<DesktopRelease?>(null) }
+    var updateReadyToRestart by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -177,6 +181,7 @@ fun DesktopApp(
                             scope.launch { appState.openCatalog(XtreamContentType.LIVE) }
                         },
                         onFavorites = { scope.launch { appState.setFavoritesOnly(true) } },
+                        onDownloads = appState::openDownloads,
                     )
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                         TopBar(
@@ -206,12 +211,24 @@ fun DesktopApp(
                                                 updateBusy = false
                                             }
                                             is UpdateCheckResult.Available -> {
-                                                updateMessage = "${text.downloading} ${result.release.displayName}…"
-                                                releaseUpdater.downloadAndLaunch(result.release)
-                                                    .onSuccess {
-                                                        updateMessage = text.installerVerified
-                                                        onExitForUpdate()
+                                                updateMessage = null
+                                                updateProgress = 0f
+                                                updateRelease = result.release
+                                                // Progress is reported so a multi-hundred-megabyte
+                                                // download does not look like a hang.
+                                                releaseUpdater
+                                                    .downloadAndLaunch(result.release) { fraction ->
+                                                        updateProgress = fraction
+                                                    }.onSuccess {
+                                                        // The installer is running; the app must
+                                                        // close for it to replace these files. The
+                                                        // user presses the button when ready rather
+                                                        // than having the window vanish under them.
+                                                        updateProgress = 1f
+                                                        updateReadyToRestart = true
+                                                        updateBusy = false
                                                     }.onFailure {
+                                                        updateRelease = null
                                                         updateMessage = text.updateFailed
                                                         updateBusy = false
                                                     }
@@ -235,6 +252,20 @@ fun DesktopApp(
                                     }
                                 },
                                 onConnectXtream = { showXtreamLogin = true },
+                            )
+                        } else if (appState.destination == DesktopDestination.DOWNLOADS) {
+                            DownloadsWorkspace(
+                                entries = appState.downloadEntries,
+                                onPlay = { key ->
+                                    activePlayback = appState.prepareOfflinePlayback(key)
+                                    if (activePlayback == null) {
+                                        // The file was removed outside the app; refresh so the row
+                                        // disappears instead of failing again on the next click.
+                                        appState.refreshDownloadStates()
+                                    }
+                                },
+                                onCancel = appState::cancelDownload,
+                                onDelete = appState::deleteDownload,
                             )
                         } else if (appState.isXtreamSelected && appState.destination == DesktopDestination.HOME) {
                             XtreamDailyHome(
@@ -306,6 +337,15 @@ fun DesktopApp(
                 }
                 // Language comes before the profile gate: the profile screen is itself translated,
                 // so asking "who's watching?" in the wrong language defeats the point.
+                updateRelease?.let { release ->
+                    UpdateOverlay(
+                        release = release,
+                        progress = updateProgress,
+                        readyToRestart = updateReadyToRestart,
+                        onRestart = onExitForUpdate,
+                        onDismiss = { updateRelease = null },
+                    )
+                }
                 if (appState.needsLanguageSetup) {
                     LanguageSetupGate(
                         current = appState.language,
@@ -411,6 +451,7 @@ private fun SourceSidebar(
     onSeries: () -> Unit,
     onLive: () -> Unit,
     onFavorites: () -> Unit,
+    onDownloads: () -> Unit,
 ) {
     val text = strings
     Column(
@@ -456,6 +497,11 @@ private fun SourceSidebar(
             selected = destination == DesktopDestination.FAVORITES,
             onClick = onFavorites,
         )
+        NavigationItem(
+            label = text.downloads,
+            selected = destination == DesktopDestination.DOWNLOADS,
+            onClick = onDownloads,
+        )
 
         // The source list used to own the whole remaining column even with one source. It is a
         // rarely-used switch, so it now takes only the height it needs and the section disappears
@@ -489,27 +535,7 @@ private fun SourceSidebar(
             }
         }
 
-        // Fills what was dead space in the middle of the sidebar, and gives downloads the one thing
-        // they lacked: somewhere to see them. A download that starts with no visible destination
-        // looks like nothing happened.
-        if (downloads.isNotEmpty()) {
-            Spacer(Modifier.height(24.dp))
-            SectionLabel(text.downloads)
-            Spacer(Modifier.height(8.dp))
-            LazyColumn(
-                modifier = Modifier.weight(1f, fill = false).heightIn(max = 260.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(downloads, key = { it.contentKey }) { entry ->
-                    DownloadRow(entry = entry, onCancel = { onCancelDownload(entry.contentKey) })
-                }
-            }
-        }
-
         Spacer(Modifier.weight(1f))
-        // Connect/Import are not repeated here. They are the two actions of the empty state, and
-        // once a source exists they are dead weight in permanent view.
-        PrivacyNote()
     }
 }
 
@@ -636,32 +662,6 @@ private fun SourceItem(
     }
 }
 
-@Composable
-private fun PrivacyNote() {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(BuroColors.Primary.copy(alpha = 0.08f))
-                .padding(11.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Box(
-            Modifier
-                .padding(top = 5.dp)
-                .size(7.dp)
-                .clip(CircleShape)
-                .background(BuroColors.Success),
-        )
-        Spacer(Modifier.width(9.dp))
-        Text(
-            "${strings.vaultProtected}\n${strings.credentialsEncrypted}",
-            color = BuroColors.TextMuted,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-    }
-}
 
 @Composable
 private fun TopBar(
@@ -1940,6 +1940,266 @@ private fun DownloadRow(
                     color = BuroColors.TextSubtle,
                     style = MaterialTheme.typography.bodySmall,
                 )
+        }
+    }
+}
+
+/**
+ * Offline library.
+ *
+ * The point of downloading is watching without the provider, so every completed row plays straight
+ * from disk and never touches the network. Before this screen existed a download reached 100% and
+ * then did nothing: the file was on disk with no way to reach it.
+ */
+@Composable
+private fun DownloadsWorkspace(
+    entries: List<DownloadEntry>,
+    onPlay: (String) -> Unit,
+    onCancel: (String) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    val text = strings
+    Column(modifier = Modifier.fillMaxSize().padding(BuroSpacing.Lg)) {
+        Text(
+            text = text.downloads,
+            color = BuroColors.Text,
+            style = MaterialTheme.typography.headlineSmall,
+        )
+        Spacer(Modifier.height(BuroSpacing.Md))
+
+        if (entries.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = text.downloadsEmptyTitle,
+                        color = BuroColors.Text,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Spacer(Modifier.height(BuroSpacing.Xs))
+                    Text(
+                        text = text.downloadsEmptyBody,
+                        color = BuroColors.TextSubtle,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+            return@Column
+        }
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
+            items(entries, key = { it.contentKey }) { entry ->
+                DownloadLibraryRow(
+                    entry = entry,
+                    onPlay = { onPlay(entry.contentKey) },
+                    onCancel = { onCancel(entry.contentKey) },
+                    onDelete = { onDelete(entry.contentKey) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadLibraryRow(
+    entry: DownloadEntry,
+    onPlay: () -> Unit,
+    onCancel: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val text = strings
+    val stored = entry.state == DownloadState.Completed
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(BuroRadius.Medium)
+            .background(BuroColors.Surface)
+            .padding(BuroSpacing.Md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = entry.title,
+                color = BuroColors.Text,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+            when (val state = entry.state) {
+                is DownloadState.Running -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(BuroColors.Canvas),
+                    ) {
+                        // A negative fraction means the server gave no length. Leaving the bar
+                        // empty is honest; an indeterminate animation would imply measured progress.
+                        if (state.fraction >= 0f) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(state.fraction.coerceIn(0f, 1f))
+                                    .fillMaxHeight()
+                                    .clip(CircleShape)
+                                    .background(BuroColors.Primary),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text =
+                            if (state.fraction >= 0f) {
+                                "${(state.fraction * 100).toInt()}%"
+                            } else {
+                                text.downloadInProgress
+                            },
+                        color = BuroColors.TextSubtle,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                DownloadState.Completed ->
+                    Text(
+                        text = "✓ ${text.downloaded}",
+                        color = BuroColors.Success,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                DownloadState.Failed ->
+                    Text(
+                        text = text.downloadFailed,
+                        color = BuroColors.Error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                DownloadState.Idle ->
+                    Text(
+                        text = text.downloadPaused,
+                        color = BuroColors.TextSubtle,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+            }
+        }
+
+        Spacer(Modifier.width(BuroSpacing.Md))
+        if (stored) {
+            Button(
+                onClick = onPlay,
+                shape = BuroRadius.Small,
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = BuroColors.Primary,
+                        contentColor = BuroColors.OnPrimary,
+                    ),
+            ) {
+                Text("▶  ${text.watchNow}", fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(BuroSpacing.Xs))
+            OutlinedButton(
+                onClick = onDelete,
+                shape = BuroRadius.Small,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
+            ) {
+                Text(text.removeDownload, maxLines = 1)
+            }
+        } else if (entry.state is DownloadState.Running) {
+            OutlinedButton(
+                onClick = onCancel,
+                shape = BuroRadius.Small,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
+            ) {
+                Text(text.cancel, maxLines = 1)
+            }
+        } else {
+            OutlinedButton(
+                onClick = onDelete,
+                shape = BuroRadius.Small,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
+            ) {
+                Text(text.removeDownload, maxLines = 1)
+            }
+        }
+    }
+}
+
+/**
+ * Update progress and restart prompt.
+ *
+ * Previously the app called exitApplication the moment the installer launched, so the window
+ * vanished with no warning and no visible progress — indistinguishable from a crash. The installer
+ * still needs the app closed to replace its files, but the user decides when.
+ */
+@Composable
+private fun UpdateOverlay(
+    release: DesktopRelease,
+    progress: Float,
+    readyToRestart: Boolean,
+    onRestart: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val text = strings
+    Box(
+        modifier = Modifier.fillMaxSize().background(BuroColors.Scrim),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 460.dp)
+                .clip(BuroRadius.Large)
+                .background(BuroColors.SurfaceRaised)
+                .border(1.dp, BuroColors.BorderSoft, BuroRadius.Large)
+                .padding(BuroSpacing.Xl),
+        ) {
+            Text(
+                text = release.displayName,
+                color = BuroColors.Text,
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Spacer(Modifier.height(BuroSpacing.Md))
+
+            if (readyToRestart) {
+                Text(
+                    text = text.updateReadyBody,
+                    color = BuroColors.TextMuted,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(BuroSpacing.Lg))
+                Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm)) {
+                    Button(
+                        onClick = onRestart,
+                        shape = BuroRadius.Small,
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = BuroColors.Primary,
+                                contentColor = BuroColors.OnPrimary,
+                            ),
+                    ) {
+                        Text(text.updateRestartNow, fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(onClick = onDismiss) { Text(text.updateLater) }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(CircleShape)
+                        .background(BuroColors.Canvas),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress.coerceIn(0f, 1f))
+                            .fillMaxHeight()
+                            .clip(CircleShape)
+                            .background(BuroColors.Primary),
+                    )
+                }
+                Spacer(Modifier.height(BuroSpacing.Xs))
+                Text(
+                    text = "${text.downloading}  ${(progress * 100).toInt()}%",
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
 }

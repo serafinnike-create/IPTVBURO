@@ -103,6 +103,11 @@ data class DesktopStrings(
     val languageLabel: String,
     val chooseYear: String,
     val downloadPaused: String,
+    val downloadsEmptyTitle: String,
+    val downloadsEmptyBody: String,
+    val updateReadyBody: String,
+    val updateRestartNow: String,
+    val updateLater: String,
 ) {
     companion object {
         fun of(language: DesktopLanguage): DesktopStrings =
@@ -205,6 +210,11 @@ data class DesktopStrings(
                 languageLabel = "IDIOMA",
                 chooseYear = "Escolher ano",
                 downloadPaused = "Pausado",
+                downloadsEmptyTitle = "Nenhuma copia offline",
+                downloadsEmptyBody = "Abra um filme e escolha Baixar. As copias salvas aparecem aqui e tocam sem internet.",
+                updateReadyBody = "A atualizacao foi baixada e verificada. O aplicativo precisa fechar para concluir a instalacao.",
+                updateRestartNow = "Fechar e atualizar",
+                updateLater = "Depois",
             )
 
         private val En =
@@ -299,6 +309,11 @@ data class DesktopStrings(
                 languageLabel = "LANGUAGE",
                 chooseYear = "Choose year",
                 downloadPaused = "Paused",
+                downloadsEmptyTitle = "No offline copies",
+                downloadsEmptyBody = "Open a film and choose Download. Stored copies appear here and play without a connection.",
+                updateReadyBody = "The update was downloaded and verified. The app must close to finish installing.",
+                updateRestartNow = "Close and update",
+                updateLater = "Later",
             )
 
         private val De =
@@ -394,6 +409,11 @@ data class DesktopStrings(
                 languageLabel = "SPRACHE",
                 chooseYear = "Jahr wählen",
                 downloadPaused = "Pausiert",
+                downloadsEmptyTitle = "Keine Offline-Kopien",
+                downloadsEmptyBody = "Oeffne einen Film und waehle Herunterladen. Gespeicherte Kopien erscheinen hier und laufen ohne Verbindung.",
+                updateReadyBody = "Das Update wurde geladen und geprueft. Die App muss sich schliessen, um die Installation abzuschliessen.",
+                updateRestartNow = "Schliessen und aktualisieren",
+                updateLater = "Spaeter",
             )
 
         private val It =
@@ -489,6 +509,11 @@ data class DesktopStrings(
                 languageLabel = "LINGUA",
                 chooseYear = "Scegli anno",
                 downloadPaused = "In pausa",
+                downloadsEmptyTitle = "Nessuna copia offline",
+                downloadsEmptyBody = "Apri un film e scegli Scarica. Le copie salvate compaiono qui e si riproducono senza connessione.",
+                updateReadyBody = "L aggiornamento e stato scaricato e verificato. L app deve chiudersi per completare l installazione.",
+                updateRestartNow = "Chiudi e aggiorna",
+                updateLater = "Piu tardi",
             )
     }
 }

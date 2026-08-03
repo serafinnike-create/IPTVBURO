@@ -93,7 +93,16 @@ class GitHubReleaseUpdater(
             }
         }
 
-    suspend fun downloadAndLaunch(release: DesktopRelease): Result<Path> =
+    /**
+     * Downloads the installer, reporting progress as a 0..1 fraction.
+     *
+     * The installer is well over a hundred megabytes, so a caller that shows only "updating…" for
+     * several minutes is indistinguishable from one that has hung.
+     */
+    suspend fun downloadAndLaunch(
+        release: DesktopRelease,
+        onProgress: (Float) -> Unit = {},
+    ): Result<Path> =
         withContext(Dispatchers.IO) {
             runCatching {
                 require(isWindowsInstallerName(release.assetName))
@@ -121,6 +130,9 @@ class GitHubReleaseUpdater(
                                 copied += read
                                 check(copied <= MAX_INSTALLER_BYTES)
                                 output.write(buffer, 0, read)
+                                if (release.sizeBytes > 0L) {
+                                    onProgress((copied.toFloat() / release.sizeBytes).coerceIn(0f, 1f))
+                                }
                             }
                         }
                     }

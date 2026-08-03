@@ -346,6 +346,12 @@ class DesktopAppState(
                 .toList()
         }
 
+    /** Opens the offline library and reconciles it with disk. */
+    fun openDownloads() {
+        refreshDownloadStates()
+        destination = DesktopDestination.DOWNLOADS
+    }
+
     fun openHome() {
         destination = DesktopDestination.HOME
         favoritesOnly = false
@@ -713,6 +719,41 @@ class DesktopAppState(
         downloadManager.cancel(contentKey)
     }
 
+    /**
+     * Playback request for a stored copy.
+     *
+     * The whole point of downloading is watching without the provider, so this resolves the local
+     * file and never touches the network. Returns null when the file has gone — a user can delete
+     * it from Explorer, and offering playback for something that is not there would fail with a
+     * confusing player error instead of an honest empty state.
+     */
+    fun prepareOfflinePlayback(contentKey: String): DesktopPlaybackRequest? {
+        val file = downloadManager.downloadedFile(contentKey) ?: return null
+        return DesktopPlaybackRequest(
+            title = (downloadTitles[contentKey] ?: contentKey).take(180),
+            uri = file.toUri(),
+            progressIdentity = null,
+            startPositionMillis = 0L,
+        )
+    }
+
+    /**
+     * Reconciles in-memory state with what is actually on disk.
+     *
+     * A copy finished in an earlier session leaves no trace in [downloads], so without this the
+     * list would claim nothing had ever been downloaded.
+     */
+    fun refreshDownloadStates() {
+        val stored = downloadManager.storedDownloads()
+        if (stored.isEmpty() && downloads.isEmpty()) return
+        downloadTitles = downloadTitles + stored.filterKeys { it !in downloadTitles }
+        downloads =
+            downloads +
+            stored.keys
+                .filter { key -> downloads[key] !is DownloadState.Running }
+                .associateWith { DownloadState.Completed }
+    }
+
     fun deleteDownload(contentKey: String) {
         downloadManager.delete(contentKey)
         downloads = downloads - contentKey
@@ -1019,7 +1060,7 @@ data class DesktopContinueWatchingEntry(
     val progress: PlaybackProgress,
 )
 
-enum class DesktopDestination { HOME, CATALOG, FAVORITES }
+enum class DesktopDestination { HOME, CATALOG, FAVORITES, DOWNLOADS }
 
 data class DailyHomeSnapshot(
     val sourceId: String,

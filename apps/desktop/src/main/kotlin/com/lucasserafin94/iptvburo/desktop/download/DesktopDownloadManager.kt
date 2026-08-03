@@ -49,6 +49,28 @@ class DesktopDownloadManager(
 
     fun isDownloaded(contentKey: String): Boolean = Files.exists(fileFor(contentKey))
 
+    /**
+     * Content keys that have a completed file on disk, mapped to a readable title.
+     *
+     * Lets the library rebuild its list after a restart. The key is recovered from the file name,
+     * which is why the name is derived from the key rather than from the stream URL.
+     */
+    fun storedDownloads(): Map<String, String> {
+        if (!Files.isDirectory(rootDirectory)) return emptyMap()
+        return Files.list(rootDirectory).use { stream ->
+            stream
+                .filter { path -> Files.isRegularFile(path) }
+                .map { path -> path.fileName.toString() }
+                // `.part` files are interrupted downloads, not stored copies.
+                .filter { name -> !name.endsWith(".part") }
+                .toList()
+                .associate { name ->
+                    val key = name.substringBeforeLast('.')
+                    key to key.substringAfterLast(':').replace('-', ' ').trim()
+                }
+        }
+    }
+
     fun downloadedFile(contentKey: String): Path? = fileFor(contentKey).takeIf(Files::exists)
 
     fun delete(contentKey: String): Boolean = Files.deleteIfExists(fileFor(contentKey))
