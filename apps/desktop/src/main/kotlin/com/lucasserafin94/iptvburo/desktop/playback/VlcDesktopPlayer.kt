@@ -111,6 +111,24 @@ class VlcDesktopPlayer {
         executor.shutdownNow()
     }
 
+    /**
+     * Waits for the AWT peer to exist and returns its native window handle.
+     *
+     * Polls rather than assuming, because the peer is created asynchronously and a zero handle is
+     * accepted silently by VLC: it plays into nothing and reports success.
+     */
+    private fun awaitComponentHandle(canvas: Canvas): Long {
+        repeat(HANDLE_ATTEMPTS) {
+            if (canvas.isDisplayable) {
+                val pointer = runCatching { Native.getComponentPointer(canvas) }.getOrNull()
+                val handle = pointer?.let(Pointer::nativeValue) ?: 0L
+                if (handle != 0L) return handle
+            }
+            Thread.sleep(HANDLE_POLL_MILLIS)
+        }
+        error("The video surface was not ready")
+    }
+
     private fun startIfNeeded(canvas: Canvas, request: DesktopPlaybackRequest) {
         if (disposed.get() || !started.compareAndSet(false, true)) return
         snapshot = snapshot.copy(loading = true, errorMessage = null)
@@ -131,7 +149,12 @@ class VlcDesktopPlayer {
         val executable = locateVlcExecutable() ?: error("Bundled VLC runtime was not found")
         val port = freeLoopbackPort()
         val password = randomPassword()
-        val windowHandle = Pointer.nativeValue(Native.getComponentPointer(canvas))
+
+        // The native peer is not always realised by the time addNotify fires. When it is not, the
+        // pointer comes back null and VLC is told to draw into window handle 0 — it starts, reports
+        // no error, and renders nowhere. That is the intermittent black screen that a close and
+        // reopen "fixed": the second attempt happened to win the race.
+        val windowHandle = awaitComponentHandle(canvas)
         process =
             ProcessBuilder(
                 executable.absolutePath,
@@ -234,6 +257,10 @@ class VlcDesktopPlayer {
     }
 
     private companion object {
+        /** Roughly two seconds in total; the peer normally arrives within a frame or two. */
+        const val HANDLE_ATTEMPTS = 100
+        const val HANDLE_POLL_MILLIS = 20L
+
         const val VLC_VOLUME_MAX = 256
         const val CONNECT_TIMEOUT_MILLIS = 12_000L
         const val START_TIMEOUT_MILLIS = 25_000L

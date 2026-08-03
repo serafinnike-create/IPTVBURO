@@ -1,7 +1,12 @@
 package com.lucasserafin94.iptvburo.desktop
 
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -26,6 +31,12 @@ fun main() {
             rememberWindowState(
                 size = DpSize(width = 1_380.dp, height = 860.dp),
             )
+
+        // Remembered so leaving the compact overlay restores the window the user had, rather than
+        // snapping back to the default size.
+        var restoreSize by remember { mutableStateOf(windowState.size) }
+        var restorePosition by remember { mutableStateOf(windowState.position) }
+        var compactMode by remember { mutableStateOf(false) }
 
         Window(
             onCloseRequest = {
@@ -62,6 +73,23 @@ fun main() {
                         } else {
                             WindowPlacement.Fullscreen
                         }
+                },
+                isCompact = compactMode,
+                onToggleCompact = {
+                    if (compactMode) {
+                        windowState.size = restoreSize
+                        windowState.position = restorePosition
+                        compactMode = false
+                    } else {
+                        // Watch in a corner while doing something else, the behaviour of a
+                        // picture-in-picture window elsewhere.
+                        restoreSize = windowState.size
+                        restorePosition = windowState.position
+                        windowState.placement = WindowPlacement.Floating
+                        windowState.size = DpSize(width = 480.dp, height = 300.dp)
+                        windowState.position = WindowPosition(Alignment.BottomEnd)
+                        compactMode = true
+                    }
                 },
                 onExitForUpdate = {
                     xtreamRepository.clear()

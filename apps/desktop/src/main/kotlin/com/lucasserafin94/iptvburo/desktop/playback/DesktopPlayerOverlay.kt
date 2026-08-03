@@ -26,6 +26,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.Color
@@ -50,6 +52,8 @@ fun DesktopPlayerOverlay(
     onEnded: (Long) -> Unit,
     isFullScreen: Boolean,
     onToggleFullScreen: () -> Unit,
+    isCompact: Boolean = false,
+    onToggleCompact: () -> Unit = {},
     onClose: () -> Unit,
 ) {
     val controller = remember(request) { VlcDesktopPlayer() }
@@ -103,6 +107,10 @@ fun DesktopPlayerOverlay(
         }
     }
 
+    // Nothing requested focus, so key events never reached the handler and F11 did nothing at all.
+    val playerFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { playerFocus.requestFocus() } }
+
     val closePlayer = {
         if (state.durationMillis > 0.0) onCheckpoint(state.positionMillis.toLong(), state.durationMillis.toLong())
         onClose()
@@ -130,6 +138,7 @@ fun DesktopPlayerOverlay(
                     else -> false
                 }
             }
+            .focusRequester(playerFocus)
             .focusable(),
     ) {
         // Hidden in full screen. Maximising the window while keeping a 64 dp chrome bar above the
@@ -147,8 +156,12 @@ fun DesktopPlayerOverlay(
                 Text(request.title, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text("${state.engineName} • HEVC/H.264", color = BuroColors.Primary)
                 Spacer(Modifier.width(12.dp))
+                OutlinedButton(onClick = onToggleCompact) {
+                    Text(if (isCompact) "Voltar ao app" else "Janela pequena")
+                }
+                Spacer(Modifier.width(8.dp))
                 OutlinedButton(onClick = onToggleFullScreen) {
-                    Text("Tela cheia (F11)")
+                    Text("⛶  Tela cheia (F11)")
                 }
             }
         }

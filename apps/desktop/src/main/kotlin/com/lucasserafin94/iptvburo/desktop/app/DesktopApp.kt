@@ -109,6 +109,8 @@ fun DesktopApp(
     ownerWindow: Frame?,
     isFullScreen: Boolean,
     onToggleFullScreen: () -> Unit,
+    isCompact: Boolean,
+    onToggleCompact: () -> Unit,
     onExitForUpdate: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -329,6 +331,8 @@ fun DesktopApp(
                         onEnded = { durationMs -> appState.completePlayback(request, durationMs) },
                         isFullScreen = isFullScreen,
                         onToggleFullScreen = onToggleFullScreen,
+                        isCompact = isCompact,
+                        onToggleCompact = onToggleCompact,
                         onClose = {
                             if (isFullScreen) onToggleFullScreen()
                             activePlayback = null
