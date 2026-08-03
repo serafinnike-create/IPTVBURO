@@ -49,8 +49,13 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 | Player HLS Media3 | ✅ Vertical funcional |
 | BURO Ribbon, Home real, capas e detalhes | 🧪 Fundação cinematográfica em teste |
 | Busca, quatro idiomas, perfis e favoritos | 🧪 Implementados; paridade em evolução |
-| Temporal Intelligence no código | 🚧 Fileiras 2026/2025; domínio completo pendente |
+| Temporal Intelligence no código | 🚧 Filtro por ano com seletor completo; domínio total pendente |
 | Resilience Engine no código | 🧭 Pendente |
+| Portal Stalker/Ministra (MAC) | 🧪 Cliente e importação prontos; falta a tela de conexão |
+| Download de VOD | 🧪 Windows funcional; Android pendente. Diverge do GDD 6 por [ADR-008](docs/adr/ADR-008-UNRESTRICTED-VOD-DOWNLOAD.md) |
+| Multiview (até 4 canais) | 🧪 Implementado no Windows |
+| Licenciamento e site de ativação | 🚧 App exibe código e QR; `site/` pronto. Sem servidor, nenhuma compra é possível |
+| Atualização automática no Windows | ✅ Funcional desde que o repositório passou a ser público |
 | Android mobile | 🧪 Mesma build adaptativa instalada em Android 15 |
 | Windows | 🧪 Compose Desktop, player compatível e MSI local aprovados |
 | Continuidade de reprodução por perfil | 🧪 Android e Windows implementados; migração Android validada em aparelho físico |
