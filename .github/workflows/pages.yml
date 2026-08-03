@@ -2,7 +2,9 @@ name: Publish activation site
 
 on:
   push:
-    branches: [main]
+    # The preview branch is included so the activation page can go live before the
+    # branch is merged; the app already points at the published URL.
+    branches: [main, 'agent/iptv-buro-0.2-preview']
     paths: ['site/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
