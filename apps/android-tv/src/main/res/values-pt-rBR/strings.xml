@@ -107,4 +107,17 @@
     <string name="sources_xtream_stage_movies">Carregando filmes…</string>
     <string name="sources_xtream_stage_series">Carregando séries…</string>
     <string name="sources_xtream_stage_saving">Salvando com segurança neste dispositivo…</string>
+    <string name="license_title">Licença deste aparelho</string>
+    <string name="license_device_code">Código do aparelho</string>
+    <string name="license_generating">gerando…</string>
+    <string name="license_state_unavailable">Não ativado</string>
+    <string name="license_how_title">Como ativar</string>
+    <string name="license_step_1">1. Abra %1$s no celular ou computador.</string>
+    <string name="license_step_2">2. Informe o código do aparelho mostrado acima.</string>
+    <string name="license_step_3">3. Conclua a compra única para liberar este aparelho.</string>
+    <string name="license_portal">iptvburo.app/activate</string>
+    <string name="license_backend_pending">A ativação ainda não está disponível. O servidor seguro de licenças não está no ar, então nenhuma compra pode ser concluída e nada está sendo cobrado.</string>
+    <string name="license_copy">Copiar código</string>
+    <string name="license_copied">Código copiado</string>
+    <string name="license_privacy">O código identifica apenas esta instalação. Não é o endereço MAC e não contém dados pessoais.</string>
 </resources>

@@ -2,6 +2,10 @@ package com.lucasserafin94.iptvburo.ui.screens
 
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
@@ -1707,15 +1711,7 @@ private fun SettingsContent(
                 compact = compact,
             )
             Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
-            SettingsRow(
-                title = "Licença deste dispositivo",
-                body = buildString {
-                    append("Device ID: ")
-                    append(deviceId ?: "gerando…")
-                    append("\nTeste de 7 dias e compra única de € 9,99 serão ativados pelo servidor seguro; nenhuma cobrança está ativa nesta prévia.")
-                },
-                compact = compact,
-            )
+            DeviceLicenceCard(deviceId = deviceId, compact = compact)
             Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
             Text(stringResource(R.string.settings_language), color = BuroTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
@@ -1766,6 +1762,151 @@ private fun SettingsRow(
             text = body,
             color = BuroTextSecondary,
             fontSize = if (compact) 13.sp else 14.sp,
+        )
+    }
+}
+
+/**
+ * Device licence card.
+ *
+ * Mirrors the activation flow users know from other IPTV players — the app shows a code, the user
+ * enters it on the portal to pay — with one deliberate difference recorded in ADR-004: the code is
+ * derived from a Keystore EC key and an installation UUID, **not** from the MAC address.
+ *
+ * MAC would be the familiar choice, and it is the wrong one here. Android randomises the Wi-Fi MAC
+ * per network from Android 10, so a licence bound to it would break when the user changes network,
+ * and apps cannot read the hardware MAC at all since Android 6. A key-derived code is stable and
+ * cannot be typed into someone else's device to clone a paid licence.
+ *
+ * The card states plainly that activation is not live yet. ADR-004 requires that no control ever
+ * implies a purchase can be completed while the licensing server does not exist.
+ */
+@Composable
+private fun DeviceLicenceCard(
+    deviceId: String?,
+    compact: Boolean,
+) {
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+    val portal = stringResource(R.string.license_portal)
+
+    LaunchedEffect(copied) {
+        if (copied) {
+            kotlinx.coroutines.delay(2_000)
+            copied = false
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(BuroSurface)
+            .border(1.dp, BuroGold.copy(alpha = 0.28f), RoundedCornerShape(20.dp))
+            .padding(if (compact) 16.dp else 22.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.license_title),
+                color = BuroTextPrimary,
+                fontSize = if (compact) 17.sp else 19.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(BuroGold.copy(alpha = 0.16f))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.license_state_unavailable),
+                    color = BuroGold,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = stringResource(R.string.license_device_code),
+            color = BuroTextSecondary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Spacer(Modifier.height(6.dp))
+        // Monospace and widely letter-spaced: this code gets read aloud and retyped on another
+        // device, so glyph-by-glyph legibility matters more than compactness.
+        Text(
+            text = deviceId ?: stringResource(R.string.license_generating),
+            color = BuroGold,
+            fontSize = if (compact) 22.sp else 27.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 2.sp,
+        )
+
+        if (deviceId != null) {
+            Spacer(Modifier.height(12.dp))
+            FocusSurface(
+                onClick = {
+                    clipboard.setText(AnnotatedString(deviceId))
+                    copied = true
+                },
+                modifier = Modifier.height(if (compact) 44.dp else 50.dp),
+            ) {
+                Box(
+                    modifier = Modifier.padding(horizontal = 18.dp).fillMaxHeight(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (copied) R.string.license_copied else R.string.license_copy,
+                        ),
+                        color = if (copied) BuroGold else BuroTextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+        Text(
+            text = stringResource(R.string.license_how_title),
+            color = BuroTextPrimary,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(8.dp))
+        listOf(
+            stringResource(R.string.license_step_1, portal),
+            stringResource(R.string.license_step_2),
+            stringResource(R.string.license_step_3),
+        ).forEach { step ->
+            Text(
+                text = step,
+                color = BuroTextSecondary,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = stringResource(R.string.license_backend_pending),
+            color = BuroTextSecondary,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = stringResource(R.string.license_privacy),
+            color = BuroTextSecondary.copy(alpha = 0.75f),
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
         )
     }
 }
