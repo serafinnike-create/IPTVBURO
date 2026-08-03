@@ -23,6 +23,11 @@ import com.lucasserafin94.iptvburo.domain.model.SourceType
 import com.lucasserafin94.iptvburo.playlist.M3uParser
 import com.lucasserafin94.iptvburo.playlist.M3uParseSummary
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
+import com.lucasserafin94.iptvburo.stalker.StalkerCatalogItem
+import com.lucasserafin94.iptvburo.stalker.StalkerClient
+import com.lucasserafin94.iptvburo.stalker.StalkerContentType
+import com.lucasserafin94.iptvburo.stalker.StalkerCredentials
+import com.lucasserafin94.iptvburo.stalker.StalkerMacAddress
 import com.lucasserafin94.iptvburo.xtream.XtreamClient
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.xtream.XtreamCredentials
@@ -50,6 +55,7 @@ class RoomCatalogRepository @Inject constructor(
     private val parser: M3uParser,
     private val playlistEntityMapper: PlaylistEntityMapper,
     private val xtreamClient: XtreamClient,
+    private val stalkerClient: StalkerClient,
     private val sourceConnectionStore: SourceConnectionStore,
     private val logger: AppLogger,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -151,6 +157,12 @@ class RoomCatalogRepository @Inject constructor(
         }
         val providerItemId = channel.providerItemId ?: return@withContext channel
         val source = sourceDao.getById(channel.sourceId)
+
+        // A Stalker row stores the portal's opaque command, not a URL. Returning it unchanged
+        // would hand the player a string like "ffmpeg http://..." and playback would fail.
+        if (source?.type == SourceType.STALKER.name) {
+            return@withContext channel.copy(streamUri = resolveStalkerPlayback(channel))
+        }
         if (source?.type != SourceType.XTREAM.name) {
             return@withContext channel
         }
@@ -621,6 +633,226 @@ class RoomCatalogRepository @Inject constructor(
             -> throw IllegalArgumentException("The catalog item is not an Xtream root item.")
         }
 
+    /**
+     * Imports a Stalker/Ministra portal.
+     *
+     * Differs from the Xtream import in one structural way: a Stalker item cannot be turned into a
+     * playable URL at import time. The portal issues a single-use, short-lived link through
+     * `create_link` when the user presses play, so the stored `streamUrl` holds the portal's opaque
+     * command instead of a URL. [resolveStalkerPlayback] exchanges it later.
+     */
+    override suspend fun importStalker(
+        request: StalkerImportRequest,
+        onProgress: (XtreamImportStage) -> Unit,
+    ): XtreamImportResult = withContext(ioDispatcher) {
+        val displayName = request.displayName.trim()
+        require(displayName.isNotEmpty()) { "The source display name cannot be blank." }
+        require(displayName.length <= MAX_DISPLAY_NAME_LENGTH) {
+            "The source display name cannot exceed $MAX_DISPLAY_NAME_LENGTH characters."
+        }
+        val normalisedMac =
+            StalkerMacAddress.normalise(request.macAddress)
+                ?: throw IllegalArgumentException("The MAC address is invalid.")
+
+        onProgress(XtreamImportStage.AUTHENTICATING)
+        logger.info(TAG, "Stalker import started")
+        val credentials =
+            StalkerCredentials(
+                portalUrl = request.portalUrl,
+                macAddress = normalisedMac,
+                username = request.username,
+                password = request.password,
+            )
+        val session = stalkerClient.handshake(credentials)
+        currentCoroutineContext().ensureActive()
+        val account = stalkerClient.account(credentials, session)
+        require(!account.blocked) { "The portal reports this subscription as blocked." }
+
+        val sourceId = UUID.randomUUID().toString()
+        val importedAt = System.currentTimeMillis()
+        val categoriesByProviderKey = linkedMapOf<String, CategoryEntity>()
+        var categorySortOrder = 0
+
+        onProgress(XtreamImportStage.CATEGORIES)
+        for (type in StalkerContentType.entries) {
+            currentCoroutineContext().ensureActive()
+            for (category in stalkerClient.categories(credentials, session, type)) {
+                val contentType = type.toCatalogContentType()
+                val key = categoryKey(contentType, category.providerId)
+                categoriesByProviderKey[key] =
+                    CategoryEntity(
+                        id = stableId("$sourceId:stalker:category:$key"),
+                        sourceId = sourceId,
+                        name = category.name,
+                        sortOrder = categorySortOrder++,
+                        contentType = contentType.name,
+                        providerCategoryId = category.providerId,
+                    )
+            }
+        }
+
+        // Fetched before opening the write transaction. Room forbids network work inside one, and
+        // a portal page can take seconds.
+        val itemsByType = linkedMapOf<StalkerContentType, List<ChannelEntity>>()
+        var skippedItemCount = 0
+        for (type in StalkerContentType.entries) {
+            currentCoroutineContext().ensureActive()
+            onProgress(
+                when (type) {
+                    StalkerContentType.LIVE -> XtreamImportStage.LIVE
+                    StalkerContentType.MOVIE -> XtreamImportStage.MOVIES
+                    StalkerContentType.SERIES -> XtreamImportStage.SERIES
+                },
+            )
+            val contentType = type.toCatalogContentType()
+            val collected = ArrayList<ChannelEntity>()
+            var sortOrder = 0
+            for (category in categoriesByProviderKey.values.filter { it.contentType == contentType.name }) {
+                var page = 1
+                while (page <= MAX_STALKER_PAGES) {
+                    currentCoroutineContext().ensureActive()
+                    val result =
+                        stalkerClient.page(
+                            credentials = credentials,
+                            session = session,
+                            contentType = type,
+                            categoryId = category.providerCategoryId,
+                            page = page,
+                        )
+                    if (result.items.isEmpty()) break
+                    for (item in result.items) {
+                        val command = item.command
+                        if (command.isNullOrBlank()) {
+                            // Without a command the item can never be played, so storing it would
+                            // only produce a dead entry in the catalogue.
+                            skippedItemCount += 1
+                            continue
+                        }
+                        collected +=
+                            ChannelEntity(
+                                id = stableId("$sourceId:stalker:${type.name}:${item.providerId}"),
+                                sourceId = sourceId,
+                                categoryId = category.id,
+                                tvgId = null,
+                                tvgName = null,
+                                name = item.name,
+                                logoUrl = item.artworkUrl,
+                                streamUrl = command,
+                                userAgent = null,
+                                referer = null,
+                                origin = null,
+                                sortOrder = sortOrder++,
+                                contentType = contentType.name,
+                                providerItemId = item.providerId,
+                                containerExtension = null,
+                                year = item.year,
+                                rating = item.rating,
+                            )
+                    }
+                    if (collected.size >= result.totalItems || result.items.size < STALKER_PAGE_HINT) break
+                    page += 1
+                }
+            }
+            itemsByType[type] = collected
+        }
+
+        val totalItemCount = itemsByType.values.sumOf { it.size }
+        require(totalItemCount > 0) { "The portal returned an empty catalog." }
+
+        onProgress(XtreamImportStage.SAVING)
+        val importContext = currentCoroutineContext()
+        try {
+            importContext.ensureActive()
+            sourceConnectionStore.saveStalker(sourceId, credentials)
+            importContext.ensureActive()
+            database.runInTransaction(
+                Callable {
+                    sourceDao.upsertBlocking(
+                        SourceEntity(
+                            id = sourceId,
+                            displayName = displayName,
+                            type = SourceType.STALKER.name,
+                            createdAtEpochMillis = importedAt,
+                            updatedAtEpochMillis = importedAt,
+                            channelCount = totalItemCount,
+                        ),
+                    )
+                    categoriesByProviderKey.values
+                        .chunked(INSERT_BATCH_SIZE)
+                        .forEach(categoryDao::upsertAllBlocking)
+                    itemsByType.values.flatten()
+                        .chunked(INSERT_BATCH_SIZE)
+                        .forEach(channelDao::insertAllBlocking)
+                },
+            )
+        } catch (error: Exception) {
+            runCatching { sourceConnectionStore.remove(sourceId) }
+            if (error !is CancellationException) {
+                logger.error(TAG, "Stalker import failed during secure persistence", error)
+            }
+            throw error
+        }
+
+        val result =
+            XtreamImportResult(
+                sourceId = sourceId,
+                liveCount = itemsByType[StalkerContentType.LIVE]?.size ?: 0,
+                movieCount = itemsByType[StalkerContentType.MOVIE]?.size ?: 0,
+                seriesCount = itemsByType[StalkerContentType.SERIES]?.size ?: 0,
+                categoryCount = categoriesByProviderKey.size,
+                skippedItemCount = skippedItemCount,
+            )
+        logger.info(
+            TAG,
+            "Stalker import completed: ${result.totalItemCount} catalog items, " +
+                "${result.categoryCount} categories, ${result.skippedItemCount} skipped",
+        )
+        result
+    }
+
+    /**
+     * Exchanges a stored portal command for a playable URL.
+     *
+     * The returned link carries a single-use play token and expires quickly, so it is resolved per
+     * playback and never cached or persisted.
+     */
+    suspend fun resolveStalkerPlayback(channel: Channel): String =
+        withContext(ioDispatcher) {
+            val credentials =
+                sourceConnectionStore.readStalker(channel.sourceId)
+                    ?: throw IllegalStateException("The portal connection is unavailable.")
+            val session = stalkerClient.handshake(credentials)
+            stalkerClient.resolvePlaybackUrl(
+                credentials = credentials,
+                session = session,
+                item =
+                    StalkerCatalogItem(
+                        providerId = channel.id,
+                        name = channel.name,
+                        contentType = channel.contentType.toStalkerContentType(),
+                        categoryId = null,
+                        artworkUrl = null,
+                        year = null,
+                        rating = null,
+                        command = channel.streamUri,
+                    ),
+            )
+        }
+
+    private fun StalkerContentType.toCatalogContentType(): CatalogContentType =
+        when (this) {
+            StalkerContentType.LIVE -> CatalogContentType.LIVE
+            StalkerContentType.MOVIE -> CatalogContentType.MOVIE
+            StalkerContentType.SERIES -> CatalogContentType.SERIES
+        }
+
+    private fun CatalogContentType.toStalkerContentType(): StalkerContentType =
+        when (this) {
+            CatalogContentType.MOVIE -> StalkerContentType.MOVIE
+            CatalogContentType.SERIES, CatalogContentType.EPISODE -> StalkerContentType.SERIES
+            else -> StalkerContentType.LIVE
+        }
+
     private fun categoryKey(
         contentType: CatalogContentType,
         providerCategoryId: String,
@@ -641,6 +873,12 @@ class RoomCatalogRepository @Inject constructor(
         const val MAX_DISPLAY_NAME_LENGTH = 120
         const val INSERT_BATCH_SIZE = 500
         const val MAX_PAGE_SIZE = 500
+
+        /** Portals page at 14 items; a shorter page means the category ended. */
+        const val STALKER_PAGE_HINT = 14
+
+        /** Hard stop so a portal that always answers with data cannot loop forever. */
+        const val MAX_STALKER_PAGES = 200
         val PLAYABLE_XTREAM_TYPES =
             setOf(CatalogContentType.LIVE, CatalogContentType.MOVIE)
     }

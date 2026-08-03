@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.di
 
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.lucasserafin94.iptvburo.stalker.StalkerClient
 import com.lucasserafin94.iptvburo.xtream.XtreamClient
 import dagger.Module
 import dagger.Provides
@@ -40,6 +41,14 @@ object NetworkModule {
     @Singleton
     fun provideXtreamClient(): XtreamClient =
         XtreamClient(userAgent = XTREAM_USER_AGENT)
+
+    /**
+     * Stalker portals fingerprint the caller and reject anything that is not a set-top box, so the
+     * client keeps its own MAG identity rather than reusing the app's user agent.
+     */
+    @Provides
+    @Singleton
+    fun provideStalkerClient(): StalkerClient = StalkerClient()
 
     private const val USER_AGENT = "IPTV BURO/0.2 Android"
     private const val XTREAM_USER_AGENT = "IPTV BURO/0.2 Android"
