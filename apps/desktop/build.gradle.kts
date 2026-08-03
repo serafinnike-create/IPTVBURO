@@ -133,4 +133,10 @@ tasks.matching {
 
 tasks.test {
     useJUnitPlatform()
+    // Gradle's own -D properties do not reach the forked test JVM, so the live-updater probe
+    // opt-in has to be forwarded explicitly.
+    System.getProperty("buroLiveUpdaterProbe")?.let { value ->
+        systemProperty("buroLiveUpdaterProbe", value)
+    }
+    testLogging { showStandardStreams = true }
 }

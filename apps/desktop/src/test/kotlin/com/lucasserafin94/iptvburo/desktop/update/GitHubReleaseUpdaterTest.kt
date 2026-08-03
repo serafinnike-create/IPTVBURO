@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -46,6 +47,53 @@ class GitHubReleaseUpdaterTest {
             val result = updater.check()
             assertIs<UpdateCheckResult.Available>(result)
             assertTrue(result.release.version == "0.2.0-alpha.5")
+        }
+    }
+
+    @Test
+    fun `the version-stamped installer wins when a release carries several`() = runBlocking {
+        // Real releases ship both the versioned artefact and a legacy name left by the packaging
+        // task. Taking the first match meant installing whichever asset GitHub happened to list
+        // first, which is not necessarily the build the tag advertises.
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """
+                    [{
+                      "draft": false,
+                      "tag_name": "v0.2.0-alpha.9",
+                      "name": "Preview",
+                      "assets": [
+                        {
+                          "name": "IPTVBURO-0.2.6.msi",
+                          "browser_download_url": "https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.9/IPTVBURO-0.2.6.msi",
+                          "size": 10,
+                          "digest": "sha256:${"a".repeat(64)}"
+                        },
+                        {
+                          "name": "IPTV-BURO-v0.2.0-alpha.9-windows-x64.msi",
+                          "browser_download_url": "https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.9/IPTV-BURO-v0.2.0-alpha.9-windows-x64.msi",
+                          "size": 20,
+                          "digest": "sha256:${"b".repeat(64)}"
+                        }
+                      ]
+                    }]
+                    """.trimIndent(),
+                ),
+            )
+            val updater =
+                GitHubReleaseUpdater(
+                    releasesUrl = server.url("/releases").toString(),
+                    currentVersion = "0.2.0-alpha.5",
+                )
+
+            val result = updater.check()
+
+            val available = assertIs<UpdateCheckResult.Available>(result)
+            assertEquals(
+                "IPTV-BURO-v0.2.0-alpha.9-windows-x64.msi",
+                available.release.assetName,
+            )
         }
     }
 }

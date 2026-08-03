@@ -59,13 +59,22 @@ class GitHubReleaseUpdater(
                             if (release["draft"]?.asBoolean == true) return@mapNotNull null
                             val tag = release["tag_name"]?.asString?.removePrefix("v") ?: return@mapNotNull null
                             if (!isNewerVersion(tag, currentVersion)) return@mapNotNull null
-                            val asset =
+                            // A release can carry more than one installer: the versioned artefact
+                            // and a legacy name from the packaging task. Picking the first match
+                            // would sometimes install an older build than the tag advertises, so
+                            // the version-stamped asset is preferred explicitly.
+                            val installers =
                                 release["assets"]?.asJsonArray
                                     ?.map { it.asJsonObject }
-                                    ?.firstOrNull { candidate ->
+                                    ?.filter { candidate ->
                                         candidate["name"]?.asString?.let(::isWindowsInstallerName) == true &&
                                             candidate["digest"]?.asString?.startsWith("sha256:") == true
-                                    } ?: return@mapNotNull null
+                                    }
+                                    .orEmpty()
+                            val asset =
+                                installers.firstOrNull { candidate ->
+                                    candidate["name"].asString.contains(tag, ignoreCase = true)
+                                } ?: installers.firstOrNull() ?: return@mapNotNull null
                             val downloadUrl = asset["browser_download_url"]?.asString ?: return@mapNotNull null
                             requireTrustedDownloadUrl(downloadUrl)
                             DesktopRelease(
