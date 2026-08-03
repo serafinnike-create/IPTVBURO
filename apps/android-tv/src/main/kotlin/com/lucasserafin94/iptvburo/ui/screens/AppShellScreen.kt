@@ -74,6 +74,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.Button
@@ -95,6 +96,7 @@ import com.lucasserafin94.iptvburo.ui.ProfileUi
 import com.lucasserafin94.iptvburo.ui.localization.AppLocaleController
 import com.lucasserafin94.iptvburo.ui.SourceImportMethod
 import com.lucasserafin94.iptvburo.ui.SourceUi
+import com.lucasserafin94.iptvburo.ui.StalkerFailureUi
 import com.lucasserafin94.iptvburo.ui.XtreamImportStageUi
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
@@ -131,6 +133,8 @@ fun AppShellScreen(
     onImportSource: () -> Unit,
     onImportXtreamSource: (String, String, String, String) -> Unit,
     onCancelXtreamImport: () -> Unit,
+    onImportStalkerSource: (String, String, String, String, String) -> Unit,
+    onCancelStalkerImport: () -> Unit,
     onOpenSource: (SourceUi) -> Unit,
     onOpenCategory: (CategoryUi) -> Unit,
     onOpenChannel: (ChannelUi) -> Unit,
@@ -156,6 +160,10 @@ fun AppShellScreen(
     val ribbonFocusRequester = remember { FocusRequester() }
     var showXtreamModal by remember { mutableStateOf(false) }
     var xtreamSuccessVersionAtOpen by remember {
+        mutableLongStateOf(state.importSuccessVersion)
+    }
+    var showStalkerModal by remember { mutableStateOf(false) }
+    var stalkerSuccessVersionAtOpen by remember {
         mutableLongStateOf(state.importSuccessVersion)
     }
     var homeContentOwnsBack by remember(state.content) {
@@ -296,11 +304,16 @@ fun AppShellScreen(
                             lastImportedChannelCount = state.lastImportedChannelCount,
                             hasImportError = state.hasImportError,
                             lastImportMethod = state.lastImportMethod,
+                            stalkerFailure = state.stalkerFailure,
                             xtreamImportStage = state.xtreamImportStage,
                             onImportSource = onImportSource,
                             onOpenXtream = {
                                 xtreamSuccessVersionAtOpen = state.importSuccessVersion
                                 showXtreamModal = true
+                            },
+                            onOpenStalker = {
+                                stalkerSuccessVersionAtOpen = state.importSuccessVersion
+                                showStalkerModal = true
                             },
                             onOpenSource = onOpenSource,
                         )
@@ -399,6 +412,23 @@ fun AppShellScreen(
             onSubmit = onImportXtreamSource,
             onCancelImport = onCancelXtreamImport,
             onDismiss = { showXtreamModal = false },
+        )
+    }
+
+    if (showStalkerModal) {
+        SecureActivityWindowEffect()
+        StalkerSourceDialog(
+            isImporting = state.isImporting,
+            hasImportError =
+                state.hasImportError &&
+                    state.lastImportMethod == SourceImportMethod.STALKER,
+            failure = state.stalkerFailure,
+            importStage = state.xtreamImportStage,
+            importSuccessVersion = state.importSuccessVersion,
+            successVersionAtOpen = stalkerSuccessVersionAtOpen,
+            onSubmit = onImportStalkerSource,
+            onCancelImport = onCancelStalkerImport,
+            onDismiss = { showStalkerModal = false },
         )
     }
 }
@@ -754,9 +784,11 @@ private fun SourcesContent(
     lastImportedChannelCount: Int?,
     hasImportError: Boolean,
     lastImportMethod: SourceImportMethod?,
+    stalkerFailure: StalkerFailureUi?,
     xtreamImportStage: XtreamImportStageUi?,
     onImportSource: () -> Unit,
     onOpenXtream: () -> Unit,
+    onOpenStalker: () -> Unit,
     onOpenSource: (SourceUi) -> Unit,
 ) {
     val initialFocusRequester = remember { FocusRequester() }
@@ -781,6 +813,7 @@ private fun SourcesContent(
                     lastImportedChannelCount = lastImportedChannelCount,
                     hasImportError = hasImportError,
                     lastImportMethod = lastImportMethod,
+                    stalkerFailure = stalkerFailure,
                     xtreamImportStage = xtreamImportStage,
                     isImporting = isImporting,
                     compact = true,
@@ -791,6 +824,7 @@ private fun SourcesContent(
                     lastImportMethod = lastImportMethod,
                     onImportSource = onImportSource,
                     onOpenXtream = onOpenXtream,
+                    onOpenStalker = onOpenStalker,
                     modifier = Modifier.fillMaxWidth(),
                     stack = true,
                     initialFocusRequester =
@@ -805,6 +839,7 @@ private fun SourcesContent(
                         lastImportedChannelCount = lastImportedChannelCount,
                         hasImportError = hasImportError,
                         lastImportMethod = lastImportMethod,
+                        stalkerFailure = stalkerFailure,
                         xtreamImportStage = xtreamImportStage,
                         isImporting = isImporting,
                         compact = false,
@@ -816,6 +851,7 @@ private fun SourcesContent(
                         lastImportMethod = lastImportMethod,
                         onImportSource = onImportSource,
                         onOpenXtream = onOpenXtream,
+                        onOpenStalker = onOpenStalker,
                         stack = false,
                         initialFocusRequester =
                             if (sources.isEmpty()) initialFocusRequester else null,
@@ -859,6 +895,7 @@ private fun SourcesHeading(
     lastImportedChannelCount: Int?,
     hasImportError: Boolean,
     lastImportMethod: SourceImportMethod?,
+    stalkerFailure: StalkerFailureUi?,
     xtreamImportStage: XtreamImportStageUi?,
     isImporting: Boolean,
     compact: Boolean,
@@ -875,7 +912,7 @@ private fun SourcesHeading(
             Text(
                 text =
                     if (
-                        lastImportMethod == SourceImportMethod.XTREAM &&
+                        lastImportMethod != SourceImportMethod.M3U_FILE &&
                         xtreamImportStage != null
                     ) {
                         xtreamImportStage.localizedLabel()
@@ -891,10 +928,12 @@ private fun SourcesHeading(
                 text =
                     if (hasImportError) {
                         stringResource(
-                            if (lastImportMethod == SourceImportMethod.XTREAM) {
-                                R.string.sources_xtream_error
-                            } else {
-                                R.string.sources_import_error
+                            when (lastImportMethod) {
+                                SourceImportMethod.XTREAM -> R.string.sources_xtream_error
+                                SourceImportMethod.STALKER ->
+                                    stalkerFailure.messageResource()
+
+                                else -> R.string.sources_import_error
                             },
                         )
                     } else if (lastImportMethod == SourceImportMethod.XTREAM) {
@@ -924,6 +963,7 @@ private fun SourceImportActions(
     lastImportMethod: SourceImportMethod?,
     onImportSource: () -> Unit,
     onOpenXtream: () -> Unit,
+    onOpenStalker: () -> Unit,
     stack: Boolean,
     modifier: Modifier = Modifier,
     initialFocusRequester: FocusRequester? = null,
@@ -968,6 +1008,29 @@ private fun SourceImportActions(
             Text(text = stringResource(R.string.sources_xtream_action))
         }
     }
+    val stalkerButton: @Composable () -> Unit = {
+        BuroButton(
+            onClick = onOpenStalker,
+            enabled = !isImporting,
+            style = BuroButtonStyle.Secondary,
+            modifier = if (stack) Modifier.fillMaxWidth() else Modifier,
+        ) {
+            Icon(Icons.Default.Router, contentDescription = null)
+            Text(
+                text =
+                    stringResource(
+                        if (
+                            isImporting &&
+                            lastImportMethod == SourceImportMethod.STALKER
+                        ) {
+                            R.string.sources_stalker_connecting
+                        } else {
+                            R.string.sources_stalker_action
+                        },
+                    ),
+            )
+        }
+    }
 
     if (stack) {
         Column(
@@ -976,6 +1039,7 @@ private fun SourceImportActions(
         ) {
             fileButton()
             xtreamButton()
+            stalkerButton()
         }
     } else {
         Row(
@@ -985,6 +1049,7 @@ private fun SourceImportActions(
         ) {
             fileButton()
             xtreamButton()
+            stalkerButton()
         }
     }
 }

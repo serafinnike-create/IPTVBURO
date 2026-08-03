@@ -168,6 +168,8 @@ private fun IptvBuroRoot(
                 },
                 onImportXtreamSource = viewModel::importXtreamSource,
                 onCancelXtreamImport = viewModel::cancelXtreamImport,
+                onImportStalkerSource = viewModel::importStalkerSource,
+                onCancelStalkerImport = viewModel::cancelStalkerImport,
                 onOpenSource = viewModel::openSource,
                 onOpenCategory = viewModel::openCategory,
                 onOpenChannel = viewModel::openChannel,

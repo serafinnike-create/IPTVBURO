@@ -457,7 +457,7 @@ private fun XtreamImportStageUi.labelResource(): Int =
             R.string.sources_xtream_stage_saving
     }
 
-private fun XtreamImportStageUi.progressFraction(): Float =
+internal fun XtreamImportStageUi.progressFraction(): Float =
     when (this) {
         XtreamImportStageUi.AUTHENTICATING -> 1f / 6f
         XtreamImportStageUi.CATEGORIES -> 2f / 6f
