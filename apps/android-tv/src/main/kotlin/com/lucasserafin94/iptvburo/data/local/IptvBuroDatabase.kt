@@ -12,7 +12,9 @@ import com.lucasserafin94.iptvburo.data.local.dao.PlaybackProgressDao
 import com.lucasserafin94.iptvburo.data.local.dao.SourceDao
 import com.lucasserafin94.iptvburo.data.local.entity.CategoryEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ChannelEntity
+import com.lucasserafin94.iptvburo.data.local.dao.LibraryEntryDao
 import com.lucasserafin94.iptvburo.data.local.entity.FavoriteEntity
+import com.lucasserafin94.iptvburo.data.local.entity.LibraryEntryEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ProfileEntity
 import com.lucasserafin94.iptvburo.data.local.entity.PlaybackProgressEntity
 import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
@@ -25,8 +27,9 @@ import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
         ProfileEntity::class,
         FavoriteEntity::class,
         PlaybackProgressEntity::class,
+        LibraryEntryEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class IptvBuroDatabase : RoomDatabase() {
@@ -41,6 +44,8 @@ abstract class IptvBuroDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDao
 
     abstract fun playbackProgressDao(): PlaybackProgressDao
+
+    abstract fun libraryEntryDao(): LibraryEntryDao
 
     companion object {
         val MIGRATION_1_2: Migration =
@@ -172,6 +177,57 @@ abstract class IptvBuroDatabase : RoomDatabase() {
                     db.execSQL("CREATE INDEX IF NOT EXISTS index_playback_progress_profile_id_content_type_last_watched_at_epoch_millis ON playback_progress(profile_id, content_type, last_watched_at_epoch_millis)")
                     db.execSQL("CREATE INDEX IF NOT EXISTS index_playback_progress_source_id_content_id ON playback_progress(source_id, content_id)")
                     db.execSQL("CREATE INDEX IF NOT EXISTS index_playback_progress_profile_id_series_id_season_number_episode_number ON playback_progress(profile_id, series_id, season_number, episode_number)")
+                }
+            }
+
+        /**
+         * Adds `library_entries`, a favourites table with no foreign key into the catalogue.
+         *
+         * `favorites` cascades from `channels`, and every import mints a fresh random `sourceId`
+         * and therefore fresh channel rows. Replacing a playlist made SQLite *delete* the user's
+         * favourites, not merely orphan them. Entries are carried across keyed on content identity
+         * so they survive the next import.
+         */
+        val MIGRATION_5_6: Migration =
+            object : Migration(5, 6) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS library_entries (
+                            profile_id TEXT NOT NULL,
+                            content_key TEXT NOT NULL,
+                            last_known_title TEXT NOT NULL,
+                            content_type TEXT NOT NULL,
+                            added_at_epoch_millis INTEGER NOT NULL,
+                            PRIMARY KEY(profile_id, content_key),
+                            FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_library_entries_profile_id " +
+                            "ON library_entries(profile_id)",
+                    )
+                    // Carry over favourites that still resolve to a channel. The content key is
+                    // computed in SQL here rather than in Kotlin because the migration has no
+                    // access to the app's mappers; it mirrors ContentIdentity for the common
+                    // shapes and any imperfect key is corrected the next time the user toggles
+                    // the item.
+                    db.execSQL(
+                        """
+                        INSERT OR IGNORE INTO library_entries (
+                            profile_id, content_key, last_known_title, content_type, added_at_epoch_millis
+                        )
+                        SELECT
+                            f.profile_id,
+                            lower(c.content_type) || ':' || lower(trim(c.name)),
+                            c.name,
+                            c.content_type,
+                            f.added_at_epoch_millis
+                        FROM favorites AS f
+                        INNER JOIN channels AS c ON c.id = f.channel_id
+                        """.trimIndent(),
+                    )
                 }
             }
     }

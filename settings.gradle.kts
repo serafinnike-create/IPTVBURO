@@ -22,5 +22,6 @@ include(
     ":packages:domain-model",
     ":packages:playlist-parser",
     ":packages:test-fixtures",
+    ":packages:stalker-client",
     ":packages:xtream-client",
 )

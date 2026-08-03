@@ -34,6 +34,7 @@ object DatabaseModule {
                 IptvBuroDatabase.MIGRATION_2_3,
                 IptvBuroDatabase.MIGRATION_3_4,
                 IptvBuroDatabase.MIGRATION_4_5,
+                IptvBuroDatabase.MIGRATION_5_6,
             )
             .build()
 
