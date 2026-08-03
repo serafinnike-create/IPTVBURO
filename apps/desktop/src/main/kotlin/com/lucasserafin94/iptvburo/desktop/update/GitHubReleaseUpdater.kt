@@ -11,7 +11,7 @@ import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.time.Duration
 
-const val DESKTOP_VERSION = "0.2.0-alpha.5"
+const val DESKTOP_VERSION = "0.2.0-alpha.6"
 
 sealed interface UpdateCheckResult {
     data object UpToDate : UpdateCheckResult
@@ -180,22 +180,37 @@ class GitHubReleaseUpdater(
             }.getOrDefault(false)
 
         fun writeInstallScript(installer: Path): Path =
-            writeUpdateScript(installer, ProcessHandle.current().pid(), installedLauncher())
+            writeUpdateScript(
+                installer = installer,
+                pid = ProcessHandle.current().pid(),
+                launcher = installedLauncher(),
+                installedProductCode = installedProductCode(),
+            )
 
-        /** The installed executable, so the script can start the version it just installed. */
+        /**
+         * The installed executable, so the script can start the version it just installed.
+         *
+         * The MSI installs per-user into LOCALAPPDATA, not into Program Files, and names the binary
+         * IPTVBURO.exe. Resolving from the running process is the reliable route; the fixed paths
+         * are only a fallback for a layout this build did not produce.
+         */
         private fun installedLauncher(): Path? {
+            // resources.dir is <install>/app/resources, so the executable is two levels up.
             val fromRuntime =
                 System.getProperty("compose.application.resources.dir")
                     ?.let(Path::of)
                     ?.parent
-                    ?.resolve("IPTV BURO.exe")
-            val programFiles =
-                System.getenv("PROGRAMFILES")
+                    ?.parent
+                    ?.resolve(LAUNCHER_NAME)
+            val localAppData =
+                System.getenv("LOCALAPPDATA")
                     ?.let(Path::of)
-                    ?.resolve("IPTV BURO")
-                    ?.resolve("IPTV BURO.exe")
-            return listOfNotNull(fromRuntime, programFiles).firstOrNull(Files::isRegularFile)
+                    ?.resolve("IPTVBURO")
+                    ?.resolve(LAUNCHER_NAME)
+            return listOfNotNull(fromRuntime, localAppData).firstOrNull(Files::isRegularFile)
         }
+
+        const val LAUNCHER_NAME = "IPTVBURO.exe"
     }
 }
 
@@ -214,11 +229,21 @@ internal fun writeUpdateScript(
     installer: Path,
     pid: Long,
     launcher: Path?,
+    installedProductCode: String? = null,
 ): Path {
     val script = installer.resolveSibling("apply-update.cmd")
     val relaunch =
         launcher?.let { path -> "start \"\" \"${path.toAbsolutePath()}\"" }
             ?: "rem launcher not found; the update is installed and can be opened from the Start menu"
+    // Each MSI is generated with a fresh ProductCode, so installing over the existing one returns
+    // 1638 ("another version is already installed") and does nothing at all. That is what made an
+    // update report success and leave the old version in place. Removing the registered product
+    // first is the only reliable fix; the GUID comes from the registry and is validated below.
+    val uninstall =
+        installedProductCode
+            ?.takeIf(PRODUCT_CODE::matches)
+            ?.let { code -> "msiexec.exe /x $code /passive /norestart" }
+            ?: "rem no installed product registered; installing fresh"
     Files.writeString(
         script,
         """
@@ -229,13 +254,45 @@ internal fun writeUpdateScript(
           timeout /t 1 /nobreak >nul
         )
         :install
-        msiexec.exe /i "${installer.toAbsolutePath()}" /passive /norestart
+        $uninstall
+        msiexec.exe /i "${installer.toAbsolutePath()}" /passive /norestart REINSTALLMODE=amus
         $relaunch
         del "%~f0"
         """.trimIndent(),
     )
     return script
 }
+
+/** A Windows Installer ProductCode. Anything else is refused rather than passed to the shell. */
+internal val PRODUCT_CODE = Regex("\\{[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}}")
+
+/**
+ * The ProductCode of the currently installed build, read from the per-user uninstall registry.
+ *
+ * Returns null when nothing is registered, in which case the script simply installs.
+ */
+internal fun installedProductCode(): String? =
+    // Verified against a real install: this MSI registers under HKLM even though it installs
+    // per-user into LOCALAPPDATA. HKCU is searched too, since the hive is a packaging detail that
+    // could change and querying both costs nothing.
+    UNINSTALL_KEYS.firstNotNullOfOrNull { key ->
+        runCatching {
+            val process =
+                ProcessBuilder("reg", "query", key, "/s", "/f", "IPTVBURO")
+                    .redirectErrorStream(true)
+                    .start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            process.waitFor()
+            // The key name is the ProductCode; the match is anchored on the GUID shape.
+            PRODUCT_CODE.find(output)?.value
+        }.getOrNull()
+    }
+
+private val UNINSTALL_KEYS =
+    listOf(
+        "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+    )
 
 internal fun isNewerVersion(candidate: String, current: String): Boolean = compareVersions(candidate, current) > 0
 

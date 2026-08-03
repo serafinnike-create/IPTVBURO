@@ -73,6 +73,62 @@ class UpdateScriptTest {
         }
     }
 
+    /**
+     * Every MSI is generated with a fresh ProductCode, so installing over the existing one returns
+     * 1638 and does nothing. The old product must come off first or the update silently no-ops.
+     */
+    @Test
+    fun `removes the installed product before installing`() {
+        withDirectory { directory ->
+            val code = "{A49CCA56-12E0-3ACF-81D3-649F5B7460D5}"
+            val body =
+                Files.readString(
+                    writeUpdateScript(
+                        installer = directory.resolve("a.msi"),
+                        pid = 1,
+                        launcher = null,
+                        installedProductCode = code,
+                    ),
+                )
+
+            val removeAt = body.indexOf("/x $code")
+            val installAt = body.indexOf("msiexec.exe /i")
+            assertTrue(removeAt in 0..<installAt, "the removal must precede the install")
+        }
+    }
+
+    /** The GUID reaches a shell command, so anything that is not a ProductCode is refused. */
+    @Test
+    fun `refuses a product code that is not a guid`() {
+        withDirectory { directory ->
+            val body =
+                Files.readString(
+                    writeUpdateScript(
+                        installer = directory.resolve("a.msi"),
+                        pid = 1,
+                        launcher = null,
+                        installedProductCode = "{} & del /q C:\\Windows\\*",
+                    ),
+                )
+
+            assertTrue(!body.contains("del /q"), "injected text must not reach the script")
+            assertContains(body, "no installed product registered")
+        }
+    }
+
+    @Test
+    fun `installs fresh when no product is registered`() {
+        withDirectory { directory ->
+            val body =
+                Files.readString(
+                    writeUpdateScript(directory.resolve("a.msi"), pid = 1, launcher = null),
+                )
+
+            assertTrue(!body.contains("msiexec.exe /x"), "nothing to remove")
+            assertContains(body, "msiexec.exe /i")
+        }
+    }
+
     @Test
     fun `the script deletes itself so the updates folder does not accumulate`() {
         withDirectory { directory ->

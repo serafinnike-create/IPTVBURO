@@ -13,8 +13,8 @@ android {
         applicationId = "com.lucasserafin94.iptvburo"
         minSdk = 23
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.2.0-alpha.5"
+        versionCode = 6
+        versionName = "0.2.0-alpha.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
