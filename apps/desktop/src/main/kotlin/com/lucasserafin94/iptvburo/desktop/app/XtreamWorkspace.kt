@@ -64,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -591,7 +592,16 @@ private fun XtreamCatalogGrid(
                 state = gridState,
                 modifier = Modifier.weight(1f),
                 columns = GridCells.Adaptive(minSize = if (live) 250.dp else 172.dp),
-                contentPadding = PaddingValues(horizontal = gutter, vertical = BuroSpacing.Sm),
+                // Generous bottom padding so the final row clears the pagination bar. With only
+                // the symmetric vertical padding the last row sat flush against it and read as
+                // cut off, which is indistinguishable from the grid failing to scroll.
+                contentPadding =
+                    PaddingValues(
+                        start = gutter,
+                        end = gutter,
+                        top = BuroSpacing.Sm,
+                        bottom = BuroSpacing.Xxl,
+                    ),
                 horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Md),
                 verticalArrangement = Arrangement.spacedBy(BuroSpacing.Lg),
             ) {
@@ -792,12 +802,17 @@ internal fun XtreamInternalDetailsPage(
                 ),
             label = "backdrop-scale",
         )
-        BuroRemoteArtwork(
-            artworkUrl = backdrop,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize().scale(backdropScale),
-            contentScale = ContentScale.Crop,
-        ) { Box(Modifier.fillMaxSize().background(BuroColors.Canvas)) }
+        // The scale has to be clipped to the page. Scaling an un-clipped composable draws outside
+        // its own bounds, so the backdrop grew over the sidebar and the header instead of drifting
+        // within its frame.
+        Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
+            BuroRemoteArtwork(
+                artworkUrl = backdrop,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().scale(backdropScale),
+                contentScale = ContentScale.Crop,
+            ) { Box(Modifier.fillMaxSize().background(BuroColors.Canvas)) }
+        }
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
@@ -1086,6 +1101,9 @@ internal fun XtreamItemDetail(
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.bodySmall,
             )
+            // Breathing room at the end of the scroll. Without it the last line sits flush against
+            // the window edge and looks truncated rather than finished.
+            Spacer(Modifier.height(BuroSpacing.Xxl))
                 }
             }
         }
