@@ -18,6 +18,8 @@ import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackRequest
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackProgressCoordinator
 import com.lucasserafin94.iptvburo.desktop.security.XtreamLoginInput
 import com.lucasserafin94.iptvburo.desktop.security.RememberedXtreamStore
+import com.lucasserafin94.iptvburo.desktop.security.XtreamSource
+import com.lucasserafin94.iptvburo.desktop.security.XtreamSourceLibrary
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
@@ -50,6 +52,7 @@ import java.nio.file.Path
 import java.time.LocalDate
 import java.util.Arrays
 import java.util.Locale
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -62,6 +65,7 @@ class DesktopAppState(
     private val userStore: DesktopUserStore = DesktopUserStore(),
     private val playbackProgressCoordinator: DesktopPlaybackProgressCoordinator = DesktopPlaybackProgressCoordinator(),
     private val downloadManager: DesktopDownloadManager = DesktopDownloadManager(),
+    private val sourceLibrary: XtreamSourceLibrary = XtreamSourceLibrary(),
 ) {
     var destination by mutableStateOf(DesktopDestination.HOME)
         private set
@@ -206,6 +210,123 @@ class DesktopAppState(
         language = value
         userStore.setLanguage(value)
         needsLanguageSetup = false
+    }
+
+    /**
+     * Where first-run setup currently is.
+     *
+     * Modelled as one state rather than a chain of booleans because the steps are ordered and
+     * exactly one is on screen at a time; separate flags made it possible to show two at once.
+     */
+    var onboarding by mutableStateOf(initialOnboardingStep())
+        private set
+
+    private fun initialOnboardingStep(): OnboardingStep =
+        when {
+            !userStore.hasChosenLanguage() -> OnboardingStep.Language
+            !userStore.hasAcceptedTerms() -> OnboardingStep.Terms
+            // A profile with no playlist and no saved source means setup never finished.
+            sourceLibrary.sources().isEmpty() -> OnboardingStep.Account
+            else -> OnboardingStep.Done
+        }
+
+    fun acceptTerms() {
+        userStore.setAcceptedTerms()
+        onboarding =
+            if (sourceLibrary.sources().isEmpty()) OnboardingStep.Account else OnboardingStep.Done
+    }
+
+    fun advanceOnboardingAfterLanguage() {
+        onboarding = if (userStore.hasAcceptedTerms()) OnboardingStep.Account else OnboardingStep.Terms
+    }
+
+    /**
+     * Creates the profile and its playlist together, proving the credentials before either is kept.
+     *
+     * The provider is contacted first: a playlist that never loaded is worse than no playlist, since
+     * it leaves the app in a signed-in state that cannot show anything. On failure the message is
+     * the provider's own, already stripped of the host and credentials.
+     */
+    suspend fun completeSetup(
+        profileName: String,
+        avatarIndex: Int,
+        listLabel: String,
+        input: XtreamLoginInput,
+    ) {
+        onboarding = OnboardingStep.Connecting
+        val server = input.copyServer()
+        val username = input.copyUsername()
+        val password = input.copyPassword()
+        try {
+            connectXtream(input)
+            val status = xtreamStatus
+            if (status is XtreamStatus.Error) {
+                onboarding = OnboardingStep.Failed(status.message)
+                return
+            }
+            val source = sourceLibrary.create(listLabel.ifBlank { profileName })
+            sourceLibrary.store(source.id).save(server, username, password)
+            val profile =
+                DesktopProfile(
+                    id = UUID.randomUUID().toString(),
+                    name = profileName.trim().ifBlank { "Meu perfil" },
+                    isKids = false,
+                    avatarIndex = avatarIndex,
+                    sourceId = source.id,
+                )
+            profiles = listOf(profile) + profiles.filterNot { it.name == profile.name }
+            userStore.saveProfiles(profiles)
+            selectProfile(profile.id)
+            onboarding = OnboardingStep.Done
+        } finally {
+            Arrays.fill(server, ZERO_CHAR)
+            Arrays.fill(username, ZERO_CHAR)
+            Arrays.fill(password, ZERO_CHAR)
+        }
+    }
+
+    /** Returns to the form so the user can correct the address or credentials. */
+    fun retrySetup() {
+        onboarding = OnboardingStep.Account
+    }
+
+    /** Playlists already configured, offered so a new profile can reuse one. */
+    fun savedSources(): List<XtreamSource> = sourceLibrary.sources()
+
+    /**
+     * Signs in to an existing playlist and attaches it to a new profile.
+     *
+     * This is the household case: one subscription, several people, separate favourites.
+     */
+    suspend fun completeSetupWithSavedSource(
+        profileName: String,
+        avatarIndex: Int,
+        sourceId: String,
+    ) {
+        val input = sourceLibrary.store(sourceId).load()
+        if (input == null) {
+            onboarding = OnboardingStep.Failed(null)
+            return
+        }
+        onboarding = OnboardingStep.Connecting
+        connectXtream(input)
+        val status = xtreamStatus
+        if (status is XtreamStatus.Error) {
+            onboarding = OnboardingStep.Failed(status.message)
+            return
+        }
+        val profile =
+            DesktopProfile(
+                id = UUID.randomUUID().toString(),
+                name = profileName.trim().ifBlank { "Meu perfil" },
+                isKids = false,
+                avatarIndex = avatarIndex,
+                sourceId = sourceId,
+            )
+        profiles = profiles + profile
+        userStore.saveProfiles(profiles)
+        selectProfile(profile.id)
+        onboarding = OnboardingStep.Done
     }
 
     fun isFavorite(item: XtreamCatalogItem): Boolean = favoriteKey(item) in favoriteKeys
@@ -1259,6 +1380,24 @@ sealed interface DownloadState {
     data object Completed : DownloadState
 
     data object Failed : DownloadState
+}
+
+/** The ordered steps a first-time user passes through before reaching the catalogue. */
+sealed interface OnboardingStep {
+    data object Language : OnboardingStep
+
+    /** Copyright notice. The app plays what the user's own provider serves; it hosts nothing. */
+    data object Terms : OnboardingStep
+
+    /** Name, avatar and playlist, entered together. */
+    data object Account : OnboardingStep
+
+    data object Connecting : OnboardingStep
+
+    /** [message] is the provider's reason, already stripped of host and credentials. */
+    data class Failed(val message: String?) : OnboardingStep
+
+    data object Done : OnboardingStep
 }
 
 /** A download as the sidebar needs it: identity, a human name, and current state. */

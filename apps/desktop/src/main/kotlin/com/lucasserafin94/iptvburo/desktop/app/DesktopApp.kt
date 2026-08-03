@@ -69,6 +69,8 @@ import androidx.compose.ui.unit.dp
 import java.awt.Frame
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.DesktopDestination
+import com.lucasserafin94.iptvburo.desktop.OnboardingStep
+import com.lucasserafin94.iptvburo.desktop.security.XtreamLoginInput
 import com.lucasserafin94.iptvburo.desktop.DownloadEntry
 import com.lucasserafin94.iptvburo.desktop.DownloadState
 import com.lucasserafin94.iptvburo.desktop.ImportStatus
@@ -355,10 +357,51 @@ fun DesktopApp(
                         onDismiss = { updateRelease = null },
                     )
                 }
+                // First run is an ordered sequence — language, copyright, account, connection — and
+                // exactly one step is on screen at a time.
+                val step = appState.onboarding
                 if (appState.needsLanguageSetup) {
                     LanguageSetupGate(
                         current = appState.language,
-                        onSelect = appState::updateLanguage,
+                        onSelect = { option ->
+                            appState.updateLanguage(option)
+                            appState.advanceOnboardingAfterLanguage()
+                        },
+                    )
+                } else if (step is OnboardingStep.Terms) {
+                    TermsGate(text = text, onAccept = appState::acceptTerms)
+                } else if (step is OnboardingStep.Account) {
+                    AccountSetupGate(
+                        text = text,
+                        savedSources = appState.savedSources(),
+                        onCreate = { profileName, avatarIndex, listLabel, server, username, password ->
+                            scope.launch {
+                                appState.completeSetup(
+                                    profileName = profileName,
+                                    avatarIndex = avatarIndex,
+                                    listLabel = listLabel,
+                                    input =
+                                        XtreamLoginInput(
+                                            server.toCharArray(),
+                                            username.toCharArray(),
+                                            password.toCharArray(),
+                                        ),
+                                )
+                            }
+                        },
+                        onUseSaved = { profileName, avatarIndex, sourceId ->
+                            scope.launch {
+                                appState.completeSetupWithSavedSource(profileName, avatarIndex, sourceId)
+                            }
+                        },
+                    )
+                } else if (step is OnboardingStep.Connecting) {
+                    ConnectingGate(text = text)
+                } else if (step is OnboardingStep.Failed) {
+                    SetupFailedGate(
+                        text = text,
+                        message = step.message,
+                        onRetry = appState::retrySetup,
                     )
                 } else if (appState.activeProfile == null || showProfileGate) {
                     DesktopProfileGate(

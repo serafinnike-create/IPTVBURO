@@ -14,6 +14,13 @@ data class DesktopProfile(
     val name: String,
     val isKids: Boolean,
     val avatarIndex: Int = 0,
+    /**
+     * The playlist this profile signs in to, or null to use whichever is already connected.
+     *
+     * Two profiles may share one id — a household on one subscription, each with their own
+     * favourites — or hold different ones, in which case switching profile switches the account.
+     */
+    val sourceId: String? = null,
 )
 
 /** Fixed avatar set. Emoji keep this dependency-free and render on every Windows build. */
@@ -55,6 +62,8 @@ class DesktopUserStore(
                 encode(profile.name),
                 if (profile.isKids) "1" else "0",
                 profile.avatarIndex.toString(),
+                // A UUID contains no ':' or ';', so it needs no escaping to survive this format.
+                profile.sourceId.orEmpty(),
             ).joinToString(":")
         })
     }
@@ -67,6 +76,16 @@ class DesktopUserStore(
 
     /** Whether the user has ever picked a language, used to decide if first-run setup is needed. */
     fun hasChosenLanguage(): Boolean = preferences.get(KEY_LANGUAGE, null) != null
+
+    /**
+     * Whether the copyright notice has been acknowledged.
+     *
+     * Shown once. The app carries no catalogue of its own; it plays what the user's provider
+     * serves, and the notice says so before anything is configured.
+     */
+    fun hasAcceptedTerms(): Boolean = preferences.getBoolean(KEY_TERMS_ACCEPTED, false)
+
+    fun setAcceptedTerms() = preferences.putBoolean(KEY_TERMS_ACCEPTED, true)
 
     /**
      * Clears every stored preference for this user: profiles, favourites, language and the active
@@ -104,8 +123,9 @@ class DesktopUserStore(
     private fun decodeProfiles(raw: String): List<DesktopProfile> =
         raw.split(';').mapNotNull { encoded ->
             val parts = encoded.split(':')
-            // Rows written before avatars existed have three fields; they decode with avatar 0.
-            if (parts.size !in 3..4) return@mapNotNull null
+            // Rows written before avatars existed have three fields and before per-profile sources
+            // four; both decode with the later fields defaulted rather than being discarded.
+            if (parts.size !in 3..5) return@mapNotNull null
             runCatching {
                 DesktopProfile(
                     id = parts[0],
@@ -113,6 +133,7 @@ class DesktopUserStore(
                     isKids = parts[2] == "1",
                     avatarIndex =
                         parts.getOrNull(3)?.toIntOrNull()?.coerceIn(0, PROFILE_AVATARS.lastIndex) ?: 0,
+                    sourceId = parts.getOrNull(4)?.takeIf(String::isNotBlank),
                 )
             }.getOrNull()
         }.take(5)
@@ -127,6 +148,7 @@ class DesktopUserStore(
         const val KEY_PROFILES = "profiles"
         const val KEY_ACTIVE_PROFILE = "active_profile"
         const val KEY_LANGUAGE = "language"
+        const val KEY_TERMS_ACCEPTED = "terms-accepted"
         const val KEY_LEGACY_FAVORITES = "favorites"
     }
 }

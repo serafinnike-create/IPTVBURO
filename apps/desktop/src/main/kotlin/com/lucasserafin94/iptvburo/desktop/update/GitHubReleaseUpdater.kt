@@ -154,13 +154,87 @@ class GitHubReleaseUpdater(
             return root.resolve("IPTVBURO").resolve("updates")
         }
 
+        /**
+         * Installs the update after this process has exited, then starts the new build.
+         *
+         * Running msiexec directly while the app is open meant the MSI could not replace files that
+         * were in use: it rolled back or deferred to a reboot, so the app restarted on the version
+         * it started with and nothing explained why. A detached script waits for the process to go
+         * away first, which is the only point at which the install can actually succeed, and it is
+         * also what makes an automatic relaunch possible — the app cannot start itself after exit.
+         */
         fun launchWindowsInstaller(installer: Path): Boolean =
             runCatching {
-                ProcessBuilder("msiexec.exe", "/i", installer.toAbsolutePath().toString(), "/passive")
-                    .start()
+                val script = writeInstallScript(installer)
+                ProcessBuilder(
+                    "cmd.exe",
+                    "/c",
+                    "start",
+                    "",
+                    "/min",
+                    "cmd.exe",
+                    "/c",
+                    script.toAbsolutePath().toString(),
+                ).start()
                 true
             }.getOrDefault(false)
+
+        fun writeInstallScript(installer: Path): Path =
+            writeUpdateScript(installer, ProcessHandle.current().pid(), installedLauncher())
+
+        /** The installed executable, so the script can start the version it just installed. */
+        private fun installedLauncher(): Path? {
+            val fromRuntime =
+                System.getProperty("compose.application.resources.dir")
+                    ?.let(Path::of)
+                    ?.parent
+                    ?.resolve("IPTV BURO.exe")
+            val programFiles =
+                System.getenv("PROGRAMFILES")
+                    ?.let(Path::of)
+                    ?.resolve("IPTV BURO")
+                    ?.resolve("IPTV BURO.exe")
+            return listOfNotNull(fromRuntime, programFiles).firstOrNull(Files::isRegularFile)
+        }
     }
+}
+
+/**
+ * Writes the batch file that performs the swap.
+ *
+ * Only paths the updater produced are interpolated — the installer inside our own updates directory
+ * and the launcher inside the install directory — so no user input reaches the shell. The process is
+ * identified by [pid] rather than by window title: a title match would wait on, or act against, an
+ * unrelated window with the same name.
+ *
+ * The wait is bounded. If the app somehow never exits, installing anyway is better than leaving a
+ * downloaded update that is never applied and a script that never terminates.
+ */
+internal fun writeUpdateScript(
+    installer: Path,
+    pid: Long,
+    launcher: Path?,
+): Path {
+    val script = installer.resolveSibling("apply-update.cmd")
+    val relaunch =
+        launcher?.let { path -> "start \"\" \"${path.toAbsolutePath()}\"" }
+            ?: "rem launcher not found; the update is installed and can be opened from the Start menu"
+    Files.writeString(
+        script,
+        """
+        @echo off
+        rem Wait for IPTV BURO to exit so the installer can replace files that are in use.
+        for /l %%i in (1,1,60) do (
+          tasklist /fi "PID eq $pid" | find "$pid" >nul || goto :install
+          timeout /t 1 /nobreak >nul
+        )
+        :install
+        msiexec.exe /i "${installer.toAbsolutePath()}" /passive /norestart
+        $relaunch
+        del "%~f0"
+        """.trimIndent(),
+    )
+    return script
 }
 
 internal fun isNewerVersion(candidate: String, current: String): Boolean = compareVersions(candidate, current) > 0
