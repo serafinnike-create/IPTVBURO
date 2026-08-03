@@ -115,4 +115,5 @@
     <string name="license_copy">Code kopieren</string>
     <string name="license_copied">Code kopiert</string>
     <string name="license_privacy">Der Code identifiziert nur diese Installation. Er ist nicht deine MAC-Adresse und enthält keine personenbezogenen Daten.</string>
+    <string name="license_qr_hint">Mit dem Handy scannen, um die Aktivierungsseite mit bereits eingetragenem Code zu öffnen.</string>
 </resources>

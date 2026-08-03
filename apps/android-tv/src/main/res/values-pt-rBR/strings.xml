@@ -120,4 +120,5 @@
     <string name="license_copy">Copiar código</string>
     <string name="license_copied">Código copiado</string>
     <string name="license_privacy">O código identifica apenas esta instalação. Não é o endereço MAC e não contém dados pessoais.</string>
+    <string name="license_qr_hint">Aponte a câmera do celular para abrir a página de ativação já com o código preenchido.</string>
 </resources>

@@ -1,6 +1,10 @@
 package com.lucasserafin94.iptvburo.ui.screens
 
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import com.lucasserafin94.iptvburo.domain.model.QrCode
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -1872,6 +1876,16 @@ private fun DeviceLicenceCard(
             }
         }
 
+        if (deviceId != null) {
+            Spacer(Modifier.height(18.dp))
+            // Typing a 12-character code on a TV remote is painful, so the QR lets the user open
+            // the activation page already filled in from their phone.
+            ActivationQr(
+                url = "https://$portal?code=$deviceId",
+                compact = compact,
+            )
+        }
+
         Spacer(Modifier.height(18.dp))
         Text(
             text = stringResource(R.string.license_how_title),
@@ -1908,5 +1922,60 @@ private fun DeviceLicenceCard(
             fontSize = 11.sp,
             lineHeight = 16.sp,
         )
+    }
+}
+
+/**
+ * Activation QR.
+ *
+ * Drawn straight onto a Canvas from the bit matrix rather than rasterised to a Bitmap: at this size
+ * a bitmap would either be blurry or waste memory, and the matrix is a few hundred booleans.
+ *
+ * A quiet zone of four modules is mandatory — without it many phone cameras will not lock on, which
+ * looks like a broken code rather than a missing margin.
+ */
+@Composable
+private fun ActivationQr(
+    url: String,
+    compact: Boolean,
+) {
+    val matrix = remember(url) { QrCode.encode(url) } ?: return
+    val side = if (compact) 132.dp else 156.dp
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(side)
+                .clip(RoundedCornerShape(10.dp))
+                // White background, not the app's dark surface: readers expect dark modules on a
+                // light field and many fail on an inverted code.
+                .background(Color.White)
+                .padding(8.dp),
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val quiet = 4
+                val modules = matrix.size + quiet * 2
+                val cell = size.minDimension / modules
+                for (y in 0 until matrix.size) {
+                    for (x in 0 until matrix.size) {
+                        if (!matrix[x, y]) continue
+                        drawRect(
+                            color = Color.Black,
+                            topLeft = Offset((x + quiet) * cell, (y + quiet) * cell),
+                            size = Size(cell, cell),
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.license_qr_hint),
+                color = BuroTextSecondary,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+            )
+        }
     }
 }

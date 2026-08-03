@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IPTV BURO — Ativar dispositivo</title>
+<meta name="description" content="Ative o IPTV BURO no seu dispositivo com o código exibido no aplicativo.">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="buro-mark.png">
+<style>
+  /* BURO Nocturne. Values mirror packages/design-tokens/tokens.json so the site and the apps
+     cannot drift apart. */
+  :root {
+    --canvas: #08090A;
+    --surface: #111214;
+    --raised: #1A1C1F;
+    --border: rgba(255,255,255,.10);
+    --gold: #D6A956;
+    --gold-strong: #F0C877;
+    --ivory: #E7E2D8;
+    --text: #F4F1EA;
+    --muted: #B8B4AC;
+    --subtle: #85827C;
+    --success: #4ED59B;
+    --error: #FF6B6B;
+    --radius: 16px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* A single soft gold bloom behind the fold. Keeps the page from reading as flat black without
+     adding an image request. */
+  .bloom {
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(60rem 40rem at 50% -10%, rgba(214,169,86,.16), transparent 60%),
+      radial-gradient(40rem 30rem at 90% 10%, rgba(231,226,216,.05), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap { position: relative; z-index: 1; max-width: 62rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+
+  header { display: flex; align-items: center; gap: .75rem; padding-block: 1rem 3rem; }
+  .logo { width: 2.5rem; height: 2.5rem; }
+  .brand { font-weight: 800; letter-spacing: .18em; font-size: .95rem; }
+  .brand span { color: var(--gold); }
+
+  h1 { font-size: clamp(1.9rem, 5vw, 3rem); line-height: 1.1; margin: 0 0 .75rem; letter-spacing: -.02em; }
+  .lede { color: var(--muted); font-size: clamp(1rem, 2.2vw, 1.15rem); max-width: 46ch; margin: 0 0 2.5rem; }
+
+  .card {
+    background: linear-gradient(180deg, var(--raised), var(--surface));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: clamp(1.25rem, 4vw, 2rem);
+  }
+
+  label { display: block; font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; color: var(--subtle); margin-bottom: .5rem; }
+
+  /* Monospace and wide tracking: this code is read off a TV across the room and retyped here, so
+     glyph-by-glyph legibility matters more than compactness. */
+  input[type="text"] {
+    width: 100%;
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--gold);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(1.1rem, 4vw, 1.5rem);
+    font-weight: 700;
+    letter-spacing: .18em;
+    padding: .9rem 1rem;
+    text-align: center;
+    text-transform: uppercase;
+  }
+  input[type="text"]:focus { outline: 2px solid var(--gold); outline-offset: 2px; border-color: transparent; }
+  input::placeholder { color: var(--subtle); letter-spacing: .12em; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    width: 100%; margin-top: 1rem; padding: .95rem 1.25rem;
+    background: var(--gold); color: var(--canvas);
+    border: none; border-radius: 10px;
+    font-size: 1rem; font-weight: 700; cursor: pointer;
+    transition: background .16s ease, transform .16s ease;
+  }
+  .btn:hover:not(:disabled) { background: var(--gold-strong); }
+  .btn:active:not(:disabled) { transform: scale(.99); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .note { margin-top: .9rem; font-size: .85rem; color: var(--subtle); }
+
+  .status { margin-top: 1rem; padding: .85rem 1rem; border-radius: 10px; font-size: .9rem; display: none; }
+  .status.show { display: block; }
+  .status.info { background: rgba(214,169,86,.12); color: var(--gold); border: 1px solid rgba(214,169,86,.3); }
+  .status.bad { background: rgba(255,107,107,.1); color: var(--error); border: 1px solid rgba(255,107,107,.3); }
+
+  .steps { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin-top: 3.5rem; }
+  .step { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; }
+  .step b { display: block; color: var(--gold); font-size: .8rem; letter-spacing: .1em; margin-bottom: .4rem; }
+  .step p { margin: 0; color: var(--muted); font-size: .92rem; }
+
+  .banner {
+    margin-top: 3rem; padding: 1rem 1.25rem;
+    border-radius: var(--radius);
+    border: 1px solid rgba(255,107,107,.3);
+    background: rgba(255,107,107,.08);
+    color: var(--muted); font-size: .9rem;
+  }
+  .banner b { color: var(--error); }
+
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--subtle); font-size: .82rem; }
+  a { color: var(--gold); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="bloom" aria-hidden="true"></div>
+<div class="wrap">
+
+  <header>
+    <img src="buro-mark.png" alt="" class="logo" width="40" height="40">
+    <div class="brand">IPTV <span>BURO</span></div>
+  </header>
+
+  <main>
+    <h1>Ative o seu dispositivo</h1>
+    <p class="lede">
+      Abra o IPTV BURO no seu aparelho, vá em Configurações e informe abaixo o código exibido.
+      Sua avaliação de 7 dias começa automaticamente na primeira abertura.
+    </p>
+
+    <section class="card">
+      <form id="form" novalidate>
+        <label for="code">Código do dispositivo</label>
+        <input
+          id="code" name="code" type="text"
+          placeholder="ABCD-EFGH-JKLM"
+          autocomplete="off" autocapitalize="characters" spellcheck="false"
+          maxlength="14" aria-describedby="hint">
+        <button class="btn" id="submit" type="submit" disabled>Continuar</button>
+      </form>
+      <p class="note" id="hint">
+        O código identifica apenas a instalação. Não é o endereço MAC e não contém dados pessoais.
+      </p>
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="steps">
+      <div class="step">
+        <b>PASSO 1</b>
+        <p>Instale o IPTV BURO e abra o aplicativo. A avaliação de 7 dias inicia sozinha, sem cartão.</p>
+      </div>
+      <div class="step">
+        <b>PASSO 2</b>
+        <p>Em Configurações, encontre o cartão de licença e copie o código do dispositivo.</p>
+      </div>
+      <div class="step">
+        <b>PASSO 3</b>
+        <p>Informe o código aqui e conclua a compra única para liberar o aparelho definitivamente.</p>
+      </div>
+    </section>
+
+    <!-- Stated plainly rather than hidden: ADR-004 requires that nothing on any surface implies a
+         purchase can be completed while the licensing server does not exist. -->
+    <div class="banner">
+      <b>Ativação ainda indisponível.</b>
+      O servidor seguro de licenças não está no ar. Nenhuma compra pode ser concluída e nada está
+      sendo cobrado. Esta página valida o formato do código e ficará pronta assim que o serviço
+      entrar em operação.
+    </div>
+  </main>
+
+  <footer>
+    IPTV BURO não vende, hospeda nem fornece conteúdo. O aplicativo reproduz apenas fontes que
+    você mesmo configurar. &middot;
+    <a href="https://github.com/lucasserafin94/IPTVBURO">Código-fonte</a>
+  </footer>
+</div>
+
+<script>
+  const input = document.getElementById('code');
+  const submit = document.getElementById('submit');
+  const status = document.getElementById('status');
+  const form = document.getElementById('form');
+
+  // The app renders the code as three groups of four from a Crockford-style alphabet: no I, L, O
+  // or U, so it cannot be misread as 1, 0 or copied wrong off a TV screen.
+  const PATTERN = /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/;
+
+  function format(raw) {
+    const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+    return clean.match(/.{1,4}/g)?.join('-') ?? '';
+  }
+
+  input.addEventListener('input', () => {
+    const atEnd = input.selectionStart === input.value.length;
+    input.value = format(input.value);
+    if (atEnd) input.setSelectionRange(input.value.length, input.value.length);
+    submit.disabled = !PATTERN.test(input.value);
+    status.className = 'status';
+  });
+
+  // Accept a pasted code even when it arrives with spaces or lowercase from a chat app.
+  input.addEventListener('paste', (event) => {
+    event.preventDefault();
+    input.value = format((event.clipboardData || window.clipboardData).getData('text'));
+    submit.disabled = !PATTERN.test(input.value);
+  });
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!PATTERN.test(input.value)) return;
+    status.className = 'status show info';
+    status.textContent =
+      'Código válido (' + input.value + '). A ativação ficará disponível quando o servidor de ' +
+      'licenças entrar em operação — nenhuma cobrança foi feita.';
+  });
+
+  // Deep link from the app's QR code: /?code=ABCD-EFGH-JKLM prefills the field.
+  const fromQr = new URLSearchParams(location.search).get('code');
+  if (fromQr) {
+    input.value = format(fromQr);
+    submit.disabled = !PATTERN.test(input.value);
+  }
+</script>
+</body>
+</html>
