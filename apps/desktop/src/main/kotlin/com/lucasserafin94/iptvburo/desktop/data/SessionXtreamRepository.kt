@@ -179,6 +179,39 @@ class SessionXtreamRepository(
             client.seriesDetails(credentials, seriesId)
         }
 
+    /**
+     * Films whose cast includes [personName].
+     *
+     * The provider only exposes the cast inside per-film details, so this costs one request per
+     * candidate. Sweeping a 30,000-item catalogue that way would take many minutes and hammer the
+     * provider, so the search is bounded: it walks the movie catalogue in catalogue order and stops
+     * at [limit] matches or once [MAX_CAST_LOOKUPS] films have been inspected. That trades
+     * completeness for a page that appears in seconds, which is the right trade for a filmography.
+     */
+    fun findByCastMember(
+        personName: String,
+        limit: Int,
+    ): List<XtreamCatalogItem> {
+        val needle = personName.trim().lowercase()
+        if (needle.isBlank()) return emptyList()
+        val catalog = synchronized(lock) { catalogs[XtreamContentType.MOVIE] } ?: return emptyList()
+
+        val matches = ArrayList<XtreamCatalogItem>(limit)
+        var inspected = 0
+        for (index in 0 until catalog.size) {
+            if (matches.size >= limit || inspected >= MAX_CAST_LOOKUPS) break
+            val item = catalog.itemAt(index)
+            inspected += 1
+            val cast =
+                runCatching { movieDetails(item.providerId).cast }
+                    .getOrNull()
+                    ?.lowercase()
+                    ?: continue
+            if (cast.contains(needle)) matches += item
+        }
+        return matches
+    }
+
     fun movieDetails(movieId: String): XtreamMovieDetails =
         withCredentials { credentials ->
             client.movieDetails(credentials, movieId)
@@ -239,6 +272,20 @@ class SessionXtreamRepository(
                 summaryLocked()
             }
         }
+
+    /**
+     * Drops the cached lists while keeping the session.
+     *
+     * Unlike [clear] the credentials survive, so the next [loadCatalog] re-fetches from the provider
+     * instead of failing with no active session. The generation is deliberately not bumped: nothing
+     * is being invalidated, only re-read.
+     */
+    fun clearCatalogCache() {
+        synchronized(lock) {
+            categories.clear()
+            catalogs.clear()
+        }
+    }
 
     fun clear() {
         val oldVault =
@@ -373,6 +420,9 @@ class SessionXtreamRepository(
     }
 
     private companion object {
+        /** Bounds a cast sweep so a filmography cannot take minutes or flood the provider. */
+        const val MAX_CAST_LOOKUPS = 400
+
         const val DEFAULT_PAGE_SIZE = 80
         const val MAX_PAGE_SIZE = 200
         const val ZERO_CHAR = '\u0000'

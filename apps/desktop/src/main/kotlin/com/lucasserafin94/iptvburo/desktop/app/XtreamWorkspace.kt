@@ -89,6 +89,7 @@ import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.data.episodeContentKey
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.desktop.ui.CategoryBadge
+import com.lucasserafin94.iptvburo.desktop.ui.categoryLabel
 import com.lucasserafin94.iptvburo.desktop.ui.categoryBadgeFor
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
@@ -158,8 +159,8 @@ fun XtreamWorkspace(
             onBack = { detailsOpen = false },
             onOpenExternal = onOpenExternal,
             onOpenPerson = { name ->
-                appState.openPerson(name)
                 personOpen = true
+                scope.launch { appState.openPerson(name) }
             },
         )
         return
@@ -297,13 +298,6 @@ private fun XtreamToolbar(
                     ),
             )
             Spacer(Modifier.weight(1f))
-            OutlinedButton(
-                onClick = onDisconnect,
-                shape = BuroRadius.Small,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
-            ) {
-                Text(text.endSession, maxLines = 1)
-            }
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -332,7 +326,6 @@ private fun XtreamToolbar(
                 Spacer(Modifier.width(BuroSpacing.Md))
             }
             Spacer(Modifier.weight(1f))
-            SessionStatusLabel(status = status, text = text)
         }
     }
 }
@@ -466,9 +459,12 @@ private fun XtreamCategoryRail(
             )
         }
         items(categories, key = XtreamCategory::providerId) { category ->
+            // The section prefix is dropped from both the label and the badge lookup: with it, every
+            // category under Films matched the "filme" rule and got the same clapperboard.
+            val label = category.name.categoryLabel()
             XtreamCategoryChip(
-                label = category.name,
-                badge = categoryBadgeFor(category.name, contentType),
+                label = label,
+                badge = categoryBadgeFor(label, contentType),
                 selected = category.providerId == selectedCategoryId,
                 onClick = { onSelected(category.providerId) },
             )
@@ -853,12 +849,34 @@ internal fun XtreamInternalDetailsPage(
                 downloadState = downloadTarget?.let { appState.downloadState(it.contentKey) },
                 onDownload =
                     downloadTarget?.let { target ->
-                        { scope.launch { appState.startDownload(target, item.name) } }
+                        {
+                            scope.launch {
+                                appState.startDownload(
+                                    target = target,
+                                    title = item.name.editorialTitle(),
+                                    artworkUrl = item.artworkUrl,
+                                )
+                            }
+                        }
                     },
                 onCancelDownload =
                     downloadTarget?.let { target -> { appState.cancelDownload(target.contentKey) } },
                 onRemoveDownload =
                     downloadTarget?.let { target -> { appState.deleteDownload(target.contentKey) } },
+                episodeDownloadFor = { target -> appState.downloadState(target.contentKey) },
+                onDownloadEpisode = { target, displayName ->
+                    scope.launch {
+                        appState.startDownload(
+                            target = target,
+                            title = displayName,
+                            // Episode stills are often missing; the series poster is the sensible
+                            // fallback so the library never shows a blank tile.
+                            artworkUrl = target.episode.artworkUrl ?: item.artworkUrl,
+                        )
+                    }
+                },
+                onCancelEpisodeDownload = { target -> appState.cancelDownload(target.contentKey) },
+                onRemoveEpisodeDownload = { target -> appState.deleteDownload(target.contentKey) },
             )
         }
     }
@@ -884,6 +902,10 @@ internal fun XtreamItemDetail(
     onDownload: (() -> Unit)? = null,
     onCancelDownload: (() -> Unit)? = null,
     onRemoveDownload: (() -> Unit)? = null,
+    episodeDownloadFor: (XtreamPlaybackTarget.Episode) -> DownloadState? = { null },
+    onDownloadEpisode: (XtreamPlaybackTarget.Episode, String) -> Unit = { _, _ -> },
+    onCancelEpisodeDownload: (XtreamPlaybackTarget.Episode) -> Unit = {},
+    onRemoveEpisodeDownload: (XtreamPlaybackTarget.Episode) -> Unit = {},
 ) {
     val text = strings
     Box(
@@ -967,33 +989,47 @@ internal fun XtreamItemDetail(
                     )
                     Spacer(Modifier.height(BuroSpacing.Md))
             if (item.contentType == XtreamContentType.SERIES) {
+                // One place builds the playback target for an episode, so playback, resume and
+                // download all agree on the content key that identifies it.
+                val targetForEpisode = { episode: XtreamEpisode ->
+                    XtreamPlaybackTarget.Episode(
+                        seriesId = item.providerId,
+                        episode = episode,
+                        contentKey = item.episodeContentKey(episode),
+                    )
+                }
                 SeriesDetailContent(
                     status = seriesStatus,
+                    seriesTitle = item.name,
+                    isFavorite = isFavorite,
+                    onToggleFavorite = onToggleFavorite,
                     onLoadSeries = onLoadSeries,
                     onOpenTrailer = onOpenTrailer,
                     resumeDecisionForEpisode = { episode ->
-                        resumeDecisionFor(
-                            XtreamPlaybackTarget.Episode(
-                                seriesId = item.providerId,
-                                episode = episode,
-                                contentKey = item.episodeContentKey(episode),
-                            ),
-                        )
+                        resumeDecisionFor(targetForEpisode(episode))
                     },
                     onOpenEpisode = { episode, startPositionMillis ->
-                        val target = XtreamPlaybackTarget.Episode(
-                            seriesId = item.providerId,
-                            episode = episode,
-                            contentKey = item.episodeContentKey(episode),
-                        )
                         onOpenExternal(
                             PendingXtreamExternal(
                                 displayName = episode.title,
-                                target = target,
+                                target = targetForEpisode(episode),
                                 startPositionMillis = startPositionMillis,
                             ),
                         )
                     },
+                    downloadStateForEpisode = { episode -> episodeDownloadFor(targetForEpisode(episode)) },
+                    onDownloadEpisode = { episode ->
+                        // The library lists downloads from every title together, so an entry named
+                        // only "S01E03" would be unidentifiable there.
+                        onDownloadEpisode(
+                            targetForEpisode(episode),
+                            "${item.name.editorialTitle()} · T${episode.seasonNumber}" +
+                                "E${episode.episodeNumber ?: "—"}",
+                        )
+                    },
+                    onCancelEpisodeDownload = { episode -> onCancelEpisodeDownload(targetForEpisode(episode)) },
+                    onRemoveEpisodeDownload = { episode -> onRemoveEpisodeDownload(targetForEpisode(episode)) },
+                    text = text,
                 )
             } else {
                 val mediaTarget = XtreamPlaybackTarget.CatalogItem(
@@ -1095,12 +1131,6 @@ internal fun XtreamItemDetail(
                     Spacer(Modifier.height(18.dp))
                 }
             }
-            Spacer(Modifier.height(BuroSpacing.Sm))
-            Text(
-                "Player VLC · H.264, H.265/HEVC, AAC, MP4, MKV, HLS",
-                color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.bodySmall,
-            )
             // Breathing room at the end of the scroll. Without it the last line sits flush against
             // the window edge and looks truncated rather than finished.
             Spacer(Modifier.height(BuroSpacing.Xxl))
@@ -1289,8 +1319,20 @@ internal fun PersonFilmographyPage(
                     "Filmografia confirmada enquanto você navega nesta fonte.",
                     color = BuroColors.TextMuted,
                 )
-                if (person.items.isEmpty()) {
-                    Text("Nenhum outro título confirmado nesta sessão.")
+                if (person.isLoading && person.items.isEmpty()) {
+                    // The sweep costs one provider request per film, so it takes a moment. Saying
+                    // so beats an empty page that looks like the person has no other work.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            color = BuroColors.Primary,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(BuroSpacing.Sm))
+                        Text("Procurando no catálogo…", color = BuroColors.TextMuted)
+                    }
+                } else if (person.items.isEmpty()) {
+                    Text("Nenhum outro título encontrado no catálogo.", color = BuroColors.TextMuted)
                 } else {
                     person.items.take(20).forEach { item ->
                         Row(
@@ -1323,10 +1365,18 @@ internal fun PersonFilmographyPage(
 @Composable
 private fun SeriesDetailContent(
     status: SeriesDetailsStatus,
+    seriesTitle: String,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onLoadSeries: () -> Unit,
     onOpenTrailer: (String) -> Unit,
     resumeDecisionForEpisode: (XtreamEpisode) -> ResumeDecision,
     onOpenEpisode: (XtreamEpisode, Long) -> Unit,
+    downloadStateForEpisode: (XtreamEpisode) -> DownloadState?,
+    onDownloadEpisode: (XtreamEpisode) -> Unit,
+    onCancelEpisodeDownload: (XtreamEpisode) -> Unit,
+    onRemoveEpisodeDownload: (XtreamEpisode) -> Unit,
+    text: DesktopStrings,
 ) {
     when (status) {
         SeriesDetailsStatus.Idle -> {
@@ -1377,22 +1427,68 @@ private fun SeriesDetailContent(
             }
             details.director?.let { DetailLine("Direção", it) }
             details.cast?.let { DetailLine("Elenco", it) }
-            details.youtubeTrailerId?.let { trailerId ->
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = { onOpenTrailer(trailerId) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Assistir ao trailer")
+
+            // Actions sit together above the episode list, matching the film page. Previously the
+            // trailer was a full-width button buried between the metadata and the episodes, and
+            // there was no way to favourite a series from its own page at all.
+            Spacer(Modifier.height(BuroSpacing.Md))
+            val firstEpisode = episodes.firstOrNull()
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+            ) {
+                if (firstEpisode != null) {
+                    val resumable = episodes.firstOrNull { resumeDecisionForEpisode(it) is ResumeDecision.ResumeFrom }
+                    val target = resumable ?: firstEpisode
+                    val decision = resumeDecisionForEpisode(target)
+                    Button(
+                        onClick = { onOpenEpisode(target, resumeStartPosition(decision)) },
+                        modifier = Modifier.height(48.dp),
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = BuroColors.Primary,
+                                contentColor = BuroColors.OnPrimary,
+                            ),
+                        shape = BuroRadius.Small,
+                        contentPadding = PaddingValues(horizontal = BuroSpacing.Lg),
+                    ) {
+                        val label =
+                            if (decision is ResumeDecision.ResumeFrom) {
+                                "▶  Continuar T${target.seasonNumber} E${target.episodeNumber ?: "—"}"
+                            } else {
+                                "▶  Assistir T${target.seasonNumber} E${target.episodeNumber ?: "—"}"
+                            }
+                        Text(label, fontWeight = FontWeight.Bold)
+                    }
                 }
-                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = onToggleFavorite,
+                    modifier = Modifier.height(48.dp),
+                    shape = BuroRadius.Small,
+                    colors =
+                        ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (isFavorite) BuroColors.Primary else BuroColors.Text,
+                        ),
+                ) {
+                    Text(
+                        if (isFavorite) "♥  Nos favoritos" else "♡  Favoritos",
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                details.youtubeTrailerId?.let { trailerId ->
+                    OutlinedButton(
+                        onClick = { onOpenTrailer(trailerId) },
+                        modifier = Modifier.height(48.dp),
+                        shape = BuroRadius.Small,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+                    ) {
+                        Text("Trailer", fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
-            Text(
-                "${episodes.size} episódios",
-                color = BuroColors.TextMuted,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(BuroSpacing.Lg))
+
             if (episodes.isEmpty()) {
                 Text(
                     "O servidor não retornou episódios reproduzíveis.",
@@ -1400,52 +1496,186 @@ private fun SeriesDetailContent(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth().height(220.dp),
-                    verticalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    items(episodes, key = XtreamEpisode::providerId) { episode ->
-                        val decision = resumeDecisionForEpisode(episode)
-                        Row(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(9.dp))
-                                    .background(BuroColors.SurfaceHover)
-                                    .clickable { onOpenEpisode(episode, resumeStartPosition(decision)) }
-                                    .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                "T${episode.seasonNumber} • E${episode.episodeNumber ?: "—"}",
-                                color = BuroColors.Primary,
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                            Spacer(Modifier.width(9.dp))
-                            Text(
-                                episode.title,
-                                color = BuroColors.Text,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (decision is ResumeDecision.ResumeFrom) {
+                // Emitted straight into the parent's scrolling column. A LazyColumn here was given a
+                // fixed 220dp height because it cannot measure inside a scrollable parent, which
+                // showed five of twenty-four episodes and swallowed the wheel that should have
+                // scrolled the page.
+                val seasons = episodes.groupBy(XtreamEpisode::seasonNumber).toSortedMap()
+                var openSeason by remember(details.providerId) {
+                    mutableStateOf(seasons.keys.firstOrNull())
+                }
+                if (seasons.size > 1) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+                        verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+                    ) {
+                        seasons.forEach { (season, seasonEpisodes) ->
+                            val selected = season == openSeason
+                            BuroInteractiveSurface(
+                                onClick = { openSeason = season },
+                                shape = BuroRadius.Pill,
+                                background =
+                                    if (selected) BuroColors.Primary else BuroColors.SurfaceHover,
+                            ) { _ ->
                                 Text(
-                                    "Continuar ${formatPlaybackTime(decision.positionMs)}",
-                                    color = BuroColors.Primary,
-                                    style = MaterialTheme.typography.labelMedium,
+                                    text = "T$season  ·  ${seasonEpisodes.size}",
+                                    color = if (selected) BuroColors.OnPrimary else BuroColors.TextMuted,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier =
+                                        Modifier.padding(
+                                            horizontal = BuroSpacing.Md,
+                                            vertical = BuroSpacing.Sm,
+                                        ),
                                 )
-                                Spacer(Modifier.width(8.dp))
-                                TextButton(onClick = { onOpenEpisode(episode, 0L) }) {
-                                    Text("Do início")
-                                }
                             }
                         }
                     }
+                    Spacer(Modifier.height(BuroSpacing.Md))
+                }
+                val visible = seasons[openSeason] ?: episodes
+                Text(
+                    text =
+                        if (seasons.size > 1) {
+                            "Temporada $openSeason  ·  ${visible.size} episódios"
+                        } else {
+                            "${episodes.size} episódios"
+                        },
+                    color = BuroColors.TextMuted,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.height(BuroSpacing.Sm))
+                visible
+                    .sortedBy { it.episodeNumber ?: Int.MAX_VALUE }
+                    .forEach { episode ->
+                        EpisodeRow(
+                            episode = episode,
+                            decision = resumeDecisionForEpisode(episode),
+                            downloadState = downloadStateForEpisode(episode),
+                            onOpen = onOpenEpisode,
+                            onDownload = { onDownloadEpisode(episode) },
+                            onCancelDownload = { onCancelEpisodeDownload(episode) },
+                            onRemoveDownload = { onRemoveEpisodeDownload(episode) },
+                            text = text,
+                        )
+                        Spacer(Modifier.height(BuroSpacing.Xs))
+                    }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EpisodeRow(
+    episode: XtreamEpisode,
+    decision: ResumeDecision,
+    downloadState: DownloadState?,
+    onOpen: (XtreamEpisode, Long) -> Unit,
+    onDownload: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onRemoveDownload: () -> Unit,
+    text: DesktopStrings,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(BuroRadius.Small)
+                .background(BuroColors.SurfaceHover)
+                .clickable { onOpen(episode, resumeStartPosition(decision)) }
+                .padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "E${episode.episodeNumber ?: "—"}",
+            color = BuroColors.Primary,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(40.dp),
+        )
+        Text(
+            text = episode.title.editorialTitle(),
+            color = BuroColors.Text,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (decision is ResumeDecision.ResumeFrom) {
+            Spacer(Modifier.width(BuroSpacing.Sm))
+            Text(
+                text = formatPlaybackTime(decision.positionMs),
+                color = BuroColors.Primary,
+                style = MaterialTheme.typography.labelMedium,
+            )
+            TextButton(onClick = { onOpen(episode, 0L) }) {
+                Text("Do início", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        if (downloadState != null) {
+            Spacer(Modifier.width(BuroSpacing.Xs))
+            EpisodeDownloadControl(
+                state = downloadState,
+                onDownload = onDownload,
+                onCancel = onCancelDownload,
+                onRemove = onRemoveDownload,
+                text = text,
+            )
+        }
+    }
+}
+
+/**
+ * Compact download affordance for a single episode.
+ *
+ * The full [DownloadButton] carries a word label, which does not fit twenty-four times in a list;
+ * this keeps the same four states in an icon-sized control.
+ */
+@Composable
+private fun EpisodeDownloadControl(
+    state: DownloadState,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    onRemove: () -> Unit,
+    text: DesktopStrings,
+) {
+    when (state) {
+        is DownloadState.Running -> {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    // A negative fraction means the server sent no content length, so there is no
+                    // percentage to show — only that it is running.
+                    text =
+                        if (state.fraction < 0f) {
+                            text.downloading
+                        } else {
+                            "${(state.fraction * 100).toInt()}%"
+                        },
+                    color = BuroColors.Primary,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                TextButton(onClick = onCancel) {
+                    Text(text.cancel, style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
+        DownloadState.Completed ->
+            TextButton(onClick = onRemove) {
+                Text(
+                    text = "✓  ${text.removeDownload}",
+                    color = BuroColors.Success,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        else ->
+            TextButton(onClick = onDownload) {
+                Text(
+                    text = "⤓",
+                    color = BuroColors.TextMuted,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
     }
 }
 

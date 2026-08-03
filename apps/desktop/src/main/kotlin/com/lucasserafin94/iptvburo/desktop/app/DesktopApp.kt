@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -198,6 +199,10 @@ fun DesktopApp(
                             onSelectLanguage = appState::updateLanguage,
                             updateBusy = updateBusy,
                             updateMessage = updateMessage,
+                            sessionActive = appState.isXtreamSelected,
+                            onEndSession = appState::disconnectXtream,
+                            catalogRefreshing = appState.xtreamStatus is XtreamStatus.LoadingCatalog,
+                            onRefreshCatalog = { scope.launch { appState.refreshCatalog() } },
                             onUpdate = {
                                 if (!updateBusy) {
                                     scope.launch {
@@ -678,6 +683,10 @@ private fun TopBar(
     updateBusy: Boolean,
     updateMessage: String?,
     onUpdate: () -> Unit,
+    sessionActive: Boolean,
+    onEndSession: () -> Unit,
+    catalogRefreshing: Boolean,
+    onRefreshCatalog: () -> Unit,
 ) {
     val text = strings
     // A Row does not shrink unweighted children: once their intrinsic widths exceed the space they
@@ -703,11 +712,12 @@ private fun TopBar(
                     overflow = TextOverflow.Ellipsis,
                 )
                 // Version and counts share one quiet line so the header carries a single strong
-                // element instead of five competing pills.
+                // element instead of five competing pills. The full version is shown, including the
+                // pre-release suffix: "v0.2.0" for a 0.2.0-alpha.5 build made bug reports ambiguous.
                 Text(
                     updateMessage
                         ?: "$sourceCount ${text.sourcesCount}  ·  $channelCount ${text.items}  ·  " +
-                        "v${DESKTOP_VERSION.substringBefore('-')}",
+                        "IPTV BURO v$DESKTOP_VERSION",
                     color = BuroColors.TextSubtle,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
@@ -734,6 +744,10 @@ private fun TopBar(
                 onSelectLanguage = onSelectLanguage,
                 updateBusy = updateBusy,
                 onUpdate = onUpdate,
+                sessionActive = sessionActive,
+                onEndSession = onEndSession,
+                catalogRefreshing = catalogRefreshing,
+                onRefreshCatalog = onRefreshCatalog,
                 text = text,
             )
         }
@@ -753,6 +767,10 @@ private fun SettingsMenu(
     onSelectLanguage: (DesktopLanguage) -> Unit,
     updateBusy: Boolean,
     onUpdate: () -> Unit,
+    sessionActive: Boolean,
+    onEndSession: () -> Unit,
+    catalogRefreshing: Boolean,
+    onRefreshCatalog: () -> Unit,
     text: DesktopStrings,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -805,6 +823,24 @@ private fun SettingsMenu(
                 )
             }
             HorizontalDivider(color = BuroColors.BorderSoft)
+            // Refreshing the lists and updating the app are different things and were easy to
+            // confuse when only the latter existed. The catalogue is fetched on start; this is the
+            // manual re-fetch for when the provider adds a title mid-session.
+            if (sessionActive) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = if (catalogRefreshing) "…" else text.refreshCatalog,
+                            color = BuroColors.Text,
+                        )
+                    },
+                    enabled = !catalogRefreshing,
+                    onClick = {
+                        onRefreshCatalog()
+                        expanded = false
+                    },
+                )
+            }
             DropdownMenuItem(
                 text = {
                     Text(
@@ -821,7 +857,7 @@ private fun SettingsMenu(
             DropdownMenuItem(
                 text = {
                     Text(
-                        text = "v${DESKTOP_VERSION.substringBefore('-')}",
+                        text = "IPTV BURO v$DESKTOP_VERSION",
                         color = BuroColors.TextSubtle,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -829,6 +865,35 @@ private fun SettingsMenu(
                 enabled = false,
                 onClick = {},
             )
+            // Session controls belong here rather than in the catalogue toolbar: they are consulted
+            // rarely and were taking permanent width from the browsing surface.
+            if (sessionActive) {
+                HorizontalDivider(color = BuroColors.BorderSoft)
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                Modifier.size(6.dp).clip(CircleShape).background(BuroColors.Success),
+                            )
+                            Spacer(Modifier.width(BuroSpacing.Xs))
+                            Text(
+                                text = text.sessionActive,
+                                color = BuroColors.TextSubtle,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    },
+                    enabled = false,
+                    onClick = {},
+                )
+                DropdownMenuItem(
+                    text = { Text(text = text.endSession, color = BuroColors.Error) },
+                    onClick = {
+                        onEndSession()
+                        expanded = false
+                    },
+                )
+            }
         }
     }
 }
@@ -2021,6 +2086,28 @@ private fun DownloadLibraryRow(
             .padding(BuroSpacing.Md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        BuroRemoteArtwork(
+            artworkUrl = entry.artworkUrl,
+            contentDescription = entry.title,
+            modifier =
+                Modifier
+                    .width(54.dp)
+                    .aspectRatio(2f / 3f)
+                    .clip(BuroRadius.Small)
+                    .background(BuroColors.SurfaceRaised),
+            contentScale = ContentScale.Crop,
+        ) {
+            // A download made before the sidecar existed has no poster; the row still needs to read
+            // as a title rather than as an empty box.
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = entry.title.take(1).uppercase(),
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+        }
+        Spacer(Modifier.width(BuroSpacing.Md))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = entry.title,

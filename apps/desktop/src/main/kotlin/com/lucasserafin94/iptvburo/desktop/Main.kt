@@ -17,6 +17,7 @@ import androidx.compose.ui.window.rememberWindowState
 import com.lucasserafin94.iptvburo.desktop.app.DesktopApp
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.SessionXtreamRepository
+import com.lucasserafin94.iptvburo.desktop.platform.WindowChrome
 import com.lucasserafin94.iptvburo.desktop.security.RememberedXtreamStore
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
 
@@ -61,6 +62,12 @@ fun main() {
                 }
             LaunchedEffect(appState) {
                 appState.restoreRememberedXtream()
+            }
+            // The title bar is drawn by Windows, not by Compose, so it stayed light against the
+            // near-black app. Keyed on placement because the native frame is rebuilt when the
+            // window enters or leaves full screen, which drops the attribute.
+            LaunchedEffect(windowState.placement) {
+                WindowChrome.applyDarkTitleBar(window)
             }
             DesktopApp(
                 appState = appState,

@@ -94,7 +94,7 @@ class VlcDesktopPlayer {
         executor.execute {
             runCatching {
                 remote?.command("pl_stop")
-                remote?.command("in_play", mapOf("input" to request.uri.toASCIIString()))
+                remote?.command("in_play", mapOf("input" to request.uri.toVlcInput()))
                 snapshot = snapshot.copy(errorMessage = null, loading = true, ended = false)
                 mediaStartedAt = System.currentTimeMillis()
                 everPlayed = false
@@ -178,7 +178,7 @@ class VlcDesktopPlayer {
         val control = VlcHttpControl.connect(port, password, CONNECT_TIMEOUT_MILLIS)
         remote = control
         control.command("volume", mapOf("val" to (snapshot.volume * VLC_VOLUME_MAX).toInt().toString()))
-        control.command("in_play", mapOf("input" to request.uri.toASCIIString()))
+        control.command("in_play", mapOf("input" to request.uri.toVlcInput()))
         mediaStartedAt = System.currentTimeMillis()
         if (request.startPositionMillis > 0L) {
             executor.schedule({ seekToMillis(request.startPositionMillis) }, 2, TimeUnit.SECONDS)
@@ -266,6 +266,21 @@ class VlcDesktopPlayer {
         const val START_TIMEOUT_MILLIS = 25_000L
     }
 }
+
+/**
+ * The MRL to hand to VLC for this source.
+ *
+ * A downloaded file lives under `Videos/IPTV BURO`, and `Path.toUri` percent-encodes that space.
+ * Passing the encoded form through the HTTP control interface left VLC opening a path that does not
+ * exist, so an offline title reported no error and simply never started. The native path has no such
+ * ambiguity. Remote sources keep their URI: for them the encoding is part of the address.
+ */
+private fun URI.toVlcInput(): String =
+    if (scheme.equals("file", ignoreCase = true)) {
+        runCatching { java.nio.file.Path.of(this).toString() }.getOrElse { toASCIIString() }
+    } else {
+        toASCIIString()
+    }
 
 private class VlcHttpControl private constructor(
     private val port: Int,

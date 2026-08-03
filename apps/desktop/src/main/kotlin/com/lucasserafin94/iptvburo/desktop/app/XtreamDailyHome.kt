@@ -164,8 +164,8 @@ fun XtreamDailyHome(
             onBack = { detailsOpen = false },
             onOpenExternal = onOpenExternal,
             onOpenPerson = { name ->
-                appState.openPerson(name)
                 personOpen = true
+                scope.launch { appState.openPerson(name) }
             },
         )
         return

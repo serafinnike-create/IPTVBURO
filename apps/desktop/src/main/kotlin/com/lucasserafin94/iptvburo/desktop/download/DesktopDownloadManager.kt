@@ -1,5 +1,7 @@
 package com.lucasserafin94.iptvburo.desktop.download
 
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import java.io.IOException
@@ -39,6 +41,7 @@ class DesktopDownloadManager(
     private val client: OkHttpClient = OkHttpClient(),
 ) {
     private val cancelled = ConcurrentHashMap<String, AtomicBoolean>()
+    private val gson = Gson()
 
     /** Whether this target may be downloaded at all. */
     fun isDownloadable(target: XtreamPlaybackTarget): Boolean =
@@ -47,33 +50,90 @@ class DesktopDownloadManager(
             is XtreamPlaybackTarget.Episode -> true
         }
 
-    fun isDownloaded(contentKey: String): Boolean = Files.exists(fileFor(contentKey))
+    fun isDownloaded(contentKey: String): Boolean = downloadedFile(contentKey) != null
 
     /**
-     * Content keys that have a completed file on disk, mapped to a readable title.
+     * Completed downloads on disk, keyed by content key.
      *
      * Lets the library rebuild its list after a restart. The key is recovered from the file name,
-     * which is why the name is derived from the key rather than from the stream URL.
+     * which is why the name is derived from the key rather than from the stream URL. Title and
+     * artwork come from the sidecar written at download time; without it the list could only show
+     * the sanitised key, which is how `movie_supergirl_2026` ended up on screen.
      */
-    fun storedDownloads(): Map<String, String> {
+    fun storedDownloads(): Map<String, StoredDownload> {
         if (!Files.isDirectory(rootDirectory)) return emptyMap()
+        val sidecars = readIndex()
         return Files.list(rootDirectory).use { stream ->
             stream
                 .filter { path -> Files.isRegularFile(path) }
                 .map { path -> path.fileName.toString() }
                 // `.part` files are interrupted downloads, not stored copies.
-                .filter { name -> !name.endsWith(".part") }
+                // The index itself is bookkeeping, not a download.
+                .filter { name -> !name.endsWith(".part") && name != INDEX_FILE }
                 .toList()
                 .associate { name ->
                     val key = name.substringBeforeLast('.')
-                    key to key.toReadableTitle()
+                    key to (sidecars[key] ?: StoredDownload(key.toReadableTitle(), null))
                 }
         }
     }
 
-    fun downloadedFile(contentKey: String): Path? = fileFor(contentKey).takeIf(Files::exists)
+    /**
+     * Records how a stored download should be presented.
+     *
+     * Only the poster URL is kept, never the stream URL: artwork is public and unauthenticated,
+     * while the media address carries the account credentials.
+     */
+    fun remember(
+        contentKey: String,
+        title: String,
+        artworkUrl: String?,
+    ) {
+        runCatching {
+            Files.createDirectories(rootDirectory)
+            val updated = readIndex() + (contentKey to StoredDownload(title, artworkUrl))
+            Files.writeString(rootDirectory.resolve(INDEX_FILE), gson.toJson(updated))
+        }
+    }
 
-    fun delete(contentKey: String): Boolean = Files.deleteIfExists(fileFor(contentKey))
+    private fun readIndex(): Map<String, StoredDownload> {
+        val file = rootDirectory.resolve(INDEX_FILE)
+        if (!Files.isRegularFile(file)) return emptyMap()
+        return runCatching {
+            val type = object : TypeToken<Map<String, StoredDownload>>() {}.type
+            gson.fromJson<Map<String, StoredDownload>>(Files.readString(file), type).orEmpty()
+        }.getOrDefault(emptyMap())
+    }
+
+    /**
+     * The stored copy for [contentKey], whatever container it was saved in.
+     *
+     * Matching on the key rather than assuming `.mp4` is what makes an episode downloaded as `.mkv`
+     * findable: the extension comes from the provider and is not known here.
+     */
+    fun downloadedFile(contentKey: String): Path? {
+        if (!Files.isDirectory(rootDirectory)) return null
+        val safe = safeName(contentKey)
+        return Files.list(rootDirectory).use { stream ->
+            stream
+                .filter { path -> Files.isRegularFile(path) }
+                .filter { path ->
+                    val name = path.fileName.toString()
+                    !name.endsWith(".part") && name.substringBeforeLast('.') == safe
+                }
+                .findFirst()
+                .orElse(null)
+        }
+    }
+
+    fun delete(contentKey: String): Boolean {
+        val removed = downloadedFile(contentKey)?.let(Files::deleteIfExists) ?: false
+        runCatching {
+            val remaining = readIndex() - contentKey
+            Files.writeString(rootDirectory.resolve(INDEX_FILE), gson.toJson(remaining))
+        }
+        return removed
+    }
 
     fun cancel(contentKey: String) {
         cancelled[contentKey]?.set(true)
@@ -150,13 +210,16 @@ class DesktopDownloadManager(
         contentKey: String,
         containerExtension: String? = null,
     ): Path {
-        val safe = contentKey.replace(UNSAFE_NAME, "_").take(120)
         val extension = containerExtension?.takeIf { it.matches(SAFE_EXTENSION) } ?: "mp4"
-        return rootDirectory.resolve("$safe.$extension")
+        return rootDirectory.resolve("${safeName(contentKey)}.$extension")
     }
+
+    private fun safeName(contentKey: String): String =
+        contentKey.replace(UNSAFE_NAME, "_").take(120)
 
     private companion object {
         const val BUFFER_BYTES = 1 shl 16
+        const val INDEX_FILE = "library.json"
         val UNSAFE_NAME = Regex("""[^A-Za-z0-9._-]""")
         val SAFE_EXTENSION = Regex("""[A-Za-z0-9]{1,5}""")
 
@@ -164,6 +227,12 @@ class DesktopDownloadManager(
             Path.of(System.getProperty("user.home"), "Videos", "IPTV BURO")
     }
 }
+
+/** How a completed download should be presented in the library. */
+data class StoredDownload(
+    val title: String,
+    val artworkUrl: String?,
+)
 
 sealed interface DownloadResult {
     data class Completed(val file: Path, val bytes: Long) : DownloadResult

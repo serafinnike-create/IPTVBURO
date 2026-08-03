@@ -23,6 +23,8 @@ import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
 import com.lucasserafin94.iptvburo.desktop.download.DesktopDownloadManager
 import com.lucasserafin94.iptvburo.desktop.download.DownloadResult
+import com.lucasserafin94.iptvburo.desktop.download.StoredDownload
+import com.lucasserafin94.iptvburo.desktop.download.toReadableTitle
 import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.data.migrateFavoriteKeys
 import com.lucasserafin94.iptvburo.domain.model.Category
@@ -517,6 +519,42 @@ class DesktopAppState(
         connectXtream(input)
     }
 
+    /**
+     * Re-fetches every loaded list from the provider.
+     *
+     * The catalogue is normally fetched once on connect and then answered from memory, so a title
+     * added by the provider during the session never appeared. This is the manual override; the
+     * automatic fetch on start still covers the common case.
+     */
+    suspend fun refreshCatalog() {
+        if (xtreamStatus is XtreamStatus.LoadingCatalog) return
+        val loaded = xtreamSummary?.loadedContentTypes.orEmpty().ifEmpty { setOf(xtreamContentType) }
+        val current = xtreamContentType
+        xtreamStatus = XtreamStatus.LoadingCatalog(current)
+
+        runCatching {
+            withContext(Dispatchers.IO) {
+                // Dropping the cache first is what makes this a refresh rather than a no-op: with
+                // the entries still present, loadCatalog would answer from them.
+                xtreamRepository.clearCatalogCache()
+                var latest: XtreamSessionSummary? = null
+                // The type on screen goes first so the visible grid is repopulated soonest.
+                for (contentType in listOf(current) + (loaded - current)) {
+                    latest = xtreamRepository.loadCatalog(contentType)
+                }
+                requireNotNull(latest)
+            }
+        }.onSuccess { summary ->
+            xtreamSummary = summary
+            xtreamCategories = visibleXtreamCategories(current)
+            refreshXtreamPage(pageIndex = 0)
+            xtreamStatus = XtreamStatus.Connected
+        }.onFailure { error ->
+            error.rethrowIfCancellation()
+            xtreamStatus = XtreamStatus.Error(error.toSafeXtreamMessage())
+        }
+    }
+
     suspend fun selectXtreamContentType(contentType: XtreamContentType) {
         if (contentType == xtreamContentType && contentType in xtreamSummary?.loadedContentTypes.orEmpty()) {
             return
@@ -691,15 +729,24 @@ class DesktopAppState(
     var downloads by mutableStateOf<Map<String, DownloadState>>(emptyMap())
         private set
 
-    /** Titles kept alongside state so the sidebar can name a download without the catalogue. */
-    private var downloadTitles by mutableStateOf<Map<String, String>>(emptyMap())
+    /**
+     * Title and poster kept alongside state so the library can present a download without the
+     * catalogue, including after a restart when nothing is loaded yet.
+     */
+    private var downloadMetadata by mutableStateOf<Map<String, StoredDownload>>(emptyMap())
 
     /** Ordered view for the sidebar: running first, so active work is never scrolled out of sight. */
     val downloadEntries: List<DownloadEntry>
         get() =
             downloads.entries
                 .map { (key, state) ->
-                    DownloadEntry(key, downloadTitles[key] ?: key, state)
+                    val metadata = downloadMetadata[key]
+                    DownloadEntry(
+                        contentKey = key,
+                        title = metadata?.title ?: key.toReadableTitle(),
+                        artworkUrl = metadata?.artworkUrl,
+                        state = state,
+                    )
                 }.sortedBy { entry ->
                     when (entry.state) {
                         is DownloadState.Running -> 0
@@ -730,7 +777,7 @@ class DesktopAppState(
     fun prepareOfflinePlayback(contentKey: String): DesktopPlaybackRequest? {
         val file = downloadManager.downloadedFile(contentKey) ?: return null
         return DesktopPlaybackRequest(
-            title = (downloadTitles[contentKey] ?: contentKey).take(180),
+            title = (downloadMetadata[contentKey]?.title ?: contentKey.toReadableTitle()).take(180),
             uri = file.toUri(),
             progressIdentity = null,
             startPositionMillis = 0L,
@@ -746,7 +793,9 @@ class DesktopAppState(
     fun refreshDownloadStates() {
         val stored = downloadManager.storedDownloads()
         if (stored.isEmpty() && downloads.isEmpty()) return
-        downloadTitles = downloadTitles + stored.filterKeys { it !in downloadTitles }
+        // Disk wins for keys we know nothing about; in-memory wins for the rest, since a running
+        // download already has the live title and the sidecar is only written on completion.
+        downloadMetadata = stored + downloadMetadata
         downloads =
             downloads +
             stored.keys
@@ -768,6 +817,7 @@ class DesktopAppState(
     suspend fun startDownload(
         target: XtreamPlaybackTarget,
         title: String,
+        artworkUrl: String? = null,
     ) {
         if (!downloadManager.isDownloadable(target)) return
         val contentKey = target.contentKey
@@ -778,10 +828,17 @@ class DesktopAppState(
             downloads = downloads + (contentKey to DownloadState.Failed)
             return
         }
-        downloadTitles = downloadTitles + (contentKey to title)
+        val metadata = StoredDownload(title = title, artworkUrl = artworkUrl)
+        downloadMetadata = downloadMetadata + (contentKey to metadata)
         downloads = downloads + (contentKey to DownloadState.Running(0f))
 
-        val containerExtension = (target as? XtreamPlaybackTarget.CatalogItem)?.containerExtension
+        // An episode carries its own container. Falling back to mp4 for it wrote an mkv under the
+        // wrong extension, which the player then refused to open from the library.
+        val containerExtension =
+            when (target) {
+                is XtreamPlaybackTarget.CatalogItem -> target.containerExtension
+                is XtreamPlaybackTarget.Episode -> target.episode.containerExtension
+            }
         val result =
             downloadManager.download(
                 contentKey = contentKey,
@@ -801,6 +858,11 @@ class DesktopAppState(
                         is DownloadResult.Failed -> DownloadState.Failed
                     }
             )
+        // Only a finished copy earns a sidecar. Writing it earlier would leave a library entry
+        // pointing at a file that a cancellation then deleted.
+        if (result is DownloadResult.Completed) {
+            downloadManager.remember(contentKey, metadata.title, metadata.artworkUrl)
+        }
     }
 
     fun checkpointPlayback(request: DesktopPlaybackRequest, positionMs: Long, durationMs: Long) {
@@ -854,14 +916,31 @@ class DesktopAppState(
         }.getOrDefault(ExternalOpenResult.Failed)
     }
 
-    fun openPerson(name: String) {
+    /**
+     * Opens a person's filmography.
+     *
+     * [movieAppearances] only holds films whose details the user already opened, so on a fresh
+     * session it is almost always empty and the page appeared blank. Anything missing is looked up
+     * across the catalogue instead, which is what the user expects from tapping a name.
+     */
+    suspend fun openPerson(name: String) {
         val cleanName = name.trim().take(100)
         if (cleanName.isBlank()) return
-        selectedPerson =
-            PersonFilmography(
-                name = cleanName,
-                items = movieAppearances[cleanName.lowercase(Locale.ROOT)]?.values?.toList().orEmpty(),
-            )
+        val key = cleanName.lowercase(Locale.ROOT)
+        val known = movieAppearances[key]?.values?.toList().orEmpty()
+
+        // Show what is already known immediately; a catalogue sweep takes a moment and a blank
+        // page in the meantime is worse than a partial one.
+        selectedPerson = PersonFilmography(name = cleanName, items = known, isLoading = true)
+
+        val discovered =
+            withContext(Dispatchers.Default) {
+                xtreamRepository.findByCastMember(cleanName, MAX_FILMOGRAPHY_ITEMS)
+            }
+        // The user may have navigated away while the sweep ran.
+        if (selectedPerson?.name != cleanName) return
+        val merged = (known + discovered).distinctBy { it.providerId }
+        selectedPerson = PersonFilmography(name = cleanName, items = merged, isLoading = false)
     }
 
     fun closePerson() {
@@ -1031,6 +1110,9 @@ class DesktopAppState(
     private companion object {
         const val MAX_SEARCH_LENGTH = 120
 
+        /** Enough to fill a filmography page without a long sweep. */
+        const val MAX_FILMOGRAPHY_ITEMS = 24
+
         /**
          * Scope for stored watch progress.
          *
@@ -1053,6 +1135,8 @@ private fun String?.castNames(): List<String> =
 data class PersonFilmography(
     val name: String,
     val items: List<XtreamCatalogItem>,
+    /** True while the catalogue is still being searched, so the page can say so. */
+    val isLoading: Boolean = false,
 )
 
 data class DesktopContinueWatchingEntry(
@@ -1181,5 +1265,6 @@ sealed interface DownloadState {
 data class DownloadEntry(
     val contentKey: String,
     val title: String,
+    val artworkUrl: String?,
     val state: DownloadState,
 )
