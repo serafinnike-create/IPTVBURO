@@ -53,6 +53,9 @@
     <string name="download_cancel">Cancelar download</string>
     <string name="download_delete">Remover download</string>
     <string name="download_episode">Baixar episódio</string>
+    <string name="downloads_title">Downloads</string>
+    <string name="downloads_empty_title">Ainda não há cópias offline</string>
+    <string name="downloads_empty_body">Abra um filme ou um episódio e escolha Baixar. As cópias salvas aparecem aqui.</string>
     <string name="common_back">Voltar</string>
     <string name="common_close">Fechar</string>
     <string name="common_cancel">Cancelar</string>

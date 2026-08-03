@@ -122,6 +122,14 @@ class MainViewModel @Inject constructor(
                 loadFavorites()
             }
 
+            // Re-checks disk on the way in: a copy finished in a previous session is only known to
+            // be stored once the file is looked for, and this is the one screen that claims to list
+            // everything the user has offline.
+            AppSection.DOWNLOADS -> {
+                updateDestination(section, AppContent.Downloads)
+                hydrateDownloadStates(mutableState.value.downloads.keys.toList())
+            }
+
             AppSection.PROFILE -> updateDestination(section, AppContent.Settings)
 
             AppSection.DISCOVER,

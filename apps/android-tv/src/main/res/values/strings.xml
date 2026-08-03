@@ -126,6 +126,9 @@
     <string name="download_cancel">Cancel download</string>
     <string name="download_delete">Remove download</string>
     <string name="download_episode">Download episode</string>
+    <string name="downloads_title">Downloads</string>
+    <string name="downloads_empty_title">No offline copies yet</string>
+    <string name="downloads_empty_body">Open a film or an episode and choose Download. Copies you save appear here.</string>
     <string name="common_back">Back</string>
     <string name="common_close">Close</string>
     <string name="common_cancel">Cancel</string>

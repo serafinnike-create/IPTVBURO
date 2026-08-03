@@ -88,6 +88,7 @@ import com.lucasserafin94.iptvburo.ui.AppSection
 import com.lucasserafin94.iptvburo.ui.AppUiState
 import com.lucasserafin94.iptvburo.ui.CategoryUi
 import com.lucasserafin94.iptvburo.ui.ChannelUi
+import com.lucasserafin94.iptvburo.ui.DownloadEntryUi
 import com.lucasserafin94.iptvburo.ui.DownloadStateUi
 import com.lucasserafin94.iptvburo.ui.EpisodeUi
 import com.lucasserafin94.iptvburo.ui.episodeDownloadKey
@@ -377,6 +378,12 @@ fun AppShellScreen(
                             onBack = onBack,
                         )
 
+                        AppContent.Downloads -> DownloadsContent(
+                            entries = state.downloadEntries,
+                            onCancelDownload = onCancelDownload,
+                            onDeleteDownload = onDeleteDownload,
+                        )
+
                         AppContent.Profiles -> ProfilePickerScreen(
                             profiles = state.profiles,
                             onSelect = onSelectProfile,
@@ -441,6 +448,7 @@ private fun AppSection.isRibbonDestination(): Boolean =
         AppSection.SERIES,
         AppSection.DISCOVER,
         AppSection.MY_BURO,
+        AppSection.DOWNLOADS,
         AppSection.SEARCH,
         AppSection.PROFILE,
         -> true
@@ -535,6 +543,7 @@ private fun AppSection.ribbonLabelResource(): Int =
         AppSection.SERIES -> R.string.buro_nav_series
         AppSection.DISCOVER -> R.string.buro_nav_discover
         AppSection.MY_BURO -> R.string.buro_nav_my_buro
+        AppSection.DOWNLOADS -> R.string.buro_nav_downloads
         AppSection.SEARCH -> R.string.buro_nav_search
         AppSection.PROFILE -> R.string.buro_nav_profile
         AppSection.SOURCES -> R.string.nav_sources
@@ -1538,6 +1547,165 @@ private fun MyBuroContent(
         onLoadMore = {},
         headerAction = null,
     )
+}
+
+/**
+ * The offline library.
+ *
+ * A top-level ribbon destination, so it carries no back affordance: the ribbon is the way out and a
+ * back button here would compete with it for the first focus.
+ */
+@Composable
+private fun DownloadsContent(
+    entries: List<DownloadEntryUi>,
+    onCancelDownload: (String) -> Unit,
+    onDeleteDownload: (String) -> Unit,
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val compactPortrait = maxWidth < 600.dp && maxHeight >= maxWidth
+        val colors = BuroTheme.colors
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    horizontal = if (compactPortrait) 16.dp else 42.dp,
+                    vertical = if (compactPortrait) 18.dp else 34.dp,
+                ),
+        ) {
+            Text(
+                text = stringResource(R.string.downloads_title),
+                color = colors.textPrimary,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(if (compactPortrait) 18.dp else 24.dp))
+
+            if (entries.isEmpty()) {
+                BuroEmptyState(
+                    title = stringResource(R.string.downloads_empty_title),
+                    message = stringResource(R.string.downloads_empty_body),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                )
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(bottom = 30.dp),
+                    verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+                ) {
+                    items(
+                        items = entries,
+                        key = DownloadEntryUi::contentKey,
+                    ) { entry ->
+                        DownloadEntryRow(
+                            entry = entry,
+                            onCancel = { onCancelDownload(entry.contentKey) },
+                            onDelete = { onDeleteDownload(entry.contentKey) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One offline copy.
+ *
+ * The whole row is the focus target and its click is the row's only action, because a D-pad remote
+ * has no way to reach a second control inside a row without turning every entry into a two-stop
+ * journey. Which action that is follows the state: cancel while work is in flight, remove once
+ * there is a file to remove.
+ */
+@Composable
+private fun DownloadEntryRow(
+    entry: DownloadEntryUi,
+    onCancel: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val colors = BuroTheme.colors
+    val state = entry.state
+    val isRunning = state is DownloadStateUi.Running
+    val actionLabel =
+        stringResource(
+            if (isRunning) R.string.download_cancel else R.string.download_delete,
+        )
+
+    FocusSurface(
+        onClick = if (isRunning) onCancel else onDelete,
+        modifier = Modifier.fillMaxWidth(),
+        backgroundColor = colors.surface,
+        focusedBackgroundColor = colors.elevated,
+    ) { _ ->
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = entry.title,
+                    color = colors.textPrimary,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(BuroSpacing.Xs))
+                Text(
+                    text = actionLabel,
+                    color = colors.textSecondary,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+
+            if (state is DownloadStateUi.Running) {
+                DownloadProgressBar(fraction = state.fraction)
+                Spacer(Modifier.height(6.dp))
+            }
+
+            Text(
+                text = state.label(),
+                color =
+                    when (state) {
+                        DownloadStateUi.Completed -> colors.success
+                        DownloadStateUi.Failed -> colors.error
+                        else -> colors.textSecondary
+                    },
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+/**
+ * Progress track for a running download.
+ *
+ * A negative [fraction] means the server never sent a content length. The track is then left empty
+ * rather than animated, because a moving bar would claim a position the app cannot measure; the
+ * row's label carries the honest "downloading, size unknown" wording instead.
+ */
+@Composable
+private fun DownloadProgressBar(fraction: Float) {
+    val colors = BuroTheme.colors
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(4.dp)
+            .clip(CircleShape)
+            .background(colors.canvas),
+    ) {
+        if (fraction >= 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                    .fillMaxHeight()
+                    .clip(CircleShape)
+                    .background(colors.brandPrimary),
+            )
+        }
+    }
 }
 
 @Composable

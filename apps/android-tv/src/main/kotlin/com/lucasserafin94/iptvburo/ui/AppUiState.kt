@@ -193,6 +193,7 @@ enum class AppSection {
     SERIES,
     DISCOVER,
     MY_BURO,
+    DOWNLOADS,
     SEARCH,
     PROFILE,
     SOURCES,
@@ -245,6 +246,14 @@ sealed interface AppContent {
     ) : AppContent
 
     data object Favorites : AppContent
+
+    /**
+     * The list of offline copies.
+     *
+     * Carries no payload: the entries live on [AppUiState.downloadEntries], which the download
+     * engine keeps current, so the destination never holds a snapshot that can go stale mid-download.
+     */
+    data object Downloads : AppContent
 
     data object Profiles : AppContent
 

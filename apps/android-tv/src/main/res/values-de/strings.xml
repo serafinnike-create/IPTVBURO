@@ -50,6 +50,9 @@
     <string name="download_cancel">Download abbrechen</string>
     <string name="download_delete">Download entfernen</string>
     <string name="download_episode">Folge herunterladen</string>
+    <string name="downloads_title">Downloads</string>
+    <string name="downloads_empty_title">Noch keine Offline-Kopien</string>
+    <string name="downloads_empty_body">Öffne einen Film oder eine Folge und wähle Herunterladen. Gespeicherte Kopien erscheinen hier.</string>
     <string name="common_back">Zurück</string>
     <string name="common_close">Schließen</string>
     <string name="common_cancel">Abbrechen</string>

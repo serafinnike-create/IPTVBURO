@@ -50,6 +50,7 @@ private val ribbonDestinations =
         RibbonDestination(AppSection.MOVIES, R.string.buro_nav_movies),
         RibbonDestination(AppSection.SERIES, R.string.buro_nav_series),
         RibbonDestination(AppSection.MY_BURO, R.string.buro_nav_my_buro),
+        RibbonDestination(AppSection.DOWNLOADS, R.string.buro_nav_downloads),
         RibbonDestination(AppSection.PROFILE, R.string.buro_nav_profile),
     )
 

@@ -6,6 +6,7 @@
     <string name="buro_nav_series">Serie</string>
     <string name="buro_nav_discover">Scopri</string>
     <string name="buro_nav_my_buro">Preferiti</string>
+    <string name="buro_nav_downloads">Download</string>
     <string name="buro_nav_search">Cerca</string>
     <string name="buro_nav_profile">Impostazioni</string>
 </resources>

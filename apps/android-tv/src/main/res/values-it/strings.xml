@@ -53,6 +53,9 @@
     <string name="download_cancel">Annulla download</string>
     <string name="download_delete">Rimuovi download</string>
     <string name="download_episode">Scarica episodio</string>
+    <string name="downloads_title">Download</string>
+    <string name="downloads_empty_title">Nessuna copia offline</string>
+    <string name="downloads_empty_body">Apri un film o un episodio e scegli Scarica. Le copie salvate compaiono qui.</string>
     <string name="common_back">Indietro</string>
     <string name="common_close">Chiudi</string>
     <string name="common_cancel">Annulla</string>
