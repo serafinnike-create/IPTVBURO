@@ -45,6 +45,14 @@
     <string name="player_retry">Tentar novamente</string>
     <string name="player_back">Voltar aos canais</string>
     <string name="player_seek_unavailable">Esta fonte não permite avançar ou retroceder.</string>
+    <string name="download_action">Baixar</string>
+    <string name="download_running">Baixando… %1$d%%</string>
+    <string name="download_running_unknown">Baixando…</string>
+    <string name="download_completed">Salvo offline</string>
+    <string name="download_failed">Falha no download</string>
+    <string name="download_cancel">Cancelar download</string>
+    <string name="download_delete">Remover download</string>
+    <string name="download_episode">Baixar episódio</string>
     <string name="common_back">Voltar</string>
     <string name="common_close">Fechar</string>
     <string name="common_cancel">Cancelar</string>

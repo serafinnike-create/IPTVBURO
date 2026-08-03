@@ -3,10 +3,14 @@
     <item>
         <shape android:shape="rectangle">
             <corners android:radius="12dp" />
+            <!--
+                Nocturne canvas washing into a warm near-black. The previous ramp ended on the
+                aurora navy #14264A, a colour the palette no longer contains.
+            -->
             <gradient
                 android:angle="0"
-                android:endColor="#14264A"
-                android:startColor="#070B14" />
+                android:endColor="#1A1C1F"
+                android:startColor="#08090A" />
         </shape>
     </item>
     <item

@@ -73,14 +73,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.HistoryEdu
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.NewReleases
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.RocketLaunch
-import androidx.compose.material.icons.filled.SportsSoccer
-import androidx.compose.material.icons.filled.TheaterComedy
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
@@ -95,7 +87,10 @@ import com.lucasserafin94.iptvburo.ui.AppSection
 import com.lucasserafin94.iptvburo.ui.AppUiState
 import com.lucasserafin94.iptvburo.ui.CategoryUi
 import com.lucasserafin94.iptvburo.ui.ChannelUi
+import com.lucasserafin94.iptvburo.ui.DownloadStateUi
 import com.lucasserafin94.iptvburo.ui.EpisodeUi
+import com.lucasserafin94.iptvburo.ui.episodeDownloadKey
+import com.lucasserafin94.iptvburo.ui.movieDownloadKey
 import com.lucasserafin94.iptvburo.ui.ProfileUi
 import com.lucasserafin94.iptvburo.ui.localization.AppLocaleController
 import com.lucasserafin94.iptvburo.ui.SourceImportMethod
@@ -107,6 +102,7 @@ import com.lucasserafin94.iptvburo.ui.designsystem.BuroButtonStyle
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroEmptyState
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroErrorState
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroScreen
+import com.lucasserafin94.iptvburo.ui.designsystem.categoryBadgeFor
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroSpacing
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroTheme
 import com.lucasserafin94.iptvburo.ui.home.DemoHomeCatalog
@@ -142,6 +138,10 @@ fun AppShellScreen(
     onToggleMovieFavorite: () -> Unit,
     onOpenPerson: (String) -> Unit,
     onOpenEpisode: (EpisodeUi) -> Unit,
+    onDownloadMovie: () -> Unit,
+    onDownloadEpisode: (EpisodeUi) -> Unit,
+    onCancelDownload: (String) -> Unit,
+    onDeleteDownload: (String) -> Unit,
     onSelectProfile: (String) -> Unit,
     onCreateProfile: (String, Boolean) -> Unit,
     onRequestProfileSelection: () -> Unit,
@@ -153,8 +153,6 @@ fun AppShellScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Enabled only after the provider/backend returns an explicit offline entitlement.
-    val supportsOfflineVault = false
     val ribbonFocusRequester = remember { FocusRequester() }
     var showXtreamModal by remember { mutableStateOf(false) }
     var xtreamSuccessVersionAtOpen by remember {
@@ -187,38 +185,56 @@ fun AppShellScreen(
                 onBack = onBack,
             )
 
-            is AppContent.SeriesDetails -> SeriesDetailsScreen(
-                fallbackTitle = content.fallbackTitle,
-                details = state.seriesDetails,
-                isLoading = state.isSeriesLoading,
-                hasError = state.hasSeriesError,
-                isResolvingPlayback = state.isResolvingPlayback,
-                hasPlaybackError = state.hasPlaybackError,
-                onOpenEpisode = onOpenEpisode,
-                onDownloadEpisode = {},
-                canDownloadOffline = supportsOfflineVault,
-                onOpenPerson = onOpenPerson,
-                onRetry = onRetryCatalog,
-                onBack = onBack,
-            )
+            is AppContent.SeriesDetails -> {
+                val seriesTitle = state.seriesDetails?.title ?: content.fallbackTitle
+                SeriesDetailsScreen(
+                    fallbackTitle = content.fallbackTitle,
+                    details = state.seriesDetails,
+                    isLoading = state.isSeriesLoading,
+                    hasError = state.hasSeriesError,
+                    isResolvingPlayback = state.isResolvingPlayback,
+                    hasPlaybackError = state.hasPlaybackError,
+                    onOpenEpisode = onOpenEpisode,
+                    onDownloadEpisode = onDownloadEpisode,
+                    onCancelEpisodeDownload = { episode ->
+                        onCancelDownload(episodeDownloadKey(seriesTitle, episode))
+                    },
+                    onDeleteEpisodeDownload = { episode ->
+                        onDeleteDownload(episodeDownloadKey(seriesTitle, episode))
+                    },
+                    downloadStateOf = { episode ->
+                        state.downloads[episodeDownloadKey(seriesTitle, episode)]
+                            ?: DownloadStateUi.Idle
+                    },
+                    onOpenPerson = onOpenPerson,
+                    onRetry = onRetryCatalog,
+                    onBack = onBack,
+                )
+            }
 
-            is AppContent.MovieDetails -> MovieDetailsScreen(
-                fallbackTitle = content.fallbackTitle,
-                fallbackArtworkUrl = content.fallbackArtworkUrl,
-                details = state.movieDetails,
-                isLoading = state.isMovieLoading,
-                hasError = state.hasMovieError,
-                isResolvingPlayback = state.isResolvingPlayback,
-                hasPlaybackError = state.hasPlaybackError,
-                onPlay = onPlayMovie,
-                isFavorite = content.channelId in state.favoriteIds,
-                onToggleFavorite = onToggleMovieFavorite,
-                onDownload = {},
-                canDownloadOffline = supportsOfflineVault,
-                onOpenPerson = onOpenPerson,
-                onRetry = onRetryCatalog,
-                onBack = onBack,
-            )
+            is AppContent.MovieDetails -> {
+                val movieKey =
+                    movieDownloadKey(state.movieDetails?.title ?: content.fallbackTitle)
+                MovieDetailsScreen(
+                    fallbackTitle = content.fallbackTitle,
+                    fallbackArtworkUrl = content.fallbackArtworkUrl,
+                    details = state.movieDetails,
+                    isLoading = state.isMovieLoading,
+                    hasError = state.hasMovieError,
+                    isResolvingPlayback = state.isResolvingPlayback,
+                    hasPlaybackError = state.hasPlaybackError,
+                    onPlay = onPlayMovie,
+                    isFavorite = content.channelId in state.favoriteIds,
+                    onToggleFavorite = onToggleMovieFavorite,
+                    onDownload = onDownloadMovie,
+                    onCancelDownload = { onCancelDownload(movieKey) },
+                    onDeleteDownload = { onDeleteDownload(movieKey) },
+                    downloadState = state.downloads[movieKey] ?: DownloadStateUi.Idle,
+                    onOpenPerson = onOpenPerson,
+                    onRetry = onRetryCatalog,
+                    onBack = onBack,
+                )
+            }
 
             is AppContent.Person -> PersonFilmographyScreen(
                 personName = content.name,
@@ -1122,6 +1138,14 @@ private fun CategoriesContent(
                             onClick = { onOpenCategory(category) },
                             modifier = Modifier.height(if (compactPortrait) 132.dp else 150.dp),
                         ) {
+                            // Glyph and tint come from the category's own wording. Every card used
+                            // to draw the same accent-tinted icon over one of six shared atlas
+                            // tiles, so a grid of twenty categories told the user nothing.
+                            val badge =
+                                categoryBadgeFor(
+                                    label = if (category.id == null) "" else category.name,
+                                    contentType = contentType,
+                                )
                             Box(modifier = Modifier.fillMaxSize()) {
                                 CategoryArtwork(
                                     tile = category.categoryArtworkTile(contentType),
@@ -1152,16 +1176,23 @@ private fun CategoriesContent(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        Icon(
-                                            imageVector = category.categoryIcon(contentType),
-                                            contentDescription = null,
-                                            tint = BuroAccent,
-                                            modifier = Modifier.size(if (compactPortrait) 22.dp else 26.dp),
-                                        )
-                                        Spacer(Modifier.weight(1f))
-                                        category.providerBadge()?.let { badge ->
+                                        Box(
+                                            modifier =
+                                                Modifier
+                                                    .size(if (compactPortrait) 30.dp else 34.dp)
+                                                    .clip(CircleShape)
+                                                    .background(badge.tint.copy(alpha = 0.20f)),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
                                             Text(
-                                                text = badge.monogram,
+                                                text = badge.glyph,
+                                                fontSize = if (compactPortrait) 15.sp else 17.sp,
+                                            )
+                                        }
+                                        Spacer(Modifier.weight(1f))
+                                        category.providerBadge()?.let { provider ->
+                                            Text(
+                                                text = provider.monogram,
                                                 color = BuroTextPrimary,
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Black,
@@ -1200,7 +1231,7 @@ private fun CategoriesContent(
                                                 category.channelCount,
                                                 category.channelCount,
                                             ),
-                                        color = BuroAccent,
+                                        color = badge.tint,
                                         fontSize = 12.sp,
                                     )
                                 }
@@ -1245,22 +1276,6 @@ private fun CategoryUi.categoryArtworkTile(contentType: CatalogContentType?): Ca
         contentType == CatalogContentType.LIVE -> CategoryArtworkTile(0, 0)
         contentType == CatalogContentType.SERIES -> CategoryArtworkTile(2, 0)
         else -> CategoryArtworkTile(1, 0)
-    }
-}
-
-private fun CategoryUi.categoryIcon(contentType: CatalogContentType?): ImageVector {
-    val normalized = name.lowercase()
-    return when {
-        id == null -> Icons.Default.Folder
-        "ação" in normalized || "action" in normalized -> Icons.Default.RocketLaunch
-        "comédia" in normalized || "comedy" in normalized -> Icons.Default.TheaterComedy
-        "infantil" in normalized || "kids" in normalized || "family" in normalized -> Icons.Default.ChildCare
-        "sport" in normalized || "futebol" in normalized -> Icons.Default.SportsSoccer
-        "document" in normalized || "história" in normalized -> Icons.Default.HistoryEdu
-        "lançamento" in normalized || Regex("\b20(2[4-9]|3[0-9])\b").containsMatchIn(normalized) -> Icons.Default.NewReleases
-        "internacional" in normalized || "world" in normalized -> Icons.Default.Public
-        contentType == CatalogContentType.LIVE -> Icons.Default.LiveTv
-        else -> Icons.Default.Movie
     }
 }
 

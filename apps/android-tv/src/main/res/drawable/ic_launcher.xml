@@ -1,16 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Full-bleed launcher icon: the BURO Nocturne mark on the Nocturne canvas.
+
+    This is what `android:icon` in the manifest points at, so it carries its own background rather
+    than relying on an adaptive-icon layer. Being unmasked it can run the ring out to 0.89 of the
+    half-width, matching the proportions of `assets/brand/buro-mark-512.png`; the masked variant in
+    `ic_launcher_foreground.xml` draws the same mark tucked into the adaptive safe zone.
+
+    Both previously drew teal #31E6C7 and blue #4D7CFE, which left the palette when the product
+    moved to Nocturne.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#070B14"
+        android:fillColor="#08090A"
         android:pathData="M0,0h108v108h-108z" />
+    <!-- Aperture ring, stroked so the gradient runs around the band. -->
     <path
-        android:fillColor="#31E6C7"
-        android:pathData="M25,24h12v60h-12zM71,24h12v60h-12z" />
+        android:pathData="M54,12a42,42 0,1 1,-0.01 0z"
+        android:strokeWidth="12">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:endX="94"
+                android:endY="94"
+                android:startX="14"
+                android:startY="14"
+                android:type="linear">
+                <item
+                    android:color="#F0C877"
+                    android:offset="0" />
+                <item
+                    android:color="#D6A956"
+                    android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Ivory "B", even-odd so the two counters stay hollow. Spans x 38..70, y 31..77. -->
     <path
-        android:fillColor="#4D7CFE"
-        android:pathData="M45,34l25,20 -25,20z" />
+        android:fillColor="#E7E2D8"
+        android:fillType="evenOdd"
+        android:pathData="M38,31h18.5c8,0 13.6,4.4 13.6,11.4c0,4.7 -2.6,8.4 -6.9,10.1c5.6,1.4 9,5.6 9,11.3c0,7.8 -6.1,12.7 -15.3,12.7h-18.9zM47.2,38.7v11.1h8.4c3.9,0 6.3,-2.2 6.3,-5.6c0,-3.4 -2.4,-5.5 -6.3,-5.5zM47.2,57v12h9.2c4.3,0 6.9,-2.3 6.9,-6c0,-3.7 -2.6,-6 -6.9,-6z" />
 </vector>

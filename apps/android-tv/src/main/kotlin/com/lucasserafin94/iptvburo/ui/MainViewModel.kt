@@ -8,6 +8,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.core.logging.AppLogger
+import com.lucasserafin94.iptvburo.data.download.AndroidDownloadManager
+import com.lucasserafin94.iptvburo.data.download.DownloadResult
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
 import com.lucasserafin94.iptvburo.data.licensing.AndroidDeviceIdentityProvider
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
@@ -54,6 +56,7 @@ class MainViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
     private val onboardingPreferences: OnboardingPreferences,
     private val userLibraryRepository: UserLibraryRepository,
+    private val downloadManager: AndroidDownloadManager,
     private val logger: AppLogger,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
@@ -260,6 +263,137 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             userLibraryRepository.toggleFavorite(profileId, channel.id, currentlyFavorite)
         }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Downloads
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Starts an offline copy of the movie whose details are open.
+     *
+     * The signed URL is resolved here and handed straight to the downloader; it is never placed in
+     * [AppUiState], so it cannot leak into a state dump or a crash report.
+     */
+    fun downloadSelectedMovie() {
+        val content = mutableState.value.content as? AppContent.MovieDetails ?: return
+        val title = mutableState.value.movieDetails?.title ?: content.fallbackTitle
+        startDownload(movieDownloadKey(title), title) {
+            catalogRepository.getChannel(content.channelId)
+        }
+    }
+
+    /** Starts an offline copy of one episode of the series whose details are open. */
+    fun downloadEpisode(episode: EpisodeUi) {
+        val content = mutableState.value.content as? AppContent.SeriesDetails ?: return
+        val resolved = seriesEpisodes[episode.id] ?: return
+        val seriesTitle = mutableState.value.seriesDetails?.title ?: content.fallbackTitle
+        val title = "$seriesTitle ${episode.seasonLabel()}"
+        startDownload(episodeDownloadKey(seriesTitle, episode), title) {
+            catalogRepository.resolveEpisode(resolved)
+        }
+    }
+
+    fun cancelDownload(contentKey: String) {
+        downloadManager.cancel(contentKey)
+    }
+
+    /**
+     * Marks keys already present on disk as completed.
+     *
+     * Called when a details screen opens, so a copy stored in a previous session shows as stored
+     * rather than as never-downloaded. Keys with work in flight are left alone.
+     *
+     * External storage can be absent or unmounted, in which case there are simply no stored copies
+     * to report — that must never stop a details screen from opening, so the failure is swallowed.
+     */
+    private fun hydrateDownloadStates(contentKeys: List<String>) {
+        if (contentKeys.isEmpty()) return
+        viewModelScope.launch {
+            val stored =
+                withContext(ioDispatcher) {
+                    runCatching { contentKeys.filter(downloadManager::isDownloaded) }
+                        .getOrDefault(emptyList())
+                }
+            if (stored.isEmpty()) return@launch
+            mutableState.update { state ->
+                state.copy(
+                    downloads =
+                        state.downloads +
+                            stored
+                                .filterNot { key -> state.downloads[key] is DownloadStateUi.Running }
+                                .associateWith { DownloadStateUi.Completed },
+                )
+            }
+        }
+    }
+
+    fun deleteDownload(contentKey: String) {
+        viewModelScope.launch {
+            withContext(ioDispatcher) { downloadManager.delete(contentKey) }
+            mutableState.update {
+                it.copy(
+                    downloads = it.downloads - contentKey,
+                    downloadTitles = it.downloadTitles - contentKey,
+                )
+            }
+        }
+    }
+
+    /**
+     * Shared download pipeline for both movies and episodes.
+     *
+     * [resolve] is what produces the short-lived signed URL; it runs inside the coroutine so no
+     * caller ever holds the URL, and it is only invoked once the target is known to be downloadable.
+     */
+    private fun startDownload(
+        contentKey: String,
+        title: String,
+        resolve: suspend () -> Channel?,
+    ) {
+        if (mutableState.value.downloads[contentKey] is DownloadStateUi.Running) return
+        mutableState.update {
+            it.copy(
+                downloads = it.downloads + (contentKey to DownloadStateUi.Running(0f)),
+                downloadTitles = it.downloadTitles + (contentKey to title),
+            )
+        }
+        viewModelScope.launch {
+            val resolved = runCatching { resolve() }.getOrNull()
+            // A live stream never ends, so downloading one would grow until storage fills. This is
+            // a technical limit rather than a policy one — see ADR-008.
+            if (
+                resolved == null ||
+                resolved.streamUri.isBlank() ||
+                !downloadManager.isDownloadable(resolved.contentType)
+            ) {
+                logger.warn(TAG, "The selected item could not be prepared for offline storage")
+                markDownload(contentKey, DownloadStateUi.Failed)
+                return@launch
+            }
+
+            val result =
+                downloadManager.download(
+                    contentKey = contentKey,
+                    url = resolved.streamUri,
+                    containerExtension = resolved.containerExtension,
+                ) { read, total ->
+                    val fraction = if (total != null && total > 0L) read.toFloat() / total else -1f
+                    markDownload(contentKey, DownloadStateUi.Running(fraction))
+                }
+            markDownload(
+                contentKey,
+                when (result) {
+                    is DownloadResult.Completed -> DownloadStateUi.Completed
+                    DownloadResult.Cancelled -> DownloadStateUi.Idle
+                    is DownloadResult.Failed -> DownloadStateUi.Failed
+                },
+            )
+        }
+    }
+
+    private fun markDownload(contentKey: String, state: DownloadStateUi) {
+        mutableState.update { it.copy(downloads = it.downloads + (contentKey to state)) }
     }
 
     private fun resolveCatalogItemForPlayback(
@@ -720,6 +854,7 @@ class MainViewModel @Inject constructor(
                             hasMovieError = false,
                         )
                     }
+                    hydrateDownloadStates(listOf(movieDownloadKey(details.title)))
                     details.cast
                         ?.split(Regex("[,;]|\\s/\\s"))
                         ?.map(String::trim)
@@ -769,13 +904,19 @@ class MainViewModel @Inject constructor(
                 }.onSuccess { details ->
                     if (mutableState.value.content != content) return@onSuccess
                     seriesEpisodes = details.episodes.associateBy(Episode::id)
+                    val seriesUi = details.toUi()
                     mutableState.update {
                         it.copy(
-                            seriesDetails = details.toUi(),
+                            seriesDetails = seriesUi,
                             isSeriesLoading = false,
                             hasSeriesError = false,
                         )
                     }
+                    hydrateDownloadStates(
+                        seriesUi.episodes.map { episode ->
+                            episodeDownloadKey(seriesUi.title, episode)
+                        },
+                    )
                 }.onFailure { error ->
                     if (error is CancellationException) return@onFailure
                     logger.error(TAG, "Could not load series details", error)

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +54,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.ui.DownloadStateUi
 import com.lucasserafin94.iptvburo.ui.EpisodeUi
 import com.lucasserafin94.iptvburo.ui.SeriesDetailsUi
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
@@ -77,7 +79,9 @@ internal fun SeriesDetailsScreen(
     hasPlaybackError: Boolean,
     onOpenEpisode: (EpisodeUi) -> Unit,
     onDownloadEpisode: (EpisodeUi) -> Unit,
-    canDownloadOffline: Boolean,
+    onCancelEpisodeDownload: (EpisodeUi) -> Unit,
+    onDeleteEpisodeDownload: (EpisodeUi) -> Unit,
+    downloadStateOf: (EpisodeUi) -> DownloadStateUi,
     onOpenPerson: (String) -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
@@ -368,7 +372,9 @@ internal fun SeriesDetailsScreen(
                                                 episode = episode,
                                                 onClick = { onOpenEpisode(episode) },
                                                 onDownload = { onDownloadEpisode(episode) },
-                                                canDownloadOffline = canDownloadOffline,
+                                                onCancelDownload = { onCancelEpisodeDownload(episode) },
+                                                onDeleteDownload = { onDeleteEpisodeDownload(episode) },
+                                                downloadState = downloadStateOf(episode),
                                                 enabled = !isResolvingPlayback,
                                                 modifier = Modifier.weight(1f),
                                             )
@@ -391,7 +397,9 @@ private fun EpisodeCard(
     episode: EpisodeUi,
     onClick: () -> Unit,
     onDownload: () -> Unit,
-    canDownloadOffline: Boolean,
+    onCancelDownload: () -> Unit,
+    onDeleteDownload: () -> Unit,
+    downloadState: DownloadStateUi,
     enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -452,9 +460,18 @@ private fun EpisodeCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (canDownloadOffline) {
+            // Unrestricted for VOD by owner decision, recorded in ADR-008. An episode is never a
+            // live target, so the live refusal in the download manager cannot fire here.
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 FocusSurface(
-                    onClick = onDownload,
+                    onClick =
+                        when (downloadState) {
+                            is DownloadStateUi.Running -> onCancelDownload
+                            DownloadStateUi.Completed -> onDeleteDownload
+                            DownloadStateUi.Idle,
+                            DownloadStateUi.Failed,
+                            -> onDownload
+                        },
                     enabled = enabled,
                     modifier = Modifier.size(44.dp),
                     backgroundColor = BuroCanvas.copy(alpha = 0.55f),
@@ -462,11 +479,33 @@ private fun EpisodeCard(
                 ) { focused ->
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = "Baixar episódio",
-                            tint = if (focused) BuroCanvas else BuroAccent,
+                            imageVector =
+                                when (downloadState) {
+                                    DownloadStateUi.Completed -> Icons.Default.DownloadDone
+                                    else -> Icons.Default.Download
+                                },
+                            contentDescription =
+                                when (downloadState) {
+                                    DownloadStateUi.Idle -> stringResource(R.string.download_episode)
+                                    else -> downloadState.label()
+                                },
+                            tint =
+                                when {
+                                    focused -> BuroCanvas
+                                    downloadState == DownloadStateUi.Failed -> BuroDanger
+                                    else -> BuroAccent
+                                },
                         )
                     }
+                }
+                if (downloadState !is DownloadStateUi.Idle) {
+                    Text(
+                        text = downloadState.label(),
+                        color = if (downloadState == DownloadStateUi.Failed) BuroDanger else BuroAccent,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }

@@ -1,13 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    BURO Nocturne mark: a gold aperture ring around an ivory "B".
+
+    Sized for the adaptive-icon safe zone. The ring is r=28.5 with a stroke of 8, so its outer edge
+    lands at 32.5 from centre, inside the 33 radius a circular or squircle launcher mask keeps. The
+    previous mark used teal #31E6C7 and blue #4D7CFE, which left the palette when the product moved
+    to Nocturne.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="72dp"
     android:height="72dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!--
+        Aperture ring. Stroked rather than filled as an even-odd donut so the gradient runs around
+        the band instead of across the hollow centre.
+    -->
     <path
-        android:fillColor="#31E6C7"
-        android:pathData="M25,24h12v60h-12zM71,24h12v60h-12z" />
+        android:pathData="M54,25.5a28.5,28.5 0,1 1,-0.01 0z"
+        android:strokeWidth="8">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:endX="82"
+                android:endY="82"
+                android:startX="26"
+                android:startY="26"
+                android:type="linear">
+                <item
+                    android:color="#F0C877"
+                    android:offset="0" />
+                <item
+                    android:color="#D6A956"
+                    android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!--
+        Ivory "B": stem plus two bowls as one even-odd path, so the counters stay hollow and the
+        canvas reads through them. Spans x 43..66, y 38..70 — clear of the ring's inner edge.
+    -->
     <path
-        android:fillColor="#4D7CFE"
-        android:pathData="M45,34l25,20 -25,20z" />
+        android:fillColor="#E7E2D8"
+        android:fillType="evenOdd"
+        android:pathData="M43,38h13.2c5.6,0 9.5,3.1 9.5,7.9c0,3.3 -1.8,5.9 -4.8,7.1c3.9,1 6.3,3.9 6.3,7.9c0,5.4 -4.3,8.9 -10.7,8.9h-13.5zM49.5,43.4v7.7h5.9c2.7,0 4.4,-1.5 4.4,-3.9c0,-2.4 -1.7,-3.8 -4.4,-3.8zM49.5,56.2v8.3h6.5c3,0 4.8,-1.6 4.8,-4.2c0,-2.5 -1.8,-4.1 -4.8,-4.1z" />
 </vector>

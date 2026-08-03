@@ -91,6 +91,14 @@
     <string name="player_retry">Try again</string>
     <string name="player_back">Back to channels</string>
     <string name="player_seek_unavailable">This source does not allow seeking.</string>
+    <string name="download_action">Download</string>
+    <string name="download_running">Downloading… %1$d%%</string>
+    <string name="download_running_unknown">Downloading…</string>
+    <string name="download_completed">Saved offline</string>
+    <string name="download_failed">Download failed</string>
+    <string name="download_cancel">Cancel download</string>
+    <string name="download_delete">Remove download</string>
+    <string name="download_episode">Download episode</string>
     <string name="common_back">Back</string>
     <string name="common_close">Close</string>
     <string name="common_cancel">Cancel</string>

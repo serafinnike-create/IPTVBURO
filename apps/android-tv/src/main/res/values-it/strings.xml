@@ -45,6 +45,14 @@
     <string name="player_retry">Riprova</string>
     <string name="player_back">Torna ai canali</string>
     <string name="player_seek_unavailable">Questa fonte non consente di avanzare o tornare indietro.</string>
+    <string name="download_action">Scarica</string>
+    <string name="download_running">Download… %1$d%%</string>
+    <string name="download_running_unknown">Download in corso…</string>
+    <string name="download_completed">Salvato offline</string>
+    <string name="download_failed">Download non riuscito</string>
+    <string name="download_cancel">Annulla download</string>
+    <string name="download_delete">Rimuovi download</string>
+    <string name="download_episode">Scarica episodio</string>
     <string name="common_back">Indietro</string>
     <string name="common_close">Chiudi</string>
     <string name="common_cancel">Annulla</string>

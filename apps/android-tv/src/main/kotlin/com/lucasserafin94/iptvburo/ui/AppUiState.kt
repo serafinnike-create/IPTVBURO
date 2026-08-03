@@ -1,6 +1,8 @@
 package com.lucasserafin94.iptvburo.ui
 
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
+import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
+import com.lucasserafin94.iptvburo.domain.model.ContentKind
 import com.lucasserafin94.iptvburo.domain.model.SourceType
 
 data class ProfileUi(
@@ -94,6 +96,62 @@ enum class SourceImportMethod {
     M3U_FILE,
     XTREAM,
 }
+
+/** UI-facing state of an offline copy. Mirrors the desktop `DownloadState`. */
+sealed interface DownloadStateUi {
+    data object Idle : DownloadStateUi
+
+    /** [fraction] is negative when the server did not report a content length. */
+    data class Running(val fraction: Float) : DownloadStateUi
+
+    data object Completed : DownloadStateUi
+
+    data object Failed : DownloadStateUi
+}
+
+/** A download as the UI needs it: identity, a human name, and current state. */
+data class DownloadEntryUi(
+    val contentKey: String,
+    val title: String,
+    val state: DownloadStateUi,
+)
+
+/**
+ * Key an offline copy is filed under.
+ *
+ * Derived from what the content *is* rather than from the provider's numbering, so a stored copy is
+ * still recognised after the user replaces their playlist. The view model and the screens both
+ * derive it here so the button the user presses and the row the download lands in cannot drift.
+ */
+internal fun movieDownloadKey(title: String): String =
+    ContentIdentity.of(
+        kind = ContentKind.MOVIE,
+        title = title,
+        year = ContentIdentity.yearFromTitle(title),
+    ).key
+
+/**
+ * Key for one episode, expressed relative to its series.
+ *
+ * Season and episode numbers are stable across providers in a way episode ids are not.
+ */
+internal fun episodeDownloadKey(
+    seriesTitle: String,
+    episode: EpisodeUi,
+): String =
+    buildString {
+        append(
+            ContentIdentity.of(
+                kind = ContentKind.SERIES,
+                title = seriesTitle,
+                year = ContentIdentity.yearFromTitle(seriesTitle),
+            ).key,
+        )
+        append("|s")
+        append(episode.seasonNumber)
+        append("e")
+        append(episode.episodeNumber ?: 0)
+    }
 
 enum class XtreamImportStageUi {
     AUTHENTICATING,
@@ -211,4 +269,20 @@ data class AppUiState(
     val isSeriesLoading: Boolean = false,
     val hasSeriesError: Boolean = false,
     val personMovies: List<ChannelUi> = emptyList(),
-)
+    val downloads: Map<String, DownloadStateUi> = emptyMap(),
+    val downloadTitles: Map<String, String> = emptyMap(),
+) {
+    /** Ordered view for a download list: running first, so active work is never scrolled away. */
+    val downloadEntries: List<DownloadEntryUi>
+        get() =
+            downloads
+                .map { (key, state) -> DownloadEntryUi(key, downloadTitles[key] ?: key, state) }
+                .sortedBy { entry ->
+                    when (entry.state) {
+                        is DownloadStateUi.Running -> 0
+                        DownloadStateUi.Failed -> 1
+                        DownloadStateUi.Idle -> 2
+                        DownloadStateUi.Completed -> 3
+                    }
+                }
+}

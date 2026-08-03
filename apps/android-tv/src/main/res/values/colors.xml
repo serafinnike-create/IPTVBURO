@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    BURO Nocturne palette for the platform surfaces Compose cannot reach: the window background,
+    the splash screen and the system bars. Everything drawn inside the app reads `BuroColors` in
+    the design system instead, so only the tokens `styles.xml` actually binds live here.
+
+    The names used to be `aurora_*` and held the teal/blue/navy scheme the product left behind, so
+    the splash and system bars painted colours that appeared nowhere else in the app.
+-->
 <resources>
-    <color name="aurora_ink">#070B14</color>
-    <color name="aurora_surface">#101827</color>
-    <color name="aurora_teal">#31E6C7</color>
-    <color name="aurora_blue">#4D7CFE</color>
-    <color name="aurora_white">#F6F8FC</color>
+    <color name="buro_canvas">#08090A</color>
+    <color name="buro_gold">#D6A956</color>
 </resources>

@@ -1,6 +1,8 @@
 package com.lucasserafin94.iptvburo.ui
 
+import android.content.Context
 import com.lucasserafin94.iptvburo.core.logging.AppLogger
+import com.lucasserafin94.iptvburo.data.download.AndroidDownloadManager
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
 import com.lucasserafin94.iptvburo.data.local.dao.FavoriteDao
 import com.lucasserafin94.iptvburo.data.local.dao.ProfileDao
@@ -37,6 +39,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -393,14 +396,17 @@ class MainViewModelNavigationTest {
     ): MainViewModel {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
+        val contextProvider =
+            Provider<Context> {
+                error("Android context is not used by these assertions")
+            }
         return MainViewModel(
-            contextProvider =
-                Provider {
-                    error("Android context is not used by these assertions")
-                },
+            contextProvider = contextProvider,
             catalogRepository = repository,
             onboardingPreferences = FakeOnboardingPreferences,
             userLibraryRepository = UserLibraryRepository(FakeProfileDao(), FakeFavoriteDao(), dispatcher),
+            // The manager resolves storage lazily, so these navigation assertions never touch it.
+            downloadManager = AndroidDownloadManager(contextProvider, OkHttpClient(), dispatcher),
             logger = logger,
             ioDispatcher = dispatcher,
         )

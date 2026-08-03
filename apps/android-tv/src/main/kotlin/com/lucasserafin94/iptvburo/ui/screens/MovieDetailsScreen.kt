@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.runtime.Composable
@@ -37,6 +38,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +49,8 @@ import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
+import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.ui.DownloadStateUi
 import com.lucasserafin94.iptvburo.ui.MovieDetailsUi
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
@@ -72,7 +76,9 @@ internal fun MovieDetailsScreen(
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     onDownload: () -> Unit,
-    canDownloadOffline: Boolean,
+    onCancelDownload: () -> Unit,
+    onDeleteDownload: () -> Unit,
+    downloadState: DownloadStateUi,
     onOpenPerson: (String) -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
@@ -225,15 +231,34 @@ internal fun MovieDetailsScreen(
                         )
                         Text(if (isFavorite) "Na Minha BURO" else "Minha BURO")
                     }
-                    if (canDownloadOffline) {
-                        BuroButton(
-                            onClick = onDownload,
-                            enabled = !isLoading && !isResolvingPlayback,
-                            style = BuroButtonStyle.Secondary,
-                        ) {
-                            Icon(Icons.Default.Download, contentDescription = null)
-                            Text("Baixar")
-                        }
+                    // Unrestricted for VOD by owner decision, recorded in ADR-008. Live is still
+                    // refused, but a movie details screen can never carry a live target.
+                    BuroButton(
+                        onClick =
+                            when (downloadState) {
+                                is DownloadStateUi.Running -> onCancelDownload
+                                DownloadStateUi.Completed -> onDeleteDownload
+                                DownloadStateUi.Idle,
+                                DownloadStateUi.Failed,
+                                -> onDownload
+                            },
+                        enabled = !isLoading && !isResolvingPlayback,
+                        style = BuroButtonStyle.Secondary,
+                    ) {
+                        Icon(
+                            imageVector =
+                                when (downloadState) {
+                                    DownloadStateUi.Completed -> Icons.Default.DownloadDone
+                                    else -> Icons.Default.Download
+                                },
+                            contentDescription = null,
+                            tint =
+                                when (downloadState) {
+                                    DownloadStateUi.Failed -> BuroDanger
+                                    else -> BuroTextPrimary
+                                },
+                        )
+                        Text(downloadState.label())
                     }
                     details?.youtubeTrailerId?.let { trailerId ->
                         BuroButton(
@@ -314,6 +339,27 @@ internal fun MovieDetailsScreen(
         }
     }
 }
+
+/**
+ * Human label for an offline copy.
+ *
+ * A provider that omits `Content-Length` leaves the fraction negative; that reads as an unbounded
+ * "downloading" rather than as a wrong percentage.
+ */
+@Composable
+internal fun DownloadStateUi.label(): String =
+    when (this) {
+        DownloadStateUi.Idle -> stringResource(R.string.download_action)
+        is DownloadStateUi.Running ->
+            if (fraction < 0f) {
+                stringResource(R.string.download_running_unknown)
+            } else {
+                stringResource(R.string.download_running, (fraction * 100f).toInt())
+            }
+
+        DownloadStateUi.Completed -> stringResource(R.string.download_completed)
+        DownloadStateUi.Failed -> stringResource(R.string.download_failed)
+    }
 
 @Composable
 private fun DetailFact(
