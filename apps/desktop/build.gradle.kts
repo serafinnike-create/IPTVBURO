@@ -120,6 +120,12 @@ compose.desktop {
                 menuGroup = "IPTV BURO"
                 shortcut = true
                 perUserInstall = true
+                // Without this the installer, the shortcut and the taskbar all fall back to the
+                // generic Java icon, which is the single most obvious sign of an unfinished app.
+                iconFile.set(project.file("src/main/resources/brand/buro.ico"))
+                // Stable across versions so Windows upgrades the existing install instead of
+                // leaving two entries in Apps & Features.
+                upgradeUuid = "5A0F2D5E-6C6B-4B2E-9E1A-2F7C1B9D4A31"
             }
         }
     }

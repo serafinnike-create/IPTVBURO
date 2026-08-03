@@ -63,6 +63,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
 import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
@@ -201,7 +202,7 @@ fun XtreamDailyHome(
                             onPlay = { item ->
                                 onOpenExternal(
                                     PendingXtreamExternal(
-                                        displayName = item.name.editorialDisplayTitle(),
+                                        displayName = item.name.editorialTitle(),
                                         target =
                                             XtreamPlaybackTarget.CatalogItem(
                                                 providerId = item.providerId,
@@ -282,7 +283,7 @@ private fun DailyHero(
                     "${date.dayOfMonth.pad2()}/${date.monthValue.pad2()}",
             )
             Text(
-                text = item?.name?.editorialDisplayTitle() ?: text.heroFallbackTitle,
+                text = item?.name?.editorialTitle() ?: text.heroFallbackTitle,
                 color = BuroColors.Text,
                 style =
                     if (metrics.wide) {
@@ -452,7 +453,7 @@ private fun DailyCard(
     val live = item.contentType == XtreamContentType.LIVE
     val width = if (live) metrics.landscapeWidth else metrics.posterWidth
     val artHeight = if (live) width * 9f / 16f else width * 3f / 2f
-    val title = item.name.editorialDisplayTitle()
+    val title = item.name.editorialTitle()
 
     BuroInteractiveSurface(
         onClick = { onClick(item) },
@@ -539,7 +540,7 @@ private fun ContinueWatchingRow(
                 items = entries,
                 key = { "${it.progress.identity.contentType}:${it.progress.identity.contentId}" },
             ) { entry ->
-                val title = entry.item.name.editorialDisplayTitle()
+                val title = entry.item.name.editorialTitle()
                 val fraction = entry.progress.progressPercent.toFloat().coerceIn(0f, 1f)
                 BuroInteractiveSurface(
                     onClick = { onClick(entry) },
@@ -848,17 +849,6 @@ private fun HomeError(
 // ---------------------------------------------------------------------------------------------
 // Formatting
 // ---------------------------------------------------------------------------------------------
-
-/**
- * Strips the provider's bracketed quality/language tags (`[4K]`, `[DUB]`, …) from a title.
- *
- * Only short bracket groups are removed so a legitimate title such as `Movie [Director's Cut]`
- * survives intact.
- */
-private fun String.editorialDisplayTitle(): String =
-    replace(Regex("\\s*\\[[^]]{1,12}]\\s*"), " ")
-        .replace(Regex("\\s+"), " ")
-        .trim()
 
 private fun Int.pad2(): String = toString().padStart(2, '0')
 

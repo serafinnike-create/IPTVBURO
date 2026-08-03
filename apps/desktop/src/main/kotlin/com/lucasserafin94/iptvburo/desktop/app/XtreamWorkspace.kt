@@ -92,6 +92,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
 import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
@@ -659,12 +660,13 @@ private fun XtreamCatalogCard(
     onClick: () -> Unit,
 ) {
     val live = item.contentType == XtreamContentType.LIVE
+    val title = item.name.editorialTitle()
     BuroInteractiveSurface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = BuroRadius.Medium,
         compact = !live,
-        contentDescription = item.name,
+        contentDescription = title,
         ringColor = if (selected) BuroColors.Primary else BuroColors.Focus,
     ) { state ->
         Column {
@@ -689,7 +691,7 @@ private fun XtreamCatalogCard(
                     contentScale = if (live) ContentScale.Fit else ContentScale.Crop,
                 ) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        XtreamMonogram(item.name, if (live) 52 else 62)
+                        XtreamMonogram(title, if (live) 52 else 62)
                     }
                 }
                 item.rating?.takeIf { it > 0.0 }?.let { rating ->
@@ -721,7 +723,7 @@ private fun XtreamCatalogCard(
             }
             Spacer(Modifier.height(BuroSpacing.Xs))
             Text(
-                text = item.name,
+                text = title,
                 color = if (selected) BuroColors.Primary else BuroColors.Text,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 2,

@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.desktop
 
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -34,6 +35,9 @@ fun main() {
             },
             state = windowState,
             title = "IPTV BURO",
+            // The .ico in the installer covers the shortcut and Explorer; this covers the running
+            // window, which is what the taskbar and alt-tab show while the app is open.
+            icon = painterResource("brand/buro-mark-512.png"),
         ) {
             val appState =
                 remember {
