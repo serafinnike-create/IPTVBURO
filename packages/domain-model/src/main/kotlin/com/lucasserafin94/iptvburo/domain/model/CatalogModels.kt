@@ -19,6 +19,14 @@ enum class SourceType {
     LOCAL_M3U,
     REMOTE_M3U,
     XTREAM,
+
+    /**
+     * Stalker/Ministra portal, sold as "MAC + portal".
+     *
+     * Authenticates the device rather than a person: the MAC address is the credential, so there
+     * is no username or password to store for most subscriptions.
+     */
+    STALKER,
 }
 
 enum class CatalogContentType {

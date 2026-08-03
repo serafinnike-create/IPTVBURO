@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.lucasserafin94.iptvburo.stalker.StalkerCredentials
 import com.lucasserafin94.iptvburo.xtream.XtreamCredentials
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayInputStream
@@ -34,6 +35,82 @@ class AndroidKeystoreSourceConnectionStore @Inject constructor(
         requireValidSourceId(sourceId)
         val plaintext = encode(credentials)
         try {
+            persist(sourceId, plaintext)
+        } finally {
+            plaintext.fill(0)
+        }
+    }
+
+    @Synchronized
+    override fun readXtream(sourceId: String): XtreamCredentials? {
+        requireValidSourceId(sourceId)
+        val plaintext = decrypt(sourceId) ?: return null
+        return try {
+            decode(plaintext)
+        } finally {
+            plaintext.fill(0)
+        }
+    }
+
+    @Synchronized
+    override fun saveStalker(
+        sourceId: String,
+        credentials: StalkerCredentials,
+    ) {
+        requireValidSourceId(sourceId)
+        val plaintext = encodeStalker(credentials)
+        try {
+            persist(sourceId, plaintext)
+        } finally {
+            plaintext.fill(0)
+        }
+    }
+
+    @Synchronized
+    override fun readStalker(sourceId: String): StalkerCredentials? {
+        requireValidSourceId(sourceId)
+        val plaintext = decrypt(sourceId) ?: return null
+        return try {
+            DataInputStream(ByteArrayInputStream(plaintext)).use { data ->
+                val version = data.readInt()
+                if (version != STALKER_PAYLOAD_VERSION) {
+                    throw SourceConnectionStoreException(
+                        "The encrypted source payload has an unsupported version.",
+                    )
+                }
+                StalkerCredentials(
+                    portalUrl = data.readUtf8(),
+                    macAddress = data.readUtf8(),
+                    username = data.readUtf8().takeIf(String::isNotEmpty),
+                    password = data.readUtf8().takeIf(String::isNotEmpty),
+                )
+            }
+        } finally {
+            plaintext.fill(0)
+        }
+    }
+
+    @Synchronized
+    override fun remove(sourceId: String) {
+        requireValidSourceId(sourceId)
+        if (!preferences.edit().remove(sourceId).commit()) {
+            throw SourceConnectionStoreException(
+                "The encrypted source connection could not be removed.",
+            )
+        }
+    }
+
+    /**
+     * Encrypts [plaintext] under the Keystore key and stores it against [sourceId].
+     *
+     * Shared by both source kinds so Stalker credentials get exactly the same protection as Xtream
+     * ones — same AES-GCM key, same `sourceId` bound in as AAD.
+     */
+    private fun persist(
+        sourceId: String,
+        plaintext: ByteArray,
+    ) {
+        try {
             val cipher = Cipher.getInstance(CIPHER_TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
             cipher.updateAAD(sourceId.toByteArray(StandardCharsets.UTF_8))
@@ -58,14 +135,11 @@ class AndroidKeystoreSourceConnectionStore @Inject constructor(
                 "The encrypted source connection could not be saved.",
                 error,
             )
-        } finally {
-            plaintext.fill(0)
         }
     }
 
-    @Synchronized
-    override fun readXtream(sourceId: String): XtreamCredentials? {
-        requireValidSourceId(sourceId)
+    /** Returns the decrypted payload for [sourceId], or null when nothing is stored. */
+    private fun decrypt(sourceId: String): ByteArray? {
         val stored = preferences.getString(sourceId, null) ?: return null
         return try {
             val parts = stored.split(SEPARATOR)
@@ -79,12 +153,7 @@ class AndroidKeystoreSourceConnectionStore @Inject constructor(
             val encrypted = Base64.decode(parts[2], Base64.NO_WRAP)
             cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
             cipher.updateAAD(sourceId.toByteArray(StandardCharsets.UTF_8))
-            val plaintext = cipher.doFinal(encrypted)
-            try {
-                decode(plaintext)
-            } finally {
-                plaintext.fill(0)
-            }
+            cipher.doFinal(encrypted)
         } catch (error: SourceConnectionStoreException) {
             throw error
         } catch (error: Exception) {
@@ -95,15 +164,17 @@ class AndroidKeystoreSourceConnectionStore @Inject constructor(
         }
     }
 
-    @Synchronized
-    override fun remove(sourceId: String) {
-        requireValidSourceId(sourceId)
-        if (!preferences.edit().remove(sourceId).commit()) {
-            throw SourceConnectionStoreException(
-                "The encrypted source connection could not be removed.",
-            )
+    private fun encodeStalker(credentials: StalkerCredentials): ByteArray =
+        ByteArrayOutputStream().use { output ->
+            DataOutputStream(output).use { data ->
+                data.writeInt(STALKER_PAYLOAD_VERSION)
+                data.writeUtf8(credentials.portalUrl)
+                data.writeUtf8(credentials.macAddress)
+                data.writeUtf8(credentials.username.orEmpty())
+                data.writeUtf8(credentials.password.orEmpty())
+            }
+            output.toByteArray()
         }
-    }
 
     private fun getOrCreateKey(): SecretKey {
         val keyStore =
@@ -197,6 +268,9 @@ class AndroidKeystoreSourceConnectionStore @Inject constructor(
         const val FORMAT_VERSION = "v1"
         const val SEPARATOR = "."
         const val PAYLOAD_VERSION = 1
+
+        /** Distinct from the Xtream payload so a mismatched read fails loudly instead of silently. */
+        const val STALKER_PAYLOAD_VERSION = 100
         const val KEY_SIZE_BITS = 256
         const val GCM_TAG_BITS = 128
         const val MAX_FIELD_BYTES = 16 * 1024

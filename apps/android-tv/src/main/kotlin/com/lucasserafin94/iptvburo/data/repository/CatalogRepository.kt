@@ -96,6 +96,17 @@ interface CatalogRepository {
         onProgress: (XtreamImportStage) -> Unit = {},
     ): XtreamImportResult
 
+    /**
+     * Imports a Stalker/Ministra portal.
+     *
+     * Default implementation throws so existing fakes in tests keep compiling; the Room repository
+     * overrides it.
+     */
+    suspend fun importStalker(
+        request: StalkerImportRequest,
+        onProgress: (XtreamImportStage) -> Unit = {},
+    ): XtreamImportResult = throw UnsupportedOperationException("Stalker import is unavailable.")
+
     suspend fun loadSeriesDetails(
         sourceId: String,
         providerSeriesId: String,
@@ -160,6 +171,24 @@ data class XtreamImportRequest(
         "XtreamImportRequest(" +
             "displayName=$displayName, serverUrl=<redacted>, " +
             "username=<redacted>, password=<redacted>)"
+}
+
+/**
+ * A Stalker portal import.
+ *
+ * [macAddress] is the credential, so it is redacted in [toString] exactly as passwords are
+ * elsewhere. [username] and [password] are optional because most portals gate on the MAC alone.
+ */
+data class StalkerImportRequest(
+    val displayName: String,
+    val portalUrl: String,
+    val macAddress: String,
+    val username: String? = null,
+    val password: String? = null,
+) {
+    override fun toString(): String =
+        "StalkerImportRequest(" +
+            "displayName=$displayName, portalUrl=<redacted>, macAddress=<redacted>)"
 }
 
 data class XtreamImportResult(

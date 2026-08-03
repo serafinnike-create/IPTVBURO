@@ -65,6 +65,7 @@ ksp {
 dependencies {
     implementation(project(":packages:domain-model"))
     implementation(project(":packages:playlist-parser"))
+    implementation(project(":packages:stalker-client"))
     implementation(project(":packages:xtream-client"))
 
     implementation(platform(libs.androidx.compose.bom))
