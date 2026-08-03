@@ -29,6 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -39,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import kotlinx.coroutines.delay
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun DesktopPlayerOverlay(
     request: DesktopPlaybackRequest,
@@ -82,6 +86,23 @@ fun DesktopPlayerOverlay(
         if (state.ended && state.durationMillis > 0.0) onEnded(state.durationMillis.toLong())
     }
 
+    // Controls reveal on pointer movement and hide again after a pause, the behaviour every video
+    // player uses. Only meaningful in full screen; windowed mode keeps them pinned.
+    var controlsVisible by remember { mutableStateOf(true) }
+    var wakeCounter by remember { mutableStateOf(0) }
+    LaunchedEffect(wakeCounter, isFullScreen, state.playing) {
+        if (!isFullScreen) {
+            controlsVisible = true
+            return@LaunchedEffect
+        }
+        controlsVisible = true
+        // Kept visible while paused: a paused player with hidden controls looks frozen.
+        if (state.playing) {
+            delay(3_000)
+            controlsVisible = false
+        }
+    }
+
     val closePlayer = {
         if (state.durationMillis > 0.0) onCheckpoint(state.positionMillis.toLong(), state.durationMillis.toLong())
         onClose()
@@ -90,6 +111,7 @@ fun DesktopPlayerOverlay(
         Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .onPointerEvent(PointerEventType.Move) { wakeCounter++ }
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
@@ -110,19 +132,24 @@ fun DesktopPlayerOverlay(
             }
             .focusable(),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(
-                onClick = closePlayer,
-            ) { Text("Voltar") }
-            Spacer(Modifier.width(16.dp))
-            Text(request.title, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Text("${state.engineName} • HEVC/H.264", color = BuroColors.Primary)
-            Spacer(Modifier.width(12.dp))
-            OutlinedButton(onClick = onToggleFullScreen) {
-                Text(if (isFullScreen) "Sair da tela cheia" else "Tela cheia (F11)")
+        // Hidden in full screen. Maximising the window while keeping a 64 dp chrome bar above the
+        // video is not full screen: the picture stayed letterboxed and the feature looked broken.
+        // Escape and F11 still work, so the controls remain reachable without them being visible.
+        if (!isFullScreen) {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(
+                    onClick = closePlayer,
+                ) { Text("Voltar") }
+                Spacer(Modifier.width(16.dp))
+                Text(request.title, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("${state.engineName} • HEVC/H.264", color = BuroColors.Primary)
+                Spacer(Modifier.width(12.dp))
+                OutlinedButton(onClick = onToggleFullScreen) {
+                    Text("Tela cheia (F11)")
+                }
             }
         }
         Box(Modifier.fillMaxWidth().weight(1f)) {
@@ -153,6 +180,10 @@ fun DesktopPlayerOverlay(
                 }
             }
         }
+        // In full screen the transport bar is an overlay that hides itself, so the video keeps the
+        // whole surface. Outside full screen it stays pinned, which is the expected windowed
+        // behaviour and avoids controls that flicker while the user is aiming at them.
+        if (!isFullScreen || controlsVisible) {
         Column(Modifier.fillMaxWidth().background(Color(0xE6121418)).padding(horizontal = 24.dp, vertical = 14.dp)) {
             Slider(
                 value = if (state.durationMillis > 0.0) (state.positionMillis / state.durationMillis).toFloat().coerceIn(0f, 1f) else 0f,
@@ -193,6 +224,7 @@ fun DesktopPlayerOverlay(
                     modifier = Modifier.width(180.dp),
                 )
             }
+        }
         }
     }
 }
