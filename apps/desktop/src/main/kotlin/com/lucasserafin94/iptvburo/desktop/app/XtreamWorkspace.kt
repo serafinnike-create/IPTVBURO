@@ -84,6 +84,8 @@ import com.lucasserafin94.iptvburo.desktop.XtreamStatus
 import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.data.episodeContentKey
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
+import com.lucasserafin94.iptvburo.desktop.ui.CategoryBadge
+import com.lucasserafin94.iptvburo.desktop.ui.categoryBadgeFor
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
@@ -448,7 +450,7 @@ private fun XtreamCategoryRail(
         item(key = "category:all") {
             XtreamCategoryChip(
                 label = text.allCategories,
-                artworkResource = categoryArtworkResource("", contentType),
+                badge = categoryBadgeFor("", contentType),
                 selected = selectedCategoryId == null,
                 onClick = { onSelected(null) },
             )
@@ -456,7 +458,7 @@ private fun XtreamCategoryRail(
         items(categories, key = XtreamCategory::providerId) { category ->
             XtreamCategoryChip(
                 label = category.name,
-                artworkResource = categoryArtworkResource(category.name, contentType),
+                badge = categoryBadgeFor(category.name, contentType),
                 selected = category.providerId == selectedCategoryId,
                 onClick = { onSelected(category.providerId) },
             )
@@ -467,7 +469,7 @@ private fun XtreamCategoryRail(
 @Composable
 private fun XtreamCategoryChip(
     label: String,
-    artworkResource: String,
+    badge: CategoryBadge,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
@@ -492,12 +494,18 @@ private fun XtreamCategoryChip(
                     ).padding(start = 4.dp, end = 14.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(
-                painter = painterResource(artworkResource),
-                contentDescription = null,
-                modifier = Modifier.size(26.dp).clip(CircleShape),
-                contentScale = ContentScale.Crop,
-            )
+            // Glyph on a tinted disc, chosen from the category's own wording. Every category used
+            // to resolve to one of six shared images, so a rail of twenty chips showed the same
+            // picture twenty times and told the user nothing.
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(badge.tint.copy(alpha = 0.20f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = badge.glyph, style = MaterialTheme.typography.bodyMedium)
+            }
             Spacer(Modifier.width(BuroSpacing.Xs))
             Text(
                 text = label,
@@ -510,22 +518,6 @@ private fun XtreamCategoryChip(
     }
 }
 
-private fun categoryArtworkResource(
-    label: String,
-    contentType: XtreamContentType,
-): String {
-    val normalized = label.lowercase()
-    val name =
-        when {
-            "4k" in normalized || "uhd" in normalized || "hevc" in normalized -> "4k"
-            "sport" in normalized || "futebol" in normalized -> "sports"
-            "infantil" in normalized || "kids" in normalized || "family" in normalized -> "kids"
-            contentType == XtreamContentType.LIVE -> "live"
-            contentType == XtreamContentType.SERIES -> "series"
-            else -> "cinema"
-        }
-    return "brand/buro-category-$name.png"
-}
 
 // ---------------------------------------------------------------------------------------------
 // Grid

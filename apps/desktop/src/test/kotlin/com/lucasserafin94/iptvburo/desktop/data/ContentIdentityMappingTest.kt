@@ -88,4 +88,26 @@ class ContentIdentityMappingTest {
 
         assertEquals(withField.contentIdentity(), withTitleOnly.contentIdentity())
     }
+
+    @Test
+    fun `the catalogue index and the item agree on identity`() {
+        // These two must match exactly. add() resolves a missing year out of the title, so
+        // reading the stored column produced an identity with a year while the item — holding the
+        // provider's raw null — produced one without. Favouriting wrote the second and the filter
+        // searched for the first, so favourites appeared empty.
+        val catalog = CompactXtreamCatalog(XtreamContentType.MOVIE)
+        val item = item(providerId = "9", name = "Some Film (1998)", year = null)
+        catalog.add(item)
+
+        assertEquals(item.contentIdentity(), catalog.identityAt(0))
+    }
+
+    @Test
+    fun `index and item agree when the provider supplies the year`() {
+        val catalog = CompactXtreamCatalog(XtreamContentType.MOVIE)
+        val item = item(providerId = "10", name = "Другой Film", year = 2011)
+        catalog.add(item)
+
+        assertEquals(item.contentIdentity(), catalog.identityAt(0))
+    }
 }

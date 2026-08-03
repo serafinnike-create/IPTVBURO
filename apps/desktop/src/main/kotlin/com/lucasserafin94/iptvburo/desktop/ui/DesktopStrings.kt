@@ -99,6 +99,8 @@ data class DesktopStrings(
     val resetSettings: String,
     val resetConfirm: String,
     val resetWarning: String,
+    val settings: String,
+    val languageLabel: String,
 ) {
     companion object {
         fun of(language: DesktopLanguage): DesktopStrings =
@@ -197,6 +199,8 @@ data class DesktopStrings(
                 resetSettings = "Redefinir configuracoes",
                 resetConfirm = "Apagar tudo",
                 resetWarning = "Isso apaga perfis, favoritos e progresso. Os arquivos baixados sao mantidos.",
+                settings = "Configuracoes",
+                languageLabel = "IDIOMA",
             )
 
         private val En =
@@ -287,6 +291,8 @@ data class DesktopStrings(
                 resetSettings = "Reset settings",
                 resetConfirm = "Erase everything",
                 resetWarning = "This erases profiles, favourites and progress. Downloaded files are kept.",
+                settings = "Settings",
+                languageLabel = "LANGUAGE",
             )
 
         private val De =
@@ -378,6 +384,8 @@ data class DesktopStrings(
                 resetSettings = "Einstellungen zuruecksetzen",
                 resetConfirm = "Alles loeschen",
                 resetWarning = "Loescht Profile, Favoriten und Fortschritt. Heruntergeladene Dateien bleiben.",
+                settings = "Einstellungen",
+                languageLabel = "SPRACHE",
             )
 
         private val It =
@@ -469,6 +477,8 @@ data class DesktopStrings(
                 resetSettings = "Reimposta impostazioni",
                 resetConfirm = "Cancella tutto",
                 resetWarning = "Cancella profili, preferiti e avanzamento. I file scaricati restano.",
+                settings = "Impostazioni",
+                languageLabel = "LINGUA",
             )
     }
 }

@@ -31,6 +31,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -491,25 +493,14 @@ private fun SourceSidebar(
 @Composable
 private fun Brand() {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier =
-                Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(BuroColors.Primary, BuroColors.Accent),
-                        ),
-                    ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "B",
-                color = BuroColors.OnPrimary,
-                fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.titleLarge,
-            )
-        }
+        // The real mark rather than a letter in a rounded square. The same asset is the window and
+        // taskbar icon, so the app is recognisable by one shape everywhere it appears.
+        Image(
+            painter = painterResource("brand/buro-mark-512.png"),
+            contentDescription = null,
+            modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)),
+            contentScale = ContentScale.Fit,
+        )
         Spacer(Modifier.width(12.dp))
         Column {
             Text(
@@ -696,30 +687,121 @@ private fun TopBar(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            // Profile first, then a single settings entry. Four loose language buttons plus an
+            // update button plus two status pills made the header read as a debug toolbar; the
+            // language belongs inside settings, where a user looks for it once and never again.
             Spacer(Modifier.width(BuroSpacing.Md))
-            LanguagePicker(language = language, onSelect = onSelectLanguage)
-            Spacer(Modifier.width(BuroSpacing.Sm))
-            OutlinedButton(
-                onClick = onUpdate,
-                enabled = !updateBusy,
-                shape = BuroRadius.Small,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
-                contentPadding =
-                    if (showUpdateLabel) {
-                        PaddingValues(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs)
-                    } else {
-                        PaddingValues(BuroSpacing.Xs)
-                    },
-            ) {
+            if (showProfile) {
+                ProfileChip(
+                    name = activeProfile?.name ?: text.profile,
+                    avatar =
+                        activeProfile
+                            ?.let { PROFILE_AVATARS.getOrNull(it.avatarIndex) }
+                            ?: PROFILE_AVATARS.first(),
+                    onClick = onChangeProfile,
+                )
+                Spacer(Modifier.width(BuroSpacing.Sm))
+            }
+            SettingsMenu(
+                language = language,
+                onSelectLanguage = onSelectLanguage,
+                updateBusy = updateBusy,
+                onUpdate = onUpdate,
+                text = text,
+            )
+        }
+    }
+}
+
+/**
+ * Gear menu holding language and app settings.
+ *
+ * These were previously spread across the header as individual controls. Collapsing them behind one
+ * affordance leaves the header carrying only what changes often — the library summary and who is
+ * watching.
+ */
+@Composable
+private fun SettingsMenu(
+    language: DesktopLanguage,
+    onSelectLanguage: (DesktopLanguage) -> Unit,
+    updateBusy: Boolean,
+    onUpdate: () -> Unit,
+    text: DesktopStrings,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        BuroInteractiveRow(
+            onClick = { expanded = true },
+            selected = expanded,
+            shape = CircleShape,
+            contentDescription = text.settings,
+        ) {
+            Box(modifier = Modifier.size(38.dp), contentAlignment = Alignment.Center) {
                 Text(
-                    text = if (updateBusy) "…" else if (showUpdateLabel) text.checkUpdate else "↻",
-                    maxLines = 1,
+                    text = "⚙",
+                    color = BuroColors.TextMuted,
+                    style = MaterialTheme.typography.headlineSmall,
                 )
             }
-            if (showProfile) {
-                Spacer(Modifier.width(BuroSpacing.Sm))
-                ProfileChip(name = activeProfile?.name ?: text.profile, onClick = onChangeProfile)
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(BuroColors.SurfaceRaised),
+        ) {
+            Text(
+                text = text.languageLabel,
+                modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs),
+                color = BuroColors.TextSubtle,
+                style = MaterialTheme.typography.labelSmall,
+            )
+            DesktopLanguage.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = option.nativeName(),
+                            color =
+                                if (option == language) BuroColors.Primary else BuroColors.Text,
+                        )
+                    },
+                    trailingIcon = {
+                        if (option == language) {
+                            Text("✓", color = BuroColors.Primary)
+                        }
+                    },
+                    onClick = {
+                        onSelectLanguage(option)
+                        expanded = false
+                    },
+                )
             }
+            HorizontalDivider(color = BuroColors.BorderSoft)
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = if (updateBusy) "…" else text.checkUpdate,
+                        color = BuroColors.Text,
+                    )
+                },
+                enabled = !updateBusy,
+                onClick = {
+                    onUpdate()
+                    expanded = false
+                },
+            )
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = "v${DESKTOP_VERSION.substringBefore('-')}",
+                        color = BuroColors.TextSubtle,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                enabled = false,
+                onClick = {},
+            )
         }
     }
 }
@@ -760,6 +842,7 @@ private fun LanguagePicker(
 @Composable
 private fun ProfileChip(
     name: String,
+    avatar: String,
     onClick: () -> Unit,
 ) {
     BuroInteractiveRow(
@@ -780,11 +863,9 @@ private fun ProfileChip(
                         .background(BuroColors.Primary.copy(alpha = 0.22f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = name.firstOrNull()?.uppercase() ?: "B",
-                    color = BuroColors.Primary,
-                    style = MaterialTheme.typography.labelMedium,
-                )
+                // The avatar the user picked, not an initial. Choosing a face and then seeing a
+                // letter makes the choice feel ignored.
+                Text(text = avatar, style = MaterialTheme.typography.labelLarge)
             }
             Spacer(Modifier.width(8.dp))
             Text(

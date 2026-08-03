@@ -82,16 +82,16 @@ internal class CompactXtreamCatalog(
             (normalizedQuery.isEmpty() || names[index].contains(normalizedQuery, ignoreCase = true))
     }
 
-    /** Identity of the row, derived from the title and year the provider supplied. */
-    fun identityAt(index: Int): ContentIdentity {
-        require(index in 0 until size)
-        val name = names[index]
-        return ContentIdentity.of(
-            kind = contentType.toContentKind(),
-            title = name,
-            year = years[index].takeIf { hasYear[index] } ?: ContentIdentity.yearFromTitle(name),
-        )
-    }
+    /**
+     * Identity of the row.
+     *
+     * Deliberately built from [itemAt] rather than from the columns directly. `append` already
+     * resolves a missing year out of the title, so reading `years[index]` here produced an identity
+     * carrying a year while `XtreamCatalogItem.contentIdentity()` — which sees the provider's raw
+     * null — produced one without. Favouriting stored the second form and the favourites filter
+     * searched for the first, so a favourited film never appeared in Favourites.
+     */
+    fun identityAt(index: Int): ContentIdentity = itemAt(index).contentIdentity()
 
     fun itemAt(index: Int): XtreamCatalogItem {
         require(index in 0 until size)
