@@ -66,7 +66,7 @@ class DesktopDownloadManager(
                 .toList()
                 .associate { name ->
                     val key = name.substringBeforeLast('.')
-                    key to key.substringAfterLast(':').replace('-', ' ').trim()
+                    key to key.toReadableTitle()
                 }
         }
     }
@@ -179,3 +179,25 @@ enum class FailureReason {
     REJECTED,
     EMPTY,
 }
+
+/**
+ * Best-effort title from a sanitised content key, used when the real title is not in memory.
+ *
+ * A key looks like `movie_the_godfather_1972`: the kind prefix and the trailing year are structure,
+ * not part of the name, and the separators were `:` and `-` before the filesystem-safe rewrite.
+ * The stored title is preferred whenever the app still has it; this only has to be good enough for
+ * a copy downloaded in an earlier session.
+ */
+internal fun String.toReadableTitle(): String {
+    val withoutKind = KIND_PREFIX.replace(this, "")
+    val withoutYear = TRAILING_YEAR.replace(withoutKind, "")
+    val words =
+        withoutYear
+            .split('_', '-')
+            .filter(String::isNotBlank)
+            .joinToString(" ") { word -> word.replaceFirstChar(Char::uppercaseChar) }
+    return words.ifBlank { this }
+}
+
+private val KIND_PREFIX = Regex("^(movie|series|episode|live)_")
+private val TRAILING_YEAR = Regex("""_(18|19|20|21)\d{2}$""")

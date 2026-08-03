@@ -1,5 +1,6 @@
 package com.lucasserafin94.iptvburo.desktop.ui
 
+import com.lucasserafin94.iptvburo.desktop.download.toReadableTitle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -54,5 +55,19 @@ class EditorialTitleTest {
     @Test
     fun `collapses whitespace left behind`() {
         assertEquals("Some Movie", "  Some   [HD]   Movie  ".editorialTitle())
+    }
+
+    @Test
+    fun `a stored download key becomes a readable title`() {
+        // Used only when a copy was made in an earlier session and the real title is no longer in
+        // memory; the file name is all that survives.
+        assertEquals(
+            "The Godfather",
+            "movie_the_godfather_1972".toReadableTitle(),
+        )
+        assertEquals(
+            "Supergirl",
+            "movie_supergirl_2026".toReadableTitle(),
+        )
     }
 }
