@@ -101,6 +101,8 @@ data class DesktopStrings(
     val resetWarning: String,
     val settings: String,
     val languageLabel: String,
+    val chooseYear: String,
+    val downloadPaused: String,
 ) {
     companion object {
         fun of(language: DesktopLanguage): DesktopStrings =
@@ -201,6 +203,8 @@ data class DesktopStrings(
                 resetWarning = "Isso apaga perfis, favoritos e progresso. Os arquivos baixados sao mantidos.",
                 settings = "Configuracoes",
                 languageLabel = "IDIOMA",
+                chooseYear = "Escolher ano",
+                downloadPaused = "Pausado",
             )
 
         private val En =
@@ -293,6 +297,8 @@ data class DesktopStrings(
                 resetWarning = "This erases profiles, favourites and progress. Downloaded files are kept.",
                 settings = "Settings",
                 languageLabel = "LANGUAGE",
+                chooseYear = "Choose year",
+                downloadPaused = "Paused",
             )
 
         private val De =
@@ -386,6 +392,8 @@ data class DesktopStrings(
                 resetWarning = "Loescht Profile, Favoriten und Fortschritt. Heruntergeladene Dateien bleiben.",
                 settings = "Einstellungen",
                 languageLabel = "SPRACHE",
+                chooseYear = "Jahr wählen",
+                downloadPaused = "Pausiert",
             )
 
         private val It =
@@ -479,6 +487,8 @@ data class DesktopStrings(
                 resetWarning = "Cancella profili, preferiti e avanzamento. I file scaricati restano.",
                 settings = "Impostazioni",
                 languageLabel = "LINGUA",
+                chooseYear = "Scegli anno",
+                downloadPaused = "In pausa",
             )
     }
 }

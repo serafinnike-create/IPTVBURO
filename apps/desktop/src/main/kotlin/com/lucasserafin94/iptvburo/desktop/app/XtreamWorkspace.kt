@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,6 +45,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -306,18 +309,24 @@ private fun XtreamToolbar(
             if (selectedType != XtreamContentType.LIVE) {
                 val currentYear = Year.now().value
                 Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
-                    listOf<Int?>(null, currentYear, currentYear - 1).forEach { year ->
-                        FilterChip(
-                            label =
-                                if (year == null) {
-                                    text.allYears
-                                } else {
-                                    "${text.releasesIn} $year"
-                                },
-                            selected = selectedYear == year,
-                            onClick = { onYearSelected(year) },
-                        )
-                    }
+                    FilterChip(
+                        label = text.allYears,
+                        selected = selectedYear == null,
+                        onClick = { onYearSelected(null) },
+                    )
+                    FilterChip(
+                        label = "${text.releasesIn} $currentYear",
+                        selected = selectedYear == currentYear,
+                        onClick = { onYearSelected(currentYear) },
+                    )
+                    // A picker rather than one chip per year: a catalogue spans decades, and a row
+                    // of chips would either cover a handful of years arbitrarily or run off screen.
+                    YearPicker(
+                        selectedYear = selectedYear?.takeIf { it != currentYear },
+                        currentYear = currentYear,
+                        label = text.chooseYear,
+                        onSelect = onYearSelected,
+                    )
                 }
                 Spacer(Modifier.width(BuroSpacing.Md))
             }
@@ -1592,5 +1601,77 @@ private fun DownloadButton(
         colors = ButtonDefaults.outlinedButtonColors(contentColor = tint),
     ) {
         Text(label, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+/**
+ * Dropdown for picking any release year.
+ *
+ * The toolbar previously offered only the current year and the one before it, so anything older was
+ * unreachable from the filter at all. The list runs back forty years, which covers the vast
+ * majority of what providers actually carry, and stays scrollable rather than growing the toolbar.
+ */
+@Composable
+private fun YearPicker(
+    selectedYear: Int?,
+    currentYear: Int,
+    label: String,
+    onSelect: (Int?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val active = selectedYear != null
+
+    Box {
+        BuroInteractiveRow(
+            onClick = { expanded = true },
+            selected = active,
+            shape = BuroRadius.Pill,
+            contentDescription = label,
+        ) {
+            Box(
+                modifier = Modifier
+                    .border(
+                        width = 1.dp,
+                        color =
+                            if (active) {
+                                BuroColors.Primary.copy(alpha = 0.55f)
+                            } else {
+                                BuroColors.BorderSoft
+                            },
+                        shape = BuroRadius.Pill,
+                    ).padding(horizontal = 14.dp, vertical = 7.dp),
+            ) {
+                Text(
+                    text = if (active) "$selectedYear  ▾" else "$label  ▾",
+                    color = if (active) BuroColors.Primary else BuroColors.TextMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .background(BuroColors.SurfaceRaised)
+                .heightIn(max = 360.dp),
+        ) {
+            // Excludes the current year: it already has its own chip beside this control.
+            ((currentYear - 1) downTo (currentYear - 40)).forEach { year ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = year.toString(),
+                            color = if (year == selectedYear) BuroColors.Primary else BuroColors.Text,
+                        )
+                    },
+                    onClick = {
+                        onSelect(year)
+                        expanded = false
+                    },
+                )
+            }
+        }
     }
 }

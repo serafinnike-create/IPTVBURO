@@ -685,6 +685,24 @@ class DesktopAppState(
     var downloads by mutableStateOf<Map<String, DownloadState>>(emptyMap())
         private set
 
+    /** Titles kept alongside state so the sidebar can name a download without the catalogue. */
+    private var downloadTitles by mutableStateOf<Map<String, String>>(emptyMap())
+
+    /** Ordered view for the sidebar: running first, so active work is never scrolled out of sight. */
+    val downloadEntries: List<DownloadEntry>
+        get() =
+            downloads.entries
+                .map { (key, state) ->
+                    DownloadEntry(key, downloadTitles[key] ?: key, state)
+                }.sortedBy { entry ->
+                    when (entry.state) {
+                        is DownloadState.Running -> 0
+                        DownloadState.Failed -> 1
+                        DownloadState.Idle -> 2
+                        DownloadState.Completed -> 3
+                    }
+                }
+
     fun isDownloadable(target: XtreamPlaybackTarget): Boolean = downloadManager.isDownloadable(target)
 
     fun downloadState(contentKey: String): DownloadState =
@@ -719,6 +737,7 @@ class DesktopAppState(
             downloads = downloads + (contentKey to DownloadState.Failed)
             return
         }
+        downloadTitles = downloadTitles + (contentKey to title)
         downloads = downloads + (contentKey to DownloadState.Running(0f))
 
         val containerExtension = (target as? XtreamPlaybackTarget.CatalogItem)?.containerExtension
@@ -1116,3 +1135,10 @@ sealed interface DownloadState {
 
     data object Failed : DownloadState
 }
+
+/** A download as the sidebar needs it: identity, a human name, and current state. */
+data class DownloadEntry(
+    val contentKey: String,
+    val title: String,
+    val state: DownloadState,
+)

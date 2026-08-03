@@ -68,6 +68,8 @@ import androidx.compose.ui.unit.dp
 import java.awt.Frame
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.DesktopDestination
+import com.lucasserafin94.iptvburo.desktop.DownloadEntry
+import com.lucasserafin94.iptvburo.desktop.DownloadState
 import com.lucasserafin94.iptvburo.desktop.ImportStatus
 import com.lucasserafin94.iptvburo.desktop.XtreamStatus
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceKind
@@ -162,6 +164,8 @@ fun DesktopApp(
                         onSourceSelected = appState::selectSource,
                         destination = appState.destination,
                         catalogType = appState.xtreamContentType,
+                        downloads = appState.downloadEntries,
+                        onCancelDownload = appState::cancelDownload,
                         onHome = appState::openHome,
                         onMovies = {
                             scope.launch { appState.openCatalog(XtreamContentType.MOVIE) }
@@ -400,6 +404,8 @@ private fun SourceSidebar(
     onSourceSelected: (String) -> Unit,
     destination: DesktopDestination,
     catalogType: XtreamContentType,
+    downloads: List<DownloadEntry>,
+    onCancelDownload: (String) -> Unit,
     onHome: () -> Unit,
     onMovies: () -> Unit,
     onSeries: () -> Unit,
@@ -479,6 +485,23 @@ private fun SourceSidebar(
                         selected = source.id == selectedSourceId,
                         onClick = { onSourceSelected(source.id) },
                     )
+                }
+            }
+        }
+
+        // Fills what was dead space in the middle of the sidebar, and gives downloads the one thing
+        // they lacked: somewhere to see them. A download that starts with no visible destination
+        // looks like nothing happened.
+        if (downloads.isNotEmpty()) {
+            Spacer(Modifier.height(24.dp))
+            SectionLabel(text.downloads)
+            Spacer(Modifier.height(8.dp))
+            LazyColumn(
+                modifier = Modifier.weight(1f, fill = false).heightIn(max = 260.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(downloads, key = { it.contentKey }) { entry ->
+                    DownloadRow(entry = entry, onCancel = { onCancelDownload(entry.contentKey) })
                 }
             }
         }
@@ -1827,3 +1850,96 @@ private fun DesktopLanguage.nativeName(): String =
         DesktopLanguage.GERMAN -> "Deutsch"
         DesktopLanguage.ITALIAN -> "Italiano"
     }
+
+/**
+ * One download in the sidebar list.
+ *
+ * Progress is shown as a bar rather than a spinner because a film download runs for minutes and a
+ * spinner conveys nothing about whether it is advancing.
+ */
+@Composable
+private fun DownloadRow(
+    entry: DownloadEntry,
+    onCancel: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(BuroRadius.Small)
+            .background(BuroColors.SurfaceRaised)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = entry.title,
+                color = BuroColors.Text,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            val state = entry.state
+            if (state is DownloadState.Running) {
+                Text(
+                    text = "✕",
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.clickable(onClick = onCancel).padding(start = 6.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(5.dp))
+        when (val state = entry.state) {
+            is DownloadState.Running -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(BuroColors.Canvas),
+                ) {
+                    // A negative fraction means the server sent no length; an indeterminate bar
+                    // would be a lie about progress, so the bar is left empty and the label says so.
+                    if (state.fraction >= 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(state.fraction.coerceIn(0f, 1f))
+                                .fillMaxHeight()
+                                .clip(CircleShape)
+                                .background(BuroColors.Primary),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text =
+                        if (state.fraction >= 0f) {
+                            "${(state.fraction * 100).toInt()}%"
+                        } else {
+                            strings.downloadInProgress
+                        },
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            DownloadState.Completed ->
+                Text(
+                    text = "✓ ${strings.downloaded}",
+                    color = BuroColors.Success,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            DownloadState.Failed ->
+                Text(
+                    text = strings.downloadFailed,
+                    color = BuroColors.Error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            DownloadState.Idle ->
+                Text(
+                    text = strings.downloadPaused,
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+        }
+    }
+}
