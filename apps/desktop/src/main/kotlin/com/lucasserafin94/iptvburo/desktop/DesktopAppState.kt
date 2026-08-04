@@ -87,6 +87,34 @@ class DesktopAppState(
     val isMetadataConfigured: Boolean
         get() = metadataClient.isConfigured
 
+    /**
+     * Cast photos already looked up, by lower-cased name.
+     *
+     * The details page shows a dozen faces and is rebuilt on every recomposition, so each name is
+     * resolved once per session; without this the same twelve lookups would run on every frame.
+     */
+    var castPhotos by mutableStateOf<Map<String, String?>>(emptyMap())
+        private set
+
+    private val castLookupsInFlight = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    /**
+     * Fetches the photo for [name] if it has not been tried yet.
+     *
+     * A miss is cached as null, so a person TMDb does not know is not asked for again every time
+     * the page is drawn.
+     */
+    suspend fun ensureCastPhoto(name: String) {
+        val key = name.trim().lowercase(Locale.ROOT)
+        if (key.isBlank() || key in castPhotos || !metadataClient.isConfigured) return
+        if (!castLookupsInFlight.add(key)) return
+        val photo = withContext(Dispatchers.IO) { metadataClient.findPerson(name)?.profileImageUrl }
+        castPhotos = castPhotos + (key to photo)
+        castLookupsInFlight.remove(key)
+    }
+
+    fun castPhotoFor(name: String): String? = castPhotos[name.trim().lowercase(Locale.ROOT)]
+
     fun updateMetadataApiKey(value: String) {
         metadataApiKey = value
         userStore.setMetadataApiKey(value)
@@ -1194,11 +1222,10 @@ class DesktopAppState(
         // Disk wins for keys we know nothing about; in-memory wins for the rest, since a running
         // download already has the live title and the sidecar is only written on completion.
         downloadMetadata = stored + downloadMetadata
-        downloads =
-            downloads +
-            stored.keys
-                .filter { key -> downloads[key] !is DownloadState.Running }
-                .associateWith { DownloadState.Completed }
+        // Anything on disk is complete, including a key still marked Running in memory: the file
+        // being there is proof the transfer finished. Skipping those left the finished download
+        // stuck at 100% with a Cancel button while its own copy appeared as a second row.
+        downloads = downloads + stored.keys.associateWith { DownloadState.Completed }
     }
 
     fun deleteDownload(contentKey: String) {
@@ -1264,6 +1291,10 @@ class DesktopAppState(
         // pointing at a file that a cancellation then deleted.
         if (result is DownloadResult.Completed) {
             downloadManager.remember(contentKey, metadata.title, metadata.artworkUrl)
+            // Reconciled with disk right away. Without this the finished download stayed on screen
+            // as a running one at 100% with a Cancel button, while the copy recovered from disk
+            // appeared as a second row - the same episode listed twice, neither playable.
+            refreshDownloadStates()
         }
     }
 

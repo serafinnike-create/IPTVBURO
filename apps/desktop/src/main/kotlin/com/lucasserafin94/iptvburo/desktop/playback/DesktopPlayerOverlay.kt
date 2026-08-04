@@ -48,6 +48,9 @@ import kotlinx.coroutines.delay
 /** How long the pointer must rest before the controls fade in full screen. */
 private const val CONTROLS_IDLE_MILLIS = 3_000L
 
+/** The speeds the button cycles through, in order. */
+private val PLAYBACK_RATES = listOf(1.0, 1.25, 1.5, 2.0, 0.75)
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun DesktopPlayerOverlay(
@@ -219,8 +222,6 @@ fun DesktopPlayerOverlay(
                 ) { Text("Voltar") }
                 Spacer(Modifier.width(16.dp))
                 Text(request.title, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Text("${state.engineName} • HEVC/H.264", color = BuroColors.Primary)
-                Spacer(Modifier.width(12.dp))
                 OutlinedButton(onClick = onToggleCompact) {
                     Text(if (isCompact) "Voltar ao app" else "Janela pequena")
                 }
@@ -304,7 +305,7 @@ fun DesktopPlayerOverlay(
                     Modifier
                         .fillMaxWidth()
                         .background(Color(0xE6121418))
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -325,7 +326,15 @@ fun DesktopPlayerOverlay(
                 }
             }
         } else if (!isFullScreen || controlsVisible) {
-        Column(Modifier.fillMaxWidth().background(Color(0xE6121418)).padding(horizontal = 24.dp, vertical = 14.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(Color.Transparent, Color(0xCC0A0C0F), Color(0xE60A0C0F)),
+                    ),
+                ).padding(horizontal = 24.dp, vertical = 14.dp),
+        ) {
             Slider(
                 value = if (state.durationMillis > 0.0) (state.positionMillis / state.durationMillis).toFloat().coerceIn(0f, 1f) else 0f,
                 onValueChange = { controller.seekToFraction(it.toDouble()) },
@@ -337,26 +346,30 @@ fun DesktopPlayerOverlay(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Button(onClick = { controller.seekBy(-10_000.0) }, enabled = state.ready) { Text("-10 s") }
-                Button(onClick = controller::togglePlayback, enabled = state.ready) { Text(if (state.playing) "Pausar" else "Reproduzir") }
-                Button(onClick = { controller.seekBy(30_000.0) }, enabled = state.ready) { Text("+30 s") }
+                TransportButton("-10 s", state.ready) { controller.seekBy(-10_000.0) }
+                TransportButton(
+                    label = if (state.playing) "Pausar" else "Reproduzir",
+                    enabled = state.ready,
+                    emphasised = true,
+                    onClick = controller::togglePlayback,
+                )
+                TransportButton("+30 s", state.ready) { controller.seekBy(30_000.0) }
                 Text(
                     "${formatPlaybackTime(state.positionMillis)} / ${formatPlaybackTime(state.durationMillis)}",
                     color = Color.White,
                 )
                 Spacer(Modifier.weight(1f))
-                OutlinedButton(
-                    onClick = {
-                        val next = when (state.playbackRate) {
-                            in 0.0..1.0 -> 1.25
-                            in 1.01..1.25 -> 1.5
-                            in 1.26..1.5 -> 2.0
-                            else -> 1.0
-                        }
-                        controller.setPlaybackRate(next)
-                    },
+                // Stepped through a fixed list rather than matched against overlapping ranges: VLC
+                // reports the rate back as a float, so 1.2499999 fell through every branch and the
+                // button appeared to do nothing. The label is formatted, not the raw double.
+                TransportButton(
+                    label = "%.2fx".format(state.playbackRate).removeSuffix("0").removeSuffix("0").removeSuffix("."),
                     enabled = state.ready,
-                ) { Text("${state.playbackRate}x") }
+                ) {
+                    val current = PLAYBACK_RATES.minByOrNull { rate -> kotlin.math.abs(rate - state.playbackRate) }
+                    val nextIndex = (PLAYBACK_RATES.indexOf(current) + 1) % PLAYBACK_RATES.size
+                    controller.setPlaybackRate(PLAYBACK_RATES[nextIndex])
+                }
                 Text("Volume ${(state.volume * 100).toInt()}%", color = Color.White)
                 Slider(
                     value = state.volume.toFloat(),
@@ -376,6 +389,35 @@ fun DesktopPlayerOverlay(
             }
         }
         }
+    }
+}
+
+/**
+ * A transport control that sits over the picture rather than competing with it.
+ *
+ * Outlined and translucent by default; only the play/pause button carries the accent, because it is
+ * the one the eye should find without looking. Solid gold on all three made the bar shout louder
+ * than the film behind it.
+ */
+@Composable
+private fun TransportButton(
+    label: String,
+    enabled: Boolean,
+    emphasised: Boolean = false,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        shape = androidx.compose.foundation.shape.CircleShape,
+        colors =
+            androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                containerColor =
+                    if (emphasised) BuroColors.Primary.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.06f),
+                contentColor = if (emphasised) BuroColors.Primary else Color.White.copy(alpha = 0.85f),
+            ),
+    ) {
+        Text(label, maxLines = 1)
     }
 }
 

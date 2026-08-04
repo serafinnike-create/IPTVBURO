@@ -892,6 +892,8 @@ internal fun XtreamInternalDetailsPage(
     onBack: () -> Unit,
     onOpenExternal: (PendingXtreamExternal) -> Unit,
     onOpenPerson: (String) -> Unit,
+    castPhotoFor: (String) -> String? = { null },
+    onRequestCastPhoto: suspend (String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val item = appState.selectedXtreamItem ?: return
@@ -974,6 +976,8 @@ internal fun XtreamInternalDetailsPage(
                 onOpenTrailer = appState::openPublicTrailer,
                 onOpenExternal = onOpenExternal,
                 onOpenPerson = onOpenPerson,
+                castPhotoFor = castPhotoFor,
+                onRequestCastPhoto = onRequestCastPhoto,
                 isFavorite = appState.isFavorite(item),
                 onToggleFavorite = { appState.toggleFavorite(item) },
                 resumeDecisionFor = appState::resumeDecision,
@@ -1026,6 +1030,8 @@ internal fun XtreamItemDetail(
     onOpenTrailer: (String) -> Unit,
     onOpenExternal: (PendingXtreamExternal) -> Unit,
     onOpenPerson: (String) -> Unit,
+    castPhotoFor: (String) -> String? = { null },
+    onRequestCastPhoto: suspend (String) -> Unit = {},
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     resumeDecisionFor: (XtreamPlaybackTarget) -> ResumeDecision,
@@ -1269,6 +1275,8 @@ internal fun XtreamItemDetail(
                         onRetry = onLoadMovie,
                         onOpenTrailer = onOpenTrailer,
                         onOpenPerson = onOpenPerson,
+                        castPhotoFor = castPhotoFor,
+                        onRequestCastPhoto = onRequestCastPhoto,
                     )
                     Spacer(Modifier.height(18.dp))
                 }
@@ -1331,6 +1339,8 @@ private fun MovieDetailContent(
     onRetry: () -> Unit,
     onOpenTrailer: (String) -> Unit,
     onOpenPerson: (String) -> Unit,
+    castPhotoFor: (String) -> String? = { null },
+    onRequestCastPhoto: suspend (String) -> Unit = {},
 ) {
     when (status) {
         MovieDetailsStatus.Idle,
@@ -1368,7 +1378,14 @@ private fun MovieDetailContent(
                 Spacer(Modifier.height(14.dp))
             }
             details.director?.let { DetailLine("Direção", it) }
-            details.cast?.let { CastButtons(it, onOpenPerson) }
+            details.cast?.let {
+                CastButtons(
+                    rawCast = it,
+                    onOpenPerson = onOpenPerson,
+                    photoFor = castPhotoFor,
+                    onRequestPhoto = onRequestCastPhoto,
+                )
+            }
             details.youtubeTrailerId?.let { trailerId ->
                 Spacer(Modifier.height(12.dp))
                 OutlinedButton(
@@ -1399,6 +1416,10 @@ private fun DetailLine(
 private fun CastButtons(
     rawCast: String,
     onOpenPerson: (String) -> Unit,
+    castPhotoFor: (String) -> String? = { null },
+    onRequestCastPhoto: suspend (String) -> Unit = {},
+    photoFor: (String) -> String?,
+    onRequestPhoto: suspend (String) -> Unit,
 ) {
     val people =
         remember(rawCast) {
@@ -1416,23 +1437,62 @@ private fun CastButtons(
         style = MaterialTheme.typography.labelLarge,
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 5.dp),
     )
-    people.chunked(2).forEach { rowPeople ->
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-        ) {
-            rowPeople.forEach { person ->
-                OutlinedButton(
-                    onClick = { onOpenPerson(person) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp),
+    // Faces, not a list of buttons. The provider sends only names, so each portrait is resolved
+    // once from the metadata service and cached; a name it does not know keeps its initials rather
+    // than leaving a hole in the row.
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Md),
+        verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+    ) {
+        people.forEach { person ->
+            LaunchedEffect(person) { onRequestPhoto(person) }
+            Column(
+                modifier =
+                    Modifier
+                        .width(84.dp)
+                        .clip(BuroRadius.Small)
+                        .clickable { onOpenPerson(person) }
+                        .padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                BuroRemoteArtwork(
+                    artworkUrl = photoFor(person),
+                    contentDescription = person,
+                    modifier = Modifier.size(72.dp).clip(CircleShape),
+                    contentScale = ContentScale.Crop,
                 ) {
-                    Text(person, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .background(BuroColors.Primary.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text =
+                                person
+                                    .split(' ')
+                                    .take(2)
+                                    .mapNotNull { part -> part.firstOrNull()?.uppercase() }
+                                    .joinToString(""),
+                            color = BuroColors.Primary,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                 }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = person,
+                    color = BuroColors.TextMuted,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
             }
-            if (rowPeople.size == 1) Spacer(Modifier.weight(1f))
         }
-        Spacer(Modifier.height(5.dp))
     }
 }
 

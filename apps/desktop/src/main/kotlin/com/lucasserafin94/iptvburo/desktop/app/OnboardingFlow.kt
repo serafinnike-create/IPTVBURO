@@ -23,6 +23,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.LocalScrollbarStyle
+import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -139,6 +143,20 @@ private fun OnboardingScaffold(
                 }
             }
         }
+        VerticalScrollbar(
+            adapter = rememberScrollbarAdapter(panelScroll),
+            modifier =
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .padding(vertical = BuroSpacing.Xl),
+            style =
+                LocalScrollbarStyle.current.copy(
+                    thickness = 8.dp,
+                    unhoverColor = BuroColors.BorderSoft,
+                    hoverColor = BuroColors.Primary,
+                ),
+        )
     }
 }
 

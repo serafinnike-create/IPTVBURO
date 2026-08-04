@@ -849,15 +849,28 @@ private fun TopBar(
                                     Modifier.padding(horizontal = BuroSpacing.Sm, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(
-                                    text = if (catalogRefreshing) "…" else "⟳",
-                                    color = BuroColors.Primary,
-                                    style = MaterialTheme.typography.labelLarge,
-                                )
+                                // A spinner rather than an ellipsis. Refreshing a large catalogue
+                                // takes long enough that a static "…" is indistinguishable from a
+                                // button that did nothing at all.
+                                if (catalogRefreshing) {
+                                    CircularProgressIndicator(
+                                        color = BuroColors.Primary,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                } else {
+                                    Text(
+                                        text = "⟳",
+                                        color = BuroColors.Primary,
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
+                                }
                                 Spacer(Modifier.width(4.dp))
                                 Text(
-                                    text = text.refreshCatalog,
-                                    color = BuroColors.TextMuted,
+                                    text =
+                                        if (catalogRefreshing) text.loadingCatalog else text.refreshCatalog,
+                                    color =
+                                        if (catalogRefreshing) BuroColors.Primary else BuroColors.TextMuted,
                                     style = MaterialTheme.typography.labelMedium,
                                     maxLines = 1,
                                 )

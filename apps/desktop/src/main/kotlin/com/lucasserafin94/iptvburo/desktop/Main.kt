@@ -156,6 +156,9 @@ fun main() {
                         windowState.position = WindowPosition(Alignment.BottomEnd)
                         compactMode = true
                     }
+                    // Always on top only while compact. A picture-in-picture window that falls
+                    // behind whatever you click next is not one you can watch while working.
+                    window.isAlwaysOnTop = compactMode
                 },
                 onExitForUpdate = {
                     xtreamRepository.clear()
