@@ -653,45 +653,13 @@ private fun XtreamCatalogGrid(
                 style = MaterialTheme.typography.headlineSmall,
             )
             Spacer(Modifier.width(BuroSpacing.Md))
-            // Beside the title rather than in a settings menu: it changes what is on screen right
-            // now, so it belongs next to what it changes.
-            CatalogLayout.entries.forEach { layout ->
-                val selected = layout == appState.catalogLayout
-                BuroInteractiveRow(
-                    onClick = { appState.selectCatalogLayout(layout) },
-                    selected = selected,
-                    shape = BuroRadius.Pill,
-                    contentDescription = layout.id,
-                ) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .border(
-                                    width = 1.dp,
-                                    color =
-                                        if (selected) {
-                                            BuroColors.Primary.copy(alpha = 0.55f)
-                                        } else {
-                                            BuroColors.BorderSoft
-                                        },
-                                    shape = BuroRadius.Pill,
-                                ).padding(horizontal = 10.dp, vertical = 6.dp),
-                    ) {
-                        Text(
-                            text =
-                                when (layout) {
-                                    CatalogLayout.POSTER -> text.layoutPoster
-                                    CatalogLayout.COMPACT -> text.layoutCompact
-                                    CatalogLayout.LIST -> text.layoutList
-                                },
-                            color = if (selected) BuroColors.Primary else BuroColors.TextMuted,
-                            style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1,
-                        )
-                    }
-                }
-                Spacer(Modifier.width(BuroSpacing.Xs))
-            }
+            // One picker rather than three pills. The layout is chosen once and then forgotten, so
+            // it does not earn three permanent slots beside the title.
+            LayoutPicker(
+                selected = appState.catalogLayout,
+                text = text,
+                onSelect = appState::selectCatalogLayout,
+            )
             Spacer(Modifier.weight(1f))
             Text(
                 text = "${page.totalMatches} ${text.items}",
@@ -2372,6 +2340,66 @@ private fun YearPicker(
  * precision the data does not have; a title with no rating at all is excluded once a minimum is
  * asked for, rather than being quietly treated as good enough.
  */
+/** The catalogue's shape, as one dropdown labelled with the current choice. */
+@Composable
+private fun LayoutPicker(
+    selected: CatalogLayout,
+    text: DesktopStrings,
+    onSelect: (CatalogLayout) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val label = { layout: CatalogLayout ->
+        when (layout) {
+            CatalogLayout.POSTER -> text.layoutPoster
+            CatalogLayout.COMPACT -> text.layoutCompact
+            CatalogLayout.LIST -> text.layoutList
+        }
+    }
+
+    Box {
+        BuroInteractiveRow(
+            onClick = { expanded = true },
+            selected = false,
+            shape = BuroRadius.Pill,
+            contentDescription = label(selected),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .border(1.dp, BuroColors.BorderSoft, BuroRadius.Pill)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    text = "${label(selected)}  ▾",
+                    color = BuroColors.TextMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(BuroColors.SurfaceRaised),
+        ) {
+            CatalogLayout.entries.forEach { layout ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = label(layout),
+                            color = if (layout == selected) BuroColors.Primary else BuroColors.Text,
+                        )
+                    },
+                    onClick = {
+                        onSelect(layout)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun RatingPicker(
     selected: Double?,

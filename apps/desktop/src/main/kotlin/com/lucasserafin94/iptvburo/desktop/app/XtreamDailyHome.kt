@@ -63,6 +63,20 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollable
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.LocalScrollbarStyle
+import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
@@ -110,6 +124,10 @@ private data class HomeMetrics(
     }
 }
 
+/** About one shelf, so an arrow press moves between rails rather than by a few pixels. */
+private const val HOME_SCROLL_PIXELS = 300f
+
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun XtreamDailyHome(
     appState: DesktopAppState,
@@ -197,8 +215,36 @@ fun XtreamDailyHome(
 
             is DailyHomeStatus.Loaded -> {
                 val snapshot = status.snapshot
+                val homeState = rememberLazyListState()
+                val homeScope = rememberCoroutineScope()
+                val homeFocus = remember { FocusRequester() }
+                LaunchedEffect(Unit) { runCatching { homeFocus.requestFocus() } }
+                Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    state = homeState,
+                    // The shelves were always here; there was simply no way to reach them. The page
+                    // scrolled only by wheel, with nothing on screen saying so, so the film and
+                    // series rails below the fold looked like they had never loaded at all.
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .focusRequester(homeFocus)
+                            .focusable()
+                            .onPointerEvent(PointerEventType.Enter) {
+                                runCatching { homeFocus.requestFocus() }
+                            }.onPreviewKeyEvent { event ->
+                                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                val delta =
+                                    when (event.key) {
+                                        Key.DirectionDown -> HOME_SCROLL_PIXELS
+                                        Key.DirectionUp -> -HOME_SCROLL_PIXELS
+                                        Key.PageDown -> HOME_SCROLL_PIXELS * 3
+                                        Key.PageUp -> -HOME_SCROLL_PIXELS * 3
+                                        else -> return@onPreviewKeyEvent false
+                                    }
+                                homeScope.launch { homeState.animateScrollBy(delta) }
+                                true
+                            },
                     verticalArrangement = Arrangement.spacedBy(metrics.railSpacing),
                 ) {
                     item(key = "daily-hero") {
@@ -258,6 +304,17 @@ fun XtreamDailyHome(
                         DailyRow(text.liveNow, snapshot.live, metrics, text, openDetails)
                     }
                     item(key = "home-tail") { Spacer(Modifier.height(metrics.railSpacing)) }
+                }
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(homeState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                    style =
+                        LocalScrollbarStyle.current.copy(
+                            thickness = 10.dp,
+                            unhoverColor = BuroColors.BorderSoft,
+                            hoverColor = BuroColors.Primary,
+                        ),
+                )
                 }
             }
         }
