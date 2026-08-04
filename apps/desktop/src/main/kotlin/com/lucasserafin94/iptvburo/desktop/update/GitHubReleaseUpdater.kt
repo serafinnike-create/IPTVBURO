@@ -11,7 +11,7 @@ import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.time.Duration
 
-const val DESKTOP_VERSION = "0.2.0-alpha.6"
+const val DESKTOP_VERSION = "0.2.0-alpha.7"
 
 sealed interface UpdateCheckResult {
     data object UpToDate : UpdateCheckResult
