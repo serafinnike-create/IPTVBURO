@@ -40,6 +40,15 @@ class SessionXtreamRepository(
     private val categories = EnumMap<XtreamContentType, List<XtreamCategory>>(XtreamContentType::class.java)
     private val catalogs = EnumMap<XtreamContentType, CompactXtreamCatalog>(XtreamContentType::class.java)
 
+    /**
+     * One lock per content type, so a fetch of one type never blocks a fetch of another.
+     *
+     * Deliberately never cleared by [clear] or [clearCatalogCache]: these identify a *type*, not a
+     * session, and swapping them mid-flight would let two fetches of the same type run in parallel
+     * again - the exact duplicate download this guards against.
+     */
+    private val fetchLocks = EnumMap<XtreamContentType, Any>(XtreamContentType::class.java)
+
     fun authenticateAndLoadInitial(input: XtreamLoginInput): XtreamSessionSummary {
         val nextVault =
             try {
@@ -81,23 +90,44 @@ class SessionXtreamRepository(
         }
     }
 
+    /**
+     * Fetches one content type, at most once at a time.
+     *
+     * Serialised per type on [fetchLocks] rather than on [lock], because the fetch itself streams a
+     * whole catalogue over the network and holding the session lock for that would block every
+     * page(), categories() and summary() call on the UI thread for its duration.
+     *
+     * The double check around the fetch lock is what stops a duplicate download: the Home effect
+     * calls this for MOVIE and SERIES while the user clicking a content tab calls it for the same
+     * type, and the two used to miss the cache together and stream a 30,000-item catalogue twice.
+     */
     fun loadCatalog(contentType: XtreamContentType): XtreamSessionSummary {
         synchronized(lock) {
             catalogs[contentType]?.let { return summaryLocked() }
         }
-        val currentGeneration: Long
-        val vault: CredentialVault
-        synchronized(lock) {
-            currentGeneration = generation
-            vault = requireNotNull(credentialVault) { "No Xtream session is active." }
-        }
-        val loaded = loadCatalogItems(vault, contentType)
-        return synchronized(lock) {
-            checkGeneration(currentGeneration)
-            catalogs[contentType] = loaded
-            summaryLocked()
+        synchronized(fetchLockFor(contentType)) {
+            // Re-checked inside the fetch lock: the download that beat us here has published its
+            // result by now, so the loser answers from memory instead of repeating the work.
+            synchronized(lock) {
+                catalogs[contentType]?.let { return summaryLocked() }
+            }
+            val currentGeneration: Long
+            val vault: CredentialVault
+            synchronized(lock) {
+                currentGeneration = generation
+                vault = requireNotNull(credentialVault) { "No Xtream session is active." }
+            }
+            val loaded = loadCatalogItems(vault, contentType)
+            return synchronized(lock) {
+                checkGeneration(currentGeneration)
+                catalogs[contentType] = loaded
+                summaryLocked()
+            }
         }
     }
+
+    private fun fetchLockFor(contentType: XtreamContentType): Any =
+        synchronized(lock) { fetchLocks.getOrPut(contentType) { Any() } }
 
     fun categories(contentType: XtreamContentType): List<XtreamCategory> =
         synchronized(lock) {

@@ -397,6 +397,13 @@ fun DesktopApp(
                         onDismiss = { updateRelease = null },
                     )
                 }
+                // The splash sits over everything while the session is restored and the lists are
+                // fetched, so the first thing the user sees is complete rather than half-filled.
+                // Above the onboarding branch: a returning user must not glimpse a setup screen
+                // between launching the app and their catalogue appearing.
+                if (appState.isStarting) {
+                    SplashScreen(message = appState.startupMessage.ifBlank { text.loadingCatalog })
+                }
                 // First run is an ordered sequence — language, copyright, account, connection — and
                 // exactly one step is on screen at a time.
                 val step = appState.onboarding

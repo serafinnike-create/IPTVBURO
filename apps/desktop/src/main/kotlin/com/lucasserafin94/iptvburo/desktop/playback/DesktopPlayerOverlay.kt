@@ -102,6 +102,7 @@ fun DesktopPlayerOverlay(
             return@LaunchedEffect
         }
         controlsVisible = true
+        videoPanel?.let { panel -> controller.setPointerVisible(panel, true) }
         // Hidden regardless of playback state. Keeping them up while paused meant a title that had
         // not started yet - or was buffering - sat behind a permanent bar across the bottom of an
         // otherwise full-screen picture. Any movement or keypress brings them straight back.
@@ -183,8 +184,34 @@ fun DesktopPlayerOverlay(
                 // AWT canvas consumes it, so without this the controls never knew the user was
                 // still there and never hid either.
                 factory = {
-                    controller.createComponent(request) { wakeCounter++ }
-                        .also { panel -> videoPanel = panel }
+                    controller
+                        .createComponent(
+                            request = request,
+                            onPointerActivity = { wakeCounter++ },
+                            // The same three keys the Compose handler owns, wired to the canvas so
+                            // they keep working once it holds the focus - which is exactly when the
+                            // user needs Escape and has no visible control to reach for.
+                            onKey = { keyCode ->
+                                wakeCounter++
+                                when (keyCode) {
+                                    java.awt.event.KeyEvent.VK_F11 -> {
+                                        onToggleFullScreen()
+                                        true
+                                    }
+                                    java.awt.event.KeyEvent.VK_ESCAPE -> {
+                                        if (isFullScreen) onToggleFullScreen() else closePlayer()
+                                        true
+                                    }
+                                    java.awt.event.KeyEvent.VK_SPACE -> {
+                                        controller.togglePlayback()
+                                        true
+                                    }
+                                    // Everything else still counts as activity, so any key brings
+                                    // the controls back even when it does nothing else.
+                                    else -> false
+                                }
+                            },
+                        ).also { panel -> videoPanel = panel }
                 },
                 update = { panel ->
                     controller.setPointerVisible(panel, controlsVisible || !isFullScreen)

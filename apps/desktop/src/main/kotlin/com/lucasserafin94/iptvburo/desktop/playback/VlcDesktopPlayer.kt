@@ -37,16 +37,42 @@ class VlcDesktopPlayer {
     private val started = AtomicBoolean(false)
     private val executor: ScheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor { task ->
-            Thread(task, "iptvburo-vlc-control").apply { isDaemon = true }
+            Thread(task, CONTROL_THREAD_NAME).apply { isDaemon = true }
         }
+
+    /**
+     * Guards [process] and [remote], which are written on the control executor and read from the
+     * AWT/Compose thread in [dispose].
+     *
+     * Without it, closing the player while VLC was still launching leaked the process: dispose ran
+     * on the UI thread, saw `process == null` because the executor had not assigned it yet, and
+     * shut the executor down; the in-flight startVlc then stored a live VLC nobody owned any more.
+     * ProcessBuilder.start is not interruptible, so shutdownNow could not prevent the spawn.
+     */
+    private val processLock = Any()
     private var process: Process? = null
     private var remote: VlcHttpControl? = null
+
+    @Volatile
     private var mediaStartedAt = 0L
+
+    @Volatile
     private var everPlayed = false
+
+    /**
+     * The surface VLC was told to draw into.
+     *
+     * Held so [retry] can relaunch the engine when the first start never produced one: `addNotify`
+     * fires once per canvas, so without this there was no path back to [startIfNeeded] and the
+     * Retry button was permanently inert.
+     */
+    @Volatile
+    private var canvas: Canvas? = null
 
     fun createComponent(
         request: DesktopPlaybackRequest,
         onPointerActivity: () -> Unit = {},
+        onKey: (Int) -> Boolean = { false },
     ): JPanel {
         val canvas =
             object : Canvas() {
@@ -65,6 +91,28 @@ class VlcDesktopPlayer {
                         override fun mouseMoved(event: java.awt.event.MouseEvent) = onPointerActivity()
 
                         override fun mouseDragged(event: java.awt.event.MouseEvent) = onPointerActivity()
+                    },
+                )
+                // Keys too. Once the canvas takes focus - which it does as soon as the pointer is
+                // over the video - Compose stops receiving key events entirely, so Escape and F11
+                // did nothing and there was no way out of full screen at all.
+                addKeyListener(
+                    object : java.awt.event.KeyAdapter() {
+                        override fun keyPressed(event: java.awt.event.KeyEvent) {
+                            if (onKey(event.keyCode)) event.consume()
+                        }
+                    },
+                )
+                // A click on the video counts as activity, so tapping the picture brings the
+                // controls back the way it does in every other player.
+                addMouseListener(
+                    object : java.awt.event.MouseAdapter() {
+                        override fun mousePressed(event: java.awt.event.MouseEvent) {
+                            requestFocusInWindow()
+                            onPointerActivity()
+                        }
+
+                        override fun mouseEntered(event: java.awt.event.MouseEvent) = onPointerActivity()
                     },
                 )
             }
@@ -123,25 +171,78 @@ class VlcDesktopPlayer {
         executeCommand("rate", mapOf("val" to safe.toString()))
     }
 
+    /**
+     * Restarts playback after a failure.
+     *
+     * Two failures used to make this button do nothing at all. When the engine never started, there
+     * is no [remote] to send `in_play` to, and `addNotify` has already fired for good, so nobody
+     * ever called [startIfNeeded] again — the error stayed on screen for ever. And the snapshot was
+     * flipped to `loading` before either command ran, so a no-op retry replaced the error with a
+     * spinner that nothing could clear: pollState returns immediately while `remote` is null.
+     */
     fun retry(request: DesktopPlaybackRequest) {
-        executor.execute {
-            runCatching {
-                remote?.command("pl_stop")
-                remote?.command("in_play", mapOf("input" to request.uri.toVlcInput()))
-                snapshot = snapshot.copy(errorMessage = null, loading = true, ended = false)
-                mediaStartedAt = System.currentTimeMillis()
-                everPlayed = false
+        if (disposed.get()) return
+        runCatching {
+            executor.execute { retryOnControlThread(request) }
+        }
+    }
+
+    private fun retryOnControlThread(request: DesktopPlaybackRequest) {
+        if (disposed.get()) return
+        val control = synchronized(processLock) { remote }
+        if (control == null) {
+            // No engine to talk to: relaunch it from scratch rather than reporting success.
+            val surface = canvas
+            if (surface == null) {
+                snapshot =
+                    snapshot.copy(
+                        loading = false,
+                        playing = false,
+                        errorMessage = START_FAILURE_MESSAGE,
+                    )
+                return
             }
+            started.set(false)
+            startIfNeeded(surface, request)
+            return
+        }
+        runCatching {
+            control.command("pl_stop")
+            control.command("in_play", mapOf("input" to request.uri.toVlcInput()))
+        }.onSuccess {
+            mediaStartedAt = System.currentTimeMillis()
+            everPlayed = false
+            snapshot = snapshot.copy(errorMessage = null, loading = true, ended = false)
+        }.onFailure {
+            // Leaving `loading` set here is what stranded the spinner: the poll task cannot
+            // report an error for a control interface that is no longer answering.
+            snapshot =
+                snapshot.copy(
+                    loading = false,
+                    playing = false,
+                    errorMessage = START_FAILURE_MESSAGE,
+                )
         }
     }
 
     fun dispose() {
         if (!disposed.compareAndSet(false, true)) return
-        runCatching { remote?.command("pl_stop") }
-        remote = null
-        runCatching { process?.destroy() }
-        process = null
+        canvas = null
+        val (control, child) = synchronized(processLock) { remote to process }
+        runCatching { control?.command("pl_stop") }
+        runCatching { child?.destroy() }
+        // Shut the executor down first, then sweep again under the lock. A startVlc already past
+        // its `disposed` check can still spawn VLC after the sweep above - ProcessBuilder.start is
+        // not interruptible - and that orphan used to keep running with the video surface held.
         executor.shutdownNow()
+        val leftBehind =
+            synchronized(processLock) {
+                val late = process
+                process = null
+                remote = null
+                late
+            }
+        runCatching { leftBehind?.destroy() }
     }
 
     /**
@@ -167,24 +268,38 @@ class VlcDesktopPlayer {
 
     private fun startIfNeeded(canvas: Canvas, request: DesktopPlaybackRequest) {
         if (disposed.get() || !started.compareAndSet(false, true)) return
+        this.canvas = canvas
         snapshot = snapshot.copy(loading = true, errorMessage = null)
-        executor.execute {
+        val launch = {
             runCatching { startVlc(canvas, request) }
                 .onFailure {
                     // The failed attempt leaves a process behind and a latch that would refuse the
                     // next one, so a second try did nothing at all while the first VLC was still
                     // holding the video surface - two engines, one window, a broken picture.
-                    runCatching { process?.destroy() }
-                    process = null
-                    remote = null
+                    val orphan =
+                        synchronized(processLock) {
+                            val previous = process
+                            process = null
+                            remote = null
+                            previous
+                        }
+                    runCatching { orphan?.destroy() }
                     started.set(false)
                     snapshot =
                         snapshot.copy(
                             loading = false,
                             playing = false,
-                            errorMessage = "O motor de vídeo do Windows não pôde ser iniciado.",
+                            errorMessage = START_FAILURE_MESSAGE,
                         )
                 }
+            Unit
+        }
+        // A retry arrives on the executor itself. Submitting from there would deadlock nothing but
+        // would silently do nothing once the executor is shutting down, so run it inline instead.
+        if (Thread.currentThread().name == CONTROL_THREAD_NAME) {
+            launch()
+        } else {
+            runCatching { executor.execute(launch) }
         }
     }
 
@@ -198,7 +313,7 @@ class VlcDesktopPlayer {
         // no error, and renders nowhere. That is the intermittent black screen that a close and
         // reopen "fixed": the second attempt happened to win the race.
         val windowHandle = awaitComponentHandle(canvas)
-        process =
+        val child =
             ProcessBuilder(
                 executable.absolutePath,
                 "-I",
@@ -212,26 +327,66 @@ class VlcDesktopPlayer {
                 "--no-qt-error-dialogs",
                 "--network-caching=1500",
                 "--file-caching=1000",
-                "--avcodec-hw=any",
+                // Pinned to the Direct3D 11 output. Left to choose, VLC can pick a module that
+                // ignores --drawable-hwnd entirely and opens its own window - or, off screen,
+                // renders nowhere at all, which looks exactly like a film that refuses to start.
+                "--vout=direct3d11",
+                // Hardware decoding disabled. It is what fails first on 4K HDR and Dolby Vision
+                // files: the picture never arrives while the controls sit there at 00:00. Software
+                // decoding is slower but plays everything this catalogue carries.
+                "--avcodec-hw=none",
                 "--quiet",
             ).directory(executable.parentFile)
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .redirectError(ProcessBuilder.Redirect.DISCARD)
                 .start()
+        // Published immediately and under the lock. Assigning it only after the connect handshake
+        // meant a dispose during those twelve seconds found no process to kill, and VLC kept
+        // playing audio over a window the user had already closed.
+        val abandoned =
+            synchronized(processLock) {
+                if (disposed.get()) {
+                    child
+                } else {
+                    process = child
+                    null
+                }
+            }
+        if (abandoned != null) {
+            abandoned.destroy()
+            error("The player was closed while the engine was starting")
+        }
+
         val control = VlcHttpControl.connect(port, password, CONNECT_TIMEOUT_MILLIS)
-        remote = control
+        val stillWanted =
+            synchronized(processLock) {
+                if (disposed.get()) {
+                    false
+                } else {
+                    remote = control
+                    true
+                }
+            }
+        if (!stillWanted) {
+            child.destroy()
+            error("The player was closed while the engine was starting")
+        }
         control.command("volume", mapOf("val" to (snapshot.volume * VLC_VOLUME_MAX).toInt().toString()))
         control.command("in_play", mapOf("input" to request.uri.toVlcInput()))
         mediaStartedAt = System.currentTimeMillis()
-        if (request.startPositionMillis > 0L) {
-            executor.schedule({ seekToMillis(request.startPositionMillis) }, 2, TimeUnit.SECONDS)
+        // Rejected submissions are expected once dispose has shut the executor down; without the
+        // guard the closing player threw RejectedExecutionException out of the control thread.
+        runCatching {
+            if (request.startPositionMillis > 0L) {
+                executor.schedule({ seekToMillis(request.startPositionMillis) }, 2, TimeUnit.SECONDS)
+            }
+            executor.scheduleWithFixedDelay(::pollState, 250, 500, TimeUnit.MILLISECONDS)
         }
-        executor.scheduleWithFixedDelay(::pollState, 250, 500, TimeUnit.MILLISECONDS)
     }
 
     private fun pollState() {
         if (disposed.get()) return
-        val control = remote ?: return
+        val control = synchronized(processLock) { remote } ?: return
         runCatching {
             val status = control.status()
             val stateName = status.string("state")?.lowercase()
@@ -253,18 +408,29 @@ class VlcDesktopPlayer {
                     ended = ended,
                     errorMessage =
                         if (!ready && System.currentTimeMillis() - mediaStartedAt > START_TIMEOUT_MILLIS) {
-                            "O servidor respondeu, mas este vídeo não iniciou. Tente novamente ou escolha outro título."
+                            STALLED_MESSAGE
                         } else {
                             null
                         },
                 )
         }.onFailure {
-            if (process?.isAlive == false) {
+            val alive = synchronized(processLock) { process }?.isAlive ?: false
+            if (!alive) {
                 snapshot =
                     snapshot.copy(
                         loading = false,
                         playing = false,
                         errorMessage = "O motor de vídeo foi encerrado inesperadamente.",
+                    )
+            } else if (System.currentTimeMillis() - mediaStartedAt > START_TIMEOUT_MILLIS) {
+                // A VLC that is alive but has stopped answering its control interface used to leave
+                // the overlay spinning for ever: the timeout that reports a stalled title only ran
+                // in the success branch, which this poll never reaches.
+                snapshot =
+                    snapshot.copy(
+                        loading = false,
+                        playing = false,
+                        errorMessage = STALLED_MESSAGE,
                     )
             }
         }
@@ -275,7 +441,14 @@ class VlcDesktopPlayer {
     }
 
     private fun executeCommand(command: String, parameters: Map<String, String> = emptyMap()) {
-        executor.execute { runCatching { remote?.command(command, parameters) } }
+        if (disposed.get()) return
+        // Guarded: every control (volume, seek, pause) threw RejectedExecutionException straight
+        // into the UI thread when pressed on a player that was already closing.
+        runCatching {
+            executor.execute {
+                runCatching { synchronized(processLock) { remote }?.command(command, parameters) }
+            }
+        }
     }
 
     private fun locateVlcExecutable(): File? {
@@ -307,6 +480,13 @@ class VlcDesktopPlayer {
         const val VLC_VOLUME_MAX = 256
         const val CONNECT_TIMEOUT_MILLIS = 12_000L
         const val START_TIMEOUT_MILLIS = 25_000L
+
+        /** Matches the thread name given to the single control executor. */
+        const val CONTROL_THREAD_NAME = "iptvburo-vlc-control"
+
+        const val START_FAILURE_MESSAGE = "O motor de vídeo do Windows não pôde ser iniciado."
+        const val STALLED_MESSAGE =
+            "O servidor respondeu, mas este vídeo não iniciou. Tente novamente ou escolha outro título."
     }
 }
 

@@ -122,6 +122,40 @@ class SessionXtreamRepositoryTest {
         )
     }
 
+    /**
+     * The Home effect loads MOVIE and SERIES while a user clicking a content tab loads the same
+     * type. The cache check and the store were separate critical sections, so both callers missed
+     * the cache together and each streamed the whole catalogue - two full downloads of up to
+     * 30,000 items, and the loser's copy then replaced the winner's under the same key.
+     */
+    @Test
+    fun `concurrent loads of one content type fetch it only once`() {
+        enqueueAuthentication()
+        enqueueCategories("live")
+        enqueueCategories("movie")
+        enqueueCategories("series")
+        server.enqueue(jsonResponse(syntheticLiveCatalog(size = 5)))
+        repository.authenticateAndLoadInitial(loginInput())
+        val requestsAfterConnect = server.requestCount
+        // Only one movie catalogue is ever enqueued: a second fetch would block on an empty queue
+        // and be visible as an extra request below.
+        server.enqueue(jsonResponse(syntheticMovieCatalog(size = 40)))
+
+        val threads =
+            (1..4).map {
+                Thread { repository.loadCatalog(XtreamContentType.MOVIE) }
+            }
+        threads.forEach(Thread::start)
+        threads.forEach { it.join(30_000) }
+
+        assertEquals(
+            requestsAfterConnect + 1,
+            server.requestCount,
+            "the movie catalogue must be streamed exactly once",
+        )
+        assertEquals(40, repository.page(XtreamContentType.MOVIE, null, "", 0).totalMatches)
+    }
+
     @Test
     fun `playback URL is built only through the explicit confirmed method and session clears`() {
         enqueueAuthentication(allowedFormatsJson = """["m3u8"]""")
@@ -230,6 +264,22 @@ class SessionXtreamRepositoryTest {
               "name": "Synthetic channel $index",
               "category_id": "category-live",
               "container_extension": "ts"
+            }
+            """.trimIndent()
+        }
+
+    private fun syntheticMovieCatalog(size: Int): String =
+        (1..size).joinToString(
+            prefix = "[",
+            postfix = "]",
+            separator = ",",
+        ) { index ->
+            """
+            {
+              "stream_id": "$index",
+              "name": "Synthetic movie $index",
+              "category_id": "category-movie",
+              "container_extension": "mp4"
             }
             """.trimIndent()
         }

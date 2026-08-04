@@ -85,6 +85,12 @@ data class DesktopStrings(
     val details: String,
     val options: String,
     val organizingToday: String,
+    /**
+     * Badge on the seasonal rail. The rail's own name ("Especial de Natal") is not here: it is data
+     * carried by the seasonal collection, because the set of occasions grows with the calendar and
+     * a new one must not force a new field on all four language blocks.
+     */
+    val seasonalBadge: String,
     val tryAgain: String,
     val watched: String,
     val onAir: String,
@@ -231,6 +237,7 @@ data class DesktopStrings(
                 details = "Ver detalhes",
                 options = "opções",
                 organizingToday = "Organizando a seleção de hoje…",
+                seasonalBadge = "DA ÉPOCA",
                 tryAgain = "Tentar novamente",
                 watched = "assistido",
                 onAir = "AO VIVO",
@@ -369,6 +376,7 @@ data class DesktopStrings(
                 details = "Details",
                 options = "options",
                 organizingToday = "Arranging today's selection…",
+                seasonalBadge = "IN SEASON",
                 tryAgain = "Try again",
                 watched = "watched",
                 onAir = "LIVE",
@@ -507,6 +515,7 @@ data class DesktopStrings(
                 details = "Details",
                 options = "Optionen",
                 organizingToday = "Die Auswahl von heute wird zusammengestellt…",
+                seasonalBadge = "ZUR SAISON",
                 tryAgain = "Erneut versuchen",
                 watched = "gesehen",
                 onAir = "LIVE",
@@ -646,6 +655,7 @@ data class DesktopStrings(
                 details = "Dettagli",
                 options = "opzioni",
                 organizingToday = "Sto preparando la selezione di oggi…",
+                seasonalBadge = "DI STAGIONE",
                 tryAgain = "Riprova",
                 watched = "guardato",
                 onAir = "IN DIRETTA",

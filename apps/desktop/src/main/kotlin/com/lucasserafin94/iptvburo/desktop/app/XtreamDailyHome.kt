@@ -233,6 +233,21 @@ fun XtreamDailyHome(
                             ) { entry -> openDetails(entry.item) }
                         }
                     }
+                    // Above the daily picks: the seasonal rail is the reason the home screen looks
+                    // different today, so burying it under the everyday rows defeats the point.
+                    snapshot.seasonal?.let { seasonal ->
+                        item(key = "seasonal-${seasonal.collection.id}") {
+                            SeasonalRow(
+                                // Resolved here rather than when the snapshot was built, so
+                                // switching language retitles the rail without paging again.
+                                title = seasonal.collection.title(appState.language.tag),
+                                items = seasonal.items,
+                                metrics = metrics,
+                                text = text,
+                                onClick = openDetails,
+                            )
+                        }
+                    }
                     item(key = "daily-movies") {
                         DailyRow(text.moviesForToday, snapshot.movies, metrics, text, openDetails)
                     }
@@ -416,6 +431,39 @@ private fun DailyRow(
             contentPadding = PaddingValues(horizontal = metrics.gutter, vertical = BuroSpacing.Sm),
         ) {
             items(items, key = { "${it.contentType}:${it.providerId}" }) { item ->
+                DailyCard(item, metrics, text, onClick)
+            }
+        }
+    }
+}
+
+/**
+ * The calendar-driven rail.
+ *
+ * Identical to [DailyRow] apart from its badge, which says why the rail is there at all — without
+ * it "Especial de Natal" reads as an ordinary category the user never asked for. The empty guard is
+ * kept even though the snapshot already drops empty collections: nothing about this row is worth a
+ * heading with no titles under it.
+ */
+@Composable
+private fun SeasonalRow(
+    title: String,
+    items: List<XtreamCatalogItem>,
+    metrics: HomeMetrics,
+    text: DesktopStrings,
+    onClick: (XtreamCatalogItem) -> Unit,
+) {
+    if (items.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm)) {
+        RailHeader(title, text.seasonalBadge, metrics)
+        val railState = rememberLazyListState()
+        LazyRow(
+            state = railState,
+            modifier = Modifier.fillMaxWidth().arrowScrollable(railState),
+            horizontalArrangement = Arrangement.spacedBy(metrics.cardSpacing),
+            contentPadding = PaddingValues(horizontal = metrics.gutter, vertical = BuroSpacing.Sm),
+        ) {
+            items(items, key = { "seasonal:${it.contentType}:${it.providerId}" }) { item ->
                 DailyCard(item, metrics, text, onClick)
             }
         }

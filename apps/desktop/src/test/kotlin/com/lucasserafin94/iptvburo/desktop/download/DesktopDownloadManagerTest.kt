@@ -165,6 +165,85 @@ class DesktopDownloadManagerTest {
         }
     }
 
+    /**
+     * Two downloads of one key share a single `.part` path and used to interleave their writes into
+     * it, so the stored file was neither copy. The second also replaced the first's cancel flag,
+     * and the first's cleanup then removed the second's, leaving Cancel inert for both.
+     */
+    @Test
+    fun `a second download of the same key is refused while the first runs`() {
+        withManager { manager, _, server ->
+            server.enqueue(body(3_000_000))
+            val key = "movie:same_key"
+            var duplicate: DownloadResult? = null
+
+            val first =
+                runBlocking {
+                    manager.download(
+                        contentKey = key,
+                        displayName = "x",
+                        uri = URI(server.url("/a.mp4").toString()),
+                        containerExtension = "mp4",
+                    ) { read, _ ->
+                        // Attempted while the first is provably still streaming.
+                        if (read > 0 && duplicate == null) {
+                            duplicate =
+                                runBlocking {
+                                    manager.download(
+                                        contentKey = key,
+                                        displayName = "x",
+                                        uri = URI(server.url("/b.mp4").toString()),
+                                        containerExtension = "mp4",
+                                    ) { _, _ -> }
+                                }
+                        }
+                    }
+                }
+
+            assertTrue(first is DownloadResult.Completed, "the first download must still win: $first")
+            assertEquals(
+                FailureReason.ALREADY_RUNNING,
+                (duplicate as? DownloadResult.Failed)?.reason,
+                "the duplicate must be refused rather than corrupting the first, was $duplicate",
+            )
+        }
+    }
+
+    /**
+     * The progress callback runs caller code - it writes Compose state - and anything it throws is
+     * neither an IOException nor a CancellationException, so it escaped both catch blocks. The two
+     * cleanup calls lived in those blocks, so the half-written chunk stayed on disk with nothing
+     * that ever sweeps `.part` files, and every later retry of the same title added another one.
+     */
+    @Test
+    fun `a callback failure mid-stream does not strand a part file`() {
+        withManager { manager, directory, server ->
+            server.enqueue(body(2_000_000))
+
+            runCatching {
+                runBlocking {
+                    manager.download(
+                        contentKey = "movie:boom",
+                        displayName = "x",
+                        uri = URI(server.url("/m.mp4").toString()),
+                        containerExtension = "mp4",
+                    ) { read, _ ->
+                        if (read > 0) throw IllegalStateException("state update failed")
+                    }
+                }
+            }
+
+            val leftovers =
+                Files.list(directory).use { stream ->
+                    stream.map { it.fileName.toString() }.toList()
+                }
+            assertTrue(
+                leftovers.none { it.endsWith(".part") },
+                "the abandoned chunk must be swept: $leftovers",
+            )
+        }
+    }
+
     /** The library rebuilds from disk after a restart, so a stored episode has to appear there. */
     @Test
     fun `a stored episode is listed with its remembered title`() {

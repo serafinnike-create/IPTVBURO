@@ -163,9 +163,16 @@ class DesktopDownloadManager(
     ): DownloadResult =
         withContext(Dispatchers.IO) {
             val flag = AtomicBoolean(false)
-            cancelled[contentKey] = flag
+            // Claimed atomically. Two downloads of the same key share one `.part` path and used to
+            // interleave their writes into it, producing a file that was neither copy; worse, the
+            // second registration replaced the first's cancel flag and the first's `finally` then
+            // removed the second's, so Cancel silently stopped working for both.
+            if (cancelled.putIfAbsent(contentKey, flag) != null) {
+                return@withContext DownloadResult.Failed(FailureReason.ALREADY_RUNNING)
+            }
             val target = fileFor(contentKey, containerExtension)
             val partial = target.resolveSibling(target.fileName.toString() + ".part")
+            var completed = false
             try {
                 Files.createDirectories(target.parent)
                 val request = Request.Builder().url(uri.toURL()).build()
@@ -176,13 +183,17 @@ class DesktopDownloadManager(
                     val body = response.body ?: return@withContext DownloadResult.Failed(FailureReason.EMPTY)
                     val total = body.contentLength().takeIf { it > 0L }
                     var read = 0L
+                    var cancelledMidStream = false
                     body.byteStream().use { input ->
                         Files.newOutputStream(partial).use { output ->
                             val buffer = ByteArray(BUFFER_BYTES)
                             while (true) {
                                 if (flag.get()) {
-                                    Files.deleteIfExists(partial)
-                                    return@withContext DownloadResult.Cancelled
+                                    // Flagged rather than deleted here, so the single sweep in
+                                    // `finally` owns removal of the chunk on every exit path
+                                    // instead of each branch remembering to do it for itself.
+                                    cancelledMidStream = true
+                                    return@use
                                 }
                                 val count = input.read(buffer)
                                 if (count < 0) break
@@ -192,20 +203,27 @@ class DesktopDownloadManager(
                             }
                         }
                     }
+                    if (cancelledMidStream) {
+                        return@withContext DownloadResult.Cancelled
+                    }
                     Files.move(partial, target, StandardCopyOption.REPLACE_EXISTING)
+                    completed = true
                     DownloadResult.Completed(target, read)
                 }
             } catch (cancellation: CancellationException) {
-                Files.deleteIfExists(partial)
                 throw cancellation
             } catch (io: IOException) {
-                Files.deleteIfExists(partial)
                 // The exception message can embed the signed URL, so it is never surfaced or logged.
                 DownloadResult.Failed(
                     if (io is java.nio.file.FileSystemException) FailureReason.STORAGE else FailureReason.NETWORK,
                 )
             } finally {
-                cancelled.remove(contentKey)
+                // Swept on every exit path, including the early returns for a rejected or empty
+                // response and any non-IOException thrown out of the body: each of those used to
+                // leave a stray .part file that nothing ever cleaned up.
+                if (!completed) runCatching { Files.deleteIfExists(partial) }
+                // Only if it is still ours, so a later download of the same key keeps its own flag.
+                cancelled.remove(contentKey, flag)
             }
         }
 
@@ -263,6 +281,14 @@ enum class FailureReason {
     STORAGE,
     REJECTED,
     EMPTY,
+
+    /**
+     * The same content key is already downloading.
+     *
+     * Distinct from the other reasons because nothing went wrong: the first download is still
+     * running and owns the `.part` file, so the caller must leave its state alone.
+     */
+    ALREADY_RUNNING,
 }
 
 /**

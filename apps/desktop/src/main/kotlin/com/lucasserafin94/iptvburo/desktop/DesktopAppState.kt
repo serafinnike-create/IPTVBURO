@@ -27,6 +27,7 @@ import com.lucasserafin94.iptvburo.desktop.user.ProfilePhotoStore
 import com.lucasserafin94.iptvburo.metadata.TmdbClient
 import com.lucasserafin94.iptvburo.desktop.download.DesktopDownloadManager
 import com.lucasserafin94.iptvburo.desktop.download.DownloadResult
+import com.lucasserafin94.iptvburo.desktop.download.FailureReason
 import com.lucasserafin94.iptvburo.desktop.download.StoredDownload
 import com.lucasserafin94.iptvburo.desktop.download.toReadableTitle
 import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
@@ -39,6 +40,8 @@ import com.lucasserafin94.iptvburo.domain.model.PlaybackContentType
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressIdentity
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgress
 import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
+import com.lucasserafin94.iptvburo.domain.model.SeasonalCollection
+import com.lucasserafin94.iptvburo.domain.model.SeasonalCollections
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
 import com.lucasserafin94.iptvburo.xtream.XtreamClientException
@@ -683,6 +686,7 @@ class DesktopAppState(
                     movies = movies,
                     series = series,
                     live = live,
+                    seasonal = seasonalShelf(date, kidsMode),
                 ) to latestSummary
             }
         }.onSuccess { (snapshot, latestSummary) ->
@@ -693,6 +697,40 @@ class DesktopAppState(
                 error.rethrowIfCancellation()
                 dailyHomeStatus = DailyHomeStatus.Error(error.toSafeXtreamMessage())
             }
+    }
+
+    /**
+     * The themed shelf for [date], or null when the calendar has nothing to offer.
+     *
+     * Null is also returned when the occasion is in season but this catalogue holds none of it: the
+     * shelf is a promise of content, and an empty row reads as a fault rather than as an absence.
+     *
+     * Each term costs a full catalogue sweep, so the search stops as soon as it has enough titles
+     * to fill a rail instead of collecting every possible match. Films and series are both swept
+     * because providers file "O Grinch" under one and "Christmas specials" under the other.
+     */
+    private fun seasonalShelf(
+        date: LocalDate,
+        kidsMode: Boolean,
+    ): DailySeasonalShelf? {
+        val collection = SeasonalCollections.primaryCollectionFor(date) ?: return null
+        val found = LinkedHashMap<String, XtreamCatalogItem>()
+        for (term in collection.searchTerms) {
+            for (type in listOf(XtreamContentType.MOVIE, XtreamContentType.SERIES)) {
+                xtreamRepository
+                    .page(type, null, term, 0, pageSize = SEASONAL_TERM_PAGE_SIZE, kidsMode = kidsMode)
+                    .items
+                    // Keyed on the editorial title so the same film shipped as "HD" and "4K" does
+                    // not take two slots on a shelf that only has room for a handful.
+                    .forEach { item -> found.putIfAbsent(editorialCatalogKey(item.name), item) }
+            }
+            if (found.size >= SEASONAL_SHELF_SIZE) break
+        }
+        if (found.isEmpty()) return null
+        return DailySeasonalShelf(
+            collection = collection,
+            items = found.values.take(SEASONAL_SHELF_SIZE),
+        )
     }
 
     private fun dailyPage(
@@ -795,11 +833,36 @@ class DesktopAppState(
         }
     }
 
+    /**
+     * True while the app is still preparing itself on launch.
+     *
+     * Drives the splash screen. A returning user used to meet an empty library that filled in
+     * piecemeal, which reads as a broken app rather than one that is loading.
+     */
+    var isStarting by mutableStateOf(true)
+        private set
+
+    /** What the splash screen is currently waiting on, so a slow provider looks like progress. */
+    var startupMessage by mutableStateOf("")
+        private set
+
     suspend fun restoreRememberedXtream() {
-        if (xtreamStatus !is XtreamStatus.Disconnected || xtreamSummary != null) return
-        val input = withContext(Dispatchers.IO) { rememberedXtreamStore.load() } ?: return
-        connectXtream(input)
+        try {
+            if (xtreamStatus !is XtreamStatus.Disconnected || xtreamSummary != null) return
+            val input = withContext(Dispatchers.IO) { rememberedXtreamStore.load() } ?: return
+            connectXtream(input)
+            // The home is built from the catalogue, so loading it here means the first screen is
+            // complete when the splash clears rather than filling in afterwards.
+            if (xtreamStatus !is XtreamStatus.Error) {
+                loadDailyHome(LocalDate.now())
+            }
+        } finally {
+            // In a finally so no path - no saved session, a provider that refuses, an exception -
+            // can leave the app stuck behind its own splash screen.
+            isStarting = false
+        }
     }
+
 
     /**
      * Re-fetches every loaded list from the provider.
@@ -1148,6 +1211,10 @@ class DesktopAppState(
                 val fraction = if (total != null && total > 0L) read.toFloat() / total else -1f
                 downloads = downloads + (contentKey to DownloadState.Running(fraction))
             }
+        // A refused duplicate must not touch the state: the download already in flight owns this
+        // key, and overwriting its Running progress with Failed made the first copy look broken
+        // while it was still downloading perfectly well.
+        if (result is DownloadResult.Failed && result.reason == FailureReason.ALREADY_RUNNING) return
         downloads =
             downloads + (
                 contentKey to
@@ -1516,7 +1583,31 @@ data class DailyHomeSnapshot(
     val movies: List<XtreamCatalogItem>,
     val series: List<XtreamCatalogItem>,
     val live: List<XtreamCatalogItem>,
+    /** Null outside the seasonal windows, and also when this catalogue matched nothing. */
+    val seasonal: DailySeasonalShelf? = null,
 )
+
+/**
+ * A themed rail built from titles the user's own catalogue already contains.
+ *
+ * The collection travels rather than a finished heading so the rail can be retitled when the user
+ * switches language, without paging the catalogue again.
+ */
+data class DailySeasonalShelf(
+    val collection: SeasonalCollection,
+    val items: List<XtreamCatalogItem>,
+)
+
+/** Titles per rail. Matches the eighteen the daily rails carry, so the rows read as one family. */
+private const val SEASONAL_SHELF_SIZE = 18
+
+/**
+ * Titles requested per search term.
+ *
+ * Deliberately small: a dozen terms sweep the catalogue a dozen times, and only enough matches to
+ * fill the rail are ever shown.
+ */
+private const val SEASONAL_TERM_PAGE_SIZE = 12
 
 sealed interface DailyHomeStatus {
     data object Idle : DailyHomeStatus
