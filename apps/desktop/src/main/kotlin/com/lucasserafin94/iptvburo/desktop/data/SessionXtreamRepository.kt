@@ -108,6 +108,20 @@ class SessionXtreamRepository(
         synchronized(lock) { catalogs[contentType]?.itemByProviderId(providerId) }
 
     /**
+     * The item whose content identity matches [contentKey].
+     *
+     * Progress and favourites are recorded by content key rather than provider id, because the id
+     * is per-playlist numbering: the same film has a different one in another list.
+     */
+    fun itemByContentKey(contentType: XtreamContentType, contentKey: String): XtreamCatalogItem? {
+        val catalog = synchronized(lock) { catalogs[contentType] } ?: return null
+        repeat(catalog.size) { index ->
+            if (catalog.identityAt(index).key == contentKey) return catalog.itemAt(index)
+        }
+        return null
+    }
+
+    /**
      * Returns one small page without allocating a complete filtered copy of a large catalog.
      */
     fun page(

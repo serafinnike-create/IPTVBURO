@@ -559,16 +559,24 @@ class DesktopAppState(
             @Suppress("UNUSED_EXPRESSION")
             continueWatchingRevision
             val profileId = activeProfileId ?: return emptyList()
-            val sourceId = xtreamSummary?.sourceId ?: return emptyList()
             return playbackProgressCoordinator.continueWatching(profileId)
                 .asSequence()
-                .filter { it.identity.sourceId == sourceId }
+                // No source filter. Progress is recorded against LIBRARY_SCOPE so it survives a
+                // change of playlist; comparing it to the connected source's hash matched nothing
+                // and left this list permanently empty.
                 .mapNotNull { progress ->
                     val item = when (progress.identity.contentType) {
+                        // contentId is the content key, not a provider id: the same film keeps its
+                        // key across playlists, which is the whole point of recording it that way.
                         PlaybackContentType.MOVIE ->
-                            xtreamRepository.itemByProviderId(XtreamContentType.MOVIE, progress.identity.contentId)
+                            xtreamRepository.itemByContentKey(
+                                XtreamContentType.MOVIE,
+                                progress.identity.contentId,
+                            )
                         PlaybackContentType.EPISODE ->
-                            progress.identity.seriesId?.let { xtreamRepository.itemByProviderId(XtreamContentType.SERIES, it) }
+                            progress.identity.seriesId?.let {
+                                xtreamRepository.itemByProviderId(XtreamContentType.SERIES, it)
+                            }
                     }
                     item?.let { DesktopContinueWatchingEntry(it, progress) }
                 }

@@ -135,6 +135,13 @@ class VlcDesktopPlayer {
         executor.execute {
             runCatching { startVlc(canvas, request) }
                 .onFailure {
+                    // The failed attempt leaves a process behind and a latch that would refuse the
+                    // next one, so a second try did nothing at all while the first VLC was still
+                    // holding the video surface - two engines, one window, a broken picture.
+                    runCatching { process?.destroy() }
+                    process = null
+                    remote = null
+                    started.set(false)
                     snapshot =
                         snapshot.copy(
                             loading = false,
