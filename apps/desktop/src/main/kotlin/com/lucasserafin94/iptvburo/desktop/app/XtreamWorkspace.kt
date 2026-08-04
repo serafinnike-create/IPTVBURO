@@ -210,7 +210,11 @@ fun XtreamWorkspace(
             },
         )
         HorizontalDivider(color = BuroColors.BorderSoft)
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // Weighted, not fillMaxSize. A Column measures an unweighted child against unbounded
+        // height, so fillMaxSize here claimed a full screen's height *below* the toolbar and the
+        // category rail: the grid was taller than the space it had, its last row was drawn past the
+        // bottom of the window, and the wheel had nothing left to scroll.
+        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
             XtreamCatalogGrid(
                 appState = appState,
                 text = text,

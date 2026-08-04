@@ -1226,7 +1226,10 @@ private fun CatalogWorkspace(
             }
         }
         HorizontalDivider(color = BuroColors.BorderSoft)
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // Weighted, not fillMaxSize: an unweighted Column child is measured against unbounded
+        // height, so fillMaxSize would claim a whole screen below the header and push the list off
+        // the bottom of the window.
+        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
             val compact = maxWidth < 1_050.dp
             Row(modifier = Modifier.fillMaxSize()) {
                 CategoryPane(
@@ -1272,7 +1275,12 @@ private fun CategoryPane(
     Column(modifier = modifier.fillMaxHeight().padding(16.dp)) {
         SectionLabel("CATEGORIAS")
         Spacer(Modifier.height(12.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // Weighted: an unweighted Column child is measured against unbounded height, so a long
+        // category list would run past the window instead of scrolling.
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             item {
                 CategoryItem(
                     label = "Todos os canais",
@@ -1339,7 +1347,10 @@ private fun ChannelPane(
                 modifier = Modifier.padding(10.dp),
             )
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
                 items(channels, key = Channel::id) { channel ->
                     ChannelItem(
                         channel = channel,
@@ -2132,7 +2143,13 @@ private fun DownloadsWorkspace(
             return@Column
         }
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
+        // Weighted so the list scrolls within the remaining space. Unweighted, a Column gives its
+        // child unbounded height and the lazy list lays every row out at once, running past the
+        // window instead of scrolling.
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+        ) {
             items(entries, key = { it.contentKey }) { entry ->
                 DownloadLibraryRow(
                     entry = entry,
