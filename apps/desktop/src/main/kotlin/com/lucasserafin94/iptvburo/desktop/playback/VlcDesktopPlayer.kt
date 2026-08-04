@@ -44,7 +44,10 @@ class VlcDesktopPlayer {
     private var mediaStartedAt = 0L
     private var everPlayed = false
 
-    fun createComponent(request: DesktopPlaybackRequest): JPanel {
+    fun createComponent(
+        request: DesktopPlaybackRequest,
+        onPointerActivity: () -> Unit = {},
+    ): JPanel {
         val canvas =
             object : Canvas() {
                 override fun addNotify() {
@@ -54,11 +57,41 @@ class VlcDesktopPlayer {
             }.apply {
                 background = Color.BLACK
                 isFocusable = true
+                // The AWT canvas sits over the video and swallows pointer events, so Compose never
+                // saw the movement that wakes the controls: they stayed up for ever in full screen.
+                // Forwarding it from here is the only place the movement actually arrives.
+                addMouseMotionListener(
+                    object : java.awt.event.MouseMotionAdapter() {
+                        override fun mouseMoved(event: java.awt.event.MouseEvent) = onPointerActivity()
+
+                        override fun mouseDragged(event: java.awt.event.MouseEvent) = onPointerActivity()
+                    },
+                )
             }
         return JPanel(BorderLayout()).apply {
             background = Color.BLACK
             add(canvas, BorderLayout.CENTER)
         }
+    }
+
+    /**
+     * Hides or restores the pointer over the video surface.
+     *
+     * A blank cursor rather than a real hide: AWT has no "hide" and this is how every Java video
+     * player does it.
+     */
+    fun setPointerVisible(component: JPanel, visible: Boolean) {
+        val canvas = component.components.firstOrNull() as? Canvas ?: return
+        canvas.cursor =
+            if (visible) {
+                java.awt.Cursor.getDefaultCursor()
+            } else {
+                java.awt.Toolkit.getDefaultToolkit().createCustomCursor(
+                    java.awt.image.BufferedImage(16, 16, java.awt.image.BufferedImage.TYPE_INT_ARGB),
+                    java.awt.Point(0, 0),
+                    "hidden",
+                )
+            }
     }
 
     fun snapshot(): DesktopPlaybackSnapshot = snapshot
@@ -119,7 +152,10 @@ class VlcDesktopPlayer {
      */
     private fun awaitComponentHandle(canvas: Canvas): Long {
         repeat(HANDLE_ATTEMPTS) {
-            if (canvas.isDisplayable) {
+            // Size as well as handle. A realised peer can still be 0x0 while Compose is laying the
+            // SwingPanel out, and VLC attached to a zero-sized surface renders nothing and never
+            // recovers - that is why the first open was always black and the second worked.
+            if (canvas.isDisplayable && canvas.width > 0 && canvas.height > 0) {
                 val pointer = runCatching { Native.getComponentPointer(canvas) }.getOrNull()
                 val handle = pointer?.let(Pointer::nativeValue) ?: 0L
                 if (handle != 0L) return handle

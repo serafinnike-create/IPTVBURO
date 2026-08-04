@@ -94,6 +94,7 @@ fun DesktopPlayerOverlay(
     // Controls reveal on pointer movement and hide again after a pause, the behaviour every video
     // player uses. Only meaningful in full screen; windowed mode keeps them pinned.
     var controlsVisible by remember { mutableStateOf(true) }
+    var videoPanel by remember { mutableStateOf<javax.swing.JPanel?>(null) }
     var wakeCounter by remember { mutableStateOf(0) }
     LaunchedEffect(wakeCounter, isFullScreen) {
         if (!isFullScreen) {
@@ -106,6 +107,7 @@ fun DesktopPlayerOverlay(
         // otherwise full-screen picture. Any movement or keypress brings them straight back.
         delay(3_000)
         controlsVisible = false
+        videoPanel?.let { panel -> controller.setPointerVisible(panel, false) }
     }
 
     // Nothing requested focus, so key events never reached the handler and F11 did nothing at all.
@@ -177,7 +179,16 @@ fun DesktopPlayerOverlay(
         }
         Box(Modifier.fillMaxWidth().weight(1f)) {
             SwingPanel(
-                factory = { controller.createComponent(request) },
+                // Movement over the video surface reaches Compose only through this callback: the
+                // AWT canvas consumes it, so without this the controls never knew the user was
+                // still there and never hid either.
+                factory = {
+                    controller.createComponent(request) { wakeCounter++ }
+                        .also { panel -> videoPanel = panel }
+                },
+                update = { panel ->
+                    controller.setPointerVisible(panel, controlsVisible || !isFullScreen)
+                },
                 modifier = Modifier.fillMaxSize(),
             )
             state.errorMessage?.let { message ->

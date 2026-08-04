@@ -102,6 +102,7 @@ import com.lucasserafin94.iptvburo.desktop.data.episodeContentKey
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.desktop.ui.CategoryBadge
 import com.lucasserafin94.iptvburo.desktop.ui.categoryLabel
+import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableVertically
 import com.lucasserafin94.iptvburo.desktop.ui.categoryBadgeFor
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
@@ -1052,7 +1053,8 @@ internal fun XtreamItemDetail(
                     // below - the last episodes, the cast - is laid out past the bottom edge and
                     // the scroll never reaches it. A scrolling column must be free to be taller
                     // than what is visible; that is what gives it something to scroll.
-                    .verticalScroll(detailScroll),
+                    .verticalScroll(detailScroll)
+                    .arrowScrollableVertically(detailScroll),
             // Left-aligned. The previous centred card put the poster, the title and every action
             // on the vertical axis, which reads as a dialog rather than a page about a title.
             horizontalAlignment = Alignment.Start,

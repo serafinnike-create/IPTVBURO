@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.desktop.ui
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -55,3 +56,41 @@ fun Modifier.arrowScrollable(
 }
 
 private const val DEFAULT_RAIL_STEP = 420f
+
+/**
+ * Lets the up and down arrows move a scrolling column the pointer is over.
+ *
+ * Same reasoning as the rail: pointing at a panel is enough to aim the keys at it, and the details
+ * page is long enough - twenty-four episodes, then the cast - that reaching for the wheel every
+ * time is the wrong ask.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun Modifier.arrowScrollableVertically(
+    state: ScrollState,
+    step: Float = DEFAULT_COLUMN_STEP,
+): Modifier {
+    val focus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+
+    return this
+        .focusRequester(focus)
+        .focusable()
+        .onPointerEvent(PointerEventType.Enter) { runCatching { focus.requestFocus() } }
+        .onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            val delta =
+                when (event.key) {
+                    Key.DirectionDown -> step
+                    Key.DirectionUp -> -step
+                    Key.PageDown -> step * 3
+                    Key.PageUp -> -step * 3
+                    else -> return@onPreviewKeyEvent false
+                }
+            scope.launch { state.animateScrollBy(delta) }
+            true
+        }
+}
+
+/** About one episode row, so a press moves by something the eye can follow. */
+private const val DEFAULT_COLUMN_STEP = 160f
