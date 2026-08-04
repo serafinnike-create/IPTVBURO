@@ -42,6 +42,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -217,6 +218,8 @@ fun DesktopApp(
                             onEndSession = appState::disconnectXtream,
                             catalogRefreshing = appState.xtreamStatus is XtreamStatus.LoadingCatalog,
                             onRefreshCatalog = { scope.launch { appState.refreshCatalog() } },
+                            metadataApiKey = appState.metadataApiKey,
+                            onMetadataApiKeyChange = appState::updateMetadataApiKey,
                             onUpdate = {
                                 if (!updateBusy) {
                                     scope.launch {
@@ -790,6 +793,8 @@ private fun TopBar(
     onEndSession: () -> Unit,
     catalogRefreshing: Boolean,
     onRefreshCatalog: () -> Unit,
+    metadataApiKey: String,
+    onMetadataApiKeyChange: (String) -> Unit,
 ) {
     val text = strings
     // A Row does not shrink unweighted children: once their intrinsic widths exceed the space they
@@ -881,6 +886,8 @@ private fun TopBar(
                 onEndSession = onEndSession,
                 catalogRefreshing = catalogRefreshing,
                 onRefreshCatalog = onRefreshCatalog,
+                metadataApiKey = metadataApiKey,
+                onMetadataApiKeyChange = onMetadataApiKeyChange,
                 text = text,
             )
         }
@@ -904,6 +911,8 @@ private fun SettingsMenu(
     onEndSession: () -> Unit,
     catalogRefreshing: Boolean,
     onRefreshCatalog: () -> Unit,
+    metadataApiKey: String,
+    onMetadataApiKeyChange: (String) -> Unit,
     text: DesktopStrings,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -955,6 +964,53 @@ private fun SettingsMenu(
                     },
                 )
             }
+            HorizontalDivider(color = BuroColors.BorderSoft)
+            // The metadata key lives in the menu rather than a settings page: it is pasted once and
+            // never touched again, and a whole screen for one field would be its own kind of noise.
+            DropdownMenuItem(
+                text = {
+                    Column(modifier = Modifier.width(320.dp).padding(vertical = 4.dp)) {
+                        Text(
+                            text = text.metadataKeyLabel,
+                            color = BuroColors.Text,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = text.metadataKeyHint,
+                            color = BuroColors.TextSubtle,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Spacer(Modifier.height(BuroSpacing.Xs))
+                        OutlinedTextField(
+                            value = metadataApiKey,
+                            onValueChange = onMetadataApiKeyChange,
+                            singleLine = true,
+                            placeholder = {
+                                Text(
+                                    text = text.metadataKeyPlaceholder,
+                                    color = BuroColors.TextSubtle,
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = BuroRadius.Small,
+                            colors =
+                                TextFieldDefaults.colors(
+                                    focusedTextColor = BuroColors.Text,
+                                    unfocusedTextColor = BuroColors.Text,
+                                    focusedContainerColor = BuroColors.Surface,
+                                    unfocusedContainerColor = BuroColors.Surface,
+                                    focusedIndicatorColor = BuroColors.Primary,
+                                    unfocusedIndicatorColor = BuroColors.BorderSoft,
+                                    cursorColor = BuroColors.Primary,
+                                ),
+                        )
+                    }
+                },
+                // Not dismissable by click: the row holds a text field, and closing the menu on
+                // every keystroke's click would make it impossible to type into.
+                onClick = {},
+            )
             HorizontalDivider(color = BuroColors.BorderSoft)
             DropdownMenuItem(
                 text = {

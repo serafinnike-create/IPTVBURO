@@ -88,6 +88,21 @@ class DesktopUserStore(
     fun setAcceptedTerms() = preferences.putBoolean(KEY_TERMS_ACCEPTED, true)
 
     /**
+     * The user's own TMDb key, used for cast photos and filmographies.
+     *
+     * Kept in plain preferences rather than the credential vault: it is a personal API key for a
+     * public catalogue, not an account credential, and treating it as a secret would mean it could
+     * not be shown back to the user to check what they pasted. It is never sent anywhere except to
+     * TMDb itself.
+     */
+    fun metadataApiKey(): String? = preferences.get(KEY_METADATA_KEY, null)?.takeIf(String::isNotBlank)
+
+    fun setMetadataApiKey(value: String?) {
+        val clean = value?.trim().orEmpty()
+        if (clean.isBlank()) preferences.remove(KEY_METADATA_KEY) else preferences.put(KEY_METADATA_KEY, clean)
+    }
+
+    /**
      * Clears every stored preference for this user: profiles, favourites, language and the active
      * profile.
      *
@@ -152,6 +167,7 @@ class DesktopUserStore(
         const val KEY_ACTIVE_PROFILE = "active_profile"
         const val KEY_LANGUAGE = "language"
         const val KEY_TERMS_ACCEPTED = "terms-accepted"
+        const val KEY_METADATA_KEY = "metadata-api-key"
         const val KEY_LEGACY_FAVORITES = "favorites"
     }
 }

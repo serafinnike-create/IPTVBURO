@@ -1447,24 +1447,110 @@ internal fun PersonFilmographyPage(
                 .verticalScroll(rememberScrollState())
                 .padding(44.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(92.dp).clip(CircleShape).background(BuroColors.Primary.copy(alpha = 0.16f)),
-                    contentAlignment = Alignment.Center,
+            Row(verticalAlignment = Alignment.Top) {
+                // The photo comes from the metadata service; the provider sends none. The initials
+                // stand in when it is not configured or found nobody by that name.
+                BuroRemoteArtwork(
+                    artworkUrl = person.photoUrl,
+                    contentDescription = person.name,
+                    modifier = Modifier.size(120.dp).clip(CircleShape),
+                    contentScale = ContentScale.Crop,
                 ) {
-                    Text(person.name.take(2).uppercase(), color = BuroColors.Primary, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                    Box(
+                        Modifier.fillMaxSize().background(BuroColors.Primary.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            person.name.take(2).uppercase(),
+                            color = BuroColors.Primary,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Black,
+                        )
+                    }
                 }
                 Spacer(Modifier.width(20.dp))
-                Column {
-                    Text(person.name, color = BuroColors.Text, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                    Text("Foto indisponível na fonte · filmografia confirmada nesta sessão", color = BuroColors.TextMuted)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        person.name,
+                        color = BuroColors.Text,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    person.biography?.let { biography ->
+                        Spacer(Modifier.height(BuroSpacing.Sm))
+                        Text(
+                            text = biography,
+                            color = BuroColors.TextMuted,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 6,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
-            Spacer(Modifier.height(24.dp))
+
+            // The person's full filmography, which the playlist cannot know: it only carries the
+            // titles this provider happens to sell.
+            if (person.credits.isNotEmpty()) {
+                Spacer(Modifier.height(28.dp))
+                Text(
+                    "Filmografia",
+                    color = BuroColors.Text,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(BuroSpacing.Sm))
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+                    verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+                ) {
+                    person.credits.forEach { credit ->
+                        Column(modifier = Modifier.width(120.dp)) {
+                            BuroRemoteArtwork(
+                                artworkUrl = credit.posterUrl,
+                                contentDescription = credit.title,
+                                modifier =
+                                    Modifier
+                                        .width(120.dp)
+                                        .aspectRatio(2f / 3f)
+                                        .clip(BuroRadius.Small)
+                                        .background(BuroColors.SurfaceRaised),
+                                contentScale = ContentScale.Crop,
+                            ) {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    XtreamMonogram(credit.title, 34)
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = credit.title,
+                                color = BuroColors.Text,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text =
+                                    listOfNotNull(credit.year?.toString(), credit.character)
+                                        .joinToString("  ·  "),
+                                color = BuroColors.TextSubtle,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(28.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "Filmografia confirmada enquanto você navega nesta fonte.",
-                    color = BuroColors.TextMuted,
+                    "Disponível nesta lista",
+                    color = BuroColors.Text,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                 )
                 if (person.isLoading && person.items.isEmpty()) {
                     // The sweep costs one provider request per film, so it takes a moment. Saying

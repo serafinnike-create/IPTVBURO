@@ -24,6 +24,7 @@ import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
 import com.lucasserafin94.iptvburo.desktop.user.ProfilePhotoStore
+import com.lucasserafin94.iptvburo.metadata.TmdbClient
 import com.lucasserafin94.iptvburo.desktop.download.DesktopDownloadManager
 import com.lucasserafin94.iptvburo.desktop.download.DownloadResult
 import com.lucasserafin94.iptvburo.desktop.download.StoredDownload
@@ -69,6 +70,24 @@ class DesktopAppState(
     private val sourceLibrary: XtreamSourceLibrary = XtreamSourceLibrary(),
     private val photoStore: ProfilePhotoStore = ProfilePhotoStore(),
 ) {
+    /**
+     * Cast metadata, keyed by the user's own TMDb key.
+     *
+     * Rebuilt whenever the key changes so pasting one takes effect without a restart.
+     */
+    private var metadataClient = TmdbClient(userStore.metadataApiKey())
+
+    var metadataApiKey by mutableStateOf(userStore.metadataApiKey().orEmpty())
+        private set
+
+    val isMetadataConfigured: Boolean
+        get() = metadataClient.isConfigured
+
+    fun updateMetadataApiKey(value: String) {
+        metadataApiKey = value
+        userStore.setMetadataApiKey(value)
+        metadataClient = TmdbClient(value.takeIf(String::isNotBlank))
+    }
     /**
      * Photo chosen during setup, before the profile it belongs to exists.
      *
@@ -1221,6 +1240,35 @@ class DesktopAppState(
         if (selectedPerson?.name != cleanName) return
         val merged = (known + discovered).distinctBy { it.providerId }
         selectedPerson = PersonFilmography(name = cleanName, items = merged, isLoading = false)
+
+        // The photo and the full filmography can only come from outside: the provider sends the
+        // cast as a bare list of names. Fetched after the local sweep so the page is never blank
+        // while waiting on a network call that may not be configured at all.
+        if (!metadataClient.isConfigured) return
+        val enriched =
+            withContext(Dispatchers.IO) {
+                val person = metadataClient.findPerson(cleanName) ?: return@withContext null
+                Triple(
+                    person.profileImageUrl,
+                    metadataClient.personDetails(person.id)?.biography,
+                    metadataClient.filmography(person.id, MAX_FILMOGRAPHY_ITEMS),
+                )
+            } ?: return
+        if (selectedPerson?.name != cleanName) return
+        selectedPerson =
+            selectedPerson?.copy(
+                photoUrl = enriched.first,
+                biography = enriched.second,
+                credits =
+                    enriched.third.map { credit ->
+                        PersonCredit(
+                            title = credit.title,
+                            year = credit.year,
+                            posterUrl = credit.posterUrl,
+                            character = credit.character,
+                        )
+                    },
+            )
     }
 
     fun closePerson() {
@@ -1419,6 +1467,24 @@ data class PersonFilmography(
     val items: List<XtreamCatalogItem>,
     /** True while the catalogue is still being searched, so the page can say so. */
     val isLoading: Boolean = false,
+    /** Photo from the metadata service, absent when it is not configured or found nobody. */
+    val photoUrl: String? = null,
+    val biography: String? = null,
+    /**
+     * Everything the person is credited in, beyond what this playlist happens to carry.
+     *
+     * The provider only knows the titles in its own catalogue, which is why clicking an actor used
+     * to show the single film you had just come from.
+     */
+    val credits: List<PersonCredit> = emptyList(),
+)
+
+/** One entry of a person's filmography, from the metadata service rather than the playlist. */
+data class PersonCredit(
+    val title: String,
+    val year: Int?,
+    val posterUrl: String?,
+    val character: String?,
 )
 
 data class DesktopContinueWatchingEntry(
