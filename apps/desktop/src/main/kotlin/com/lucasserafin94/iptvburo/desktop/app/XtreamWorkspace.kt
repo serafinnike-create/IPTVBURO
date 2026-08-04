@@ -255,13 +255,35 @@ fun XtreamWorkspace(
                     scope.launch { appState.nextXtreamPage() }
                 },
             )
+            // No blocking panel while the catalogue loads. It sat over the middle of the screen
+            // saying something the user could not act on, and it hid the very catalogue they were
+            // waiting for. The header carries the same information as a quiet line instead.
             if (
                 appState.xtreamStatus is XtreamStatus.Connecting ||
                 appState.xtreamStatus is XtreamStatus.LoadingCatalog
             ) {
-                // Not during startup: the splash already says the catalogue is loading, and two
-                // stacked panels saying the same thing read as a glitch.
-                if (!appState.isStarting) XtreamLoadingOverlay(status = appState.xtreamStatus)
+                Row(
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = BuroSpacing.Sm)
+                            .clip(BuroRadius.Pill)
+                            .background(BuroColors.Surface.copy(alpha = 0.92f))
+                            .padding(horizontal = BuroSpacing.Md, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(
+                        color = BuroColors.Primary,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(BuroSpacing.Sm))
+                    Text(
+                        text = text.loadingCatalog,
+                        color = BuroColors.TextMuted,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
         }
     }
@@ -2133,41 +2155,6 @@ private fun XtreamMonogram(
 @Composable
 private fun XtreamPaneDivider() {
     Box(Modifier.width(1.dp).fillMaxHeight().background(BuroColors.BorderSoft))
-}
-
-@Composable
-private fun XtreamLoadingOverlay(status: XtreamStatus) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(BuroColors.Canvas.copy(alpha = 0.78f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier =
-                Modifier
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(BuroColors.SurfaceRaised)
-                    .padding(horizontal = 38.dp, vertical = 30.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            CircularProgressIndicator(color = BuroColors.Primary, modifier = Modifier.size(34.dp))
-            Spacer(Modifier.height(15.dp))
-            Text(
-                if (status is XtreamStatus.Connecting) {
-                    "Autenticando com segurança…"
-                } else {
-                    "Carregando catálogo sob demanda…"
-                },
-                color = BuroColors.Text,
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Spacer(Modifier.height(5.dp))
-            Text(
-                "Catálogo em memória; conexão lembrada com proteção do Windows.",
-                color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-    }
 }
 
 private fun itemMetadata(item: XtreamCatalogItem): String =
