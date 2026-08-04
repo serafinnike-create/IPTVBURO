@@ -282,7 +282,9 @@ class SessionXtreamRepository(
      */
     fun clearCatalogCache() {
         synchronized(lock) {
-            categories.clear()
+            // Only the item catalogues. Categories are fetched during connect, not by loadCatalog,
+            // so clearing them here emptied the category rail down to "Todas" with no way to
+            // repopulate it until the user signed in again.
             catalogs.clear()
         }
     }

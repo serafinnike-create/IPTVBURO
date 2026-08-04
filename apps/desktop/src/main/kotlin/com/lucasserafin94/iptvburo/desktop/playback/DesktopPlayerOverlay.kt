@@ -127,8 +127,11 @@ fun DesktopPlayerOverlay(
                         onToggleFullScreen()
                         true
                     }
+                    // Escape leaves full screen first and only closes the player when already
+                    // windowed. Closing outright meant the one obvious "get me out of here" key
+                    // ended playback, and with the chrome hidden there was nothing else to press.
                     Key.Escape -> {
-                        closePlayer()
+                        if (isFullScreen) onToggleFullScreen() else closePlayer()
                         true
                     }
                     Key.Spacebar -> {
@@ -141,9 +144,10 @@ fun DesktopPlayerOverlay(
             .focusRequester(playerFocus)
             .focusable(),
     ) {
-        // Hidden in full screen. Maximising the window while keeping a 64 dp chrome bar above the
-        // video is not full screen: the picture stayed letterboxed and the feature looked broken.
-        // Escape and F11 still work, so the controls remain reachable without them being visible.
+        // Hidden in full screen so the picture is not letterboxed by a 64 dp bar. It is not the only
+        // way out: in full screen the same actions appear as a floating bar over the video whenever
+        // the controls are awake, because relying on F11 alone stranded the user when the embedded
+        // video surface held the keyboard focus and the key never arrived.
         if (!isFullScreen) {
             Row(
                 modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 18.dp),
@@ -236,6 +240,15 @@ fun DesktopPlayerOverlay(
                     enabled = state.ready,
                     modifier = Modifier.width(180.dp),
                 )
+                // The way back, on screen rather than only on a key. In full screen the top bar is
+                // hidden, and the embedded video surface can hold the keyboard focus so F11 and
+                // Escape never arrive - which left closing the whole app as the only way out.
+                if (isFullScreen) {
+                    Spacer(Modifier.width(12.dp))
+                    OutlinedButton(onClick = onToggleFullScreen) { Text("⛶  Sair da tela cheia") }
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = closePlayer) { Text("Voltar ao app") }
+                }
             }
         }
         }

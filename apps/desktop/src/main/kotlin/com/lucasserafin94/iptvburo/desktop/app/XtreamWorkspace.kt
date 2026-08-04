@@ -73,6 +73,7 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -590,7 +591,7 @@ private fun XtreamCatalogGrid(
         } else {
             LazyVerticalGrid(
                 state = gridState,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 columns = GridCells.Adaptive(minSize = if (live) 250.dp else 172.dp),
                 // Generous bottom padding so the final row clears the pagination bar. With only
                 // the symmetric vertical padding the last row sat flush against it and read as
@@ -927,7 +928,11 @@ internal fun XtreamItemDetail(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight()
+                    // No fillMaxHeight before verticalScroll. Forcing the column to the viewport
+                    // height and then making it scrollable pins it at that height, so anything
+                    // below - the last episodes, the cast - is laid out past the bottom edge and
+                    // the scroll never reaches it. A scrolling column must be free to be taller
+                    // than what is visible; that is what gives it something to scroll.
                     .verticalScroll(rememberScrollState()),
             // Left-aligned. The previous centred card put the poster, the title and every action
             // on the vertical axis, which reads as a dialog rather than a page about a title.
@@ -1303,7 +1308,16 @@ internal fun PersonFilmographyPage(
             Spacer(Modifier.weight(1f))
             Text("ELENCO", color = BuroColors.Primary, fontWeight = FontWeight.Black)
         }
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(44.dp)) {
+        // Weighted for the space below the header, then free to grow taller than it: fillMaxSize
+        // before verticalScroll would pin the column to the viewport and put the filmography that
+        // follows past the bottom edge, out of the scroll's reach.
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(44.dp),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier.size(92.dp).clip(CircleShape).background(BuroColors.Primary.copy(alpha = 0.16f)),

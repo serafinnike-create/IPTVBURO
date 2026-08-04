@@ -75,6 +75,53 @@ class SessionXtreamRepositoryTest {
         assertEquals(1, repository.categories(XtreamContentType.LIVE).size)
     }
 
+    /**
+     * "Atualizar listas" drops the cached catalogues so they are re-fetched. Categories are loaded
+     * during connect, not by loadCatalog, so clearing them too left the rail showing only "Todas"
+     * with nothing able to bring them back.
+     */
+    @Test
+    fun `refreshing the catalogue keeps the categories`() {
+        enqueueAuthentication()
+        enqueueCategories("live")
+        enqueueCategories("movie")
+        enqueueCategories("series")
+        server.enqueue(jsonResponse(syntheticLiveCatalog(size = 10)))
+        repository.authenticateAndLoadInitial(loginInput())
+        assertEquals(1, repository.categories(XtreamContentType.LIVE).size)
+
+        repository.clearCatalogCache()
+
+        assertEquals(
+            1,
+            repository.categories(XtreamContentType.LIVE).size,
+            "categories must survive a catalogue refresh",
+        )
+    }
+
+    /** The point of the refresh: the items themselves are fetched again rather than answered from memory. */
+    @Test
+    fun `refreshing the catalogue re-fetches the items`() {
+        enqueueAuthentication()
+        enqueueCategories("live")
+        enqueueCategories("movie")
+        enqueueCategories("series")
+        server.enqueue(jsonResponse(syntheticLiveCatalog(size = 10)))
+        repository.authenticateAndLoadInitial(loginInput())
+        val requestsAfterConnect = server.requestCount
+
+        repository.clearCatalogCache()
+        server.enqueue(jsonResponse(syntheticLiveCatalog(size = 12)))
+        val summary = repository.loadCatalog(XtreamContentType.LIVE)
+
+        assertEquals(12, summary.loadedItemCount, "the new item count must be visible")
+        assertEquals(
+            requestsAfterConnect + 1,
+            server.requestCount,
+            "the provider must actually be asked again",
+        )
+    }
+
     @Test
     fun `playback URL is built only through the explicit confirmed method and session clears`() {
         enqueueAuthentication(allowedFormatsJson = """["m3u8"]""")
