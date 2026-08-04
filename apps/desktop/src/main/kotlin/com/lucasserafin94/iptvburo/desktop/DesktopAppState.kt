@@ -725,6 +725,12 @@ class DesktopAppState(
                 ) to latestSummary
             }
         }.onSuccess { (snapshot, latestSummary) ->
+            // Reported once per load so the real counts can be read from the log rather than
+            // inferred. The shelves have been "fixed" twice against a cause never observed.
+            println(
+                "BURO home: movies=${snapshot.movies.size} series=${snapshot.series.size} " +
+                    "live=${snapshot.live.size} hero=${snapshot.hero != null}",
+            )
             xtreamSummary = latestSummary
             // A snapshot with no films and no series is not a loaded home, it is a home built
             // before the catalogues arrived. Storing it as Loaded made the screen's own effect

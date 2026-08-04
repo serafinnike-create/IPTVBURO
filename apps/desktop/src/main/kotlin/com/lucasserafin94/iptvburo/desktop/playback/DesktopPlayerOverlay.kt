@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -300,28 +301,40 @@ fun DesktopPlayerOverlay(
         // window skips it entirely: there is no room for a seek bar, a clock and five buttons in
         // 300dp of height, and taking that room is what left no picture at all.
         if (isCompact) {
+            // A translucent strip over the picture rather than a bar beneath it. At 480x300 every
+            // row of pixels the chrome takes is a row the film loses, and a solid slab across the
+            // bottom was a fifth of the window.
             Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .background(Color(0xE6121418))
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                listOf(Color.Transparent, Color(0xB30A0C0F)),
+                            ),
+                        ).padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                TextButton(onClick = controller::togglePlayback) {
+                TextButton(
+                    onClick = controller::togglePlayback,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                ) {
                     Text(
                         text = if (state.playing) "❚❚" else "▶",
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.9f),
+                        style = MaterialTheme.typography.labelSmall,
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onToggleCompact) {
+                TextButton(
+                    onClick = onToggleCompact,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                ) {
                     Text(
                         text = "Voltar ao app",
                         color = BuroColors.Primary,
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelSmall,
                     )
                 }
             }

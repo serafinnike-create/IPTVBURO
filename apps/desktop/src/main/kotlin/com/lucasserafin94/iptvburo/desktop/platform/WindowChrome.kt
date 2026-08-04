@@ -79,15 +79,33 @@ object WindowChrome {
                 }
             } else {
                 user32.SetWindowLong(hwnd, GWL_STYLE, style or WS_OVERLAPPEDWINDOW)
-                user32.SetWindowPos(
-                    hwnd,
-                    null,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_FRAMECHANGED or SWP_NOMOVE or SWP_NOSIZE or SWP_NOZORDER or SWP_NOOWNERZORDER,
-                )
+                // Restored to the work area, not merely re-decorated. Putting the frame back while
+                // the window still covered the whole monitor left it larger than the desktop, with
+                // the picture spilling over the taskbar and no way to grab an edge.
+                val monitor = user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+                val info = WinUser.MONITORINFO()
+                if (user32.GetMonitorInfo(monitor, info)) {
+                    val work = info.rcWork
+                    user32.SetWindowPos(
+                        hwnd,
+                        null,
+                        work.left + RESTORE_INSET,
+                        work.top + RESTORE_INSET,
+                        (work.right - work.left) - RESTORE_INSET * 2,
+                        (work.bottom - work.top) - RESTORE_INSET * 2,
+                        SWP_FRAMECHANGED or SWP_NOZORDER or SWP_NOOWNERZORDER,
+                    )
+                } else {
+                    user32.SetWindowPos(
+                        hwnd,
+                        null,
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_FRAMECHANGED or SWP_NOMOVE or SWP_NOSIZE or SWP_NOZORDER or SWP_NOOWNERZORDER,
+                    )
+                }
             }
         }
     }
@@ -103,6 +121,9 @@ object WindowChrome {
     private const val SWP_NOSIZE = 0x0001
     private const val SWP_NOZORDER = 0x0004
     private const val SWP_NOOWNERZORDER = 0x0200
+
+    /** A small margin so the restored window is visibly inside the desktop, not flush to it. */
+    private const val RESTORE_INSET = 24
 
     private interface User32Ex : com.sun.jna.win32.StdCallLibrary {
         fun GetWindowLong(hwnd: WinDef.HWND, index: Int): Int
