@@ -3,6 +3,7 @@ package com.lucasserafin94.iptvburo.desktop.app
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -47,7 +48,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
  * [message] describes the current step, so a slow provider looks like progress instead of a hang.
  */
 @Composable
-fun SplashScreen(message: String) {
+fun SplashScreen(message: String, progress: Float) {
     val transition = rememberInfiniteTransition(label = "splash")
 
     // A slow breath rather than a spinner. The mark is the brand; making it pulse says "working"
@@ -135,21 +136,39 @@ fun SplashScreen(message: String) {
                 modifier =
                     Modifier
                         .width(260.dp)
-                        .height(3.dp)
+                        .height(4.dp)
                         .clip(CircleShape)
                         .background(BuroColors.Surface),
             ) {
+                // A real measure, counted from the steps that actually happen. Eased so the bar
+                // glides between them instead of jumping, which is what makes a five-step count
+                // feel continuous without inventing progress it does not have.
+                val settled by animateFloatAsState(
+                    targetValue = progress.coerceIn(0f, 1f),
+                    animationSpec = tween(durationMillis = 450),
+                    label = "progress",
+                )
                 Box(
                     modifier =
                         Modifier
-                            .fillMaxWidth(0.35f)
-                            .height(3.dp)
+                            .fillMaxWidth(settled)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(BuroColors.Primary),
+                )
+                // The sweep rides on top of whatever has been filled, so the bar still looks alive
+                // during a long step rather than frozen at the same percentage.
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(0.3f)
+                            .height(4.dp)
                             .clip(CircleShape)
                             .background(
                                 Brush.horizontalGradient(
                                     listOf(
                                         Color.Transparent,
-                                        BuroColors.Primary,
+                                        BuroColors.Primary.copy(alpha = 0.55f),
                                         Color.Transparent,
                                     ),
                                 ),
@@ -157,6 +176,12 @@ fun SplashScreen(message: String) {
                             .splashOffset(sweep),
                 )
             }
+            Spacer(Modifier.height(BuroSpacing.Sm))
+            Text(
+                text = "${(progress.coerceIn(0f, 1f) * 100).toInt()}%",
+                color = BuroColors.Primary,
+                style = MaterialTheme.typography.labelMedium,
+            )
         }
     }
 }

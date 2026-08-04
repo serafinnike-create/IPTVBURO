@@ -117,14 +117,60 @@ fun DesktopPlayerOverlay(
         }
     }
 
+    val closePlayerRef = {
+        if (state.durationMillis > 0.0) {
+            onCheckpoint(state.positionMillis.toLong(), state.durationMillis.toLong())
+        }
+        onClose()
+    }
+
+    // A global AWT listener, because focus is the whole problem here: the embedded video surface,
+    // the SwingPanel and Compose all take turns owning it, and whichever holds it swallows the key.
+    // This sees every key in the process before any component does, so Escape always works no
+    // matter what has focus - the difference between a player you can leave and one that forces
+    // the user to kill the app.
+    DisposableEffect(isFullScreen) {
+        val dispatcher =
+            java.awt.KeyEventDispatcher { event ->
+                if (event.id != java.awt.event.KeyEvent.KEY_PRESSED) return@KeyEventDispatcher false
+                wakeCounter++
+                when (event.keyCode) {
+                    java.awt.event.KeyEvent.VK_ESCAPE -> {
+                        if (isFullScreen) onToggleFullScreen() else closePlayerRef()
+                        true
+                    }
+                    java.awt.event.KeyEvent.VK_F11 -> {
+                        onToggleFullScreen()
+                        true
+                    }
+                    else -> false
+                }
+            }
+        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
+            .addKeyEventDispatcher(dispatcher)
+        onDispose {
+            java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
+                .removeKeyEventDispatcher(dispatcher)
+        }
+    }
+
+    // Likewise for the pointer: a move anywhere in the window wakes the controls, so hovering the
+    // strip where the bar belongs brings it back even when the video surface is eating the events.
+    DisposableEffect(Unit) {
+        val awtListener =
+            java.awt.event.AWTEventListener { wakeCounter++ }
+        java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(
+            awtListener,
+            java.awt.AWTEvent.MOUSE_MOTION_EVENT_MASK,
+        )
+        onDispose { java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(awtListener) }
+    }
+
     // Nothing requested focus, so key events never reached the handler and F11 did nothing at all.
     val playerFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { playerFocus.requestFocus() } }
 
-    val closePlayer = {
-        if (state.durationMillis > 0.0) onCheckpoint(state.positionMillis.toLong(), state.durationMillis.toLong())
-        onClose()
-    }
+    val closePlayer = closePlayerRef
     Column(
         Modifier
             .fillMaxSize()

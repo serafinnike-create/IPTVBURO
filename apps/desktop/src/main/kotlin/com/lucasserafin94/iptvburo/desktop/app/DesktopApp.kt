@@ -402,7 +402,10 @@ fun DesktopApp(
                 // Above the onboarding branch: a returning user must not glimpse a setup screen
                 // between launching the app and their catalogue appearing.
                 if (appState.isStarting) {
-                    SplashScreen(message = appState.startupMessage.ifBlank { text.loadingCatalog })
+                    SplashScreen(
+                        message = appState.startupMessage.ifBlank { text.loadingCatalog },
+                        progress = appState.startupProgress,
+                    )
                 }
                 // First run is an ordered sequence — language, copyright, account, connection — and
                 // exactly one step is on screen at a time.

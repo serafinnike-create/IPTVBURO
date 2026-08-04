@@ -670,7 +670,11 @@ class DesktopAppState(
         dailyHomeStatus = DailyHomeStatus.Loading
         runCatching {
             withContext(Dispatchers.IO) {
-                var latestSummary = xtreamSummary
+                // Asked of the repository, not of the cached summary. The summary is only
+                // published back to state in onSuccess, so a home built during startup read a
+                // stale copy, believed the catalogues were still missing - or already present when
+                // they were not - and paged an empty catalogue into empty shelves.
+                var latestSummary = xtreamRepository.summary() ?: xtreamSummary
                 if (XtreamContentType.MOVIE !in latestSummary?.loadedContentTypes.orEmpty()) {
                     latestSummary = xtreamRepository.loadCatalog(XtreamContentType.MOVIE)
                 }
@@ -852,19 +856,41 @@ class DesktopAppState(
     var isStarting by mutableStateOf(true)
         private set
 
+    /** Session, connect, catalogues, home, done. */
+    private val STARTUP_STEPS = 5
+
     /** What the splash screen is currently waiting on, so a slow provider looks like progress. */
     var startupMessage by mutableStateOf("")
         private set
 
+    /**
+     * How far startup has got, 0..1.
+     *
+     * Counted from the steps that actually happen — session, channels, films, series, home — rather
+     * than animated against a guess. The provider never says how long a catalogue will take, so a
+     * timed fake bar would be a lie the user could catch by watching it stall at 90%.
+     */
+    var startupProgress by mutableStateOf(0f)
+        private set
+
+    private fun startupStep(step: Int, message: String) {
+        startupProgress = (step.toFloat() / STARTUP_STEPS).coerceIn(0f, 1f)
+        startupMessage = message
+    }
+
     suspend fun restoreRememberedXtream() {
         try {
             if (xtreamStatus !is XtreamStatus.Disconnected || xtreamSummary != null) return
+            startupStep(1, "Abrindo a sua sessão…")
             val input = withContext(Dispatchers.IO) { rememberedXtreamStore.load() } ?: return
+            startupStep(2, "Conectando ao provedor…")
             connectXtream(input)
             // The home is built from the catalogue, so loading it here means the first screen is
             // complete when the splash clears rather than filling in afterwards.
             if (xtreamStatus !is XtreamStatus.Error) {
+                startupStep(3, "Carregando filmes e séries…")
                 loadDailyHome(LocalDate.now())
+                startupStep(5, "Pronto")
             }
         } finally {
             // In a finally so no path - no saved session, a provider that refuses, an exception -
