@@ -117,6 +117,7 @@ class SessionXtreamRepository(
         requestedPage: Int,
         pageSize: Int = DEFAULT_PAGE_SIZE,
         releaseYear: Int? = null,
+        minimumRating: Double? = null,
         allowedIdentities: Set<ContentIdentity>? = null,
         kidsMode: Boolean = false,
     ): XtreamCatalogPage {
@@ -133,7 +134,16 @@ class SessionXtreamRepository(
         val categoryNames = synchronized(lock) { categories[contentType].orEmpty().associate { it.providerId to it.name } }
 
         repeat(catalogItems.size) { index ->
-            if (catalogItems.matches(index, categoryId, normalizedQuery, releaseYear, allowedIdentities)) {
+            if (
+                catalogItems.matches(
+                    index,
+                    categoryId,
+                    normalizedQuery,
+                    releaseYear,
+                    minimumRating,
+                    allowedIdentities,
+                )
+            ) {
                 val item = catalogItems.itemAt(index)
                 val allowedForKids =
                     !kidsMode || FamilyContentPolicy.isAllowedForKids(
@@ -162,6 +172,9 @@ class SessionXtreamRepository(
                 requestedPage = pageCount - 1,
                 pageSize = pageSize,
                 releaseYear = releaseYear,
+                // Carried through: without it the clamp to the last page silently dropped the
+                // rating filter and returned titles the user had just filtered out.
+                minimumRating = minimumRating,
                 allowedIdentities = allowedIdentities,
                 kidsMode = kidsMode,
             )

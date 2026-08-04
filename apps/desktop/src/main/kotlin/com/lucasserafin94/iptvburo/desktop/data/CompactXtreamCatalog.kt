@@ -68,6 +68,7 @@ internal class CompactXtreamCatalog(
         categoryId: String?,
         normalizedQuery: String,
         releaseYear: Int? = null,
+        minimumRating: Double? = null,
         allowedIdentities: Set<ContentIdentity>? = null,
     ): Boolean {
         require(index in 0 until size)
@@ -75,10 +76,14 @@ internal class CompactXtreamCatalog(
             categoryId == null ||
                 encodedCategoryIds[index]?.contains("$CATEGORY_SEPARATOR$categoryId$CATEGORY_SEPARATOR") == true
         val matchesYear = releaseYear == null || hasYear[index] && years[index] == releaseYear
+        // An unrated title is excluded once a minimum is asked for. Treating "no rating" as good
+        // enough would fill a "4+ stars" filter with titles that were never scored at all.
+        val matchesRating =
+            minimumRating == null || (hasRating[index] && ratings[index] >= minimumRating)
         // Matched on content identity rather than provider id. Provider ids are per-list numbering,
         // so filtering favourites by them showed the wrong titles once the user changed list.
         val matchesLibrary = allowedIdentities == null || identityAt(index) in allowedIdentities
-        return matchesCategory && matchesYear && matchesLibrary &&
+        return matchesCategory && matchesYear && matchesRating && matchesLibrary &&
             (normalizedQuery.isEmpty() || names[index].contains(normalizedQuery, ignoreCase = true))
     }
 

@@ -96,6 +96,7 @@ fun main() {
         var restoreSize by remember { mutableStateOf(windowState.size) }
         var restorePosition by remember { mutableStateOf(windowState.position) }
         var compactMode by remember { mutableStateOf(false) }
+        var fullScreen by remember { mutableStateOf(false) }
 
         Window(
             onCloseRequest = {
@@ -127,18 +128,18 @@ fun main() {
             LaunchedEffect(windowState.placement) {
                 WindowChrome.applyDarkTitleBar(window)
             }
+            // True full screen: the frame is removed and the window covers the monitor. Compose's
+            // Fullscreen placement only maximises a decorated window, so a border and the taskbar
+            // stayed on top of the video.
+            LaunchedEffect(fullScreen) {
+                WindowChrome.setBorderlessFullScreen(window, fullScreen)
+                if (!fullScreen) WindowChrome.applyDarkTitleBar(window)
+            }
             DesktopApp(
                 appState = appState,
                 ownerWindow = window,
-                isFullScreen = windowState.placement == WindowPlacement.Fullscreen,
-                onToggleFullScreen = {
-                    windowState.placement =
-                        if (windowState.placement == WindowPlacement.Fullscreen) {
-                            WindowPlacement.Floating
-                        } else {
-                            WindowPlacement.Fullscreen
-                        }
-                },
+                isFullScreen = fullScreen,
+                onToggleFullScreen = { fullScreen = !fullScreen },
                 isCompact = compactMode,
                 onToggleCompact = {
                     if (compactMode) {

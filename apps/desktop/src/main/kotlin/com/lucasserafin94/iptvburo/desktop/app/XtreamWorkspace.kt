@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.HorizontalScrollbar
+import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -203,6 +204,10 @@ fun XtreamWorkspace(
             onDisconnect = appState::disconnectXtream,
             selectedYear = appState.selectedXtreamYear,
             onYearSelected = { year -> scope.launch { appState.selectXtreamYear(year) } },
+            minimumRating = appState.selectedXtreamMinimumRating,
+            onMinimumRatingSelected = { rating ->
+                scope.launch { appState.selectXtreamMinimumRating(rating) }
+            },
         )
         XtreamCategoryRail(
             categories = appState.xtreamCategories,
@@ -260,6 +265,8 @@ private fun XtreamToolbar(
     onDisconnect: () -> Unit,
     selectedYear: Int?,
     onYearSelected: (Int?) -> Unit,
+    minimumRating: Double?,
+    onMinimumRatingSelected: (Double?) -> Unit,
 ) {
     val text = strings
     Column(
@@ -329,6 +336,14 @@ private fun XtreamToolbar(
                         currentYear = currentYear,
                         label = text.chooseYear,
                         onSelect = onYearSelected,
+                    )
+                    // Whole-star thresholds rather than a slider: the provider's ratings are coarse
+                    // and "at least four stars" is the question people actually ask.
+                    RatingPicker(
+                        selected = minimumRating,
+                        label = text.chooseRating,
+                        anyLabel = text.anyRating,
+                        onSelect = onMinimumRatingSelected,
                     )
                 }
                 Spacer(Modifier.width(BuroSpacing.Md))
@@ -482,12 +497,21 @@ private fun XtreamCategoryRail(
             )
         }
     }
+    // Explicit colours. The default scrollbar is nearly transparent, which on this near-black
+    // surface made it invisible: the rail scrolled, but nothing on screen said so and there was
+    // no visible handle to drag, so the categories past the right edge looked unreachable.
     HorizontalScrollbar(
         adapter = rememberScrollbarAdapter(listState),
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = BuroSpacing.GutterCompact),
+                .padding(horizontal = BuroSpacing.GutterCompact, vertical = 2.dp),
+        style =
+            LocalScrollbarStyle.current.copy(
+                thickness = 8.dp,
+                unhoverColor = BuroColors.BorderSoft,
+                hoverColor = BuroColors.Primary,
+            ),
     )
     }
 }
@@ -630,6 +654,13 @@ private fun XtreamCatalogGrid(
             VerticalScrollbar(
                 adapter = rememberScrollbarAdapter(gridState),
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 4.dp),
+                // The default is nearly transparent and vanishes against this canvas.
+                style =
+                    LocalScrollbarStyle.current.copy(
+                        thickness = 10.dp,
+                        unhoverColor = BuroColors.BorderSoft,
+                        hoverColor = BuroColors.Primary,
+                    ),
             )
             }
         }
@@ -1949,6 +1980,94 @@ private fun YearPicker(
                     },
                     onClick = {
                         onSelect(year)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Filters the catalogue by the provider's own rating.
+ *
+ * Whole stars only. The ratings are coarse and often absent, so finer thresholds would suggest a
+ * precision the data does not have; a title with no rating at all is excluded once a minimum is
+ * asked for, rather than being quietly treated as good enough.
+ */
+@Composable
+private fun RatingPicker(
+    selected: Double?,
+    label: String,
+    anyLabel: String,
+    onSelect: (Double?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val active = selected != null
+
+    Box {
+        BuroInteractiveRow(
+            onClick = { expanded = true },
+            selected = active,
+            shape = BuroRadius.Pill,
+            contentDescription = label,
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .border(
+                            width = 1.dp,
+                            color =
+                                if (active) {
+                                    BuroColors.Primary.copy(alpha = 0.55f)
+                                } else {
+                                    BuroColors.BorderSoft
+                                },
+                            shape = BuroRadius.Pill,
+                        ).padding(horizontal = 14.dp, vertical = 7.dp),
+            ) {
+                Text(
+                    text =
+                        if (active) {
+                            "★ ${selected!!.toInt()}+  ▾"
+                        } else {
+                            "$label  ▾"
+                        },
+                    color = if (active) BuroColors.Primary else BuroColors.TextMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(BuroColors.SurfaceRaised),
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = anyLabel,
+                        color = if (selected == null) BuroColors.Primary else BuroColors.Text,
+                    )
+                },
+                onClick = {
+                    onSelect(null)
+                    expanded = false
+                },
+            )
+            (5 downTo 1).forEach { stars ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = "★ $stars+",
+                            color =
+                                if (selected?.toInt() == stars) BuroColors.Primary else BuroColors.Text,
+                        )
+                    },
+                    onClick = {
+                        onSelect(stars.toDouble())
                         expanded = false
                     },
                 )

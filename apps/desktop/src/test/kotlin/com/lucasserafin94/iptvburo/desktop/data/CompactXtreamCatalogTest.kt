@@ -41,10 +41,46 @@ class CompactXtreamCatalogTest {
         assertEquals("499999", catalog.itemAt(499_999).providerId)
     }
 
+    @Test
+    fun `a minimum rating keeps only titles that reach it`() {
+        val catalog = CompactXtreamCatalog(XtreamContentType.MOVIE)
+        catalog.add(item(1, categoryIds = listOf("a"), rating = 4.5))
+        catalog.add(item(2, categoryIds = listOf("a"), rating = 2.0))
+        catalog.add(item(3, categoryIds = listOf("a"), rating = 4.0))
+
+        val matching =
+            (0 until catalog.size).filter { index ->
+                catalog.matches(index, null, "", null, minimumRating = 4.0, allowedIdentities = null)
+            }
+
+        assertEquals(listOf(0, 2), matching)
+    }
+
+    /**
+     * Providers leave the rating out often. Treating a missing rating as passing would fill a
+     * "4 stars and up" filter with titles that were never scored.
+     */
+    @Test
+    fun `an unrated title is excluded once a minimum is set`() {
+        val catalog = CompactXtreamCatalog(XtreamContentType.MOVIE)
+        catalog.add(item(1, categoryIds = listOf("a"), rating = null))
+
+        assertEquals(
+            false,
+            catalog.matches(0, null, "", null, minimumRating = 1.0, allowedIdentities = null),
+        )
+        assertEquals(
+            true,
+            catalog.matches(0, null, "", null, minimumRating = null, allowedIdentities = null),
+            "with no minimum it must still be listed",
+        )
+    }
+
     private fun item(
         index: Int,
         contentType: XtreamContentType = XtreamContentType.MOVIE,
         categoryIds: List<String>,
+        rating: Double? = 4.5,
     ): XtreamCatalogItem =
         XtreamCatalogItem(
             providerId = index.toString(),
@@ -54,7 +90,7 @@ class CompactXtreamCatalogTest {
             containerExtension = "mp4",
             artworkUrl = "https://images.invalid/$index.jpg",
             year = 2026,
-            rating = 4.5,
+            rating = rating,
             addedAtEpochSeconds = index.toLong(),
         )
 }

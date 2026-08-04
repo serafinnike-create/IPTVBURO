@@ -169,6 +169,10 @@ class DesktopAppState(
     var selectedXtreamYear by mutableStateOf<Int?>(null)
         private set
 
+    /** Lowest rating a title may have to appear, or null for no rating filter. */
+    var selectedXtreamMinimumRating by mutableStateOf<Double?>(null)
+        private set
+
     var xtreamSearchQuery by mutableStateOf("")
         private set
 
@@ -794,6 +798,7 @@ class DesktopAppState(
             xtreamCategories = visibleXtreamCategories(contentType)
             selectedXtreamCategoryId = null
             selectedXtreamYear = null
+            selectedXtreamMinimumRating = null
             xtreamSearchQuery = ""
             seriesDetailsStatus = SeriesDetailsStatus.Idle
             movieDetailsStatus = MovieDetailsStatus.Idle
@@ -814,6 +819,13 @@ class DesktopAppState(
 
     suspend fun selectXtreamYear(year: Int?) {
         selectedXtreamYear = year
+        seriesDetailsStatus = SeriesDetailsStatus.Idle
+        movieDetailsStatus = MovieDetailsStatus.Idle
+        refreshXtreamPage(pageIndex = 0)
+    }
+
+    suspend fun selectXtreamMinimumRating(rating: Double?) {
+        selectedXtreamMinimumRating = rating
         seriesDetailsStatus = SeriesDetailsStatus.Idle
         movieDetailsStatus = MovieDetailsStatus.Idle
         refreshXtreamPage(pageIndex = 0)
@@ -1249,6 +1261,7 @@ class DesktopAppState(
         val category = selectedXtreamCategoryId
         val query = xtreamSearchQuery
         val releaseYear = selectedXtreamYear
+        val minimumRating = selectedXtreamMinimumRating
         val allowedIdentities = if (favoritesOnly) favoriteIdentities() else null
         val page =
             withContext(Dispatchers.Default) {
@@ -1258,6 +1271,7 @@ class DesktopAppState(
                     query = query,
                     requestedPage = pageIndex,
                     releaseYear = releaseYear,
+                    minimumRating = minimumRating,
                     allowedIdentities = allowedIdentities,
                     kidsMode = activeProfile?.isKids == true,
                 )
