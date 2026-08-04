@@ -172,6 +172,7 @@ fun XtreamDailyHome(
         val person = appState.selectedPerson
         if (person != null) {
             PersonFilmographyPage(
+                onOpenCredit = appState::openTitleFromCredit,
                 person = person,
                 onBack = {
                     personOpen = false

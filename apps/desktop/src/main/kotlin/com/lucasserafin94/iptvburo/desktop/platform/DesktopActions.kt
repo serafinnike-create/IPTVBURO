@@ -45,6 +45,36 @@ fun chooseM3uFile(
     return dialog.files.firstOrNull()?.toPath()
 }
 
+/**
+ * Asks where to write an M3U.
+ *
+ * The chosen path is only a destination; nothing is written by this function. The sensitive-URL
+ * warning required by GDD 8 section 17 is raised before the file is produced, so picking a
+ * destination must not itself commit the user to exporting.
+ */
+fun chooseM3uDestination(
+    owner: Frame?,
+    title: String,
+    suggestedName: String,
+): Path? {
+    val dialog =
+        FileDialog(owner, title, FileDialog.SAVE).apply {
+            // The extension is appended below rather than trusted from the dialog: the native save
+            // dialog does not add one, and a playlist saved without .m3u will not reopen.
+            file = suggestedName
+            isVisible = true
+        }
+    val directory = dialog.directory ?: return null
+    val name = dialog.file ?: return null
+    val withExtension =
+        if (name.endsWith(".m3u", ignoreCase = true) || name.endsWith(".m3u8", ignoreCase = true)) {
+            name
+        } else {
+            "$name.m3u"
+        }
+    return Path.of(directory, withExtension)
+}
+
 fun openChannelExternally(channel: Channel): ExternalOpenResult {
     val uri =
         runCatching { URI(channel.streamUri) }

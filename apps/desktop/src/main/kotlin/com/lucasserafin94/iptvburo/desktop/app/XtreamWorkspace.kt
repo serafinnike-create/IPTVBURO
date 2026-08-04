@@ -154,6 +154,7 @@ fun XtreamWorkspace(
         val person = appState.selectedPerson
         if (person != null) {
             PersonFilmographyPage(
+                onOpenCredit = appState::openTitleFromCredit,
                 person = person,
                 onBack = {
                     personOpen = false
@@ -1619,7 +1620,14 @@ internal fun PersonFilmographyPage(
     person: PersonFilmography,
     onBack: () -> Unit,
     onOpenItem: (XtreamCatalogItem) -> Unit,
+    // Returns false when this playlist does not carry the title, so the page can say so.
+    onOpenCredit: suspend (String) -> Boolean = { false },
 ) {
+    val scope = rememberCoroutineScope()
+    // The title the user asked for and this list does not have. Shown rather than swallowed: a
+    // click that silently does nothing reads as a broken button.
+    var missingCredit by remember { mutableStateOf<String?>(null) }
+
     Column(Modifier.fillMaxSize().background(BuroColors.Canvas)) {
         Row(
             modifier = Modifier.fillMaxWidth().height(64.dp).background(BuroColors.Surface).padding(horizontal = 22.dp),
@@ -1698,7 +1706,22 @@ internal fun PersonFilmographyPage(
                     verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
                 ) {
                     person.credits.forEach { credit ->
-                        Column(modifier = Modifier.width(120.dp)) {
+                        Column(
+                            modifier =
+                                Modifier
+                                    .width(120.dp)
+                                    .clip(BuroRadius.Small)
+                                    .clickable {
+                                        // A credit names a film the playlist may not carry at all,
+                                        // so the click either lands on it or says plainly that this
+                                        // list does not have it.
+                                        scope.launch {
+                                            if (!onOpenCredit(credit.title)) {
+                                                missingCredit = credit.title
+                                            }
+                                        }
+                                    },
+                        ) {
                             BuroRemoteArtwork(
                                 artworkUrl = credit.posterUrl,
                                 contentDescription = credit.title,

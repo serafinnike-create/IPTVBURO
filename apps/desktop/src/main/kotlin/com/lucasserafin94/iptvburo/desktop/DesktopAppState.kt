@@ -24,7 +24,9 @@ import com.lucasserafin94.iptvburo.desktop.security.XtreamSourceLibrary
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
+import com.lucasserafin94.iptvburo.desktop.user.ListeningHistoryStore
 import com.lucasserafin94.iptvburo.desktop.user.MusicPlayCountStore
+import com.lucasserafin94.iptvburo.desktop.user.MusicPlaylistStore
 import com.lucasserafin94.iptvburo.desktop.user.ProfilePhotoStore
 import com.lucasserafin94.iptvburo.metadata.TmdbClient
 import com.lucasserafin94.iptvburo.desktop.build.BUNDLED_TMDB_KEY
@@ -39,8 +41,21 @@ import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
+import com.lucasserafin94.iptvburo.domain.model.ListeningHistoryEntry
+import com.lucasserafin94.iptvburo.domain.model.ListeningKind
 import com.lucasserafin94.iptvburo.domain.model.MusicLibrary
+import com.lucasserafin94.iptvburo.domain.model.MusicPlaylist
+import com.lucasserafin94.iptvburo.domain.model.MusicPlaylistExportResult
+import com.lucasserafin94.iptvburo.domain.model.MusicPlaylistExportWarning
+import com.lucasserafin94.iptvburo.domain.model.MusicPlaylistExporter
+import com.lucasserafin94.iptvburo.domain.model.MusicPlaylistKind
 import com.lucasserafin94.iptvburo.domain.model.MusicTrack
+import com.lucasserafin94.iptvburo.domain.model.SmartPlaylistRule
+import com.lucasserafin94.iptvburo.domain.model.SmartPlaylists
+import com.lucasserafin94.iptvburo.playlist.MusicPlaylistMapper
+import com.lucasserafin94.iptvburo.domain.model.PlaybackQueue
+import com.lucasserafin94.iptvburo.domain.model.QueueEntry
+import com.lucasserafin94.iptvburo.domain.model.QueueMediaKind
 import com.lucasserafin94.iptvburo.domain.model.PlaybackContentType
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressIdentity
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgress
@@ -57,6 +72,7 @@ import com.lucasserafin94.iptvburo.xtream.XtreamEpgProgram
 import com.lucasserafin94.iptvburo.xtream.XtreamSeriesDetails
 import java.net.URI
 import java.nio.file.AccessDeniedException
+import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.time.LocalDate
@@ -80,6 +96,14 @@ class DesktopAppState(
     private val photoStore: ProfilePhotoStore = ProfilePhotoStore(),
     private val musicLoader: MusicLibraryLoader = MusicLibraryLoader(),
     private val playCountStore: MusicPlayCountStore = MusicPlayCountStore(),
+    /**
+     * Listening history, which owns the play count that [playCountStore] used to hold.
+     *
+     * The legacy store is still injected because the history store migrates from it on first read;
+     * nothing writes counts through it any more. See [ListeningHistoryStore].
+     */
+    private val listeningHistoryStore: ListeningHistoryStore = ListeningHistoryStore(legacyCounts = playCountStore),
+    private val musicPlaylistStore: MusicPlaylistStore = MusicPlaylistStore(),
 ) {
     /**
      * Cast metadata, keyed by the user's own TMDb key.
@@ -719,6 +743,33 @@ class DesktopAppState(
     var musicPlayCounts by mutableStateOf<Map<String, Int>>(emptyMap())
         private set
 
+    /**
+     * The active profile's listening history, keyed by track id — GDD 8 section 18.
+     *
+     * Held in state because the smart playlists are evaluated from it: "never played" and
+     * "recently played" are both functions of this map, so the shelves recompute when it changes.
+     */
+    var listeningHistory by mutableStateOf<Map<String, ListeningHistoryEntry>>(emptyMap())
+        private set
+
+    /** The profile's own playlists — manual, imported and saved queues. */
+    var musicPlaylists by mutableStateOf<List<MusicPlaylist>>(emptyList())
+        private set
+
+    /** Which playlist is open, or null while the playlist index is showing. */
+    var selectedMusicPlaylistId by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * The pending export awaiting the user's answer to the sensitive-URL warning.
+     *
+     * GDD 8 section 17 permits export only with authorisation and a warning about sensitive URLs.
+     * Holding the request here means the file is written only after the dialog is confirmed — the
+     * warning cannot be bypassed by a caller that forgets to raise it.
+     */
+    var pendingMusicExport by mutableStateOf<PendingMusicExport?>(null)
+        private set
+
     /** Which artist's tracks are open, or null while the artist grid is showing. */
     var selectedMusicArtist by mutableStateOf<String?>(null)
         private set
@@ -739,6 +790,10 @@ class DesktopAppState(
      * silent by design: the library is simply left empty and the section stays hidden.
      */
     suspend fun loadMusicLibrary() {
+        // The queue holds identities from the library being replaced, and GDD 8 §16 scopes it to one
+        // profile. Carrying it across would leave rows that either resolve to nothing or, worse,
+        // resolve to a different track that happens to reuse the id.
+        playbackQueue = PlaybackQueue.EMPTY
         val path = activeProfile?.musicPlaylistPath
         if (path.isNullOrBlank()) {
             musicLibrary = MusicLibrary.EMPTY
@@ -749,7 +804,20 @@ class DesktopAppState(
                 runCatching { musicLoader.load(Path.of(path)) }.getOrNull()
             }
         musicLibrary = loaded ?: MusicLibrary.EMPTY
-        musicPlayCounts = playCountStore.countsFor(activeProfileId)
+        reloadMusicUserData()
+    }
+
+    /**
+     * Reloads the per-profile music data that lives beside the library: history and playlists.
+     *
+     * Counts come from the history store rather than [playCountStore]; the history is now the only
+     * writer of that fact, and reading it from two places is how they would drift apart.
+     */
+    private fun reloadMusicUserData() {
+        listeningHistory = listeningHistoryStore.historyFor(activeProfileId)
+        musicPlayCounts = listeningHistoryStore.playCountsFor(activeProfileId)
+        musicPlaylists = musicPlaylistStore.playlistsFor(activeProfileId)
+        selectedMusicPlaylistId = null
     }
 
     /**
@@ -817,18 +885,23 @@ class DesktopAppState(
     }
 
     /**
-     * Playback request for a track, counting the play.
+     * Playback request for a track, opening its history row.
      *
      * Music reuses the video player untouched: a track is a URI like any other, and the overlay
-     * already handles a stream that never ends. No progress identity is attached — resuming a song
-     * three minutes in is not a behaviour anyone asked for, and a radio station has no position to
-     * resume from at all.
+     * already handles a stream that never ends. No progress identity is attached — GDD 8 section 18
+     * says music does not resume its position, and a radio station has no position to resume from
+     * at all.
+     *
+     * Starting playback no longer counts a play. Section 18 counts one only after a configured
+     * threshold, so this records a zero-count row and [reportMusicListened] converts it into a play
+     * once the listener actually stays. Counting on click is what let skipping through a playlist
+     * manufacture a "most played" ranking out of tracks nobody heard.
      */
     fun prepareMusicPlayback(track: MusicTrack): DesktopPlaybackRequest? =
         runCatching {
             val uri = URI(track.streamUri)
             require(uri.scheme?.lowercase(Locale.ROOT) in setOf("http", "https", "file"))
-            musicPlayCounts = playCountStore.recordPlay(activeProfileId, track.id)
+            reportMusicListened(track, listenedMillis = 0L)
             DesktopPlaybackRequest(
                 title = musicPlaybackTitle(track).take(180),
                 uri = uri,
@@ -836,6 +909,423 @@ class DesktopAppState(
                 startPositionMillis = 0L,
             )
         }.getOrNull()
+
+    /**
+     * Reports how long [track] has been listened to, counting a play once the threshold is passed.
+     *
+     * Idempotent in the sense that matters: the store folds each report through
+     * [ListeningHistoryRules], so a caller reporting progress repeatedly still increments the count
+     * only when a report crosses the threshold. Radio is recorded as radio so it gains history
+     * without ever gaining a position.
+     */
+    fun reportMusicListened(
+        track: MusicTrack,
+        listenedMillis: Long,
+    ) {
+        val profileId = activeProfileId ?: return
+        val kind = if (track.isRadio) ListeningKind.RADIO else ListeningKind.MUSIC
+        listeningHistory =
+            listeningHistoryStore.record(
+                profileId = profileId,
+                mediaIdentity = track.id,
+                kind = kind,
+                listenedMillis = listenedMillis,
+                durationMillis = track.durationSeconds?.times(1_000L),
+                sourceId = activeProfile?.sourceId,
+            )
+        musicPlayCounts = listeningHistoryStore.playCountsFor(profileId)
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Music playlists (GDD 8 §17)
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * The smart playlists, evaluated against the current library and history.
+     *
+     * Recomputed from state rather than stored, which is the whole point of a smart playlist: a
+     * track played today must appear in "recently played" without anything having been written to
+     * a member list. Only rules with at least one track are returned, so the UI never shows a shelf
+     * that promises tracks and delivers none.
+     */
+    val smartMusicPlaylists: List<SmartMusicPlaylist>
+        get() {
+            if (musicLibrary.isEmpty) return emptyList()
+            val favourites = favoriteKeys
+            val rules =
+                buildList {
+                    add(SmartPlaylistRule.Favourites)
+                    add(SmartPlaylistRule.RecentlyPlayed)
+                    add(SmartPlaylistRule.MostPlayed)
+                    add(SmartPlaylistRule.NeverPlayed)
+                    add(SmartPlaylistRule.RecentlyAdded)
+                    // Genre and decade are per-value rules, so the available values come from the
+                    // library itself rather than from a fixed list.
+                    SmartPlaylists.genresIn(musicLibrary.tracks).forEach { add(SmartPlaylistRule.ByGenre(it)) }
+                    SmartPlaylists.decadesIn(musicLibrary.tracks).forEach {
+                        add(SmartPlaylistRule.ByDecade(it.startYear))
+                    }
+                }
+            return rules.mapNotNull { rule ->
+                val tracks =
+                    SmartPlaylists.evaluate(
+                        rule = rule,
+                        tracks = musicLibrary.tracks,
+                        history = listeningHistory,
+                        favouriteIds = favourites,
+                    )
+                if (tracks.isEmpty()) null else SmartMusicPlaylist(rule = rule, tracks = tracks)
+            }
+        }
+
+    fun createMusicPlaylist(name: String) {
+        musicPlaylists = musicPlaylistStore.create(activeProfileId, name)
+    }
+
+    fun renameMusicPlaylist(
+        playlistId: String,
+        name: String,
+    ) {
+        musicPlaylists =
+            musicPlaylistStore.update(activeProfileId, playlistId) { it.renamed(name, System.currentTimeMillis()) }
+    }
+
+    fun deleteMusicPlaylist(playlistId: String) {
+        musicPlaylists = musicPlaylistStore.delete(activeProfileId, playlistId)
+        if (selectedMusicPlaylistId == playlistId) selectedMusicPlaylistId = null
+    }
+
+    /**
+     * Duplicates a stored playlist.
+     *
+     * The copy is created through the store so it gets its own identity, then filled with the
+     * original's tracks — a duplicate that shared an id would be the same playlist twice.
+     */
+    fun duplicateMusicPlaylist(
+        playlistId: String,
+        copyName: String,
+    ) {
+        val original = musicPlaylists.firstOrNull { it.id == playlistId } ?: return
+        musicPlaylists =
+            musicPlaylistStore.create(
+                profileId = activeProfileId,
+                name = copyName,
+                kind = MusicPlaylistKind.MANUAL,
+                trackIds = original.trackIds,
+            )
+    }
+
+    fun addTrackToMusicPlaylist(
+        playlistId: String,
+        trackId: String,
+    ) {
+        musicPlaylists =
+            musicPlaylistStore.update(activeProfileId, playlistId) {
+                it.withTrackAdded(trackId, System.currentTimeMillis())
+            }
+    }
+
+    fun removeTrackFromMusicPlaylist(
+        playlistId: String,
+        trackId: String,
+    ) {
+        musicPlaylists =
+            musicPlaylistStore.update(activeProfileId, playlistId) {
+                it.withTrackRemoved(trackId, System.currentTimeMillis())
+            }
+    }
+
+    fun reorderMusicPlaylist(
+        playlistId: String,
+        fromIndex: Int,
+        toIndex: Int,
+    ) {
+        musicPlaylists =
+            musicPlaylistStore.update(activeProfileId, playlistId) {
+                it.reordered(fromIndex, toIndex, System.currentTimeMillis())
+            }
+    }
+
+    fun selectMusicPlaylist(playlistId: String?) {
+        selectedMusicPlaylistId = playlistId
+    }
+
+    /** The open playlist's tracks, resolved against the library in the user's chosen order. */
+    fun tracksForMusicPlaylist(playlistId: String): List<MusicTrack> =
+        musicPlaylists.firstOrNull { it.id == playlistId }?.resolve(musicLibrary).orEmpty()
+
+    /**
+     * Saves an arbitrary list of track ids as a playlist.
+     *
+     * This is the hook the playback queue calls for "save queue as playlist" (GDD 8 section 16).
+     * It is defined here, on the playlist side, so the queue owner needs no knowledge of playlist
+     * storage — it passes identities and gets a playlist.
+     */
+    fun saveTrackIdsAsMusicPlaylist(
+        name: String,
+        trackIds: List<String>,
+    ) {
+        if (trackIds.isEmpty()) return
+        musicPlaylists =
+            musicPlaylistStore.create(
+                profileId = activeProfileId,
+                name = name,
+                kind = MusicPlaylistKind.SAVED_QUEUE,
+                trackIds = trackIds,
+            )
+    }
+
+    /**
+     * Imports an M3U as a playlist, adding its tracks to the library for this session.
+     *
+     * The imported entries are appended to the in-memory library so the playlist's ids resolve;
+     * nothing is written back to the user's own M3U file, which is theirs to edit.
+     */
+    suspend fun importMusicPlaylist(path: Path) {
+        val profileId = activeProfileId ?: return
+        val imported =
+            withContext(Dispatchers.IO) {
+                runCatching { musicLoader.load(path) }.getOrNull()
+            } ?: return
+        if (imported.isEmpty) return
+
+        val existingIds = musicLibrary.tracks.map(MusicTrack::id).toSet()
+        val fresh = imported.tracks.filterNot { it.id in existingIds }
+        if (fresh.isNotEmpty()) {
+            val merged = musicLibrary.tracks + fresh
+            musicLibrary =
+                MusicLibrary(
+                    tracks = merged,
+                    artists = MusicPlaylistMapper.artistsFrom(merged),
+                    genres = MusicPlaylistMapper.genresFrom(merged),
+                )
+        }
+        musicPlaylists =
+            musicPlaylistStore.create(
+                profileId = profileId,
+                name = path.fileName?.toString()?.substringBeforeLast('.').orEmpty().ifBlank { "M3U" },
+                kind = MusicPlaylistKind.IMPORTED,
+                trackIds = imported.tracks.map(MusicTrack::id),
+            )
+    }
+
+    /**
+     * Begins an export, raising the sensitive-URL warning when one is needed.
+     *
+     * Nothing is written here. GDD 8 section 17 requires the warning before an export that would
+     * disclose credential-bearing URLs, so this only prepares the request; [confirmMusicExport]
+     * writes the file once the user has answered.
+     */
+    fun beginMusicExport(
+        playlistName: String,
+        tracks: List<MusicTrack>,
+        destination: Path,
+    ) {
+        if (tracks.isEmpty()) return
+        pendingMusicExport =
+            PendingMusicExport(
+                playlistName = playlistName,
+                tracks = tracks,
+                destination = destination,
+                warning = MusicPlaylistExportWarning.forTracks(tracks),
+            )
+    }
+
+    fun cancelMusicExport() {
+        pendingMusicExport = null
+    }
+
+    /**
+     * Writes the pending export, having been acknowledged.
+     *
+     * Returns false when the exporter refuses — which it does if this is ever called without the
+     * acknowledgement — so a failure surfaces rather than looking like a silent success.
+     */
+    suspend fun confirmMusicExport(): Boolean {
+        val pending = pendingMusicExport ?: return false
+        pendingMusicExport = null
+        val result =
+            MusicPlaylistExporter.export(
+                playlistName = pending.playlistName,
+                tracks = pending.tracks,
+                acknowledgedSensitiveUris = true,
+            )
+        val written = result as? MusicPlaylistExportResult.Written ?: return false
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                Files.writeString(pending.destination, written.content)
+                true
+            }.getOrDefault(false)
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Playback queue (GDD 8 §16)
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * The active profile's queue.
+     *
+     * GDD 8 §16 scopes it "por perfil e por sessão", which is exactly what a field on this state
+     * object gives: it is dropped when the profile changes and when the app closes. It holds
+     * identities only — resolving a track to its URI happens in [playQueueCurrent], at the moment of
+     * playback, so no stream URL is ever held in queue state.
+     */
+    var playbackQueue by mutableStateOf(PlaybackQueue.EMPTY)
+        private set
+
+    /** Whether the queue panel is showing. Closed by default; the queue works without it. */
+    var queuePanelVisible by mutableStateOf(false)
+        private set
+
+    /**
+     * A monotonic source for [QueueEntry.handle].
+     *
+     * Queueing the same track twice is legitimate, so the media id cannot serve as a list key; this
+     * gives every queued position one that is genuinely unique.
+     */
+    private var queueHandleSeed = 0L
+
+    fun toggleQueuePanel() {
+        queuePanelVisible = !queuePanelVisible
+    }
+
+    /**
+     * Named `showQueuePanel` rather than `setQueuePanelVisible`: the latter collides on the JVM with
+     * the setter Compose generates for [queuePanelVisible].
+     */
+    fun showQueuePanel(visible: Boolean) {
+        queuePanelVisible = visible
+    }
+
+    /** Wraps a library track as a queue entry. Deliberately drops `streamUri` — see [QueueEntry]. */
+    private fun queueEntryFor(track: MusicTrack): QueueEntry =
+        QueueEntry(
+            mediaId = track.id,
+            kind = if (track.isRadio) QueueMediaKind.RADIO else QueueMediaKind.MUSIC,
+            title = track.title,
+            subtitle = if (track.isRadio) track.genre else track.artistOrUnknown,
+            handle = ++queueHandleSeed,
+        )
+
+    /** Looks an identity back up in the library. Null once the playlist has been replaced. */
+    private fun trackForQueueEntry(entry: QueueEntry): MusicTrack? =
+        musicLibrary.tracks.firstOrNull { it.id == entry.mediaId }
+
+    /**
+     * Builds the playback request for whatever the queue is pointing at.
+     *
+     * This is the "resolver no playback" half of GDD 8 §16: the URI is produced here, from the live
+     * library, and never stored in the queue. An entry whose track has vanished — the user swapped
+     * their playlist mid-session — is dropped from the queue rather than left to fail on every
+     * attempt, and the next entry is tried instead.
+     */
+    private fun resolveQueueCurrent(): DesktopPlaybackRequest? {
+        // Bounded by the queue length: each miss removes an entry, so this cannot spin.
+        repeat(playbackQueue.size) {
+            val entry = playbackQueue.current ?: return null
+            val track = trackForQueueEntry(entry)
+            val request = track?.let(::prepareMusicPlayback)
+            if (request != null) return request
+            playbackQueue = playbackQueue.removeFirst(entry.mediaId)
+        }
+        return null
+    }
+
+    /**
+     * Starts [track], with [context] becoming the queue behind it.
+     *
+     * Passing the surrounding shelf is what makes playback continue into the next track instead of
+     * stopping after one. [PlaybackQueue.playNow] applies the §16 rules to the batch — a station
+     * keeps only itself, a chapter drops the songs around it.
+     */
+    fun playMusicNow(
+        track: MusicTrack,
+        context: List<MusicTrack> = listOf(track),
+    ): DesktopPlaybackRequest? {
+        val entries = context.map(::queueEntryFor)
+        val start = context.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
+        playbackQueue = PlaybackQueue.EMPTY.playNow(entries, start)
+        return resolveQueueCurrent()
+    }
+
+    /**
+     * Queues [track] to play after the current one.
+     *
+     * Returns a request only when the queue was empty and this therefore starts playback; adding to
+     * a queue that is already playing must not interrupt it.
+     */
+    fun queueMusicNext(track: MusicTrack): DesktopPlaybackRequest? {
+        val wasEmpty = playbackQueue.isEmpty
+        val before = playbackQueue.current
+        playbackQueue = playbackQueue.playNext(queueEntryFor(track))
+        // playNext replaces the queue for radio and for a mismatched kind, so "what is playing"
+        // can change even though the caller only asked to queue something.
+        return if (wasEmpty || before != playbackQueue.current) resolveQueueCurrent() else null
+    }
+
+    /** Queues [track] at the end. Same non-interrupting contract as [queueMusicNext]. */
+    fun queueMusicLast(track: MusicTrack): DesktopPlaybackRequest? {
+        val wasEmpty = playbackQueue.isEmpty
+        val before = playbackQueue.current
+        playbackQueue = playbackQueue.addToEnd(queueEntryFor(track))
+        return if (wasEmpty || before != playbackQueue.current) resolveQueueCurrent() else null
+    }
+
+    /** Queues several tracks at the end, for "queue this artist". */
+    fun queueMusicLast(tracks: List<MusicTrack>): DesktopPlaybackRequest? {
+        val wasEmpty = playbackQueue.isEmpty
+        val before = playbackQueue.current
+        playbackQueue = playbackQueue.addAllToEnd(tracks.map(::queueEntryFor))
+        return if (wasEmpty || before != playbackQueue.current) resolveQueueCurrent() else null
+    }
+
+    /** Plays the queued row at [position]. */
+    fun playQueuePosition(position: Int): DesktopPlaybackRequest? {
+        val next = playbackQueue.jumpTo(position)
+        if (next == playbackQueue) return null
+        playbackQueue = next
+        return resolveQueueCurrent()
+    }
+
+    /**
+     * Removes a queued row.
+     *
+     * Returns a request when the removed row was the one playing, because the queue has then moved
+     * on to the next entry and the player has to follow it. Removing anything else returns null and
+     * leaves playback alone.
+     */
+    fun removeQueuePosition(position: Int): DesktopPlaybackRequest? {
+        val before = playbackQueue
+        val next = before.removeAt(position)
+        if (next == before) return null
+        playbackQueue = next
+        return if (before.currentChangedBy(next) && !next.isEmpty) resolveQueueCurrent() else null
+    }
+
+    /** Drag-reorder. Never returns a request: moving rows around must not interrupt the song. */
+    fun moveQueuePosition(from: Int, to: Int) {
+        playbackQueue = playbackQueue.reorder(from, to)
+    }
+
+    /** GDD 8 §16 "limpar". The player is left running; clearing the queue is not a stop command. */
+    fun clearQueue() {
+        playbackQueue = PlaybackQueue.EMPTY
+    }
+
+    /** Advances to the next entry, or returns null at the end of the queue. */
+    fun playQueueNext(): DesktopPlaybackRequest? {
+        val next = playbackQueue.advance() ?: return null
+        playbackQueue = next
+        return resolveQueueCurrent()
+    }
+
+    /** Steps back one entry, or returns null at the head. */
+    fun playQueuePrevious(): DesktopPlaybackRequest? {
+        val previous = playbackQueue.back() ?: return null
+        playbackQueue = previous
+        return resolveQueueCurrent()
+    }
 
     fun openHome() {
         destination = DesktopDestination.HOME
@@ -1636,6 +2126,38 @@ class DesktopAppState(
         selectedPerson = selectedPerson?.copy(items = merged, isLoading = false)
     }
 
+    /**
+     * Opens a title from a filmography, if this playlist happens to carry it.
+     *
+     * The credit comes from the metadata service and names a film that may not be in the user's
+     * catalogue at all; matching is on the editorial title, so the provider's "Narcos 4K [DUB]"
+     * still resolves to a credit called "Narcos". Returns false when there is no match, and the
+     * caller says so rather than appearing to do nothing.
+     */
+    suspend fun openTitleFromCredit(title: String): Boolean {
+        val wanted = title.editorialCatalogTitle().lowercase(Locale.ROOT).trim()
+        if (wanted.isBlank()) return false
+
+        val found =
+            withContext(Dispatchers.Default) {
+                // Films first, then series: a credit does not say which it is, and a viewer looking
+                // for "Narcos" wants the series rather than a documentary of the same name.
+                sequenceOf(XtreamContentType.MOVIE, XtreamContentType.SERIES)
+                    .mapNotNull { type ->
+                        xtreamRepository
+                            .page(type, null, wanted, 0, pageSize = 20)
+                            .items
+                            .firstOrNull { item ->
+                                item.name.editorialCatalogTitle().lowercase(Locale.ROOT).trim() == wanted
+                            }
+                    }.firstOrNull()
+            } ?: return false
+
+        closePerson()
+        selectXtreamItem(found.providerId)
+        return true
+    }
+
     fun closePerson() {
         selectedPerson = null
     }
@@ -1898,7 +2420,31 @@ enum class CatalogLayout(val id: String) {
 enum class DesktopDestination { HOME, CATALOG, FAVORITES, DOWNLOADS, CONTINUE, MUSIC }
 
 /** Sections of the music workspace, mirroring the sidebar's own ordering. */
-enum class MusicSection { HOME, ARTISTS, RADIO, DOWNLOADS }
+enum class MusicSection { HOME, ARTISTS, PLAYLISTS, RADIO, DOWNLOADS }
+
+/**
+ * A smart playlist with its evaluated contents — GDD 8 section 17.
+ *
+ * The rule travels with the tracks so the UI can label the shelf from the rule rather than from a
+ * stored name; a smart playlist has no name of its own, only the rule that defines it.
+ */
+data class SmartMusicPlaylist(
+    val rule: SmartPlaylistRule,
+    val tracks: List<MusicTrack>,
+)
+
+/**
+ * An export waiting on the user's answer to the sensitive-URL warning.
+ *
+ * Holds the resolved tracks rather than re-reading them at confirmation time, so what the warning
+ * counted is exactly what gets written.
+ */
+data class PendingMusicExport(
+    val playlistName: String,
+    val tracks: List<MusicTrack>,
+    val destination: Path,
+    val warning: MusicPlaylistExportWarning,
+)
 
 data class DailyHomeSnapshot(
     val sourceId: String,

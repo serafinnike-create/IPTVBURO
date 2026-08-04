@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -116,44 +117,80 @@ fun MusicWorkspace(
         MusicSectionBar(
             selected = appState.musicSection,
             onSelect = appState::selectMusicSection,
+            queueSize = appState.playbackQueue.size,
+            queueOpen = appState.queuePanelVisible,
+            onToggleQueue = appState::toggleQueuePanel,
         )
         // Weighted, never fillMaxSize: an unweighted Column child is measured against unbounded
         // height, which lays the whole section out past the bottom of the window and puts it beyond
         // the reach of any scroll.
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            when (appState.musicSection) {
-                MusicSection.HOME -> {
-                    val shelves =
-                        remember(library, appState.musicPlayCounts) {
-                            musicHomeShelves(library, appState.musicPlayCounts)
-                        }
-                    MusicHome(
-                        newReleases = shelves.newReleases,
-                        mostPlayed = shelves.mostPlayed,
-                        onPlay = { track -> appState.prepareMusicPlayback(track)?.let(onPlay) },
-                    )
+        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            // The section itself is weighted so the queue panel takes its fixed width out of the
+            // row and the library reflows into what remains, rather than being overlapped.
+            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                when (appState.musicSection) {
+                    MusicSection.HOME -> {
+                        val shelves =
+                            remember(library, appState.musicPlayCounts) {
+                                musicHomeShelves(library, appState.musicPlayCounts)
+                            }
+                        MusicHome(
+                            newReleases = shelves.newReleases,
+                            mostPlayed = shelves.mostPlayed,
+                            // The shelf becomes the queue, so playback continues into the next
+                            // track instead of stopping after one - the point of a queue existing.
+                            onPlay = { track, context ->
+                                appState.playMusicNow(track, context)?.let(onPlay)
+                            },
+                            onPlayNext = { track -> appState.queueMusicNext(track)?.let(onPlay) },
+                            onAddToEnd = { track -> appState.queueMusicLast(track)?.let(onPlay) },
+                        )
+                    }
+                    MusicSection.ARTISTS ->
+                        MusicArtists(
+                            artists = library.artists,
+                            openArtist = appState.selectedMusicArtist,
+                            tracksForArtist = appState::tracksForArtist,
+                            onOpenArtist = appState::selectMusicArtist,
+                            onPlay = { track, context ->
+                                appState.playMusicNow(track, context)?.let(onPlay)
+                            },
+                            onPlayNext = { track -> appState.queueMusicNext(track)?.let(onPlay) },
+                            onAddToEnd = { track -> appState.queueMusicLast(track)?.let(onPlay) },
+                        )
+                    MusicSection.RADIO ->
+                        MusicTrackList(
+                            tracks = library.radioStations,
+                            emptyMessage = text.musicNoRadio,
+                            // A station replaces the queue (GDD 8 section 16), which the state
+                            // enforces; passing only the station keeps that explicit here too.
+                            onPlay = { track, _ -> appState.playMusicNow(track)?.let(onPlay) },
+                            onPlayNext = { track -> appState.playMusicNow(track)?.let(onPlay) },
+                            onAddToEnd = { track -> appState.playMusicNow(track)?.let(onPlay) },
+                            // Queueing a station is meaningless: it never ends, so nothing behind
+                            // it could play. The row offers play only.
+                            showQueueActions = false,
+                        )
+                    // Playlists live in their own file so the queue work and the playlist work do
+                    // not contend for this one. See MusicPlaylistsSection.
+                    MusicSection.PLAYLISTS ->
+                        MusicPlaylistsSection(
+                            appState = appState,
+                            onPlay = onPlay,
+                            ownerWindow = ownerWindow,
+                        )
+                    // Music downloads are not wired to the downloader yet, so this states the intent
+                    // rather than showing an empty list that looks like a fault. See the report.
+                    MusicSection.DOWNLOADS ->
+                        MusicEmptyState(
+                            title = text.downloads,
+                            body = text.musicNoDownloads,
+                        )
                 }
-                MusicSection.ARTISTS ->
-                    MusicArtists(
-                        artists = library.artists,
-                        openArtist = appState.selectedMusicArtist,
-                        tracksForArtist = appState::tracksForArtist,
-                        onOpenArtist = appState::selectMusicArtist,
-                        onPlay = { track -> appState.prepareMusicPlayback(track)?.let(onPlay) },
-                    )
-                MusicSection.RADIO ->
-                    MusicTrackList(
-                        tracks = library.radioStations,
-                        emptyMessage = text.musicNoRadio,
-                        onPlay = { track -> appState.prepareMusicPlayback(track)?.let(onPlay) },
-                    )
-                // Music downloads are not wired to the downloader yet, so this states the intent
-                // rather than showing an empty list that looks like a fault. See the report.
-                MusicSection.DOWNLOADS ->
-                    MusicEmptyState(
-                        title = text.downloads,
-                        body = text.musicNoDownloads,
-                    )
+            }
+            if (appState.queuePanelVisible) {
+                VerticalDivider(color = BuroColors.BorderSoft)
+                QueuePanel(appState = appState, onPlay = onPlay)
             }
         }
     }
@@ -164,12 +201,16 @@ fun MusicWorkspace(
 private fun MusicSectionBar(
     selected: MusicSection,
     onSelect: (MusicSection) -> Unit,
+    queueSize: Int,
+    queueOpen: Boolean,
+    onToggleQueue: () -> Unit,
 ) {
     val text = strings
     val labels =
         listOf(
             MusicSection.HOME to text.musicHome,
             MusicSection.ARTISTS to text.musicArtists,
+            MusicSection.PLAYLISTS to text.musicPlaylists,
             MusicSection.RADIO to text.musicRadio,
             MusicSection.DOWNLOADS to text.downloads,
         )
@@ -214,6 +255,27 @@ private fun MusicSectionBar(
                 }
             }
         }
+        Spacer(Modifier.weight(1f))
+        // The queue toggle carries its own count, so the user can tell there is something queued
+        // without opening the panel to find out.
+        BuroInteractiveRow(
+            onClick = onToggleQueue,
+            selected = queueOpen,
+            shape = BuroRadius.Pill,
+            contentDescription = if (queueOpen) text.queueClose else text.queueOpen,
+        ) { state ->
+            Text(
+                text = if (queueSize > 0) "${text.queueTitle} · $queueSize" else text.queueTitle,
+                modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs),
+                color =
+                    when {
+                        queueOpen -> BuroColors.Primary
+                        state.active -> BuroColors.Text
+                        else -> BuroColors.TextMuted
+                    },
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
     }
 }
 
@@ -227,7 +289,9 @@ private fun MusicSectionBar(
 private fun MusicHome(
     newReleases: List<MusicTrack>,
     mostPlayed: List<MusicTrack>,
-    onPlay: (MusicTrack) -> Unit,
+    onPlay: (MusicTrack, List<MusicTrack>) -> Unit,
+    onPlayNext: (MusicTrack) -> Unit,
+    onAddToEnd: (MusicTrack) -> Unit,
 ) {
     val text = strings
     if (newReleases.isEmpty() && mostPlayed.isEmpty()) {
@@ -245,12 +309,24 @@ private fun MusicHome(
         ) {
             if (newReleases.isNotEmpty()) {
                 item(key = "new-releases") {
-                    MusicShelf(title = text.musicNewReleases, tracks = newReleases, onPlay = onPlay)
+                    MusicShelf(
+                        title = text.musicNewReleases,
+                        tracks = newReleases,
+                        onPlay = onPlay,
+                        onPlayNext = onPlayNext,
+                        onAddToEnd = onAddToEnd,
+                    )
                 }
             }
             if (mostPlayed.isNotEmpty()) {
                 item(key = "most-played") {
-                    MusicShelf(title = text.musicMostPlayed, tracks = mostPlayed, onPlay = onPlay)
+                    MusicShelf(
+                        title = text.musicMostPlayed,
+                        tracks = mostPlayed,
+                        onPlay = onPlay,
+                        onPlayNext = onPlayNext,
+                        onAddToEnd = onAddToEnd,
+                    )
                 }
             }
         }
@@ -266,7 +342,9 @@ private fun MusicHome(
 private fun MusicShelf(
     title: String,
     tracks: List<MusicTrack>,
-    onPlay: (MusicTrack) -> Unit,
+    onPlay: (MusicTrack, List<MusicTrack>) -> Unit,
+    onPlayNext: (MusicTrack) -> Unit,
+    onAddToEnd: (MusicTrack) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -282,7 +360,14 @@ private fun MusicShelf(
             horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Md),
         ) {
             items(tracks, key = MusicTrack::id) { track ->
-                MusicCard(track = track, onPlay = { onPlay(track) })
+                MusicCard(
+                    track = track,
+                    // The whole rail is the context, so playing the third cover continues into the
+                    // fourth rather than falling silent.
+                    onPlay = { onPlay(track, tracks) },
+                    onPlayNext = { onPlayNext(track) },
+                    onAddToEnd = { onAddToEnd(track) },
+                )
             }
         }
     }
@@ -293,13 +378,16 @@ private fun MusicShelf(
 private fun MusicCard(
     track: MusicTrack,
     onPlay: () -> Unit,
+    onPlayNext: () -> Unit,
+    onAddToEnd: () -> Unit,
 ) {
+    val text = strings
     BuroInteractiveSurface(
         onClick = onPlay,
         modifier = Modifier.width(164.dp),
         shape = BuroRadius.Medium,
         contentDescription = track.title,
-    ) { _ ->
+    ) { cardState ->
         Column(modifier = Modifier.fillMaxWidth()) {
             BuroRemoteArtwork(
                 artworkUrl = track.artworkUri,
@@ -333,6 +421,17 @@ private fun MusicCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            // Queue actions only on hover: a rail of twenty covers each carrying two permanent
+            // buttons is unreadable, and the primary action of a cover is still to play it.
+            if (cardState.active) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xxs),
+                ) {
+                    MusicQueueAction(label = "+ ${text.queuePlayNext}", onClick = onPlayNext)
+                    MusicQueueAction(label = "↓", contentDescription = text.queueAddToEnd, onClick = onAddToEnd)
+                }
+            }
         }
     }
 }
@@ -350,7 +449,9 @@ private fun MusicArtists(
     openArtist: String?,
     tracksForArtist: (String) -> List<MusicTrack>,
     onOpenArtist: (String?) -> Unit,
-    onPlay: (MusicTrack) -> Unit,
+    onPlay: (MusicTrack, List<MusicTrack>) -> Unit,
+    onPlayNext: (MusicTrack) -> Unit,
+    onAddToEnd: (MusicTrack) -> Unit,
 ) {
     val text = strings
     if (openArtist != null) {
@@ -389,6 +490,8 @@ private fun MusicArtists(
                     tracks = tracksForArtist(openArtist),
                     emptyMessage = text.musicNoArtists,
                     onPlay = onPlay,
+                    onPlayNext = onPlayNext,
+                    onAddToEnd = onAddToEnd,
                 )
             }
         }
@@ -472,7 +575,10 @@ private fun MusicArtistCard(
 private fun MusicTrackList(
     tracks: List<MusicTrack>,
     emptyMessage: String,
-    onPlay: (MusicTrack) -> Unit,
+    onPlay: (MusicTrack, List<MusicTrack>) -> Unit,
+    onPlayNext: (MusicTrack) -> Unit,
+    onAddToEnd: (MusicTrack) -> Unit,
+    showQueueActions: Boolean = true,
 ) {
     if (tracks.isEmpty()) {
         MusicEmptyState(title = strings.music, body = emptyMessage)
@@ -488,7 +594,14 @@ private fun MusicTrackList(
             verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
         ) {
             items(tracks, key = MusicTrack::id) { track ->
-                MusicTrackRow(track = track, onPlay = { onPlay(track) })
+                MusicTrackRow(
+                    track = track,
+                    // The whole list is the context: playing one track continues into the rest.
+                    onPlay = { onPlay(track, tracks) },
+                    onPlayNext = { onPlayNext(track) },
+                    onAddToEnd = { onAddToEnd(track) },
+                    showQueueActions = showQueueActions,
+                )
             }
         }
         MusicScrollbar(
@@ -502,7 +615,11 @@ private fun MusicTrackList(
 private fun MusicTrackRow(
     track: MusicTrack,
     onPlay: () -> Unit,
+    onPlayNext: () -> Unit,
+    onAddToEnd: () -> Unit,
+    showQueueActions: Boolean,
 ) {
+    val text = strings
     BuroInteractiveRow(
         onClick = onPlay,
         selected = false,
@@ -544,7 +661,12 @@ private fun MusicTrackRow(
                 )
             }
             // The play affordance appears on hover rather than sitting on every row: a list of
-            // fifty stations with fifty gold buttons reads as noise.
+            // fifty stations with fifty gold buttons reads as noise. The queue actions follow the
+            // same rule, and are hidden entirely for radio, which cannot be queued behind anything.
+            if (state.active && showQueueActions) {
+                MusicQueueAction(label = "+ ${text.queuePlayNext}", onClick = onPlayNext)
+                MusicQueueAction(label = "↓", contentDescription = text.queueAddToEnd, onClick = onAddToEnd)
+            }
             Text(
                 text = "▶",
                 modifier = Modifier.padding(horizontal = BuroSpacing.Sm),
@@ -552,6 +674,33 @@ private fun MusicTrackRow(
                 style = MaterialTheme.typography.titleMedium,
             )
         }
+    }
+}
+
+/**
+ * A small "play next" / "add to end" control, shown on hover.
+ *
+ * Text rather than an icon: the two actions are easy to confuse as glyphs, and getting them the
+ * wrong way round is exactly the mistake the queue makes visible.
+ */
+@Composable
+private fun MusicQueueAction(
+    label: String,
+    onClick: () -> Unit,
+    contentDescription: String = label,
+) {
+    BuroInteractiveRow(
+        onClick = onClick,
+        selected = false,
+        shape = BuroRadius.Small,
+        contentDescription = contentDescription,
+    ) { state ->
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = BuroSpacing.Xs, vertical = BuroSpacing.Xxs),
+            color = if (state.active) BuroColors.Primary else BuroColors.TextMuted,
+            style = MaterialTheme.typography.labelSmall,
+        )
     }
 }
 
