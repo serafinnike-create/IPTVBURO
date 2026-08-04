@@ -554,6 +554,10 @@ class DesktopAppState(
 
     val continueWatchingEntries: List<DesktopContinueWatchingEntry>
         get() {
+            // Read so Compose re-runs this when an entry is forgotten. The list comes from the
+            // progress store, which is not observable, so without this the row stayed on screen.
+            @Suppress("UNUSED_EXPRESSION")
+            continueWatchingRevision
             val profileId = activeProfileId ?: return emptyList()
             val sourceId = xtreamSummary?.sourceId ?: return emptyList()
             return playbackProgressCoordinator.continueWatching(profileId)
@@ -570,6 +574,28 @@ class DesktopAppState(
                 }
                 .toList()
         }
+
+    /**
+     * Drops a title from the continue list.
+     *
+     * Recorded as completed rather than deleted: the progress store's own notion of "done" is what
+     * every other screen already consults, so one concept covers both finishing something and
+     * choosing to stop tracking it.
+     */
+    fun forgetProgress(entry: DesktopContinueWatchingEntry) {
+        playbackProgressCoordinator.ended(entry.progress.identity, entry.progress.durationMs)
+        continueWatchingRevision += 1
+    }
+
+    /** Bumped so the continue list rebuilds after an entry is removed. */
+    var continueWatchingRevision by mutableStateOf(0)
+        private set
+
+    /** Opens the list of part-watched titles. */
+    fun openContinueWatching() {
+        favoritesOnly = false
+        destination = DesktopDestination.CONTINUE
+    }
 
     /** Opens the offline library and reconciles it with disk. */
     fun openDownloads() {
@@ -1390,9 +1416,24 @@ data class PersonFilmography(
 data class DesktopContinueWatchingEntry(
     val item: XtreamCatalogItem,
     val progress: PlaybackProgress,
-)
+) {
+    /**
+     * The target to hand playback.
+     *
+     * An episode resolves to its series item, so resuming one opens the series rather than the
+     * exact episode: the provider id recorded in progress belongs to the episode, which the
+     * catalogue cannot look up on its own.
+     */
+    fun playbackTarget(): XtreamPlaybackTarget =
+        XtreamPlaybackTarget.CatalogItem(
+            providerId = item.providerId,
+            contentType = item.contentType,
+            containerExtension = item.containerExtension,
+            contentKey = item.contentIdentity().key,
+        )
+}
 
-enum class DesktopDestination { HOME, CATALOG, FAVORITES, DOWNLOADS }
+enum class DesktopDestination { HOME, CATALOG, FAVORITES, DOWNLOADS, CONTINUE }
 
 data class DailyHomeSnapshot(
     val sourceId: String,

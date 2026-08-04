@@ -193,6 +193,7 @@ fun DesktopApp(
                             scope.launch { appState.openCatalog(XtreamContentType.LIVE) }
                         },
                         onFavorites = { scope.launch { appState.setFavoritesOnly(true) } },
+                        onContinueWatching = appState::openContinueWatching,
                         onDownloads = appState::openDownloads,
                     )
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
@@ -272,6 +273,27 @@ fun DesktopApp(
                                     }
                                 },
                                 onConnectXtream = { showXtreamLogin = true },
+                            )
+                        } else if (appState.destination == DesktopDestination.CONTINUE) {
+                            ContinueWatchingWorkspace(
+                                entries = appState.continueWatchingEntries,
+                                onResume = { entry ->
+                                    activePlayback =
+                                        appState.prepareXtreamPlayback(
+                                            entry.playbackTarget(),
+                                            entry.item.name,
+                                            entry.progress.positionMs,
+                                        )
+                                },
+                                onRestart = { entry ->
+                                    activePlayback =
+                                        appState.prepareXtreamPlayback(
+                                            entry.playbackTarget(),
+                                            entry.item.name,
+                                            0L,
+                                        )
+                                },
+                                onForget = appState::forgetProgress,
                             )
                         } else if (appState.destination == DesktopDestination.DOWNLOADS) {
                             DownloadsWorkspace(
@@ -534,6 +556,7 @@ private fun SourceSidebar(
     onSeries: () -> Unit,
     onLive: () -> Unit,
     onFavorites: () -> Unit,
+    onContinueWatching: () -> Unit,
     onDownloads: () -> Unit,
 ) {
     val text = strings
@@ -574,6 +597,11 @@ private fun SourceSidebar(
                 destination == DesktopDestination.CATALOG &&
                     catalogType == XtreamContentType.LIVE,
             onClick = onLive,
+        )
+        NavigationItem(
+            label = text.continueWatching,
+            selected = destination == DesktopDestination.CONTINUE,
+            onClick = onContinueWatching,
         )
         NavigationItem(
             label = text.favorites,

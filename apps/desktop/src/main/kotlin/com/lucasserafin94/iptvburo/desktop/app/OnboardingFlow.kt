@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -68,17 +70,23 @@ private fun OnboardingScaffold(
     onDismiss: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    Box(
+    // The panel is capped at the window height so its scroll has somewhere to go. Without the cap
+    // the column simply grew past the bottom edge and the fields below - the password, the submit
+    // button - were laid out where nothing could reach them.
+    BoxWithConstraints(
         modifier =
             Modifier
                 .fillMaxSize()
                 .background(if (onDismiss == null) BuroColors.Canvas else BuroColors.Scrim),
         contentAlignment = Alignment.Center,
     ) {
+        val maxPanelHeight = maxHeight
+        val panelScroll = rememberScrollState()
         Column(
             modifier =
                 Modifier
                     .widthIn(max = 620.dp)
+                    .heightIn(max = maxPanelHeight)
                     .fillMaxWidth()
                     // As a panel it gets a surface and a rounded edge, so it reads as sitting over
                     // the app; during first-run it is the whole screen and needs neither.
@@ -91,7 +99,7 @@ private fun OnboardingScaffold(
                                 .clip(BuroRadius.Large)
                                 .background(BuroColors.Surface)
                         },
-                    ).verticalScroll(rememberScrollState())
+                    ).verticalScroll(panelScroll)
                     .padding(BuroSpacing.Xl),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {

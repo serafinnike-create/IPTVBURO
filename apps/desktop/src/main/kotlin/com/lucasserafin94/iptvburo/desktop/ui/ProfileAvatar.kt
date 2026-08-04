@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -147,8 +148,33 @@ private fun DrawScope.drawSphere(avatar: BuroAvatar) {
 private fun DrawScope.drawMotif(motif: AvatarMotif) {
     val w = this.size.width
     val h = this.size.height
-    val ink = Color.White.copy(alpha = 0.92f)
+    val ink = Color.White.copy(alpha = 0.94f)
     val shadow = Color.Black.copy(alpha = 0.22f)
+
+    fun p(x: Float, y: Float) = Offset(w * x, h * y)
+
+    // A soft drop shadow under the motif, offset with the light. Flat white shapes read as stickers
+    // pasted on the sphere; a shadow is what makes them sit *on* it.
+    translate(left = w * 0.018f, top = h * 0.022f) {
+        drawMotifShape(motif, Color.Black.copy(alpha = 0.28f), Color.Transparent, w, h)
+    }
+    drawMotifShape(motif, ink, shadow, w, h)
+}
+
+/**
+ * The motif itself, drawn twice: once offset as its own shadow, once as the shape.
+ *
+ * [detail] is the darker inner colour — eyes, panel lines — and is transparent on the shadow pass so
+ * the silhouette stays solid.
+ */
+private fun DrawScope.drawMotifShape(
+    motif: AvatarMotif,
+    ink: Color,
+    detail: Color,
+    w: Float,
+    h: Float,
+) {
+    val shadow = detail
 
     fun p(x: Float, y: Float) = Offset(w * x, h * y)
 
