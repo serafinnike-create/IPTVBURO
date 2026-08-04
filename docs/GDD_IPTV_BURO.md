@@ -1,8 +1,8 @@
 # GDD / PRD TÉCNICO — IPTV BURO
 
-**Versão:** 1.0 + extensões 2.0, 3.0, 4.0, 5.0, 6.0 e 7.0  
-**Data:** 2 de agosto de 2026  
-**Status:** documentação obrigatória para desenvolvimento com Codex
+**Versão:** 1.0 + extensões 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 e 8.0  
+**Data:** 4 de agosto de 2026  
+**Status:** documentação obrigatória para desenvolvimento com Claude/Codex
 
 Todos os documentos abaixo fazem parte da especificação oficial. O código existente deve ser preservado e evoluído incrementalmente.
 
@@ -65,17 +65,27 @@ Define download e playback offline de filmes, episódios e temporadas elegíveis
 
 Define progresso persistente por perfil, barra nos cards, fileira `Continuar assistindo`, retomada de filmes/episódios, conclusão, migrations e paridade entre plataformas compatíveis.
 
-## Ordem obrigatória para o Codex
+## GDD 8.0 — Media SuperHub & Audio Experience
 
-1. Ler este índice.
-2. Ler os GDDs 1.0 a 4.0.
-3. Ler o GDD 5.0 e o ADR multiplataforma.
-4. Ler o GDD 6.0 quando trabalhar em mobile/offline.
-5. Ler o GDD 7.0 antes de modificar player, progresso, Home ou Minha BURO.
-6. Ler `docs/status/CURRENT_IMPLEMENTATION.md`.
-7. Ler a revisão técnica da milestone em andamento.
-8. Auditar o código e os testes existentes.
-9. Executar o prompt específico da etapa.
+- [GDD 8.0 — Música, rádio, podcasts e audiobooks](GDD_8_MEDIA_SUPERHUB_AUDIO.md)
+- [Prompt Claude/Codex — implementação incremental](PROMPT_CLAUDE_IMPLEMENT_GDD8.md)
+- [Entrada obrigatória dos agentes](../CLAUDE.md)
+
+Expande o domínio de vídeo para um Media SuperHub modular, com taxonomia universal, source adapters, biblioteca de música, rádio, podcasts, audiobooks, fila, playlists, player de áudio e fases de implementação. O GDD exige fontes autorizadas e proíbe bypass de DRM, scraping de serviços comerciais e vazamento de credenciais.
+
+## Ordem obrigatória para Claude/Codex
+
+1. Ler `CLAUDE.md` na raiz.
+2. Ler este índice.
+3. Ler os GDDs 1.0 a 4.0.
+4. Ler o GDD 5.0 e o ADR multiplataforma.
+5. Ler o GDD 6.0 quando trabalhar em mobile/offline.
+6. Ler o GDD 7.0 antes de modificar player, progresso, Home ou Minha BURO.
+7. Ler o GDD 8.0 antes de modificar domínio universal, áudio, fontes, filas, playlists ou navegação SuperHub.
+8. Ler `docs/status/CURRENT_IMPLEMENTATION.md`.
+9. Ler a revisão técnica da milestone em andamento.
+10. Auditar o código e os testes existentes.
+11. Executar somente o prompt específico da etapa.
 
 ## Regras de precedência
 
@@ -87,7 +97,9 @@ Define progresso persistente por perfil, barra nos cards, fileira `Continuar ass
 6. GDD 5.0 para plataformas e paridade;
 7. GDD 6.0 para offline mobile;
 8. GDD 7.0 para progresso, retomada e continuidade por perfil;
-9. nenhuma plataforma pode ser chamada de pronta sem build, testes e hardware;
-10. Android TV é a referência inicial, não o limite do produto;
-11. nenhuma função offline pode exportar arquivos ou ignorar restrições da fonte/plataforma;
-12. nenhuma nova preview pode ser publicada com migration não testada ou CI incompleto.
+9. GDD 8.0 para domínio universal e experiências de áudio;
+10. nenhuma plataforma pode ser chamada de pronta sem build, testes e hardware;
+11. Android TV é a referência inicial, não o limite do produto;
+12. nenhuma função offline pode exportar arquivos ou ignorar restrições da fonte/plataforma;
+13. nenhuma integração pode contornar DRM, autenticação, paywall ou termos de serviço;
+14. nenhuma nova preview pode ser publicada com migration não testada ou CI incompleto.
