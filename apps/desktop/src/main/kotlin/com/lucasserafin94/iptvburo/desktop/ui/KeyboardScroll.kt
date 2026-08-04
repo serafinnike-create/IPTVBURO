@@ -99,6 +99,40 @@ fun Modifier.arrowScrollableVertically(
         }
 }
 
+/**
+ * Up and down arrows for a lazy list the pointer is over.
+ *
+ * The same reasoning as the rail and the column: pointing at a list is enough to aim the keys at
+ * it, and requiring a click first would activate a row instead of scrolling past it.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun Modifier.arrowScrollableList(
+    state: LazyListState,
+    step: Float = DEFAULT_COLUMN_STEP,
+): Modifier {
+    val focus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+
+    return this
+        .focusRequester(focus)
+        .focusable()
+        .onPointerEvent(PointerEventType.Enter) { runCatching { focus.requestFocus() } }
+        .onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            val delta =
+                when (event.key) {
+                    Key.DirectionDown -> step
+                    Key.DirectionUp -> -step
+                    Key.PageDown -> step * 3
+                    Key.PageUp -> -step * 3
+                    else -> return@onPreviewKeyEvent false
+                }
+            scope.launch { state.animateScrollBy(delta) }
+            true
+        }
+}
+
 /** About one episode row, so a press moves by something the eye can follow. */
 private const val DEFAULT_COLUMN_STEP = 160f
 
@@ -135,14 +169,61 @@ fun Modifier.edgeScrollable(
     return this
         .onSizeChanged { size -> width = size.width }
         .onPointerEvent(PointerEventType.Move) { event ->
+            // Read from the event's own position rather than a remembered width that can still be
+            // zero on the first frames: with width unset the right-hand test never fired, so the
+            // rail scrolled left and refused to come back.
             val x = event.changes.firstOrNull()?.position?.x ?: return@onPointerEvent
-            val edge = width * edgeFraction
+            val measured = width
+            if (measured <= 0) return@onPointerEvent
+            val edge = (measured * edgeFraction).coerceAtLeast(MIN_EDGE_PIXELS)
             direction =
                 when {
-                    width <= 0 -> 0f
-                    x < edge -> -1f
-                    x > width - edge -> 1f
+                    x <= edge -> -1f
+                    x >= measured - edge -> 1f
                     else -> 0f
                 }
         }.onPointerEvent(PointerEventType.Exit) { direction = 0f }
 }
+
+/**
+ * The same for a vertical list: resting the pointer near the top or bottom edge scrolls it.
+ *
+ * A page of five hundred titles is a long way to travel with a wheel, and the scrollbar is
+ * deliberately thin. This gives the mouse a second route without taking anything away.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun Modifier.edgeScrollableVertically(
+    state: LazyListState,
+    edgeFraction: Float = 0.10f,
+    speed: Float = 22f,
+): Modifier {
+    var height by remember { mutableStateOf(0) }
+    var direction by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(direction) {
+        if (direction == 0f) return@LaunchedEffect
+        while (true) {
+            state.scrollBy(direction * speed)
+            withFrameNanos { }
+        }
+    }
+
+    return this
+        .onSizeChanged { size -> height = size.height }
+        .onPointerEvent(PointerEventType.Move) { event ->
+            val y = event.changes.firstOrNull()?.position?.y ?: return@onPointerEvent
+            val measured = height
+            if (measured <= 0) return@onPointerEvent
+            val edge = (measured * edgeFraction).coerceAtLeast(MIN_EDGE_PIXELS)
+            direction =
+                when {
+                    y <= edge -> -1f
+                    y >= measured - edge -> 1f
+                    else -> 0f
+                }
+        }.onPointerEvent(PointerEventType.Exit) { direction = 0f }
+}
+
+/** A floor, so the edge stays reachable on a narrow rail where a fraction would be a few pixels. */
+private const val MIN_EDGE_PIXELS = 48f

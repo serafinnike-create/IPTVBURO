@@ -129,6 +129,10 @@ dependencies {
     implementation(project(":packages:playlist-parser"))
     implementation(project(":packages:xtream-client"))
     implementation(project(":packages:metadata-client"))
+    // Chromium, for playing trailers inside the app. YouTube refuses to play anywhere except a real
+    // browser engine: VLC's own youtube module reports "Couldn't extract youtube video URL" against
+    // the current site, and no amount of URL handling gets around that.
+    implementation("dev.datlag:jcef:2025.03.23")
 
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
@@ -154,7 +158,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "IPTVBURO"
-            packageVersion = "1.0.1"
+            packageVersion = "1.0.2"
             description = "IPTV BURO desktop player"
             vendor = "IPTV BURO"
             appResourcesRootDir.set(generatedAppResources)

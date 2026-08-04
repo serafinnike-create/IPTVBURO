@@ -64,6 +64,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollable
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollable
+import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableVertically
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.rememberScrollbarAdapter
@@ -233,7 +234,8 @@ fun XtreamDailyHome(
                             .focusable()
                             .onPointerEvent(PointerEventType.Enter) {
                                 runCatching { homeFocus.requestFocus() }
-                            }.onPreviewKeyEvent { event ->
+                            }.edgeScrollableVertically(homeState)
+                            .onPreviewKeyEvent { event ->
                                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                                 val delta =
                                     when (event.key) {

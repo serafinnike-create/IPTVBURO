@@ -13,6 +13,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.LocalScrollbarStyle
+import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.layout.fillMaxHeight
+import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableList
+import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableVertically
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
@@ -79,18 +86,38 @@ fun ContinueWatchingWorkspace(
             return@Column
         }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
-        ) {
-            items(entries, key = { entry -> entry.item.providerId }) { entry ->
-                ContinueRow(
-                    entry = entry,
-                    onResume = { onResume(entry) },
-                    onRestart = { onRestart(entry) },
-                    onForget = { onForget(entry) },
-                )
+        val listState = rememberLazyListState()
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                state = listState,
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .arrowScrollableList(listState)
+                        .edgeScrollableVertically(listState),
+                verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+            ) {
+                items(entries, key = { entry -> entry.item.providerId }) { entry ->
+                    ContinueRow(
+                        entry = entry,
+                        onResume = { onResume(entry) },
+                        onRestart = { onRestart(entry) },
+                        onForget = { onForget(entry) },
+                    )
+                }
             }
+            // Visible, like every other long surface: the list scrolled, but with nothing on screen
+            // saying so the rows past the fold looked like they did not exist.
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                style =
+                    LocalScrollbarStyle.current.copy(
+                        thickness = 10.dp,
+                        unhoverColor = BuroColors.BorderSoft,
+                        hoverColor = BuroColors.Primary,
+                    ),
+            )
         }
     }
 }
