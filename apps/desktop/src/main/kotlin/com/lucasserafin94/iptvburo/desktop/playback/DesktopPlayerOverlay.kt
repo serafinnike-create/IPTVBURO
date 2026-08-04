@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -148,7 +149,9 @@ fun DesktopPlayerOverlay(
         // way out: in full screen the same actions appear as a floating bar over the video whenever
         // the controls are awake, because relying on F11 alone stranded the user when the embedded
         // video surface held the keyboard focus and the key never arrived.
-        if (!isFullScreen) {
+        // Hidden in the compact window too. At 480x300 a 64dp bar plus the transport controls left
+        // the video no height at all: the picture-in-picture window showed buttons and nothing else.
+        if (!isFullScreen && !isCompact) {
             Row(
                 modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 18.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -199,8 +202,36 @@ fun DesktopPlayerOverlay(
         }
         // In full screen the transport bar is an overlay that hides itself, so the video keeps the
         // whole surface. Outside full screen it stays pinned, which is the expected windowed
-        // behaviour and avoids controls that flicker while the user is aiming at them.
-        if (!isFullScreen || controlsVisible) {
+        // behaviour and avoids controls that flicker while the user is aiming at them. The compact
+        // window skips it entirely: there is no room for a seek bar, a clock and five buttons in
+        // 300dp of height, and taking that room is what left no picture at all.
+        if (isCompact) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xE6121418))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(onClick = controller::togglePlayback) {
+                    Text(
+                        text = if (state.playing) "❚❚" else "▶",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onToggleCompact) {
+                    Text(
+                        text = "Voltar ao app",
+                        color = BuroColors.Primary,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+        } else if (!isFullScreen || controlsVisible) {
         Column(Modifier.fillMaxWidth().background(Color(0xE6121418)).padding(horizontal = 24.dp, vertical = 14.dp)) {
             Slider(
                 value = if (state.durationMillis > 0.0) (state.positionMillis / state.durationMillis).toFloat().coerceIn(0f, 1f) else 0f,
