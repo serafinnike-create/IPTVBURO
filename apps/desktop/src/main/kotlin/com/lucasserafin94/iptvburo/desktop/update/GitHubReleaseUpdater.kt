@@ -11,7 +11,7 @@ import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.time.Duration
 
-const val DESKTOP_VERSION = "0.2.0-alpha.7"
+const val DESKTOP_VERSION = "1.0"
 
 sealed interface UpdateCheckResult {
     data object UpToDate : UpdateCheckResult
@@ -235,6 +235,9 @@ class GitHubReleaseUpdater(
  * The wait is bounded. If the app somehow never exits, installing anyway is better than leaving a
  * downloaded update that is never applied and a script that never terminates.
  */
+/** The installed executable's file name, used by the relaunch fallbacks. */
+internal const val LAUNCHER_EXE = "IPTVBURO.exe"
+
 internal fun writeUpdateScript(
     installer: Path,
     pid: Long,
@@ -242,9 +245,30 @@ internal fun writeUpdateScript(
     installedProductCode: String? = null,
 ): Path {
     val script = installer.resolveSibling("apply-update.cmd")
+    // Resolved after the install, not before it. The path is read while the OLD build is running,
+    // and a fresh install can land the executable somewhere the old one never looked - so the
+    // script re-checks the standard location too rather than trusting a single stale answer.
     val relaunch =
-        launcher?.let { path -> "start \"\" \"${path.toAbsolutePath()}\"" }
-            ?: "rem launcher not found; the update is installed and can be opened from the Start menu"
+        buildString {
+            appendLine("rem Give the installer a moment to release the new executable.")
+            appendLine("timeout /t 2 /nobreak >nul")
+            launcher?.let { path ->
+                appendLine("if exist \"${path.toAbsolutePath()}\" (")
+                appendLine("  start \"\" \"${path.toAbsolutePath()}\"")
+                appendLine("  goto :started")
+                appendLine(")")
+            }
+            val localApp = """%LOCALAPPDATA%\IPTVBURO\$LAUNCHER_EXE"""
+            val programFiles = """%PROGRAMFILES%\IPTVBURO\$LAUNCHER_EXE"""
+            appendLine("""if exist "$localApp" (""")
+            appendLine("""  start "" "$localApp"""")
+            appendLine("  goto :started")
+            appendLine(")")
+            appendLine("""if exist "$programFiles" (""")
+            appendLine("""  start "" "$programFiles"""")
+            appendLine(")")
+            append(":started")
+        }
     // Each MSI is generated with a fresh ProductCode, so installing over the existing one can return
     // 1638 ("another version is already installed") and do nothing. Removing the old product fixes
     // that, but only as a fallback: doing it first is what once deleted the app outright. The GUID

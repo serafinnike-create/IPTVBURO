@@ -1048,6 +1048,8 @@ internal fun XtreamInternalDetailsPage(
             }
             XtreamItemDetail(
                 item = item,
+                castPhotoFor = appState::castPhotoFor,
+                onRequestCastPhoto = appState::ensureCastPhoto,
                 movieStatus = appState.movieDetailsStatus,
                 seriesStatus = appState.seriesDetailsStatus,
                 liveEpgStatus = appState.liveEpgStatus,
@@ -1056,8 +1058,6 @@ internal fun XtreamInternalDetailsPage(
                 onOpenTrailer = appState::openPublicTrailer,
                 onOpenExternal = onOpenExternal,
                 onOpenPerson = onOpenPerson,
-                castPhotoFor = castPhotoFor,
-                onRequestCastPhoto = onRequestCastPhoto,
                 isFavorite = appState.isFavorite(item),
                 onToggleFavorite = { appState.toggleFavorite(item) },
                 resumeDecisionFor = appState::resumeDecision,

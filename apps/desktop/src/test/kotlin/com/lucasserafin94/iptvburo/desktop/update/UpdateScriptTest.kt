@@ -51,13 +51,20 @@ class UpdateScriptTest {
 
     /** Without a launcher the update must still install rather than doing nothing. */
     @Test
-    fun `installs even when the launcher cannot be found`() {
+    /**
+     * The launcher path is read while the OLD build is running, so a fresh install can put the
+     * executable somewhere that answer never covered. When it is unknown the script falls back to
+     * the standard install locations rather than giving up - a user who updates and is left staring
+     * at a closed app has, from their side, simply lost the application.
+     */
+    fun `relaunches from the standard locations when the launcher path is unknown`() {
         withDirectory { directory ->
             val installer = directory.resolve("IPTVBURO-0.3.0.msi")
             val body = Files.readString(writeUpdateScript(installer, pid = 1, launcher = null))
 
             assertContains(body, "msiexec.exe")
-            assertTrue(!body.contains("start \"\" \""), "no relaunch should be attempted")
+            assertContains(body, "%LOCALAPPDATA%")
+            assertTrue(body.contains("start \"\" \""), "it must still try to reopen the app")
         }
     }
 
