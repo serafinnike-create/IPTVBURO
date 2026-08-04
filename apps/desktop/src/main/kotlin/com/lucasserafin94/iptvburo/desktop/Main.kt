@@ -59,6 +59,14 @@ private val PREFERRED_WIDTH = 1_380.dp
 private val PREFERRED_HEIGHT = 860.dp
 private val MIN_WIDTH = 900.dp
 private val MIN_HEIGHT = 560.dp
+
+/**
+ * Margin subtracted from the usable screen.
+ *
+ * Measured, not guessed: a window asked for at exactly the working-area size came back 1550x830 on
+ * a 1536x816 desktop, positioned at (-7,-7). Windows adds an invisible resize border of about 7px
+ * per edge, so 24dp covers that overshoot and still leaves the window clear of the screen edges.
+ */
 private val WINDOW_MARGIN = 24.dp
 
 fun main() {
@@ -76,6 +84,11 @@ fun main() {
             rememberWindowState(
                 size = preferredWindowSize(),
                 position = WindowPosition(Alignment.Center),
+                // Maximised, so Windows itself decides the bounds. Sizing by hand meant fighting
+                // the invisible 7px resize border the OS adds on each edge: a window asked for at
+                // the working-area height came back 14px larger and hung below the taskbar, taking
+                // the last row of the catalogue off screen with it.
+                placement = WindowPlacement.Maximized,
             )
 
         // Remembered so leaving the compact overlay restores the window the user had, rather than

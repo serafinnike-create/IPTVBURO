@@ -505,19 +505,17 @@ private fun XtreamCategoryChip(
                     ).padding(start = 4.dp, end = 14.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Glyph on a tinted disc, chosen from the category's own wording. Every category used
-            // to resolve to one of six shared images, so a rail of twenty chips showed the same
-            // picture twenty times and told the user nothing.
+            // A tinted dot rather than an emoji. The colour still tells the genres apart, but the
+            // emoji were drawn by the system font: they clashed with the rest of the interface and
+            // looked nothing like the app around them.
             Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(CircleShape)
-                    .background(badge.tint.copy(alpha = 0.20f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(text = badge.glyph, style = MaterialTheme.typography.bodyMedium)
-            }
-            Spacer(Modifier.width(BuroSpacing.Xs))
+                modifier =
+                    Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(if (selected) BuroColors.Primary else badge.tint),
+            )
+            Spacer(Modifier.width(BuroSpacing.Sm))
             Text(
                 text = label,
                 color = if (selected) BuroColors.Text else BuroColors.TextMuted,
@@ -1681,7 +1679,7 @@ private fun EpisodeDownloadControl(
         DownloadState.Completed ->
             TextButton(onClick = onRemove) {
                 Text(
-                    text = "✓  ${text.removeDownload}",
+                    text = text.removeDownload,
                     color = BuroColors.Success,
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -1689,9 +1687,9 @@ private fun EpisodeDownloadControl(
         else ->
             TextButton(onClick = onDownload) {
                 Text(
-                    text = "⤓",
+                    text = text.download,
                     color = BuroColors.TextMuted,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.labelMedium,
                 )
             }
     }

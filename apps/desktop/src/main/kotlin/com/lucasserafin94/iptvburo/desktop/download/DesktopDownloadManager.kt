@@ -72,8 +72,13 @@ class DesktopDownloadManager(
                 .filter { name -> !name.endsWith(".part") && name != INDEX_FILE }
                 .toList()
                 .associate { name ->
-                    val key = name.substringBeforeLast('.')
-                    key to (sidecars[key] ?: StoredDownload(key.toReadableTitle(), null))
+                    val storedName = name.substringBeforeLast('.')
+                    val sidecar = sidecars[storedName]
+                    // The original key, not the sanitised file name: the app looks downloads up by
+                    // the same content key it uses for playback and favourites, and for an episode
+                    // those differ ("series:x|s1e3" against "series_x_s1e3").
+                    val key = sidecar?.contentKey?.takeIf(String::isNotBlank) ?: storedName
+                    key to (sidecar ?: StoredDownload(storedName.toReadableTitle(), null, key))
                 }
         }
     }
@@ -91,7 +96,11 @@ class DesktopDownloadManager(
     ) {
         runCatching {
             Files.createDirectories(rootDirectory)
-            val updated = readIndex() + (contentKey to StoredDownload(title, artworkUrl))
+            // Indexed by the sanitised name, which is what storedDownloads recovers from the file
+            // on disk. Storing the raw key meant the two never matched for anything containing a
+            // ':' or '|' - every episode - so the library fell back to the mangled key as a title.
+            val updated =
+                readIndex() + (safeName(contentKey) to StoredDownload(title, artworkUrl, contentKey))
             Files.writeString(rootDirectory.resolve(INDEX_FILE), gson.toJson(updated))
         }
     }
@@ -129,7 +138,7 @@ class DesktopDownloadManager(
     fun delete(contentKey: String): Boolean {
         val removed = downloadedFile(contentKey)?.let(Files::deleteIfExists) ?: false
         runCatching {
-            val remaining = readIndex() - contentKey
+            val remaining = readIndex() - safeName(contentKey)
             Files.writeString(rootDirectory.resolve(INDEX_FILE), gson.toJson(remaining))
         }
         return removed
@@ -228,10 +237,17 @@ class DesktopDownloadManager(
     }
 }
 
-/** How a completed download should be presented in the library. */
+/**
+ * How a completed download should be presented in the library.
+ *
+ * [contentKey] is the app's own key, kept because the file name is a sanitised form of it and the
+ * two differ for anything containing ':' or '|' — every episode. Null for entries written before
+ * this field existed, where the sanitised name is the best available answer.
+ */
 data class StoredDownload(
     val title: String,
     val artworkUrl: String?,
+    val contentKey: String? = null,
 )
 
 sealed interface DownloadResult {

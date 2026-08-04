@@ -432,7 +432,8 @@ fun DesktopApp(
                             showProfileGate = false
                             scope.launch { appState.selectProfileAndRefresh(profileId) }
                         },
-                        onCreate = appState::createProfile,
+                        onAddProfile = appState::startAddingProfile,
+                        onDelete = appState::deleteProfile,
                         onReset = appState::resetEverything,
                         // Dismissable only when a profile is already active. On first launch there
                         // is nothing to fall back to, so the gate stays modal.
@@ -1775,7 +1776,8 @@ private fun DesktopProfileGate(
     profiles: List<DesktopProfile>,
     photoFor: (String) -> java.nio.file.Path?,
     onSelect: (String?) -> Unit,
-    onCreate: (String, Boolean, Int) -> Unit,
+    onAddProfile: () -> Unit,
+    onDelete: (String) -> Unit,
     onReset: () -> Unit,
     onDismiss: (() -> Unit)?,
 ) {
@@ -1783,6 +1785,9 @@ private fun DesktopProfileGate(
     var kids by remember { mutableStateOf(false) }
     var avatar by remember { mutableStateOf(0) }
     var confirmingReset by remember { mutableStateOf(false) }
+    // Which profile is one tap away from being removed. Held here so tapping a second profile
+    // cancels the first, rather than arming two at once.
+    var confirmingDelete by remember { mutableStateOf<String?>(null) }
     Box(
         modifier = Modifier.fillMaxSize().background(BuroColors.Scrim),
         contentAlignment = Alignment.Center,
@@ -1852,6 +1857,38 @@ private fun DesktopProfileGate(
                                     style = MaterialTheme.typography.labelSmall,
                                 )
                             }
+                            // Only offered while more than one profile exists: removing the last
+                            // one would leave the gate with nothing to choose. Two taps, because
+                            // deleting a profile discards its favourites.
+                            if (profiles.size > 1) {
+                                Spacer(Modifier.height(BuroSpacing.Xs))
+                                TextButton(
+                                    onClick = {
+                                        if (confirmingDelete == profile.id) {
+                                            onDelete(profile.id)
+                                            confirmingDelete = null
+                                        } else {
+                                            confirmingDelete = profile.id
+                                        }
+                                    },
+                                ) {
+                                    Text(
+                                        text =
+                                            if (confirmingDelete == profile.id) {
+                                                strings.confirmRemoveProfile
+                                            } else {
+                                                strings.removeProfile
+                                            },
+                                        color =
+                                            if (confirmingDelete == profile.id) {
+                                                BuroColors.Error
+                                            } else {
+                                                BuroColors.TextSubtle
+                                            },
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1882,24 +1919,10 @@ private fun DesktopProfileGate(
                     }
                 }
                 Spacer(Modifier.height(BuroSpacing.Sm))
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it.take(24) },
-                    label = { Text(strings.newProfile) },
-                    singleLine = true,
-                    modifier = Modifier.width(360.dp),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { kids = !kids }) { Text(if (kids) "${strings.kidsProfile} ✓" else strings.adultProfile) }
-                    Button(
-                        onClick = {
-                            if (newName.isNotBlank()) {
-                                onCreate(newName, kids, avatar)
-                                newName = ""
-                            }
-                        },
-                    ) { Text(strings.addProfile) }
-                }
+                // Adding a profile goes through the account step, where a playlist can be reused or
+                // a new one added. The gate used to create a name-only profile, which then had no
+                // playlist of its own and no way to be given one.
+                Button(onClick = onAddProfile) { Text(strings.addProfile) }
             }
 
             Spacer(Modifier.height(BuroSpacing.Xl))

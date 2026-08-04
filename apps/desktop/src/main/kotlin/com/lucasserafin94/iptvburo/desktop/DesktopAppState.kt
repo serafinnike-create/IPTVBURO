@@ -225,6 +225,49 @@ class DesktopAppState(
     }
 
     /**
+     * Opens the account step so a new profile can be given a playlist.
+     *
+     * Creating a profile from the gate only ever asked for a name and an avatar, so the choice
+     * between reusing an existing playlist and adding another one — the whole point of per-profile
+     * playlists — was reachable only during first-run setup.
+     */
+    fun startAddingProfile() {
+        onboarding = OnboardingStep.Account
+    }
+
+    /**
+     * Leaves the account step without creating anything.
+     *
+     * Only valid once a profile exists; during first-run setup there is nothing to go back to, so
+     * the step stays modal.
+     */
+    fun cancelAddingProfile() {
+        if (activeProfileId != null) onboarding = OnboardingStep.Done
+    }
+
+    /**
+     * Removes a profile along with the data that belonged only to it.
+     *
+     * The last profile is kept: with none, the app has nowhere to store favourites and would show
+     * the profile gate with nothing to pick. Downloads are deliberately untouched — they are shared
+     * between profiles and are the user's own files.
+     */
+    fun deleteProfile(profileId: String) {
+        if (profiles.size <= 1) return
+        val remaining = profiles.filterNot { it.id == profileId }
+        if (remaining.size == profiles.size) return
+
+        profiles = remaining
+        userStore.saveProfiles(remaining)
+        userStore.setFavorites(profileId, emptySet())
+        photoStore.remove(profileId)
+        photoRevision += 1
+        // Switching away from a deleted profile, rather than leaving the app pointing at one that
+        // no longer exists.
+        if (activeProfileId == profileId) selectProfile(remaining.first().id)
+    }
+
+    /**
      * Restores the application to a first-run state.
      *
      * Clears profiles, favourites, language and the active profile, and disconnects the current
