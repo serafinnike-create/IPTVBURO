@@ -770,13 +770,45 @@ private fun TopBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text.yourLibrary,
-                    color = BuroColors.Text,
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text.yourLibrary,
+                        color = BuroColors.Text,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    // Beside the library title rather than buried in the settings menu: this acts on
+                    // what is on screen, so it belongs next to the thing it refreshes.
+                    if (sessionActive) {
+                        Spacer(Modifier.width(BuroSpacing.Sm))
+                        BuroInteractiveRow(
+                            onClick = { if (!catalogRefreshing) onRefreshCatalog() },
+                            selected = false,
+                            shape = BuroRadius.Pill,
+                            contentDescription = text.refreshCatalog,
+                        ) {
+                            Row(
+                                modifier =
+                                    Modifier.padding(horizontal = BuroSpacing.Sm, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = if (catalogRefreshing) "…" else "⟳",
+                                    color = BuroColors.Primary,
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = text.refreshCatalog,
+                                    color = BuroColors.TextMuted,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
+                }
                 // Version and counts share one quiet line so the header carries a single strong
                 // element instead of five competing pills. The full version is shown, including the
                 // pre-release suffix: "v0.2.0" for a 0.2.0-alpha.5 build made bug reports ambiguous.
@@ -887,24 +919,6 @@ private fun SettingsMenu(
                 )
             }
             HorizontalDivider(color = BuroColors.BorderSoft)
-            // Refreshing the lists and updating the app are different things and were easy to
-            // confuse when only the latter existed. The catalogue is fetched on start; this is the
-            // manual re-fetch for when the provider adds a title mid-session.
-            if (sessionActive) {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = if (catalogRefreshing) "…" else text.refreshCatalog,
-                            color = BuroColors.Text,
-                        )
-                    },
-                    enabled = !catalogRefreshing,
-                    onClick = {
-                        onRefreshCatalog()
-                        expanded = false
-                    },
-                )
-            }
             DropdownMenuItem(
                 text = {
                     Text(

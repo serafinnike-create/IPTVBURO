@@ -14,12 +14,52 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import java.awt.GraphicsEnvironment
 import com.lucasserafin94.iptvburo.desktop.app.DesktopApp
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.SessionXtreamRepository
 import com.lucasserafin94.iptvburo.desktop.platform.WindowChrome
 import com.lucasserafin94.iptvburo.desktop.security.RememberedXtreamStore
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
+
+/**
+ * The window size to open at: the preferred size, shrunk to fit the usable screen.
+ *
+ * getMaximumWindowBounds already excludes the taskbar, so the result is what the user can actually
+ * see. A margin is left so the window does not sit flush against every edge, and a floor keeps the
+ * app usable on a very small display rather than collapsing to nothing.
+ */
+private fun preferredWindowSize(): DpSize {
+    val usable =
+        runCatching {
+            GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+        }.getOrNull()
+    return fitToScreen(usableWidth = usable?.width ?: 0, usableHeight = usable?.height ?: 0)
+}
+
+/**
+ * The preferred window size, shrunk to what [usableWidth] by [usableHeight] can actually show.
+ *
+ * Zero means the screen bounds are unknown, in which case the preferred size is used unchanged: a
+ * guess is better than opening at the minimum on a large display.
+ */
+internal fun fitToScreen(
+    usableWidth: Int,
+    usableHeight: Int,
+): DpSize {
+    val maxWidth = usableWidth.takeIf { it > 0 }?.dp?.minus(WINDOW_MARGIN) ?: PREFERRED_WIDTH
+    val maxHeight = usableHeight.takeIf { it > 0 }?.dp?.minus(WINDOW_MARGIN) ?: PREFERRED_HEIGHT
+    return DpSize(
+        width = minOf(PREFERRED_WIDTH, maxWidth).coerceAtLeast(MIN_WIDTH),
+        height = minOf(PREFERRED_HEIGHT, maxHeight).coerceAtLeast(MIN_HEIGHT),
+    )
+}
+
+private val PREFERRED_WIDTH = 1_380.dp
+private val PREFERRED_HEIGHT = 860.dp
+private val MIN_WIDTH = 900.dp
+private val MIN_HEIGHT = 560.dp
+private val WINDOW_MARGIN = 24.dp
 
 fun main() {
     val localRepository = InMemoryCatalogRepository()
@@ -28,9 +68,14 @@ fun main() {
     val userStore = DesktopUserStore()
 
     application {
+        // Fitted to the screen rather than fixed. A 1380x860 default is taller than a 1536x864
+        // laptop panel once the taskbar is subtracted, so the window opened with its lower edge off
+        // screen: the last rail sat under the taskbar and the page looked unscrollable because the
+        // part that would have scrolled was never visible.
         val windowState =
             rememberWindowState(
-                size = DpSize(width = 1_380.dp, height = 860.dp),
+                size = preferredWindowSize(),
+                position = WindowPosition(Alignment.Center),
             )
 
         // Remembered so leaving the compact overlay restores the window the user had, rather than

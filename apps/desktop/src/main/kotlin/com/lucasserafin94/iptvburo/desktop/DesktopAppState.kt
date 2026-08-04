@@ -716,6 +716,12 @@ class DesktopAppState(
             xtreamCategories = visibleXtreamCategories(current)
             refreshXtreamPage(pageIndex = 0)
             xtreamStatus = XtreamStatus.Connected
+            // The Home is built from its own snapshot, so refreshing only the catalogue left the
+            // screen the user was looking at unchanged — the button appeared to do nothing.
+            if (destination == DesktopDestination.HOME) {
+                dailyHomeStatus = DailyHomeStatus.Idle
+                loadDailyHome(LocalDate.now())
+            }
         }.onFailure { error ->
             error.rethrowIfCancellation()
             xtreamStatus = XtreamStatus.Error(error.toSafeXtreamMessage())
