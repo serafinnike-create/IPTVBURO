@@ -277,10 +277,11 @@ fun DesktopApp(
                         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         // Music is checked before the source, because it is fed by its own playlist
                         // and does not need the video provider to be connected at all.
-                        if (appState.destination == DesktopDestination.MUSIC && appState.hasMusicLibrary) {
+                        if (appState.destination == DesktopDestination.MUSIC) {
                             MusicWorkspace(
                                 appState = appState,
                                 onPlay = { request -> activePlayback = request },
+                                ownerWindow = ownerWindow,
                             )
                         } else if (!appState.hasSelectedSource) {
                             EmptyLibrary(
@@ -511,9 +512,14 @@ fun DesktopApp(
                 }
 
                 AnimatedVisibility(
+                    // Not while starting: the splash already says this, and two panels stacked
+                    // saying the same thing is what the user kept seeing over their catalogue.
                     visible =
-                        appState.importStatus is ImportStatus.Loading ||
-                            appState.xtreamStatus is XtreamStatus.Connecting,
+                        !appState.isStarting &&
+                            (
+                                appState.importStatus is ImportStatus.Loading ||
+                                    appState.xtreamStatus is XtreamStatus.Connecting
+                            ),
                     enter = fadeIn(),
                     exit = fadeOut(),
                 ) {
@@ -651,13 +657,11 @@ private fun SourceSidebar(
         )
         // Last, after Downloads, and only when the user actually supplied a music playlist. An
         // entry leading to an empty section is worse than no entry at all.
-        if (hasMusic) {
-            NavigationItem(
-                label = text.music,
-                selected = destination == DesktopDestination.MUSIC,
-                onClick = onMusic,
-            )
-        }
+        NavigationItem(
+            label = text.music,
+            selected = destination == DesktopDestination.MUSIC,
+            onClick = onMusic,
+        )
 
         // The source list used to own the whole remaining column even with one source. It is a
         // rarely-used switch, so it now takes only the height it needs and the section disappears

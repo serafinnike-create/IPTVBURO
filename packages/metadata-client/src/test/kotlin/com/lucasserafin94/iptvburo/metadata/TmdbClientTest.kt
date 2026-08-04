@@ -139,6 +139,59 @@ class TmdbClientTest {
         assertNull(client().findPerson("Adam Byard"))
     }
 
+    /**
+     * Most providers leave the trailer field empty even for films that plainly have one, so this
+     * lookup is the difference between the button existing and not.
+     */
+    @Test
+    fun `finds a trailer by title`() {
+        server.enqueue(json("""{"results":[{"id":42,"title":"A Film"}]}"""))
+        server.enqueue(
+            json(
+                """{"results":[
+                {"site":"YouTube","type":"Featurette","key":"wrong1"},
+                {"site":"YouTube","type":"Trailer","key":"right1"}]}""",
+            ),
+        )
+
+        assertEquals("right1", client().findTrailer("A Film", 2026))
+    }
+
+    /** TMDb returns an empty list for a language rather than falling back, so the client must. */
+    @Test
+    fun `falls back to any language when the preferred one has none`() {
+        server.enqueue(json("""{"results":[{"id":42,"title":"A Film"}]}"""))
+        server.enqueue(json("""{"results":[]}"""))
+        server.enqueue(json("""{"results":[{"site":"YouTube","type":"Trailer","key":"any1"}]}"""))
+
+        assertEquals("any1", client().findTrailer("A Film", null))
+    }
+
+    @Test
+    fun `a teaser counts when no full trailer exists`() {
+        server.enqueue(json("""{"results":[{"id":42,"title":"A Film"}]}"""))
+        server.enqueue(json("""{"results":[{"site":"YouTube","type":"Teaser","key":"teas1"}]}"""))
+
+        assertEquals("teas1", client().findTrailer("A Film", null))
+    }
+
+    /** A video hosted somewhere the app cannot play is worse than none: it would open a dead panel. */
+    @Test
+    fun `a non-YouTube video is ignored`() {
+        server.enqueue(json("""{"results":[{"id":42,"title":"A Film"}]}"""))
+        server.enqueue(json("""{"results":[{"site":"Vimeo","type":"Trailer","key":"vim1"}]}"""))
+        server.enqueue(json("""{"results":[{"site":"Vimeo","type":"Trailer","key":"vim1"}]}"""))
+
+        assertNull(client().findTrailer("A Film", null))
+    }
+
+    @Test
+    fun `an unknown title yields no trailer`() {
+        server.enqueue(json("""{"results":[]}"""))
+
+        assertNull(client().findTrailer("Nothing At All", null))
+    }
+
     /** The key is a secret and must not be reachable through a log line. */
     @Test
     fun `the api key never appears in toString`() {

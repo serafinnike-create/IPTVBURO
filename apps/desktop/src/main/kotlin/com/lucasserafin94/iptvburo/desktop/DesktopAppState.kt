@@ -749,11 +749,26 @@ class DesktopAppState(
             }
         musicLibrary = loaded ?: MusicLibrary.EMPTY
         musicPlayCounts = playCountStore.countsFor(activeProfileId)
-        // A profile with no music must not be left looking at the music workspace, which its
-        // sidebar entry no longer offers a way back to.
-        if (musicLibrary.isEmpty && destination == DesktopDestination.MUSIC) {
-            destination = DesktopDestination.HOME
-        }
+    }
+
+    /**
+     * Attaches a music playlist to the active profile.
+     *
+     * Adding one had to be done when creating a profile, which meant an existing user could not add
+     * music at all without making a second profile.
+     */
+    suspend fun attachMusicPlaylist(path: Path) {
+        val profileId = activeProfileId ?: return
+        profiles =
+            profiles.map { profile ->
+                if (profile.id == profileId) {
+                    profile.copy(musicPlaylistPath = path.toString())
+                } else {
+                    profile
+                }
+            }
+        userStore.saveProfiles(profiles)
+        loadMusicLibrary()
     }
 
     /** Opens the music workspace at its home section. */

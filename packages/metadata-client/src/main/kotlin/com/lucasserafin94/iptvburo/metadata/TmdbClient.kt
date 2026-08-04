@@ -110,6 +110,61 @@ class TmdbClient(
     }
 
     /**
+     * The YouTube id of a trailer for [title], or null when there is none.
+     *
+     * Most providers leave the trailer field empty even for films that plainly have one, so this is
+     * the difference between a Trailer button existing and not. The title is searched rather than
+     * matched on an id because the playlist carries no external identifier at all.
+     *
+     * Prefers the user's language and falls back to whatever exists: a trailer in the wrong language
+     * is better than none.
+     */
+    fun findTrailer(title: String, year: Int?): String? {
+        val key = apiKey?.takeIf(String::isNotBlank) ?: return null
+        if (title.isBlank()) return null
+
+        val searchUrl =
+            baseUrl.newBuilder()
+                .addPathSegments("search/movie")
+                .addQueryParameter("api_key", key)
+                .addQueryParameter("query", title.trim())
+                .addQueryParameter("language", language)
+                .addQueryParameter("include_adult", "false")
+                .apply { year?.let { addQueryParameter("year", it.toString()) } }
+                .build()
+
+        val movieId =
+            get(searchUrl)
+                ?.getAsJsonArray("results")
+                ?.firstOrNull()
+                ?.takeIf { it.isJsonObject }
+                ?.asJsonObject
+                ?.int("id")
+                ?: return null
+
+        // Language first, then anything: TMDb returns an empty list rather than falling back itself.
+        return trailerFor(movieId, key, language) ?: trailerFor(movieId, key, null)
+    }
+
+    private fun trailerFor(movieId: Int, key: String, forLanguage: String?): String? {
+        val url =
+            baseUrl.newBuilder()
+                .addPathSegments("movie/$movieId/videos")
+                .addQueryParameter("api_key", key)
+                .apply { forLanguage?.let { addQueryParameter("language", it) } }
+                .build()
+
+        val videos = get(url)?.getAsJsonArray("results") ?: return null
+        return videos
+            .mapNotNull { element -> element.takeIf { it.isJsonObject }?.asJsonObject }
+            .filter { video -> video.string("site").equals("YouTube", ignoreCase = true) }
+            // A trailer, not a clip or a behind-the-scenes reel, which the same endpoint returns.
+            .sortedByDescending { video -> if (video.string("type") == "Trailer") 1 else 0 }
+            .firstOrNull { video -> video.string("type") in TRAILER_TYPES }
+            ?.string("key")
+    }
+
+    /**
      * Biography and birth details for a person's page.
      *
      * Separate from [findPerson] because the search endpoint does not return them and most screens
@@ -158,6 +213,9 @@ class TmdbClient(
     private companion object {
         const val DEFAULT_BASE_URL = "https://api.themoviedb.org/3/"
         const val DEFAULT_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
+
+        /** A teaser is still worth showing when no full trailer was published. */
+        val TRAILER_TYPES = setOf("Trailer", "Teaser")
     }
 }
 

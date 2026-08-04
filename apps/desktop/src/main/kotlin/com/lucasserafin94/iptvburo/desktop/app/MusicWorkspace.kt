@@ -28,6 +28,8 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -49,6 +51,9 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.strings
+import com.lucasserafin94.iptvburo.desktop.platform.chooseLocalPlaylist
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.lucasserafin94.iptvburo.domain.model.MusicArtist
 import com.lucasserafin94.iptvburo.domain.model.MusicTrack
 
@@ -63,9 +68,49 @@ import com.lucasserafin94.iptvburo.domain.model.MusicTrack
 fun MusicWorkspace(
     appState: DesktopAppState,
     onPlay: (DesktopPlaybackRequest) -> Unit,
+    ownerWindow: java.awt.Frame? = null,
 ) {
     val text = strings
+    val scope = rememberCoroutineScope()
     val library = appState.musicLibrary
+
+    // No playlist yet: explain what this section is and offer to add one here. The section used to
+    // be hidden until a playlist existed, which made it undiscoverable - there was no way to learn
+    // the app had music, and so no reason to go looking for where to add the list.
+    if (!appState.hasMusicLibrary) {
+        Box(modifier = Modifier.fillMaxSize().padding(BuroSpacing.Xl), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = text.musicEmptyTitle,
+                    color = BuroColors.Text,
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Spacer(Modifier.height(BuroSpacing.Sm))
+                Text(
+                    text = text.musicEmptyBody,
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(BuroSpacing.Lg))
+                Button(
+                    onClick = {
+                        chooseLocalPlaylist(ownerWindow)?.let { path ->
+                            scope.launch { appState.attachMusicPlaylist(path) }
+                        }
+                    },
+                    shape = BuroRadius.Small,
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = BuroColors.Primary,
+                            contentColor = BuroColors.OnPrimary,
+                        ),
+                ) {
+                    Text(text.musicAddPlaylist, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        return
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         MusicSectionBar(

@@ -1123,6 +1123,18 @@ internal fun XtreamInternalDetailsPage(
                 onRemoveEpisodeDownload = { target -> appState.deleteDownload(target.contentKey) },
             )
         }
+
+        // Drawn last so it sits over the page. Without this the panel was written, compiled and
+        // never rendered - the button set a value nothing read.
+        openTrailerId?.let { trailerId ->
+            TrailerOverlay(
+                youtubeId = trailerId,
+                title = item.name.editorialTitle(),
+                onClose = { openTrailerId = null },
+                // Chromium missing on this machine is not a reason to deny the trailer entirely.
+                onFallback = { appState.openPublicTrailer(trailerId) },
+            )
+        }
     }
 }
 
