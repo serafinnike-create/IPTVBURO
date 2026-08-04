@@ -51,6 +51,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.security.XtreamSource
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
@@ -233,6 +234,15 @@ class AccountSetupDraft {
     val username = mutableStateOf("")
     val password = mutableStateOf("")
     val reusedSourceId = mutableStateOf<String?>(null)
+
+    /**
+     * The optional music M3U, null unless the user picked one.
+     *
+     * Held with the rest of the draft so a failed connection does not silently discard a file the
+     * user already chose, which would be invisible until they reached the sidebar and found no
+     * Músicas entry.
+     */
+    val musicPlaylist = mutableStateOf<Path?>(null)
 }
 
 /**
@@ -253,8 +263,18 @@ fun AccountSetupGate(
     onClearPhoto: () -> Unit,
     // Null on first run, where there is no app behind this to return to.
     onDismiss: (() -> Unit)? = null,
-    onCreate: (profileName: String, avatarIndex: Int, listLabel: String, server: String, username: String, password: String) -> Unit,
-    onUseSaved: (profileName: String, avatarIndex: Int, sourceId: String) -> Unit,
+    /** Opens the file dialog for the optional music playlist; null when the user cancels. */
+    onPickMusicPlaylist: () -> Path?,
+    onCreate: (
+        profileName: String,
+        avatarIndex: Int,
+        listLabel: String,
+        server: String,
+        username: String,
+        password: String,
+        musicPlaylist: Path?,
+    ) -> Unit,
+    onUseSaved: (profileName: String, avatarIndex: Int, sourceId: String, musicPlaylist: Path?) -> Unit,
 ) {
     // Hoisted out of this composable so a failed connection can return here with everything the
     // user typed still in place. Held in remember alone, the state died with the screen and the
@@ -266,6 +286,7 @@ fun AccountSetupGate(
     var username by draft.username
     var password by draft.password
     var reusedSourceId by draft.reusedSourceId
+    var musicPlaylist by draft.musicPlaylist
     var revealPassword by remember { mutableStateOf(false) }
 
     val canSubmit =
@@ -392,14 +413,32 @@ fun AccountSetupGate(
             )
         }
 
+        // The music playlist sits outside the credentials block: it is offered whether the user is
+        // reusing a saved list or adding a new one, because music is per profile either way.
+        Spacer(Modifier.height(BuroSpacing.Lg))
+        MusicPlaylistField(
+            chosen = musicPlaylist,
+            onChoose = { onPickMusicPlaylist()?.let { picked -> musicPlaylist = picked } },
+            onClear = { musicPlaylist = null },
+            text = text,
+        )
+
         Spacer(Modifier.height(BuroSpacing.Lg))
         Button(
             onClick = {
                 val saved = reusedSourceId
                 if (saved != null) {
-                    onUseSaved(profileName, avatarIndex, saved)
+                    onUseSaved(profileName, avatarIndex, saved, musicPlaylist)
                 } else {
-                    onCreate(profileName, avatarIndex, listLabel, server, username, password)
+                    onCreate(
+                        profileName,
+                        avatarIndex,
+                        listLabel,
+                        server,
+                        username,
+                        password,
+                        musicPlaylist,
+                    )
                 }
             },
             enabled = canSubmit,
@@ -414,6 +453,96 @@ fun AccountSetupGate(
                 ),
         ) {
             Text(text.setupContinue, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/**
+ * The optional music playlist, marked as optional in the UI rather than only in the docs.
+ *
+ * A file picker rather than a text field: the value is a path on this machine, and asking someone
+ * to type one is how you get a path with a typo in it that fails silently at the next launch.
+ *
+ * Leaving it untouched is a first-class outcome — nothing about the app changes — so the control is
+ * quiet by default and never blocks the submit button.
+ */
+@Composable
+private fun MusicPlaylistField(
+    chosen: Path?,
+    onChoose: () -> Unit,
+    onClear: () -> Unit,
+    text: DesktopStrings,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(BuroRadius.Medium)
+                .background(BuroColors.Surface)
+                .padding(BuroSpacing.Md),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = text.musicPlaylistLabel,
+                color = BuroColors.Text,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Spacer(Modifier.width(BuroSpacing.Xs))
+            // The badge, not a parenthesis in the label: it has to be readable at a glance so the
+            // field is never mistaken for another thing setup is demanding.
+            Text(
+                text = text.musicPlaylistOptional,
+                modifier =
+                    Modifier
+                        .clip(BuroRadius.Pill)
+                        .background(BuroColors.SurfaceRaised)
+                        .padding(horizontal = BuroSpacing.Xs, vertical = 2.dp),
+                color = BuroColors.TextSubtle,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        Spacer(Modifier.height(BuroSpacing.Xxs))
+        Text(
+            text = text.musicPlaylistHint,
+            color = BuroColors.TextSubtle,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(BuroSpacing.Sm))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BuroInteractiveSurface(
+                onClick = onChoose,
+                shape = BuroRadius.Small,
+                background = BuroColors.SurfaceRaised,
+                activeBackground = BuroColors.SurfaceHover,
+                contentDescription = text.musicPlaylistChoose,
+            ) { _ ->
+                Text(
+                    text = text.musicPlaylistChoose,
+                    modifier =
+                        Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs),
+                    color = BuroColors.Text,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+            Spacer(Modifier.width(BuroSpacing.Sm))
+            if (chosen == null) return@Row
+            Text(
+                // The file name alone. The full path is often long enough to push the remove
+                // control off the panel, and the name is what the user recognises anyway.
+                text = chosen.fileName?.toString().orEmpty(),
+                modifier = Modifier.weight(1f),
+                color = BuroColors.Primary,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            TextButton(onClick = onClear) {
+                Text(
+                    text = text.musicPlaylistRemove,
+                    color = BuroColors.TextMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
         }
     }
 }

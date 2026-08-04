@@ -21,6 +21,30 @@ fun chooseLocalPlaylist(owner: Frame?): Path? {
     return dialog.files.firstOrNull()?.toPath()
 }
 
+/**
+ * Asks for an M3U under a caller-supplied title.
+ *
+ * Separate from [chooseLocalPlaylist] only because that one names itself "Importar lista" in the
+ * dialog chrome, which is the wrong prompt when the file being picked is a music playlist and the
+ * app is running in one of the other three languages.
+ */
+fun chooseM3uFile(
+    owner: Frame?,
+    title: String,
+): Path? {
+    val dialog =
+        FileDialog(owner, title, FileDialog.LOAD).apply {
+            filenameFilter =
+                java.io.FilenameFilter { _, name ->
+                    name.endsWith(".m3u", ignoreCase = true) ||
+                        name.endsWith(".m3u8", ignoreCase = true)
+                }
+            isMultipleMode = false
+            isVisible = true
+        }
+    return dialog.files.firstOrNull()?.toPath()
+}
+
 fun openChannelExternally(channel: Channel): ExternalOpenResult {
     val uri =
         runCatching { URI(channel.streamUri) }

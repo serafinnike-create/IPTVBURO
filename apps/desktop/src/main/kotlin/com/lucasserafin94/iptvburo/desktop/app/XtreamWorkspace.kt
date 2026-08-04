@@ -102,6 +102,7 @@ import com.lucasserafin94.iptvburo.desktop.data.episodeContentKey
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.desktop.ui.CategoryBadge
 import com.lucasserafin94.iptvburo.desktop.ui.categoryLabel
+import com.lucasserafin94.iptvburo.desktop.CatalogLayout
 import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableVertically
 import com.lucasserafin94.iptvburo.desktop.ui.categoryBadgeFor
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
@@ -651,6 +652,46 @@ private fun XtreamCatalogGrid(
                 color = BuroColors.Text,
                 style = MaterialTheme.typography.headlineSmall,
             )
+            Spacer(Modifier.width(BuroSpacing.Md))
+            // Beside the title rather than in a settings menu: it changes what is on screen right
+            // now, so it belongs next to what it changes.
+            CatalogLayout.entries.forEach { layout ->
+                val selected = layout == appState.catalogLayout
+                BuroInteractiveRow(
+                    onClick = { appState.selectCatalogLayout(layout) },
+                    selected = selected,
+                    shape = BuroRadius.Pill,
+                    contentDescription = layout.id,
+                ) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .border(
+                                    width = 1.dp,
+                                    color =
+                                        if (selected) {
+                                            BuroColors.Primary.copy(alpha = 0.55f)
+                                        } else {
+                                            BuroColors.BorderSoft
+                                        },
+                                    shape = BuroRadius.Pill,
+                                ).padding(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text =
+                                when (layout) {
+                                    CatalogLayout.POSTER -> text.layoutPoster
+                                    CatalogLayout.COMPACT -> text.layoutCompact
+                                    CatalogLayout.LIST -> text.layoutList
+                                },
+                            color = if (selected) BuroColors.Primary else BuroColors.TextMuted,
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(BuroSpacing.Xs))
+            }
             Spacer(Modifier.weight(1f))
             Text(
                 text = "${page.totalMatches} ${text.items}",
@@ -708,7 +749,17 @@ private fun XtreamCatalogGrid(
                             scope.launch { gridState.animateScrollBy(delta) }
                             true
                         },
-                columns = GridCells.Adaptive(minSize = if (live) 250.dp else 172.dp),
+                // The layout the user picked decides the column width, and the list mode asks for a
+                // single very wide column so each title gets a full row.
+                columns =
+                    GridCells.Adaptive(
+                        minSize =
+                            when (appState.catalogLayout) {
+                                CatalogLayout.POSTER -> if (live) 250.dp else 172.dp
+                                CatalogLayout.COMPACT -> if (live) 180.dp else 124.dp
+                                CatalogLayout.LIST -> 460.dp
+                            },
+                    ),
                 // Generous bottom padding so the final row clears the pagination bar. With only
                 // the symmetric vertical padding the last row sat flush against it and read as
                 // cut off, which is indistinguishable from the grid failing to scroll.
@@ -731,6 +782,7 @@ private fun XtreamCatalogGrid(
                         text = text,
                         selected = item.providerId == appState.selectedXtreamItem?.providerId,
                         onClick = { onItemSelected(item.providerId) },
+                        layout = appState.catalogLayout,
                     )
                 }
             }
@@ -798,9 +850,69 @@ private fun XtreamCatalogCard(
     text: DesktopStrings,
     selected: Boolean,
     onClick: () -> Unit,
+    layout: CatalogLayout = CatalogLayout.POSTER,
 ) {
     val live = item.contentType == XtreamContentType.LIVE
     val title = item.name.editorialTitle()
+
+    // The list mode is a different shape, not a smaller card: artwork beside the name rather than
+    // above it, so the title gets the width that makes a list worth choosing.
+    if (layout == CatalogLayout.LIST) {
+        BuroInteractiveSurface(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth(),
+            shape = BuroRadius.Medium,
+            background = BuroColors.Surface,
+            contentDescription = title,
+            ringColor = if (selected) BuroColors.Primary else BuroColors.Focus,
+        ) { _ ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(BuroSpacing.Sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BuroRemoteArtwork(
+                    artworkUrl = item.artworkUrl,
+                    contentDescription = null,
+                    modifier =
+                        Modifier
+                            .width(if (live) 72.dp else 44.dp)
+                            .aspectRatio(if (live) 16f / 9f else 2f / 3f)
+                            .clip(BuroRadius.Small)
+                            .background(BuroColors.SurfaceRaised),
+                    contentScale = if (live) ContentScale.Fit else ContentScale.Crop,
+                ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        XtreamMonogram(title, 24)
+                    }
+                }
+                Spacer(Modifier.width(BuroSpacing.Md))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        color = if (selected) BuroColors.Primary else BuroColors.Text,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val facts =
+                        listOfNotNull(
+                            item.year?.toString(),
+                            item.rating?.takeIf { it > 0.0 }?.let { "★ %.1f".format(it) },
+                        ).joinToString("  ·  ")
+                    if (facts.isNotBlank()) {
+                        Text(
+                            text = facts,
+                            color = BuroColors.TextSubtle,
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+        }
+        return
+    }
+
     BuroInteractiveSurface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),

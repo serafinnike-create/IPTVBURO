@@ -154,7 +154,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "IPTVBURO"
-            packageVersion = "0.4.4"
+            packageVersion = "0.4.5"
             description = "IPTV BURO desktop player"
             vendor = "IPTV BURO"
             appResourcesRootDir.set(generatedAppResources)

@@ -22,6 +22,14 @@ data class DesktopProfile(
      * favourites — or hold different ones, in which case switching profile switches the account.
      */
     val sourceId: String? = null,
+    /**
+     * An M3U of music, supplied by the user and entirely optional.
+     *
+     * Null is the ordinary case and means the app behaves exactly as it did before music existed:
+     * no Músicas entry, no extra work at startup. Stored as a path rather than as parsed content
+     * because the file is the user's own and may change between sessions.
+     */
+    val musicPlaylistPath: String? = null,
 )
 
 
@@ -64,6 +72,10 @@ class DesktopUserStore(
                 profile.avatarIndex.toString(),
                 // A UUID contains no ':' or ';', so it needs no escaping to survive this format.
                 profile.sourceId.orEmpty(),
+                // Base64 like the name, not raw: a Windows path carries the drive's own ':', which
+                // is this format's field separator, so an unencoded "D:\music.m3u" would split into
+                // two fields and take the row's field count out of range.
+                profile.musicPlaylistPath?.let(::encode).orEmpty(),
             ).joinToString(":")
         })
     }
@@ -83,6 +95,20 @@ class DesktopUserStore(
      * Shown once. The app carries no catalogue of its own; it plays what the user's provider
      * serves, and the notice says so before anything is configured.
      */
+    /**
+     * How the catalogue grid is laid out, remembered per profile.
+     *
+     * Per profile rather than per install: one person browsing posters and another scanning a dense
+     * list is exactly the kind of preference a shared machine has two of.
+     */
+    fun catalogLayout(profileId: String?): String? =
+        profileId?.let { preferences.get(layoutKey(it), null) }
+
+    fun setCatalogLayout(profileId: String, value: String) =
+        preferences.put(layoutKey(profileId), value)
+
+    private fun layoutKey(profileId: String): String = "catalog-layout.$profileId"
+
     fun hasAcceptedTerms(): Boolean = preferences.getBoolean(KEY_TERMS_ACCEPTED, false)
 
     fun setAcceptedTerms() = preferences.putBoolean(KEY_TERMS_ACCEPTED, true)
@@ -138,9 +164,10 @@ class DesktopUserStore(
     private fun decodeProfiles(raw: String): List<DesktopProfile> =
         raw.split(';').mapNotNull { encoded ->
             val parts = encoded.split(':')
-            // Rows written before avatars existed have three fields and before per-profile sources
-            // four; both decode with the later fields defaulted rather than being discarded.
-            if (parts.size !in 3..5) return@mapNotNull null
+            // Rows written before avatars existed have three fields, before per-profile sources
+            // four, and before the optional music playlist five; every one of them decodes with the
+            // later fields defaulted rather than being discarded.
+            if (parts.size !in 3..6) return@mapNotNull null
             runCatching {
                 DesktopProfile(
                     id = parts[0],
@@ -152,6 +179,13 @@ class DesktopUserStore(
                         // are resolved when drawn.
                         parts.getOrNull(3)?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
                     sourceId = parts.getOrNull(4)?.takeIf(String::isNotBlank),
+                    // Decoded leniently: an unreadable path costs the user their music playlist,
+                    // which they can point at again, whereas failing the row would cost them the
+                    // profile itself along with its favourites.
+                    musicPlaylistPath =
+                        parts.getOrNull(5)?.takeIf(String::isNotBlank)?.let { stored ->
+                            runCatching { decode(stored) }.getOrNull()
+                        },
                 )
             }.getOrNull()
         }.take(5)

@@ -43,6 +43,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.layout
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import kotlinx.coroutines.delay
 
@@ -348,12 +349,71 @@ fun DesktopPlayerOverlay(
                     ),
                 ).padding(horizontal = 24.dp, vertical = 14.dp),
         ) {
-            Slider(
-                value = if (state.durationMillis > 0.0) (state.positionMillis / state.durationMillis).toFloat().coerceIn(0f, 1f) else 0f,
-                onValueChange = { controller.seekToFraction(it.toDouble()) },
-                enabled = state.ready && state.durationMillis > 0.0,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // Where the thumb is being dragged to, before it is committed. Seeking on every pixel
+            // of the drag flooded VLC with commands and made the picture stutter its way across the
+            // film; the seek now happens once, when the thumb is released.
+            var scrubTo by remember { mutableStateOf<Float?>(null) }
+            val playedFraction =
+                if (state.durationMillis > 0.0) {
+                    (state.positionMillis / state.durationMillis).toFloat().coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Slider(
+                    value = scrubTo ?: playedFraction,
+                    onValueChange = { scrubTo = it },
+                    onValueChangeFinished = {
+                        scrubTo?.let { fraction -> controller.seekToFraction(fraction.toDouble()) }
+                        scrubTo = null
+                    },
+                    enabled = state.ready && state.durationMillis > 0.0,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                // The time under the thumb while dragging. A frame preview is not possible here -
+                // VLC's control interface cannot render an arbitrary frame without interrupting
+                // playback - but the timestamp answers the same question: where will this land?
+                scrubTo?.let { fraction ->
+                    val targetMillis = state.durationMillis * fraction
+                    Box(
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopStart)
+                                .fillMaxWidth()
+                                .padding(bottom = 34.dp),
+                    ) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .align(Alignment.CenterStart)
+                                    .scrubberOffset(fraction)
+                                    .background(
+                                        color = Color(0xF00A0C0F),
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                                    ).padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = formatPlaybackTime(targetMillis),
+                                    color = BuroColors.Primary,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                // How far this jumps, so a small nudge is distinguishable from
+                                // landing twenty minutes away.
+                                val deltaSeconds = ((targetMillis - state.positionMillis) / 1_000.0).toInt()
+                                Text(
+                                    text =
+                                        if (deltaSeconds >= 0) "+${deltaSeconds}s" else "${deltaSeconds}s",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -382,6 +442,24 @@ fun DesktopPlayerOverlay(
                     val current = PLAYBACK_RATES.minByOrNull { rate -> kotlin.math.abs(rate - state.playbackRate) }
                     val nextIndex = (PLAYBACK_RATES.indexOf(current) + 1) % PLAYBACK_RATES.size
                     controller.setPlaybackRate(PLAYBACK_RATES[nextIndex])
+                }
+                // Audio and subtitle pickers, only when the title actually carries a choice: a menu
+                // with one entry is a control that cannot do anything.
+                if (state.audioTracks.size > 1) {
+                    TrackPicker(
+                        label = "Áudio",
+                        tracks = state.audioTracks,
+                        activeId = state.activeAudioTrackId,
+                        onSelect = controller::selectAudioTrack,
+                    )
+                }
+                if (state.subtitleTracks.isNotEmpty()) {
+                    TrackPicker(
+                        label = "Legendas",
+                        tracks = state.subtitleTracks,
+                        activeId = state.activeSubtitleTrackId,
+                        onSelect = controller::selectSubtitleTrack,
+                    )
                 }
                 Text("Volume ${(state.volume * 100).toInt()}%", color = Color.White)
                 Slider(
@@ -433,6 +511,68 @@ private fun TransportButton(
         Text(label, maxLines = 1)
     }
 }
+
+/**
+ * Picks one track from the ones the title carries.
+ *
+ * Labelled with the active track rather than a fixed word, so the bar answers "what am I hearing?"
+ * without being opened.
+ */
+@Composable
+private fun TrackPicker(
+    label: String,
+    tracks: List<MediaTrack>,
+    activeId: Int?,
+    onSelect: (Int) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val active = tracks.firstOrNull { it.id == activeId }
+
+    Box {
+        TransportButton(
+            label = active?.label?.take(14) ?: label,
+            enabled = true,
+        ) { expanded = true }
+        androidx.compose.material3.DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(BuroColors.SurfaceRaised),
+        ) {
+            tracks.forEach { track ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = track.label,
+                            color = if (track.id == activeId) BuroColors.Primary else BuroColors.Text,
+                        )
+                    },
+                    onClick = {
+                        onSelect(track.id)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Positions the scrub label under the thumb, clamped so it never runs off either edge.
+ *
+ * Laid out rather than offset by a fixed amount, because the label's own width is not known until
+ * the timestamp inside it is measured.
+ */
+private fun Modifier.scrubberOffset(fraction: Float): Modifier =
+    this.then(
+        Modifier.layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints.copy(minWidth = 0))
+            val travel = (constraints.maxWidth - placeable.width).coerceAtLeast(0)
+            val centred = (constraints.maxWidth * fraction - placeable.width / 2f).toInt()
+            layout(constraints.maxWidth, placeable.height) {
+                placeable.placeRelative(centred.coerceIn(0, travel), 0)
+            }
+        },
+    )
 
 private fun formatPlaybackTime(valueMillis: Double): String {
     val totalSeconds = (valueMillis.coerceAtLeast(0.0) / 1_000.0).toLong()

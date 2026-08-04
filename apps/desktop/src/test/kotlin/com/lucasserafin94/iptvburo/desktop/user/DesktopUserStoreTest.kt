@@ -82,6 +82,71 @@ class DesktopUserStoreTest {
         }
     }
 
+    /** The music playlist is optional; a profile without one must decode as having none. */
+    @Test
+    fun `a music playlist round trips with the profile`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            DesktopUserStore(node).saveProfiles(
+                listOf(
+                    DesktopProfile("with", "Lucas", false, musicPlaylistPath = "D:\\Musicas\\lista.m3u"),
+                    DesktopProfile("without", "Ana", false),
+                ),
+            )
+
+            val reloaded = DesktopUserStore(node).load().profiles
+            assertEquals("D:\\Musicas\\lista.m3u", reloaded.first { it.id == "with" }.musicPlaylistPath)
+            assertEquals(null, reloaded.first { it.id == "without" }.musicPlaylistPath)
+        } finally {
+            node.removeNode()
+        }
+    }
+
+    /**
+     * A Windows path carries the drive's own ':', which is this format's field separator. Stored
+     * raw it would split the row into seven fields and take it out of the decodable range,
+     * silently discarding the profile along with its favourites.
+     */
+    @Test
+    fun `a profile survives a music path containing the field separator`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            DesktopUserStore(node).saveProfiles(
+                listOf(DesktopProfile("solo", "Lucas", false, avatarIndex = 4, sourceId = "src", musicPlaylistPath = "C:\\a;b\\c.m3u")),
+            )
+
+            val reloaded = DesktopUserStore(node).load().profiles.single()
+            assertEquals("C:\\a;b\\c.m3u", reloaded.musicPlaylistPath)
+            assertEquals("src", reloaded.sourceId)
+            assertEquals(4, reloaded.avatarIndex)
+            assertEquals("Lucas", reloaded.name)
+        } finally {
+            node.removeNode()
+        }
+    }
+
+    /**
+     * Rows written before the music field existed have five fields. Decoding must default the new
+     * field rather than reject the row — an older build's profiles are still the user's profiles.
+     */
+    @Test
+    fun `five field rows from older builds still decode`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            val name = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString("Lucas".toByteArray(Charsets.UTF_8))
+            node.put("profiles", "legacy:$name:0:2:source-a")
+
+            val reloaded = DesktopUserStore(node).load().profiles.single()
+            assertEquals("Lucas", reloaded.name)
+            assertEquals("source-a", reloaded.sourceId)
+            assertEquals(2, reloaded.avatarIndex)
+            assertEquals(null, reloaded.musicPlaylistPath)
+        } finally {
+            node.removeNode()
+        }
+    }
+
     /** Rows written by builds before per-profile playlists must still load. */
     @Test
     fun `profiles saved without a playlist still decode`() {

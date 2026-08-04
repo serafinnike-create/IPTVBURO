@@ -83,6 +83,7 @@ import com.lucasserafin94.iptvburo.desktop.model.PlaybackReadiness
 import com.lucasserafin94.iptvburo.desktop.model.playbackReadiness
 import com.lucasserafin94.iptvburo.desktop.platform.ExternalOpenResult
 import com.lucasserafin94.iptvburo.desktop.platform.chooseLocalPlaylist
+import com.lucasserafin94.iptvburo.desktop.platform.chooseM3uFile
 import com.lucasserafin94.iptvburo.desktop.platform.openChannelExternally
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackRequest
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlayerOverlay
@@ -200,6 +201,8 @@ fun DesktopApp(
                         onFavorites = { scope.launch { appState.setFavoritesOnly(true) } },
                         onContinueWatching = appState::openContinueWatching,
                         onDownloads = appState::openDownloads,
+                        hasMusic = appState.hasMusicLibrary,
+                        onMusic = appState::openMusic,
                     )
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                         TopBar(
@@ -272,7 +275,14 @@ fun DesktopApp(
                         // infinite space: it laid every rail out at once, overflowed past the
                         // window and never became scrollable.
                         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        if (!appState.hasSelectedSource) {
+                        // Music is checked before the source, because it is fed by its own playlist
+                        // and does not need the video provider to be connected at all.
+                        if (appState.destination == DesktopDestination.MUSIC && appState.hasMusicLibrary) {
+                            MusicWorkspace(
+                                appState = appState,
+                                onPlay = { request -> activePlayback = request },
+                            )
+                        } else if (!appState.hasSelectedSource) {
                             EmptyLibrary(
                                 onImport = {
                                     chooseLocalPlaylist(ownerWindow)?.let { path ->
@@ -441,7 +451,8 @@ fun DesktopApp(
                             } else {
                                 null
                             },
-                        onCreate = { profileName, avatarIndex, listLabel, server, username, password ->
+                        onPickMusicPlaylist = { chooseM3uFile(ownerWindow, text.musicPlaylistTitle) },
+                        onCreate = { profileName, avatarIndex, listLabel, server, username, password, musicPlaylist ->
                             scope.launch {
                                 appState.completeSetup(
                                     profileName = profileName,
@@ -453,12 +464,18 @@ fun DesktopApp(
                                             username.toCharArray(),
                                             password.toCharArray(),
                                         ),
+                                    musicPlaylistPath = musicPlaylist,
                                 )
                             }
                         },
-                        onUseSaved = { profileName, avatarIndex, sourceId ->
+                        onUseSaved = { profileName, avatarIndex, sourceId, musicPlaylist ->
                             scope.launch {
-                                appState.completeSetupWithSavedSource(profileName, avatarIndex, sourceId)
+                                appState.completeSetupWithSavedSource(
+                                    profileName = profileName,
+                                    avatarIndex = avatarIndex,
+                                    sourceId = sourceId,
+                                    musicPlaylistPath = musicPlaylist,
+                                )
                             }
                         },
                     )
@@ -575,6 +592,8 @@ private fun SourceSidebar(
     onFavorites: () -> Unit,
     onContinueWatching: () -> Unit,
     onDownloads: () -> Unit,
+    hasMusic: Boolean,
+    onMusic: () -> Unit,
 ) {
     val text = strings
     Column(
@@ -630,6 +649,15 @@ private fun SourceSidebar(
             selected = destination == DesktopDestination.DOWNLOADS,
             onClick = onDownloads,
         )
+        // Last, after Downloads, and only when the user actually supplied a music playlist. An
+        // entry leading to an empty section is worse than no entry at all.
+        if (hasMusic) {
+            NavigationItem(
+                label = text.music,
+                selected = destination == DesktopDestination.MUSIC,
+                onClick = onMusic,
+            )
+        }
 
         // The source list used to own the whole remaining column even with one source. It is a
         // rarely-used switch, so it now takes only the height it needs and the section disappears

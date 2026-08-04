@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
+import com.lucasserafin94.iptvburo.desktop.data.MusicLibraryLoader
 import com.lucasserafin94.iptvburo.desktop.data.SessionXtreamRepository
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceKind
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceSummary
@@ -23,6 +24,7 @@ import com.lucasserafin94.iptvburo.desktop.security.XtreamSourceLibrary
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
+import com.lucasserafin94.iptvburo.desktop.user.MusicPlayCountStore
 import com.lucasserafin94.iptvburo.desktop.user.ProfilePhotoStore
 import com.lucasserafin94.iptvburo.metadata.TmdbClient
 import com.lucasserafin94.iptvburo.desktop.build.BUNDLED_TMDB_KEY
@@ -37,6 +39,8 @@ import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
+import com.lucasserafin94.iptvburo.domain.model.MusicLibrary
+import com.lucasserafin94.iptvburo.domain.model.MusicTrack
 import com.lucasserafin94.iptvburo.domain.model.PlaybackContentType
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressIdentity
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgress
@@ -73,6 +77,8 @@ class DesktopAppState(
     private val downloadManager: DesktopDownloadManager = DesktopDownloadManager(),
     private val sourceLibrary: XtreamSourceLibrary = XtreamSourceLibrary(),
     private val photoStore: ProfilePhotoStore = ProfilePhotoStore(),
+    private val musicLoader: MusicLibraryLoader = MusicLibraryLoader(),
+    private val playCountStore: MusicPlayCountStore = MusicPlayCountStore(),
 ) {
     /**
      * Cast metadata, keyed by the user's own TMDb key.
@@ -235,6 +241,22 @@ class DesktopAppState(
     var selectedXtreamMinimumRating by mutableStateOf<Double?>(null)
         private set
 
+    /**
+     * How the catalogue is laid out, remembered per profile across restarts.
+     *
+     * Restored from the store rather than defaulted, so the choice survives closing the app - the
+     * point of offering it at all.
+     */
+    var catalogLayout by mutableStateOf(
+        CatalogLayout.fromId(userStore.catalogLayout(initialUserSnapshot.activeProfileId)),
+    )
+        private set
+
+    fun selectCatalogLayout(layout: CatalogLayout) {
+        catalogLayout = layout
+        activeProfileId?.let { profileId -> userStore.setCatalogLayout(profileId, layout.id) }
+    }
+
     var xtreamSearchQuery by mutableStateOf("")
         private set
 
@@ -264,6 +286,7 @@ class DesktopAppState(
         activeProfileId = id?.takeIf { candidate -> profiles.any { it.id == candidate } }
         userStore.setActiveProfile(activeProfileId)
         favoriteKeys = userStore.favoritesForProfile(activeProfileId)
+        catalogLayout = CatalogLayout.fromId(userStore.catalogLayout(activeProfileId))
         xtreamCategories = visibleXtreamCategories(xtreamContentType)
         if (selectedXtreamCategoryId !in xtreamCategories.map(XtreamCategory::providerId)) {
             selectedXtreamCategoryId = null
@@ -272,6 +295,9 @@ class DesktopAppState(
 
     suspend fun selectProfileAndRefresh(id: String?) {
         selectProfile(id)
+        // The music playlist belongs to the profile, so switching who is watching switches the
+        // library along with the favourites.
+        loadMusicLibrary()
         if (xtreamSummary != null) refreshXtreamPage(pageIndex = 0)
     }
 
@@ -405,6 +431,8 @@ class DesktopAppState(
         avatarIndex: Int,
         listLabel: String,
         input: XtreamLoginInput,
+        /** Optional music M3U. Null is the ordinary case and leaves the app unchanged. */
+        musicPlaylistPath: Path? = null,
     ) {
         onboarding = OnboardingStep.Connecting
         val server = input.copyServer()
@@ -426,11 +454,13 @@ class DesktopAppState(
                     isKids = false,
                     avatarIndex = avatarIndex,
                     sourceId = source.id,
+                    musicPlaylistPath = musicPlaylistPath?.toString(),
                 )
             profiles = listOf(profile) + profiles.filterNot { it.name == profile.name }
             userStore.saveProfiles(profiles)
             attachPendingPhoto(profile.id)
             selectProfile(profile.id)
+            loadMusicLibrary()
             onboarding = OnboardingStep.Done
         } finally {
             Arrays.fill(server, ZERO_CHAR)
@@ -456,6 +486,8 @@ class DesktopAppState(
         profileName: String,
         avatarIndex: Int,
         sourceId: String,
+        /** Optional music M3U, chosen per profile even when the video playlist is shared. */
+        musicPlaylistPath: Path? = null,
     ) {
         val input = sourceLibrary.store(sourceId).load()
         if (input == null) {
@@ -476,11 +508,13 @@ class DesktopAppState(
                 isKids = false,
                 avatarIndex = avatarIndex,
                 sourceId = sourceId,
+                musicPlaylistPath = musicPlaylistPath?.toString(),
             )
         profiles = profiles + profile
         userStore.saveProfiles(profiles)
         attachPendingPhoto(profile.id)
         selectProfile(profile.id)
+        loadMusicLibrary()
         onboarding = OnboardingStep.Done
     }
 
@@ -663,6 +697,129 @@ class DesktopAppState(
         refreshDownloadStates()
         destination = DesktopDestination.DOWNLOADS
     }
+
+    // ---------------------------------------------------------------------------------------
+    // Music
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * The active profile's music library, or [MusicLibrary.EMPTY] when none is configured.
+     *
+     * Empty is the ordinary case. The music playlist is optional, and a user who never supplies one
+     * must see no trace of the feature — which is what [hasMusicLibrary] gates.
+     */
+    var musicLibrary by mutableStateOf(MusicLibrary.EMPTY)
+        private set
+
+    var musicSection by mutableStateOf(MusicSection.HOME)
+        private set
+
+    /** Play counts for the active profile, used to rank the "most played" shelf. */
+    var musicPlayCounts by mutableStateOf<Map<String, Int>>(emptyMap())
+        private set
+
+    /** Which artist's tracks are open, or null while the artist grid is showing. */
+    var selectedMusicArtist by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * Whether this profile has any music at all.
+     *
+     * Drives the sidebar entry. A configured playlist that turned out to be empty or unreadable
+     * counts as no music: an entry leading to a blank section is worse than no entry.
+     */
+    val hasMusicLibrary: Boolean
+        get() = !musicLibrary.isEmpty
+
+    /**
+     * Loads the active profile's music playlist from disk.
+     *
+     * Called whenever the profile changes, because the playlist belongs to the profile. Failure is
+     * silent by design: the library is simply left empty and the section stays hidden.
+     */
+    suspend fun loadMusicLibrary() {
+        val path = activeProfile?.musicPlaylistPath
+        if (path.isNullOrBlank()) {
+            musicLibrary = MusicLibrary.EMPTY
+            return
+        }
+        val loaded =
+            withContext(Dispatchers.IO) {
+                runCatching { musicLoader.load(Path.of(path)) }.getOrNull()
+            }
+        musicLibrary = loaded ?: MusicLibrary.EMPTY
+        musicPlayCounts = playCountStore.countsFor(activeProfileId)
+        // A profile with no music must not be left looking at the music workspace, which its
+        // sidebar entry no longer offers a way back to.
+        if (musicLibrary.isEmpty && destination == DesktopDestination.MUSIC) {
+            destination = DesktopDestination.HOME
+        }
+    }
+
+    /** Opens the music workspace at its home section. */
+    fun openMusic() {
+        favoritesOnly = false
+        destination = DesktopDestination.MUSIC
+        musicSection = MusicSection.HOME
+        selectedMusicArtist = null
+    }
+
+    fun selectMusicSection(section: MusicSection) {
+        musicSection = section
+        // Cleared on every section change, so leaving Artistas and coming back shows the grid
+        // rather than whichever artist happened to be open last time.
+        selectedMusicArtist = null
+    }
+
+    fun selectMusicArtist(name: String?) {
+        selectedMusicArtist = name
+    }
+
+    /** Tracks by [artistName], in playlist order. */
+    fun tracksForArtist(artistName: String): List<MusicTrack> =
+        musicLibrary.songs.filter { track ->
+            track.artistOrUnknown.equals(artistName, ignoreCase = true)
+        }
+
+    /**
+     * Attaches a music playlist to a profile, or removes it when [path] is null.
+     *
+     * Reloading immediately rather than at the next profile switch: the user has just chosen the
+     * file and expects the section to appear.
+     */
+    suspend fun setMusicPlaylist(profileId: String, path: Path?) {
+        profiles =
+            profiles.map { profile ->
+                if (profile.id == profileId) {
+                    profile.copy(musicPlaylistPath = path?.toString())
+                } else {
+                    profile
+                }
+            }
+        userStore.saveProfiles(profiles)
+        if (profileId == activeProfileId) loadMusicLibrary()
+    }
+
+    /**
+     * Playback request for a track, counting the play.
+     *
+     * Music reuses the video player untouched: a track is a URI like any other, and the overlay
+     * already handles a stream that never ends. No progress identity is attached — resuming a song
+     * three minutes in is not a behaviour anyone asked for, and a radio station has no position to
+     * resume from at all.
+     */
+    fun prepareMusicPlayback(track: MusicTrack): DesktopPlaybackRequest? =
+        runCatching {
+            val uri = URI(track.streamUri)
+            require(uri.scheme?.lowercase(Locale.ROOT) in setOf("http", "https", "file"))
+            musicPlayCounts = playCountStore.recordPlay(activeProfileId, track.id)
+            DesktopPlaybackRequest(
+                title = musicPlaybackTitle(track).take(180),
+                uri = uri,
+                progressIdentity = null,
+                startPositionMillis = 0L,
+            )
+        }.getOrNull()
 
     fun openHome() {
         destination = DesktopDestination.HOME
@@ -914,6 +1071,9 @@ class DesktopAppState(
 
     suspend fun restoreRememberedXtream() {
         try {
+            // Before the early return below: a returning user whose session is already open still
+            // needs their music playlist read, and the Músicas entry is hidden until it has been.
+            loadMusicLibrary()
             if (xtreamStatus !is XtreamStatus.Disconnected || xtreamSummary != null) return
             startupStep(1, "Abrindo a sua sessão…")
             val input = withContext(Dispatchers.IO) { rememberedXtreamStore.load() } ?: return
@@ -1647,7 +1807,33 @@ data class DesktopContinueWatchingEntry(
         )
 }
 
-enum class DesktopDestination { HOME, CATALOG, FAVORITES, DOWNLOADS, CONTINUE }
+/**
+ * The shapes the catalogue grid can take.
+ *
+ * Three, not two: posters are how people recognise a film, the compact grid is how they scan a
+ * category of four hundred, and the list is how they read titles that artwork does not distinguish -
+ * live channels, or the numbered episodes of a long-running show.
+ */
+enum class CatalogLayout(val id: String) {
+    /** Large artwork with the title underneath. The default, and how a catalogue is browsed. */
+    POSTER("poster"),
+
+    /** Smaller artwork, more per row: for scanning a long category rather than admiring it. */
+    COMPACT("compact"),
+
+    /** One row per title, artwork small and the name given room. Best where names carry the meaning. */
+    LIST("list"),
+    ;
+
+    companion object {
+        fun fromId(id: String?): CatalogLayout = entries.firstOrNull { it.id == id } ?: POSTER
+    }
+}
+
+enum class DesktopDestination { HOME, CATALOG, FAVORITES, DOWNLOADS, CONTINUE, MUSIC }
+
+/** Sections of the music workspace, mirroring the sidebar's own ordering. */
+enum class MusicSection { HOME, ARTISTS, RADIO, DOWNLOADS }
 
 data class DailyHomeSnapshot(
     val sourceId: String,
@@ -1691,6 +1877,20 @@ sealed interface DailyHomeStatus {
 
     data class Error(val message: String) : DailyHomeStatus
 }
+
+/**
+ * What the player's title bar shows for a track.
+ *
+ * "Artist — Title" when both are known, because the player overlay has one line and a bare song
+ * title tells the user nothing about which version is playing. A radio station keeps its own name:
+ * the mapper deliberately never split one into artist and title.
+ */
+internal fun musicPlaybackTitle(track: MusicTrack): String =
+    when {
+        track.isRadio -> track.title
+        track.artist.isNullOrBlank() -> track.title
+        else -> "${track.artist} — ${track.title}"
+    }
 
 internal fun rotatingPageIndex(seed: Int, pageCount: Int): Int =
     Math.floorMod(seed, pageCount.coerceAtLeast(1))

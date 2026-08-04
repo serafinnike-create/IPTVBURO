@@ -165,6 +165,12 @@ class VlcDesktopPlayer {
         executeCommand("volume", mapOf("val" to (safe * VLC_VOLUME_MAX).toInt().toString()))
     }
 
+    /** Switches audio track; the id is VLC's own, taken from the status it reported. */
+    fun selectAudioTrack(trackId: Int) = executeCommand("audio_track", mapOf("val" to trackId.toString()))
+
+    /** Switches or disables subtitles. VLC uses -1 for off, which is why the "off" entry carries it. */
+    fun selectSubtitleTrack(trackId: Int) = executeCommand("subtitle_track", mapOf("val" to trackId.toString()))
+
     fun setPlaybackRate(value: Double) {
         val safe = value.coerceIn(0.5, 2.0)
         snapshot = snapshot.copy(playbackRate = safe)
@@ -396,6 +402,7 @@ class VlcDesktopPlayer {
             val lengthSeconds = status.long("length")
             if (playing) everPlayed = true
             val ended = everPlayed && stateName == "stopped" && lengthSeconds > 0L
+            val tracks = status.readTracks()
             snapshot =
                 snapshot.copy(
                     loading = !ready,
@@ -406,6 +413,10 @@ class VlcDesktopPlayer {
                     volume = (status.long("volume").toDouble() / VLC_VOLUME_MAX).coerceIn(0.0, 1.0),
                     playbackRate = status.double("rate")?.coerceIn(0.5, 2.0) ?: snapshot.playbackRate,
                     ended = ended,
+                    audioTracks = tracks.audio,
+                    subtitleTracks = tracks.subtitles,
+                    activeAudioTrackId = tracks.activeAudio,
+                    activeSubtitleTrackId = tracks.activeSubtitle,
                     errorMessage =
                         if (!ready && System.currentTimeMillis() - mediaStartedAt > START_TIMEOUT_MILLIS) {
                             STALLED_MESSAGE
@@ -553,6 +564,56 @@ private class VlcHttpControl private constructor(
         }
     }
 }
+
+/**
+ * The audio and subtitle tracks VLC reports for the playing title.
+ *
+ * The status document describes them under `information.category` as `Stream 0`, `Stream 1` and so
+ * on, each with a `Type` of Audio, Video or Subtitle. The numeric suffix is the track id the
+ * control interface expects back, so it is parsed out of the key rather than guessed from position.
+ */
+private fun JsonObject.readTracks(): PlaybackTracks {
+    val information = get("information")?.takeUnless { it.isJsonNull }?.asJsonObject
+        ?: return PlaybackTracks()
+    val category = information.get("category")?.takeUnless { it.isJsonNull }?.asJsonObject
+        ?: return PlaybackTracks()
+
+    val audio = mutableListOf<MediaTrack>()
+    val subtitles = mutableListOf<MediaTrack>()
+    category.entrySet().forEach { (key, value) ->
+        if (!key.startsWith("Stream ") || !value.isJsonObject) return@forEach
+        val stream = value.asJsonObject
+        val id = key.removePrefix("Stream ").trim().toIntOrNull() ?: return@forEach
+        // Language first, then codec, then a numbered fallback: a track row with a blank name is
+        // unusable, and plenty of files name neither.
+        val label =
+            stream.string("Language")
+                ?: stream.string("Description")
+                ?: stream.string("Codec")
+                ?: "Faixa ${id + 1}"
+        when (stream.string("Type")?.lowercase()) {
+            "audio" -> audio += MediaTrack(id, label)
+            "subtitle", "subtitles" -> subtitles += MediaTrack(id, label)
+            else -> Unit
+        }
+    }
+
+    return PlaybackTracks(
+        audio = audio,
+        // The off entry is synthesised: VLC exposes no track for "no subtitles", but it accepts -1
+        // to turn them off, and without a row for it they could be switched on and never off.
+        subtitles = if (subtitles.isEmpty()) emptyList() else listOf(MediaTrack(-1, "Desligado")) + subtitles,
+        activeAudio = long("audio_track").toInt().takeIf { it >= 0 },
+        activeSubtitle = long("subtitle_track").toInt(),
+    )
+}
+
+private data class PlaybackTracks(
+    val audio: List<MediaTrack> = emptyList(),
+    val subtitles: List<MediaTrack> = emptyList(),
+    val activeAudio: Int? = null,
+    val activeSubtitle: Int? = null,
+)
 
 private fun JsonObject.string(name: String): String? = get(name)?.takeUnless { it.isJsonNull }?.asString
 
