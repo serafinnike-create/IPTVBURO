@@ -258,7 +258,9 @@ fun XtreamWorkspace(
                 appState.xtreamStatus is XtreamStatus.Connecting ||
                 appState.xtreamStatus is XtreamStatus.LoadingCatalog
             ) {
-                XtreamLoadingOverlay(status = appState.xtreamStatus)
+                // Not during startup: the splash already says the catalogue is loading, and two
+                // stacked panels saying the same thing read as a glitch.
+                if (!appState.isStarting) XtreamLoadingOverlay(status = appState.xtreamStatus)
             }
         }
     }

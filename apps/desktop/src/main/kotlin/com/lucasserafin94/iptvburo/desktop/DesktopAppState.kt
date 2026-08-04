@@ -25,6 +25,7 @@ import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
 import com.lucasserafin94.iptvburo.desktop.user.ProfilePhotoStore
 import com.lucasserafin94.iptvburo.metadata.TmdbClient
+import com.lucasserafin94.iptvburo.desktop.build.BUNDLED_TMDB_KEY
 import com.lucasserafin94.iptvburo.desktop.download.DesktopDownloadManager
 import com.lucasserafin94.iptvburo.desktop.download.DownloadResult
 import com.lucasserafin94.iptvburo.desktop.download.FailureReason
@@ -78,7 +79,7 @@ class DesktopAppState(
      *
      * Rebuilt whenever the key changes so pasting one takes effect without a restart.
      */
-    private var metadataClient = TmdbClient(userStore.metadataApiKey())
+    private var metadataClient = TmdbClient(userStore.metadataApiKey() ?: BUNDLED_TMDB_KEY.ifBlank { null })
 
     var metadataApiKey by mutableStateOf(userStore.metadataApiKey().orEmpty())
         private set
@@ -89,7 +90,9 @@ class DesktopAppState(
     fun updateMetadataApiKey(value: String) {
         metadataApiKey = value
         userStore.setMetadataApiKey(value)
-        metadataClient = TmdbClient(value.takeIf(String::isNotBlank))
+        // Falling back to the bundled key rather than to nothing: clearing the field should restore
+        // the default behaviour, not switch cast photos off entirely.
+        metadataClient = TmdbClient(value.takeIf(String::isNotBlank) ?: BUNDLED_TMDB_KEY.ifBlank { null })
     }
     /**
      * Photo chosen during setup, before the profile it belongs to exists.
@@ -691,7 +694,14 @@ class DesktopAppState(
             }
         }.onSuccess { (snapshot, latestSummary) ->
             xtreamSummary = latestSummary
-            dailyHomeStatus = DailyHomeStatus.Loaded(snapshot)
+            // A snapshot with no films and no series is not a loaded home, it is a home built
+            // before the catalogues arrived. Storing it as Loaded made the screen's own effect
+            // return early for the rest of the session, so the shelves stayed empty until restart.
+            if (snapshot.movies.isEmpty() && snapshot.series.isEmpty()) {
+                dailyHomeStatus = DailyHomeStatus.Idle
+            } else {
+                dailyHomeStatus = DailyHomeStatus.Loaded(snapshot)
+            }
         }
             .onFailure { error ->
                 error.rethrowIfCancellation()

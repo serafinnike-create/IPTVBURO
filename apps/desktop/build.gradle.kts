@@ -17,6 +17,49 @@ val vlcVersion = "3.0.23"
 val vlcArchiveSha256 = "992d19dbd0b8a7cde9167d2f7780b1ef6f92acc8a71acfa736101a21f35181e1"
 val vlcArchive = layout.buildDirectory.file("downloads/vlc-$vlcVersion-win64.zip")
 val generatedAppResources = layout.buildDirectory.dir("generated/app-resources")
+
+/**
+ * The TMDb key baked into this build, read from local.properties.
+ *
+ * Deliberately not a source constant: this repository is public, and a key committed to it is
+ * scraped and revoked within days. Empty when the file has no entry, in which case the app simply
+ * behaves as if no key were configured and the user can paste their own in settings.
+ */
+val bundledTmdbKey: String =
+    providers
+        .fileContents(layout.projectDirectory.file("../../local.properties"))
+        .asText
+        .map { text ->
+            text.lineSequence()
+                .firstOrNull { line -> line.trimStart().startsWith("tmdb.apiKey=") }
+                ?.substringAfter("=")
+                ?.trim()
+                .orEmpty()
+        }.getOrElse("")
+
+val generatedBuildConfig = layout.buildDirectory.dir("generated/buildconfig")
+
+val generateBuildConfig by tasks.registering {
+    description = "Writes the build-time constants the app reads at runtime."
+    val output = generatedBuildConfig
+    val key = bundledTmdbKey
+    inputs.property("tmdbKey", key)
+    outputs.dir(output)
+    doLast {
+        val directory =
+            output.get().asFile.resolve("com/lucasserafin94/iptvburo/desktop/build").also { it.mkdirs() }
+        directory.resolve("BuildKeys.kt").writeText(
+            """
+            package com.lucasserafin94.iptvburo.desktop.build
+
+            /** Generated at build time from local.properties; never committed. */
+            internal const val BUNDLED_TMDB_KEY: String = "$key"
+            """.trimIndent() + System.lineSeparator(),
+        )
+    }
+}
+
+kotlin.sourceSets.named("main") { kotlin.srcDir(generateBuildConfig) }
 val bundledVlcDirectory = generatedAppResources.map { it.dir("windows/vlc") }
 
 val prepareBundledVlc by tasks.registering {
@@ -111,7 +154,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "IPTVBURO"
-            packageVersion = "0.4.0"
+            packageVersion = "0.4.1"
             description = "IPTV BURO desktop player"
             vendor = "IPTV BURO"
             appResourcesRootDir.set(generatedAppResources)

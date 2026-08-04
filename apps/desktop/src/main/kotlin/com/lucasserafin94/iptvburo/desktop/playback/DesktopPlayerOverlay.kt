@@ -45,6 +45,9 @@ import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import kotlinx.coroutines.delay
 
+/** How long the pointer must rest before the controls fade in full screen. */
+private const val CONTROLS_IDLE_MILLIS = 3_000L
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun DesktopPlayerOverlay(
@@ -96,19 +99,22 @@ fun DesktopPlayerOverlay(
     var controlsVisible by remember { mutableStateOf(true) }
     var videoPanel by remember { mutableStateOf<javax.swing.JPanel?>(null) }
     var wakeCounter by remember { mutableStateOf(0) }
-    LaunchedEffect(wakeCounter, isFullScreen) {
-        if (!isFullScreen) {
-            controlsVisible = true
-            return@LaunchedEffect
+    // A single loop that watches the clock, rather than an effect restarted by each wake. Keying an
+    // effect on the counter meant a wake arriving *while it was already running* was swallowed:
+    // Compose only restarts on a changed key, and the canvas fires many moves in a row. That is why
+    // the controls never came back in full screen no matter how much the pointer moved.
+    var lastWakeAt by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(wakeCounter) { lastWakeAt = System.currentTimeMillis() }
+    LaunchedEffect(isFullScreen) {
+        while (true) {
+            val idleFor = System.currentTimeMillis() - lastWakeAt
+            val shouldShow = !isFullScreen || idleFor < CONTROLS_IDLE_MILLIS
+            if (shouldShow != controlsVisible) {
+                controlsVisible = shouldShow
+                videoPanel?.let { panel -> controller.setPointerVisible(panel, shouldShow) }
+            }
+            delay(200)
         }
-        controlsVisible = true
-        videoPanel?.let { panel -> controller.setPointerVisible(panel, true) }
-        // Hidden regardless of playback state. Keeping them up while paused meant a title that had
-        // not started yet - or was buffering - sat behind a permanent bar across the bottom of an
-        // otherwise full-screen picture. Any movement or keypress brings them straight back.
-        delay(3_000)
-        controlsVisible = false
-        videoPanel?.let { panel -> controller.setPointerVisible(panel, false) }
     }
 
     // Nothing requested focus, so key events never reached the handler and F11 did nothing at all.

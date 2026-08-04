@@ -11,6 +11,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // JCEF's native OpenGL dependencies (gluegen, jogl) are published here and nowhere else.
+        maven("https://jogamp.org/deployment/maven") {
+            content { includeGroupByRegex("org[.]jogamp.*") }
+        }
     }
 }
 
