@@ -62,6 +62,8 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
+import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollable
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
 import com.lucasserafin94.iptvburo.desktop.ui.strings
@@ -400,8 +402,12 @@ private fun DailyRow(
     if (items.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm)) {
         RailHeader(title, "${items.size} ${text.options}", metrics)
+        val railState = rememberLazyListState()
         LazyRow(
-            modifier = Modifier.fillMaxWidth(),
+            state = railState,
+            // Arrow keys move the rail the pointer is over: with eighteen titles per shelf, the
+            // ones past the right edge were reachable only by dragging.
+            modifier = Modifier.fillMaxWidth().arrowScrollable(railState),
             horizontalArrangement = Arrangement.spacedBy(metrics.cardSpacing),
             // contentPadding rather than Spacer items: the first card now lines up with the rail
             // title, and scrollToItem indices stay meaningful.
@@ -536,8 +542,12 @@ private fun ContinueWatchingRow(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm)) {
         RailHeader(text.continueWatching, null, metrics)
+        val railState = rememberLazyListState()
         LazyRow(
-            modifier = Modifier.fillMaxWidth(),
+            state = railState,
+            // Arrow keys move the rail the pointer is over: with eighteen titles per shelf, the
+            // ones past the right edge were reachable only by dragging.
+            modifier = Modifier.fillMaxWidth().arrowScrollable(railState),
             horizontalArrangement = Arrangement.spacedBy(metrics.cardSpacing),
             // Vertical padding is not decorative: a lazy row clips to its bounds, so without room
             // for the hover scale the top and bottom of a lifted card get sliced off.

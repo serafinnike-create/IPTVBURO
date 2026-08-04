@@ -39,6 +39,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.LocalScrollbarStyle
@@ -209,6 +216,10 @@ fun XtreamWorkspace(
                 scope.launch { appState.selectXtreamMinimumRating(rating) }
             },
         )
+        // Hidden in Favourites: the rail filters the provider's catalogue, and a favourites list is
+        // the user's own selection across all of it. Picking a category there could only ever
+        // narrow it to nothing.
+        if (!appState.favoritesOnly) {
         XtreamCategoryRail(
             categories = appState.xtreamCategories,
             contentType = appState.xtreamContentType,
@@ -218,6 +229,7 @@ fun XtreamWorkspace(
                 scope.launch { appState.selectXtreamCategory(categoryId) }
             },
         )
+        }
         HorizontalDivider(color = BuroColors.BorderSoft)
         // Weighted, not fillMaxSize. A Column measures an unweighted child against unbounded
         // height, so fillMaxSize here claimed a full screen's height *below* the toolbar and the
@@ -448,6 +460,7 @@ private fun FilterChip(
  * and spending fixed width on a menu, and the pane cost the same width on every screen while being
  * used momentarily. Search covers precise lookup; the rail covers browsing.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun XtreamCategoryRail(
     categories: List<XtreamCategory>,
@@ -457,6 +470,8 @@ private fun XtreamCategoryRail(
 ) {
     val text = strings
     val listState = rememberLazyListState()
+    val railFocus = remember { FocusRequester() }
+    val railScope = rememberCoroutineScope()
 
     // Jump back to the start when the content type changes, otherwise the rail keeps the scroll
     // offset of a category list that no longer exists.
@@ -468,7 +483,25 @@ private fun XtreamCategoryRail(
     Column(modifier = Modifier.fillMaxWidth()) {
     LazyRow(
         state = listState,
-        modifier = Modifier.fillMaxWidth(),
+        // Left and right arrows move the rail, and hovering is enough: the pointer entering it
+        // takes focus, so there is no click needed before the keys do anything.
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .focusRequester(railFocus)
+                .focusable()
+                .onPointerEvent(PointerEventType.Enter) { runCatching { railFocus.requestFocus() } }
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val delta =
+                        when (event.key) {
+                            Key.DirectionRight -> CHIP_SCROLL_PIXELS
+                            Key.DirectionLeft -> -CHIP_SCROLL_PIXELS
+                            else -> return@onPreviewKeyEvent false
+                        }
+                    railScope.launch { listState.animateScrollBy(delta) }
+                    true
+                },
         contentPadding =
             PaddingValues(
                 horizontal = BuroSpacing.GutterCompact,
@@ -566,6 +599,13 @@ private fun XtreamCategoryChip(
 // Grid
 // ---------------------------------------------------------------------------------------------
 
+/** One row of cards, near enough. Arrow keys should move by a row, not by a pixel. */
+private const val ROW_SCROLL_PIXELS = 320f
+
+/** Roughly three chips, so a press makes visible progress along the rail. */
+private const val CHIP_SCROLL_PIXELS = 400f
+
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun XtreamCatalogGrid(
     appState: DesktopAppState,
@@ -579,6 +619,10 @@ private fun XtreamCatalogGrid(
     val live = appState.xtreamContentType == XtreamContentType.LIVE
     val gutter = if (wide) BuroSpacing.GutterWide else BuroSpacing.GutterCompact
     val gridState = rememberLazyGridState()
+    val gridFocus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    // Focus goes to the grid when the page opens, so the arrow keys work without a click first.
+    LaunchedEffect(Unit) { runCatching { gridFocus.requestFocus() } }
 
     // A new page reuses the same list; without this the grid keeps the previous scroll offset and
     // the first row of the new page opens already scrolled past.
@@ -627,7 +671,30 @@ private fun XtreamCatalogGrid(
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             LazyVerticalGrid(
                 state = gridState,
-                modifier = Modifier.fillMaxSize(),
+                // Focusable so the arrow keys reach it. Without focus the key events go nowhere and
+                // the grid answers only to the wheel.
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .focusRequester(gridFocus)
+                        .focusable()
+                        .onPointerEvent(PointerEventType.Enter) {
+                            runCatching { gridFocus.requestFocus() }
+                        }
+                        .onPreviewKeyEvent { event ->
+                            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                            val rowStep = ROW_SCROLL_PIXELS
+                            val delta =
+                                when (event.key) {
+                                    Key.DirectionDown -> rowStep
+                                    Key.DirectionUp -> -rowStep
+                                    Key.PageDown -> rowStep * 3
+                                    Key.PageUp -> -rowStep * 3
+                                    else -> return@onPreviewKeyEvent false
+                                }
+                            scope.launch { gridState.animateScrollBy(delta) }
+                            true
+                        },
                 columns = GridCells.Adaptive(minSize = if (live) 250.dp else 172.dp),
                 // Generous bottom padding so the final row clears the pagination bar. With only
                 // the symmetric vertical padding the last row sat flush against it and read as
