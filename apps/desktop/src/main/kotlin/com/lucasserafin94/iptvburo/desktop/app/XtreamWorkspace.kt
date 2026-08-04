@@ -104,6 +104,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.CategoryBadge
 import com.lucasserafin94.iptvburo.desktop.ui.categoryLabel
 import com.lucasserafin94.iptvburo.desktop.CatalogLayout
 import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableVertically
+import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollable
 import com.lucasserafin94.iptvburo.desktop.ui.categoryBadgeFor
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
@@ -516,6 +517,7 @@ private fun XtreamCategoryRail(
                 .fillMaxWidth()
                 .focusRequester(railFocus)
                 .focusable()
+                .edgeScrollable(listState)
                 .onPointerEvent(PointerEventType.Enter) { runCatching { railFocus.requestFocus() } }
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

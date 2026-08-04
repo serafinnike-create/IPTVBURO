@@ -1532,6 +1532,39 @@ class DesktopAppState(
         // page in the meantime is worse than a partial one.
         selectedPerson = PersonFilmography(name = cleanName, items = known, isLoading = true)
 
+        // The photo and biography come first. The local sweep below costs one provider request per
+        // film across the whole catalogue and takes minutes on a large list; running it first meant
+        // the face and the filmography - a single fast lookup - waited behind it, and in practice
+        // the user had given up and navigated away before either arrived.
+        if (metadataClient.isConfigured) {
+            val enriched =
+                withContext(Dispatchers.IO) {
+                    val person = metadataClient.findPerson(cleanName) ?: return@withContext null
+                    Triple(
+                        person.profileImageUrl,
+                        metadataClient.personDetails(person.id)?.biography,
+                        metadataClient.filmography(person.id, MAX_FILMOGRAPHY_ITEMS),
+                    )
+                }
+            if (selectedPerson?.name != cleanName) return
+            enriched?.let { (photo, biography, credits) ->
+                selectedPerson =
+                    selectedPerson?.copy(
+                        photoUrl = photo,
+                        biography = biography,
+                        credits =
+                            credits.map { credit ->
+                                PersonCredit(
+                                    title = credit.title,
+                                    year = credit.year,
+                                    posterUrl = credit.posterUrl,
+                                    character = credit.character,
+                                )
+                            },
+                    )
+            }
+        }
+
         val discovered =
             withContext(Dispatchers.Default) {
                 xtreamRepository.findByCastMember(cleanName, MAX_FILMOGRAPHY_ITEMS)
@@ -1539,36 +1572,9 @@ class DesktopAppState(
         // The user may have navigated away while the sweep ran.
         if (selectedPerson?.name != cleanName) return
         val merged = (known + discovered).distinctBy { it.providerId }
-        selectedPerson = PersonFilmography(name = cleanName, items = merged, isLoading = false)
-
-        // The photo and the full filmography can only come from outside: the provider sends the
-        // cast as a bare list of names. Fetched after the local sweep so the page is never blank
-        // while waiting on a network call that may not be configured at all.
-        if (!metadataClient.isConfigured) return
-        val enriched =
-            withContext(Dispatchers.IO) {
-                val person = metadataClient.findPerson(cleanName) ?: return@withContext null
-                Triple(
-                    person.profileImageUrl,
-                    metadataClient.personDetails(person.id)?.biography,
-                    metadataClient.filmography(person.id, MAX_FILMOGRAPHY_ITEMS),
-                )
-            } ?: return
-        if (selectedPerson?.name != cleanName) return
-        selectedPerson =
-            selectedPerson?.copy(
-                photoUrl = enriched.first,
-                biography = enriched.second,
-                credits =
-                    enriched.third.map { credit ->
-                        PersonCredit(
-                            title = credit.title,
-                            year = credit.year,
-                            posterUrl = credit.posterUrl,
-                            character = credit.character,
-                        )
-                    },
-            )
+        // Copied rather than rebuilt: a fresh PersonFilmography would discard the photo and credits
+        // that the lookup above already put on screen.
+        selectedPerson = selectedPerson?.copy(items = merged, isLoading = false)
     }
 
     fun closePerson() {

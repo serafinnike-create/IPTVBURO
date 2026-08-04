@@ -63,6 +63,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollable
+import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollable
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.rememberScrollbarAdapter
@@ -479,7 +480,7 @@ private fun DailyRow(
             state = railState,
             // Arrow keys move the rail the pointer is over: with eighteen titles per shelf, the
             // ones past the right edge were reachable only by dragging.
-            modifier = Modifier.fillMaxWidth().arrowScrollable(railState),
+            modifier = Modifier.fillMaxWidth().arrowScrollable(railState).edgeScrollable(railState),
             horizontalArrangement = Arrangement.spacedBy(metrics.cardSpacing),
             // contentPadding rather than Spacer items: the first card now lines up with the rail
             // title, and scrollToItem indices stay meaningful.
@@ -516,7 +517,7 @@ private fun SeasonalRow(
         val railState = rememberLazyListState()
         LazyRow(
             state = railState,
-            modifier = Modifier.fillMaxWidth().arrowScrollable(railState),
+            modifier = Modifier.fillMaxWidth().arrowScrollable(railState).edgeScrollable(railState),
             horizontalArrangement = Arrangement.spacedBy(metrics.cardSpacing),
             contentPadding = PaddingValues(horizontal = metrics.gutter, vertical = BuroSpacing.Sm),
         ) {
@@ -652,7 +653,7 @@ private fun ContinueWatchingRow(
             state = railState,
             // Arrow keys move the rail the pointer is over: with eighteen titles per shelf, the
             // ones past the right edge were reachable only by dragging.
-            modifier = Modifier.fillMaxWidth().arrowScrollable(railState),
+            modifier = Modifier.fillMaxWidth().arrowScrollable(railState).edgeScrollable(railState),
             horizontalArrangement = Arrangement.spacedBy(metrics.cardSpacing),
             // Vertical padding is not decorative: a lazy row clips to its bounds, so without room
             // for the hover scale the top and bottom of a lifted card get sliced off.
