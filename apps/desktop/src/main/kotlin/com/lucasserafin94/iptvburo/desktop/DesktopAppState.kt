@@ -117,6 +117,15 @@ class DesktopAppState(
     var dailyHomeStatus by mutableStateOf<DailyHomeStatus>(DailyHomeStatus.Idle)
         private set
 
+    /**
+     * Bumped whenever the Home must be rebuilt from a catalogue that has changed underneath it.
+     *
+     * The Home's own effect is keyed on this. Without it, a manual refresh had no way to ask for a
+     * reload: the source id it was keyed on does not change, so the effect never re-ran.
+     */
+    var dailyHomeRevision by mutableStateOf(0)
+        private set
+
     private var dailySelectedItem: XtreamCatalogItem? = null
 
     private val initialUserSnapshot = userStore.load()
@@ -592,7 +601,13 @@ class DesktopAppState(
         if (dailyHomeStatus is DailyHomeStatus.Loading) return
         val existing = dailyHomeStatus as? DailyHomeStatus.Loaded
         if (existing?.snapshot?.date == date && existing.snapshot.sourceId == xtreamSummary?.sourceId) return
-        val sourceId = xtreamSummary?.sourceId ?: return
+        // Checked before the status is set to Loading. Returning after it left the Home showing its
+        // skeleton for ever, because nothing else ever moves that status off Loading.
+        val sourceId = xtreamSummary?.sourceId
+        if (sourceId == null) {
+            dailyHomeStatus = DailyHomeStatus.Idle
+            return
+        }
         dailyHomeStatus = DailyHomeStatus.Loading
         runCatching {
             withContext(Dispatchers.IO) {
@@ -765,9 +780,12 @@ class DesktopAppState(
             xtreamStatus = XtreamStatus.Connected
             // The Home is built from its own snapshot, so refreshing only the catalogue left the
             // screen the user was looking at unchanged — the button appeared to do nothing.
+            // Cleared to Idle rather than reloaded here: the Home's own effect is keyed on the
+            // summary and reloads it, and calling in from two places raced to leave the status on
+            // Loading with nothing left to move it off.
             if (destination == DesktopDestination.HOME) {
                 dailyHomeStatus = DailyHomeStatus.Idle
-                loadDailyHome(LocalDate.now())
+                dailyHomeRevision += 1
             }
         }.onFailure { error ->
             error.rethrowIfCancellation()

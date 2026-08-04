@@ -95,17 +95,17 @@ fun DesktopPlayerOverlay(
     // player uses. Only meaningful in full screen; windowed mode keeps them pinned.
     var controlsVisible by remember { mutableStateOf(true) }
     var wakeCounter by remember { mutableStateOf(0) }
-    LaunchedEffect(wakeCounter, isFullScreen, state.playing) {
+    LaunchedEffect(wakeCounter, isFullScreen) {
         if (!isFullScreen) {
             controlsVisible = true
             return@LaunchedEffect
         }
         controlsVisible = true
-        // Kept visible while paused: a paused player with hidden controls looks frozen.
-        if (state.playing) {
-            delay(3_000)
-            controlsVisible = false
-        }
+        // Hidden regardless of playback state. Keeping them up while paused meant a title that had
+        // not started yet - or was buffering - sat behind a permanent bar across the bottom of an
+        // otherwise full-screen picture. Any movement or keypress brings them straight back.
+        delay(3_000)
+        controlsVisible = false
     }
 
     // Nothing requested focus, so key events never reached the handler and F11 did nothing at all.
@@ -123,6 +123,9 @@ fun DesktopPlayerOverlay(
             .onPointerEvent(PointerEventType.Move) { wakeCounter++ }
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // Any key wakes the controls, not only the ones handled below: reaching for the
+                // keyboard is the user asking to see where they are.
+                wakeCounter++
                 when (event.key) {
                     Key.F11 -> {
                         onToggleFullScreen()

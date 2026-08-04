@@ -126,7 +126,14 @@ fun XtreamDailyHome(
             delay(60_000)
         }
     }
-    LaunchedEffect(today, appState.xtreamSummary?.sourceId, appState.activeProfileId) {
+    LaunchedEffect(
+        today,
+        appState.xtreamSummary?.sourceId,
+        appState.activeProfileId,
+        // Included so "Atualizar listas" can ask for a rebuild: the source id is unchanged by a
+        // refresh, so without this key the effect would never re-run.
+        appState.dailyHomeRevision,
+    ) {
         appState.loadDailyHome(today)
     }
     LaunchedEffect(appState.selectedXtreamItem?.providerId, detailsOpen) {

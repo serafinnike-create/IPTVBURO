@@ -23,5 +23,6 @@ include(
     ":packages:playlist-parser",
     ":packages:test-fixtures",
     ":packages:stalker-client",
+    ":packages:metadata-client",
     ":packages:xtream-client",
 )

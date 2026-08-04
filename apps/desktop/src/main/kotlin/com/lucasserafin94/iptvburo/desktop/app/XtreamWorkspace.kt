@@ -541,7 +541,10 @@ private fun XtreamCategoryChip(
                                 BuroColors.BorderSoft
                             },
                         shape = BuroRadius.Pill,
-                    ).padding(start = 4.dp, end = 14.dp, top = 4.dp, bottom = 4.dp),
+                        // Symmetric now that the leading badge is gone. The 4dp start against 14dp
+                        // end was room for an icon that no longer exists, so every label sat left
+                        // of centre in its pill.
+                    ).padding(horizontal = 14.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Just the name. The emoji came from the system font and clashed with everything around
@@ -959,7 +962,10 @@ internal fun XtreamItemDetail(
 ) {
     val text = strings
     Box(
-        modifier = modifier.fillMaxHeight().padding(if (compact) BuroSpacing.Md else BuroSpacing.Lg),
+        // No fillMaxHeight: the caller already weights this panel, and asking for the full height
+        // again on top of that is what let the column below run past the window with the last
+        // episodes drawn where no scroll could reach them.
+        modifier = modifier.padding(if (compact) BuroSpacing.Md else BuroSpacing.Lg),
     ) {
         if (item == null) {
             Text(
@@ -1192,6 +1198,16 @@ internal fun XtreamItemDetail(
                 }
             }
         }
+        VerticalScrollbar(
+            adapter = rememberScrollbarAdapter(detailScroll),
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            style =
+                LocalScrollbarStyle.current.copy(
+                    thickness = 10.dp,
+                    unhoverColor = BuroColors.BorderSoft,
+                    hoverColor = BuroColors.Primary,
+                ),
+        )
     }
 }
 
