@@ -39,6 +39,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.HorizontalScrollbar
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -444,6 +447,10 @@ private fun XtreamCategoryRail(
     // offset of a category list that no longer exists.
     LaunchedEffect(contentType) { listState.scrollToItem(0) }
 
+    // The rail scrolls sideways but showed no sign of it, so the categories past the right edge -
+    // and there are usually many - looked as though they did not exist. A scrollbar underneath is
+    // both the indication and a way to drag through them.
+    Column(modifier = Modifier.fillMaxWidth()) {
     LazyRow(
         state = listState,
         modifier = Modifier.fillMaxWidth(),
@@ -475,6 +482,14 @@ private fun XtreamCategoryRail(
             )
         }
     }
+    HorizontalScrollbar(
+        adapter = rememberScrollbarAdapter(listState),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = BuroSpacing.GutterCompact),
+    )
+    }
 }
 
 @Composable
@@ -505,17 +520,9 @@ private fun XtreamCategoryChip(
                     ).padding(start = 4.dp, end = 14.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // A tinted dot rather than an emoji. The colour still tells the genres apart, but the
-            // emoji were drawn by the system font: they clashed with the rest of the interface and
-            // looked nothing like the app around them.
-            Box(
-                modifier =
-                    Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(if (selected) BuroColors.Primary else badge.tint),
-            )
-            Spacer(Modifier.width(BuroSpacing.Sm))
+            // Just the name. The emoji came from the system font and clashed with everything around
+            // it; the dot that replaced them was decoration standing in for information that the
+            // word already carries.
             Text(
                 text = label,
                 color = if (selected) BuroColors.Text else BuroColors.TextMuted,
@@ -587,9 +594,13 @@ private fun XtreamCatalogGrid(
                 )
             }
         } else {
+            // A visible scrollbar, because the wheel alone gave no sign that there was anything
+            // below: a half-drawn row at the bottom edge is indistinguishable from a grid that
+            // refuses to scroll, and the user had no way to tell which they were looking at.
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             LazyVerticalGrid(
                 state = gridState,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier.fillMaxSize(),
                 columns = GridCells.Adaptive(minSize = if (live) 250.dp else 172.dp),
                 // Generous bottom padding so the final row clears the pagination bar. With only
                 // the symmetric vertical padding the last row sat flush against it and read as
@@ -615,6 +626,11 @@ private fun XtreamCatalogGrid(
                         onClick = { onItemSelected(item.providerId) },
                     )
                 }
+            }
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(gridState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 4.dp),
+            )
             }
         }
 
@@ -922,6 +938,7 @@ internal fun XtreamItemDetail(
             )
             return@Box
         }
+        val detailScroll = rememberScrollState()
         Column(
             modifier =
                 Modifier
@@ -931,7 +948,7 @@ internal fun XtreamItemDetail(
                     // below - the last episodes, the cast - is laid out past the bottom edge and
                     // the scroll never reaches it. A scrolling column must be free to be taller
                     // than what is visible; that is what gives it something to scroll.
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(detailScroll),
             // Left-aligned. The previous centred card put the poster, the title and every action
             // on the vertical axis, which reads as a dialog rather than a page about a title.
             horizontalAlignment = Alignment.Start,

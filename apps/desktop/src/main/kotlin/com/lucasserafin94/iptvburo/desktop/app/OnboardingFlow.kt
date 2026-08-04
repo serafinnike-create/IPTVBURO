@@ -55,14 +55,24 @@ import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.desktop.update.DESKTOP_VERSION
 import java.nio.file.Path
 
-/** Shared shell so every setup step sits on the same canvas at the same width. */
+/**
+ * Shared shell so every setup step sits on the same canvas at the same width.
+ *
+ * [onDismiss] is null during first-run setup, where there is nothing behind to go back to. Once the
+ * app is running the same screens are used to add a profile, and then they read as a panel over the
+ * app - dismissable, and visibly on top of something rather than replacing it.
+ */
 @Composable
 private fun OnboardingScaffold(
     step: Int,
+    onDismiss: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     Box(
-        modifier = Modifier.fillMaxSize().background(BuroColors.Canvas),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(if (onDismiss == null) BuroColors.Canvas else BuroColors.Scrim),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -70,10 +80,33 @@ private fun OnboardingScaffold(
                 Modifier
                     .widthIn(max = 620.dp)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    // As a panel it gets a surface and a rounded edge, so it reads as sitting over
+                    // the app; during first-run it is the whole screen and needs neither.
+                    .then(
+                        if (onDismiss == null) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .padding(BuroSpacing.Xl)
+                                .clip(BuroRadius.Large)
+                                .background(BuroColors.Surface)
+                        },
+                    ).verticalScroll(rememberScrollState())
                     .padding(BuroSpacing.Xl),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            if (onDismiss != null) {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onDismiss) {
+                        Text(
+                            text = "✕",
+                            color = BuroColors.TextMuted,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                }
+            }
             Text(
                 text = "IPTV BURO",
                 color = BuroColors.Primary,
@@ -192,6 +225,8 @@ fun AccountSetupGate(
     photo: Path?,
     onPickPhoto: () -> Unit,
     onClearPhoto: () -> Unit,
+    // Null on first run, where there is no app behind this to return to.
+    onDismiss: (() -> Unit)? = null,
     onCreate: (profileName: String, avatarIndex: Int, listLabel: String, server: String, username: String, password: String) -> Unit,
     onUseSaved: (profileName: String, avatarIndex: Int, sourceId: String) -> Unit,
 ) {
@@ -215,7 +250,7 @@ fun AccountSetupGate(
                 server.isNotBlank() && username.isNotBlank() && password.isNotBlank()
             }
 
-    OnboardingScaffold(step = 1) {
+    OnboardingScaffold(step = 1, onDismiss = onDismiss) {
         Text(
             text = text.setupTitle,
             color = BuroColors.Text,

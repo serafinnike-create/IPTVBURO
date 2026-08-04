@@ -394,6 +394,14 @@ fun DesktopApp(
                                 ?.let(appState::choosePendingPhoto)
                         },
                         onClearPhoto = { appState.choosePendingPhoto(null) },
+                        // Dismissable only once a profile exists: during first-run setup there is
+                        // nothing behind to go back to, so the step stays modal.
+                        onDismiss =
+                            if (appState.activeProfile != null) {
+                                appState::cancelAddingProfile
+                            } else {
+                                null
+                            },
                         onCreate = { profileName, avatarIndex, listLabel, server, username, password ->
                             scope.launch {
                                 appState.completeSetup(

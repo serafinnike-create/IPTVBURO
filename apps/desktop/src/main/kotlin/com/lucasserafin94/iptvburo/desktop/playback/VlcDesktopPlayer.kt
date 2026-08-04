@@ -275,7 +275,7 @@ class VlcDesktopPlayer {
  * exist, so an offline title reported no error and simply never started. The native path has no such
  * ambiguity. Remote sources keep their URI: for them the encoding is part of the address.
  */
-private fun URI.toVlcInput(): String =
+internal fun URI.toVlcInput(): String =
     if (scheme.equals("file", ignoreCase = true)) {
         runCatching { java.nio.file.Path.of(this).toString() }.getOrElse { toASCIIString() }
     } else {
