@@ -53,7 +53,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.desktop.update.DESKTOP_VERSION
-import com.lucasserafin94.iptvburo.desktop.user.PROFILE_AVATARS
+import java.nio.file.Path
 
 /** Shared shell so every setup step sits on the same canvas at the same width. */
 @Composable
@@ -160,27 +160,52 @@ fun TermsGate(
 }
 
 /**
+ * What the user has typed into setup, kept outside the screen that renders it.
+ *
+ * The connecting and failure states replace this composable, so anything held in `remember` here
+ * would be discarded: a wrong password wiped the whole form, including the fields that were right.
+ * Surviving the round trip is the point of this type.
+ */
+class AccountSetupDraft {
+    val profileName = mutableStateOf("")
+    val avatarIndex = mutableStateOf(0)
+    val listLabel = mutableStateOf("")
+    val server = mutableStateOf("")
+    val username = mutableStateOf("")
+    val password = mutableStateOf("")
+    val reusedSourceId = mutableStateOf<String?>(null)
+}
+
+/**
  * Profile and playlist, entered together.
  *
  * A profile without a playlist cannot show anything, and a playlist with no profile has nowhere to
  * keep favourites, so asking for them on one screen matches how they are actually used. When a
- * playlist already exists it can be reused, which is the household case: same subscription, separate
- * favourites.
+ * playlist already exists it can be reused, which is the household case: same subscription,
+ * separate favourites.
  */
 @Composable
 fun AccountSetupGate(
     text: DesktopStrings,
     savedSources: List<XtreamSource>,
+    draft: AccountSetupDraft,
+    photo: Path?,
+    onPickPhoto: () -> Unit,
+    onClearPhoto: () -> Unit,
     onCreate: (profileName: String, avatarIndex: Int, listLabel: String, server: String, username: String, password: String) -> Unit,
     onUseSaved: (profileName: String, avatarIndex: Int, sourceId: String) -> Unit,
 ) {
-    var profileName by remember { mutableStateOf("") }
-    var avatarIndex by remember { mutableStateOf(0) }
-    var listLabel by remember { mutableStateOf("") }
-    var server by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var reusedSourceId by remember { mutableStateOf<String?>(null) }
+    // Hoisted out of this composable so a failed connection can return here with everything the
+    // user typed still in place. Held in remember alone, the state died with the screen and the
+    // form came back empty — leaving no way to see which field was wrong.
+    var profileName by draft.profileName
+    var avatarIndex by draft.avatarIndex
+    var listLabel by draft.listLabel
+    var server by draft.server
+    var username by draft.username
+    var password by draft.password
+    var reusedSourceId by draft.reusedSourceId
+    var revealPassword by remember { mutableStateOf(false) }
 
     val canSubmit =
         profileName.isNotBlank() &&
@@ -211,34 +236,19 @@ fun AccountSetupGate(
             label = text.setupProfileName,
         )
         Spacer(Modifier.height(BuroSpacing.Md))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
-        ) {
-            PROFILE_AVATARS.forEachIndexed { index, avatar ->
-                val selected = index == avatarIndex
-                BuroInteractiveSurface(
-                    onClick = { avatarIndex = index },
-                    shape = CircleShape,
-                    background = if (selected) BuroColors.SurfaceRaised else Color.Transparent,
-                    contentDescription = avatar,
-                ) { _ ->
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(42.dp)
-                                .border(
-                                    width = if (selected) 2.dp else 1.dp,
-                                    color = if (selected) BuroColors.Primary else BuroColors.BorderSoft,
-                                    shape = CircleShape,
-                                ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(avatar, style = MaterialTheme.typography.titleMedium)
-                    }
-                }
-            }
-        }
+        AvatarPicker(
+            selectedIndex = avatarIndex,
+            onSelect = { index ->
+                avatarIndex = index
+                // Choosing a drawn avatar replaces a photo picked earlier, otherwise the photo would
+                // keep winning and the selection would appear to do nothing.
+                onClearPhoto()
+            },
+            photo = photo,
+            onPickPhoto = onPickPhoto,
+            onClearPhoto = onClearPhoto,
+            text = text,
+        )
 
         if (savedSources.isNotEmpty()) {
             Spacer(Modifier.height(BuroSpacing.Lg))
@@ -306,7 +316,18 @@ fun AccountSetupGate(
                 value = password,
                 onValueChange = { password = it },
                 label = text.passwordLabel,
-                secret = true,
+                // Revealed on demand: a mistyped password is the most common reason setup fails,
+                // and dots give the user no way to spot it.
+                secret = !revealPassword,
+                trailing = {
+                    TextButton(onClick = { revealPassword = !revealPassword }) {
+                        Text(
+                            text = if (revealPassword) text.hidePassword else text.showPassword,
+                            color = BuroColors.TextMuted,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                },
             )
         }
 
@@ -342,11 +363,13 @@ private fun OnboardingField(
     onValueChange: (String) -> Unit,
     label: String,
     secret: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label, color = BuroColors.TextSubtle) },
+        trailingIcon = trailing,
         singleLine = true,
         visualTransformation =
             if (secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,

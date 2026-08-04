@@ -222,6 +222,16 @@ class GitHubReleaseUpdater(
  * identified by [pid] rather than by window title: a title match would wait on, or act against, an
  * unrelated window with the same name.
  *
+ * ## Never leave the machine without the app
+ *
+ * An earlier version removed the installed product and then installed the new one. When the install
+ * failed the removal had already happened, so the app simply vanished — which is exactly what it did
+ * on a real machine. The order is now: install first, and only if that fails fall back to removing
+ * the old product and installing again. The removal is never the last thing that ran.
+ *
+ * The script also keeps itself and the downloaded installer when anything goes wrong, so a failed
+ * update can be inspected and re-run by hand instead of disappearing without trace.
+ *
  * The wait is bounded. If the app somehow never exits, installing anyway is better than leaving a
  * downloaded update that is never applied and a script that never terminates.
  */
@@ -235,15 +245,21 @@ internal fun writeUpdateScript(
     val relaunch =
         launcher?.let { path -> "start \"\" \"${path.toAbsolutePath()}\"" }
             ?: "rem launcher not found; the update is installed and can be opened from the Start menu"
-    // Each MSI is generated with a fresh ProductCode, so installing over the existing one returns
-    // 1638 ("another version is already installed") and does nothing at all. That is what made an
-    // update report success and leave the old version in place. Removing the registered product
-    // first is the only reliable fix; the GUID comes from the registry and is validated below.
-    val uninstall =
-        installedProductCode
-            ?.takeIf(PRODUCT_CODE::matches)
-            ?.let { code -> "msiexec.exe /x $code /passive /norestart" }
-            ?: "rem no installed product registered; installing fresh"
+    // Each MSI is generated with a fresh ProductCode, so installing over the existing one can return
+    // 1638 ("another version is already installed") and do nothing. Removing the old product fixes
+    // that, but only as a fallback: doing it first is what once deleted the app outright. The GUID
+    // comes from the registry and is validated before it reaches the shell.
+    val code = installedProductCode?.takeIf(PRODUCT_CODE::matches)
+    val retryAfterRemoval =
+        if (code == null) {
+            "rem no installed product registered; nothing to remove"
+        } else {
+            """
+            msiexec.exe /x $code /passive /norestart
+            msiexec.exe /i "${installer.toAbsolutePath()}" /passive /norestart
+            if errorlevel 1 goto :failed
+            """.trimIndent()
+        }
     Files.writeString(
         script,
         """
@@ -254,8 +270,20 @@ internal fun writeUpdateScript(
           timeout /t 1 /nobreak >nul
         )
         :install
-        $uninstall
+        rem Install over the existing product first. If this succeeds nothing is ever removed, so a
+        rem failure cannot leave the machine with no app.
         msiexec.exe /i "${installer.toAbsolutePath()}" /passive /norestart REINSTALLMODE=amus
+        if not errorlevel 1 goto :done
+        $retryAfterRemoval
+        goto :done
+
+        :failed
+        rem The update did not apply. The installer and this script are kept so it can be retried by
+        rem hand, and the old build is started if it is still there.
+        $relaunch
+        exit /b 1
+
+        :done
         $relaunch
         del "%~f0"
         """.trimIndent(),

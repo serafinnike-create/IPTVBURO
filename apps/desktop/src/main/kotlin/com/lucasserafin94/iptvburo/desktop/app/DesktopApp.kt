@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -99,7 +100,9 @@ import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
-import com.lucasserafin94.iptvburo.desktop.user.PROFILE_AVATARS
+import com.lucasserafin94.iptvburo.desktop.platform.chooseImageFile
+import com.lucasserafin94.iptvburo.desktop.ui.BURO_AVATARS
+import com.lucasserafin94.iptvburo.desktop.ui.BuroProfileAvatar
 import com.lucasserafin94.iptvburo.desktop.update.DESKTOP_VERSION
 import com.lucasserafin94.iptvburo.desktop.update.DesktopRelease
 import com.lucasserafin94.iptvburo.desktop.update.GitHubReleaseUpdater
@@ -128,6 +131,10 @@ fun DesktopApp(
     var updateProgress by remember { mutableStateOf(0f) }
     var updateRelease by remember { mutableStateOf<DesktopRelease?>(null) }
     var updateReadyToRestart by remember { mutableStateOf(false) }
+    // Owned here rather than inside the setup screen, which is replaced by the connecting and
+    // failure screens: state held there was discarded, so a wrong password emptied the whole form
+    // and hid which field was actually wrong.
+    val setupDraft = remember { AccountSetupDraft() }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -193,6 +200,10 @@ fun DesktopApp(
                             channelCount = appState.selectedSourceItemCount,
                             sourceCount = appState.sourceSummaries.size,
                             activeProfile = appState.activeProfile,
+                            // Read through photoRevision so writing or clearing a photo repaints
+                            // the chip; the file path itself never changes.
+                            activeProfilePhoto =
+                                appState.photoRevision.let { appState.photoFor(appState.activeProfileId) },
                             language = appState.language,
                             // Opening the picker must not clear the active profile. It used to
                             // call selectProfile(null), which left no way back if you opened it
@@ -374,6 +385,15 @@ fun DesktopApp(
                     AccountSetupGate(
                         text = text,
                         savedSources = appState.savedSources(),
+                        // Hoisted above the step branch so a failed connection returns to a form
+                        // that still holds everything the user typed.
+                        draft = setupDraft,
+                        photo = appState.pendingProfilePhoto,
+                        onPickPhoto = {
+                            chooseImageFile(ownerWindow, text.avatarChoosePhotoTitle)
+                                ?.let(appState::choosePendingPhoto)
+                        },
+                        onClearPhoto = { appState.choosePendingPhoto(null) },
                         onCreate = { profileName, avatarIndex, listLabel, server, username, password ->
                             scope.launch {
                                 appState.completeSetup(
@@ -406,6 +426,8 @@ fun DesktopApp(
                 } else if (appState.activeProfile == null || showProfileGate) {
                     DesktopProfileGate(
                         profiles = appState.profiles,
+                        // Read through photoRevision so a replaced photo repaints the tiles.
+                        photoFor = { id -> appState.photoRevision.let { appState.photoFor(id) } },
                         onSelect = { profileId ->
                             showProfileGate = false
                             scope.launch { appState.selectProfileAndRefresh(profileId) }
@@ -720,6 +742,7 @@ private fun TopBar(
     channelCount: Int,
     sourceCount: Int,
     activeProfile: DesktopProfile?,
+    activeProfilePhoto: java.nio.file.Path?,
     language: DesktopLanguage,
     onChangeProfile: () -> Unit,
     onSelectLanguage: (DesktopLanguage) -> Unit,
@@ -774,10 +797,8 @@ private fun TopBar(
             if (showProfile) {
                 ProfileChip(
                     name = activeProfile?.name ?: text.profile,
-                    avatar =
-                        activeProfile
-                            ?.let { PROFILE_AVATARS.getOrNull(it.avatarIndex) }
-                            ?: PROFILE_AVATARS.first(),
+                    avatarIndex = activeProfile?.avatarIndex ?: 0,
+                    photo = activeProfilePhoto,
                     onClick = onChangeProfile,
                 )
                 Spacer(Modifier.width(BuroSpacing.Sm))
@@ -977,7 +998,8 @@ private fun LanguagePicker(
 @Composable
 private fun ProfileChip(
     name: String,
-    avatar: String,
+    avatarIndex: Int,
+    photo: java.nio.file.Path?,
     onClick: () -> Unit,
 ) {
     BuroInteractiveRow(
@@ -990,18 +1012,9 @@ private fun ProfileChip(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(26.dp)
-                        .clip(CircleShape)
-                        .background(BuroColors.Primary.copy(alpha = 0.22f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                // The avatar the user picked, not an initial. Choosing a face and then seeing a
-                // letter makes the choice feel ignored.
-                Text(text = avatar, style = MaterialTheme.typography.labelLarge)
-            }
+            // The face the user picked, not an initial. Choosing one and then seeing a letter makes
+            // the choice feel ignored.
+            ProfileFace(avatarIndex = avatarIndex, photo = photo, size = 26.dp)
             Spacer(Modifier.width(8.dp))
             Text(
                 text = name,
@@ -1735,6 +1748,7 @@ private fun ExternalPlaybackDialog(
 @Composable
 private fun DesktopProfileGate(
     profiles: List<DesktopProfile>,
+    photoFor: (String) -> java.nio.file.Path?,
     onSelect: (String?) -> Unit,
     onCreate: (String, Boolean, Int) -> Unit,
     onReset: () -> Unit,
@@ -1793,9 +1807,10 @@ private fun DesktopProfileGate(
                             modifier = Modifier.fillMaxWidth().padding(vertical = BuroSpacing.Md),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Text(
-                                text = PROFILE_AVATARS.getOrElse(profile.avatarIndex) { PROFILE_AVATARS.first() },
-                                style = MaterialTheme.typography.displaySmall,
+                            ProfileFace(
+                                avatarIndex = profile.avatarIndex,
+                                photo = photoFor(profile.id),
+                                size = 64.dp,
                             )
                             Spacer(Modifier.height(BuroSpacing.Xs))
                             Text(
@@ -1819,19 +1834,24 @@ private fun DesktopProfileGate(
             if (profiles.size < 5) {
                 Spacer(Modifier.height(24.dp))
                 // Avatar is chosen before the name so the row reads left to right as one action.
-                Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
-                    PROFILE_AVATARS.forEachIndexed { index, glyph ->
+                // Wrapped rather than in one line: sixteen circles overflow the gate's width.
+                FlowRow(
+                    modifier = Modifier.width(360.dp),
+                    horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+                    verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+                ) {
+                    BURO_AVATARS.forEachIndexed { index, option ->
                         BuroInteractiveRow(
                             onClick = { avatar = index },
                             selected = avatar == index,
                             shape = CircleShape,
-                            contentDescription = glyph,
+                            contentDescription = option.id,
                         ) {
                             Box(
                                 modifier = Modifier.size(44.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(glyph, style = MaterialTheme.typography.headlineSmall)
+                                BuroProfileAvatar(index = index, size = 38.dp)
                             }
                         }
                     }

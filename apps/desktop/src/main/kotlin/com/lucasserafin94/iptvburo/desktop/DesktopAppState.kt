@@ -23,6 +23,7 @@ import com.lucasserafin94.iptvburo.desktop.security.XtreamSourceLibrary
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
+import com.lucasserafin94.iptvburo.desktop.user.ProfilePhotoStore
 import com.lucasserafin94.iptvburo.desktop.download.DesktopDownloadManager
 import com.lucasserafin94.iptvburo.desktop.download.DownloadResult
 import com.lucasserafin94.iptvburo.desktop.download.StoredDownload
@@ -66,7 +67,50 @@ class DesktopAppState(
     private val playbackProgressCoordinator: DesktopPlaybackProgressCoordinator = DesktopPlaybackProgressCoordinator(),
     private val downloadManager: DesktopDownloadManager = DesktopDownloadManager(),
     private val sourceLibrary: XtreamSourceLibrary = XtreamSourceLibrary(),
+    private val photoStore: ProfilePhotoStore = ProfilePhotoStore(),
 ) {
+    /**
+     * Photo chosen during setup, before the profile it belongs to exists.
+     *
+     * Held as a source path until [completeSetup] creates the profile and can store it under that
+     * profile's id.
+     */
+    var pendingProfilePhoto by mutableStateOf<java.nio.file.Path?>(null)
+        private set
+
+    fun choosePendingPhoto(source: java.nio.file.Path?) {
+        pendingProfilePhoto = source
+    }
+
+    /** The stored photo for a profile, or null when it uses a drawn avatar. */
+    fun photoFor(profileId: String?): java.nio.file.Path? =
+        profileId?.let(photoStore::photoFor)
+
+    /**
+     * Replaces a profile's photo, or clears it when [source] is null.
+     *
+     * Bumping [photoRevision] is what makes the change visible: the file path does not change, so
+     * nothing else would tell Compose that the picture behind it is now different.
+     */
+    fun setProfilePhoto(profileId: String, source: java.nio.file.Path?) {
+        if (source == null) photoStore.remove(profileId) else photoStore.store(profileId, source)
+        photoRevision += 1
+    }
+
+    /** Incremented whenever a photo is written or removed, so avatars recompose. */
+    var photoRevision by mutableStateOf(0)
+        private set
+
+    /**
+     * Moves the photo chosen during setup onto the profile that setup just created.
+     *
+     * The pending path is cleared either way: keeping it would apply the same picture to the next
+     * profile created in this session.
+     */
+    private fun attachPendingPhoto(profileId: String) {
+        pendingProfilePhoto?.let { source -> setProfilePhoto(profileId, source) }
+        pendingProfilePhoto = null
+    }
     var destination by mutableStateOf(DesktopDestination.HOME)
         private set
 
@@ -276,6 +320,7 @@ class DesktopAppState(
                 )
             profiles = listOf(profile) + profiles.filterNot { it.name == profile.name }
             userStore.saveProfiles(profiles)
+            attachPendingPhoto(profile.id)
             selectProfile(profile.id)
             onboarding = OnboardingStep.Done
         } finally {
@@ -325,6 +370,7 @@ class DesktopAppState(
             )
         profiles = profiles + profile
         userStore.saveProfiles(profiles)
+        attachPendingPhoto(profile.id)
         selectProfile(profile.id)
         onboarding = OnboardingStep.Done
     }

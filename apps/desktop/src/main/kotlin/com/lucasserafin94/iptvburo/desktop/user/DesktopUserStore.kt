@@ -6,8 +6,9 @@ import java.util.UUID
 import java.util.prefs.Preferences
 
 /**
- * [avatarIndex] selects one of [PROFILE_AVATARS]. Stored as an index rather than an image so the
- * choice survives a reinstall and costs nothing on disk.
+ * [avatarIndex] selects one of the drawn avatars in BURO_AVATARS. Stored as an index rather than an
+ * image so the choice survives a reinstall and costs nothing on disk. A photo, when the user picks
+ * one, lives separately in ProfilePhotoStore and takes precedence over the index.
  */
 data class DesktopProfile(
     val id: String,
@@ -23,8 +24,7 @@ data class DesktopProfile(
     val sourceId: String? = null,
 )
 
-/** Fixed avatar set. Emoji keep this dependency-free and render on every Windows build. */
-val PROFILE_AVATARS = listOf("🎬", "🍿", "🚀", "🦊", "🌙", "⚽", "🎸", "🐱")
+
 
 enum class DesktopLanguage(val tag: String) {
     PORTUGUESE_BRAZIL("pt-BR"), ENGLISH("en"), GERMAN("de"), ITALIAN("it");
@@ -132,7 +132,10 @@ class DesktopUserStore(
                     name = decode(parts[1]),
                     isKids = parts[2] == "1",
                     avatarIndex =
-                        parts.getOrNull(3)?.toIntOrNull()?.coerceIn(0, PROFILE_AVATARS.lastIndex) ?: 0,
+                        // Not clamped to the set size: the avatar list can grow, and clamping here
+                        // would rewrite a stored choice into a different face. Out-of-range values
+                        // are resolved when drawn.
+                        parts.getOrNull(3)?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
                     sourceId = parts.getOrNull(4)?.takeIf(String::isNotBlank),
                 )
             }.getOrNull()

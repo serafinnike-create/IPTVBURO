@@ -64,6 +64,24 @@ class DesktopUserStoreTest {
         }
     }
 
+    /**
+     * The avatar set grew from eight to sixteen. Clamping on load would have rewritten a stored
+     * choice of, say, 12 into a different face every time the app started.
+     */
+    @Test
+    fun `an avatar index beyond the old set survives a round trip`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            DesktopUserStore(node).saveProfiles(
+                listOf(DesktopProfile("solo", "Lucas", false, avatarIndex = 12)),
+            )
+
+            assertEquals(12, DesktopUserStore(node).load().profiles.single().avatarIndex)
+        } finally {
+            node.removeNode()
+        }
+    }
+
     /** Rows written by builds before per-profile playlists must still load. */
     @Test
     fun `profiles saved without a playlist still decode`() {

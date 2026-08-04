@@ -74,11 +74,12 @@ class UpdateScriptTest {
     }
 
     /**
-     * Every MSI is generated with a fresh ProductCode, so installing over the existing one returns
-     * 1638 and does nothing. The old product must come off first or the update silently no-ops.
+     * The bug that deleted the app off a real machine: the script removed the installed product and
+     * then installed. When the install failed, the removal had already happened and nothing was
+     * left. Installing first means a failure can never take the existing app with it.
      */
     @Test
-    fun `removes the installed product before installing`() {
+    fun `installs before it ever removes anything`() {
         withDirectory { directory ->
             val code = "{A49CCA56-12E0-3ACF-81D3-649F5B7460D5}"
             val body =
@@ -91,9 +92,47 @@ class UpdateScriptTest {
                     ),
                 )
 
-            val removeAt = body.indexOf("/x $code")
             val installAt = body.indexOf("msiexec.exe /i")
-            assertTrue(removeAt in 0..<installAt, "the removal must precede the install")
+            val removeAt = body.indexOf("/x $code")
+            assertTrue(installAt >= 0, "the script must install")
+            assertTrue(removeAt > installAt, "removal must only happen after an install attempt")
+        }
+    }
+
+    /** The removal is a fallback, so it must sit behind the check for a failed install. */
+    @Test
+    fun `removal is guarded by the install having failed`() {
+        withDirectory { directory ->
+            val code = "{A49CCA56-12E0-3ACF-81D3-649F5B7460D5}"
+            val body =
+                Files.readString(
+                    writeUpdateScript(
+                        installer = directory.resolve("a.msi"),
+                        pid = 1,
+                        launcher = null,
+                        installedProductCode = code,
+                    ),
+                )
+
+            val skipAt = body.indexOf("if not errorlevel 1 goto :done")
+            val removeAt = body.indexOf("/x $code")
+            assertTrue(skipAt in 0..<removeAt, "a successful install must skip the removal")
+        }
+    }
+
+    /** A failed update must leave the installer behind so it can be retried. */
+    @Test
+    fun `the script only deletes itself on success`() {
+        withDirectory { directory ->
+            val body =
+                Files.readString(
+                    writeUpdateScript(directory.resolve("a.msi"), pid = 1, launcher = null),
+                )
+
+            val failedAt = body.indexOf(":failed")
+            val deleteAt = body.indexOf("del \"%~f0\"")
+            assertTrue(failedAt in 0..<deleteAt, "the failure path must not reach the delete")
+            assertTrue(body.indexOf("exit /b 1") in failedAt..deleteAt, "failure must exit early")
         }
     }
 
