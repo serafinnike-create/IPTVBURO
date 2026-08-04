@@ -105,10 +105,14 @@ import com.lucasserafin94.iptvburo.desktop.platform.chooseImageFile
 import com.lucasserafin94.iptvburo.desktop.ui.BURO_AVATARS
 import com.lucasserafin94.iptvburo.desktop.ui.BuroProfileAvatar
 import com.lucasserafin94.iptvburo.desktop.update.DESKTOP_VERSION
+import com.lucasserafin94.iptvburo.desktop.platform.openUriExternally
 import com.lucasserafin94.iptvburo.desktop.update.DesktopRelease
 import com.lucasserafin94.iptvburo.desktop.update.GitHubReleaseUpdater
 import com.lucasserafin94.iptvburo.desktop.update.UpdateCheckResult
 import kotlinx.coroutines.launch
+
+/** Where TMDb issues the personal API key this app asks for. */
+private const val TMDB_API_SETTINGS_URL = "https://www.themoviedb.org/settings/api"
 
 @Composable
 fun DesktopApp(
@@ -976,11 +980,18 @@ private fun SettingsMenu(
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = text.metadataKeyHint,
-                            color = BuroColors.TextSubtle,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
+                        // The hint is the link. Sending the user to the page that issues the key is
+                        // more use than telling them the address and making them type it.
+                        TextButton(
+                            onClick = { openUriExternally(java.net.URI(TMDB_API_SETTINGS_URL)) },
+                            contentPadding = PaddingValues(0.dp),
+                        ) {
+                            Text(
+                                text = text.metadataKeyHint,
+                                color = BuroColors.Primary,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
                         Spacer(Modifier.height(BuroSpacing.Xs))
                         OutlinedTextField(
                             value = metadataApiKey,

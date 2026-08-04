@@ -691,6 +691,16 @@ private fun XtreamCatalogGrid(
                                     Key.DirectionUp -> -rowStep
                                     Key.PageDown -> rowStep * 3
                                     Key.PageUp -> -rowStep * 3
+                                    // Left and right change page. With 375 pages, reaching for the
+                                    // buttons at the bottom for every one of them is the wrong ask.
+                                    Key.DirectionRight -> {
+                                        if (page.hasNext) onNextPage()
+                                        return@onPreviewKeyEvent page.hasNext
+                                    }
+                                    Key.DirectionLeft -> {
+                                        if (page.hasPrevious) onPreviousPage()
+                                        return@onPreviewKeyEvent page.hasPrevious
+                                    }
                                     else -> return@onPreviewKeyEvent false
                                 }
                             scope.launch { gridState.animateScrollBy(delta) }
@@ -1812,14 +1822,16 @@ private fun EpisodeRow(
     onRemoveDownload: () -> Unit,
     text: DesktopStrings,
 ) {
-    Row(
+    Column(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .clip(BuroRadius.Small)
                 .background(BuroColors.SurfaceHover)
-                .clickable { onOpen(episode, resumeStartPosition(decision)) }
-                .padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Sm),
+                .clickable { onOpen(episode, resumeStartPosition(decision)) },
+    ) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -1847,6 +1859,13 @@ private fun EpisodeRow(
             TextButton(onClick = { onOpen(episode, 0L) }) {
                 Text("Do início", style = MaterialTheme.typography.labelMedium)
             }
+        } else if (decision is ResumeDecision.WatchAgain) {
+            Spacer(Modifier.width(BuroSpacing.Sm))
+            Text(
+                text = "✓ Visto",
+                color = BuroColors.Success,
+                style = MaterialTheme.typography.labelMedium,
+            )
         }
         if (downloadState != null) {
             Spacer(Modifier.width(BuroSpacing.Xs))
@@ -1858,6 +1877,19 @@ private fun EpisodeRow(
                 text = text,
             )
         }
+    }
+    // A thin bar under the row, the length of what has been watched. Scanning the list, the part-
+    // watched episode is the one to carry on from, and remembering which it was is not the user's
+    // job.
+    if (decision is ResumeDecision.ResumeFrom) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth(decision.progressPercent.toFloat().coerceIn(0f, 1f))
+                    .height(3.dp)
+                    .background(BuroColors.Primary),
+        )
+    }
     }
 }
 
