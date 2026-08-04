@@ -93,6 +93,9 @@ class DesktopDownloadManager(
                 .toList()
                 .associate { name ->
                     val storedName = name.substringBeforeLast('.')
+                    // A file with no sidecar is still a finished download: the copy is what proves
+                    // it, not the bookkeeping beside it. Transfers interrupted between the move and
+                    // the sidecar write left files that were complete and unusable.
                     val sidecar = sidecars[storedName]
                     // The original key, not the sanitised file name: the app looks downloads up by
                     // the same content key it uses for playback and favourites, and for an episode

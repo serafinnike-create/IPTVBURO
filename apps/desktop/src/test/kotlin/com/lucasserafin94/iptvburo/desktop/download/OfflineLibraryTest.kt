@@ -112,6 +112,27 @@ class OfflineLibraryTest {
     }
 
     /**
+     * The exact failure a user hit: a complete 983 MB episode on disk with an empty index.
+     *
+     * The download ran in the details page's own coroutine scope, so navigating away cancelled it
+     * after the file had been moved into place but before the sidecar was written. The library kept
+     * showing "downloading" for something already finished, and Assistir did nothing.
+     */
+    @Test
+    fun `a finished file with no sidecar is playable`() {
+        withManager { manager, directory, _ ->
+            Files.writeString(directory.resolve("series_my-show_2026_s1e1.mp4"), "x")
+            Files.writeString(directory.resolve("library.json"), "{}")
+
+            val rebuilt = manager.storedDownloads()
+            val key = rebuilt.keys.single()
+
+            assertEquals(1, rebuilt.size, "the copy on disk is what proves it finished")
+            assertNotNull(manager.downloadedFile(key), "it must be playable")
+        }
+    }
+
+    /**
      * Copies made before the sidecar recorded the original key still have to be playable; they just
      * fall back to the sanitised name.
      */

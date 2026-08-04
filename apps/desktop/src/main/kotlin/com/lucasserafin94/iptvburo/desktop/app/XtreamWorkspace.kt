@@ -1094,13 +1094,11 @@ internal fun XtreamInternalDetailsPage(
                 onDownload =
                     downloadTarget?.let { target ->
                         {
-                            scope.launch {
-                                appState.startDownload(
-                                    target = target,
-                                    title = item.name.editorialTitle(),
-                                    artworkUrl = item.artworkUrl,
-                                )
-                            }
+                            appState.enqueueDownload(
+                                target = target,
+                                title = item.name.editorialTitle(),
+                                artworkUrl = item.artworkUrl,
+                            )
                         }
                     },
                 onCancelDownload =
@@ -1109,15 +1107,13 @@ internal fun XtreamInternalDetailsPage(
                     downloadTarget?.let { target -> { appState.deleteDownload(target.contentKey) } },
                 episodeDownloadFor = { target -> appState.downloadState(target.contentKey) },
                 onDownloadEpisode = { target, displayName ->
-                    scope.launch {
-                        appState.startDownload(
-                            target = target,
-                            title = displayName,
-                            // Episode stills are often missing; the series poster is the sensible
-                            // fallback so the library never shows a blank tile.
-                            artworkUrl = target.episode.artworkUrl ?: item.artworkUrl,
-                        )
-                    }
+                    appState.enqueueDownload(
+                        target = target,
+                        title = displayName,
+                        // Episode stills are often missing; the series poster is the sensible
+                        // fallback so the library never shows a blank tile.
+                        artworkUrl = target.episode.artworkUrl ?: item.artworkUrl,
+                    )
                 },
                 onCancelEpisodeDownload = { target -> appState.cancelDownload(target.contentKey) },
                 onRemoveEpisodeDownload = { target -> appState.deleteDownload(target.contentKey) },

@@ -66,6 +66,7 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 @Stable
 class DesktopAppState(
@@ -1423,6 +1424,30 @@ class DesktopAppState(
      * The signed URL is resolved here and handed straight to the downloader; it is never stored in
      * state, so it cannot leak into a recomposition dump or a crash report.
      */
+    /**
+     * Downloads outlive the screen that started them.
+     *
+     * They used to run in the details page's own scope, so leaving that page cancelled the transfer
+     * mid-flight. The file was already on disk - one user had a complete 983 MB episode - but the
+     * sidecar that records it is written after the copy returns, and that line never ran: the
+     * library kept showing "downloading" for something already finished and could not play it.
+     *
+     * SupervisorJob so one failed download does not cancel the others.
+     */
+    private val downloadScope =
+        kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.SupervisorJob() + Dispatchers.Default,
+        )
+
+    /** Starts a download that survives navigation. Callers no longer need a scope of their own. */
+    fun enqueueDownload(
+        target: XtreamPlaybackTarget,
+        title: String,
+        artworkUrl: String? = null,
+    ) {
+        downloadScope.launch { startDownload(target, title, artworkUrl) }
+    }
+
     suspend fun startDownload(
         target: XtreamPlaybackTarget,
         title: String,
