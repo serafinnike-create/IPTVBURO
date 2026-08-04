@@ -1075,6 +1075,9 @@ class DesktopAppState(
             // needs their music playlist read, and the Músicas entry is hidden until it has been.
             loadMusicLibrary()
             if (xtreamStatus !is XtreamStatus.Disconnected || xtreamSummary != null) return
+            // Swept before anything else: a chunk from a transfer that died with the app is not a
+            // download, and leaving it makes the library claim a title it cannot play.
+            downloadManager.discardInterruptedDownloads()
             startupStep(1, "Abrindo a sua sessão…")
             val input = withContext(Dispatchers.IO) { rememberedXtreamStore.load() } ?: return
             startupStep(2, "Conectando ao provedor…")

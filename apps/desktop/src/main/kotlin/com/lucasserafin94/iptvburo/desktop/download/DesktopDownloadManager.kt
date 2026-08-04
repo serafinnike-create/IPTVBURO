@@ -38,7 +38,7 @@ import okhttp3.Request
  */
 class DesktopDownloadManager(
     private val rootDirectory: Path = defaultRootDirectory(),
-    private val client: OkHttpClient = OkHttpClient(),
+    private val client: OkHttpClient = defaultClient(),
 ) {
     private val cancelled = ConcurrentHashMap<String, AtomicBoolean>()
     private val gson = Gson()
@@ -51,6 +51,26 @@ class DesktopDownloadManager(
         }
 
     fun isDownloaded(contentKey: String): Boolean = downloadedFile(contentKey) != null
+
+    /**
+     * Removes chunks left by downloads that never finished.
+     *
+     * Nothing else sweeps them: a transfer killed by closing the app, or by a provider that stopped
+     * sending, leaves its `.part` on disk for ever. One user had 430 MB of an episode that was
+     * showing as 100% complete and could not be played, because the file it needed was never
+     * written. Called at startup, where no download of this session can be in flight yet.
+     */
+    fun discardInterruptedDownloads(): Int {
+        if (!Files.isDirectory(rootDirectory)) return 0
+        return runCatching {
+            Files.list(rootDirectory).use { stream ->
+                stream
+                    .filter { path -> Files.isRegularFile(path) }
+                    .filter { path -> path.fileName.toString().endsWith(".part") }
+                    .toList()
+            }.count { path -> runCatching { Files.deleteIfExists(path) }.getOrDefault(false) }
+        }.getOrDefault(0)
+    }
 
     /**
      * Completed downloads on disk, keyed by content key.
@@ -249,6 +269,24 @@ class DesktopDownloadManager(
         const val INDEX_FILE = "library.json"
         val UNSAFE_NAME = Regex("""[^A-Za-z0-9._-]""")
         val SAFE_EXTENSION = Regex("""[A-Za-z0-9]{1,5}""")
+
+        /**
+         * The client used for downloads.
+         *
+         * A read timeout is the whole point. OkHttp's default is none, so a provider that stops
+         * sending mid-file left the transfer hanging for ever: the bar sat at whatever fraction it
+         * had reached - 100% when the announced length was wrong - with a .part file on disk, no
+         * error, and no way to tell a finished download from an abandoned one.
+         *
+         * Generous, because a large file over a slow line legitimately pauses between chunks; it
+         * only has to be shorter than "for ever".
+         */
+        fun defaultClient(): OkHttpClient =
+            OkHttpClient.Builder()
+                .connectTimeout(java.time.Duration.ofSeconds(30))
+                .readTimeout(java.time.Duration.ofSeconds(60))
+                .retryOnConnectionFailure(true)
+                .build()
 
         fun defaultRootDirectory(): Path =
             Path.of(System.getProperty("user.home"), "Videos", "IPTV BURO")

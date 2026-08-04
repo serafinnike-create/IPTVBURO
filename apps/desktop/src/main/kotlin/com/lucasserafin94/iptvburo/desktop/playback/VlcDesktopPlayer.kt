@@ -59,6 +59,13 @@ class VlcDesktopPlayer {
     @Volatile
     private var everPlayed = false
 
+    /** One silent retry per player, for the cold-start stall described in pollState. */
+    private val firstRetryUsed = AtomicBoolean(false)
+
+    /** The request currently playing, so the retry knows what to re-open. */
+    @Volatile
+    private var lastRequest: DesktopPlaybackRequest? = null
+
     /**
      * The surface VLC was told to draw into.
      *
@@ -403,6 +410,26 @@ class VlcDesktopPlayer {
             if (playing) everPlayed = true
             val ended = everPlayed && stateName == "stopped" && lengthSeconds > 0L
             val tracks = status.readTracks()
+
+            // The first title of a session often stops without ever playing: VLC has to bring up
+            // the Direct3D device and attach it to a surface Compose is still settling, and the
+            // second attempt worked only because that work was already done. Retried once,
+            // silently, which is exactly what the user was doing by hand.
+            if (
+                !everPlayed &&
+                stateName == "stopped" &&
+                System.currentTimeMillis() - mediaStartedAt > FIRST_START_RETRY_MILLIS &&
+                firstRetryUsed.compareAndSet(false, true)
+            ) {
+                lastRequest?.let { request ->
+                    runCatching {
+                        control.command("in_play", mapOf("input" to request.uri.toVlcInput()))
+                        mediaStartedAt = System.currentTimeMillis()
+                    }
+                }
+                return@runCatching
+            }
+
             snapshot =
                 snapshot.copy(
                     loading = !ready,
@@ -491,6 +518,14 @@ class VlcDesktopPlayer {
         const val VLC_VOLUME_MAX = 256
         const val CONNECT_TIMEOUT_MILLIS = 12_000L
         const val START_TIMEOUT_MILLIS = 25_000L
+
+        /**
+         * How long to let a title sit at "stopped" before retrying it once.
+         *
+         * Long enough that a genuinely slow provider is not interrupted mid-open, short enough that
+         * the user has not yet reached for the close button.
+         */
+        const val FIRST_START_RETRY_MILLIS = 4_000L
 
         /** Matches the thread name given to the single control executor. */
         const val CONTROL_THREAD_NAME = "iptvburo-vlc-control"

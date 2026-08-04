@@ -105,6 +105,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.categoryLabel
 import com.lucasserafin94.iptvburo.desktop.CatalogLayout
 import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableVertically
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollable
+import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableGrid
 import com.lucasserafin94.iptvburo.desktop.ui.categoryBadgeFor
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
@@ -716,7 +717,7 @@ private fun XtreamCatalogGrid(
                         .focusable()
                         .onPointerEvent(PointerEventType.Enter) {
                             runCatching { gridFocus.requestFocus() }
-                        }
+                        }.edgeScrollableGrid(gridState)
                         .onPreviewKeyEvent { event ->
                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             val rowStep = ROW_SCROLL_PIXELS
@@ -1000,6 +1001,8 @@ internal fun XtreamInternalDetailsPage(
     onRequestCastPhoto: suspend (String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
+    // Which trailer is open, if any. Held here so the panel closes when the page does.
+    var openTrailerId by remember { mutableStateOf<String?>(null) }
     val item = appState.selectedXtreamItem ?: return
     val movie = appState.movieDetailsStatus as? MovieDetailsStatus.Loaded
     val series = appState.seriesDetailsStatus as? SeriesDetailsStatus.Loaded
@@ -1079,7 +1082,7 @@ internal fun XtreamInternalDetailsPage(
                 liveEpgStatus = appState.liveEpgStatus,
                 onLoadMovie = { scope.launch { appState.loadSelectedMovieDetails() } },
                 onLoadSeries = { scope.launch { appState.loadSelectedSeriesDetails() } },
-                onOpenTrailer = appState::openPublicTrailer,
+                onOpenTrailer = { trailerId -> openTrailerId = trailerId },
                 onOpenExternal = onOpenExternal,
                 onOpenPerson = onOpenPerson,
                 isFavorite = appState.isFavorite(item),
@@ -1252,6 +1255,9 @@ internal fun XtreamItemDetail(
                 }
                 SeriesDetailContent(
                     status = seriesStatus,
+                    onOpenPerson = onOpenPerson,
+                    castPhotoFor = castPhotoFor,
+                    onRequestCastPhoto = onRequestCastPhoto,
                     seriesTitle = item.name,
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
@@ -1776,6 +1782,9 @@ internal fun PersonFilmographyPage(
 @Composable
 private fun SeriesDetailContent(
     status: SeriesDetailsStatus,
+    onOpenPerson: (String) -> Unit,
+    castPhotoFor: (String) -> String?,
+    onRequestCastPhoto: suspend (String) -> Unit,
     seriesTitle: String,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
@@ -1837,7 +1846,17 @@ private fun SeriesDetailContent(
                 Spacer(Modifier.height(10.dp))
             }
             details.director?.let { DetailLine("Direção", it) }
-            details.cast?.let { DetailLine("Elenco", it) }
+            // Portraits, the same as the film page. A series was showing its cast as one line of
+            // comma-separated text, which is the raw field the provider sends rather than anything
+            // the user can click.
+            details.cast?.let {
+                CastButtons(
+                    rawCast = it,
+                    onOpenPerson = onOpenPerson,
+                    photoFor = castPhotoFor,
+                    onRequestPhoto = onRequestCastPhoto,
+                )
+            }
 
             // Actions sit together above the episode list, matching the film page. Previously the
             // trailer was a full-width button buried between the metadata and the episodes, and

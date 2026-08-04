@@ -225,5 +225,45 @@ fun Modifier.edgeScrollableVertically(
         }.onPointerEvent(PointerEventType.Exit) { direction = 0f }
 }
 
+/**
+ * Vertical edge scrolling for the catalogue grid.
+ *
+ * Separate from the list overload only because LazyGridState is a different type; the behaviour is
+ * the same, and a page of four hundred posters is exactly where dragging a wheel gets tiring.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun Modifier.edgeScrollableGrid(
+    state: androidx.compose.foundation.lazy.grid.LazyGridState,
+    edgeFraction: Float = 0.10f,
+    speed: Float = 22f,
+): Modifier {
+    var height by remember { mutableStateOf(0) }
+    var direction by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(direction) {
+        if (direction == 0f) return@LaunchedEffect
+        while (true) {
+            state.scrollBy(direction * speed)
+            withFrameNanos { }
+        }
+    }
+
+    return this
+        .onSizeChanged { size -> height = size.height }
+        .onPointerEvent(PointerEventType.Move) { event ->
+            val y = event.changes.firstOrNull()?.position?.y ?: return@onPointerEvent
+            val measured = height
+            if (measured <= 0) return@onPointerEvent
+            val edge = (measured * edgeFraction).coerceAtLeast(MIN_EDGE_PIXELS)
+            direction =
+                when {
+                    y <= edge -> -1f
+                    y >= measured - edge -> 1f
+                    else -> 0f
+                }
+        }.onPointerEvent(PointerEventType.Exit) { direction = 0f }
+}
+
 /** A floor, so the edge stays reachable on a narrow rail where a fraction would be a few pixels. */
 private const val MIN_EDGE_PIXELS = 48f
