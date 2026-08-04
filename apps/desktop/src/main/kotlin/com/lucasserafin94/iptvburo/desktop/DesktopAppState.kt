@@ -1283,6 +1283,22 @@ class DesktopAppState(
                     movieAppearances
                         .getOrPut(person.lowercase(Locale.ROOT), ::LinkedHashMap)[selected.providerId] = selected
                 }
+                // Most providers leave the trailer field empty even for films that plainly have
+                // one, so without this the button simply never appeared. Looked up after the
+                // details are on screen: the page must not wait on a network call for an extra.
+                if (details.youtubeTrailerId.isNullOrBlank() && metadataClient.isConfigured) {
+                    val found =
+                        withContext(Dispatchers.IO) {
+                            metadataClient.findTrailer(
+                                title = selected.name.editorialCatalogTitle(),
+                                year = selected.year,
+                            )
+                        }
+                    if (found != null && selectedXtreamItemId == selected.providerId) {
+                        movieDetailsStatus =
+                            MovieDetailsStatus.Loaded(details.copy(youtubeTrailerId = found))
+                    }
+                }
             }
         }.onFailure { error ->
             error.rethrowIfCancellation()
@@ -1943,6 +1959,20 @@ internal fun musicPlaybackTitle(track: MusicTrack): String =
 
 internal fun rotatingPageIndex(seed: Int, pageCount: Int): Int =
     Math.floorMod(seed, pageCount.coerceAtLeast(1))
+
+/**
+ * The title as a metadata service would know it.
+ *
+ * "72 Horas em Miami 4K [DV][HDR]" is the provider's shelf label, not a film name: searched
+ * verbatim it matches nothing.
+ */
+internal fun String.editorialCatalogTitle(): String =
+    replace(Regex("""\[[^]]{1,12}]"""), " ")
+        .replace(
+            Regex("""(?i)\b(4k|uhd|fhd|hd|sd|dv|hdr|h\.?265|hevc|multi|dual|leg|dub)\b"""),
+            " ",
+        ).replace(Regex("""\s+"""), " ")
+        .trim()
 
 internal fun editorialCatalogKey(title: String): String =
     title
