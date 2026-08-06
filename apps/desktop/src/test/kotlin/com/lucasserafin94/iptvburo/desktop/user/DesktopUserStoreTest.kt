@@ -163,4 +163,67 @@ class DesktopUserStoreTest {
             node.removeNode()
         }
     }
+
+    @Test
+    fun `each profile keeps its own streaming services`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            val store = DesktopUserStore(node)
+            store.saveProfiles(listOf(DesktopProfile("mine", "Lucas", false), DesktopProfile("theirs", "Ana", false)))
+
+            store.setStreamingPreference(
+                "mine",
+                StoredStreamingPreference(region = "BR", currency = "BRL", subscribedProviderIds = setOf("a", "b")),
+            )
+            store.setStreamingPreference("theirs", StoredStreamingPreference(region = "PT"))
+
+            val reloaded = DesktopUserStore(node)
+            assertEquals(setOf("a", "b"), reloaded.streamingPreference("mine").subscribedProviderIds)
+            assertEquals("BR", reloaded.streamingPreference("mine").region)
+            assertEquals("BRL", reloaded.streamingPreference("mine").currency)
+
+            assertTrue(reloaded.streamingPreference("theirs").subscribedProviderIds.isEmpty())
+            assertEquals("PT", reloaded.streamingPreference("theirs").region)
+            assertEquals(null, reloaded.streamingPreference("theirs").currency)
+        } finally {
+            node.removeNode()
+        }
+    }
+
+    /**
+     * A profile that predates this feature has no stored row. It must come back as "nothing stated",
+     * not as an error and not as a guessed region — guessing would quietly filter the catalogue.
+     */
+    @Test
+    fun `a profile that never opened the screen has no stated preference`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            val store = DesktopUserStore(node)
+            store.saveProfiles(listOf(DesktopProfile("old", "Perfil antigo", false)))
+
+            val stored = DesktopUserStore(node).streamingPreference("old")
+            assertEquals(StoredStreamingPreference(), stored)
+            assertEquals(StoredStreamingPreference(), store.streamingPreference(null))
+        } finally {
+            node.removeNode()
+        }
+    }
+
+    @Test
+    fun `clearing every service is remembered rather than read as unset`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            val store = DesktopUserStore(node)
+            store.saveProfiles(listOf(DesktopProfile("mine", "Lucas", false)))
+            store.setStreamingPreference("mine", StoredStreamingPreference(region = "BR", subscribedProviderIds = setOf("a")))
+
+            store.setStreamingPreference("mine", StoredStreamingPreference(region = "BR"))
+
+            val stored = DesktopUserStore(node).streamingPreference("mine")
+            assertTrue(stored.subscribedProviderIds.isEmpty())
+            assertEquals("BR", stored.region)
+        } finally {
+            node.removeNode()
+        }
+    }
 }

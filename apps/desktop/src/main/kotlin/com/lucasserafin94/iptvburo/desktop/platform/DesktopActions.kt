@@ -1,6 +1,9 @@
 package com.lucasserafin94.iptvburo.desktop.platform
 
 import com.lucasserafin94.iptvburo.domain.model.Channel
+import com.lucasserafin94.iptvburo.domain.model.ExternalContentLauncher
+import com.lucasserafin94.iptvburo.domain.model.ExternalLaunchTarget
+import com.lucasserafin94.iptvburo.domain.model.LaunchDecision
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
@@ -101,8 +104,43 @@ fun openUriExternally(uri: URI): ExternalOpenResult {
     )
 }
 
+/**
+ * Opens a streaming service's own app or website for a title — GDD 9.
+ *
+ * The safety decision is not made here. [ExternalContentLauncher] owns it, in the domain, where it
+ * is tested without a desktop; this function only carries out a decision already made. Keeping the
+ * split means there is no path from a discovery result to `browse()` that skips the checks: a
+ * refused target returns [ExternalOpenResult.Refused] and nothing is opened.
+ *
+ * The app never plays these titles itself. Handing the user to the official service is the whole
+ * feature, and a stream URL reaching this function would mean something upstream got that wrong —
+ * which is why the launcher refuses one rather than opening it.
+ */
+fun openStreamingOfferExternally(target: ExternalLaunchTarget): ExternalOpenResult =
+    when (val decision = ExternalContentLauncher.decide(target)) {
+        is LaunchDecision.OpenApp ->
+            runCatching { URI(decision.uri) }
+                .fold(onSuccess = ::openUriExternally, onFailure = { ExternalOpenResult.Failed })
+
+        is LaunchDecision.OpenWeb ->
+            runCatching { URI(decision.url) }
+                .fold(onSuccess = ::openUriExternally, onFailure = { ExternalOpenResult.Failed })
+
+        is LaunchDecision.Unavailable -> ExternalOpenResult.Refused
+    }
+
 enum class ExternalOpenResult {
     Opened,
     NotSupported,
     Failed,
+
+    /**
+     * The destination was rejected before anything was opened.
+     *
+     * Distinct from [Failed] on purpose: Failed means the system could not open a legitimate
+     * address, Refused means the address should never have been opened at all — a stream, a
+     * credential-bearing URL, a local file. The two want different handling and, if they are ever
+     * surfaced, very different wording.
+     */
+    Refused,
 }

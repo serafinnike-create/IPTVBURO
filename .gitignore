@@ -32,3 +32,9 @@ Thumbs.db
 # Logs and generated release artifacts
 *.log
 artifacts/
+
+# Chromium writes these beside the working directory when the embedded browser runs. They are a
+# SQLite store of per-device media identifiers from the developer's own machine — nothing to do
+# with the product, and not something to publish.
+MediaDeviceSalts
+MediaDeviceSalts-journal

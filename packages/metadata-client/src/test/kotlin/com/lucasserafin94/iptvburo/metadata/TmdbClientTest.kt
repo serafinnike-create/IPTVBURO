@@ -8,6 +8,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -208,5 +209,305 @@ class TmdbClientTest {
         assertEquals("Adam Byard", requested.queryParameter("query"))
         assertEquals("pt-BR", requested.queryParameter("language"))
         assertEquals("false", requested.queryParameter("include_adult"))
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Watch providers (GDD 9)
+    // -------------------------------------------------------------------------------------------
+
+    private fun enqueueSearchHit(id: Int = 42) = server.enqueue(json("""{"results":[{"id":$id}]}"""))
+
+    @Test
+    fun `reads the services carrying a title in one region`() {
+        enqueueSearchHit()
+        server.enqueue(
+            json(
+                """
+                {"id":42,"results":{
+                  "BR":{"link":"https://www.themoviedb.org/movie/42/watch?locale=BR",
+                        "flatrate":[{"provider_id":8,"provider_name":"Service A","logo_path":"/a.jpg"}],
+                        "rent":[{"provider_id":2,"provider_name":"Store A","logo_path":"/b.jpg"}],
+                        "buy":[{"provider_id":3,"provider_name":"Store B"}]},
+                  "US":{"flatrate":[{"provider_id":9,"provider_name":"Service B"}]}}}
+                """.trimIndent(),
+            ),
+        )
+
+        val providers = client().watchProviders("Duna", 2021, "BR")
+
+        assertNotNull(providers)
+        assertEquals("BR", providers.region)
+        assertEquals(listOf("Service A"), providers.subscription.map(TmdbWatchProvider::name))
+        assertEquals(listOf("Store A"), providers.rent.map(TmdbWatchProvider::name))
+        assertEquals(listOf("Store B"), providers.buy.map(TmdbWatchProvider::name))
+        // The other region in the same response must not leak into this one.
+        assertTrue(providers.subscription.none { it.name == "Service B" })
+    }
+
+    /**
+     * The gap that shapes the whole feature: TMDb returns no prices, in any bucket. If this ever
+     * starts failing because a price appeared, the ranking could offer "cheapest rental" again.
+     */
+    @Test
+    fun `rental entries carry no price because the API returns none`() {
+        enqueueSearchHit()
+        server.enqueue(
+            json(
+                """
+                {"results":{"BR":{"rent":[{"provider_id":2,"provider_name":"Store A"}]}}}
+                """.trimIndent(),
+            ),
+        )
+
+        val rental = client().watchProviders("Duna", 2021, "BR")?.rent?.single()
+
+        assertNotNull(rental)
+        assertEquals("Store A", rental.name)
+        // TmdbWatchProvider has no price field at all — there is nothing to read.
+        assertEquals(2, rental.providerId)
+    }
+
+    @Test
+    fun `a region with no listing is unknown rather than unavailable`() {
+        enqueueSearchHit()
+        server.enqueue(json("""{"results":{"US":{"flatrate":[{"provider_id":9,"provider_name":"Service B"}]}}}"""))
+
+        // Null means "we cannot say", which the caller must not render as "not available anywhere".
+        assertNull(client().watchProviders("Duna", 2021, "BR"))
+    }
+
+    @Test
+    fun `a region whose buckets are all empty is treated as unknown`() {
+        enqueueSearchHit()
+        server.enqueue(json("""{"results":{"BR":{"link":"https://example.invalid/watch"}}}"""))
+
+        assertNull(client().watchProviders("Duna", 2021, "BR"))
+    }
+
+    @Test
+    fun `missing buckets do not fail the parse`() {
+        // TMDb omits a bucket entirely rather than sending an empty array.
+        enqueueSearchHit()
+        server.enqueue(json("""{"results":{"BR":{"ads":[{"provider_id":7,"provider_name":"Free Service"}]}}}"""))
+
+        val providers = client().watchProviders("Duna", 2021, "BR")
+
+        assertNotNull(providers)
+        assertEquals(listOf("Free Service"), providers.withAds.map(TmdbWatchProvider::name))
+        assertTrue(providers.subscription.isEmpty())
+        assertTrue(providers.rent.isEmpty())
+    }
+
+    /**
+     * "Free" and "with ads" are different claims. Collapsing them would promise adverts on
+     * something that may have none, so the client keeps them apart.
+     */
+    @Test
+    fun `free and ad-funded are kept apart`() {
+        enqueueSearchHit()
+        server.enqueue(
+            json(
+                """
+                {"results":{"BR":{
+                  "free":[{"provider_id":1,"provider_name":"Free One"}],
+                  "ads":[{"provider_id":2,"provider_name":"Ads One"}]}}}
+                """.trimIndent(),
+            ),
+        )
+
+        val providers = client().watchProviders("Duna", 2021, "BR")
+
+        assertEquals(listOf("Free One"), providers?.free?.map(TmdbWatchProvider::name))
+        assertEquals(listOf("Ads One"), providers?.withAds?.map(TmdbWatchProvider::name))
+    }
+
+    @Test
+    fun `the region is matched regardless of the casing asked for`() {
+        enqueueSearchHit()
+        server.enqueue(json("""{"results":{"BR":{"flatrate":[{"provider_id":8,"provider_name":"Service A"}]}}}"""))
+
+        assertNotNull(client().watchProviders("Duna", 2021, "br"))
+    }
+
+    @Test
+    fun `an unknown title asks nothing further`() {
+        server.enqueue(json("""{"results":[]}"""))
+
+        assertNull(client().watchProviders("Nada", null, "BR"))
+        // Only the search was attempted; no providers call followed.
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `no key means no request at all`() {
+        assertNull(client(apiKey = null).watchProviders("Duna", 2021, "BR"))
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `a blank region is refused before any request`() {
+        assertNull(client().watchProviders("Duna", 2021, "  "))
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `a rate limited response is silent rather than fatal`() {
+        enqueueSearchHit()
+        server.enqueue(MockResponse().setResponseCode(429))
+
+        assertNull(client().watchProviders("Duna", 2021, "BR"))
+    }
+
+    @Test
+    fun `the attribution required by JustWatch is available to callers`() {
+        // Their terms require this on every item showing the data; access is revoked otherwise.
+        assertTrue(WATCH_PROVIDER_ATTRIBUTION.contains("JustWatch"))
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Browsing a service's shelf
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    fun `reads a service's titles with their posters`() {
+        server.enqueue(
+            json(
+                """
+                {"results":[
+                  {"id":1,"title":"Filme Um","release_date":"2021-10-21","poster_path":"/one.jpg",
+                   "overview":"Sinopse","vote_average":7.5},
+                  {"id":2,"title":"Filme Dois","release_date":"2019-03-01","poster_path":"/two.jpg"}]}
+                """.trimIndent(),
+            ),
+        )
+
+        val titles = client().titlesOnProvider(providerId = 8, region = "BR")
+
+        assertEquals(2, titles.size)
+        assertEquals("Filme Um", titles.first().title)
+        assertEquals(2021, titles.first().year)
+        assertEquals("https://images.test/w342/one.jpg", titles.first().posterUrl)
+        assertEquals(7.5, titles.first().rating)
+    }
+
+    @Test
+    fun `the service and region filters reach the request`() {
+        server.enqueue(json("""{"results":[]}"""))
+
+        client().titlesOnProvider(providerId = 8, region = "br")
+
+        val requested = server.takeRequest().requestUrl!!
+        assertEquals("8", requested.queryParameter("with_watch_providers"))
+        // TMDb ignores the provider filter unless watch_region accompanies it.
+        assertEquals("BR", requested.queryParameter("watch_region"))
+        // Newest first, not most popular: a shelf sorted by popularity mixes a 2000 film in among
+        // this year's releases, which is not what "what is on this service" is asking.
+        assertEquals("primary_release_date.desc", requested.queryParameter("sort_by"))
+        assertEquals("false", requested.queryParameter("include_adult"))
+        // Bounded at today, or titles dated years ahead sort to the front and crowd out everything
+        // the user can actually watch.
+        assertNotNull(requested.queryParameter("primary_release_date.lte"))
+    }
+
+    @Test
+    fun `series come from the tv endpoint and read their own field names`() {
+        server.enqueue(
+            json("""{"results":[{"id":5,"name":"Serie Um","first_air_date":"2024-02-01","poster_path":"/s.jpg"}]}"""),
+        )
+
+        val titles = client().titlesOnProvider(8, "BR", kind = TmdbDiscoverKind.SERIES)
+
+        val requested = server.takeRequest().requestUrl!!
+        assertTrue(requested.encodedPath.endsWith("/discover/tv"), "used ${requested.encodedPath}")
+        assertEquals("first_air_date.desc", requested.queryParameter("sort_by"))
+        // `name` and `first_air_date`, not `title` and `release_date`.
+        assertEquals("Serie Um", titles.single().title)
+        assertEquals(2024, titles.single().year)
+        assertTrue(titles.single().isSeries)
+    }
+
+    @Test
+    fun `upcoming asks for releases after today, soonest first`() {
+        server.enqueue(json("""{"results":[]}"""))
+
+        client().titlesOnProvider(8, "BR", kind = TmdbDiscoverKind.UPCOMING)
+
+        val requested = server.takeRequest().requestUrl!!
+        assertEquals("primary_release_date.asc", requested.queryParameter("sort_by"))
+        assertNotNull(requested.queryParameter("primary_release_date.gte"))
+        // No upper bound here — the whole point is titles that have not come out yet.
+        assertNull(requested.queryParameter("primary_release_date.lte"))
+    }
+
+    @Test
+    fun `a title without a poster is still listed`() {
+        server.enqueue(json("""{"results":[{"id":1,"title":"Sem Capa"}]}"""))
+
+        val title = client().titlesOnProvider(providerId = 8, region = "BR").single()
+
+        assertEquals("Sem Capa", title.title)
+        assertNull(title.posterUrl)
+        assertNull(title.year)
+    }
+
+    @Test
+    fun `a shelf is capped at the requested size`() {
+        val many = (1..40).joinToString(",") { """{"id":$it,"title":"Filme $it"}""" }
+        server.enqueue(json("""{"results":[$many]}"""))
+
+        assertEquals(5, client().titlesOnProvider(providerId = 8, region = "BR", limit = 5).size)
+    }
+
+    @Test
+    fun `an empty shelf is empty rather than an error`() {
+        server.enqueue(json("""{"results":[]}"""))
+
+        assertTrue(client().titlesOnProvider(providerId = 8, region = "BR").isEmpty())
+    }
+
+    @Test
+    fun `a failed shelf request is silent`() {
+        server.enqueue(MockResponse().setResponseCode(429))
+
+        assertTrue(client().titlesOnProvider(providerId = 8, region = "BR").isEmpty())
+    }
+
+    @Test
+    fun `no key means no shelf request`() {
+        assertTrue(client(apiKey = null).titlesOnProvider(providerId = 8, region = "BR").isEmpty())
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `the provider directory comes back in TMDb's own priority order`() {
+        server.enqueue(
+            json(
+                """
+                {"results":[
+                  {"provider_id":3,"provider_name":"Third","display_priority":30},
+                  {"provider_id":1,"provider_name":"First","display_priority":10},
+                  {"provider_id":2,"provider_name":"Second","display_priority":20}]}
+                """.trimIndent(),
+            ),
+        )
+
+        val directory = client().watchProviderDirectory("BR")
+
+        assertEquals(listOf("First", "Second", "Third"), directory.map(TmdbWatchProvider::name))
+    }
+
+    @Test
+    fun `a directory entry missing its priority sorts last rather than failing`() {
+        server.enqueue(
+            json(
+                """
+                {"results":[
+                  {"provider_id":1,"provider_name":"No Priority"},
+                  {"provider_id":2,"provider_name":"First","display_priority":5}]}
+                """.trimIndent(),
+            ),
+        )
+
+        assertEquals(listOf("First", "No Priority"), client().watchProviderDirectory("BR").map(TmdbWatchProvider::name))
     }
 }

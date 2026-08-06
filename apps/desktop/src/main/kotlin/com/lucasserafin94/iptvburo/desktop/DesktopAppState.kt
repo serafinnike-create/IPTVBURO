@@ -31,6 +31,7 @@ import com.lucasserafin94.iptvburo.desktop.user.ProfilePhotoStore
 import com.lucasserafin94.iptvburo.metadata.TmdbClient
 import com.lucasserafin94.iptvburo.desktop.build.BUNDLED_TMDB_KEY
 import com.lucasserafin94.iptvburo.desktop.download.DesktopDownloadManager
+import com.lucasserafin94.iptvburo.desktop.download.DownloadRateTracker
 import com.lucasserafin94.iptvburo.desktop.download.DownloadResult
 import com.lucasserafin94.iptvburo.desktop.download.FailureReason
 import com.lucasserafin94.iptvburo.desktop.download.StoredDownload
@@ -60,8 +61,25 @@ import com.lucasserafin94.iptvburo.domain.model.PlaybackContentType
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressIdentity
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgress
 import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
+import com.lucasserafin94.iptvburo.domain.model.BestOfferPolicy
+import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
+import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
+import com.lucasserafin94.iptvburo.domain.model.HeroCandidate
+import com.lucasserafin94.iptvburo.domain.model.HeroSelection
+import com.lucasserafin94.iptvburo.domain.model.LibraryCandidate
+import com.lucasserafin94.iptvburo.domain.model.LibraryOfferPolicy
+import com.lucasserafin94.iptvburo.domain.model.asExternalCandidate
+import com.lucasserafin94.iptvburo.domain.model.asLibraryCandidate
+import com.lucasserafin94.iptvburo.domain.model.OfferRanking
 import com.lucasserafin94.iptvburo.domain.model.SeasonalCollection
 import com.lucasserafin94.iptvburo.domain.model.SeasonalCollections
+import com.lucasserafin94.iptvburo.domain.model.StreamingDiscoveryCapability
+import com.lucasserafin94.iptvburo.domain.model.StreamingDiscoveryProvider
+import com.lucasserafin94.iptvburo.domain.model.UserStreamingPreference
+import com.lucasserafin94.iptvburo.desktop.data.TmdbServiceShelf
+import com.lucasserafin94.iptvburo.metadata.TmdbDiscoverKind
+import com.lucasserafin94.iptvburo.desktop.data.TmdbStreamingCatalogue
+import com.lucasserafin94.iptvburo.domain.model.ExternalTitle
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
 import com.lucasserafin94.iptvburo.xtream.XtreamClientException
@@ -151,7 +169,15 @@ class DesktopAppState(
         userStore.setMetadataApiKey(value)
         // Falling back to the bundled key rather than to nothing: clearing the field should restore
         // the default behaviour, not switch cast photos off entirely.
-        metadataClient = TmdbClient(value.takeIf(String::isNotBlank) ?: BUNDLED_TMDB_KEY.ifBlank { null })
+        val effectiveKey = value.takeIf(String::isNotBlank) ?: BUNDLED_TMDB_KEY.ifBlank { null }
+        metadataClient = TmdbClient(effectiveKey)
+        // Assinaturas has its own client and would otherwise keep using the previous key: pasting a
+        // personal key fixed cast photos while leaving the shelves on the old one, which is exactly
+        // the kind of half-applied setting a user cannot diagnose.
+        streamingCatalogue = buildStreamingCatalogue(effectiveKey, streamingRegion)
+        shelfCache.clear()
+        streamingShelves = emptyList()
+        loadStreamingShelves(force = true)
     }
     /**
      * Photo chosen during setup, before the profile it belongs to exists.
@@ -840,6 +866,352 @@ class DesktopAppState(
         loadMusicLibrary()
     }
 
+    /**
+     * Whether the Assinaturas area may be shown, and in what state.
+     *
+     * AVAILABLE once a metadata key is configured, since that is what lets TMDb answer "what is on
+     * this service" for real. Without a key there is no catalogue, real or otherwise, and the entry
+     * disappears rather than opening onto nothing.
+     *
+     * The DEMO_ONLY state remains reachable through [demoStreamingProvider], but nothing sets it in
+     * a shipping build any more — it exists so the screen can be exercised without a key.
+     */
+    val streamingDiscoveryCapability: StreamingDiscoveryCapability
+        get() =
+            StreamingDiscoveryCapability.of(
+                hasRealProvider = streamingCatalogue != null,
+                hasFixtureProvider = demoStreamingProvider != null,
+            )
+
+    /**
+     * The region whose services and availability are shown.
+     *
+     * Per profile, because a household can span countries and the catalogues genuinely differ.
+     * Defaults to Brazil rather than being guessed from the machine's locale: pt-BR and pt-PT are
+     * different catalogues, and someone reading Italian may well be in Switzerland.
+     */
+    var streamingRegion by mutableStateOf(
+        userStore.streamingPreference(initialUserSnapshot.activeProfileId).region
+            ?: TmdbStreamingCatalogue.DEFAULT_REGION,
+    )
+        private set
+
+    /**
+     * Where shelf loading runs.
+     *
+     * Its own scope, declared *above* the functions that use it. `downloadScope` is defined near the
+     * bottom of this class, and a property is null until its own initialiser runs — so launching on
+     * it from here left the shelves silently empty, the failure swallowed by the surrounding
+     * runCatching. Same reason it is not a composable's scope: leaving the screen mid-load must not
+     * cancel the work and strand the section empty.
+     */
+    private val streamingScope =
+        kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.SupervisorJob() + Dispatchers.Default,
+        )
+
+    /** Measures how fast each download is going, so the row can say more than a percentage. */
+    private val rateTracker = DownloadRateTracker()
+
+    /**
+     * The real catalogue, or null when no metadata key is configured.
+     *
+     * Rebuilt whenever the key or the region changes, since both are baked into every request it
+     * makes.
+     */
+    private var streamingCatalogue: TmdbStreamingCatalogue? =
+        buildStreamingCatalogue(userStore.metadataApiKey() ?: BUNDLED_TMDB_KEY.ifBlank { null }, streamingRegion)
+
+    private fun buildStreamingCatalogue(
+        key: String?,
+        region: String,
+    ): TmdbStreamingCatalogue? =
+        key?.takeIf(String::isNotBlank)?.let { configured ->
+            TmdbStreamingCatalogue(client = TmdbClient(configured), region = region)
+        }
+
+    /**
+     * The demo catalogue, kept only for builds with no key at all.
+     *
+     * Null in the ordinary case. When it is not null the capability becomes DEMO_ONLY, which forces
+     * the DEMO badge onto every row — there is no state where invented listings appear unlabelled.
+     */
+    private val demoStreamingProvider: StreamingDiscoveryProvider? = null
+
+    /**
+     * The offers to show, ranked. Empty until a title is opened.
+     *
+     * Ranked through [BestOfferPolicy] with the profile's own stated services, so the ordering the
+     * user sees is the ordering the policy decided — the screen never re-sorts.
+     */
+    var streamingOffers by mutableStateOf(OfferRanking.EMPTY)
+        private set
+
+    /** The service shelves, once loaded. Empty while loading and when nothing is available. */
+    var streamingShelves by mutableStateOf<List<TmdbServiceShelf>>(emptyList())
+        private set
+
+    /** Which kind of title the shelves are showing. */
+    var streamingKind by mutableStateOf(TmdbDiscoverKind.MOVIES)
+        private set
+
+    /**
+     * Shelves already fetched, by kind, so switching back and forth is instant.
+     *
+     * Each kind is a full round of requests — one per service — and re-fetching on every tap of a
+     * filter would make the buttons feel broken on a slow connection.
+     */
+    private val shelfCache = mutableMapOf<TmdbDiscoverKind, List<TmdbServiceShelf>>()
+
+    /** Switches the shelves between films, series and upcoming releases. */
+    fun selectStreamingKind(kind: TmdbDiscoverKind) {
+        if (kind == streamingKind) return
+        streamingKind = kind
+        // Shown at once if already fetched; otherwise the shelves empty and the loader fills them,
+        // which reads as a load rather than as the previous kind lingering under a new label.
+        streamingShelves = shelfCache[kind].orEmpty()
+        loadStreamingShelves()
+    }
+
+    var streamingLoading by mutableStateOf(false)
+        private set
+
+    /**
+     * Loads the shelves for the current region.
+     *
+     * Runs on [downloadScope] rather than a composable's own scope: leaving the screen mid-load
+     * used to cancel the work and leave the section permanently empty, which is the bug that cost a
+     * day on downloads. Skips when shelves are already loaded, so revisiting the section is
+     * instant and does not re-hit TMDb.
+     */
+    fun loadStreamingShelves(force: Boolean = false) {
+        // Each of these returns used to be silent, so "nothing happened" and "nothing to do" looked
+        // identical from outside — which is how an empty section survived two builds.
+        val catalogue = streamingCatalogue
+        if (catalogue == null) {
+            println("[streaming] no catalogue: metadata key missing or blank")
+            return
+        }
+        if (streamingLoading) {
+            println("[streaming] already loading, skipping")
+            return
+        }
+        val kind = streamingKind
+        if (!force && shelfCache[kind]?.isNotEmpty() == true) {
+            println("[streaming] $kind already cached, skipping")
+            return
+        }
+        println("[streaming] loading $kind shelves for region $streamingRegion")
+
+        streamingLoading = true
+        streamingScope.launch {
+            val loaded =
+                runCatching { catalogue.shelves(kind) }
+                    .onFailure { error ->
+                        // Printed rather than swallowed. An empty section and a crashed load look
+                        // identical on screen, and this one hid a null scope for a whole build.
+                        // The message carries no URL or key — only the failure type.
+                        println("[streaming] shelf load failed: ${error::class.simpleName}: ${error.message}")
+                    }.getOrDefault(emptyList())
+            println("[streaming] loaded ${loaded.size} $kind shelves")
+            shelfCache[kind] = loaded
+            // Only if the user has not switched filters while this was in flight — otherwise a slow
+            // request would overwrite the shelves they are now looking at.
+            if (streamingKind != kind) return@launch
+            // Assigned directly, not through withContext(Dispatchers.Main). Compose Desktop has no
+            // Main dispatcher unless kotlinx-coroutines-swing is on the classpath, so that call
+            // never ran its body: the shelves loaded, the log said so, and the screen stayed empty
+            // because the state was never actually set. Snapshot state is safe to write from any
+            // thread; every other loader in this class does the same.
+            run {
+                streamingShelves = loaded
+                streamingLoading = false
+            }
+        }
+    }
+
+    /**
+     * Switches region, which changes both the services shown and their availability.
+     *
+     * Named `changeStreamingRegion` rather than `setStreamingRegion` because the latter collides on
+     * the JVM with the generated setter for [streamingRegion].
+     */
+    fun changeStreamingRegion(region: String) {
+        val clean = region.trim().uppercase().takeIf(String::isNotBlank) ?: return
+        if (clean == streamingRegion) return
+
+        streamingRegion = clean
+        activeProfileId?.let { profileId ->
+            val stored = userStore.streamingPreference(profileId)
+            userStore.setStreamingPreference(profileId, stored.copy(region = clean))
+        }
+        streamingCatalogue =
+            buildStreamingCatalogue(userStore.metadataApiKey() ?: BUNDLED_TMDB_KEY.ifBlank { null }, clean)
+        // The old region's shelves are wrong now, so they go rather than lingering under a new
+        // label — including the cached ones for the filters the user is not currently looking at.
+        shelfCache.clear()
+        streamingShelves = emptyList()
+        streamingOffers = OfferRanking.EMPTY
+        loadStreamingShelves(force = true)
+    }
+
+    /**
+     * Opens the Assinaturas area and ranks the offers for [title].
+     *
+     * The user's own catalogue is searched first, so "you already have this" can outrank every paid
+     * option — the one answer no comparison site can give. Only a confident match produces that
+     * row; see [LibraryOfferPolicy].
+     */
+    fun showStreamingOffers(title: ExternalTitleDetails) {
+        val withLibrary =
+            LibraryOfferPolicy.withLibraryOffer(
+                offers = title.offers,
+                external = title.title.asExternalCandidate(),
+                library = libraryMatchCandidates(),
+            )
+        streamingOffers = BestOfferPolicy.rank(withLibrary, streamingPreference)
+        selectedStreamingTitle = title
+        destination = DesktopDestination.SUBSCRIPTIONS
+    }
+
+    /**
+     * Opens a title picked off a service's shelf, fetching where it can be watched.
+     *
+     * The shelf only knows the film; the availability is a second call. The user's own library is
+     * consulted locally and shown immediately, so "you already have this" never waits on the
+     * network — and still stands if TMDb says nothing.
+     */
+    fun openStreamingTitle(title: ExternalTitle) {
+        val catalogue = streamingCatalogue ?: return
+        val candidate = title.asExternalCandidate()
+
+        // Shown at once from what is already known locally, then replaced when the network answers.
+        val localOnly = LibraryOfferPolicy.withLibraryOffer(emptyList(), candidate, libraryMatchCandidates())
+        selectedStreamingTitle = ExternalTitleDetails(title = title, offers = localOnly)
+        streamingOffers = BestOfferPolicy.rank(localOnly, streamingPreference)
+        destination = DesktopDestination.SUBSCRIPTIONS
+        streamingLoading = true
+
+        streamingScope.launch {
+            val details = runCatching { catalogue.detailsFor(title) }.getOrNull()
+            val offers =
+                LibraryOfferPolicy.withLibraryOffer(
+                    offers = details?.offers.orEmpty(),
+                    external = candidate,
+                    library = libraryMatchCandidates(),
+                )
+            // Direct, for the same reason as the shelves above: there is no Main dispatcher here.
+            selectedStreamingTitle = ExternalTitleDetails(title = title, offers = offers)
+            streamingOffers = BestOfferPolicy.rank(offers, streamingPreference)
+            streamingLoading = false
+        }
+    }
+
+    /** The title whose offers are on screen, so the local copy can be resolved when pressed. */
+    var selectedStreamingTitle by mutableStateOf<ExternalTitleDetails?>(null)
+        private set
+
+    /**
+     * Opens the user's own copy of the title currently on screen, on its details page.
+     *
+     * Returns false when there is no confident match — the same bar the "in your list" row is shown
+     * behind, so a row that appears always leads somewhere.
+     */
+    fun openInLibrary(): Boolean {
+        val title = selectedStreamingTitle ?: return false
+        val found =
+            LibraryOfferPolicy.findInLibrary(
+                external = title.title.asExternalCandidate(),
+                library = libraryMatchCandidates(),
+            ) ?: return false
+        // "MOVIE:1234" — the content type is carried because provider ids are numbered per
+        // catalogue and a bare one cannot say which list it came from.
+        val contentType =
+            runCatching { XtreamContentType.valueOf(found.localContentId.substringBefore(':')) }.getOrNull()
+                ?: return false
+        val providerId = found.localContentId.substringAfter(':').takeIf(String::isNotBlank) ?: return false
+        val item = xtreamRepository.itemByProviderId(contentType, providerId) ?: return false
+
+        // Opened, not played. Starting the film the instant the row is pressed skips the synopsis,
+        // the cast and the episode list — everything the user opened the title to read. They press
+        // play from that page when they have decided, which is one more click and a much better
+        // answer to "is this the film I meant?".
+        //
+        // This applies to films as much as to series: a series has no single stream to start, and a
+        // film has a page worth seeing first.
+        // selectDailyItem, not selectedXtreamItemId alone. selectedXtreamItem resolves against
+        // xtreamPage — one page of eighty — so a title from anywhere else in a 40,000-item
+        // catalogue was not found there and fell through to `firstOrNull()`, opening whatever
+        // happened to be first on the page. This is the same route the home screen's rails use for
+        // exactly that reason.
+        selectDailyItem(item)
+        xtreamContentType = contentType
+        destination = DesktopDestination.CATALOG
+        // The details page is opened by the catalogue screen, whose "is it open" flag is its own
+        // local state. Without this the navigation landed on the grid instead — the item was
+        // selected, but nothing told the screen to show it.
+        pendingDetailsRequest = providerId
+        return true
+    }
+
+    /**
+     * A provider id whose details page should open as soon as the catalogue screen is composed.
+     *
+     * Consumed once by that screen and cleared, so returning to the catalogue later does not
+     * re-open a page the user has already dismissed.
+     */
+    var pendingDetailsRequest by mutableStateOf<String?>(null)
+        private set
+
+    fun consumePendingDetailsRequest(): String? = pendingDetailsRequest?.also { pendingDetailsRequest = null }
+
+    /**
+     * The local catalogue in the terms matching needs.
+     *
+     * Live channels are dropped: a channel is a stream, not a work, and matching one against a film
+     * would only ever produce noise.
+     */
+    /**
+     * The whole loaded catalogue in the terms matching needs.
+     *
+     * Asked of the repository, not of [selectedCatalog]: that holds one page of eighty items, so
+     * matching against it answered "you do not have this" for almost every title the user actually
+     * owns. The question is about the library, so it has to be asked of the library.
+     */
+    private fun libraryMatchCandidates(): List<LibraryCandidate> =
+        runCatching { xtreamRepository.libraryMatchCandidates() }.getOrDefault(emptyList())
+
+    /** Opens the Assinaturas area at its shelves, loading them if this is the first visit. */
+    fun openSubscriptions() {
+        favoritesOnly = false
+        streamingOffers = OfferRanking.EMPTY
+        selectedStreamingTitle = null
+        destination = DesktopDestination.SUBSCRIPTIONS
+        loadStreamingShelves()
+    }
+
+    /**
+     * The active profile's stated streaming services, in the form the ranking policy consumes.
+     *
+     * A statement by the user, never a verified entitlement — see [StoredStreamingPreference]. Read
+     * fresh rather than cached because switching profile must switch the answer.
+     */
+    val streamingPreference: UserStreamingPreference
+        get() =
+            userStore.streamingPreference(activeProfileId).let { stored ->
+                UserStreamingPreference(
+                    subscribedProviderIds = stored.subscribedProviderIds,
+                    preferredCurrency = stored.currency,
+                )
+            }
+
+    /** Records which services this profile says it pays for. */
+    fun setStreamingServices(providerIds: Set<String>) {
+        val profileId = activeProfileId ?: return
+        val stored = userStore.streamingPreference(profileId)
+        userStore.setStreamingPreference(profileId, stored.copy(subscribedProviderIds = providerIds))
+    }
+
     /** Opens the music workspace at its home section. */
     fun openMusic() {
         favoritesOnly = false
@@ -1347,7 +1719,16 @@ class DesktopAppState(
         liveEpgStatus = LiveEpgStatus.Idle
     }
 
-    suspend fun loadDailyHome(date: LocalDate = LocalDate.now()) {
+    suspend fun loadDailyHome(
+        date: LocalDate = LocalDate.now(),
+        /**
+         * Reports the slow parts of building the home, for the splash screen.
+         *
+         * Defaulted away because every other caller — a date change, a manual refresh — happens
+         * behind an already-drawn screen with no bar to move.
+         */
+        onCatalogueStage: (progress: Float, message: String) -> Unit = { _, _ -> },
+    ) {
         if (dailyHomeStatus is DailyHomeStatus.Loading) return
         val existing = dailyHomeStatus as? DailyHomeStatus.Loaded
         if (existing?.snapshot?.date == date && existing.snapshot.sourceId == xtreamSummary?.sourceId) return
@@ -1366,21 +1747,51 @@ class DesktopAppState(
                 // stale copy, believed the catalogues were still missing - or already present when
                 // they were not - and paged an empty catalogue into empty shelves.
                 var latestSummary = xtreamRepository.summary() ?: xtreamSummary
+                // These two are the slowest part of a cold start by a wide margin — each pulls a
+                // provider's entire catalogue, and a large list is tens of thousands of items. They
+                // report themselves so the splash does not sit on one number for the whole wait.
                 if (XtreamContentType.MOVIE !in latestSummary?.loadedContentTypes.orEmpty()) {
+                    onCatalogueStage(0.75f, "Baixando a lista de filmes…")
                     latestSummary = xtreamRepository.loadCatalog(XtreamContentType.MOVIE)
                 }
                 if (XtreamContentType.SERIES !in latestSummary?.loadedContentTypes.orEmpty()) {
+                    onCatalogueStage(0.88f, "Baixando a lista de séries…")
                     latestSummary = xtreamRepository.loadCatalog(XtreamContentType.SERIES)
                 }
+                onCatalogueStage(0.96f, "Montando a tela inicial…")
                 val kidsMode = activeProfile?.isKids == true
                 val movies = dailyPage(XtreamContentType.MOVIE, date.dayOfYear * 31 + date.year, kidsMode, 18)
                 val series = dailyPage(XtreamContentType.SERIES, date.dayOfYear * 17 + date.year, kidsMode, 18)
                 val live = dailyPage(XtreamContentType.LIVE, date.dayOfYear * 7 + date.year, kidsMode, 14)
-                val heroPool = (movies + series).filter { !it.artworkUrl.isNullOrBlank() }
+                // Scored rather than picked by date arithmetic. The old rule was
+                // `dayOfYear % poolSize`, which changed daily and did nothing else — it could put
+                // an unrated piece of catalogue filler in the largest slot on the screen.
+                val heroRotation =
+                    HeroSelection.rotationFor(
+                        candidates =
+                            (movies + series).map { item ->
+                                HeroCandidate(
+                                    id = "${item.contentType}:${item.providerId}",
+                                    title = item.name,
+                                    year = item.year,
+                                    rating = item.rating,
+                                    hasArtwork = !item.artworkUrl.isNullOrBlank(),
+                                )
+                            },
+                        dayOfEpoch = date.toEpochDay(),
+                    )
+                val heroPool =
+                    heroRotation.mapNotNull { chosen ->
+                        (movies + series).firstOrNull { item ->
+                            "${item.contentType}:${item.providerId}" == chosen.id
+                        }
+                    }
                 DailyHomeSnapshot(
                     sourceId = sourceId,
                     date = date,
-                    hero = heroPool.getOrNull(Math.floorMod(date.toEpochDay(), heroPool.size.coerceAtLeast(1).toLong()).toInt()),
+                    // First of the rotation, already scored and ordered by HeroSelection.
+                    hero = heroPool.firstOrNull(),
+                    heroRotation = heroPool,
                     movies = movies,
                     series = series,
                     live = live,
@@ -1485,7 +1896,16 @@ class DesktopAppState(
         }
     }
 
-    suspend fun connectXtream(input: XtreamLoginInput) {
+    suspend fun connectXtream(
+        input: XtreamLoginInput,
+        /**
+         * Reports what the connection is doing, for the splash screen.
+         *
+         * Defaulted so the ordinary login path — where the user is watching a form, not a progress
+         * bar — needs no callback of its own.
+         */
+        onProgress: (fraction: Float, stage: SessionXtreamRepository.XtreamLoadStage) -> Unit = { _, _ -> },
+    ) {
         if (xtreamStatus is XtreamStatus.Connecting) {
             input.clear()
             return
@@ -1503,7 +1923,7 @@ class DesktopAppState(
         try {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    xtreamRepository.authenticateAndLoadInitial(input)
+                    xtreamRepository.authenticateAndLoadInitial(input, onProgress)
                 }
             }.onSuccess { summary ->
                 // A transient DPAPI/filesystem problem must not discard an already authenticated
@@ -1575,6 +1995,26 @@ class DesktopAppState(
         startupMessage = message
     }
 
+    /**
+     * Moves the bar *inside* one phase, between [from] and [to].
+     *
+     * The connect phase alone can take most of a slow start, and a bar parked at one value for that
+     * long reads as a hang however honest the label is. [fraction] is the phase's own 0..1.
+     *
+     * Never goes backwards: phases report their own progress and a later one starting at 0 would
+     * otherwise yank the bar left, which looks like a failure and a restart.
+     */
+    private fun startupProgressWithin(
+        from: Float,
+        to: Float,
+        fraction: Float,
+        message: String,
+    ) {
+        val target = from + (to - from) * fraction.coerceIn(0f, 1f)
+        startupProgress = maxOf(startupProgress, target).coerceIn(0f, 1f)
+        startupMessage = message
+    }
+
     suspend fun restoreRememberedXtream() {
         try {
             // Before the early return below: a returning user whose session is already open still
@@ -1586,13 +2026,35 @@ class DesktopAppState(
             downloadManager.discardInterruptedDownloads()
             startupStep(1, "Abrindo a sua sessão…")
             val input = withContext(Dispatchers.IO) { rememberedXtreamStore.load() } ?: return
-            startupStep(2, "Conectando ao provedor…")
-            connectXtream(input)
+
+            // The connect phase is four network round trips and used to sit under one unchanging
+            // message, which on a slow provider is indistinguishable from a hang. It now reports
+            // each one, and the bar moves within the phase rather than between phases.
+            connectXtream(input) { fraction, stage ->
+                startupProgressWithin(
+                    from = 0.2f,
+                    to = 0.7f,
+                    fraction = fraction,
+                    message =
+                        when (stage) {
+                            is SessionXtreamRepository.XtreamLoadStage.Authenticating -> "Autenticando…"
+                            is SessionXtreamRepository.XtreamLoadStage.Categories ->
+                                when (stage.contentType) {
+                                    XtreamContentType.LIVE -> "Carregando categorias de canais…"
+                                    XtreamContentType.MOVIE -> "Carregando categorias de filmes…"
+                                    XtreamContentType.SERIES -> "Carregando categorias de séries…"
+                                }
+                            is SessionXtreamRepository.XtreamLoadStage.Channels -> "Carregando canais…"
+                        },
+                )
+            }
             // The home is built from the catalogue, so loading it here means the first screen is
             // complete when the splash clears rather than filling in afterwards.
             if (xtreamStatus !is XtreamStatus.Error) {
-                startupStep(3, "Carregando filmes e séries…")
-                loadDailyHome(LocalDate.now())
+                startupStep(4, "Organizando filmes e séries…")
+                loadDailyHome(LocalDate.now()) { progress, message ->
+                    startupProgressWithin(from = progress, to = progress, fraction = 1f, message = message)
+                }
                 startupStep(5, "Pronto")
             }
         } finally {
@@ -1987,12 +2449,24 @@ class DesktopAppState(
                 containerExtension = containerExtension,
             ) { read, total ->
                 val fraction = if (total != null && total > 0L) read.toFloat() / total else -1f
-                downloads = downloads + (contentKey to DownloadState.Running(fraction))
+                downloads =
+                    downloads + (
+                        contentKey to
+                            DownloadState.Running(
+                                fraction = fraction,
+                                bytesPerSecond = rateTracker.observe(contentKey, read),
+                                downloadedBytes = read,
+                                totalBytes = total ?: -1L,
+                            )
+                    )
             }
         // A refused duplicate must not touch the state: the download already in flight owns this
         // key, and overwriting its Running progress with Failed made the first copy look broken
         // while it was still downloading perfectly well.
         if (result is DownloadResult.Failed && result.reason == FailureReason.ALREADY_RUNNING) return
+        // Dropped whatever the outcome, so a retry measures itself rather than inheriting the rate
+        // of the attempt that failed.
+        rateTracker.forget(contentKey)
         downloads =
             downloads + (
                 contentKey to
@@ -2417,7 +2891,7 @@ enum class CatalogLayout(val id: String) {
     }
 }
 
-enum class DesktopDestination { HOME, CATALOG, FAVORITES, DOWNLOADS, CONTINUE, MUSIC }
+enum class DesktopDestination { HOME, CATALOG, FAVORITES, DOWNLOADS, CONTINUE, MUSIC, SUBSCRIPTIONS }
 
 /** Sections of the music workspace, mirroring the sidebar's own ordering. */
 enum class MusicSection { HOME, ARTISTS, PLAYLISTS, RADIO, DOWNLOADS }
@@ -2450,6 +2924,13 @@ data class DailyHomeSnapshot(
     val sourceId: String,
     val date: LocalDate,
     val hero: XtreamCatalogItem?,
+    /**
+     * The banner rotation, best first — [hero] is simply its first entry.
+     *
+     * Several rather than one so the banner can cycle: a single daily pick meant the same image all
+     * day, and a user who came back an hour later saw nothing new on the largest surface in the app.
+     */
+    val heroRotation: List<XtreamCatalogItem> = emptyList(),
     val movies: List<XtreamCatalogItem>,
     val series: List<XtreamCatalogItem>,
     val live: List<XtreamCatalogItem>,
@@ -2605,8 +3086,28 @@ sealed interface LiveEpgStatus {
 sealed interface DownloadState {
     data object Idle : DownloadState
 
-    /** [fraction] is negative when the server did not report a content length. */
-    data class Running(val fraction: Float) : DownloadState
+    /**
+     * [fraction] is negative when the server did not report a content length.
+     *
+     * The rest is what makes a long transfer bearable: a bar that only moves says nothing about
+     * whether the download is healthy, and a stalled one looks identical to a slow one. The speed
+     * answers "is it working", the remaining time answers "should I wait".
+     */
+    data class Running(
+        val fraction: Float,
+        val bytesPerSecond: Long = 0L,
+        val downloadedBytes: Long = 0L,
+        val totalBytes: Long = -1L,
+    ) : DownloadState {
+        /** Seconds left at the current rate, or null when it cannot be known. */
+        val secondsRemaining: Long?
+            get() =
+                if (totalBytes > 0 && bytesPerSecond > 0 && downloadedBytes in 0 until totalBytes) {
+                    (totalBytes - downloadedBytes) / bytesPerSecond
+                } else {
+                    null
+                }
+    }
 
     data object Completed : DownloadState
 

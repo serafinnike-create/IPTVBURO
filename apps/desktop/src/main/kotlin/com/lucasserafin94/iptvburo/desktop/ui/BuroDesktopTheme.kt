@@ -123,6 +123,20 @@ object BuroScrim {
             0f to Color.Transparent,
             1f to BuroColors.Canvas.copy(alpha = 0.94f),
         )
+
+    /**
+     * The mirror of [cardFooter], for a badge pinned to the top of artwork.
+     *
+     * A badge over a poster is the classic contrast failure: the artwork's brightness is unknown, so
+     * a chip that reads cleanly on a dark cover can vanish on a bright one. Darkening the strip the
+     * badge occupies makes it legible regardless of what is behind it, without dimming the whole
+     * poster the way a full-card overlay would.
+     */
+    fun badgeHeader(): Brush =
+        Brush.verticalGradient(
+            0f to BuroColors.Canvas.copy(alpha = 0.86f),
+            1f to Color.Transparent,
+        )
 }
 
 private val BuroScheme =

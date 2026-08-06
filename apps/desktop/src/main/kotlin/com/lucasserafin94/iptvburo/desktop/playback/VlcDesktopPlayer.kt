@@ -59,8 +59,18 @@ class VlcDesktopPlayer {
     @Volatile
     private var everPlayed = false
 
+    /** Last state printed, so the poll does not log the same word twice a second. */
+    private var lastLoggedState: String? = null
+
     /** One silent retry per player, for the cold-start stall described in pollState. */
-    private val firstRetryUsed = AtomicBoolean(false)
+    /**
+     * How many silent restarts this media has been given.
+     *
+     * One was not always enough: the device and the surface can both still be settling four seconds
+     * in, and a single retry then failed the same way the first attempt did. Three attempts spread
+     * over about twelve seconds cover it without the user ever seeing a retry happen.
+     */
+    private val startRetries = java.util.concurrent.atomic.AtomicInteger(0)
 
     /** The request currently playing, so the retry knows what to re-open. */
     @Volatile
@@ -225,6 +235,9 @@ class VlcDesktopPlayer {
         }.onSuccess {
             mediaStartedAt = System.currentTimeMillis()
             everPlayed = false
+            // Per media, not per player: without this the second title of a session inherits the
+            // first one's exhausted retries and gets none of its own.
+            startRetries.set(0)
             snapshot = snapshot.copy(errorMessage = null, loading = true, ended = false)
         }.onFailure {
             // Leaving `loading` set here is what stranded the spinner: the poll task cannot
@@ -326,6 +339,10 @@ class VlcDesktopPlayer {
         // no error, and renders nowhere. That is the intermittent black screen that a close and
         // reopen "fixed": the second attempt happened to win the race.
         val windowHandle = awaitComponentHandle(canvas)
+        // Handle and surface size, never the input. A zero handle or a zero-sized canvas is the
+        // difference between "VLC is running and drawing nowhere" and "VLC never started", and
+        // from outside the two look identical: a black window with 00:00 / 00:00.
+        println("[player] starting: handle=$windowHandle surface=${canvas.width}x${canvas.height}")
         val child =
             ProcessBuilder(
                 executable.absolutePath,
@@ -350,6 +367,10 @@ class VlcDesktopPlayer {
                 "--avcodec-hw=none",
                 "--quiet",
             ).directory(executable.parentFile)
+                // Discarded on purpose: VLC logs the MRL it was given, and for a provider source
+                // that string carries the username and password. A log file of those is exactly
+                // what this project's credential rules forbid, so failures are diagnosed through
+                // the status the control interface reports instead.
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .redirectError(ProcessBuilder.Redirect.DISCARD)
                 .start()
@@ -403,6 +424,13 @@ class VlcDesktopPlayer {
         runCatching {
             val status = control.status()
             val stateName = status.string("state")?.lowercase()
+            // The state name and length only — never the input, which for a provider source carries
+            // the credentials. Enough to tell "never started" from "started and stopped", which is
+            // the distinction that has cost the most time here.
+            if (stateName != lastLoggedState) {
+                lastLoggedState = stateName
+                println("[player] state=$stateName length=${status.long("length")}")
+            }
             val playing = stateName == "playing"
             val paused = stateName == "paused"
             val ready = playing || paused || stateName == "stopped"
@@ -415,11 +443,17 @@ class VlcDesktopPlayer {
             // the Direct3D device and attach it to a surface Compose is still settling, and the
             // second attempt worked only because that work was already done. Retried once,
             // silently, which is exactly what the user was doing by hand.
+            // Any state that is not playback counts, not just "stopped". A start that hangs in
+            // "opening" never reaches "stopped", so the retry never fired and the window stayed
+            // black indefinitely — the case a user hit on a downloaded episode that VLC could open
+            // perfectly well from a command line.
             if (
                 !everPlayed &&
-                stateName == "stopped" &&
+                !playing &&
+                !paused &&
                 System.currentTimeMillis() - mediaStartedAt > FIRST_START_RETRY_MILLIS &&
-                firstRetryUsed.compareAndSet(false, true)
+                startRetries.get() < MAX_START_RETRIES &&
+                startRetries.incrementAndGet() <= MAX_START_RETRIES
             ) {
                 lastRequest?.let { request ->
                     runCatching {
@@ -526,6 +560,9 @@ class VlcDesktopPlayer {
          * the user has not yet reached for the close button.
          */
         const val FIRST_START_RETRY_MILLIS = 4_000L
+
+        /** Silent restarts before giving up. Three covers a cold device; more would just stall. */
+        const val MAX_START_RETRIES = 3
 
         /** Matches the thread name given to the single control executor. */
         const val CONTROL_THREAD_NAME = "iptvburo-vlc-control"

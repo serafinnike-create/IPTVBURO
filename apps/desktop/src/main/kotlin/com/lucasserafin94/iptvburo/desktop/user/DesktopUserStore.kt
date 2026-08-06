@@ -34,6 +34,21 @@ data class DesktopProfile(
 
 
 
+/**
+ * A profile's stated streaming situation, as persisted.
+ *
+ * Deliberately all-optional and all-defaulted: a profile that has never opened Assinaturas has no
+ * stored row, and this is what it gets. Nothing here is a claim about what the user can actually
+ * watch — it only lets an offer they already pay for be ranked above one they would have to buy.
+ */
+data class StoredStreamingPreference(
+    /** ISO 3166-1 alpha-2, or null when the user has not said. */
+    val region: String? = null,
+    /** ISO 4217, or null to show whatever currency the provider quoted. */
+    val currency: String? = null,
+    val subscribedProviderIds: Set<String> = emptySet(),
+)
+
 enum class DesktopLanguage(val tag: String) {
     PORTUGUESE_BRAZIL("pt-BR"), ENGLISH("en"), GERMAN("de"), ITALIAN("it");
 
@@ -108,6 +123,53 @@ class DesktopUserStore(
         preferences.put(layoutKey(profileId), value)
 
     private fun layoutKey(profileId: String): String = "catalog-layout.$profileId"
+
+    /**
+     * Which streaming services this profile says it pays for, and where it is watching from.
+     *
+     * Kept in its own key rather than as more fields on the profile row: the profile format is
+     * positional, so every field appended there widens a row that already carries six, and this is
+     * a set that will keep growing as services are added. A per-profile key also means a household
+     * where one person has Netflix and another does not gets the right answer each.
+     *
+     * This is what the user *says*, never a verified entitlement — the app has no way to check and
+     * does not try. Region defaults to null, meaning "not stated", which the discovery layer reads
+     * as "show everything" rather than guessing a country from the machine's locale.
+     */
+    fun streamingPreference(profileId: String?): StoredStreamingPreference {
+        val raw = profileId?.let { preferences.get(streamingKey(it), null) } ?: return StoredStreamingPreference()
+        val parts = raw.split('|')
+        // Rows written by an earlier build carry fewer fields; the missing ones default rather than
+        // discarding a preference the user took the trouble to set.
+        return StoredStreamingPreference(
+            region = parts.getOrNull(0)?.takeIf(String::isNotBlank),
+            currency = parts.getOrNull(1)?.takeIf(String::isNotBlank),
+            subscribedProviderIds =
+                parts.getOrNull(2)
+                    ?.split(',')
+                    ?.filter(String::isNotBlank)
+                    ?.toSet()
+                    .orEmpty(),
+        )
+    }
+
+    fun setStreamingPreference(
+        profileId: String,
+        preference: StoredStreamingPreference,
+    ) {
+        // Provider ids are our own slugs — lower-case letters, digits and dashes — so they never
+        // contain the separators this format splits on and need no encoding.
+        preferences.put(
+            streamingKey(profileId),
+            listOf(
+                preference.region.orEmpty(),
+                preference.currency.orEmpty(),
+                preference.subscribedProviderIds.sorted().joinToString(","),
+            ).joinToString("|"),
+        )
+    }
+
+    private fun streamingKey(profileId: String): String = "streaming-preference.$profileId"
 
     fun hasAcceptedTerms(): Boolean = preferences.getBoolean(KEY_TERMS_ACCEPTED, false)
 

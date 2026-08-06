@@ -219,6 +219,46 @@ data class DesktopStrings(
     val queueOpen: String,
     val queueClose: String,
     val queueCount: String,
+    // Streaming discovery (GDD 9)
+    val subscriptions: String,
+    val subscriptionsDemoBadge: String,
+    val subscriptionsDemoNotice: String,
+    val subscriptionsWhereToWatch: String,
+    val subscriptionsInYourLibrary: String,
+    val subscriptionsIncludedInSubscription: String,
+    val subscriptionsFreeWithAds: String,
+    val subscriptionsRent: String,
+    val subscriptionsBuy: String,
+    val subscriptionsRequiresSubscription: String,
+    val subscriptionsUnavailable: String,
+    val subscriptionsOpenProvider: String,
+    val subscriptionsMyServices: String,
+    val subscriptionsRegion: String,
+    /** Explains what each settings section actually controls — the labels alone read as synonyms. */
+    val languageHint: String,
+    val regionHint: String,
+    val metadataKeyUses: String,
+    /** Confirms a pasted key took effect — there is no Save button, and silence looks like failure. */
+    val metadataKeySaved: String,
+    val metadataKeyUsingBundled: String,
+    val subscriptionsFilterMovies: String,
+    val subscriptionsFilterSeries: String,
+    val subscriptionsFilterUpcoming: String,
+    val subscriptionsFilterThisWeek: String,
+    /**
+     * The caveat on the upcoming shelf.
+     *
+     * TMDb dates a release but does not say which service will carry it, so a shelf under a
+     * provider's name means "out soon", not "coming to this service". Saying so is the difference
+     * between informing the user and misleading them.
+     */
+    val subscriptionsUpcomingNote: String,
+    val subscriptionsEmptyBody: String,
+    // Browse-by-service shelves (GDD 9)
+    val subscriptionsBrowseByService: String,
+    val subscriptionsNoShelves: String,
+    val subscriptionsBackToServices: String,
+    val subscriptionsSelectedTitle: String,
 ) {
     companion object {
         fun of(language: DesktopLanguage): DesktopStrings =
@@ -273,7 +313,7 @@ data class DesktopStrings(
                 resumeFrom = "Continuar",
                 startOver = "Do início",
                 forgetProgress = "Remover",
-                metadataKeyLabel = "Fotos do elenco (TMDb)",
+                metadataKeyLabel = "Chave TMDb (opcional)",
                 metadataKeyHint = "Cole a sua chave de themoviedb.org/settings/api",
                 metadataKeyPlaceholder = "Chave da API",
                 layoutPoster = "Capas",
@@ -431,6 +471,38 @@ data class DesktopStrings(
                 queueOpen = "Abrir a fila",
                 queueClose = "Fechar a fila",
                 queueCount = "na fila",
+                subscriptions = "Assinaturas",
+                subscriptionsDemoBadge = "DEMO",
+                subscriptionsDemoNotice =
+                    "Estes resultados são de exemplo, criados apenas para demonstrar a tela. " +
+                        "Nenhum serviço de streaming real está conectado.",
+                subscriptionsWhereToWatch = "Onde assistir",
+                subscriptionsInYourLibrary = "Já está na sua lista",
+                subscriptionsIncludedInSubscription = "Incluído na sua assinatura",
+                subscriptionsFreeWithAds = "Grátis com anúncios",
+                subscriptionsRent = "Alugar",
+                subscriptionsBuy = "Comprar",
+                subscriptionsRequiresSubscription = "Requer assinatura",
+                subscriptionsUnavailable = "Indisponível por aqui",
+                subscriptionsOpenProvider = "Abrir no serviço oficial",
+                subscriptionsMyServices = "Meus serviços",
+                subscriptionsRegion = "Região",
+                languageHint = "Idioma dos textos do aplicativo",
+                regionHint = "País usado para saber quais serviços de streaming têm cada filme",
+                metadataKeyUses = "Usada para capas, elenco, trailers e a aba Assinaturas",
+                metadataKeySaved = "✓ Chave salva. Já está em uso.",
+                metadataKeyUsingBundled = "Usando a chave padrão do aplicativo.",
+                subscriptionsFilterMovies = "Filmes",
+                subscriptionsFilterSeries = "Séries",
+                subscriptionsFilterUpcoming = "Em breve",
+                subscriptionsFilterThisWeek = "Esta semana",
+                subscriptionsUpcomingNote =
+                    "Lançamentos com data marcada. Ainda não se sabe em qual serviço cada título vai estrear.",
+                subscriptionsEmptyBody = "Nada encontrado para este título.",
+                subscriptionsBrowseByService = "Por serviço",
+                subscriptionsNoShelves = "Nenhum serviço para mostrar ainda.",
+                subscriptionsBackToServices = "Voltar aos serviços",
+                subscriptionsSelectedTitle = "Título selecionado",
             )
 
         private val En =
@@ -477,7 +549,7 @@ data class DesktopStrings(
                 resumeFrom = "Resume",
                 startOver = "Start over",
                 forgetProgress = "Remove",
-                metadataKeyLabel = "Cast photos (TMDb)",
+                metadataKeyLabel = "TMDb key (optional)",
                 metadataKeyHint = "Paste your key from themoviedb.org/settings/api",
                 metadataKeyPlaceholder = "API key",
                 layoutPoster = "Posters",
@@ -635,6 +707,38 @@ data class DesktopStrings(
                 queueOpen = "Open the queue",
                 queueClose = "Close the queue",
                 queueCount = "queued",
+                subscriptions = "Subscriptions",
+                subscriptionsDemoBadge = "DEMO",
+                subscriptionsDemoNotice =
+                    "These results are examples, made up to demonstrate the screen. " +
+                        "No real streaming service is connected.",
+                subscriptionsWhereToWatch = "Where to watch",
+                subscriptionsInYourLibrary = "Already in your list",
+                subscriptionsIncludedInSubscription = "Included in your subscription",
+                subscriptionsFreeWithAds = "Free with ads",
+                subscriptionsRent = "Rent",
+                subscriptionsBuy = "Buy",
+                subscriptionsRequiresSubscription = "Requires a subscription",
+                subscriptionsUnavailable = "Not available here",
+                subscriptionsOpenProvider = "Open in the official service",
+                subscriptionsMyServices = "My services",
+                subscriptionsRegion = "Region",
+                languageHint = "Language of the app's own text",
+                regionHint = "Country used to work out which streaming services carry each film",
+                metadataKeyUses = "Used for posters, cast, trailers and the Subscriptions tab",
+                metadataKeySaved = "✓ Key saved. It is in use now.",
+                metadataKeyUsingBundled = "Using the app's default key.",
+                subscriptionsFilterMovies = "Films",
+                subscriptionsFilterSeries = "Series",
+                subscriptionsFilterUpcoming = "Coming soon",
+                subscriptionsFilterThisWeek = "This week",
+                subscriptionsUpcomingNote =
+                    "Titles with a release date set. Which service will carry each one is not yet known.",
+                subscriptionsEmptyBody = "Nothing found for this title.",
+                subscriptionsBrowseByService = "By service",
+                subscriptionsNoShelves = "No services to show yet.",
+                subscriptionsBackToServices = "Back to services",
+                subscriptionsSelectedTitle = "Selected title",
             )
 
         private val De =
@@ -681,7 +785,7 @@ data class DesktopStrings(
                 resumeFrom = "Fortsetzen",
                 startOver = "Von vorn",
                 forgetProgress = "Entfernen",
-                metadataKeyLabel = "Besetzungsfotos (TMDb)",
+                metadataKeyLabel = "TMDb-Schlüssel (optional)",
                 metadataKeyHint = "Fügen Sie Ihren Schlüssel von themoviedb.org/settings/api ein",
                 metadataKeyPlaceholder = "API-Schlüssel",
                 layoutPoster = "Poster",
@@ -840,6 +944,38 @@ data class DesktopStrings(
                 queueOpen = "Warteschlange öffnen",
                 queueClose = "Warteschlange schließen",
                 queueCount = "in der Warteschlange",
+                subscriptions = "Abonnements",
+                subscriptionsDemoBadge = "DEMO",
+                subscriptionsDemoNotice =
+                    "Diese Ergebnisse sind Beispiele und dienen nur der Darstellung des Bildschirms. " +
+                        "Es ist kein echter Streamingdienst verbunden.",
+                subscriptionsWhereToWatch = "Wo ansehen",
+                subscriptionsInYourLibrary = "Bereits in Ihrer Liste",
+                subscriptionsIncludedInSubscription = "In Ihrem Abo enthalten",
+                subscriptionsFreeWithAds = "Kostenlos mit Werbung",
+                subscriptionsRent = "Leihen",
+                subscriptionsBuy = "Kaufen",
+                subscriptionsRequiresSubscription = "Abo erforderlich",
+                subscriptionsUnavailable = "Hier nicht verfügbar",
+                subscriptionsOpenProvider = "Im offiziellen Dienst öffnen",
+                languageHint = "Sprache der App-Texte",
+                regionHint = "Land, nach dem ermittelt wird, welche Streamingdienste einen Film führen",
+                metadataKeyUses = "Für Poster, Besetzung, Trailer und den Bereich Abonnements",
+                metadataKeySaved = "✓ Schlüssel gespeichert und aktiv.",
+                metadataKeyUsingBundled = "Der Standardschlüssel der App wird verwendet.",
+                subscriptionsFilterMovies = "Filme",
+                subscriptionsFilterSeries = "Serien",
+                subscriptionsFilterUpcoming = "Demnächst",
+                subscriptionsFilterThisWeek = "Diese Woche",
+                subscriptionsUpcomingNote =
+                    "Titel mit festem Erscheinungsdatum. Welcher Dienst sie zeigen wird, ist noch nicht bekannt.",
+                subscriptionsMyServices = "Meine Dienste",
+                subscriptionsRegion = "Region",
+                subscriptionsEmptyBody = "Für diesen Titel wurde nichts gefunden.",
+                subscriptionsBrowseByService = "Nach Dienst",
+                subscriptionsNoShelves = "Noch keine Dienste vorhanden.",
+                subscriptionsBackToServices = "Zurück zu den Diensten",
+                subscriptionsSelectedTitle = "Ausgewählter Titel",
             )
 
         private val It =
@@ -886,7 +1022,7 @@ data class DesktopStrings(
                 resumeFrom = "Riprendi",
                 startOver = "Dall'inizio",
                 forgetProgress = "Rimuovi",
-                metadataKeyLabel = "Foto del cast (TMDb)",
+                metadataKeyLabel = "Chiave TMDb (facoltativa)",
                 metadataKeyHint = "Incolla la tua chiave da themoviedb.org/settings/api",
                 metadataKeyPlaceholder = "Chiave API",
                 layoutPoster = "Locandine",
@@ -1045,6 +1181,38 @@ data class DesktopStrings(
                 queueOpen = "Apri la coda",
                 queueClose = "Chiudi la coda",
                 queueCount = "in coda",
+                subscriptions = "Abbonamenti",
+                subscriptionsDemoBadge = "DEMO",
+                subscriptionsDemoNotice =
+                    "Questi risultati sono di esempio, creati solo per mostrare la schermata. " +
+                        "Nessun servizio di streaming reale è collegato.",
+                subscriptionsWhereToWatch = "Dove guardare",
+                subscriptionsInYourLibrary = "Già nella tua lista",
+                subscriptionsIncludedInSubscription = "Incluso nel tuo abbonamento",
+                subscriptionsFreeWithAds = "Gratis con pubblicità",
+                subscriptionsRent = "Noleggia",
+                subscriptionsBuy = "Acquista",
+                subscriptionsRequiresSubscription = "Richiede un abbonamento",
+                subscriptionsUnavailable = "Non disponibile qui",
+                subscriptionsOpenProvider = "Apri nel servizio ufficiale",
+                subscriptionsMyServices = "I miei servizi",
+                subscriptionsRegion = "Regione",
+                languageHint = "Lingua dei testi dell'app",
+                regionHint = "Paese usato per sapere quali servizi di streaming offrono ogni film",
+                metadataKeyUses = "Usata per copertine, cast, trailer e la scheda Abbonamenti",
+                metadataKeySaved = "✓ Chiave salvata e già attiva.",
+                metadataKeyUsingBundled = "Si sta usando la chiave predefinita dell'app.",
+                subscriptionsFilterMovies = "Film",
+                subscriptionsFilterSeries = "Serie",
+                subscriptionsFilterUpcoming = "Prossimamente",
+                subscriptionsFilterThisWeek = "Questa settimana",
+                subscriptionsUpcomingNote =
+                    "Titoli con data di uscita fissata. Non si sa ancora quale servizio li offrirà.",
+                subscriptionsEmptyBody = "Nessun risultato per questo titolo.",
+                subscriptionsBrowseByService = "Per servizio",
+                subscriptionsNoShelves = "Nessun servizio da mostrare per ora.",
+                subscriptionsBackToServices = "Torna ai servizi",
+                subscriptionsSelectedTitle = "Titolo selezionato",
             )
     }
 }

@@ -6,6 +6,8 @@ import com.lucasserafin94.iptvburo.desktop.model.XtreamSessionSummary
 import com.lucasserafin94.iptvburo.desktop.security.XtreamLoginInput
 import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
+import com.lucasserafin94.iptvburo.domain.model.LibraryCandidate
+import com.lucasserafin94.iptvburo.domain.model.MatchKind
 import com.lucasserafin94.iptvburo.xtream.XtreamAccount
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
@@ -49,7 +51,35 @@ class SessionXtreamRepository(
      */
     private val fetchLocks = EnumMap<XtreamContentType, Any>(XtreamContentType::class.java)
 
-    fun authenticateAndLoadInitial(input: XtreamLoginInput): XtreamSessionSummary {
+    /**
+     * What the initial load is doing right now.
+     *
+     * A type rather than a string so the wording stays in the translation tables and out of the
+     * data layer — the repository knows *what* it is fetching, not how to say it in four languages.
+     */
+    sealed interface XtreamLoadStage {
+        data object Authenticating : XtreamLoadStage
+
+        data class Categories(val contentType: XtreamContentType) : XtreamLoadStage
+
+        data object Channels : XtreamLoadStage
+    }
+
+    /**
+     * Reports what the initial load is doing, so a slow provider looks like progress.
+     *
+     * This is four network round trips — authentication, then categories for live, films and
+     * series, then the live catalogue itself — and on a slow provider each takes seconds. Reported
+     * as it goes rather than left silent: a bar parked at one message reads as a hang, and the user
+     * has no way to tell a slow provider from a broken app.
+     *
+     * The callback receives a fraction of *this* phase, 0..1, not of overall startup — the caller
+     * knows where this phase sits in the whole sequence and scales accordingly.
+     */
+    fun authenticateAndLoadInitial(
+        input: XtreamLoginInput,
+        onProgress: (fraction: Float, detail: XtreamLoadStage) -> Unit = { _, _ -> },
+    ): XtreamSessionSummary {
         val nextVault =
             try {
                 CredentialVault(
@@ -71,12 +101,22 @@ class SessionXtreamRepository(
             }
 
         return try {
+            onProgress(0f, XtreamLoadStage.Authenticating)
             val authenticatedAccount = nextVault.use(client::authenticate)
+
+            // Weighted by what actually costs time rather than by step count: authentication is one
+            // small request, the category lists are three, and the live catalogue is by far the
+            // largest payload of the four.
+            val types = XtreamContentType.entries
             val loadedCategories =
-                XtreamContentType.entries.associateWith { type ->
-                    loadCategoriesAdaptively(nextVault, type)
-                }
+                types.mapIndexed { index, type ->
+                    onProgress(0.15f + 0.15f * index / types.size, XtreamLoadStage.Categories(type))
+                    type to loadCategoriesAdaptively(nextVault, type)
+                }.toMap()
+
+            onProgress(0.35f, XtreamLoadStage.Channels)
             val liveCatalog = loadCatalogItems(nextVault, XtreamContentType.LIVE)
+            onProgress(1f, XtreamLoadStage.Channels)
             synchronized(lock) {
                 checkGeneration(currentGeneration)
                 account = authenticatedAccount
@@ -267,6 +307,46 @@ class SessionXtreamRepository(
             if (cast.contains(needle)) matches += item
         }
         return matches
+    }
+
+    /**
+     * Every film and series in the loaded catalogue, as matching candidates.
+     *
+     * The whole catalogue, not the page the user is looking at. "Is this film already in my list?"
+     * has to be asked of all 40-odd thousand items — checking only the current page answers no
+     * almost every time, which is worse than not asking, because the user reads it as a fact.
+     *
+     * Live channels are left out: a channel is a stream, not a work, and matching one against a
+     * film would only ever produce noise.
+     */
+    fun libraryMatchCandidates(): List<LibraryCandidate> {
+        val loaded =
+            synchronized(lock) {
+                listOf(XtreamContentType.MOVIE, XtreamContentType.SERIES)
+                    .mapNotNull { type -> catalogs[type]?.let { type to it } }
+            }
+        if (loaded.isEmpty()) return emptyList()
+
+        // Sized up front: this runs on every title opened in Assinaturas, and growing an ArrayList
+        // through forty thousand appends is measurable.
+        val candidates = ArrayList<LibraryCandidate>(loaded.sumOf { (_, catalog) -> catalog.size })
+        loaded.forEach { (contentType, catalog) ->
+            val kind = if (contentType == XtreamContentType.SERIES) MatchKind.SERIES else MatchKind.MOVIE
+            for (index in 0 until catalog.size) {
+                val item = catalog.itemAt(index)
+                candidates +=
+                    LibraryCandidate(
+                        // Prefixed with the content type: provider ids are numbered per catalogue,
+                        // so film 42 and series 42 both exist and a bare id cannot say which was
+                        // matched. The caller splits this back apart to reopen the item.
+                        localContentId = "${contentType.name}:${item.providerId}",
+                        title = item.name,
+                        year = item.year,
+                        kind = kind,
+                    )
+            }
+        }
+        return candidates
     }
 
     fun movieDetails(movieId: String): XtreamMovieDetails =

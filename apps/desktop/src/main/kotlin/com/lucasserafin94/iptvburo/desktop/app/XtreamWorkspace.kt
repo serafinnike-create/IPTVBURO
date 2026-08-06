@@ -140,6 +140,23 @@ fun XtreamWorkspace(
         appState.applyXtreamSearch()
     }
 
+    // Opening a title from elsewhere — the "already in your list" row in Assinaturas — arrives as a
+    // request here, because whether the details page is showing is this screen's own state. Without
+    // this the user landed on the catalogue grid with the item merely selected.
+    LaunchedEffect(appState.pendingDetailsRequest) {
+        if (appState.consumePendingDetailsRequest() == null) return@LaunchedEffect
+        detailsOpen = true
+        // Loaded here as well as by the effect below. Both run in the same composition, and that
+        // one captured `detailsOpen` as false — it had not been set yet — so the page opened and
+        // then sat on "Carregando ficha do filme…" for ever with nothing in flight.
+        when (appState.selectedXtreamItem?.contentType) {
+            XtreamContentType.MOVIE -> appState.loadSelectedMovieDetails()
+            XtreamContentType.SERIES -> appState.loadSelectedSeriesDetails()
+            XtreamContentType.LIVE -> appState.loadSelectedLiveEpg()
+            else -> Unit
+        }
+    }
+
     LaunchedEffect(appState.selectedXtreamItem?.providerId, detailsOpen) {
         if (!detailsOpen) return@LaunchedEffect
         when (appState.selectedXtreamItem?.contentType) {

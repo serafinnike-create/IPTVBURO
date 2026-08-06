@@ -53,8 +53,12 @@ import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.DailyHomeStatus
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.DesktopContinueWatchingEntry
+import com.lucasserafin94.iptvburo.desktop.data.TmdbServiceShelf
 import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
+import com.lucasserafin94.iptvburo.domain.model.ExternalTitle
+import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
+import com.lucasserafin94.iptvburo.metadata.WATCH_PROVIDER_ATTRIBUTION
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
 import com.lucasserafin94.iptvburo.desktop.ui.BuroMotion
@@ -129,6 +133,9 @@ private data class HomeMetrics(
 /** About one shelf, so an arrow press moves between rails rather than by a few pixels. */
 private const val HOME_SCROLL_PIXELS = 300f
 
+/** How long each banner title holds before the next one. */
+private const val HERO_ROTATION_MILLIS = 10_000L
+
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun XtreamDailyHome(
@@ -157,6 +164,12 @@ fun XtreamDailyHome(
         appState.dailyHomeRevision,
     ) {
         appState.loadDailyHome(today)
+    }
+    // The streaming rails, loaded once and reused by the Assinaturas area. Keyed on the region so
+    // changing it rebuilds them; the call itself no-ops when they are already loaded, so returning
+    // to the home screen does not re-hit the network.
+    LaunchedEffect(appState.streamingRegion) {
+        appState.loadStreamingShelves()
     }
     LaunchedEffect(appState.selectedXtreamItem?.providerId, detailsOpen) {
         if (!detailsOpen) return@LaunchedEffect
@@ -252,8 +265,21 @@ fun XtreamDailyHome(
                     verticalArrangement = Arrangement.spacedBy(metrics.railSpacing),
                 ) {
                     item(key = "daily-hero") {
+                        // The banner cycles through the day's rotation rather than holding one
+                        // image. Ten seconds is long enough to read the title and press play, short
+                        // enough that a user who lingers sees more than one thing on the largest
+                        // surface in the app.
+                        val rotation = snapshot.heroRotation.ifEmpty { listOfNotNull(snapshot.hero) }
+                        var heroIndex by remember(snapshot.date, snapshot.sourceId) { mutableStateOf(0) }
+                        LaunchedEffect(rotation.size) {
+                            if (rotation.size <= 1) return@LaunchedEffect
+                            while (true) {
+                                delay(HERO_ROTATION_MILLIS)
+                                heroIndex = (heroIndex + 1) % rotation.size
+                            }
+                        }
                         DailyHero(
-                            item = snapshot.hero,
+                            item = rotation.getOrNull(heroIndex) ?: snapshot.hero,
                             date = snapshot.date,
                             metrics = metrics,
                             text = text,
@@ -306,6 +332,23 @@ fun XtreamDailyHome(
                     }
                     item(key = "daily-live") {
                         DailyRow(text.liveNow, snapshot.live, metrics, text, openDetails)
+                    }
+                    // What is new on the streaming services, below the user's own library.
+                    //
+                    // Under rather than above deliberately: these are titles the user cannot play
+                    // here — clicking one leads out to the service — so they must not displace the
+                    // content they actually have. Absent entirely until the shelves have loaded, so
+                    // the home screen never shows an empty heading while waiting on the network.
+                    items(
+                        items = appState.streamingShelves.filter { shelf -> shelf.titles.isNotEmpty() },
+                        key = { shelf -> "streaming-${shelf.provider.id}" },
+                    ) { shelf ->
+                        StreamingServiceRow(
+                            shelf = shelf,
+                            metrics = metrics,
+                            text = text,
+                            onClick = { title -> appState.openStreamingTitle(title) },
+                        )
                     }
                     item(key = "home-tail") { Spacer(Modifier.height(metrics.railSpacing)) }
                 }
@@ -493,6 +536,49 @@ private fun DailyRow(
         ) {
             items(items, key = { "${it.contentType}:${it.providerId}" }) { item ->
                 DailyCard(item, metrics, text, onClick)
+            }
+        }
+    }
+}
+
+/**
+ * What is new on one streaming service.
+ *
+ * Built from the same rail shape as [DailyRow] so the home screen reads as one page, but the cards
+ * lead somewhere different: these titles are not in the user's library and cannot be played here.
+ * Selecting one opens the Assinaturas area, which says where it can actually be watched.
+ *
+ * The service name is the heading, in text. Its logo is that company's mark and is never fetched —
+ * the posters are the films' own artwork, which is a different thing entirely.
+ */
+@Composable
+private fun StreamingServiceRow(
+    shelf: TmdbServiceShelf,
+    metrics: HomeMetrics,
+    text: DesktopStrings,
+    onClick: (ExternalTitle) -> Unit,
+) {
+    if (shelf.titles.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm)) {
+        RailHeader(shelf.provider.displayName, WATCH_PROVIDER_ATTRIBUTION, metrics)
+        val railState = rememberLazyListState()
+        LazyRow(
+            state = railState,
+            modifier = Modifier.fillMaxWidth().arrowScrollable(railState).edgeScrollable(railState),
+            horizontalArrangement = Arrangement.spacedBy(metrics.cardSpacing),
+            contentPadding = PaddingValues(horizontal = metrics.gutter, vertical = BuroSpacing.Sm),
+        ) {
+            items(shelf.titles, key = { title -> title.id.key }) { title ->
+                // The same card the Assinaturas shelves use, so a title looks identical wherever it
+                // appears. It takes details rather than a bare title; the offers are not read for
+                // the card itself, and the real ones are fetched when the title is opened.
+                ProviderShelfCard(
+                    details = ExternalTitleDetails(title = title),
+                    // Real listings, so no DEMO badge — it would say invented about genuine data.
+                    showDemoBadge = title.isDemo,
+                    text = text,
+                    onClick = { onClick(title) },
+                )
             }
         }
     }

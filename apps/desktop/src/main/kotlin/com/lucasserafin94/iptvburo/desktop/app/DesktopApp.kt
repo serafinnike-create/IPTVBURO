@@ -97,8 +97,16 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.LocalDesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.strings
+import com.lucasserafin94.iptvburo.desktop.data.TmdbStreamingCatalogue
+import com.lucasserafin94.iptvburo.desktop.download.formatDuration
+import com.lucasserafin94.iptvburo.desktop.download.formatRate
+import com.lucasserafin94.iptvburo.desktop.platform.openStreamingOfferExternally
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
+import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
+import com.lucasserafin94.iptvburo.domain.model.OfferType
+import com.lucasserafin94.iptvburo.domain.model.ProviderDeepLinks
+import com.lucasserafin94.iptvburo.domain.model.StreamingOffer
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
@@ -203,6 +211,8 @@ fun DesktopApp(
                         onDownloads = appState::openDownloads,
                         hasMusic = appState.hasMusicLibrary,
                         onMusic = appState::openMusic,
+                        hasSubscriptions = appState.streamingDiscoveryCapability.isVisible,
+                        onSubscriptions = appState::openSubscriptions,
                     )
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                         TopBar(
@@ -227,6 +237,8 @@ fun DesktopApp(
                             onRefreshCatalog = { scope.launch { appState.refreshCatalog() } },
                             metadataApiKey = appState.metadataApiKey,
                             onMetadataApiKeyChange = appState::updateMetadataApiKey,
+                            streamingRegion = appState.streamingRegion,
+                            onSelectRegion = appState::changeStreamingRegion,
                             onUpdate = {
                                 if (!updateBusy) {
                                     scope.launch {
@@ -282,6 +294,61 @@ fun DesktopApp(
                                 appState = appState,
                                 onPlay = { request -> activePlayback = request },
                                 ownerWindow = ownerWindow,
+                            )
+                        } else if (appState.destination == DesktopDestination.SUBSCRIPTIONS) {
+                            // Like Music, checked before the source: it answers where a title can be
+                            // watched elsewhere, which does not need the video provider connected.
+                            SubscriptionsWorkspace(
+                                capability = appState.streamingDiscoveryCapability,
+                                ranking = appState.streamingOffers,
+                                // The shelves arrive as services-with-titles; the screen groups by
+                                // provider itself, and every title carries its own offers, so this
+                                // flattens to the shape it already expects. A title on two services
+                                // appears twice here and is regrouped onto both shelves.
+                                titles =
+                                    appState.streamingShelves
+                                        .also { shelves ->
+                                            println("[streaming] screen sees ${shelves.size} shelves")
+                                        }.flatMap { shelf ->
+                                        shelf.titles.map { title ->
+                                            ExternalTitleDetails(
+                                                title = title,
+                                                offers =
+                                                    listOf(
+                                                        StreamingOffer(
+                                                            provider = shelf.provider,
+                                                            type = OfferType.SUBSCRIPTION,
+                                                            launchTarget =
+                                                                ProviderDeepLinks.bestTargetFor(
+                                                                    shelf.provider.id,
+                                                                    title.title,
+                                                                ),
+                                                        ),
+                                                    ),
+                                            )
+                                        }
+                                    },
+                                // Opening a shelf title fetches where it can actually be watched;
+                                // the shelf itself only knows which service it came from.
+                                onSelectTitle = { details -> appState.openStreamingTitle(details.title) },
+                                kind = appState.streamingKind,
+                                onSelectKind = appState::selectStreamingKind,
+                                // Clearing the ranking is what returns the screen to its shelves,
+                                // which is exactly what opening the area already does.
+                                onBackToShelves = { appState.openSubscriptions() },
+                                onOpenOffer = { ranked ->
+                                    // The user's own copy plays here rather than being handed to the
+                                    // system: it is their file, and there is no external destination
+                                    // on a USER_LIBRARY offer to hand over anyway.
+                                    if (ranked.offer.type == OfferType.USER_LIBRARY) {
+                                        // To the title's own page, not straight into playback: the
+                                        // user came here to find out about the film, and the
+                                        // synopsis and cast are on that page.
+                                        appState.openInLibrary()
+                                    } else {
+                                        ranked.offer.launchTarget?.let(::openStreamingOfferExternally)
+                                    }
+                                },
                             )
                         } else if (!appState.hasSelectedSource) {
                             EmptyLibrary(
@@ -600,6 +667,8 @@ private fun SourceSidebar(
     onDownloads: () -> Unit,
     hasMusic: Boolean,
     onMusic: () -> Unit,
+    hasSubscriptions: Boolean,
+    onSubscriptions: () -> Unit,
 ) {
     val text = strings
     Column(
@@ -662,6 +731,15 @@ private fun SourceSidebar(
             selected = destination == DesktopDestination.MUSIC,
             onClick = onMusic,
         )
+        // Only while something can actually answer "where can I watch this" — currently the demo
+        // catalogue. With nothing behind it the entry disappears rather than opening a dead screen.
+        if (hasSubscriptions) {
+            NavigationItem(
+                label = text.subscriptions,
+                selected = destination == DesktopDestination.SUBSCRIPTIONS,
+                onClick = onSubscriptions,
+            )
+        }
 
         // The source list used to own the whole remaining column even with one source. It is a
         // rarely-used switch, so it now takes only the height it needs and the section disappears
@@ -841,6 +919,8 @@ private fun TopBar(
     onRefreshCatalog: () -> Unit,
     metadataApiKey: String,
     onMetadataApiKeyChange: (String) -> Unit,
+    streamingRegion: String,
+    onSelectRegion: (String) -> Unit,
 ) {
     val text = strings
     // A Row does not shrink unweighted children: once their intrinsic widths exceed the space they
@@ -947,6 +1027,8 @@ private fun TopBar(
                 onRefreshCatalog = onRefreshCatalog,
                 metadataApiKey = metadataApiKey,
                 onMetadataApiKeyChange = onMetadataApiKeyChange,
+                streamingRegion = streamingRegion,
+                onSelectRegion = onSelectRegion,
                 text = text,
             )
         }
@@ -960,6 +1042,108 @@ private fun TopBar(
  * affordance leaves the header carrying only what changes often — the library summary and who is
  * watching.
  */
+/**
+ * A heading in the settings menu, with a line explaining what it controls.
+ *
+ * The explanation is not decoration: "Idioma" and "Região" are near-synonyms in Portuguese, and a
+ * user reasonably read them as the same setting listed twice.
+ */
+@Composable
+private fun SettingsSectionLabel(
+    label: String,
+    hint: String,
+) {
+    Column(
+        modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs).width(320.dp),
+    ) {
+        Text(
+            text = label,
+            color = BuroColors.TextMuted,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = hint,
+            color = BuroColors.TextSubtle,
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
+
+/**
+ * One selectable value in the settings menu, as a pill.
+ *
+ * Chips rather than full-width menu rows: nine of those overflowed the screen on a laptop, and a
+ * DropdownMenu scrolls with no visible indicator, so everything below simply looked missing. Four
+ * languages and five regions fit in two short rows this way.
+ */
+@Composable
+private fun SettingsChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    BuroInteractiveRow(
+        onClick = onClick,
+        selected = selected,
+        shape = BuroRadius.Pill,
+        contentDescription = label,
+    ) { state ->
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = BuroSpacing.Sm, vertical = 6.dp),
+            color =
+                when {
+                    selected -> BuroColors.Primary
+                    state.active -> BuroColors.Text
+                    else -> BuroColors.TextMuted
+                },
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        )
+    }
+}
+
+/**
+ * A country's name for the region picker.
+ *
+ * Written out rather than taken from `Locale.getDisplayCountry`, which returns the name in the JVM's
+ * own locale and would put German country names in front of a Portuguese-speaking user. The list is
+ * short and fixed, so a lookup is both correct and simpler than plumbing a locale through.
+ */
+/**
+ * The line under a running download's bar.
+ *
+ * A percentage alone cannot answer the two questions a waiting user actually has: is it still
+ * moving, and how long. So the speed and the remaining time join it — "17% · 4.2 MB/s · 12 min" —
+ * and a stalled transfer becomes visible instead of looking like a slow one.
+ *
+ * Each part is dropped when it is unknown rather than shown as a zero: a server that sends no
+ * length gives no percentage and no estimate, and inventing either would be worse than the silence.
+ */
+private fun downloadProgressLabel(
+    state: DownloadState.Running,
+    inProgressLabel: String,
+): String {
+    val parts = mutableListOf<String>()
+    parts += if (state.fraction >= 0f) "${(state.fraction * 100).toInt()}%" else inProgressLabel
+    if (state.bytesPerSecond > 0) parts += formatRate(state.bytesPerSecond)
+    // Only once the rate has settled: an estimate from the first second of a transfer swings between
+    // minutes and hours and reads as broken.
+    state.secondsRemaining?.takeIf { it > 0 }?.let { seconds -> parts += formatDuration(seconds) }
+    return parts.joinToString(" · ")
+}
+
+private fun regionName(code: String): String =
+    when (code) {
+        "BR" -> "Brasil"
+        "PT" -> "Portugal"
+        "US" -> "Estados Unidos"
+        "DE" -> "Alemanha"
+        "IT" -> "Itália"
+        else -> code
+    }
+
 @Composable
 private fun SettingsMenu(
     language: DesktopLanguage,
@@ -972,6 +1156,8 @@ private fun SettingsMenu(
     onRefreshCatalog: () -> Unit,
     metadataApiKey: String,
     onMetadataApiKeyChange: (String) -> Unit,
+    streamingRegion: String,
+    onSelectRegion: (String) -> Unit,
     text: DesktopStrings,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -992,36 +1178,61 @@ private fun SettingsMenu(
             }
         }
 
+        // The menu's own scroll state, so a scrollbar can be drawn against it. DropdownMenu scrolls
+        // its content itself but shows no indicator, so the settings below the fold — the update
+        // button, the version, the session line — looked as though they did not exist. Passing this
+        // in rather than wrapping in verticalScroll: the wrapper crashes with "measured with an
+        // infinity maximum height", since the menu already measures unbounded.
+        val menuScroll = androidx.compose.foundation.rememberScrollState()
+
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.background(BuroColors.SurfaceRaised),
+            scrollState = menuScroll,
+            modifier =
+                Modifier
+                    .background(BuroColors.SurfaceRaised)
+                    .heightIn(max = 560.dp)
+                    .width(360.dp),
         ) {
-            Text(
-                text = text.languageLabel,
-                modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs),
-                color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.labelSmall,
-            )
-            DesktopLanguage.entries.forEach { option ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = option.nativeName(),
-                            color =
-                                if (option == language) BuroColors.Primary else BuroColors.Text,
-                        )
-                    },
-                    trailingIcon = {
-                        if (option == language) {
-                            Text("✓", color = BuroColors.Primary)
-                        }
-                    },
-                    onClick = {
-                        onSelectLanguage(option)
-                        expanded = false
-                    },
-                )
+            // Language and region as compact rows rather than one full-height menu item each. Nine
+            // options at menu-item height overflowed the screen, and a DropdownMenu scrolls without
+            // ever showing a scrollbar — so the settings below simply looked absent. Laid out this
+            // way the whole menu fits, which is a better answer than an indicator for a scroll the
+            // user should not have needed.
+            SettingsSectionLabel(text.languageLabel, text.languageHint)
+            FlowRow(
+                modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs).width(320.dp),
+                horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+                verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+            ) {
+                DesktopLanguage.entries.forEach { option ->
+                    SettingsChip(
+                        label = option.nativeName(),
+                        selected = option == language,
+                        onClick = {
+                            onSelectLanguage(option)
+                            expanded = false
+                        },
+                    )
+                }
+            }
+            SettingsSectionLabel(text.subscriptionsRegion, text.regionHint)
+            FlowRow(
+                modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs).width(320.dp),
+                horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+                verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+            ) {
+                TmdbStreamingCatalogue.SUPPORTED_REGIONS.forEach { option ->
+                    SettingsChip(
+                        label = regionName(option),
+                        selected = option == streamingRegion,
+                        onClick = {
+                            onSelectRegion(option)
+                            expanded = false
+                        },
+                    )
+                }
             }
             HorizontalDivider(color = BuroColors.BorderSoft)
             // The metadata key lives in the menu rather than a settings page: it is pasted once and
@@ -1033,6 +1244,14 @@ private fun SettingsMenu(
                             text = text.metadataKeyLabel,
                             color = BuroColors.Text,
                             style = MaterialTheme.typography.labelLarge,
+                        )
+                        // What the key actually powers. It started out fetching cast photos and now
+                        // also drives posters, trailers and the whole Assinaturas area, so a label
+                        // naming only the first of those undersells what leaving it blank costs.
+                        Text(
+                            text = text.metadataKeyUses,
+                            color = BuroColors.TextSubtle,
+                            style = MaterialTheme.typography.labelSmall,
                         )
                         Spacer(Modifier.height(4.dp))
                         // The hint is the link. Sending the user to the page that issues the key is
@@ -1070,6 +1289,20 @@ private fun SettingsMenu(
                                     unfocusedIndicatorColor = BuroColors.BorderSoft,
                                     cursorColor = BuroColors.Primary,
                                 ),
+                        )
+                        // There is no Save button — the key applies as it is typed — so without a
+                        // line saying so the user is left wondering whether anything happened.
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text =
+                                if (metadataApiKey.isNotBlank()) {
+                                    text.metadataKeySaved
+                                } else {
+                                    text.metadataKeyUsingBundled
+                                },
+                            color =
+                                if (metadataApiKey.isNotBlank()) BuroColors.Success else BuroColors.TextSubtle,
+                            style = MaterialTheme.typography.labelSmall,
                         )
                     }
                 },
@@ -2250,12 +2483,7 @@ private fun DownloadRow(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text =
-                        if (state.fraction >= 0f) {
-                            "${(state.fraction * 100).toInt()}%"
-                        } else {
-                            strings.downloadInProgress
-                        },
+                    text = downloadProgressLabel(state, strings.downloadInProgress),
                     color = BuroColors.TextSubtle,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -2415,12 +2643,7 @@ private fun DownloadLibraryRow(
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text =
-                            if (state.fraction >= 0f) {
-                                "${(state.fraction * 100).toInt()}%"
-                            } else {
-                                text.downloadInProgress
-                            },
+                        text = downloadProgressLabel(state, text.downloadInProgress),
                         color = BuroColors.TextSubtle,
                         style = MaterialTheme.typography.bodySmall,
                     )

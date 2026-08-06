@@ -1,12 +1,15 @@
 package com.lucasserafin94.iptvburo.desktop.playback
 
+import com.jetbrains.cef.JCefAppConfig
 import java.awt.BorderLayout
 import java.awt.Color
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.JPanel
 import org.cef.CefApp
 import org.cef.CefClient
 import org.cef.CefSettings
+import org.cef.SystemBootstrap
 import org.cef.browser.CefBrowser
 
 /**
@@ -40,20 +43,17 @@ class TrailerBrowser {
         runCatching {
             val app = sharedApp() ?: return null
             val cefClient = app.createClient().also { client = it }
-            // The embed URL with the controls the situation calls for: a trailer opened deliberately
-            // gets controls, one playing behind a banner does not and must never make noise
-            // unasked.
-            val url =
-                buildString {
-                    append("https://www.youtube-nocookie.com/embed/")
-                    append(youtubeId)
-                    append("?autoplay=").append(if (autoplay) 1 else 0)
-                    append("&mute=").append(if (muted) 1 else 0)
-                    append("&controls=").append(if (muted) 0 else 1)
-                    append("&modestbranding=1&rel=0&playsinline=1")
-                    if (muted) append("&loop=1&playlist=").append(youtubeId)
-                }
-            val cefBrowser = cefClient.createBrowser(url, false, false).also { browser = it }
+
+            // Served from a loopback page rather than loading the embed as the top-level document.
+            // YouTube refuses to configure its player for a frame with no page behind it — "Video
+            // player configuration error, Error 153" — and a data: URL does not help because its
+            // origin is null, which is the same rejection. A real http://127.0.0.1 origin is what
+            // an ordinary embedding site has.
+            val host = sharedHost() ?: return null
+            val cefBrowser =
+                cefClient
+                    .createBrowser(host.pageUrlFor(youtubeId, autoplay, muted), false, false)
+                    .also { browser = it }
 
             JPanel(BorderLayout()).apply {
                 background = Color.BLACK
@@ -78,6 +78,27 @@ class TrailerBrowser {
         @Volatile
         private var unavailable = false
 
+        @Volatile
+        private var host: TrailerHostServer? = null
+
+        /**
+         * The one loopback page server for the process.
+         *
+         * Started on first use and left running: it holds a single socket and one route, and
+         * restarting it per trailer would churn ports for no gain.
+         */
+        @Synchronized
+        private fun sharedHost(): TrailerHostServer? {
+            host?.let { return it }
+            return TrailerHostServer.start()?.also { started ->
+                host = started
+                println("[trailer] host page server on ${started.origin}")
+            } ?: run {
+                println("[trailer] host page server failed to bind")
+                null
+            }
+        }
+
         /**
          * The one Chromium instance for the process.
          *
@@ -88,9 +109,27 @@ class TrailerBrowser {
         private fun sharedApp(): CefApp? {
             if (unavailable) return null
             app?.let { return it }
+            // Checked before anything else, because CefApp.startup and getInstance both *succeed*
+            // without the native runtime present — they hand back an object whose first browser
+            // then renders a blank white rectangle the user has to dismiss. Asking the loader for
+            // the library is the only reliable way to tell an installed runtime from a missing one.
+            val runtime = locateNativeRuntime()
+            if (runtime == null) {
+                println("[trailer] no Chromium runtime found; falling back to the system browser")
+                unavailable = true
+                return null
+            }
+            println("[trailer] Chromium runtime at ${runtime.absolutePath}")
             return runCatching {
+                // Chromium lives beside the app, not on the library path, so the bundle directory
+                // has to be handed to JCEF explicitly. JCefAppConfig derives the whole layout from
+                // it: the loader that System.load()s libcef.dll by absolute path, plus the resource,
+                // locale and helper-process paths. Without this, startup "succeeds" and the first
+                // browser renders a blank white rectangle.
+                val config = JCefAppConfig.getInstance(runtime.absolutePath)
+                SystemBootstrap.setLoader(config.loader)
                 val settings =
-                    CefSettings().apply {
+                    config.cefSettings.apply {
                         windowless_rendering_enabled = false
                         // Nothing about a trailer needs to survive the session, and a browser cache
                         // inside an IPTV app is a store of browsing history nobody asked for.
@@ -98,13 +137,45 @@ class TrailerBrowser {
                         persist_session_cookies = false
                         log_severity = CefSettings.LogSeverity.LOGSEVERITY_DISABLE
                     }
-                CefApp.startup(emptyArray())
-                CefApp.getInstance(settings).also { app = it }
-            }.getOrElse {
+                CefApp.startup(config.appArgs)
+                CefApp.getInstance(config.appArgs, settings).also { app = it }
+            }.getOrElse { error ->
+                // The type and message only — no paths, no URLs. Enough to tell a missing library
+                // from a refused initialisation, which look identical from the UI.
+                println("[trailer] Chromium failed to start: ${error::class.simpleName}: ${error.message}")
                 unavailable = true
                 null
             }
         }
+
+        /**
+         * The directory holding Chromium's native runtime, or null when it is not on this machine.
+         *
+         * The installed layout comes first — that is where the installer puts it — then the same
+         * directory as produced by a Gradle build run from the repository, then the library path for
+         * a runtime installed elsewhere and pointed at by the launcher. A missing runtime is an
+         * ordinary case rather than an error, so this must be cheap and must never throw: the caller
+         * falls back to the system browser.
+         */
+        private fun locateNativeRuntime(): File? {
+            val resources = System.getProperty("compose.application.resources.dir")?.let(::File)
+            val workingDirectory = File(System.getProperty("user.dir"))
+            val candidates =
+                listOfNotNull(
+                    resources?.resolve("jcef"),
+                    resources?.resolve("windows/jcef"),
+                    workingDirectory.resolve("apps/desktop/build/generated/app-resources/windows/jcef"),
+                ) +
+                    System.getProperty("java.library.path").orEmpty()
+                        .split(File.pathSeparator)
+                        .filter(String::isNotBlank)
+                        .map(::File)
+            return runCatching {
+                candidates.firstOrNull { directory -> directory.resolve(CHROMIUM_LIBRARY).isFile }
+            }.getOrNull()
+        }
+
+        private const val CHROMIUM_LIBRARY = "libcef.dll"
 
         /** Whether an embedded trailer can be shown at all on this machine. */
         fun isAvailable(): Boolean = sharedApp() != null
