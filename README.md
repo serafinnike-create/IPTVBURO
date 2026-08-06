@@ -7,9 +7,9 @@
 Transforma fontes de mídia autorizadas pelo usuário em uma biblioteca organizada, cinematográfica, resiliente e, no mobile, disponível offline.
 
 ![Status](https://img.shields.io/badge/status-em%20desenvolvimento-7c3aed)
-![GDD](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%207.0-2563eb)
+![GDD](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%209.0-2563eb)
 ![Android TV](https://img.shields.io/badge/Android%20TV-v0.2.0--alpha.5-3ddc84)
-![Windows](https://img.shields.io/badge/Windows-v0.2.0--alpha.5-e2b458)
+![Windows](https://img.shields.io/badge/Windows-v1.1-e2b458)
 ![Multiplataforma](https://img.shields.io/badge/escopo-universal-0f766e)
 ![Offline Mobile](https://img.shields.io/badge/Offline%20Vault-planejado-f59e0b)
 
@@ -41,8 +41,14 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 
 | Entrega | Estado |
 |---|---|
-| GDDs 1.0 a 7.0 | ✅ Documentados na `main` |
+| GDDs 1.0 a 9.0 | ✅ Documentados na `main` |
 | Aplicação Android/Android TV | 🧪 Prévia `v0.2.0-alpha.5` |
+| Aplicação Windows | 🧪 Prévia `v1.1` |
+| **Onde assistir** (GDD 9) — prateleira por serviço, com capas | 🧪 Windows, dados reais do TMDb |
+| **Já está na sua lista** — o título encontrado no catálogo do usuário | 🧪 Só um casamento confiante produz a linha |
+| Redirecionamento ao serviço oficial | ✅ Nunca reproduz stream protegido; recusa endereço com token ou mídia |
+| Música, rádio, fila e playlists (GDD 8) | 🧪 Windows; seções 16 a 18 implementadas |
+| Trailer dentro do aplicativo | 🧪 Chromium embutido; recuo para o navegador quando indisponível |
 | Importação local M3U/M3U8 | ✅ Vertical funcional |
 | Xtream: ao vivo, filmes, séries e episódios | ✅ Vertical funcional |
 | Room, parser em lotes e transação de catálogo | ✅ Implementados |
