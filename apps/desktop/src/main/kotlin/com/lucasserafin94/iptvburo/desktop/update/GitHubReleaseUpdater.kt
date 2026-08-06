@@ -145,7 +145,7 @@ class GitHubReleaseUpdater(
         }
 
     private companion object {
-        const val RELEASES_URL = "https://api.github.com/repos/lucasserafin94/IPTVBURO/releases?per_page=20"
+        const val RELEASES_URL = "https://api.github.com/repos/serafinnike-create/IPTVBURO/releases?per_page=20"
         const val MAX_INSTALLER_BYTES = 1_000_000_000L
 
         fun defaultUpdatesDirectory(): Path {
