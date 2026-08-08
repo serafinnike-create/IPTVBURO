@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
@@ -71,7 +72,16 @@ fun MultiviewOverlay(
     onClose: () -> Unit,
     onRemoveTile: (Int) -> Unit,
 ) {
-    if (tiles.isEmpty()) return
+    // An empty overlay says so rather than vanishing.
+    //
+    // Returning silently left the app looking exactly as it did before: the user pressed a button,
+    // the screen did not change, and there was nothing to act on. Tiles are dropped when a stream
+    // URL cannot be resolved, which is a real failure the customer needs told about — not one to
+    // hide by rendering nothing.
+    if (tiles.isEmpty()) {
+        MultiviewUnavailable(onClose = onClose)
+        return
+    }
     var audioIndex by remember(tiles.size) { mutableStateOf(0) }
 
     Box(modifier = Modifier.fillMaxSize().background(BuroColors.Canvas)) {
@@ -265,6 +275,51 @@ private fun MultiviewBar(
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
             )
+        }
+    }
+}
+
+/**
+ * Shown when every queued channel failed to produce a playable stream.
+ *
+ * The alternative was rendering nothing, which is what made this look like a broken button: the user
+ * pressed it, the screen stayed exactly as it was, and there was no way to tell whether the feature
+ * had failed or never existed.
+ */
+@Composable
+private fun MultiviewUnavailable(onClose: () -> Unit) {
+    val text = strings
+    Box(
+        modifier = Modifier.fillMaxSize().background(BuroColors.Canvas),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = text.settingsText.multiviewUnavailable,
+                color = BuroColors.Text,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(BuroSpacing.Xs))
+            Text(
+                text = text.settingsText.multiviewUnavailableHint,
+                color = BuroColors.TextMuted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(BuroSpacing.Lg))
+            BuroInteractiveRow(
+                onClick = onClose,
+                selected = false,
+                shape = BuroRadius.Small,
+                contentDescription = text.close,
+            ) {
+                Text(
+                    text = text.close,
+                    modifier = Modifier.padding(horizontal = BuroSpacing.Lg, vertical = BuroSpacing.Xs),
+                    color = BuroColors.Text,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
         }
     }
 }

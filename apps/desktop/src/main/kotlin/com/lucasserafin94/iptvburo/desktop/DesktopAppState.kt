@@ -1727,7 +1727,14 @@ class DesktopAppState(
         multiviewChannelIds.mapNotNull { providerId ->
             val item =
                 xtreamRepository.itemByProviderId(XtreamContentType.LIVE, providerId)
-                    ?: return@mapNotNull null
+                    // Logged, because a tile that vanishes here takes the whole feature with it when
+                    // every channel does the same: the overlay opens with nothing in it and the user
+                    // sees a button that appears to do nothing. Only the reason, never the provider
+                    // id's stream URL.
+                    ?: run {
+                        println("multiview: channel no longer in catalogue")
+                        return@mapNotNull null
+                    }
             val request =
                 prepareXtreamPlayback(
                     XtreamPlaybackTarget.CatalogItem(
@@ -1738,7 +1745,10 @@ class DesktopAppState(
                     ),
                     item.name,
                     0L,
-                ) ?: return@mapNotNull null
+                ) ?: run {
+                    println("multiview: could not resolve a stream for a queued channel")
+                    return@mapNotNull null
+                }
             MultiviewTile(request = request, title = item.name)
         }
 
