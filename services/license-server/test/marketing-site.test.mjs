@@ -24,6 +24,21 @@ test('the public site presents the product before asking for payment', () => {
   assert.ok(html.includes('730 dias'), 'the real license term must be explicit');
 });
 
+test('Offline Vault is prominent without pretending the mobile gate already passed', () => {
+  const all = `${html}\n${script}`;
+  assert.ok(html.includes('id="offline"'), 'Offline Vault needs its own product story');
+  assert.ok(html.includes('data-demo-tab="offline"'), 'downloads need a place in the interactive tour');
+  assert.ok(all.includes('BURO OFFLINE VAULT'));
+  assert.ok(all.includes('EM PREPARAÇÃO PARA MOBILE'));
+  assert.ok(all.includes('sem baixar TV ao vivo nem contornar proteção'));
+
+  const androidCapabilities = JSON.parse(
+    readFileSync(new URL('../../../packages/platform-capabilities/android-adaptive.json', import.meta.url), 'utf8'),
+  );
+  assert.equal(androidCapabilities.offline.supported, false, 'the public copy must remain roadmap copy while the capability is gated');
+  assert.ok(!/offline vault (?:já )?(?:está )?disponível no mobile/i.test(all));
+});
+
 test('the static page hands payment to the Worker without handling card data', () => {
   assert.ok(script.includes("const WORKER_ORIGIN = 'https://iptvburo.iptvburo.workers.dev'"));
   assert.ok(script.includes("new URL('/comprar', WORKER_ORIGIN)"));

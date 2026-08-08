@@ -5,15 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#090A0D">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="IPTV BURO organiza TV ao vivo, filmes e séries das fontes autorizadas que você já possui. Experimente por 7 dias.">
+  <meta name="description" content="Organize TV, filmes e séries das suas fontes autorizadas e conheça o Offline Vault que está chegando ao app móvel.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://serafinnike-create.github.io/IPTVBURO/">
   <meta property="og:title" content="IPTV BURO — Sua biblioteca, finalmente organizada">
-  <meta property="og:description" content="Um player cinematográfico para as suas próprias fontes de mídia. TV, filmes e séries em todas as telas.">
+  <meta property="og:description" content="Sua biblioteca cinematográfica, com Offline Vault em preparação para assistir no mobile mesmo quando a internet falhar.">
   <meta property="og:image" content="https://serafinnike-create.github.io/IPTVBURO/og.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="IPTV BURO — Sua biblioteca, finalmente organizada">
-  <meta name="twitter:description" content="Um player cinematográfico para as suas próprias fontes de mídia.">
+  <meta name="twitter:description" content="TV, filmes, séries e Offline Vault em preparação para o mobile.">
   <meta name="twitter:image" content="https://serafinnike-create.github.io/IPTVBURO/og.png">
   <title>IPTV BURO — Sua biblioteca, finalmente organizada</title>
   <link rel="icon" href="buro-mark.png">
@@ -103,8 +103,8 @@
     <section class="section demo-section" id="demonstracao" aria-labelledby="demo-title">
       <div class="section-heading reveal">
         <p class="kicker" data-i18n="demoKicker">DEMONSTRAÇÃO INTERATIVA</p>
-        <h2 id="demo-title" data-i18n="demoTitle">Cinco telas. Uma biblioteca.</h2>
-        <p data-i18n="demoLead">Escolha uma função ou deixe a apresentação avançar sozinha. É assim que o IPTV BURO organiza uma fonte real depois da importação.</p>
+        <h2 id="demo-title" data-i18n="demoTitle">Seis telas. Uma biblioteca.</h2>
+        <p data-i18n="demoLead">Explore as funções atuais e conheça a próxima grande experiência mobile do IPTV BURO.</p>
       </div>
 
       <div class="demo-layout reveal" data-demo-root>
@@ -123,6 +123,9 @@
           </button>
           <button class="demo-tab" type="button" role="tab" aria-selected="false" data-demo-tab="multiview">
             <span aria-hidden="true">▦</span><b>Multiview</b><small data-i18n="demoMultiSub">Até quatro canais</small>
+          </button>
+          <button class="demo-tab" type="button" role="tab" aria-selected="false" data-demo-tab="offline">
+            <span aria-hidden="true">↓</span><b data-i18n="demoOffline">Downloads</b><small data-i18n="demoOfflineSub">Próximo no mobile</small>
           </button>
           <button class="tour-toggle" type="button" data-tour-toggle aria-pressed="false">
             <span data-tour-icon aria-hidden="true">Ⅱ</span>
@@ -146,7 +149,7 @@
               <span class="stage-badge" data-stage-badge>CONTINUE ASSISTINDO</span>
               <h3 data-stage-title>No limite do horizonte</h3>
               <p data-stage-description>Retome exatamente do ponto onde parou, dentro do perfil certo.</p>
-              <div class="stage-actions"><span class="mini-primary">▶ <i data-i18n="play">Assistir</i></span><span class="mini-secondary">＋ <i data-i18n="details">Detalhes</i></span></div>
+              <div class="stage-actions"><span class="mini-primary">▶ <i data-i18n="play" data-stage-primary>Assistir</i></span><span class="mini-secondary">＋ <i data-i18n="details" data-stage-secondary>Detalhes</i></span></div>
             </div>
             <div class="content-rail" data-content-rail aria-label="Exemplos de conteúdo">
               <article style="--poster:url('assets/category-cinema.webp')"><span>Em destaque</span></article>
@@ -240,6 +243,38 @@
           <p data-i18n="updatesBody">Atualizações verificadas, quatro idiomas e uma arquitetura preparada para novas plataformas.</p>
         </article>
       </div>
+
+      <div class="offline-story reveal" id="offline">
+        <div class="offline-visual" aria-hidden="true">
+          <div class="offline-glow"></div>
+          <div class="offline-phone">
+            <div class="offline-phone-bar"><span>20:48</span><span>● ● ●</span></div>
+            <div class="offline-phone-title"><img src="buro-mark.png" alt="" width="24" height="24"><span>OFFLINE VAULT</span></div>
+            <div class="offline-cover">
+              <img src="assets/category-cinema.webp" alt="" width="1024" height="1024" loading="lazy">
+              <span>↓</span>
+            </div>
+            <div class="offline-progress"><i></i></div>
+            <div class="offline-progress-copy"><b>Baixando</b><span>78% · 1,4 GB</span></div>
+            <div class="offline-library-row"><span style="--thumb:url('assets/category-series.webp')"></span><div><b>Episódio salvo</b><small>Disponível offline</small></div><i>✓</i></div>
+            <div class="offline-library-row"><span style="--thumb:url('assets/category-kids.webp')"></span><div><b>Filme salvo</b><small>Pronto para viajar</small></div><i>✓</i></div>
+          </div>
+          <div class="offline-signal"><span>⌁</span><b>Sem internet</b><small>Reprodução local continua</small></div>
+        </div>
+
+        <div class="offline-copy">
+          <div class="roadmap-badge"><i></i><span data-i18n="offlineStatus">EM PREPARAÇÃO PARA MOBILE</span></div>
+          <p class="kicker" data-i18n="offlineKicker">BURO OFFLINE VAULT</p>
+          <h2 data-i18n="offlineTitle">A internet pode falhar.<br>Sua sessão não precisa parar.</h2>
+          <p class="offline-lead" data-i18n="offlineLead">Baixe antecipadamente filmes e episódios elegíveis e assista depois dentro do IPTV BURO — ideal para viagens, sinal fraco ou uma conexão instável.</p>
+          <ul class="offline-benefits">
+            <li><span>01</span><div><b data-i18n="offlineOneTitle">Sem travamentos</b><p data-i18n="offlineOneBody">O arquivo local não depende da velocidade da internet durante o filme.</p></div></li>
+            <li><span>02</span><div><b data-i18n="offlineTwoTitle">Tudo dentro do app</b><p data-i18n="offlineTwoBody">Downloads, capas e progresso ficam organizados na biblioteca privada do IPTV BURO.</p></div></li>
+            <li><span>03</span><div><b data-i18n="offlineThreeTitle">Feito para o mobile</b><p data-i18n="offlineThreeBody">A experiência está sendo preparada para chegar ao aplicativo móvel após os testes de segurança e reprodução.</p></div></li>
+          </ul>
+          <p class="offline-disclaimer" data-i18n="offlineDisclaimer">Recurso ainda oculto nas versões públicas. Será liberado apenas para mídia elegível, sem baixar TV ao vivo nem contornar proteção.</p>
+        </div>
+      </div>
     </section>
 
     <section class="screens-section" aria-labelledby="screens-title">
@@ -266,7 +301,7 @@
         </article>
         <article class="platform-card">
           <span class="platform-symbol">△</span>
-          <div><h3>Android / Android TV</h3><p data-i18n="androidBody">Aplicativo adaptativo com Media3, perfis, catálogo e reprodução.</p></div>
+          <div><h3>Android / Android TV</h3><p data-i18n="androidBody">Aplicativo adaptativo com Media3, perfis, catálogo e reprodução. Offline Vault em preparação para o mobile.</p></div>
           <span class="platform-tag" data-i18n="previewAvailable">Prévia disponível</span>
         </article>
         <article class="platform-card dimmed">
@@ -340,6 +375,7 @@
         <details><summary data-i18n="faqLifetimeQ">A licença é vitalícia?</summary><p data-i18n="faqLifetimeA">Não. O pagamento libera um dispositivo por 730 dias. Isso financia manutenção contínua para mudanças de formatos, provedores e sistemas.</p></details>
         <details><summary data-i18n="faqDeviceQ">Posso usar em vários dispositivos?</summary><p data-i18n="faqDeviceA">Cada pagamento ativa uma instalação. Perfis são pessoas dentro do mesmo aparelho; não multiplicam a licença.</p></details>
         <details><summary data-i18n="faqPrivateQ">O site recebe minha lista IPTV?</summary><p data-i18n="faqPrivateA">Não. O portal de pagamento recebe apenas o código público da instalação. A sua lista e as credenciais ficam no aplicativo.</p></details>
+        <details><summary data-i18n="faqOfflineQ">Já posso baixar filmes no celular?</summary><p data-i18n="faqOfflineA">O Offline Vault está em preparação para uma próxima versão mobile. Quando passar pelos testes de armazenamento, segurança e reprodução, os downloads elegíveis ficarão dentro da biblioteca privada do aplicativo.</p></details>
         <details><summary data-i18n="faqRefundQ">O que acontece num reembolso?</summary><p data-i18n="faqRefundA">Um reembolso integral confirmado revoga a licença ligada à compra. Reembolsos e disputas são processados pelo servidor de forma auditável.</p></details>
       </div>
     </section>
