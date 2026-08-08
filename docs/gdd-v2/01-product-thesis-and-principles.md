@@ -132,7 +132,7 @@ Digitar URL e senha com controle remoto é último recurso. Priorizar QR code, p
 
 ### P9 — Local-first por economia e privacidade
 
-Histórico, indexação, deduplicação, preferências e boa parte das recomendações devem funcionar localmente. Serviços em nuvem serão opcionais e limitados para manter viável a compra única de € 9,99.
+Histórico, indexação, deduplicação, preferências e boa parte das recomendações devem funcionar localmente. Serviços em nuvem serão opcionais e limitados para manter viável o pagamento único de € 9,90 por 730 dias.
 
 ### P10 — Legalidade por design
 

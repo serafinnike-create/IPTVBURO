@@ -3,6 +3,10 @@
 - Estado: aceito para implementação incremental
 - Data: 2 de agosto de 2026
 
+> Atualização: os termos comerciais de EUR 9,99 vitalícios foram substituídos
+> pelo ADR-010. As decisões de identidade, assinatura e autoridade do backend
+> permanecem válidas.
+
 ## Contexto
 
 O produto oferece sete dias de avaliação sem cartão e compra única de EUR 9,99

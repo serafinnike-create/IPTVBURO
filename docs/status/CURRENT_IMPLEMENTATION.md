@@ -54,7 +54,8 @@ classificar o produto como uma versão estável.
   Android, TV e Windows até a fonte/backend autorizar o item e a implementação
   cumprir integralmente o Cofre Offline do GDD 6;
 - domínio de entitlement e identidade criptográfica de instalação Android foram
-  adicionados; pagamento real aguarda backend, Stripe e Google Play Billing;
+  adicionados; o Worker Cloudflare e o Checkout Stripe para Windows/portal estão
+  implantados em preview, enquanto Google Play Billing ainda não foi integrado;
 - ADRs de licenciamento/player e auditorias de playback, importação e logging
   documentam os gates que ainda bloqueiam a primeira versão Windows estável.
 - EPG curto Xtream agora é consultado sob demanda e apresenta **Agora/A seguir**

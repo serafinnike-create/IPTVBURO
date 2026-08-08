@@ -362,7 +362,7 @@ Princípios:
 - não haverá bypass de proteção ou autorização;
 - conteúdo offline permanece privado e autorizado;
 - teste gratuito proposto: 7 dias;
-- compra única proposta: € 9,99 por dispositivo;
+- compra única: preço-base de € 9,90 por dispositivo, válida por 730 dias e sem renovação automática;
 - regras finais dependem de validação jurídica, fiscal e das lojas.
 
 <div align="center">

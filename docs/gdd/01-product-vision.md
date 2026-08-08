@@ -5,7 +5,7 @@
 **Status:** Documento-base para desenvolvimento com Codex  
 **Codinome:** IPTV BURO  
 **Categoria:** Reprodutor OTT/IPTV multiplataforma  
-**Modelo comercial inicial:** teste gratuito de 7 dias + licença vitalícia de € 9,99 por dispositivo  
+**Modelo comercial vigente:** teste gratuito de 7 dias + pagamento único de € 9,90 por 730 dias e por dispositivo
 **Princípio jurídico:** o produto é somente um player. Não fornece canais, filmes, séries, listas, assinaturas ou conteúdo protegido.
 
 ---
@@ -302,7 +302,7 @@ Somente em versão futura ou plano adicional:
 
 ### 7.3 Restrição comercial
 
-Uma licença única de € 9,99 não sustenta inferência cloud ilimitada para sempre. Portanto:
+Uma licença de € 9,90 por 730 dias não sustenta inferência cloud ilimitada. Portanto:
 
 - P0 e P1 devem ser local-first;
 - metadados devem usar cache;
