@@ -44,6 +44,34 @@ class DesktopPlaybackProgressStore(
                 .toList()
         }
 
+    /**
+     * Everything this profile has watched, most recent first.
+     *
+     * Unlike [continueWatching] this keeps finished titles: the history answers "what did I watch?",
+     * and a film seen to the end is the clearest possible answer to that.
+     */
+    fun history(
+        profileId: String,
+        limit: Int,
+    ): List<PlaybackProgress> =
+        synchronized(preferences) {
+            preferences.keys().asSequence()
+                .mapNotNull { key -> preferences.get(key, null)?.let(::decode) }
+                .filter { progress -> progress.identity.profileId == profileId }
+                .sortedByDescending(PlaybackProgress::lastWatchedAtEpochMillis)
+                .take(limit.coerceAtLeast(0))
+                .toList()
+        }
+
+    /** Forgets everything this profile has watched. */
+    fun clearHistory(profileId: String) {
+        synchronized(preferences) {
+            preferences.keys()
+                .filter { key -> preferences.get(key, null)?.let(::decode)?.identity?.profileId == profileId }
+                .forEach(preferences::remove)
+        }
+    }
+
     private fun storageKey(identity: PlaybackProgressIdentity): String {
         val canonical = listOf(identity.profileId, identity.sourceId, identity.contentType.name, identity.contentId).joinToString("\u001F")
         val digest = MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray(StandardCharsets.UTF_8))

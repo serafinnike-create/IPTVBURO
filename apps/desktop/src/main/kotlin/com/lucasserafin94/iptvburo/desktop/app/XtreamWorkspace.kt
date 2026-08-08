@@ -100,6 +100,7 @@ import com.lucasserafin94.iptvburo.desktop.XtreamStatus
 import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.data.episodeContentKey
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
+import com.lucasserafin94.iptvburo.desktop.platform.DesktopPlatformCapabilities
 import com.lucasserafin94.iptvburo.desktop.ui.CategoryBadge
 import com.lucasserafin94.iptvburo.desktop.ui.categoryLabel
 import com.lucasserafin94.iptvburo.desktop.CatalogLayout
@@ -132,6 +133,7 @@ fun XtreamWorkspace(
     onOpenExternal: (PendingXtreamExternal) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val capabilities = DesktopPlatformCapabilities.current
     var detailsOpen by remember { mutableStateOf(false) }
     var personOpen by remember { mutableStateOf(false) }
 
@@ -237,6 +239,9 @@ fun XtreamWorkspace(
             onMinimumRatingSelected = { rating ->
                 scope.launch { appState.selectXtreamMinimumRating(rating) }
             },
+            multiviewCount = if (capabilities.multiviewSupported) appState.multiviewChannelIds.size else 0,
+            onOpenMultiview = appState::openMultiview,
+            onClearMultiview = appState::clearMultiview,
         )
         // Hidden in Favourites: the rail filters the provider's catalogue, and a favourites list is
         // the user's own selection across all of it. Picking a category there could only ever
@@ -325,6 +330,15 @@ private fun XtreamToolbar(
     onYearSelected: (Int?) -> Unit,
     minimumRating: Double?,
     onMinimumRatingSelected: (Double?) -> Unit,
+    /**
+     * How many channels are queued for the multiview grid, and how to open it.
+     *
+     * Live only: four films at once is not something anyone wants, while four matches at once is
+     * exactly what a second screen normally gets used for.
+     */
+    multiviewCount: Int = 0,
+    onOpenMultiview: () -> Unit = {},
+    onClearMultiview: () -> Unit = {},
 ) {
     val text = strings
     Column(
@@ -405,6 +419,22 @@ private fun XtreamToolbar(
                     )
                 }
                 Spacer(Modifier.width(BuroSpacing.Md))
+            }
+            // Multiview, live only and only once something is queued. Shown as a count rather than
+            // a plain button so the toolbar says how many channels are waiting — with a cap of
+            // four, "3 canais" is the whole state.
+            if (selectedType == XtreamContentType.LIVE && multiviewCount > 0) {
+                FilterChip(
+                    label = "▦  ${text.settingsText.multiviewOpen} ($multiviewCount)",
+                    selected = true,
+                    onClick = onOpenMultiview,
+                )
+                Spacer(Modifier.width(BuroSpacing.Xs))
+                FilterChip(
+                    label = text.settingsText.multiviewClear,
+                    selected = false,
+                    onClick = onClearMultiview,
+                )
             }
             Spacer(Modifier.weight(1f))
         }
@@ -1019,6 +1049,7 @@ internal fun XtreamInternalDetailsPage(
     onRequestCastPhoto: suspend (String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
+    val capabilities = DesktopPlatformCapabilities.current
     // Which trailer is open, if any. Held here so the panel closes when the page does.
     var openTrailerId by remember { mutableStateOf<String?>(null) }
     val item = appState.selectedXtreamItem ?: return
@@ -1027,7 +1058,7 @@ internal fun XtreamInternalDetailsPage(
     // Only VOD is downloadable. A live stream has no end, so a download would grow until the
     // disk fills.
     val downloadTarget =
-        if (item.contentType == XtreamContentType.MOVIE) {
+        if (capabilities.offlineSupported && item.contentType == XtreamContentType.MOVIE) {
             XtreamPlaybackTarget.CatalogItem(
                 providerId = item.providerId,
                 contentType = item.contentType,
@@ -1123,7 +1154,9 @@ internal fun XtreamInternalDetailsPage(
                     downloadTarget?.let { target -> { appState.cancelDownload(target.contentKey) } },
                 onRemoveDownload =
                     downloadTarget?.let { target -> { appState.deleteDownload(target.contentKey) } },
-                episodeDownloadFor = { target -> appState.downloadState(target.contentKey) },
+                episodeDownloadFor = { target ->
+                    if (capabilities.offlineSupported) appState.downloadState(target.contentKey) else null
+                },
                 onDownloadEpisode = { target, displayName ->
                     appState.enqueueDownload(
                         target = target,
@@ -1135,6 +1168,14 @@ internal fun XtreamInternalDetailsPage(
                 },
                 onCancelEpisodeDownload = { target -> appState.cancelDownload(target.contentKey) },
                 onRemoveEpisodeDownload = { target -> appState.deleteDownload(target.contentKey) },
+                onToggleMultiview =
+                    if (capabilities.multiviewSupported && item.contentType == XtreamContentType.LIVE) {
+                        { appState.toggleMultiviewChannel(item.providerId) }
+                    } else {
+                        null
+                    },
+                inMultiview = item.providerId in appState.multiviewChannelIds,
+                multiviewFull = appState.multiviewChannelIds.size >= 4,
             )
         }
 
@@ -1178,6 +1219,13 @@ internal fun XtreamItemDetail(
     onDownloadEpisode: (XtreamPlaybackTarget.Episode, String) -> Unit = { _, _ -> },
     onCancelEpisodeDownload: (XtreamPlaybackTarget.Episode) -> Unit = {},
     onRemoveEpisodeDownload: (XtreamPlaybackTarget.Episode) -> Unit = {},
+    /**
+     * Adds or removes this channel from the multiview grid. Null for anything but a live channel.
+     */
+    onToggleMultiview: (() -> Unit)? = null,
+    inMultiview: Boolean = false,
+    /** True once four channels are queued, which is as many as the grid holds. */
+    multiviewFull: Boolean = false,
 ) {
     val text = strings
     Box(
@@ -1398,6 +1446,33 @@ internal fun XtreamItemDetail(
                             onCancel = onCancelDownload ?: {},
                             onRemove = onRemoveDownload ?: {},
                         )
+                    }
+                    // Live only. Queueing four films to watch at once is not a thing anyone wants;
+                    // four matches at once is what people buy a second screen for, and it is the
+                    // one case where running several decoders earns what it costs.
+                    if (item.contentType == XtreamContentType.LIVE && onToggleMultiview != null) {
+                        OutlinedButton(
+                            onClick = onToggleMultiview,
+                            enabled = inMultiview || !multiviewFull,
+                            shape = BuroRadius.Small,
+                            colors =
+                                ButtonDefaults.outlinedButtonColors(
+                                    contentColor =
+                                        if (inMultiview) BuroColors.Primary else BuroColors.Text,
+                                ),
+                            contentPadding = PaddingValues(horizontal = BuroSpacing.Lg),
+                            modifier = Modifier.height(46.dp),
+                        ) {
+                            Text(
+                                text =
+                                    when {
+                                        inMultiview -> "▦  ${text.settingsText.multiviewRemove}"
+                                        multiviewFull -> text.settingsText.multiviewFull
+                                        else -> "▦  ${text.settingsText.multiviewAdd}"
+                                    },
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(BuroSpacing.Lg))
@@ -2024,21 +2099,50 @@ private fun SeriesDetailContent(
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Spacer(Modifier.height(BuroSpacing.Sm))
-                visible
-                    .sortedBy { it.episodeNumber ?: Int.MAX_VALUE }
-                    .forEach { episode ->
-                        EpisodeRow(
-                            episode = episode,
-                            decision = resumeDecisionForEpisode(episode),
-                            downloadState = downloadStateForEpisode(episode),
-                            onOpen = onOpenEpisode,
-                            onDownload = { onDownloadEpisode(episode) },
-                            onCancelDownload = { onCancelEpisodeDownload(episode) },
-                            onRemoveDownload = { onRemoveEpisodeDownload(episode) },
-                            text = text,
+
+                // Drawn in pages, not all at once.
+                //
+                // These rows go straight into the parent's scrolling column rather than a
+                // LazyColumn — see the note above for why — which means every episode of the open
+                // season is composed and measured whether or not it is on screen. That is fine for
+                // a season of twenty and not for One Piece, whose 1,171 episodes across 23 seasons
+                // left a season of several hundred rows building on the UI thread: the page simply
+                // never appeared.
+                //
+                // Reset per season and per series, so switching either starts from the top again.
+                var shown by remember(details.providerId, openSeason) {
+                    mutableStateOf(EPISODE_PAGE_SIZE)
+                }
+                val ordered = remember(visible) { visible.sortedBy { it.episodeNumber ?: Int.MAX_VALUE } }
+                ordered.take(shown).forEach { episode ->
+                    EpisodeRow(
+                        episode = episode,
+                        decision = resumeDecisionForEpisode(episode),
+                        downloadState = downloadStateForEpisode(episode),
+                        onOpen = onOpenEpisode,
+                        onDownload = { onDownloadEpisode(episode) },
+                        onCancelDownload = { onCancelEpisodeDownload(episode) },
+                        onRemoveDownload = { onRemoveEpisodeDownload(episode) },
+                        text = text,
+                    )
+                    Spacer(Modifier.height(BuroSpacing.Xs))
+                }
+                if (shown < ordered.size) {
+                    val remaining = ordered.size - shown
+                    OutlinedButton(
+                        onClick = { shown += EPISODE_PAGE_SIZE },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = BuroRadius.Small,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+                    ) {
+                        Text(
+                            // The count, so the button says how much is left rather than just
+                            // "more" — with 1,171 episodes that difference matters.
+                            text = "Mostrar mais $remaining",
+                            fontWeight = FontWeight.SemiBold,
                         )
-                        Spacer(Modifier.height(BuroSpacing.Xs))
                     }
+                }
             }
         }
     }
@@ -2271,6 +2375,16 @@ private fun formatPlaybackTime(positionMs: Long): String {
 private const val SEARCH_DEBOUNCE_MILLIS = 280L
 
 /**
+ * Episodes drawn before the "show more" button appears.
+ *
+ * Chosen to cover an ordinary season in one go — most run to twenty-something — so the paging is
+ * invisible for almost every series and only shows up where it is needed. The rows are composed
+ * eagerly inside a scrolling column, so this is the number that decides whether the page appears
+ * at all on something like One Piece.
+ */
+private const val EPISODE_PAGE_SIZE = 40
+
+/**
  * Download control.
  *
  * One button that reflects the four states rather than a separate control per state, so the action
@@ -2489,8 +2603,11 @@ private fun RatingPicker(
             ) {
                 Text(
                     text =
-                        if (active) {
-                            "★ ${selected!!.toInt()}+  ▾"
+                        // On `selected` rather than on `active`, so the compiler proves the value
+                        // is there instead of a `!!` asserting it. The two conditions are the same
+                        // today; a `!!` is a crash waiting for the day they are not.
+                        if (selected != null) {
+                            "★ ${selected.toInt()}+  ▾"
                         } else {
                             "$label  ▾"
                         },

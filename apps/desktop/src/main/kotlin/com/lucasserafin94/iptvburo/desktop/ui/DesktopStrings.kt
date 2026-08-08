@@ -12,6 +12,186 @@ import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
  * a compile error instead of a runtime `NoSuchElementException`, and the tables are allocated once
  * at class-init instead of on every recomposition.
  */
+/**
+ * Strings for the settings screen.
+ *
+ * A group rather than more fields on [DesktopStrings]: that class's constructor had reached the
+ * JVM's 254-argument ceiling and any further addition broke the app at class load. New settings
+ * strings belong here.
+ */
+/**
+ * Strings for the activation screen.
+ *
+ * Its own group for the same reason as [SettingsStrings]: the main constructor is at the JVM's
+ * argument ceiling. Grouped separately from settings besides, because this screen is shown *instead
+ * of* the app rather than inside it, and the two are edited for different reasons.
+ */
+data class LicenseStrings(
+    val trialTitle: String,
+    val trialBody: String,
+    val expiredTitle: String,
+    val expiredBody: String,
+    val revokedTitle: String,
+    val revokedBody: String,
+    val unreachableTitle: String,
+    val unreachableBody: String,
+    val verifyTitle: String,
+    val verifyBody: String,
+    val deviceLabel: String,
+    val macLabel: String,
+    val scanHint: String,
+    val openInBrowser: String,
+    val retry: String,
+    val haveKey: String,
+    val keyPlaceholder: String,
+    val redeem: String,
+    val redeemFailed: String,
+    val quit: String,
+    /** Leaves this screen while there is still a working app behind it. */
+    val back: String,
+    /** The term beside the price: "2 anos". Formatted with %d years. */
+    val termYears: String,
+    /**
+     * The three prices, chosen by the machine's country rather than its language.
+     *
+     * Identical in all four translations, and deliberately so: "R$ 99,90" is the same string to a
+     * German as to a Brazilian. What changes is only the word for the term beside it, which is why
+     * these carry it. Keeping them per-language rather than as constants means a translator can fix
+     * "2 anos" without touching the number.
+     */
+    val priceEur: String,
+    val priceUsd: String,
+    val priceBrl: String,
+    val whyNotLifetime: String,
+    val copied: String,
+    val clockWarning: String,
+    /** Shown in the app while a trial is still running, so its end is never a surprise. */
+    val trialDaysLeft: String,
+    /**
+     * The same countdown for a paid licence, shown only in its final month.
+     *
+     * Formatted with `%d`. A translation that drops the placeholder prints a sentence with no
+     * number in it, and does so only in that one language — which is why a test checks for it.
+     */
+    val licenseDaysLeft: String,
+    val licenseLastDay: String,
+    val trialLastDay: String,
+    val buyNow: String,
+)
+
+data class SettingsStrings(
+    /** Editing a profile from the gate: rename, avatar, Kids, and which playlist it signs in to. */
+    val profileEdit: String,
+    val profileEditTitle: String,
+    val profileNameLabel: String,
+    val profileAvatarLabel: String,
+    val profileKidsLabel: String,
+    val profileKidsHint: String,
+    val profileSourceLabel: String,
+    val profileSourceNone: String,
+    val profileSourceChange: String,
+    val profileMusicLabel: String,
+    val profileMusicNone: String,
+    val profileMusicChoose: String,
+    val profileMusicClear: String,
+    val profileSave: String,
+    val expandSidebar: String,
+    val subtitlesLabel: String,
+    val subtitlesHint: String,
+    val subtitlesBackground: String,
+    val historyTitle: String,
+    val historyClearAll: String,
+    val historyEmpty: String,
+    val categoriesLabel: String,
+    val categoriesHint: String,
+    val categoryHide: String,
+    val categoryLock: String,
+    val clockLabel: String,
+    val clockHint: String,
+    val clock24h: String,
+    val clock12h: String,
+    val parentalTitle: String,
+    val parentalHint: String,
+    val parentalSetPin: String,
+    val parentalChangePin: String,
+    val parentalRemovePin: String,
+    val parentalCurrentPin: String,
+    val parentalNewPin: String,
+    val parentalWrongPin: String,
+    val parentalPinSaved: String,
+    val parentalPinFormat: String,
+    val parentalLockAdult: String,
+    val parentalLocked: String,
+    val parentalUnlock: String,
+    /** Shown only on the first run, where the wait is longest and needs explaining. */
+    val firstRunTitle: String,
+    val firstRunBody: String,
+    /** The TMDb key: what it is for, that it is free, and how to get one. */
+    val firstRunTmdbTitle: String,
+    val firstRunTmdbBody: String,
+    /**
+     * What the preparation screen is doing right now.
+     *
+     * These were Portuguese string literals in DesktopAppState — invisible while only a returning
+     * Brazilian user saw them, and wrong the moment the preparation screen became something all
+     * four languages meet on their first launch.
+     */
+    val startupAuthenticating: String,
+    val startupOrganising: String,
+    /** The per-profile TMDb key: what it is for, and that leaving it empty shares the other one. */
+    val profileKeyLabel: String,
+    val profileKeyHint: String,
+    val profileKeyShared: String,
+    val profileKeyOwn: String,
+    /**
+     * The button that opens the settings dialog.
+     *
+     * Named for what it opens rather than for one thing inside it: the dialog also holds subtitle
+     * appearance, the clock format, category hiding and the history controls, and calling the
+     * button "Controle dos pais" hid all of that behind a name that sounded like it did not apply.
+     */
+    val moreSettingsTitle: String,
+    val moreSettingsHint: String,
+    /**
+     * Multiview, on the live tab only.
+     *
+     * Four films at once is not something anyone wants; four matches at once is what a second
+     * screen normally gets used for, which is why this exists nowhere else.
+     */
+    val multiviewAdd: String,
+    val multiviewRemove: String,
+    val multiviewOpen: String,
+    val multiviewClear: String,
+    val multiviewFull: String,
+    /**
+     * The licence gate.
+     *
+     * This screen is where someone decides whether to pay or close the app for ever, so the wording
+     * matters commercially rather than only cosmetically. Two rules run through it: never ask for
+     * money when the problem is a connection, and answer "why is this not lifetime?" before it is
+     * asked, because the competing products in this market all say lifetime.
+     */
+    val licenseTrialOverTitle: String,
+    val licenseTrialOverBody: String,
+    val licenseExpiredTitle: String,
+    val licenseExpiredBody: String,
+    val licenseRevokedTitle: String,
+    val licenseRevokedBody: String,
+    val licenseVerifyTitle: String,
+    val licenseVerifyBody: String,
+    val licenseOfflineTitle: String,
+    val licenseOfflineBody: String,
+    val licenseTwoYears: String,
+    val licenseWhyNotLifetime: String,
+    val licenseBuy: String,
+    val licenseRetry: String,
+    val licenseDeviceLabel: String,
+    val licenseHaveKey: String,
+    val licenseKeyPlaceholder: String,
+    val licenseRedeem: String,
+    val licenseDaysLeft: String,
+)
+
 data class DesktopStrings(
     // Shell
     val library: String,
@@ -241,6 +421,19 @@ data class DesktopStrings(
     /** Confirms a pasted key took effect — there is no Save button, and silence looks like failure. */
     val metadataKeySaved: String,
     val metadataKeyUsingBundled: String,
+    /**
+     * Settings-screen strings, grouped rather than listed flat.
+     *
+     * The JVM caps a method at 254 arguments, and this class's constructor reached it — the app
+     * compiled and then died on class load with "Too many arguments in method signature". Grouping
+     * spends one parameter instead of twenty-one, and there is room to grow again.
+     */
+    val settingsText: SettingsStrings,
+    val licenseText: LicenseStrings,
+    val subscriptionsSynopsis: String,
+    val subscriptionsCast: String,
+    val subscriptionsWatchTrailer: String,
+    val subscriptionsAvailableOn: String,
     val subscriptionsFilterMovies: String,
     val subscriptionsFilterSeries: String,
     val subscriptionsFilterUpcoming: String,
@@ -400,7 +593,7 @@ data class DesktopStrings(
                 resetSettings = "Redefinir configuracoes",
                 resetConfirm = "Apagar tudo",
                 resetWarning = "Isso apaga perfis, favoritos e progresso. Os arquivos baixados sao mantidos.",
-                settings = "Configuracoes",
+                settings = "Configurações",
                 languageLabel = "IDIOMA",
                 chooseYear = "Escolher ano",
                 downloadPaused = "Pausado",
@@ -492,6 +685,106 @@ data class DesktopStrings(
                 metadataKeyUses = "Usada para capas, elenco, trailers e a aba Assinaturas",
                 metadataKeySaved = "✓ Chave salva. Já está em uso.",
                 metadataKeyUsingBundled = "Usando a chave padrão do aplicativo.",
+                settingsText =
+                    SettingsStrings(
+                        profileEdit = "Editar",
+                        profileEditTitle = "Editar perfil",
+                        profileNameLabel = "Nome",
+                        profileAvatarLabel = "Imagem",
+                        profileKidsLabel = "Modo infantil",
+                        profileKidsHint = "Mostra apenas conteúdo para crianças",
+                        profileSourceLabel = "Lista",
+                        profileSourceNone = "Usar a que já está conectada",
+                        profileSourceChange = "Trocar lista",
+                        profileMusicLabel = "Música (M3U)",
+                        profileMusicNone = "Nenhum arquivo escolhido",
+                        profileMusicChoose = "Escolher arquivo",
+                        profileMusicClear = "Remover",
+                        profileSave = "Salvar",
+                        expandSidebar = "Expandir",
+                        subtitlesLabel = "Legendas",
+                        subtitlesHint = "Vale para o próximo filme aberto",
+                        subtitlesBackground = "Fundo escuro",
+                        historyTitle = "Histórico",
+                        historyClearAll = "Apagar tudo",
+                        historyEmpty = "Nada assistido ainda.",
+                        categoriesLabel = "Categorias",
+                        categoriesHint = "Esconda o que não usa, ou proteja com a senha",
+                        categoryHide = "Ocultar",
+                        categoryLock = "Proteger",
+                        clockLabel = "Relógio",
+                        clockHint = "Formato da hora mostrada no topo",
+                        clock24h = "24 horas",
+                        clock12h = "12 horas",
+                        parentalTitle = "Controle dos pais",
+                        parentalHint = "Protege categorias com uma senha de 4 dígitos",
+                        parentalSetPin = "Criar senha",
+                        parentalChangePin = "Alterar senha",
+                        parentalRemovePin = "Remover senha",
+                        parentalCurrentPin = "Senha atual",
+                        parentalNewPin = "Nova senha",
+                        parentalWrongPin = "Senha incorreta.",
+                        parentalPinSaved = "✓ Senha salva.",
+                        parentalPinFormat = "A senha precisa ter 4 números.",
+                        parentalLockAdult = "Bloquear categorias adultas automaticamente",
+                        parentalLocked = "Conteúdo protegido",
+                        firstRunTitle = "A preparar o IPTV BURO",
+                        firstRunBody =
+                            "Só desta vez demora mais: a sua lista está a ser lida e organizada. " +
+                                "Nas próximas aberturas isto já estará pronto.",
+                        firstRunTmdbTitle = "Capas e sinopses",
+                        firstRunTmdbBody =
+                            "Para ver capas, sinopses e elenco, adicione uma chave do TMDb em " +
+                                "Opções. É gratuita: crie uma conta em themoviedb.org, peça a chave " +
+                                "de API e cole-a no BURO.",
+                        startupAuthenticating = "Autenticando…",
+                        startupOrganising = "Organizando a sua lista…",
+                        profileKeyLabel = "Chave só deste perfil",
+                        profileKeyHint =
+                            "Deixe em branco para usar a mesma chave dos outros perfis. " +
+                                "Preencha para este perfil usar a sua própria conta do TMDb.",
+                        profileKeyShared = "Usando a chave compartilhada",
+                        profileKeyOwn = "Este perfil usa a própria chave",
+                        moreSettingsTitle = "Mais opções",
+                        moreSettingsHint = "Legendas, relógio, categorias e controle dos pais",
+                        multiviewAdd = "Ver junto",
+                        multiviewRemove = "Tirar da tela dupla",
+                        multiviewOpen = "Ver junto",
+                        multiviewClear = "Limpar",
+                        multiviewFull = "Máximo de 4 canais",
+                        licenseTrialOverTitle = "Seus 7 dias terminaram",
+                        licenseTrialOverBody =
+                            "Esperamos que tenha gostado. Para continuar assistindo, ative este " +
+                                "dispositivo.",
+                        licenseExpiredTitle = "Sua licença expirou",
+                        licenseExpiredBody = "Renove para continuar usando o IPTV BURO neste dispositivo.",
+                        licenseRevokedTitle = "Licença cancelada",
+                        licenseRevokedBody =
+                            "Esta licença foi cancelada. Se acha que houve um engano, fale connosco.",
+                        licenseVerifyTitle = "Precisamos verificar sua licença",
+                        licenseVerifyBody =
+                            "Já faz um tempo desde a última verificação. Conecte-se à internet " +
+                                "uma vez e volta ao normal.",
+                        licenseOfflineTitle = "Sem conexão",
+                        licenseOfflineBody =
+                            "Não conseguimos verificar sua licença. Confira sua internet e tente de novo.",
+                        licenseTwoYears = "por 2 anos",
+                        licenseWhyNotLifetime =
+                            "Não é vitalício porque o app continua sendo mantido e atualizado: " +
+                                "provedores mudam, formatos mudam, o Windows muda.",
+                        licenseBuy = "Ativar dispositivo",
+                        licenseRetry = "Tentar de novo",
+                        licenseDeviceLabel = "Seu dispositivo",
+                        licenseHaveKey = "Tenho um código de ativação",
+                        licenseKeyPlaceholder = "Código",
+                        licenseRedeem = "Usar código",
+                        licenseDaysLeft = "Faltam %d dias",
+                        parentalUnlock = "Digite a senha para ver esta categoria",
+                    ),
+                subscriptionsSynopsis = "Sinopse",
+                subscriptionsCast = "Elenco",
+                subscriptionsWatchTrailer = "▶  Ver trailer",
+                subscriptionsAvailableOn = "Disponível em",
                 subscriptionsFilterMovies = "Filmes",
                 subscriptionsFilterSeries = "Séries",
                 subscriptionsFilterUpcoming = "Em breve",
@@ -503,6 +796,53 @@ data class DesktopStrings(
                 subscriptionsNoShelves = "Nenhum serviço para mostrar ainda.",
                 subscriptionsBackToServices = "Voltar aos serviços",
                 subscriptionsSelectedTitle = "Título selecionado",
+                licenseText =
+                    LicenseStrings(
+                        trialTitle = "Seu período de teste terminou",
+                        trialBody =
+                            "Os 7 dias acabaram. Ative este dispositivo para continuar usando o IPTV BURO.",
+                        expiredTitle = "Licença expirada",
+                        expiredBody =
+                            "A licença deste dispositivo venceu. Renove para continuar.",
+                        revokedTitle = "Licença cancelada",
+                        revokedBody =
+                            "Esta licença não está mais ativa. Se achar que é um engano, escreva para "
+                                + "nós informando o código abaixo.",
+                        unreachableTitle = "Não foi possível verificar a licença",
+                        unreachableBody =
+                            "Não conseguimos falar com o servidor. Confira sua conexão e tente de novo.",
+                        verifyTitle = "Precisa verificar",
+                        verifyBody =
+                            "O aplicativo ficou tempo demais sem verificar. Conecte-se à internet uma "
+                                + "vez para continuar.",
+                        deviceLabel = "Dispositivo",
+                        macLabel = "MAC",
+                        scanHint = "Aponte a câmera do celular para o código",
+                        openInBrowser = "Abrir no navegador",
+                        retry = "Tentar de novo",
+                        haveKey = "Tem um código de ativação?",
+                        keyPlaceholder = "XXXX-XXXX",
+                        redeem = "Ativar",
+                        redeemFailed = "Código inválido ou já usado.",
+                        quit = "Fechar",
+                        back = "Voltar ao aplicativo",
+                        termYears = "%d anos",
+                        priceEur = "€ 9,90 · 2 anos",
+                        priceUsd = "US$ 9.90 · 2 anos",
+                        priceBrl = "R$ 99,90 · 2 anos",
+                        whyNotLifetime =
+                            "Por que não é vitalício: o aplicativo continua sendo mantido e atualizado. "
+                                + "Os 2 anos pagam esse trabalho.",
+                        copied = "Copiado",
+                        clockWarning =
+                            "O relógio deste computador parece errado. As datas da licença vêm do "
+                                + "servidor de qualquer forma.",
+                        trialDaysLeft = "Faltam %d dias de teste",
+                        licenseDaysLeft = "Faltam %d dias",
+                        licenseLastDay = "Último dia",
+                        trialLastDay = "Último dia de teste",
+                        buyNow = "Ativar",
+                    ),
             )
 
         private val En =
@@ -728,6 +1068,105 @@ data class DesktopStrings(
                 metadataKeyUses = "Used for posters, cast, trailers and the Subscriptions tab",
                 metadataKeySaved = "✓ Key saved. It is in use now.",
                 metadataKeyUsingBundled = "Using the app's default key.",
+                settingsText =
+                    SettingsStrings(
+                        profileEdit = "Edit",
+                        profileEditTitle = "Edit profile",
+                        profileNameLabel = "Name",
+                        profileAvatarLabel = "Picture",
+                        profileKidsLabel = "Kids mode",
+                        profileKidsHint = "Shows only children's content",
+                        profileSourceLabel = "Playlist",
+                        profileSourceNone = "Use whichever is connected",
+                        profileSourceChange = "Change playlist",
+                        profileMusicLabel = "Music (M3U)",
+                        profileMusicNone = "No file chosen",
+                        profileMusicChoose = "Choose file",
+                        profileMusicClear = "Remove",
+                        profileSave = "Save",
+                        expandSidebar = "Expand",
+                        subtitlesLabel = "Subtitles",
+                        subtitlesHint = "Applies to the next title you open",
+                        subtitlesBackground = "Dark background",
+                        historyTitle = "History",
+                        historyClearAll = "Clear all",
+                        historyEmpty = "Nothing watched yet.",
+                        categoriesLabel = "Categories",
+                        categoriesHint = "Hide what you do not use, or protect it with the PIN",
+                        categoryHide = "Hide",
+                        categoryLock = "Protect",
+                        clockLabel = "Clock",
+                        clockHint = "How the time reads in the header",
+                        clock24h = "24-hour",
+                        clock12h = "12-hour",
+                        parentalTitle = "Parental controls",
+                        parentalHint = "Protects categories with a four-digit PIN",
+                        parentalSetPin = "Create a PIN",
+                        parentalChangePin = "Change PIN",
+                        parentalRemovePin = "Remove PIN",
+                        parentalCurrentPin = "Current PIN",
+                        parentalNewPin = "New PIN",
+                        parentalWrongPin = "Wrong PIN.",
+                        parentalPinSaved = "✓ PIN saved.",
+                        parentalPinFormat = "The PIN must be four digits.",
+                        parentalLockAdult = "Lock adult categories automatically",
+                        parentalLocked = "Protected content",
+                        firstRunTitle = "Setting up IPTV BURO",
+                        firstRunBody =
+                            "This one time takes longer: your list is being read and organised. " +
+                                "It will already be ready the next time you open the app.",
+                        firstRunTmdbTitle = "Artwork and synopses",
+                        firstRunTmdbBody =
+                            "For posters, synopses and cast, add a TMDb key in Settings. It is " +
+                                "free: create an account at themoviedb.org, request the API key and " +
+                                "paste it into BURO.",
+                        startupAuthenticating = "Signing in…",
+                        startupOrganising = "Organising your list…",
+                        profileKeyLabel = "Key for this profile only",
+                        profileKeyHint =
+                            "Leave blank to use the same key as the other profiles. Fill it in for " +
+                                "this profile to use its own TMDb account.",
+                        profileKeyShared = "Using the shared key",
+                        profileKeyOwn = "This profile uses its own key",
+                        moreSettingsTitle = "More settings",
+                        moreSettingsHint = "Subtitles, clock, categories and parental controls",
+                        multiviewAdd = "Watch together",
+                        multiviewRemove = "Remove from multiview",
+                        multiviewOpen = "Watch together",
+                        multiviewClear = "Clear",
+                        multiviewFull = "Four channels maximum",
+                        licenseTrialOverTitle = "Your 7 days are up",
+                        licenseTrialOverBody =
+                            "We hope you enjoyed it. To keep watching, activate this device.",
+                        licenseExpiredTitle = "Your licence has expired",
+                        licenseExpiredBody = "Renew to keep using IPTV BURO on this device.",
+                        licenseRevokedTitle = "Licence cancelled",
+                        licenseRevokedBody =
+                            "This licence has been cancelled. If you think that is a mistake, get in touch.",
+                        licenseVerifyTitle = "We need to check your licence",
+                        licenseVerifyBody =
+                            "It has been a while since the last check. Connect to the internet once " +
+                                "and you are back to normal.",
+                        licenseOfflineTitle = "No connection",
+                        licenseOfflineBody =
+                            "We could not check your licence. Check your internet and try again.",
+                        licenseTwoYears = "for 2 years",
+                        licenseWhyNotLifetime =
+                            "Not lifetime, because the app keeps being maintained and updated: " +
+                                "providers change, formats change, Windows changes.",
+                        licenseBuy = "Activate device",
+                        licenseRetry = "Try again",
+                        licenseDeviceLabel = "Your device",
+                        licenseHaveKey = "I have an activation code",
+                        licenseKeyPlaceholder = "Code",
+                        licenseRedeem = "Use code",
+                        licenseDaysLeft = "%d days left",
+                        parentalUnlock = "Enter the PIN to open this category",
+                    ),
+                subscriptionsSynopsis = "Synopsis",
+                subscriptionsCast = "Cast",
+                subscriptionsWatchTrailer = "▶  Watch trailer",
+                subscriptionsAvailableOn = "Available on",
                 subscriptionsFilterMovies = "Films",
                 subscriptionsFilterSeries = "Series",
                 subscriptionsFilterUpcoming = "Coming soon",
@@ -739,6 +1178,52 @@ data class DesktopStrings(
                 subscriptionsNoShelves = "No services to show yet.",
                 subscriptionsBackToServices = "Back to services",
                 subscriptionsSelectedTitle = "Selected title",
+                licenseText =
+                    LicenseStrings(
+                        trialTitle = "Your trial has ended",
+                        trialBody =
+                            "The 7 days are over. Activate this device to keep using IPTV BURO.",
+                        expiredTitle = "Licence expired",
+                        expiredBody =
+                            "This device's licence has run out. Renew it to carry on.",
+                        revokedTitle = "Licence revoked",
+                        revokedBody =
+                            "This licence is no longer active. If you think that is a mistake, write to "
+                                + "us quoting the identifier below.",
+                        unreachableTitle = "Could not check your licence",
+                        unreachableBody =
+                            "We could not reach the server. Check your connection and try again.",
+                        verifyTitle = "Verification needed",
+                        verifyBody =
+                            "The app has run offline for long enough. Go online once to carry on.",
+                        deviceLabel = "Device",
+                        macLabel = "MAC",
+                        scanHint = "Scan this with your phone",
+                        openInBrowser = "Open in browser",
+                        retry = "Try again",
+                        haveKey = "Have an activation code?",
+                        keyPlaceholder = "XXXX-XXXX",
+                        redeem = "Activate",
+                        redeemFailed = "That code is not valid, or has already been used.",
+                        quit = "Quit",
+                        back = "Back to the app",
+                        termYears = "%d years",
+                        priceEur = "€9.90 · 2 years",
+                        priceUsd = "$9.90 · 2 years",
+                        priceBrl = "R$99.90 · 2 years",
+                        whyNotLifetime =
+                            "Why not lifetime: the app keeps being maintained and updated. The 2 years "
+                                + "pay for that work.",
+                        copied = "Copied",
+                        clockWarning =
+                            "This computer's clock looks wrong. Your licence dates come from the server "
+                                + "either way.",
+                        trialDaysLeft = "%d days left in your trial",
+                        licenseDaysLeft = "%d days left",
+                        licenseLastDay = "Last day",
+                        trialLastDay = "Last day of your trial",
+                        buyNow = "Activate",
+                    ),
             )
 
         private val De =
@@ -963,6 +1448,108 @@ data class DesktopStrings(
                 metadataKeyUses = "Für Poster, Besetzung, Trailer und den Bereich Abonnements",
                 metadataKeySaved = "✓ Schlüssel gespeichert und aktiv.",
                 metadataKeyUsingBundled = "Der Standardschlüssel der App wird verwendet.",
+                settingsText =
+                    SettingsStrings(
+                        profileEdit = "Bearbeiten",
+                        profileEditTitle = "Profil bearbeiten",
+                        profileNameLabel = "Name",
+                        profileAvatarLabel = "Bild",
+                        profileKidsLabel = "Kindermodus",
+                        profileKidsHint = "Zeigt nur Inhalte für Kinder",
+                        profileSourceLabel = "Playlist",
+                        profileSourceNone = "Die bereits verbundene verwenden",
+                        profileSourceChange = "Playlist wechseln",
+                        profileMusicLabel = "Musik (M3U)",
+                        profileMusicNone = "Keine Datei gewählt",
+                        profileMusicChoose = "Datei wählen",
+                        profileMusicClear = "Entfernen",
+                        profileSave = "Speichern",
+                        expandSidebar = "Erweitern",
+                        subtitlesLabel = "Untertitel",
+                        subtitlesHint = "Gilt für den nächsten Titel",
+                        subtitlesBackground = "Dunkler Hintergrund",
+                        historyTitle = "Verlauf",
+                        historyClearAll = "Alles löschen",
+                        historyEmpty = "Noch nichts gesehen.",
+                        categoriesLabel = "Kategorien",
+                        categoriesHint = "Verbergen Sie Ungenutztes oder schützen Sie es mit der PIN",
+                        categoryHide = "Ausblenden",
+                        categoryLock = "Schützen",
+                        clockLabel = "Uhr",
+                        clockHint = "Format der Uhrzeit in der Kopfzeile",
+                        clock24h = "24 Stunden",
+                        clock12h = "12 Stunden",
+                        parentalTitle = "Kindersicherung",
+                        parentalHint = "Schützt Kategorien mit einer vierstelligen PIN",
+                        parentalSetPin = "PIN einrichten",
+                        parentalChangePin = "PIN ändern",
+                        parentalRemovePin = "PIN entfernen",
+                        parentalCurrentPin = "Aktuelle PIN",
+                        parentalNewPin = "Neue PIN",
+                        parentalWrongPin = "Falsche PIN.",
+                        parentalPinSaved = "✓ PIN gespeichert.",
+                        parentalPinFormat = "Die PIN muss vier Ziffern haben.",
+                        parentalLockAdult = "Erwachsenenkategorien automatisch sperren",
+                        parentalLocked = "Geschützter Inhalt",
+                        firstRunTitle = "IPTV BURO wird eingerichtet",
+                        firstRunBody =
+                            "Nur dieses eine Mal dauert es länger: Ihre Liste wird gelesen und " +
+                                "geordnet. Beim nächsten Start ist alles bereit.",
+                        firstRunTmdbTitle = "Cover und Inhaltsangaben",
+                        firstRunTmdbBody =
+                            "Für Cover, Inhaltsangaben und Besetzung fügen Sie in den Optionen " +
+                                "einen TMDb-Schlüssel hinzu. Er ist kostenlos: Konto auf " +
+                                "themoviedb.org anlegen, API-Schlüssel anfordern und in BURO einfügen.",
+                        startupAuthenticating = "Anmeldung läuft…",
+                        startupOrganising = "Ihre Liste wird geordnet…",
+                        profileKeyLabel = "Schlüssel nur für dieses Profil",
+                        profileKeyHint =
+                            "Leer lassen, um denselben Schlüssel wie die anderen Profile zu " +
+                                "verwenden. Ausfüllen, damit dieses Profil sein eigenes " +
+                                "TMDb-Konto nutzt.",
+                        profileKeyShared = "Gemeinsamer Schlüssel wird verwendet",
+                        profileKeyOwn = "Dieses Profil nutzt einen eigenen Schlüssel",
+                        moreSettingsTitle = "Weitere Optionen",
+                        moreSettingsHint = "Untertitel, Uhr, Kategorien und Kindersicherung",
+                        multiviewAdd = "Zusammen ansehen",
+                        multiviewRemove = "Aus der Mehrfachansicht entfernen",
+                        multiviewOpen = "Zusammen ansehen",
+                        multiviewClear = "Leeren",
+                        multiviewFull = "Höchstens vier Kanäle",
+                        licenseTrialOverTitle = "Ihre 7 Tage sind vorbei",
+                        licenseTrialOverBody =
+                            "Wir hoffen, es hat Ihnen gefallen. Aktivieren Sie dieses Gerät, um " +
+                                "weiterzuschauen.",
+                        licenseExpiredTitle = "Ihre Lizenz ist abgelaufen",
+                        licenseExpiredBody =
+                            "Verlängern Sie, um IPTV BURO auf diesem Gerät weiter zu nutzen.",
+                        licenseRevokedTitle = "Lizenz storniert",
+                        licenseRevokedBody =
+                            "Diese Lizenz wurde storniert. Wenn das ein Irrtum ist, melden Sie sich.",
+                        licenseVerifyTitle = "Wir müssen Ihre Lizenz prüfen",
+                        licenseVerifyBody =
+                            "Die letzte Prüfung ist eine Weile her. Einmal mit dem Internet " +
+                                "verbinden genügt.",
+                        licenseOfflineTitle = "Keine Verbindung",
+                        licenseOfflineBody =
+                            "Die Lizenz konnte nicht geprüft werden. Prüfen Sie Ihre Verbindung.",
+                        licenseTwoYears = "für 2 Jahre",
+                        licenseWhyNotLifetime =
+                            "Nicht lebenslang, weil die App weiter gepflegt wird: Anbieter ändern " +
+                                "sich, Formate ändern sich, Windows ändert sich.",
+                        licenseBuy = "Gerät aktivieren",
+                        licenseRetry = "Erneut versuchen",
+                        licenseDeviceLabel = "Ihr Gerät",
+                        licenseHaveKey = "Ich habe einen Aktivierungscode",
+                        licenseKeyPlaceholder = "Code",
+                        licenseRedeem = "Code einlösen",
+                        licenseDaysLeft = "Noch %d Tage",
+                        parentalUnlock = "PIN eingeben, um diese Kategorie zu öffnen",
+                    ),
+                subscriptionsSynopsis = "Handlung",
+                subscriptionsCast = "Besetzung",
+                subscriptionsWatchTrailer = "▶  Trailer ansehen",
+                subscriptionsAvailableOn = "Verfügbar bei",
                 subscriptionsFilterMovies = "Filme",
                 subscriptionsFilterSeries = "Serien",
                 subscriptionsFilterUpcoming = "Demnächst",
@@ -976,6 +1563,54 @@ data class DesktopStrings(
                 subscriptionsNoShelves = "Noch keine Dienste vorhanden.",
                 subscriptionsBackToServices = "Zurück zu den Diensten",
                 subscriptionsSelectedTitle = "Ausgewählter Titel",
+                licenseText =
+                    LicenseStrings(
+                        trialTitle = "Testzeitraum beendet",
+                        trialBody =
+                            "Die 7 Tage sind vorbei. Aktivieren Sie dieses Gerät, um IPTV BURO weiter "
+                                + "zu nutzen.",
+                        expiredTitle = "Lizenz abgelaufen",
+                        expiredBody =
+                            "Die Lizenz dieses Geräts ist abgelaufen. Verlängern Sie sie, um fortzufahren.",
+                        revokedTitle = "Lizenz widerrufen",
+                        revokedBody =
+                            "Diese Lizenz ist nicht mehr aktiv. Falls das ein Fehler ist, schreiben Sie "
+                                + "uns mit der Kennung unten.",
+                        unreachableTitle = "Lizenz nicht überprüfbar",
+                        unreachableBody =
+                            "Der Server ist nicht erreichbar. Prüfen Sie Ihre Verbindung und versuchen "
+                                + "Sie es erneut.",
+                        verifyTitle = "Überprüfung erforderlich",
+                        verifyBody =
+                            "Die App lief lange genug offline. Gehen Sie einmal online, um fortzufahren.",
+                        deviceLabel = "Gerät",
+                        macLabel = "MAC",
+                        scanHint = "Code mit dem Handy scannen",
+                        openInBrowser = "Im Browser öffnen",
+                        retry = "Erneut versuchen",
+                        haveKey = "Haben Sie einen Aktivierungscode?",
+                        keyPlaceholder = "XXXX-XXXX",
+                        redeem = "Aktivieren",
+                        redeemFailed = "Code ungültig oder bereits verwendet.",
+                        quit = "Schließen",
+                        back = "Zurück zur App",
+                        termYears = "%d Jahre",
+                        priceEur = "9,90 € · 2 Jahre",
+                        priceUsd = "9,90 $ · 2 Jahre",
+                        priceBrl = "99,90 R$ · 2 Jahre",
+                        whyNotLifetime =
+                            "Warum nicht lebenslang: Die App wird weiter gepflegt und aktualisiert. Die "
+                                + "2 Jahre bezahlen diese Arbeit.",
+                        copied = "Kopiert",
+                        clockWarning =
+                            "Die Uhr dieses Rechners scheint falsch zu gehen. Die Lizenzdaten kommen "
+                                + "ohnehin vom Server.",
+                        trialDaysLeft = "Noch %d Tage im Test",
+                        licenseDaysLeft = "Noch %d Tage",
+                        licenseLastDay = "Letzter Tag",
+                        trialLastDay = "Letzter Testtag",
+                        buyNow = "Aktivieren",
+                    ),
             )
 
         private val It =
@@ -1202,6 +1837,104 @@ data class DesktopStrings(
                 metadataKeyUses = "Usata per copertine, cast, trailer e la scheda Abbonamenti",
                 metadataKeySaved = "✓ Chiave salvata e già attiva.",
                 metadataKeyUsingBundled = "Si sta usando la chiave predefinita dell'app.",
+                settingsText =
+                    SettingsStrings(
+                        profileEdit = "Modifica",
+                        profileEditTitle = "Modifica profilo",
+                        profileNameLabel = "Nome",
+                        profileAvatarLabel = "Immagine",
+                        profileKidsLabel = "Modalità bambini",
+                        profileKidsHint = "Mostra solo contenuti per bambini",
+                        profileSourceLabel = "Lista",
+                        profileSourceNone = "Usa quella già connessa",
+                        profileSourceChange = "Cambia lista",
+                        profileMusicLabel = "Musica (M3U)",
+                        profileMusicNone = "Nessun file scelto",
+                        profileMusicChoose = "Scegli file",
+                        profileMusicClear = "Rimuovi",
+                        profileSave = "Salva",
+                        expandSidebar = "Espandi",
+                        subtitlesLabel = "Sottotitoli",
+                        subtitlesHint = "Vale per il prossimo titolo aperto",
+                        subtitlesBackground = "Sfondo scuro",
+                        historyTitle = "Cronologia",
+                        historyClearAll = "Cancella tutto",
+                        historyEmpty = "Non hai ancora guardato nulla.",
+                        categoriesLabel = "Categorie",
+                        categoriesHint = "Nascondi ciò che non usi, o proteggilo con il PIN",
+                        categoryHide = "Nascondi",
+                        categoryLock = "Proteggi",
+                        clockLabel = "Orologio",
+                        clockHint = "Formato dell'ora mostrata in alto",
+                        clock24h = "24 ore",
+                        clock12h = "12 ore",
+                        parentalTitle = "Controllo genitori",
+                        parentalHint = "Protegge le categorie con un PIN di quattro cifre",
+                        parentalSetPin = "Crea un PIN",
+                        parentalChangePin = "Cambia PIN",
+                        parentalRemovePin = "Rimuovi PIN",
+                        parentalCurrentPin = "PIN attuale",
+                        parentalNewPin = "Nuovo PIN",
+                        parentalWrongPin = "PIN errato.",
+                        parentalPinSaved = "✓ PIN salvato.",
+                        parentalPinFormat = "Il PIN deve avere quattro cifre.",
+                        parentalLockAdult = "Blocca automaticamente le categorie per adulti",
+                        parentalLocked = "Contenuto protetto",
+                        firstRunTitle = "Preparazione di IPTV BURO",
+                        firstRunBody =
+                            "Solo questa volta richiede più tempo: la tua lista viene letta e " +
+                                "organizzata. Alla prossima apertura sarà già pronta.",
+                        firstRunTmdbTitle = "Copertine e trame",
+                        firstRunTmdbBody =
+                            "Per copertine, trame e cast aggiungi una chiave TMDb nelle Opzioni. " +
+                                "È gratuita: crea un account su themoviedb.org, richiedi la chiave " +
+                                "API e incollala in BURO.",
+                        startupAuthenticating = "Accesso in corso…",
+                        startupOrganising = "Organizzazione della tua lista…",
+                        profileKeyLabel = "Chiave solo per questo profilo",
+                        profileKeyHint =
+                            "Lascia vuoto per usare la stessa chiave degli altri profili. " +
+                                "Compila per far usare a questo profilo il proprio account TMDb.",
+                        profileKeyShared = "Si sta usando la chiave condivisa",
+                        profileKeyOwn = "Questo profilo usa una chiave propria",
+                        moreSettingsTitle = "Altre opzioni",
+                        moreSettingsHint = "Sottotitoli, orologio, categorie e controllo genitori",
+                        multiviewAdd = "Guarda insieme",
+                        multiviewRemove = "Togli dalla vista multipla",
+                        multiviewOpen = "Guarda insieme",
+                        multiviewClear = "Svuota",
+                        multiviewFull = "Massimo quattro canali",
+                        licenseTrialOverTitle = "I tuoi 7 giorni sono finiti",
+                        licenseTrialOverBody =
+                            "Speriamo ti sia piaciuto. Per continuare a guardare, attiva questo dispositivo.",
+                        licenseExpiredTitle = "La tua licenza è scaduta",
+                        licenseExpiredBody = "Rinnova per continuare a usare IPTV BURO su questo dispositivo.",
+                        licenseRevokedTitle = "Licenza annullata",
+                        licenseRevokedBody =
+                            "Questa licenza è stata annullata. Se pensi sia un errore, scrivici.",
+                        licenseVerifyTitle = "Dobbiamo verificare la licenza",
+                        licenseVerifyBody =
+                            "È passato un po' dall'ultimo controllo. Basta collegarsi a internet una volta.",
+                        licenseOfflineTitle = "Nessuna connessione",
+                        licenseOfflineBody =
+                            "Non è stato possibile verificare la licenza. Controlla la connessione.",
+                        licenseTwoYears = "per 2 anni",
+                        licenseWhyNotLifetime =
+                            "Non è a vita perché l'app continua a essere aggiornata: i provider " +
+                                "cambiano, i formati cambiano, Windows cambia.",
+                        licenseBuy = "Attiva dispositivo",
+                        licenseRetry = "Riprova",
+                        licenseDeviceLabel = "Il tuo dispositivo",
+                        licenseHaveKey = "Ho un codice di attivazione",
+                        licenseKeyPlaceholder = "Codice",
+                        licenseRedeem = "Usa codice",
+                        licenseDaysLeft = "%d giorni rimasti",
+                        parentalUnlock = "Inserisci il PIN per aprire questa categoria",
+                    ),
+                subscriptionsSynopsis = "Trama",
+                subscriptionsCast = "Cast",
+                subscriptionsWatchTrailer = "▶  Guarda il trailer",
+                subscriptionsAvailableOn = "Disponibile su",
                 subscriptionsFilterMovies = "Film",
                 subscriptionsFilterSeries = "Serie",
                 subscriptionsFilterUpcoming = "Prossimamente",
@@ -1213,6 +1946,53 @@ data class DesktopStrings(
                 subscriptionsNoShelves = "Nessun servizio da mostrare per ora.",
                 subscriptionsBackToServices = "Torna ai servizi",
                 subscriptionsSelectedTitle = "Titolo selezionato",
+                licenseText =
+                    LicenseStrings(
+                        trialTitle = "La prova è terminata",
+                        trialBody =
+                            "I 7 giorni sono finiti. Attiva questo dispositivo per continuare a usare "
+                                + "IPTV BURO.",
+                        expiredTitle = "Licenza scaduta",
+                        expiredBody = "La licenza di questo dispositivo è scaduta. Rinnovala per continuare.",
+                        revokedTitle = "Licenza revocata",
+                        revokedBody =
+                            "Questa licenza non è più attiva. Se pensi si tratti di un errore, scrivici "
+                                + "indicando il codice qui sotto.",
+                        unreachableTitle = "Impossibile verificare la licenza",
+                        unreachableBody =
+                            "Non riusciamo a raggiungere il server. Controlla la connessione e riprova.",
+                        verifyTitle = "Verifica necessaria",
+                        verifyBody =
+                            "L'app ha funzionato offline abbastanza a lungo. Collegati a internet una "
+                                + "volta per continuare.",
+                        deviceLabel = "Dispositivo",
+                        macLabel = "MAC",
+                        scanHint = "Inquadra il codice con il telefono",
+                        openInBrowser = "Apri nel browser",
+                        retry = "Riprova",
+                        haveKey = "Hai un codice di attivazione?",
+                        keyPlaceholder = "XXXX-XXXX",
+                        redeem = "Attiva",
+                        redeemFailed = "Codice non valido o già usato.",
+                        quit = "Chiudi",
+                        back = "Torna all'app",
+                        termYears = "%d anni",
+                        priceEur = "9,90 € · 2 anni",
+                        priceUsd = "9,90 $ · 2 anni",
+                        priceBrl = "99,90 R$ · 2 anni",
+                        whyNotLifetime =
+                            "Perché non a vita: l'app continua a essere mantenuta e aggiornata. I 2 anni "
+                                + "pagano quel lavoro.",
+                        copied = "Copiato",
+                        clockWarning =
+                            "L'orologio del computer sembra sbagliato. Le date della licenza vengono "
+                                + "comunque dal server.",
+                        trialDaysLeft = "%d giorni di prova rimasti",
+                        licenseDaysLeft = "%d giorni rimasti",
+                        licenseLastDay = "Ultimo giorno",
+                        trialLastDay = "Ultimo giorno di prova",
+                        buyNow = "Attiva",
+                    ),
             )
     }
 }

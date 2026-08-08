@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.DesktopContinueWatchingEntry
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
@@ -60,6 +61,9 @@ fun ContinueWatchingWorkspace(
 ) {
     val text = strings
     Column(modifier = Modifier.fillMaxSize().padding(BuroSpacing.Lg)) {
+        // The heading, the "clear everything" button and the configurable title all lived here to
+        // serve the history screen, which now has its own gallery. Removed rather than left
+        // defaulted: parameters no caller passes are dead weight that reads as a live option.
         Text(
             text = text.continueWatching,
             color = BuroColors.Text,

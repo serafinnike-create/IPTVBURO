@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -34,9 +35,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.desktop.ui.BuroMark
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
+import com.lucasserafin94.iptvburo.desktop.ui.strings
 
 /**
  * What the app shows while the catalogue is being fetched.
@@ -48,7 +52,26 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
  * [message] describes the current step, so a slow provider looks like progress instead of a hang.
  */
 @Composable
-fun SplashScreen(message: String, progress: Float) {
+fun SplashScreen(
+    message: String,
+    progress: Float,
+    /**
+     * Whether this is the first launch after setting an account up.
+     *
+     * The wait is longest exactly then — the whole catalogue is being read for the first time — and
+     * a user with no reason to expect it reads a long unexplained pause as a hang. Saying so, once,
+     * costs nothing and is only shown when it is true.
+     */
+    isFirstRun: Boolean = false,
+    /**
+     * Artwork to drift behind the mark, as texture.
+     *
+     * Empty on a true first run — the catalogue is being read for the first time and there is
+     * nothing to show yet — and the wall then uses the bundled fictional artwork rather than
+     * depending on the network during the busiest part of startup.
+     */
+    backdropPosters: List<String> = emptyList(),
+) {
     val transition = rememberInfiniteTransition(label = "splash")
 
     // A slow breath rather than a spinner. The mark is the brand; making it pulse says "working"
@@ -88,6 +111,11 @@ fun SplashScreen(message: String, progress: Float) {
         modifier = Modifier.fillMaxSize().background(BuroColors.Canvas),
         contentAlignment = Alignment.Center,
     ) {
+        // Behind everything, and behind its own scrim: the mark and the progress bar are what the
+        // user is reading, and posters bright enough to compete with them would be a worse screen
+        // rather than a richer one.
+        SplashPosterWall(posters = backdropPosters)
+
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(contentAlignment = Alignment.Center) {
                 // A halo behind the mark, breathing with it. Gold on near-black is the app's whole
@@ -107,12 +135,9 @@ fun SplashScreen(message: String, progress: Float) {
                                 shape = CircleShape,
                             ),
                 )
-                Image(
-                    painter = painterResource("brand/buro-mark-512.png"),
-                    contentDescription = null,
-                    modifier = Modifier.size(132.dp).scale(breath),
-                    contentScale = ContentScale.Fit,
-                )
+                // Drawn, not loaded: the PNG carried an opaque black square that showed as a tile
+                // around the ring, and its edge softened at this size on a scaled display.
+                BuroMark(size = 132.dp, modifier = Modifier.scale(breath))
             }
 
             Spacer(Modifier.height(BuroSpacing.Xl))
@@ -182,7 +207,46 @@ fun SplashScreen(message: String, progress: Float) {
                 color = BuroColors.Primary,
                 style = MaterialTheme.typography.labelMedium,
             )
+
+            if (isFirstRun) {
+                val text = strings
+                Spacer(Modifier.height(BuroSpacing.Xl))
+                Column(
+                    modifier = Modifier.widthIn(max = 420.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    FirstRunNote(title = text.settingsText.firstRunTitle, body = text.settingsText.firstRunBody)
+                    Spacer(Modifier.height(BuroSpacing.Md))
+                    // The TMDb key is the difference between a wall of titles and a wall of covers,
+                    // and the moment the user is watching a progress bar is the one moment they
+                    // have nothing else to do. Told here rather than buried in Settings.
+                    FirstRunNote(
+                        title = text.settingsText.firstRunTmdbTitle,
+                        body = text.settingsText.firstRunTmdbBody,
+                    )
+                }
+            }
         }
+    }
+}
+
+/** One explanatory note under the progress bar: a heading and a sentence, centred. */
+@Composable
+private fun FirstRunNote(title: String, body: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = title,
+            color = BuroColors.Text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = body,
+            color = BuroColors.TextSubtle,
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

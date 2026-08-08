@@ -49,6 +49,36 @@ data class StoredStreamingPreference(
     val subscribedProviderIds: Set<String> = emptySet(),
 )
 
+/**
+ * A profile's parental lock, as persisted.
+ *
+ * [salt] and [hash] are absent until a PIN is set, which is what [hasPin] tests: a lock with
+ * categories listed but no PIN cannot ask for anything, so the UI must not offer it.
+ */
+/**
+ * Where the window was and how big, so the next launch reopens it that way.
+ *
+ * Sizes are in density-independent pixels, as Compose reports them: storing device pixels would
+ * reopen at the wrong size on a machine whose scaling has changed.
+ */
+data class StoredWindowGeometry(
+    val maximised: Boolean,
+    val width: Float,
+    val height: Float,
+    val x: Float,
+    val y: Float,
+)
+
+data class StoredParentalLock(
+    val salt: String? = null,
+    val hash: String? = null,
+    val lockAdultCategories: Boolean = true,
+    val lockedCategoryIds: Set<String> = emptySet(),
+) {
+    val hasPin: Boolean
+        get() = !salt.isNullOrBlank() && !hash.isNullOrBlank()
+}
+
 enum class DesktopLanguage(val tag: String) {
     PORTUGUESE_BRAZIL("pt-BR"), ENGLISH("en"), GERMAN("de"), ITALIAN("it");
 
@@ -105,6 +135,85 @@ class DesktopUserStore(
     fun hasChosenLanguage(): Boolean = preferences.get(KEY_LANGUAGE, null) != null
 
     /**
+     * Whether a catalogue has ever finished loading on this machine.
+     *
+     * Distinguishes the first, long start — where the whole list is read for the first time and the
+     * wait needs explaining — from every later one. Per install rather than per profile: the wait
+     * belongs to the machine, and a second profile on a set-up machine starts fast.
+     */
+    fun hasCompletedFirstStartup(): Boolean = preferences.getBoolean(KEY_FIRST_STARTUP_DONE, false)
+
+    /**
+     * How the window was left, or null on a machine that has never resized it.
+     *
+     * Null is deliberately the first-run answer, and the caller opens maximised for it: a catalogue
+     * of posters is a poor fit for a small default window, and the user who wants one will make one.
+     * After that, whatever they left is what they get.
+     *
+     * Stored as `maximised|width|height|x|y` in one string rather than five keys, because the five
+     * are only ever meaningful together — a half-written set would place a window nowhere.
+     */
+    fun windowGeometry(): StoredWindowGeometry? {
+        val raw = preferences.get(KEY_WINDOW_GEOMETRY, null) ?: return null
+        val parts = raw.split('|')
+        if (parts.size != 5) return null
+        return runCatching {
+            StoredWindowGeometry(
+                maximised = parts[0] == "1",
+                width = parts[1].toFloat(),
+                height = parts[2].toFloat(),
+                x = parts[3].toFloat(),
+                y = parts[4].toFloat(),
+            )
+        }.getOrNull()
+    }
+
+    /**
+     * Artwork URLs to drift behind the next launch's loading screen.
+     *
+     * Written when a home is built and read before anything is loaded, because the backdrop has to
+     * be on screen during the wait rather than after it. Fetching them at startup would add a
+     * network round trip to the very wait this is meant to soften.
+     *
+     * Poster addresses only: they are public, unauthenticated, and carry no credential. A stream
+     * URL would never be stored here.
+     */
+    fun backdropPosters(): List<String> =
+        preferences
+            .get(KEY_BACKDROP_POSTERS, null)
+            ?.split('\n')
+            ?.filter(String::isNotBlank)
+            .orEmpty()
+
+    fun setBackdropPosters(urls: List<String>) {
+        // Preferences caps a value at 8 KB, and a URL is roughly 60 bytes; the cap keeps a long
+        // list from being rejected wholesale, which would silently store nothing.
+        val capped = urls.filter(String::isNotBlank).take(MAX_BACKDROP_POSTERS)
+        if (capped.isEmpty()) {
+            preferences.remove(KEY_BACKDROP_POSTERS)
+        } else {
+            preferences.put(KEY_BACKDROP_POSTERS, capped.joinToString("\n"))
+        }
+    }
+
+    fun setWindowGeometry(geometry: StoredWindowGeometry) {
+        preferences.put(
+            KEY_WINDOW_GEOMETRY,
+            listOf(
+                if (geometry.maximised) "1" else "0",
+                geometry.width,
+                geometry.height,
+                geometry.x,
+                geometry.y,
+            ).joinToString("|"),
+        )
+    }
+
+    fun markFirstStartupComplete() {
+        preferences.putBoolean(KEY_FIRST_STARTUP_DONE, true)
+    }
+
+    /**
      * Whether the copyright notice has been acknowledged.
      *
      * Shown once. The app carries no catalogue of its own; it plays what the user's provider
@@ -116,13 +225,35 @@ class DesktopUserStore(
      * Per profile rather than per install: one person browsing posters and another scanning a dense
      * list is exactly the kind of preference a shared machine has two of.
      */
-    fun catalogLayout(profileId: String?): String? =
-        profileId?.let { preferences.get(layoutKey(it), null) }
+    /**
+     * The layout of one section, per profile.
+     *
+     * Keyed by section as well as profile: films, series and live channels are browsed differently,
+     * and a single shared value meant changing one changed all three.
+     *
+     * Falls back to the old profile-wide key so an existing choice is not lost on upgrade.
+     */
+    fun catalogLayout(
+        profileId: String?,
+        section: String,
+    ): String? =
+        profileId?.let { id ->
+            preferences.get(layoutKey(id, section), null) ?: preferences.get(legacyLayoutKey(id), null)
+        }
 
-    fun setCatalogLayout(profileId: String, value: String) =
-        preferences.put(layoutKey(profileId), value)
+    fun setCatalogLayout(
+        profileId: String,
+        section: String,
+        value: String,
+    ) = preferences.put(layoutKey(profileId, section), value)
 
-    private fun layoutKey(profileId: String): String = "catalog-layout.$profileId"
+    private fun layoutKey(
+        profileId: String,
+        section: String,
+    ): String = "catalog-layout.$profileId.$section"
+
+    /** Written by builds before the layout was per-section. Read once, never written again. */
+    private fun legacyLayoutKey(profileId: String): String = "catalog-layout.$profileId"
 
     /**
      * Which streaming services this profile says it pays for, and where it is watching from.
@@ -171,6 +302,115 @@ class DesktopUserStore(
 
     private fun streamingKey(profileId: String): String = "streaming-preference.$profileId"
 
+    /**
+     * The parental lock, per profile.
+     *
+     * Per profile rather than per install: a household has one machine and several people, and the
+     * parent's own profile is exactly where the lock is wanted while the child's Kids profile
+     * removes the content outright.
+     *
+     * The PIN is stored as salt and hash, never in the clear. It is a weak secret — four digits —
+     * but it is often a number the user reuses, and a preferences file is not the place for it.
+     */
+    fun parentalLock(profileId: String?): StoredParentalLock {
+        val raw = profileId?.let { preferences.get(parentalKey(it), null) } ?: return StoredParentalLock()
+        val parts = raw.split('|')
+        return StoredParentalLock(
+            salt = parts.getOrNull(0)?.takeIf(String::isNotBlank),
+            hash = parts.getOrNull(1)?.takeIf(String::isNotBlank),
+            // Absent in rows written by an earlier build; defaulted on, which is the safer answer
+            // for a lock.
+            lockAdultCategories = parts.getOrNull(2) != "0",
+            lockedCategoryIds =
+                parts.getOrNull(3)
+                    ?.split(',')
+                    ?.filter(String::isNotBlank)
+                    // Decoded leniently: an unreadable id costs one locked category, whereas
+                    // failing the row would silently unlock every one of them.
+                    ?.mapNotNull { stored -> runCatching { decode(stored) }.getOrNull() }
+                    ?.toSet()
+                    .orEmpty(),
+        )
+    }
+
+    fun setParentalLock(
+        profileId: String,
+        lock: StoredParentalLock,
+    ) {
+        // Category ids come from the provider and can contain anything, so they are encoded — an
+        // id with a comma in it would otherwise split into two and lock the wrong thing.
+        preferences.put(
+            parentalKey(profileId),
+            listOf(
+                lock.salt.orEmpty(),
+                lock.hash.orEmpty(),
+                if (lock.lockAdultCategories) "1" else "0",
+                lock.lockedCategoryIds.sorted().joinToString(",", transform = ::encode),
+            ).joinToString("|"),
+        )
+    }
+
+    private fun parentalKey(profileId: String): String = "parental-lock.$profileId"
+
+    /**
+     * Categories this profile has chosen to hide.
+     *
+     * Separate from the parental lock, and deliberately so: hiding is tidying — a rail of sports
+     * channels somebody never watches — while locking is protection. Conflating them would mean
+     * tidying up required a PIN.
+     */
+    fun hiddenCategories(profileId: String?): Set<String> =
+        profileId
+            ?.let { preferences.get(hiddenKey(it), "") }
+            ?.split(',')
+            ?.filter(String::isNotBlank)
+            // Encoded on write because a provider's category id can contain anything, including
+            // this format's own comma.
+            ?.mapNotNull { stored -> runCatching { decode(stored) }.getOrNull() }
+            ?.toSet()
+            .orEmpty()
+
+    fun setHiddenCategories(
+        profileId: String,
+        ids: Set<String>,
+    ) = preferences.put(hiddenKey(profileId), ids.sorted().joinToString(",", transform = ::encode))
+
+    private fun hiddenKey(profileId: String): String = "hidden-categories.$profileId"
+
+    /**
+     * Whether the clock shows a 24-hour time.
+     *
+     * Per install rather than per profile: it is about the person reading the screen, and everyone
+     * in a household reads the same clock. Defaults to 24-hour, which is what the app's primary
+     * locale uses.
+     */
+    /**
+     * How subtitles are drawn. Per install: it is about eyesight and screen, not about the profile.
+     *
+     * Stored as three fields rather than an object so an unknown value written by a later build
+     * degrades to the default instead of discarding the whole setting.
+     */
+    fun subtitleStyle(): Triple<String, String, Boolean> =
+        Triple(
+            preferences.get(KEY_SUBTITLE_SIZE, "MEDIUM"),
+            preferences.get(KEY_SUBTITLE_COLOUR, "WHITE"),
+            preferences.getBoolean(KEY_SUBTITLE_BACKGROUND, true),
+        )
+
+    fun setSubtitleStyle(
+        size: String,
+        colour: String,
+        background: Boolean,
+    ) {
+        preferences.put(KEY_SUBTITLE_SIZE, size)
+        preferences.put(KEY_SUBTITLE_COLOUR, colour)
+        preferences.putBoolean(KEY_SUBTITLE_BACKGROUND, background)
+    }
+
+    fun uses24HourClock(): Boolean = preferences.getBoolean(KEY_CLOCK_24H, true)
+
+    fun setUses24HourClock(value: Boolean) = preferences.putBoolean(KEY_CLOCK_24H, value)
+
     fun hasAcceptedTerms(): Boolean = preferences.getBoolean(KEY_TERMS_ACCEPTED, false)
 
     fun setAcceptedTerms() = preferences.putBoolean(KEY_TERMS_ACCEPTED, true)
@@ -189,6 +429,41 @@ class DesktopUserStore(
         val clean = value?.trim().orEmpty()
         if (clean.isBlank()) preferences.remove(KEY_METADATA_KEY) else preferences.put(KEY_METADATA_KEY, clean)
     }
+
+    /**
+     * A profile's own TMDb key, when it has one.
+     *
+     * Null means "use the shared one", which is the default and the common case: a household
+     * normally has one key and no reason for more. A profile sets its own when the shared key has
+     * hit TMDb's rate limit, or when someone simply wants their own account's key used.
+     *
+     * Stored per profile rather than replacing the shared key so that clearing it falls back
+     * rather than leaving the profile with no metadata at all.
+     */
+    fun profileMetadataApiKey(profileId: String?): String? =
+        profileId
+            ?.let { preferences.get(metadataKeyFor(it), null) }
+            ?.takeIf(String::isNotBlank)
+
+    fun setProfileMetadataApiKey(profileId: String, value: String?) {
+        val clean = value?.trim().orEmpty()
+        if (clean.isBlank()) {
+            preferences.remove(metadataKeyFor(profileId))
+        } else {
+            preferences.put(metadataKeyFor(profileId), clean)
+        }
+    }
+
+    /**
+     * The key this profile should actually use: its own, or the shared one.
+     *
+     * A single place to ask, so no caller has to remember the precedence — getting that wrong
+     * would silently use the wrong account's quota.
+     */
+    fun effectiveMetadataApiKey(profileId: String?): String? =
+        profileMetadataApiKey(profileId) ?: metadataApiKey()
+
+    private fun metadataKeyFor(profileId: String): String = "$KEY_METADATA_KEY.$profileId"
 
     /**
      * Clears every stored preference for this user: profiles, favourites, language and the active
@@ -262,8 +537,18 @@ class DesktopUserStore(
         const val KEY_PROFILES = "profiles"
         const val KEY_ACTIVE_PROFILE = "active_profile"
         const val KEY_LANGUAGE = "language"
+        const val KEY_FIRST_STARTUP_DONE = "first-startup-done"
+        const val KEY_WINDOW_GEOMETRY = "window-geometry"
+        const val KEY_BACKDROP_POSTERS = "backdrop-posters"
+
+        /** Enough for three drifting columns, far short of the 8 KB a preference value allows. */
+        const val MAX_BACKDROP_POSTERS = 18
         const val KEY_TERMS_ACCEPTED = "terms-accepted"
         const val KEY_METADATA_KEY = "metadata-api-key"
         const val KEY_LEGACY_FAVORITES = "favorites"
+        const val KEY_CLOCK_24H = "clock-24h"
+        const val KEY_SUBTITLE_SIZE = "subtitle-size"
+        const val KEY_SUBTITLE_COLOUR = "subtitle-colour"
+        const val KEY_SUBTITLE_BACKGROUND = "subtitle-background"
     }
 }

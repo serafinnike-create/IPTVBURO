@@ -11,7 +11,7 @@ import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.time.Duration
 
-const val DESKTOP_VERSION = "1.1"
+const val DESKTOP_VERSION = "2.0"
 
 sealed interface UpdateCheckResult {
     data object UpToDate : UpdateCheckResult
@@ -362,10 +362,27 @@ internal fun compareVersions(left: String, right: String): Int {
 
 private data class ParsedVersion(val numbers: List<Int>, val preRelease: String?) {
     companion object {
+        /**
+         * Parses "2.0", "2.0.1", "v2.0.1" and "0.2.0-alpha.5" alike.
+         *
+         * The patch number is optional, and that is not cosmetic. This project writes its shipped
+         * version with two numbers — DESKTOP_VERSION has been "1.1" and is now "2.0" — while the
+         * pattern used to demand three. An unparseable *current* version made compareVersions
+         * return 1 for every candidate, so the updater offered the running build to itself as an
+         * update, repeatedly, and there was no version it would ever consider itself up to date
+         * against. A missing patch means zero, which is what "2.0" means.
+         */
         fun parse(value: String): ParsedVersion? {
-            val match = Regex("^v?(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?$").matchEntire(value) ?: return null
+            val match =
+                Regex("^v?(\\d+)\\.(\\d+)(?:\\.(\\d+))?(?:-([0-9A-Za-z.-]+))?$").matchEntire(value)
+                    ?: return null
             return ParsedVersion(
-                numbers = (1..3).map { match.groupValues[it].toInt() },
+                numbers =
+                    listOf(
+                        match.groupValues[1].toInt(),
+                        match.groupValues[2].toInt(),
+                        match.groupValues[3].toIntOrNull() ?: 0,
+                    ),
                 preRelease = match.groupValues[4].takeIf(String::isNotBlank),
             )
         }

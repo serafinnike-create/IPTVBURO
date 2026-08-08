@@ -140,9 +140,12 @@ class TrailerBrowser {
                 CefApp.startup(config.appArgs)
                 CefApp.getInstance(config.appArgs, settings).also { app = it }
             }.getOrElse { error ->
-                // The type and message only — no paths, no URLs. Enough to tell a missing library
-                // from a refused initialisation, which look identical from the UI.
-                println("[trailer] Chromium failed to start: ${error::class.simpleName}: ${error.message}")
+                // The type only. The message was included here on the reasoning that a Chromium
+                // startup failure talks about libraries rather than media — but the exception is
+                // arbitrary, its message is not ours to predict, and "probably safe" is not the
+                // standard this repository holds logs to. The type still distinguishes a missing
+                // library from a refused initialisation, which is what this line is for.
+                println("[trailer] Chromium failed to start: ${error::class.simpleName}")
                 unavailable = true
                 null
             }

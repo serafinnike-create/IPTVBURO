@@ -7,6 +7,7 @@ import com.lucasserafin94.iptvburo.domain.model.ExternalTitleKind
 import com.lucasserafin94.iptvburo.domain.model.StreamingProvider
 import com.lucasserafin94.iptvburo.metadata.TmdbClient
 import com.lucasserafin94.iptvburo.metadata.TmdbDiscoverKind
+import com.lucasserafin94.iptvburo.metadata.TmdbTitleDetails
 import com.lucasserafin94.iptvburo.metadata.TmdbDiscoveredTitle
 
 /**
@@ -64,6 +65,19 @@ class TmdbStreamingCatalogue(
      * not render it that way. An empty offer list from a title TMDb *does* know is a different and
      * genuine answer.
      */
+    /**
+     * Artwork, synopsis, cast and trailer for [title].
+     *
+     * Separate from [detailsFor], which answers where it can be watched. Different questions with
+     * different failure modes: availability can be unknown while the synopsis is well known, and a
+     * screen that lost the whole page because one call failed would be worse than one drawing what
+     * it has.
+     */
+    fun pageFor(title: ExternalTitle): TmdbTitleDetails? {
+        val tmdbId = title.id.value.toIntOrNull() ?: return null
+        return client.titleDetails(tmdbId, isSeries = title.kind == ExternalTitleKind.SERIES)
+    }
+
     fun detailsFor(title: ExternalTitle): ExternalTitleDetails? {
         val listing = client.watchProviders(title.title, title.year, region) ?: return null
         return ExternalTitleDetails(

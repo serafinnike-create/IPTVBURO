@@ -1,5 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.language.jvm.tasks.ProcessResources
 import java.net.URI
 import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
@@ -20,7 +21,7 @@ plugins {
 }
 
 group = "com.lucasserafin94.iptvburo"
-version = "1.1"
+version = "2.0"
 
 val vlcVersion = "3.0.23"
 val vlcArchiveSha256 = "992d19dbd0b8a7cde9167d2f7780b1ef6f92acc8a71acfa736101a21f35181e1"
@@ -80,6 +81,15 @@ val generateBuildConfig by tasks.registering {
 }
 
 kotlin.sourceSets.named("main") { kotlin.srcDir(generateBuildConfig) }
+
+// The UI reads the same capability contract that release tooling and documentation inspect. Keeping
+// a copied Boolean in Kotlin caused preview-only features to appear even while this manifest said
+// they were unavailable. Gradle packages the canonical JSON as an application resource instead.
+tasks.named<ProcessResources>("processResources") {
+    from(rootProject.file("packages/platform-capabilities/windows-preview.json")) {
+        into("capabilities")
+    }
+}
 val bundledVlcDirectory = generatedAppResources.map { it.dir("windows/vlc") }
 
 val prepareBundledVlc by tasks.registering {
@@ -129,6 +139,17 @@ val prepareBundledVlc by tasks.registering {
             }
         }
         check(expectedExecutable.isFile) { "VLC runtime extraction did not produce vlc.exe." }
+
+        // The plugin index is deliberately NOT built here.
+        //
+        // It was, and it did nothing: VLC's plugins.dat records each module's absolute path and
+        // modification time, so an index built against this build directory is rejected wholesale
+        // once the installer copies the tree to %LOCALAPPDATA% with fresh timestamps. The shipped
+        // index was stale on arrival — verified in the installed app's own log, which reported
+        // `stale plugins cache` once per module.
+        //
+        // VlcPluginCache builds it at runtime instead, in the directory the plugins actually live
+        // in, once per install. See that file for what the optimisation is measured to be worth.
     }
 }
 
@@ -243,24 +264,61 @@ dependencies {
     implementation(libs.coil.network.okhttp)
     implementation(libs.okhttp)
     implementation("com.google.code.gson:gson:2.13.2")
+    // The QR code on the activation screen. `core` only — the javase artifact adds image encoding
+    // and camera decoding, neither of which this needs.
+    //
+    // Written by hand first, on the reasoning that this is one small thing. The result produced
+    // correct data and correct error correction and still could not be read by any decoder, which
+    // is the failure mode that matters: it looks perfect and the customer finds out by pointing a
+    // phone at a screen that never responds.
+    implementation("com.google.zxing:core:3.5.3")
     implementation("net.java.dev.jna:jna-platform:5.17.0")
-    implementation("org.openjfx:javafx-base:17.0.14:win")
-    implementation("org.openjfx:javafx-graphics:17.0.14:win")
-    implementation("org.openjfx:javafx-media:17.0.14:win")
-    implementation("org.openjfx:javafx-swing:17.0.14:win")
+    // JavaFX is gone with JavaFxDesktopPlayer, the media player it existed for. That class was
+    // replaced by the VLC engine and then kept, unreferenced, along with four platform-specific
+    // artefacts it dragged into the installer.
 
     testImplementation(kotlin("test"))
     testImplementation(libs.okhttp.mockwebserver)
+    // Compose UI testing.
+    //
+    // Every test in this suite until now covered logic and data, and every bug a user reported this
+    // week lived somewhere else: switches that changed the stored value and never redrew, a poster
+    // that never loaded, a settings panel whose lower half could not be reached. Those are all
+    // composition-level failures, and nothing here could see them.
+    testImplementation(compose.desktop.uiTestJUnit4)
 }
 
 compose.desktop {
     application {
         mainClass = "com.lucasserafin94.iptvburo.desktop.MainKt"
 
+        // Memory, bounded rather than left to the JVM's defaults.
+        //
+        // Unset, HotSpot sizes the heap from physical RAM — a quarter of it — so on a 32 GB machine
+        // it will happily grow to 8 GB and never give any back. That is why the app sat at 700 MB
+        // resident while doing nothing: not a leak, just a collector with no reason to tidy up.
+        //
+        // 768 MB is comfortably above what the catalogue needs. CompactXtreamCatalog stores 41,698
+        // items columnar precisely so the whole list is tens of megabytes rather than hundreds, and
+        // the images are Coil's own bounded cache.
+        jvmArgs += listOf(
+            "-Xmx768m",
+            // G1 with a short pause target: this is an interactive app, and a long collection while
+            // the user is scrolling a wall of posters is the one thing they would actually feel.
+            "-XX:+UseG1GC",
+            "-XX:MaxGCPauseMillis=100",
+            // Return unused heap to the OS instead of holding the high-water mark for ever. Without
+            // this the app keeps whatever it needed during the catalogue load — the busiest moment
+            // of its life — for the entire session.
+            "-XX:+ShrinkHeapInSteps",
+            "-XX:MinHeapFreeRatio=15",
+            "-XX:MaxHeapFreeRatio=35",
+        )
+
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "IPTVBURO"
-            packageVersion = "1.1.0"
+            packageVersion = "2.0.0"
             description = "IPTV BURO desktop player"
             vendor = "IPTV BURO"
             appResourcesRootDir.set(generatedAppResources)
@@ -297,6 +355,16 @@ tasks.test {
     // opt-in has to be forwarded explicitly.
     System.getProperty("buroLiveUpdaterProbe")?.let { value ->
         systemProperty("buroLiveUpdaterProbe", value)
+    }
+    // Same opt-in shape: a probe that talks to the machine's own configured provider, so it must
+    // never run as part of an ordinary suite.
+    System.getProperty("buroSeriesProbe")?.let { value ->
+        systemProperty("buroSeriesProbe", value)
+    }
+    // Talks to the production licence server with this machine's identity, to tell apart the four
+    // causes of "could not verify your licence" that the shipping client deliberately conflates.
+    System.getProperty("buroLicenceProbe")?.let { value ->
+        systemProperty("buroLicenceProbe", value)
     }
     testLogging { showStandardStreams = true }
 }

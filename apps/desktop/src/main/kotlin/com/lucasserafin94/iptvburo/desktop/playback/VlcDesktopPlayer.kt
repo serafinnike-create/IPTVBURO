@@ -12,7 +12,6 @@ import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.URI
-import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
 import java.util.Base64
@@ -29,7 +28,17 @@ import javax.swing.SwingUtilities
  * The credential-bearing media URI is sent only to VLC's password-protected loopback interface;
  * it is never placed in the process command line, persisted, or logged.
  */
-class VlcDesktopPlayer {
+class VlcDesktopPlayer(
+    /**
+     * How subtitles are drawn.
+     *
+     * Passed in at construction because VLC builds its text renderer with the video chain: these
+     * take effect on the next title, not on the one already playing. Changing them mid-film and
+     * seeing nothing happen would read as a broken setting, so the UI says the change applies to
+     * what is played next.
+     */
+    private val subtitleStyle: SubtitleStyle = SubtitleStyle(),
+) {
     @Volatile
     private var snapshot = DesktopPlaybackSnapshot(engineName = "VLC")
 
@@ -58,6 +67,17 @@ class VlcDesktopPlayer {
 
     @Volatile
     private var everPlayed = false
+
+    /**
+     * Until when a `stopped` report should be ignored, because a track switch caused it.
+     *
+     * Changing audio or subtitles makes VLC rebuild the stream, and during that it reports states
+     * that look exactly like a film ending or a start that never happened. Both of those have
+     * handlers that close or restart playback, so without this window a user switching to
+     * Portuguese had the player shut on them mid-film.
+     */
+    @Volatile
+    private var switchingTrackUntil = 0L
 
     /** Last state printed, so the poll does not log the same word twice a second. */
     private var lastLoggedState: String? = null
@@ -98,6 +118,24 @@ class VlcDesktopPlayer {
                     SwingUtilities.invokeLater { startIfNeeded(this, request) }
                 }
             }.apply {
+                // The second chance, and the one that matters.
+                //
+                // addNotify fires exactly once, and at that moment the canvas can still be 0x0
+                // while Compose lays the SwingPanel out. awaitComponentHandle then polls for two
+                // seconds and gives up, and because addNotify has already fired there was no path
+                // back into startIfNeeded: the title never started and the window stayed black
+                // with no error, until the user closed and reopened it.
+                //
+                // A resize is precisely the event that says the surface now has real dimensions,
+                // so it is the right signal to try again on. startIfNeeded is idempotent — it
+                // latches on `started` — so an engine that did come up ignores this entirely.
+                addComponentListener(
+                    object : java.awt.event.ComponentAdapter() {
+                        override fun componentResized(event: java.awt.event.ComponentEvent) {
+                            if (width > 0 && height > 0) startIfNeeded(this@apply, request)
+                        }
+                    },
+                )
                 background = Color.BLACK
                 isFocusable = true
                 // The AWT canvas sits over the video and swallows pointer events, so Compose never
@@ -176,17 +214,74 @@ class VlcDesktopPlayer {
         seekToMillis(target.toLong())
     }
 
+    /**
+     * How the picture fills the window.
+     *
+     * Two different VLC settings, which is why this takes one value rather than two: `crop` stretches
+     * the image to fill, `aspectratio` reshapes it. Sending both keeps them from fighting — a crop
+     * left over from a previous title would otherwise survive a change of aspect ratio and produce
+     * a shape neither setting asked for.
+     */
+    fun setAspectRatio(ratio: PlaybackAspectRatio) {
+        snapshot = snapshot.copy(aspectRatio = ratio)
+        when (ratio) {
+            // Default clears both: the source's own shape, letterboxed as the film intends.
+            PlaybackAspectRatio.DEFAULT -> {
+                executeCommand("aspectratio", mapOf("val" to ""))
+                executeCommand("crop", mapOf("val" to ""))
+            }
+            // Fill crops to 16:9 rather than stretching: a stretched face is worse than a trimmed
+            // edge, and cropping is what other players mean by "fill" on a widescreen display.
+            PlaybackAspectRatio.FILL -> {
+                executeCommand("aspectratio", mapOf("val" to ""))
+                executeCommand("crop", mapOf("val" to "16:9"))
+            }
+            else -> {
+                executeCommand("crop", mapOf("val" to ""))
+                executeCommand("aspectratio", mapOf("val" to ratio.vlcValue))
+            }
+        }
+    }
+
+    /**
+     * Brightens or darkens the picture, 0.0 to 2.0 with 1.0 as the source's own.
+     *
+     * VLC's adjust filter has to be switched on before any of its values take effect — sending
+     * `brightness` alone changes nothing at all, which is easy to mistake for a broken control.
+     */
+    fun setBrightness(value: Double) {
+        val safe = value.coerceIn(BRIGHTNESS_MIN, BRIGHTNESS_MAX)
+        snapshot = snapshot.copy(brightness = safe)
+        executeCommand("adjust", mapOf("val" to "1"))
+        executeCommand("brightness", mapOf("val" to safe.toString()))
+    }
+
     fun setVolume(value: Double) {
         val safe = value.coerceIn(0.0, 1.0)
         snapshot = snapshot.copy(volume = safe)
         executeCommand("volume", mapOf("val" to (safe * VLC_VOLUME_MAX).toInt().toString()))
     }
 
-    /** Switches audio track; the id is VLC's own, taken from the status it reported. */
-    fun selectAudioTrack(trackId: Int) = executeCommand("audio_track", mapOf("val" to trackId.toString()))
+    /**
+     * Switches audio track; the id is VLC's own, taken from the status it reported.
+     *
+     * VLC tears the stream down and reopens it to do this, and for a poll or two reports `stopped`
+     * — sometimes with the position back at zero. [switchingTrackUntil] tells [pollState] to leave
+     * that window alone, so a track change is not mistaken for the film ending or for a start that
+     * failed. Without it, choosing Portuguese closed the player mid-film.
+     */
+    fun selectAudioTrack(trackId: Int) {
+        switchingTrackUntil = System.currentTimeMillis() + TRACK_SWITCH_GRACE_MILLIS
+        executeCommand("audio_track", mapOf("val" to trackId.toString()))
+    }
 
     /** Switches or disables subtitles. VLC uses -1 for off, which is why the "off" entry carries it. */
-    fun selectSubtitleTrack(trackId: Int) = executeCommand("subtitle_track", mapOf("val" to trackId.toString()))
+    fun selectSubtitleTrack(trackId: Int) {
+        // Same grace window as the audio switch: subtitles are re-attached to the running chain and
+        // can produce the same brief `stopped`.
+        switchingTrackUntil = System.currentTimeMillis() + TRACK_SWITCH_GRACE_MILLIS
+        executeCommand("subtitle_track", mapOf("val" to trackId.toString()))
+    }
 
     fun setPlaybackRate(value: Double) {
         val safe = value.coerceIn(0.5, 2.0)
@@ -289,6 +384,13 @@ class VlcDesktopPlayer {
             }
             Thread.sleep(HANDLE_POLL_MILLIS)
         }
+        // Logged before throwing, because from outside this is indistinguishable from a file that
+        // will not play: the window is black and the clock reads 00:00 either way. Dimensions
+        // only — no path, no MRL.
+        println(
+            "[player] surface never became usable: displayable=${canvas.isDisplayable} " +
+                "size=${canvas.width}x${canvas.height}",
+        )
         error("The video surface was not ready")
     }
 
@@ -361,6 +463,22 @@ class VlcDesktopPlayer {
                 // ignores --drawable-hwnd entirely and opens its own window - or, off screen,
                 // renders nowhere at all, which looks exactly like a film that refuses to start.
                 "--vout=direct3d11",
+                // The adjust filter has to be in the chain when the video output is built. Enabling
+                // it later over the control interface returns success and changes nothing: the
+                // chain is already running, and with a GPU output there is no software stage left
+                // to insert it into. Declared here at its neutral value, it costs nothing until the
+                // brightness control is actually moved.
+                "--video-filter=adjust",
+                "--brightness=1.0",
+                // Subtitle appearance, declared at startup for the same reason as the adjust
+                // filter: the text renderer is built with the video chain, and changing these
+                // afterwards over the control interface has no effect on a running one.
+                "--freetype-rel-fontsize=${subtitleStyle.vlcRelativeSize}",
+                "--freetype-color=${subtitleStyle.textColour.vlcValue}",
+                "--freetype-opacity=255",
+                // A background box behind the text, which is the difference between readable and
+                // not over a bright scene.
+                "--freetype-background-opacity=${if (subtitleStyle.background) 160 else 0}",
                 // Hardware decoding disabled. It is what fails first on 4K HDR and Dolby Vision
                 // files: the picture never arrives while the controls sit there at 00:00. Software
                 // decoding is slower but plays everything this catalogue carries.
@@ -436,7 +554,20 @@ class VlcDesktopPlayer {
             val ready = playing || paused || stateName == "stopped"
             val lengthSeconds = status.long("length")
             if (playing) everPlayed = true
-            val ended = everPlayed && stateName == "stopped" && lengthSeconds > 0L
+            // "Ended" means the title ran out, not merely that VLC is momentarily stopped.
+            //
+            // Switching audio track makes VLC tear the stream down and reopen it, and for a poll or
+            // two in between it reports `stopped` with the length still set. Treating that as the
+            // end closed the player mid-film — which is exactly what choosing Portuguese did.
+            //
+            // A real ending leaves the position at or near the duration. A track switch leaves it
+            // wherever the user was, so the position is what tells the two apart.
+            val positionSeconds = status.long("time")
+            val switchingTrack = System.currentTimeMillis() < switchingTrackUntil
+            val ended =
+                everPlayed &&
+                    !switchingTrack &&
+                    isEnded(stateName, positionSeconds, lengthSeconds)
             val tracks = status.readTracks()
 
             // The first title of a session often stops without ever playing: VLC has to bring up
@@ -451,6 +582,9 @@ class VlcDesktopPlayer {
                 !everPlayed &&
                 !playing &&
                 !paused &&
+                // Not while a track switch is settling: the stream is deliberately down, and
+                // re-issuing `in_play` here would restart the film from the beginning.
+                !switchingTrack &&
                 System.currentTimeMillis() - mediaStartedAt > FIRST_START_RETRY_MILLIS &&
                 startRetries.get() < MAX_START_RETRIES &&
                 startRetries.incrementAndGet() <= MAX_START_RETRIES
@@ -523,17 +657,7 @@ class VlcDesktopPlayer {
         }
     }
 
-    private fun locateVlcExecutable(): File? {
-        val resources = System.getProperty("compose.application.resources.dir")?.let(::File)
-        val workingDirectory = File(System.getProperty("user.dir"))
-        return listOfNotNull(
-            resources?.resolve("vlc/vlc.exe"),
-            resources?.resolve("windows/vlc/vlc.exe"),
-            workingDirectory.resolve("apps/desktop/build/generated/app-resources/windows/vlc/vlc.exe"),
-            File("C:/Program Files/VideoLAN/VLC/vlc.exe"),
-            File("C:/Program Files (x86)/VideoLAN/VLC/vlc.exe"),
-        ).firstOrNull(File::isFile)
-    }
+    private fun locateVlcExecutable(): File? = findVlcExecutable()
 
     private fun freeLoopbackPort(): Int =
         ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
@@ -550,6 +674,10 @@ class VlcDesktopPlayer {
         const val HANDLE_POLL_MILLIS = 20L
 
         const val VLC_VOLUME_MAX = 256
+
+        /** VLC's own bounds for the adjust filter's brightness. 1.0 is the source untouched. */
+        const val BRIGHTNESS_MIN = 0.0
+        const val BRIGHTNESS_MAX = 2.0
         const val CONNECT_TIMEOUT_MILLIS = 12_000L
         const val START_TIMEOUT_MILLIS = 25_000L
 
@@ -563,6 +691,16 @@ class VlcDesktopPlayer {
 
         /** Silent restarts before giving up. Three covers a cold device; more would just stall. */
         const val MAX_START_RETRIES = 3
+
+        /**
+         * How long a `stopped` report is ignored after a track switch.
+         *
+         * Changing audio makes VLC rebuild the stream; while it does, the status looks identical to
+         * a film that ended and to a start that never happened, and both of those close or restart
+         * playback. Three seconds covers the rebuild on a slow file without leaving a genuinely
+         * failed switch hanging.
+         */
+        const val TRACK_SWITCH_GRACE_MILLIS = 3_000L
 
         /** Matches the thread name given to the single control executor. */
         const val CONTROL_THREAD_NAME = "iptvburo-vlc-control"
@@ -581,6 +719,32 @@ class VlcDesktopPlayer {
  * exist, so an offline title reported no error and simply never started. The native path has no such
  * ambiguity. Remote sources keep their URI: for them the encoding is part of the address.
  */
+/**
+ * Encodes one value for VLC's HTTP control query string.
+ *
+ * Not `URLEncoder`, which implements **HTML form** encoding. Its one famous difference is the
+ * space: a form writes `+`, a URL writes `%20`. VLC decodes this query as a URL, so a form-encoded
+ * path arrived with a literal plus — `Videos\IPTV+BURO\…` — naming a directory that does not exist.
+ * VLC reports no error for a path it cannot open; it starts, plays nothing, and the app shows a
+ * black screen with `state=stopped length=0`. Every offline title went through this, because the
+ * download directory is `Videos/IPTV BURO`.
+ *
+ * Everything except the unreserved set is escaped, so a stream URL's own `&` and `=` cannot be read
+ * as further commands.
+ */
+internal fun encodeQueryValue(value: String): String {
+    val unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"
+    return buildString {
+        value.toByteArray(StandardCharsets.UTF_8).forEach { byte ->
+            // Masked to 0..255: a Kotlin Byte is signed, so anything above 127 — every accented
+            // character, once UTF-8 encoded — would format as a negative and produce a broken escape.
+            val unsigned = byte.toInt() and 0xFF
+            val character = unsigned.toChar()
+            if (character in unreserved) append(character) else append("%%%02X".format(unsigned))
+        }
+    }
+}
+
 internal fun URI.toVlcInput(): String =
     if (scheme.equals("file", ignoreCase = true)) {
         runCatching { java.nio.file.Path.of(this).toString() }.getOrElse { toASCIIString() }
@@ -618,7 +782,7 @@ private class VlcHttpControl private constructor(
         }
     }
 
-    private fun encode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
+    private fun encode(value: String): String = encodeQueryValue(value)
 
     companion object {
         fun connect(port: Int, password: String, timeoutMillis: Long): VlcHttpControl {
@@ -644,28 +808,80 @@ private class VlcHttpControl private constructor(
  * on, each with a `Type` of Audio, Video or Subtitle. The numeric suffix is the track id the
  * control interface expects back, so it is parsed out of the key rather than guessed from position.
  */
+/**
+ * Whether VLC's report means the title ran out.
+ *
+ * `stopped` alone is not enough, and assuming it was is what closed the player mid-film: switching
+ * audio track makes VLC tear the stream down and reopen it, reporting `stopped` in between with the
+ * length still set. A genuine ending leaves the position at the duration; a track switch leaves it
+ * wherever the user was, so the position is what tells them apart.
+ *
+ * The tolerance exists because VLC frequently stops a second or two short of the declared length.
+ */
+private const val END_TOLERANCE_SECONDS = 2L
+
+internal fun isEnded(
+    state: String?,
+    positionSeconds: Long,
+    lengthSeconds: Long,
+): Boolean =
+    state == "stopped" &&
+        lengthSeconds > 0L &&
+        positionSeconds >= lengthSeconds - END_TOLERANCE_SECONDS
+
+/** Exposed under a distinct name so the test reads as what it checks rather than as internals. */
+internal fun isEndedForTesting(
+    state: String,
+    positionSeconds: Long,
+    lengthSeconds: Long,
+): Boolean = isEnded(state, positionSeconds, lengthSeconds)
+
+/**
+ * The track parsing, exposed for tests.
+ *
+ * What is worth pinning is the mapping from VLC's status document to the id sent back — getting it
+ * wrong stops playback, and that failure only appears on files with an unusual stream layout.
+ */
+internal fun JsonObject.readTracksForTesting(): PlaybackTracks = readTracks()
+
 private fun JsonObject.readTracks(): PlaybackTracks {
     val information = get("information")?.takeUnless { it.isJsonNull }?.asJsonObject
         ?: return PlaybackTracks()
     val category = information.get("category")?.takeUnless { it.isJsonNull }?.asJsonObject
         ?: return PlaybackTracks()
 
+    // Sorted by stream number before anything is read out of them.
+    //
+    // `entrySet()` returns the keys in whatever order they were parsed, and a JSON object promises
+    // no order at all. Iterating it directly meant the picker could list "English, Portuguese" for
+    // a file whose streams are the other way round — so choosing the first row selected the second
+    // track. Everything below depends on position, so the ordering has to come first.
+    val streams =
+        category
+            .entrySet()
+            .mapNotNull { (key, value) ->
+                if (!key.startsWith("Stream ") || !value.isJsonObject) return@mapNotNull null
+                val number = key.removePrefix("Stream ").trim().toIntOrNull() ?: return@mapNotNull null
+                number to value.asJsonObject
+            }.sortedBy { (number, _) -> number }
+
     val audio = mutableListOf<MediaTrack>()
     val subtitles = mutableListOf<MediaTrack>()
-    category.entrySet().forEach { (key, value) ->
-        if (!key.startsWith("Stream ") || !value.isJsonObject) return@forEach
-        val stream = value.asJsonObject
-        val id = key.removePrefix("Stream ").trim().toIntOrNull() ?: return@forEach
+    streams.forEach { (number, stream) ->
         // Language first, then codec, then a numbered fallback: a track row with a blank name is
         // unusable, and plenty of files name neither.
         val label =
             stream.string("Language")
                 ?: stream.string("Description")
                 ?: stream.string("Codec")
-                ?: "Faixa ${id + 1}"
+                ?: "Faixa ${number + 1}"
+        // The key's number is the stream's position in the status document; the id the control
+        // interface expects back is the demuxer's, which starts at 1 rather than 0. Selecting by
+        // the key's number silently switched to the wrong track or to none at all.
+        val trackId = number + 1
         when (stream.string("Type")?.lowercase()) {
-            "audio" -> audio += MediaTrack(id, label)
-            "subtitle", "subtitles" -> subtitles += MediaTrack(id, label)
+            "audio" -> audio += MediaTrack(trackId, label)
+            "subtitle", "subtitles" -> subtitles += MediaTrack(trackId, label)
             else -> Unit
         }
     }
@@ -680,7 +896,7 @@ private fun JsonObject.readTracks(): PlaybackTracks {
     )
 }
 
-private data class PlaybackTracks(
+internal data class PlaybackTracks(
     val audio: List<MediaTrack> = emptyList(),
     val subtitles: List<MediaTrack> = emptyList(),
     val activeAudio: Int? = null,

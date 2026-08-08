@@ -16,8 +16,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,27 +28,37 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.platform.openStreamingOfferExternally
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.desktop.ui.BuroMark
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
+import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollable
 import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableList
+import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollable
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableVertically
 import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
 import com.lucasserafin94.iptvburo.domain.model.OfferReason
+import com.lucasserafin94.iptvburo.metadata.TmdbCastMember
 import com.lucasserafin94.iptvburo.metadata.TmdbDiscoverKind
+import com.lucasserafin94.iptvburo.metadata.TmdbTitleDetails
 import com.lucasserafin94.iptvburo.domain.model.OfferRanking
 import com.lucasserafin94.iptvburo.domain.model.OfferType
 import com.lucasserafin94.iptvburo.metadata.WATCH_PROVIDER_ATTRIBUTION
@@ -101,8 +114,22 @@ fun SubscriptionsWorkspace(
     onOpenOffer: (RankedOffer) -> Unit = { ranked ->
         ranked.offer.launchTarget?.let(::openStreamingOfferExternally)
     },
+    /**
+     * Artwork, synopsis, cast and trailer for the title whose offers are showing.
+     *
+     * Null is ordinary, not an error: it covers the moment before the lookup returns, an
+     * unconfigured metadata key, and the many real titles TMDb has nothing for. The screen then
+     * draws only the provider rows, exactly as it did before this existed.
+     */
+    page: TmdbTitleDetails? = null,
+    /** Opens the trailer in the browser when the embedded engine cannot start. */
+    onOpenTrailerExternally: (String) -> Unit = {},
 ) {
     val text = strings
+
+    // Which trailer is open, if any. Keyed on the title so it closes when the screen moves on
+    // rather than surviving into a page it does not belong to.
+    var openTrailerId by remember(page?.youtubeTrailerId) { mutableStateOf<String?>(null) }
 
     // The grouping is a domain rule, computed once per catalogue rather than on every
     // recomposition. Keying on the list keeps a scroll or a hover from rebuilding every shelf.
@@ -137,9 +164,22 @@ fun SubscriptionsWorkspace(
                     showDemoBadge = capability.requiresDemoLabel,
                     text = text,
                     onOpenOffer = onOpenOffer,
+                    page = page,
+                    onPlayTrailer = { trailerId -> openTrailerId = trailerId },
                 )
             }
         }
+    }
+
+    // Drawn last so it sits over the page. Without this the button would set a value that nothing
+    // reads — a failure this project has shipped three times.
+    openTrailerId?.let { trailerId ->
+        TrailerOverlay(
+            youtubeId = trailerId,
+            title = page?.title.orEmpty(),
+            onClose = { openTrailerId = null },
+            onFallback = { onOpenTrailerExternally(trailerId) },
+        )
     }
 }
 
@@ -304,12 +344,157 @@ private fun ProviderShelves(
 }
 
 /** One title's ranked offers. Nothing is hidden: the ranking orders, it never filters. */
+/**
+ * The film at the top of the page: backdrop, poster, facts and the trailer button.
+ *
+ * The backdrop is the film's own art. It sits behind a scrim because its brightness is unknown and
+ * white text over a pale image is unreadable. A film with no backdrop simply gets no image — the
+ * facts still read, and a grey placeholder would look like a failed load.
+ */
+@Composable
+private fun TitleFacts(
+    details: TmdbTitleDetails,
+    text: DesktopStrings,
+    onPlayTrailer: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
+        Text(
+            text = details.title,
+            color = BuroColors.Text,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+
+        // Year, rating, runtime and genres, each dropped when absent so the line never reads
+        // "· · ·" around missing values.
+        val facts =
+            listOfNotNull(
+                details.year?.toString(),
+                details.rating?.takeIf { it > 0 }?.let { rating -> "★ %.1f".format(rating) },
+                details.runtimeMinutes?.takeIf { it > 0 }?.let { minutes -> "$minutes min" },
+                details.genres.take(3).joinToString(", ").takeIf(String::isNotBlank),
+            ).joinToString("  ·  ")
+        if (facts.isNotBlank()) {
+            Text(
+                text = facts,
+                color = BuroColors.TextMuted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+
+        details.youtubeTrailerId?.let { trailerId ->
+            Spacer(Modifier.height(BuroSpacing.Xxs))
+            BuroInteractiveRow(
+                onClick = { onPlayTrailer(trailerId) },
+                selected = false,
+                shape = BuroRadius.Pill,
+                contentDescription = text.subscriptionsWatchTrailer,
+            ) { state ->
+                Text(
+                    text = text.subscriptionsWatchTrailer,
+                    modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs),
+                    color = if (state.active) BuroColors.Primary else BuroColors.Text,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+}
+
+/** A heading over one section of the page. */
+@Composable
+private fun SectionHeading(label: String) {
+    Text(
+        text = label,
+        color = BuroColors.TextMuted,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+    )
+}
+
+/**
+ * The cast, as circular photos with names.
+ *
+ * Scrolls horizontally with arrow keys and pointer-edge travel, like every other rail here. A
+ * performer with no photo keeps their place with an initial instead — dropping them would make the
+ * strip lie about who is in the film.
+ */
+@Composable
+private fun CastStrip(cast: List<TmdbCastMember>) {
+    val railState = rememberLazyListState()
+    LazyRow(
+        state = railState,
+        modifier = Modifier.fillMaxWidth().arrowScrollable(railState).edgeScrollable(railState),
+        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+    ) {
+        items(cast, key = { member -> member.name }) { member ->
+            Column(
+                modifier = Modifier.width(84.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Box(
+                    modifier = Modifier.size(72.dp).clip(CircleShape).background(BuroColors.SurfaceRaised),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (member.photoUrl != null) {
+                        BuroRemoteArtwork(
+                            artworkUrl = member.photoUrl,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            CastInitial(member.name)
+                        }
+                    } else {
+                        CastInitial(member.name)
+                    }
+                }
+                Text(
+                    text = member.name,
+                    color = BuroColors.Text,
+                    style = MaterialTheme.typography.labelSmall,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                member.character?.takeIf(String::isNotBlank)?.let { character ->
+                    Text(
+                        text = character,
+                        color = BuroColors.TextSubtle,
+                        style = MaterialTheme.typography.labelSmall,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Stands in for a missing headshot: the performer's initial, never a broken-image box. */
+@Composable
+private fun CastInitial(name: String) {
+    Text(
+        text = name.trim().take(1).uppercase(),
+        color = BuroColors.TextSubtle,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+    )
+}
+
 @Composable
 private fun OfferList(
     ranking: OfferRanking,
     showDemoBadge: Boolean,
     text: DesktopStrings,
     onOpenOffer: (RankedOffer) -> Unit,
+    /** The film's own page. Null draws only the provider rows, as this screen did before. */
+    page: TmdbTitleDetails? = null,
+    onPlayTrailer: (String) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
 
@@ -329,18 +514,80 @@ private fun OfferList(
                 ),
             verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
         ) {
-            // Every offer is listed, including the ones that cost money and the ones on services
-            // the user does not have. The ranking decides the order; it never hides a row.
-            items(ranking.all, key = { ranked -> ranked.provider.id + ranked.reason.name }) { ranked ->
-                OfferRow(
-                    ranked = ranked,
-                    text = text,
-                    showDemoBadge = showDemoBadge,
-                    // Credited on real listings only: demo rows came from nobody, and the user's own
-                    // library is something the app worked out for itself.
-                    showAttribution = !showDemoBadge && ranked.offer.type != OfferType.USER_LIBRARY,
-                    onClick = { onOpenOffer(ranked) },
-                )
+            // Facts and the answer on the left, poster on the right. "Where can I watch this" is
+            // the question the screen exists for, so it sits at the top rather than below a
+            // synopsis the user has to scroll past to reach it.
+            item(key = "page-top") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Lg),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+                    ) {
+                        page?.let { details ->
+                            TitleFacts(details = details, text = text, onPlayTrailer = onPlayTrailer)
+                        }
+                        SectionHeading(text.subscriptionsAvailableOn)
+                        ranking.all.forEach { ranked ->
+                            OfferRow(
+                                ranked = ranked,
+                                text = text,
+                                showDemoBadge = showDemoBadge,
+                                // Credited on real listings only: demo rows came from nobody, and
+                                // the user's own library is something the app worked out itself.
+                                showAttribution =
+                                    !showDemoBadge && ranked.offer.type != OfferType.USER_LIBRARY,
+                                onClick = { onOpenOffer(ranked) },
+                            )
+                        }
+                    }
+
+                    // Fixed width so the offers keep a readable measure on a wide window; absent
+                    // entirely when TMDb has no poster, rather than leaving a grey rectangle.
+                    page?.posterUrl?.let { poster ->
+                        Box(
+                            modifier =
+                                Modifier
+                                    .width(200.dp)
+                                    .aspectRatio(2f / 3f)
+                                    .clip(BuroRadius.Medium)
+                                    .background(BuroColors.SurfaceRaised),
+                        ) {
+                            BuroRemoteArtwork(
+                                artworkUrl = poster,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                            ) {}
+                        }
+                    }
+                }
+            }
+
+            // Below the fold: the reading matter. Each part appears only when TMDb has it —
+            // coverage is uneven, and a heading over nothing reads as a fault.
+            page?.overview?.takeIf(String::isNotBlank)?.let { overview ->
+                item(key = "page-synopsis") {
+                    Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
+                        Spacer(Modifier.height(BuroSpacing.Xs))
+                        SectionHeading(text.subscriptionsSynopsis)
+                        Text(
+                            text = overview,
+                            color = BuroColors.TextMuted,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
+            page?.cast?.takeIf { it.isNotEmpty() }?.let { cast ->
+                item(key = "page-cast") {
+                    Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
+                        SectionHeading(text.subscriptionsCast)
+                        CastStrip(cast = cast)
+                    }
+                }
             }
         }
 
@@ -451,12 +698,7 @@ private fun OfferRow(
                     // companies. This one is ours, and it makes the row the user cares about most
                     // findable at a glance.
                     if (ranked.offer.type == OfferType.USER_LIBRARY) {
-                        Image(
-                            painter = painterResource("brand/buro-mark-512.png"),
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp).clip(RoundedCornerShape(6.dp)),
-                            contentScale = ContentScale.Fit,
-                        )
+                        BuroMark(size = 24.dp)
                     }
                     // The provider's name as text. GDD 9 section 10 forbids copying brand logos, so
                     // there is deliberately no artwork here.

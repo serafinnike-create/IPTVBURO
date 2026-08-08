@@ -1,5 +1,6 @@
 package com.lucasserafin94.iptvburo.desktop
 
+import com.lucasserafin94.iptvburo.domain.model.shelfDeduplicationKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -23,10 +24,28 @@ class DailyHomeRotationTest {
         assertEquals(0, rotatingPageIndex(seed = Int.MIN_VALUE, pageCount = 0))
     }
 
+    /**
+     * The shelf key groups a provider's variants of one film.
+     *
+     * These cases came from `editorialCatalogKey`, which the shelves used until it was found to
+     * miss accents, pipe-separated labels and trailing single-letter tags — the shapes that were
+     * still showing as duplicate posters on the home screen. Kept here so the replacement is held
+     * to everything the original already handled.
+     */
     @Test
-    fun `editorial key groups quality and language variants`() {
-        assertEquals(editorialCatalogKey("Dívida de Honra [L1]"), editorialCatalogKey("Dívida de Honra [L2] 4K"))
-        assertEquals(editorialCatalogKey("Filme Exemplo HEVC"), editorialCatalogKey("Filme Exemplo HD"))
-        assertNotEquals(editorialCatalogKey("Filme Exemplo"), editorialCatalogKey("Outro Filme"))
+    fun `shelf key groups quality and language variants`() {
+        assertEquals(
+            "Dívida de Honra [L1]".shelfDeduplicationKey(),
+            "Dívida de Honra [L2] 4K".shelfDeduplicationKey(),
+        )
+        assertEquals("Filme Exemplo HEVC".shelfDeduplicationKey(), "Filme Exemplo HD".shelfDeduplicationKey())
+        assertNotEquals("Filme Exemplo".shelfDeduplicationKey(), "Outro Filme".shelfDeduplicationKey())
+    }
+
+    /** A numbered sequel is a different film, and no amount of tag-stripping may fuse them. */
+    @Test
+    fun `sequels stay distinct`() {
+        assertNotEquals("Enola Holmes 2".shelfDeduplicationKey(), "Enola Holmes 3".shelfDeduplicationKey())
+        assertNotEquals("Duna".shelfDeduplicationKey(), "Duna: Parte Dois".shelfDeduplicationKey())
     }
 }

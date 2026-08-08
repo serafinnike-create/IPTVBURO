@@ -19,8 +19,13 @@ import com.lucasserafin94.iptvburo.desktop.app.DesktopApp
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.SessionXtreamRepository
 import com.lucasserafin94.iptvburo.desktop.platform.WindowChrome
+import com.lucasserafin94.iptvburo.desktop.playback.VlcPluginCache
 import com.lucasserafin94.iptvburo.desktop.security.RememberedXtreamStore
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
+import com.lucasserafin94.iptvburo.desktop.user.StoredWindowGeometry
 
 /**
  * The window size to open at: the preferred size, shrunk to fit the usable screen.
@@ -70,6 +75,40 @@ private val MIN_HEIGHT = 560.dp
 private val WINDOW_MARGIN = 24.dp
 
 fun main() {
+    // Started before the window and left to run on its own: it takes a few seconds, only happens
+    // on the first launch after an install or update, and nothing on screen depends on it.
+    //
+    // Building the index at build time did not survive packaging — the installer copies the
+    // plugins to a different directory with new timestamps, which invalidates every entry — so
+    // the index shipped in the MSI was never actually used. Worth doing, though measured to be
+    // worth less than assumed on a warm cache; see VlcPluginCache for the numbers.
+    //
+    // A daemon thread, so a slow or wedged generator can never keep the app from exiting.
+    Thread { VlcPluginCache.ensureFreshForBundledRuntime() }
+        .apply {
+            name = "iptvburo-vlc-cache"
+            isDaemon = true
+            // Below the UI: this is a startup optimisation and must never compete with drawing.
+            priority = Thread.MIN_PRIORITY
+        }.start()
+
+    // Coil's network fetcher, registered by hand rather than discovered.
+    //
+    // coil-network-okhttp announces itself through META-INF/services, and a ServiceLoader finds it
+    // only if it looks at the class loader that owns the jar. Under `gradle run` that is the
+    // application loader and everything works; in the packaged app it is not, and Coil silently
+    // ends up with no way to fetch an http(s) URL at all — every remote poster falls back to its
+    // placeholder letter while the URL itself is perfectly good. Verified: the same URLs return
+    // 200 image/jpeg through the very OkHttp client Coil would have used.
+    //
+    // Setting the loader explicitly removes the discovery step, so this cannot depend on how the
+    // runtime was assembled.
+    SingletonImageLoader.setSafe { context ->
+        ImageLoader.Builder(context)
+            .components { add(OkHttpNetworkFetcherFactory()) }
+            .build()
+    }
+
     val localRepository = InMemoryCatalogRepository()
     val xtreamRepository = SessionXtreamRepository()
     val rememberedXtreamStore = RememberedXtreamStore()
@@ -80,15 +119,34 @@ fun main() {
         // laptop panel once the taskbar is subtracted, so the window opened with its lower edge off
         // screen: the last rail sat under the taskbar and the page looked unscrollable because the
         // part that would have scrolled was never visible.
+        // What the user left last time, or nothing on a machine that has never been resized.
+        val savedGeometry = remember { userStore.windowGeometry() }
         val windowState =
             rememberWindowState(
-                size = preferredWindowSize(),
-                position = WindowPosition(Alignment.Center),
-                // Maximised, so Windows itself decides the bounds. Sizing by hand meant fighting
-                // the invisible 7px resize border the OS adds on each edge: a window asked for at
-                // the working-area height came back 14px larger and hung below the taskbar, taking
-                // the last row of the catalogue off screen with it.
-                placement = WindowPlacement.Maximized,
+                size =
+                    savedGeometry
+                        ?.takeIf { !it.maximised }
+                        ?.let { DpSize(it.width.dp, it.height.dp) }
+                        ?: preferredWindowSize(),
+                position =
+                    savedGeometry
+                        ?.takeIf { !it.maximised }
+                        ?.let { WindowPosition(it.x.dp, it.y.dp) }
+                        ?: WindowPosition(Alignment.Center),
+                // Maximised on a first run, so Windows itself decides the bounds. Sizing by hand
+                // meant fighting the invisible 7px resize border the OS adds on each edge: a window
+                // asked for at the working-area height came back 14px larger and hung below the
+                // taskbar, taking the last row of the catalogue off screen with it.
+                //
+                // After that the user's own choice wins. Someone who deliberately made the window
+                // small wants it small again, and forcing maximised every launch would override a
+                // decision they made on purpose.
+                placement =
+                    if (savedGeometry == null || savedGeometry.maximised) {
+                        WindowPlacement.Maximized
+                    } else {
+                        WindowPlacement.Floating
+                    },
             )
 
         // Remembered so leaving the compact overlay restores the window the user had, rather than
@@ -98,8 +156,44 @@ fun main() {
         var compactMode by remember { mutableStateOf(false) }
         var fullScreen by remember { mutableStateOf(false) }
 
+        // Hoisted out of the Window so closing it can dispose the state. It used to be created
+        // inside, where onCloseRequest could not reach it, and the background scope that loads the
+        // streaming shelves was therefore never cancelled: TMDb requests stayed in flight against a
+        // window that no longer existed.
+        val appState =
+            remember {
+                DesktopAppState(
+                    localRepository = localRepository,
+                    xtreamRepository = xtreamRepository,
+                    rememberedXtreamStore = rememberedXtreamStore,
+                    userStore = userStore,
+                )
+            }
+
+        /**
+         * Remembers the window for next launch, unless it is in a temporary shape.
+         *
+         * Full screen and the compact overlay are both modes the user turned on for one title, not
+         * a size they chose to keep; storing either would reopen the app in a shape nobody asked
+         * for. In those two cases the previously stored geometry is left as it was.
+         */
+        fun rememberWindowGeometry() {
+            if (fullScreen || compactMode) return
+            userStore.setWindowGeometry(
+                StoredWindowGeometry(
+                    maximised = windowState.placement == WindowPlacement.Maximized,
+                    width = windowState.size.width.value,
+                    height = windowState.size.height.value,
+                    x = windowState.position.x.value,
+                    y = windowState.position.y.value,
+                ),
+            )
+        }
+
         Window(
             onCloseRequest = {
+                rememberWindowGeometry()
+                appState.dispose()
                 xtreamRepository.clear()
                 localRepository.clear()
                 exitApplication()
@@ -110,15 +204,6 @@ fun main() {
             // window, which is what the taskbar and alt-tab show while the app is open.
             icon = painterResource("brand/buro-mark-512.png"),
         ) {
-            val appState =
-                remember {
-                    DesktopAppState(
-                        localRepository = localRepository,
-                        xtreamRepository = xtreamRepository,
-                        rememberedXtreamStore = rememberedXtreamStore,
-                        userStore = userStore,
-                    )
-                }
             LaunchedEffect(appState) {
                 appState.restoreRememberedXtream()
             }
@@ -161,6 +246,10 @@ fun main() {
                     window.isAlwaysOnTop = compactMode
                 },
                 onExitForUpdate = {
+                    // Same teardown as a normal close: the installer is about to replace this
+                    // build, and a request still in flight would hold the old process open.
+                    rememberWindowGeometry()
+                    appState.dispose()
                     xtreamRepository.clear()
                     localRepository.clear()
                     exitApplication()

@@ -395,6 +395,79 @@ class TmdbClient(
     }
 
     /** The TMDb id for a title, or null when the search finds nothing. */
+    /**
+     * Everything the "where to watch" screen shows about a title: artwork, synopsis, cast, trailer.
+     *
+     * One request rather than four. TMDb's `append_to_response` folds credits and videos into the
+     * details payload, and a screen firing four calls per title would be slow enough to notice on a
+     * shelf the user is browsing quickly.
+     */
+    fun titleDetails(
+        tmdbId: Int,
+        isSeries: Boolean = false,
+    ): TmdbTitleDetails? {
+        val key = apiKey?.takeIf(String::isNotBlank) ?: return null
+
+        val url =
+            baseUrl.newBuilder()
+                .addPathSegments(if (isSeries) "tv/$tmdbId" else "movie/$tmdbId")
+                .addQueryParameter("api_key", key)
+                .addQueryParameter("language", language)
+                .addQueryParameter("append_to_response", "credits,videos")
+                .build()
+
+        val root = get(url) ?: return null
+
+        val cast =
+            root
+                .getAsJsonObject("credits")
+                ?.getAsJsonArray("cast")
+                ?.mapNotNull { element -> element.takeIf { it.isJsonObject }?.asJsonObject }
+                ?.take(MAX_CAST)
+                ?.mapNotNull { member ->
+                    val name = member.string("name") ?: return@mapNotNull null
+                    TmdbCastMember(
+                        name = name,
+                        character = member.string("character"),
+                        photoUrl = member.string("profile_path")?.let { path -> "$imageBaseUrl/w185$path" },
+                    )
+                }.orEmpty()
+
+        val trailerKey =
+            root
+                .getAsJsonObject("videos")
+                ?.getAsJsonArray("results")
+                ?.mapNotNull { element -> element.takeIf { it.isJsonObject }?.asJsonObject }
+                ?.filter { video -> video.string("site").equals("YouTube", ignoreCase = true) }
+                // A full trailer before a teaser; the endpoint returns them mixed together.
+                ?.sortedByDescending { video -> if (video.string("type") == "Trailer") 1 else 0 }
+                ?.firstOrNull { video -> video.string("type") in TRAILER_TYPES }
+                ?.string("key")
+
+        return TmdbTitleDetails(
+            title = root.string(if (isSeries) "name" else "title").orEmpty(),
+            overview = root.string("overview"),
+            // The wide image behind the page, not the poster: a backdrop is 16:9 and made for this.
+            backdropUrl = root.string("backdrop_path")?.let { path -> "$imageBaseUrl/w1280$path" },
+            posterUrl = root.string("poster_path")?.let { path -> "$imageBaseUrl/w342$path" },
+            year = root.string(if (isSeries) "first_air_date" else "release_date")?.take(4)?.toIntOrNull(),
+            rating = root.double("vote_average"),
+            runtimeMinutes =
+                if (isSeries) {
+                    root.getAsJsonArray("episode_run_time")?.firstOrNull()?.asInt
+                } else {
+                    root.int("runtime")
+                },
+            genres =
+                root
+                    .getAsJsonArray("genres")
+                    ?.mapNotNull { element -> element.takeIf { it.isJsonObject }?.asJsonObject?.string("name") }
+                    .orEmpty(),
+            cast = cast,
+            youtubeTrailerId = trailerKey,
+        )
+    }
+
     private fun findMovieId(
         title: String,
         year: Int?,
@@ -433,7 +506,7 @@ class TmdbClient(
                     .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return null
-                JsonParser.parseString(response.body?.string() ?: return null).asJsonObject
+                JsonParser.parseString(response.body.string()).asJsonObject
             }
         }.getOrNull()
 
@@ -446,6 +519,9 @@ class TmdbClient(
 
         /** A teaser is still worth showing when no full trailer was published. */
         val TRAILER_TYPES = setOf("Trailer", "Teaser")
+
+        /** Enough cast to fill a strip. TMDb returns the whole billed and unbilled list. */
+        const val MAX_CAST = 12
     }
 }
 
@@ -468,6 +544,33 @@ data class TmdbPersonDetails(
     val biography: String?,
     val birthday: String?,
     val placeOfBirth: String?,
+)
+
+/** One credited performer, with the photo the cast strip shows. */
+data class TmdbCastMember(
+    val name: String,
+    val character: String?,
+    val photoUrl: String?,
+)
+
+/**
+ * The page shown above the "where to watch" list.
+ *
+ * Every field but the title is optional: TMDb's coverage is uneven, and a screen that only rendered
+ * when everything was present would show nothing for a great many real films. Each piece is drawn
+ * when it exists and omitted when it does not.
+ */
+data class TmdbTitleDetails(
+    val title: String,
+    val overview: String?,
+    val backdropUrl: String?,
+    val posterUrl: String?,
+    val year: Int?,
+    val rating: Double?,
+    val runtimeMinutes: Int?,
+    val genres: List<String> = emptyList(),
+    val cast: List<TmdbCastMember> = emptyList(),
+    val youtubeTrailerId: String? = null,
 )
 
 /**

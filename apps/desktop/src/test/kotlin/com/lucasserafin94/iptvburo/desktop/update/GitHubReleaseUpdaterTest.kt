@@ -19,6 +19,35 @@ class GitHubReleaseUpdaterTest {
         assertFalse(isNewerVersion("invalid", "0.2.0-alpha.2"))
     }
 
+    /**
+     * The version the app actually ships as must parse.
+     *
+     * DESKTOP_VERSION has been written as two numbers — "1.1", then "2.0" — while the parser
+     * requires three. An unparseable *current* version made compareVersions return 1 for every
+     * candidate, so the updater would have offered the running build to itself as an update, over
+     * and over. Nothing in the suite caught it because every existing case used three numbers on
+     * both sides.
+     */
+    @Test
+    fun `the shipped version string is comparable`() {
+        assertFalse(
+            isNewerVersion(DESKTOP_VERSION, DESKTOP_VERSION),
+            "the running build must never be newer than itself — DESKTOP_VERSION is '$DESKTOP_VERSION'",
+        )
+        assertTrue(isNewerVersion("99.0.0", DESKTOP_VERSION), "a genuinely newer release must still be offered")
+        assertFalse(isNewerVersion("0.0.1", DESKTOP_VERSION), "an older release must not be offered")
+    }
+
+    /** Two-number versions are what this project writes, so they have to order correctly. */
+    @Test
+    fun `two-number versions compare like their three-number form`() {
+        assertTrue(isNewerVersion("2.0", "1.1"))
+        assertFalse(isNewerVersion("1.1", "2.0"))
+        assertFalse(isNewerVersion("2.0", "2.0"))
+        assertTrue(isNewerVersion("2.0.1", "2.0"))
+        assertFalse(isNewerVersion("2.0", "2.0.1"))
+    }
+
     @Test
     fun `release check accepts only a newer installer with github digest`() = runBlocking {
         MockWebServer().use { server ->

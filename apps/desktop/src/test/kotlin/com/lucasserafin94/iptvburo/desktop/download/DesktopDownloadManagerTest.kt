@@ -261,4 +261,56 @@ class DesktopDownloadManagerTest {
             assertEquals("The Show · T1E3", stored.values.single().title)
         }
     }
+
+    /**
+     * A 200 that carries nothing must fail, not produce a file.
+     *
+     * An empty file passes every check the library makes afterwards — it exists, so the download is
+     * listed as complete and offered for playback — and the user gets a title that opens to a black
+     * screen with nothing to explain it. This is the same class of failure as the interrupted
+     * `.part` files, arriving by a different route.
+     */
+    @Test
+    fun `a response with no content fails instead of storing an empty file`() {
+        withManager { manager, directory, server ->
+            server.enqueue(MockResponse().setBody(Buffer()))
+
+            val result =
+                runBlocking {
+                    manager.download(
+                        "movie:nothing_2026",
+                        "Nothing",
+                        URI(server.url("/empty.mp4").toString()),
+                        "mp4",
+                    ) { _, _ -> }
+                }
+
+            assertEquals(DownloadResult.Failed(FailureReason.EMPTY), result)
+            assertNull(manager.downloadedFile("movie:nothing_2026"), "no file may be left behind")
+            val leftovers = Files.list(directory).use { stream -> stream.toList() }
+            assertTrue(leftovers.isEmpty(), "not even a chunk should remain: $leftovers")
+        }
+    }
+
+    /** The opposite case, so the guard above cannot be satisfied by rejecting everything. */
+    @Test
+    fun `a response with content is stored`() {
+        withManager { manager, _, server ->
+            server.enqueue(body(2_048))
+
+            val result =
+                runBlocking {
+                    manager.download(
+                        "movie:something_2026",
+                        "Something",
+                        URI(server.url("/full.mp4").toString()),
+                        "mp4",
+                    ) { _, _ -> }
+                }
+
+            assertTrue(result is DownloadResult.Completed, "was $result")
+            assertEquals(2_048L, result.bytes)
+            assertNotNull(manager.downloadedFile("movie:something_2026"))
+        }
+    }
 }

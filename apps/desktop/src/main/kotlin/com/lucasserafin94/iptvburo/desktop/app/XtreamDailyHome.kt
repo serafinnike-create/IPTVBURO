@@ -278,8 +278,15 @@ fun XtreamDailyHome(
                                 heroIndex = (heroIndex + 1) % rotation.size
                             }
                         }
+                        val heroItem = rotation.getOrNull(heroIndex) ?: snapshot.hero
+                        // Fetched as the banner reaches each title rather than all five up front:
+                        // four of them may never be seen if the user moves on.
+                        LaunchedEffect(heroItem?.providerId) {
+                            heroItem?.let(appState::loadHeroSynopsis)
+                        }
                         DailyHero(
-                            item = rotation.getOrNull(heroIndex) ?: snapshot.hero,
+                            item = heroItem,
+                            synopsis = heroItem?.providerId?.let { id -> appState.heroSynopsis[id] },
                             date = snapshot.date,
                             metrics = metrics,
                             text = text,
@@ -321,6 +328,31 @@ fun XtreamDailyHome(
                                 metrics = metrics,
                                 text = text,
                                 onClick = openDetails,
+                            )
+                        }
+                    }
+                    // This year's releases, above the daily picks. What is new is what the user
+                    // most often came to see, and burying it under a rotating selection meant
+                    // scrolling past today's shuffle to find it.
+                    if (snapshot.releasesThisYear.isNotEmpty()) {
+                        item(key = "releases-year-movies") {
+                            DailyRow(
+                                "${text.releasesIn} ${snapshot.date.year}",
+                                snapshot.releasesThisYear,
+                                metrics,
+                                text,
+                                openDetails,
+                            )
+                        }
+                    }
+                    if (snapshot.seriesThisYear.isNotEmpty()) {
+                        item(key = "releases-year-series") {
+                            DailyRow(
+                                "${text.series} · ${snapshot.date.year}",
+                                snapshot.seriesThisYear,
+                                metrics,
+                                text,
+                                openDetails,
                             )
                         }
                     }
@@ -378,6 +410,8 @@ private fun DailyHero(
     date: LocalDate,
     metrics: HomeMetrics,
     text: DesktopStrings,
+    /** The film's own description, when it has been fetched. Null falls back to the fixed line. */
+    synopsis: String?,
     onDetails: (XtreamCatalogItem) -> Unit,
     onPlay: (XtreamCatalogItem) -> Unit,
 ) {
@@ -431,11 +465,15 @@ private fun DailyHero(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            // The film's own description when it has arrived, the fixed line about the daily
+            // selection until then. The largest block of text on the home screen used to say
+            // nothing about the title it sat under.
             Text(
-                text = text.heroSubtitle,
+                text = synopsis?.takeIf(String::isNotBlank) ?: text.heroSubtitle,
                 color = BuroColors.TextMuted,
                 style = MaterialTheme.typography.bodyLarge,
-                maxLines = 2,
+                // Three lines for a real synopsis, which needs the room; the fixed line fits in two.
+                maxLines = if (synopsis.isNullOrBlank()) 2 else 3,
                 overflow = TextOverflow.Ellipsis,
             )
             item?.let { selected ->

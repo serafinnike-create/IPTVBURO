@@ -9,6 +9,7 @@ import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
@@ -53,21 +54,36 @@ class DesktopDownloadManager(
     fun isDownloaded(contentKey: String): Boolean = downloadedFile(contentKey) != null
 
     /**
-     * Removes chunks left by downloads that never finished.
+     * Removes chunks left by downloads that never finished, once they are old enough to be dead.
      *
      * Nothing else sweeps them: a transfer killed by closing the app, or by a provider that stopped
      * sending, leaves its `.part` on disk for ever. One user had 430 MB of an episode that was
      * showing as 100% complete and could not be played, because the file it needed was never
-     * written. Called at startup, where no download of this session can be in flight yet.
+     * written.
+     *
+     * ## Why there is an age limit
+     *
+     * This used to delete every `.part` unconditionally at startup, and it destroyed a download the
+     * user was still waiting for: they had a 106 MB episode in flight, the app was restarted, and
+     * the transfer's own file was swept out from under it. A quarter of an hour without a single
+     * byte written is the difference between "abandoned" and "still going" — an active download
+     * touches its file constantly, so anything stale by that much is genuinely dead.
+     *
+     * Erring towards keeping: a stray chunk costs disk space the user can see and delete, while a
+     * wrongly swept one costs them the download and gives no clue why.
      */
     fun discardInterruptedDownloads(): Int {
         if (!Files.isDirectory(rootDirectory)) return 0
+        val deadline = System.currentTimeMillis() - STALE_PART_MILLIS
         return runCatching {
             Files.list(rootDirectory).use { stream ->
                 stream
                     .filter { path -> Files.isRegularFile(path) }
                     .filter { path -> path.fileName.toString().endsWith(".part") }
-                    .toList()
+                    .filter { path ->
+                        runCatching { Files.getLastModifiedTime(path).toMillis() < deadline }
+                            .getOrDefault(false)
+                    }.toList()
             }.count { path -> runCatching { Files.deleteIfExists(path) }.getOrDefault(false) }
         }.getOrDefault(0)
     }
@@ -196,19 +212,71 @@ class DesktopDownloadManager(
             val target = fileFor(contentKey, containerExtension)
             val partial = target.resolveSibling(target.fileName.toString() + ".part")
             var completed = false
+
+            /**
+             * Whether the chunk on disk is a usable prefix that a later attempt can resume from.
+             *
+             * Set only where what was written is genuinely the start of the file: a cancellation
+             * and a dropped connection. A rejected or empty response leaves nothing worth keeping.
+             */
+            var keepPartial = false
             try {
                 Files.createDirectories(target.parent)
-                val request = Request.Builder().url(uri.toURL()).build()
+
+                // What a previous attempt already wrote, if anything.
+                //
+                // A 600 MB episode over a domestic line takes long enough that an interruption is
+                // ordinary rather than exceptional — closing the app, a provider that drops the
+                // connection, a laptop that sleeps. Starting again from zero every time made a
+                // large download on an unreliable line effectively impossible to finish.
+                val alreadyHave =
+                    runCatching { if (Files.exists(partial)) Files.size(partial) else 0L }
+                        .getOrDefault(0L)
+
+                val request =
+                    Request.Builder()
+                        .url(uri.toURL())
+                        .apply {
+                            // Asks the server to send from where the chunk ends. A server that does
+                            // not support ranges simply ignores this and answers 200 with the whole
+                            // file, which the branch below handles by starting over.
+                            if (alreadyHave > 0L) header("Range", "bytes=$alreadyHave-")
+                        }.build()
+
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
                         return@withContext DownloadResult.Failed(FailureReason.REJECTED)
                     }
-                    val body = response.body ?: return@withContext DownloadResult.Failed(FailureReason.EMPTY)
-                    val total = body.contentLength().takeIf { it > 0L }
-                    var read = 0L
+                    // 206 means the server honoured the range and is sending the remainder; 200
+                    // means it ignored it and is sending everything. Getting this backwards would
+                    // append a whole second copy onto the chunk and produce a corrupt file, so the
+                    // append decision follows the status code rather than what was asked for.
+                    val resuming = alreadyHave > 0L && response.code == HTTP_PARTIAL_CONTENT
+
+                    // OkHttp 5's body is non-null, so the old `?: Failed(EMPTY)` never fired and
+                    // EMPTY was unreachable. The condition it was meant to catch is real, though —
+                    // a provider answering 200 with nothing in it — and is checked after the
+                    // transfer instead, where "nothing arrived" is a fact rather than a guess.
+                    val body = response.body
+                    // The whole file's size, not this response's: on a resumed transfer the body
+                    // carries only the remainder, and reporting that as the total would show the
+                    // bar restarting at zero for a download that is most of the way done.
+                    val total =
+                        body.contentLength().takeIf { it > 0L }?.let { length ->
+                            if (resuming) length + alreadyHave else length
+                        }
+                    var read = if (resuming) alreadyHave else 0L
                     var cancelledMidStream = false
                     body.byteStream().use { input ->
-                        Files.newOutputStream(partial).use { output ->
+                        val sink =
+                            if (resuming) {
+                                Files.newOutputStream(partial, StandardOpenOption.APPEND)
+                            } else {
+                                // Not appending: the server sent the whole file, so anything
+                                // already in the chunk is a prefix of what is arriving now.
+                                Files.newOutputStream(partial)
+                            }
+                        sink.use { output ->
                             val buffer = ByteArray(BUFFER_BYTES)
                             while (true) {
                                 if (flag.get()) {
@@ -227,7 +295,18 @@ class DesktopDownloadManager(
                         }
                     }
                     if (cancelledMidStream) {
+                        // Everything written is a valid prefix, so pressing download again picks up
+                        // from here rather than starting the transfer over.
+                        keepPartial = read > 0L
                         return@withContext DownloadResult.Cancelled
+                    }
+                    // A 200 that carried nothing. Reported as a failure rather than moved into
+                    // place: an empty file passes every later check — it exists, so the library
+                    // lists it as downloaded and offers to play it — and the user gets a title
+                    // that opens to a black screen with no explanation. The `.part` is swept by
+                    // the `finally` below, since `completed` is still false here.
+                    if (read == 0L) {
+                        return@withContext DownloadResult.Failed(FailureReason.EMPTY)
                     }
                     Files.move(partial, target, StandardCopyOption.REPLACE_EXISTING)
                     completed = true
@@ -236,15 +315,24 @@ class DesktopDownloadManager(
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (io: IOException) {
+                // A dropped connection mid-transfer: what arrived is still the start of the file,
+                // so it is kept and the next attempt resumes. A storage error is different — the
+                // chunk may be truncated or unwritable — and that one is swept.
+                keepPartial = io !is java.nio.file.FileSystemException &&
+                    runCatching { Files.exists(partial) && Files.size(partial) > 0L }.getOrDefault(false)
                 // The exception message can embed the signed URL, so it is never surfaced or logged.
                 DownloadResult.Failed(
                     if (io is java.nio.file.FileSystemException) FailureReason.STORAGE else FailureReason.NETWORK,
                 )
             } finally {
-                // Swept on every exit path, including the early returns for a rejected or empty
-                // response and any non-IOException thrown out of the body: each of those used to
-                // leave a stray .part file that nothing ever cleaned up.
-                if (!completed) runCatching { Files.deleteIfExists(partial) }
+                // Kept when it can still be resumed, swept when it cannot.
+                //
+                // This deleted the chunk on every unsuccessful exit, which is right for a rejected
+                // or empty response — those leave a file that is not a prefix of anything — and
+                // wrong for the two ordinary interruptions: a cancellation and a dropped
+                // connection. Both leave a valid prefix, and throwing it away is what made a large
+                // download on an unreliable line impossible to finish.
+                if (!completed && !keepPartial) runCatching { Files.deleteIfExists(partial) }
                 // Only if it is still ours, so a later download of the same key keeps its own flag.
                 cancelled.remove(contentKey, flag)
             }
@@ -270,6 +358,24 @@ class DesktopDownloadManager(
     private companion object {
         const val BUFFER_BYTES = 1 shl 16
         const val INDEX_FILE = "library.json"
+
+        /**
+         * 206 Partial Content: the server honoured the Range header and is sending the remainder.
+         *
+         * A plain 200 to a ranged request means it ignored the header and is sending the whole file
+         * again — appending in that case would concatenate a second copy onto the chunk and produce
+         * a file that is corrupt in a way nothing later checks for.
+         */
+        const val HTTP_PARTIAL_CONTENT = 206
+
+        /**
+         * How long a `.part` must go untouched before it counts as abandoned.
+         *
+         * An active transfer writes to its file continuously, so fifteen minutes of silence means
+         * the process that owned it is gone. Long enough to survive a restart while a download is
+         * running, which is the case that lost a user 106 MB mid-transfer.
+         */
+        const val STALE_PART_MILLIS = 15 * 60 * 1000L
         val UNSAFE_NAME = Regex("""[^A-Za-z0-9._-]""")
         val SAFE_EXTENSION = Regex("""[A-Za-z0-9]{1,5}""")
 
