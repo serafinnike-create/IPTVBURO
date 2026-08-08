@@ -172,20 +172,23 @@ fun LicenseGate(
                 // the scrollable area against a parent whose height is already decided.
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(BuroSpacing.Xl),
+                .padding(horizontal = BuroSpacing.Xl, vertical = BuroSpacing.Md),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            BuroMark(size = 56.dp)
-            Spacer(Modifier.height(BuroSpacing.Lg))
+            // Tightened throughout. Every element here was sized for a comfortable screen, and
+            // together they made a column taller than a laptop window — which put the activation
+            // route, the one thing somebody may have arrived needing, out of reach entirely.
+            BuroMark(size = 40.dp)
+            Spacer(Modifier.height(BuroSpacing.Sm))
 
             Text(
                 text = titleFor(reason, text),
                 color = BuroColors.Text,
-                fontSize = 26.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
             )
-            Spacer(Modifier.height(BuroSpacing.Xs))
+            Spacer(Modifier.height(BuroSpacing.Xxs))
             Text(
                 text = bodyFor(reason, text),
                 color = BuroColors.TextMuted,
@@ -193,7 +196,7 @@ fun LicenseGate(
                 textAlign = TextAlign.Center,
             )
 
-            Spacer(Modifier.height(BuroSpacing.Lg))
+            Spacer(Modifier.height(BuroSpacing.Md))
 
             DeviceIdentity(
                 deviceId = status.deviceId,
@@ -215,7 +218,7 @@ fun LicenseGate(
                 )
             }
 
-            Spacer(Modifier.height(BuroSpacing.Lg))
+            Spacer(Modifier.height(BuroSpacing.Md))
 
             if (needsPayment) {
                 PaymentSection(
@@ -265,6 +268,19 @@ fun LicenseGate(
         // Going back when there is a working app to go back to, quitting otherwise. Trapping
         // somebody here while their trial still has days left is alarming: the app behind works, and
         // the only apparent way out is to close the program.
+        // Why two years and not for ever, answered before anybody asks — it is the objection that
+        // arrives at the moment of paying. Down here rather than above the buttons: reassurance for
+        // whoever reads it, never something between a customer and the action.
+        if (needsPayment) {
+            Text(
+                text = text.whyNotLifetime,
+                color = BuroColors.TextSubtle,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = BuroSpacing.Xl),
+            )
+        }
+
         TextButton(
             onClick = onDismiss ?: onQuit,
             modifier = Modifier.padding(bottom = BuroSpacing.Sm),
@@ -322,7 +338,7 @@ private fun DeviceIdentity(
             .clip(RoundedCornerShape(14.dp))
             .background(BuroColors.Surface)
             .border(1.dp, BuroColors.BorderSoft, RoundedCornerShape(14.dp))
-            .padding(BuroSpacing.Md),
+            .padding(BuroSpacing.Sm),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(text.deviceLabel, color = BuroColors.TextSubtle, fontSize = 11.sp)
@@ -429,11 +445,19 @@ private fun PaymentSection(
         Text(text.openInBrowser, fontWeight = FontWeight.Bold)
     }
 
-    Spacer(Modifier.height(BuroSpacing.Sm))
+    Spacer(Modifier.height(BuroSpacing.Xs))
 
     // A link, not a field. The field lives on its own view, reached from here, which is what keeps
     // this column short enough to fit a laptop window.
-    TextButton(onClick = { enteringKey = true }) {
+    //
+    // It is styled as a bordered button rather than as text: below a large gold button, a line of
+    // small coloured text does not read as something to press, and this is the only route for
+    // somebody holding a code.
+    OutlinedButton(
+        onClick = { enteringKey = true },
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth().height(44.dp),
+    ) {
         Text(
             text = text.haveKey,
             color = BuroColors.Primary,
@@ -441,14 +465,6 @@ private fun PaymentSection(
             fontWeight = FontWeight.Bold,
         )
     }
-
-    Spacer(Modifier.height(BuroSpacing.Xs))
-    Text(
-        text = text.whyNotLifetime,
-        color = BuroColors.TextSubtle,
-        fontSize = 11.5.sp,
-        textAlign = TextAlign.Center,
-    )
 }
 
 /**

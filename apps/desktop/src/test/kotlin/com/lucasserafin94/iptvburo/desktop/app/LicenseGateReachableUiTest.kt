@@ -1,6 +1,9 @@
 package com.lucasserafin94.iptvburo.desktop.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
@@ -18,6 +21,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.LocalDesktopStrings
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.domain.model.LicenseBlockReason
 import com.lucasserafin94.iptvburo.domain.model.LicenseDecision
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 
 /**
@@ -41,6 +45,39 @@ class LicenseGateReachableUiTest {
             decision = LicenseDecision.Blocked(LicenseBlockReason.TRIAL_ENDED),
             deviceId = "7HXY-3HVE-SFSE",
         )
+
+    /**
+     * The route to the code field fits a laptop window without scrolling.
+     *
+     * This is the assertion the earlier tests were missing. They composed at the test harness's own
+     * generous size, passed, and the button was still off the bottom of a real 900px window — which
+     * is what the user was actually looking at.
+     *
+     * 780dp of height is a 1080p laptop minus the taskbar and title bar, scaled at 125%: the most
+     * common Windows screen this product runs on.
+     */
+    @Test
+    fun `the code route fits a laptop window without scrolling`() = runComposeUiTest {
+        setContent {
+            BuroDesktopTheme {
+                CompositionLocalProvider(LocalDesktopStrings provides strings) {
+                    Box(Modifier.size(width = 1280.dp, height = 780.dp)) {
+                        LicenseGate(
+                            status = blockedStatus(),
+                            client = LicenseClient(),
+                            onRechecked = {},
+                            onQuit = {},
+                            languageTag = "pt-BR",
+                        )
+                    }
+                }
+            }
+        }
+
+        // No performScrollTo: the point is that it is already there. A user who has to discover a
+        // scrollbar to find the only route they need has not been given that route.
+        onNodeWithText(strings.licenseText.haveKey).assertIsDisplayed()
+    }
 
     /**
      * The way to enter a code is visible without scrolling.
