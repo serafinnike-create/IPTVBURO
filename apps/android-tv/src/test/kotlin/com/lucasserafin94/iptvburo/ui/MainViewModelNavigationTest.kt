@@ -55,6 +55,38 @@ class MainViewModelNavigationTest {
     }
 
     @Test
+    fun `downloads destination is rejected while Android offline capability is disabled`() = runTest {
+        val viewModel = createViewModel(FakeCatalogRepository())
+        runCurrent()
+
+        viewModel.selectSection(AppSection.DOWNLOADS)
+
+        assertEquals(AppSection.HOME, viewModel.state.value.section)
+        assertEquals(AppContent.Home, viewModel.state.value.content)
+    }
+
+    @Test
+    fun `direct download action does not resolve media while offline capability is disabled`() = runTest {
+        val movie =
+            catalogChannel(
+                id = "movie-offline-disabled",
+                contentType = CatalogContentType.MOVIE,
+                providerItemId = "provider-movie-offline-disabled",
+            )
+        val repository = FakeCatalogRepository()
+        val viewModel = createViewModel(repository)
+        runCurrent()
+        viewModel.openChannel(movie.toUi())
+        runCurrent()
+
+        viewModel.downloadSelectedMovie()
+        runCurrent()
+
+        assertTrue(repository.getChannelRequests.isEmpty())
+        assertTrue(viewModel.state.value.downloads.isEmpty())
+    }
+
+    @Test
     fun `live without a source keeps live selected and shows a treated state`() = runTest {
         val viewModel = createViewModel(FakeCatalogRepository())
         runCurrent()

@@ -8,6 +8,8 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import java.util.concurrent.TimeUnit
+import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 
@@ -80,7 +82,7 @@ class StalkerClientTest {
 
     @Test
     fun `live categories drop the all pseudo entry`() {
-        server.enqueue(MockResponse().setBody("""{"js":{"token":"t"}}"""))
+        server.enqueue(MockResponse().setBody("""{"js":{"token":"very-secret-token-123"}}"""))
         server.enqueue(
             MockResponse().setBody(
                 """{"js":[{"id":"*","title":"All"},{"id":"7","title":"Sports"}]}""",
@@ -164,5 +166,73 @@ class StalkerClientTest {
         val rendered = failure.toString() + " " + failure.message.orEmpty()
         assertFalse(rendered.contains("00:1A:79"), "leaked the MAC: $rendered")
         assertFalse(rendered.contains(server.hostName), "leaked the host: $rendered")
+    }
+
+    @Test
+    fun `redirects never forward the mac cookie or bearer token to another host`() {
+        val redirectTarget = MockWebServer()
+        try {
+            val crossHostLocation =
+                redirectTarget.url("/capture").newBuilder()
+                    .host("127.0.0.1")
+                    .build()
+            val permissiveTransport =
+                OkHttpClient.Builder()
+                    .followRedirects(true)
+                    .followSslRedirects(true)
+                    .readTimeout(2, TimeUnit.SECONDS)
+                    .build()
+            val hardenedClient = StalkerClient(httpClient = permissiveTransport)
+            server.enqueue(MockResponse().setBody("""{"js":{"token":"secret-token"}}"""))
+            repeat(4) {
+                server.enqueue(
+                    MockResponse()
+                        .setResponseCode(302)
+                        .setHeader("Location", crossHostLocation),
+                )
+            }
+            redirectTarget.enqueue(
+                MockResponse().setBody("""{"js":{"tariff_plan":"must-not-be-used"}}"""),
+            )
+
+            val creds = credentials()
+            val session = hardenedClient.handshake(creds)
+            val failure =
+                assertFailsWith<StalkerClientException> {
+                    hardenedClient.account(creds, session)
+                }
+
+            assertEquals(StalkerFailureReason.NETWORK, failure.reason)
+            assertEquals(0, redirectTarget.requestCount)
+        } finally {
+            redirectTarget.shutdown()
+        }
+    }
+
+    @Test
+    fun `chunked response is stopped at the byte limit before creating a string`() {
+        val hardenedClient = StalkerClient(maximumResponseBytes = 64)
+        // A distinctive token, not "t". A single common letter appears inside ordinary English
+        // words — "portal response exceeded safety limit" contains four of them — so a one-character
+        // token makes the leak assertions below fail on the error message's own prose rather than on
+        // anything having leaked.
+        server.enqueue(MockResponse().setBody("""{"js":{"token":"zqx9token"}}"""))
+        val oversizedBody = """{"js":{"padding":"${"x".repeat(128)}"}}"""
+        repeat(4) {
+            server.enqueue(MockResponse().setChunkedBody(oversizedBody, 7))
+        }
+
+        val creds = credentials()
+        val session = hardenedClient.handshake(creds)
+        val failure =
+            assertFailsWith<StalkerClientException> {
+                hardenedClient.account(creds, session)
+            }
+
+        assertEquals(StalkerFailureReason.MALFORMED, failure.reason)
+        assertEquals("portal response exceeded safety limit", failure.message)
+        val rendered = failure.toString() + " " + failure.message.orEmpty()
+        assertFalse(rendered.contains(creds.macAddress))
+        assertFalse(rendered.contains(session.token))
     }
 }

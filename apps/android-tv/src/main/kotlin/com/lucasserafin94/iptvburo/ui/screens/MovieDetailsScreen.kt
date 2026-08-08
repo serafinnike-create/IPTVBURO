@@ -52,6 +52,7 @@ import coil3.request.ImageRequest
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.ui.DownloadStateUi
 import com.lucasserafin94.iptvburo.ui.MovieDetailsUi
+import com.lucasserafin94.iptvburo.ui.capabilities.AndroidPlatformCapabilities
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButtonStyle
@@ -82,6 +83,7 @@ internal fun MovieDetailsScreen(
     onOpenPerson: (String) -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
+    offlineSupported: Boolean = AndroidPlatformCapabilities.offlineSupported,
     modifier: Modifier = Modifier,
 ) {
     val platformContext = LocalPlatformContext.current
@@ -231,34 +233,34 @@ internal fun MovieDetailsScreen(
                         )
                         Text(if (isFavorite) "Na Minha BURO" else "Minha BURO")
                     }
-                    // Unrestricted for VOD by owner decision, recorded in ADR-008. Live is still
-                    // refused, but a movie details screen can never carry a live target.
-                    BuroButton(
-                        onClick =
-                            when (downloadState) {
-                                is DownloadStateUi.Running -> onCancelDownload
-                                DownloadStateUi.Completed -> onDeleteDownload
-                                DownloadStateUi.Idle,
-                                DownloadStateUi.Failed,
-                                -> onDownload
-                            },
-                        enabled = !isLoading && !isResolvingPlayback,
-                        style = BuroButtonStyle.Secondary,
-                    ) {
-                        Icon(
-                            imageVector =
+                    if (offlineSupported) {
+                        BuroButton(
+                            onClick =
                                 when (downloadState) {
-                                    DownloadStateUi.Completed -> Icons.Default.DownloadDone
-                                    else -> Icons.Default.Download
+                                    is DownloadStateUi.Running -> onCancelDownload
+                                    DownloadStateUi.Completed -> onDeleteDownload
+                                    DownloadStateUi.Idle,
+                                    DownloadStateUi.Failed,
+                                    -> onDownload
                                 },
-                            contentDescription = null,
-                            tint =
-                                when (downloadState) {
-                                    DownloadStateUi.Failed -> BuroDanger
-                                    else -> BuroTextPrimary
-                                },
-                        )
-                        Text(downloadState.label())
+                            enabled = !isLoading && !isResolvingPlayback,
+                            style = BuroButtonStyle.Secondary,
+                        ) {
+                            Icon(
+                                imageVector =
+                                    when (downloadState) {
+                                        DownloadStateUi.Completed -> Icons.Default.DownloadDone
+                                        else -> Icons.Default.Download
+                                    },
+                                contentDescription = null,
+                                tint =
+                                    when (downloadState) {
+                                        DownloadStateUi.Failed -> BuroDanger
+                                        else -> BuroTextPrimary
+                                    },
+                            )
+                            Text(downloadState.label())
+                        }
                     }
                     details?.youtubeTrailerId?.let { trailerId ->
                         BuroButton(

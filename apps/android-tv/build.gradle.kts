@@ -1,9 +1,27 @@
+import groovy.json.JsonSlurper
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
+
+val androidPlatformCapabilities =
+    JsonSlurper().parseText(
+        providers.fileContents(
+            rootProject.layout.projectDirectory.file(
+                "packages/platform-capabilities/android-adaptive.json",
+            ),
+        ).asText.get(),
+    )
+        as? Map<*, *> ?: error("Android platform capabilities must be a JSON object")
+val androidOfflineCapabilities =
+    androidPlatformCapabilities["offline"] as? Map<*, *>
+        ?: error("Android platform capabilities must declare offline")
+val androidOfflineSupported =
+    androidOfflineCapabilities["supported"] as? Boolean
+        ?: error("Android platform capabilities must declare offline.supported")
 
 android {
     namespace = "com.lucasserafin94.iptvburo"
@@ -15,6 +33,8 @@ android {
         targetSdk = 36
         versionCode = 6
         versionName = "0.2.0-alpha.6"
+
+        buildConfigField("boolean", "OFFLINE_SUPPORTED", androidOfflineSupported.toString())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

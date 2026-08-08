@@ -34,6 +34,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.ui.AppSection
+import com.lucasserafin94.iptvburo.ui.capabilities.AndroidPlatformCapabilities
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroChip
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroSpacing
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroTheme
@@ -43,7 +44,7 @@ private data class RibbonDestination(
     @param:StringRes val labelResource: Int,
 )
 
-private val ribbonDestinations =
+private val allRibbonDestinations =
     listOf(
         RibbonDestination(AppSection.HOME, R.string.buro_nav_home),
         RibbonDestination(AppSection.LIVE, R.string.buro_nav_live),
@@ -53,6 +54,15 @@ private val ribbonDestinations =
         RibbonDestination(AppSection.DOWNLOADS, R.string.buro_nav_downloads),
         RibbonDestination(AppSection.PROFILE, R.string.buro_nav_profile),
     )
+
+internal fun availableRibbonSections(
+    offlineSupported: Boolean = AndroidPlatformCapabilities.offlineSupported,
+): List<AppSection> =
+    allRibbonDestinations
+        .asSequence()
+        .map(RibbonDestination::section)
+        .filter { section -> section != AppSection.DOWNLOADS || offlineSupported }
+        .toList()
 
 /**
  * Compact, D-pad-first primary navigation for IPTV BURO.
@@ -71,9 +81,12 @@ fun BuroRibbon(
     isKidsProfile: Boolean = false,
 ) {
     val colors = BuroTheme.colors
+    val availableSections = availableRibbonSections()
+    val availableDestinations =
+        allRibbonDestinations.filter { destination -> destination.section in availableSections }
     val ribbonSelection =
         selectedSection?.takeIf { candidate ->
-            ribbonDestinations.any { destination -> destination.section == candidate }
+            availableDestinations.any { destination -> destination.section == candidate }
         }
     val focusTarget = ribbonSelection ?: AppSection.HOME
 
@@ -86,9 +99,9 @@ fun BuroRibbon(
         val compact = maxWidth < 600.dp
         val visibleDestinations =
             if (compact) {
-                ribbonDestinations.filterNot { it.section == AppSection.PROFILE }
+                availableDestinations.filterNot { it.section == AppSection.PROFILE }
             } else {
-                ribbonDestinations
+                availableDestinations
             }
         val ribbonState = rememberLazyListState()
         LaunchedEffect(compact, focusTarget) {

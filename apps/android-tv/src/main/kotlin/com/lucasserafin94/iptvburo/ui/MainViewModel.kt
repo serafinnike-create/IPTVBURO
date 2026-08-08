@@ -24,6 +24,7 @@ import com.lucasserafin94.iptvburo.data.repository.XtreamImportStage
 import com.lucasserafin94.iptvburo.stalker.StalkerClientException
 import com.lucasserafin94.iptvburo.stalker.StalkerFailureReason
 import com.lucasserafin94.iptvburo.stalker.StalkerMacAddress
+import com.lucasserafin94.iptvburo.ui.capabilities.AndroidPlatformCapabilities
 import com.lucasserafin94.iptvburo.di.IoDispatcher
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import com.lucasserafin94.iptvburo.domain.model.Category
@@ -104,6 +105,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun selectSection(section: AppSection) {
+        if (section == AppSection.DOWNLOADS && !AndroidPlatformCapabilities.offlineSupported) return
         cancelCatalogWork()
         backStack.clear()
         clearEphemeralSeries()
@@ -363,6 +365,7 @@ class MainViewModel @Inject constructor(
         title: String,
         resolve: suspend () -> Channel?,
     ) {
+        if (!AndroidPlatformCapabilities.offlineSupported) return
         if (mutableState.value.downloads[contentKey] is DownloadStateUi.Running) return
         mutableState.update {
             it.copy(

@@ -113,6 +113,7 @@ import com.lucasserafin94.iptvburo.ui.home.DemoStoryScreen
 import com.lucasserafin94.iptvburo.ui.home.HomeSourceSummary
 import com.lucasserafin94.iptvburo.ui.home.LivingHomeScreen
 import com.lucasserafin94.iptvburo.ui.navigation.BuroRibbon
+import com.lucasserafin94.iptvburo.ui.capabilities.AndroidPlatformCapabilities
 import com.lucasserafin94.iptvburo.ui.security.SecureActivityWindowEffect
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import coil3.compose.AsyncImage
@@ -378,11 +379,15 @@ fun AppShellScreen(
                             onBack = onBack,
                         )
 
-                        AppContent.Downloads -> DownloadsContent(
-                            entries = state.downloadEntries,
-                            onCancelDownload = onCancelDownload,
-                            onDeleteDownload = onDeleteDownload,
-                        )
+                        AppContent.Downloads -> {
+                            if (AndroidPlatformCapabilities.offlineSupported) {
+                                DownloadsContent(
+                                    entries = state.downloadEntries,
+                                    onCancelDownload = onCancelDownload,
+                                    onDeleteDownload = onDeleteDownload,
+                                )
+                            }
+                        }
 
                         AppContent.Profiles -> ProfilePickerScreen(
                             profiles = state.profiles,
@@ -448,10 +453,11 @@ private fun AppSection.isRibbonDestination(): Boolean =
         AppSection.SERIES,
         AppSection.DISCOVER,
         AppSection.MY_BURO,
-        AppSection.DOWNLOADS,
         AppSection.SEARCH,
         AppSection.PROFILE,
         -> true
+
+        AppSection.DOWNLOADS -> AndroidPlatformCapabilities.offlineSupported
 
         AppSection.SOURCES,
         AppSection.SETTINGS,

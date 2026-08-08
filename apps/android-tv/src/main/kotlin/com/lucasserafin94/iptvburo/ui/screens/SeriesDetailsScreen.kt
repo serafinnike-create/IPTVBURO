@@ -57,6 +57,7 @@ import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.ui.DownloadStateUi
 import com.lucasserafin94.iptvburo.ui.EpisodeUi
 import com.lucasserafin94.iptvburo.ui.SeriesDetailsUi
+import com.lucasserafin94.iptvburo.ui.capabilities.AndroidPlatformCapabilities
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroErrorState
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
@@ -85,6 +86,7 @@ internal fun SeriesDetailsScreen(
     onOpenPerson: (String) -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
+    offlineSupported: Boolean = AndroidPlatformCapabilities.offlineSupported,
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(BuroCanvas)) {
@@ -375,6 +377,7 @@ internal fun SeriesDetailsScreen(
                                                 onCancelDownload = { onCancelEpisodeDownload(episode) },
                                                 onDeleteDownload = { onDeleteEpisodeDownload(episode) },
                                                 downloadState = downloadStateOf(episode),
+                                                showDownloadAction = offlineSupported,
                                                 enabled = !isResolvingPlayback,
                                                 modifier = Modifier.weight(1f),
                                             )
@@ -400,6 +403,7 @@ private fun EpisodeCard(
     onCancelDownload: () -> Unit,
     onDeleteDownload: () -> Unit,
     downloadState: DownloadStateUi,
+    showDownloadAction: Boolean,
     enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -460,52 +464,52 @@ private fun EpisodeCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            // Unrestricted for VOD by owner decision, recorded in ADR-008. An episode is never a
-            // live target, so the live refusal in the download manager cannot fire here.
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                FocusSurface(
-                    onClick =
-                        when (downloadState) {
-                            is DownloadStateUi.Running -> onCancelDownload
-                            DownloadStateUi.Completed -> onDeleteDownload
-                            DownloadStateUi.Idle,
-                            DownloadStateUi.Failed,
-                            -> onDownload
-                        },
-                    enabled = enabled,
-                    modifier = Modifier.size(44.dp),
-                    backgroundColor = BuroCanvas.copy(alpha = 0.55f),
-                    focusedBackgroundColor = BuroAccent,
-                ) { focused ->
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector =
-                                when (downloadState) {
-                                    DownloadStateUi.Completed -> Icons.Default.DownloadDone
-                                    else -> Icons.Default.Download
-                                },
-                            contentDescription =
-                                when (downloadState) {
-                                    DownloadStateUi.Idle -> stringResource(R.string.download_episode)
-                                    else -> downloadState.label()
-                                },
-                            tint =
-                                when {
-                                    focused -> BuroCanvas
-                                    downloadState == DownloadStateUi.Failed -> BuroDanger
-                                    else -> BuroAccent
-                                },
+            if (showDownloadAction) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    FocusSurface(
+                        onClick =
+                            when (downloadState) {
+                                is DownloadStateUi.Running -> onCancelDownload
+                                DownloadStateUi.Completed -> onDeleteDownload
+                                DownloadStateUi.Idle,
+                                DownloadStateUi.Failed,
+                                -> onDownload
+                            },
+                        enabled = enabled,
+                        modifier = Modifier.size(44.dp),
+                        backgroundColor = BuroCanvas.copy(alpha = 0.55f),
+                        focusedBackgroundColor = BuroAccent,
+                    ) { focused ->
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector =
+                                    when (downloadState) {
+                                        DownloadStateUi.Completed -> Icons.Default.DownloadDone
+                                        else -> Icons.Default.Download
+                                    },
+                                contentDescription =
+                                    when (downloadState) {
+                                        DownloadStateUi.Idle -> stringResource(R.string.download_episode)
+                                        else -> downloadState.label()
+                                    },
+                                tint =
+                                    when {
+                                        focused -> BuroCanvas
+                                        downloadState == DownloadStateUi.Failed -> BuroDanger
+                                        else -> BuroAccent
+                                    },
+                            )
+                        }
+                    }
+                    if (downloadState !is DownloadStateUi.Idle) {
+                        Text(
+                            text = downloadState.label(),
+                            color = if (downloadState == DownloadStateUi.Failed) BuroDanger else BuroAccent,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
-                }
-                if (downloadState !is DownloadStateUi.Idle) {
-                    Text(
-                        text = downloadState.label(),
-                        color = if (downloadState == DownloadStateUi.Failed) BuroDanger else BuroAccent,
-                        fontSize = 10.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
                 }
             }
         }
