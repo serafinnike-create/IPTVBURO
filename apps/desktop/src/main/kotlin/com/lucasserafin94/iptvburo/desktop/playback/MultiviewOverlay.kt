@@ -59,12 +59,12 @@ data class MultiviewTile(
  * restart the players that were already running — restarting a live stream costs seconds and drops
  * the user out of whatever they were watching.
  *
- * ## Not yet reachable from the interface
+ * ## How it is reached
  *
- * Nothing calls this. It is complete and deliberately kept — the behaviour above is the hard part
- * and re-deriving it later would be waste — but no screen opens it, so multiview is not a feature
- * the app currently has. Said plainly here because a file this finished otherwise reads as live
- * code, and "planned is not implemented" is a rule of this repository.
+ * Each live channel's detail page offers "add to multiview"; once anything is queued, a chip in the
+ * live toolbar opens this. Both are gated on `multiviewSupported` in the platform capability
+ * manifest, which is what kept the whole feature invisible for a while: the code was complete and
+ * the manifest said `false`, so no button ever rendered and multiview looked unimplemented.
  */
 @Composable
 fun MultiviewOverlay(

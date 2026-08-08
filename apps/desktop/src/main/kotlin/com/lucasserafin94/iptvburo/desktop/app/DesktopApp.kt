@@ -542,6 +542,16 @@ fun DesktopApp(
                     }
                 }
 
+                // Opening multiview closes the single player.
+                //
+                // They are alternatives, not layers. Left running, the single player drew on top —
+                // so pressing "watch together" while a channel was playing changed nothing visible,
+                // and the feature looked broken. It also freed a decoder before four more start,
+                // which on a laptop is the difference between four streams and a stutter.
+                LaunchedEffect(appState.multiviewOpen) {
+                    if (appState.multiviewOpen) activePlayback = null
+                }
+
                 // Above the catalogue, below the single-title player: opening one channel full
                 // screen from inside the grid should replace it rather than draw underneath.
                 if (capabilities.multiviewSupported && appState.multiviewOpen) {
