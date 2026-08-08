@@ -22,6 +22,9 @@ keystore.properties
 .env
 .env.*
 !.env.example
+**/.dev.vars
+**/.wrangler/
+**/node_modules/
 
 # Native / OS files
 .cxx/
@@ -38,3 +41,14 @@ artifacts/
 # with the product, and not something to publish.
 MediaDeviceSalts
 MediaDeviceSalts-journal
+
+# Partial downloads. The download manager writes `<name>.part` while a file is in flight and renames
+# it on completion, so anything matching this is by definition an unfinished copy of licensed
+# content from somebody's own subscription.
+*.part
+
+# Anything written while setting up the licence server. These files hold the admin token and the
+# Stripe webhook secret in plain text; they are meant to be deleted after use, and this makes a
+# forgotten one impossible to commit by accident.
+token-buro.txt
+whsec.txt

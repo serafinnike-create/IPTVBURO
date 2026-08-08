@@ -64,11 +64,12 @@ Remove-Variable segredo, entrada
 Write-Host ""
 Write-Host "  Pronto." -ForegroundColor Green
 Write-Host ""
-Write-Host "  Confirma no Stripe que o endpoint ouve estes quatro eventos:"
+Write-Host "  Confirma no Stripe que o endpoint ouve estes cinco eventos:"
 Write-Host "    checkout.session.completed"
 Write-Host "    checkout.session.async_payment_succeeded"
 Write-Host "    charge.refunded"
 Write-Host "    charge.dispute.created"
+Write-Host "    charge.dispute.closed"
 Write-Host ""
 Write-Host "  Depois faz uma compra real de teste e usa 'Resend' no evento se precisares."
 Write-Host "  O webhook deve responder 200 e a pagina /obrigado so confirma depois do evento assinado."

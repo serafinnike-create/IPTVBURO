@@ -47,9 +47,19 @@ export function adminPage() {
   .row.between { justify-content: space-between; }
   .field { display: grid; gap: 5px; min-width: 160px; }
   .field > span { color: var(--muted); font-size: 13px; }
-  .stats { display: flex; gap: 28px; }
-  .stat b { display: block; font-size: 28px; color: var(--gold); }
+  .stats { display: flex; gap: 12px; }
+  /* Buttons, not captions: each figure opens the list behind it. Styled flat so the panel still
+     reads as a summary rather than as a row of controls. */
+  .stat {
+    background: transparent; border: 1px solid transparent; border-radius: 10px;
+    padding: 8px 16px 8px 12px; cursor: pointer; text-align: left; font: inherit;
+  }
+  .stat:hover { background: var(--raised); border-color: #45424a; }
+  .stat b { display: block; font-size: 28px; color: var(--gold); font-weight: 700; }
   .stat span { font-size: 12px; color: var(--subtle); }
+  /* Time running out. Amber for days, red for gone — the two states worth noticing in a list. */
+  .soon { color: var(--gold); font-weight: 600; }
+  .over { color: var(--bad); }
   table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid #45424a; border-radius: 10px; }
   th { text-align: left; color: var(--subtle); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid #262429; }
@@ -187,11 +197,20 @@ export function adminPage() {
     document.getElementById('login').classList.add('hidden');
     document.getElementById('panel').classList.remove('hidden');
     document.getElementById('stats').innerHTML =
-      stat(response.active, 'ativos') + stat(response.trial, 'em teste') + stat(response.paid, 'pagaram');
+      stat(response.active, 'ativos', 'ACTIVE')
+      + stat(response.trial, 'em teste', 'TRIAL')
+      + stat(response.paid, 'pagaram', 'paid');
   }
 
-  function stat(value, label) {
-    return '<div class="stat"><b>' + value + '</b><span>' + label + '</span></div>';
+  /**
+   * A summary figure, as a button.
+   *
+   * "3 em teste" with nothing to click on is a dead end: the panel could only find a device by a
+   * code the administrator had no way of knowing. Each figure now opens the list behind it.
+   */
+  function stat(value, label, status) {
+    return '<button type="button" class="stat" onclick="listByStatus(\\'' + status + '\\')">'
+      + '<b>' + value + '</b><span>' + label + '</span></button>';
   }
 
   // What the last call answered, so a failure can say which kind it was. Zero means the request
@@ -215,23 +234,45 @@ export function adminPage() {
   async function search() {
     const query = document.getElementById('query').value.trim();
     if (!query) return;
+    await showDevices('/admin/search?q=' + encodeURIComponent(query));
+  }
+
+  /** The summary figures link here, so a count is something you can open. */
+  async function listByStatus(status) {
+    document.getElementById('query').value = '';
+    await showDevices('/admin/list?status=' + encodeURIComponent(status));
+  }
+
+  async function showDevices(path) {
     const target = document.getElementById('results');
     target.setAttribute('aria-busy', 'true');
-    const data = await api('/admin/search?q=' + encodeURIComponent(query));
+    const data = await api(path);
     target.removeAttribute('aria-busy');
     if (!data || !data.devices.length) { target.innerHTML = '<p class="sub">Nada encontrado.</p>'; return; }
 
-    target.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Dispositivo</th><th>MAC</th><th>Estado</th><th>Até</th><th>Nota</th><th>Ações</th></tr></thead><tbody>'
+    target.innerHTML = '<div class="table-wrap"><table><thead><tr>'
+      + '<th>Dispositivo</th><th>Estado</th><th>Falta</th><th>Até</th><th>Desde</th><th>Nota</th><th>Ações</th>'
+      + '</tr></thead><tbody>'
       + data.devices.map(function (device) {
           return '<tr>'
             + '<td><code>' + esc(device.device_id) + '</code></td>'
-            + '<td class="sub">' + esc(device.mac_address || '—') + '</td>'
             + '<td>' + tag(device.status) + '</td>'
+            + '<td>' + remaining(device) + '</td>'
             + '<td class="sub">' + date(device.expires_at || device.trial_ends_at) + '</td>'
-            + '<td class="sub">' + esc(device.note || '') + '</td>'
-            + '<td><button class="ghost" onclick="revoke(\\'' + esc(device.device_id) + '\\')">Revogar</button></td>'
+            + '<td class="sub">' + date(device.first_seen_at) + '</td>'
+            + '<td class="sub">' + esc(device.note || '—') + '</td>'
+            + '<td><button class="ghost" onclick="revoke(\\'' + esc(device.device_id) + '\\')">Revogar</button>'
+            + ' <button class="ghost" onclick="fillGrant(\\'' + esc(device.device_id) + '\\')">Liberar</button></td>'
             + '</tr>';
         }).join('') + '</tbody></table></div>';
+  }
+
+  /** Copies a device into the grant form, so releasing one found by search needs no retyping. */
+  function fillGrant(device) {
+    const field = document.getElementById('grantDevice');
+    field.value = device;
+    field.focus();
+    field.scrollIntoView({ block: 'center' });
   }
 
   async function grant() {
@@ -251,23 +292,100 @@ export function adminPage() {
   }
 
   async function makeKeys() {
+    const days = Number(document.getElementById('keyDays').value);
+    const note = document.getElementById('keyNote').value.trim();
     const result = await api('/admin/keys', {
-      days: Number(document.getElementById('keyDays').value),
+      days: days,
       count: Number(document.getElementById('keyCount').value),
-      note: document.getElementById('keyNote').value.trim(),
+      note: note,
     });
-    document.getElementById('keyResult').innerHTML =
-      result ? result.keys.map(esc).join('<br>') : 'Falhou.';
+    if (!result) { document.getElementById('keyResult').textContent = 'Falhou.'; return; }
+
+    // Codes are shown in the same table as every other code, rather than as a bare list. A code on
+    // its own is not usable information: the whole point of the note and the duration is knowing,
+    // later, who a code was for and what it grants.
+    await loadKeys();
+    document.getElementById('keyResult').scrollIntoView({ block: 'nearest' });
   }
 
   async function loadKeys() {
+    const target = document.getElementById('keyResult');
+    target.setAttribute('aria-busy', 'true');
     const result = await api('/admin/keys');
-    if (!result) return;
-    document.getElementById('keyResult').innerHTML = result.keys.map(function (key) {
-      return esc(key.key_code) + '  ·  ' + key.grant_days + 'd'
-        + (key.redeemed_by ? '  ·  usado por ' + esc(key.redeemed_by) : '  ·  livre')
-        + (key.note ? '  ·  ' + esc(key.note) : '');
-    }).join('<br>');
+    target.removeAttribute('aria-busy');
+    if (!result) { target.textContent = 'Falhou.'; return; }
+    if (!result.keys.length) { target.innerHTML = '<p class="sub">Nenhum código ainda.</p>'; return; }
+
+    target.innerHTML =
+      '<div class="table-wrap"><table><thead><tr>'
+      + '<th>Código</th><th>Vale</th><th>Para quem</th><th>Criado</th><th>Estado</th><th>Ações</th>'
+      + '</tr></thead><tbody>'
+      + result.keys.map(function (key) {
+          const used = Boolean(key.redeemed_by);
+          return '<tr>'
+            + '<td><code>' + esc(key.key_code) + '</code></td>'
+            + '<td>' + duration(key.grant_days) + '</td>'
+            + '<td class="sub">' + esc(key.note || '—') + '</td>'
+            + '<td class="sub">' + date(key.created_at) + '</td>'
+            + '<td>' + (used
+                ? '<span class="tag dead">usado</span> <span class="sub">'
+                  + esc(key.redeemed_by) + ' · ' + date(key.redeemed_at) + '</span>'
+                : '<span class="tag active">livre</span>')
+            + '</td>'
+            // Only an unused key can be cancelled. A redeemed one is history: deleting it would
+            // break the link between a device and how it was activated, and the way to take back
+            // what it granted is to revoke that device.
+            + '<td>' + (used
+                ? '<span class="sub">—</span>'
+                : '<button class="ghost" onclick="cancelKey(\\'' + esc(key.key_code) + '\\')">Cancelar</button>')
+            + '</td>'
+            + '</tr>';
+        }).join('') + '</tbody></table></div>';
+  }
+
+  /**
+   * Cancels an unused code.
+   *
+   * Confirmed, because it cannot be undone — the code stops working the moment this returns, and
+   * anybody already holding it finds it invalid.
+   */
+  async function cancelKey(code) {
+    if (!confirm('Cancelar o código ' + code + '?\\n\\nDeixa de funcionar imediatamente.')) return;
+    const result = await api('/admin/keys/cancel', { key: code });
+    if (!result) {
+      alert('Não foi possível cancelar. Se já foi usado, revogue o dispositivo em vez disso.');
+    }
+    await loadKeys();
+  }
+
+  /** Days as something readable: "30 dias", "1 ano", "2 anos". */
+  function duration(days) {
+    const value = Number(days);
+    if (!Number.isFinite(value)) return '—';
+    if (value >= 365 && value % 365 === 0) {
+      const years = value / 365;
+      return years === 1 ? '1 ano' : years + ' anos';
+    }
+    return value + (value === 1 ? ' dia' : ' dias');
+  }
+
+  /**
+   * How long is left, which is the question actually being asked.
+   *
+   * A date alone makes the reader do arithmetic against today, and the reason for looking a device
+   * up is nearly always "how long do they have?".
+   */
+  function remaining(device) {
+    const end = device.expires_at || device.trial_ends_at;
+    if (!end) return '—';
+    const parsed = new Date(end);
+    if (Number.isNaN(parsed.getTime())) return '—';
+
+    const days = Math.ceil((parsed.getTime() - Date.now()) / 86400000);
+    if (days < 0) return '<span class="over">terminou</span>';
+    if (days === 0) return '<span class="soon">último dia</span>';
+    const label = days + (days === 1 ? ' dia' : ' dias');
+    return days <= 3 ? '<span class="soon">' + label + '</span>' : label;
   }
 
   function tag(status) {

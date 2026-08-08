@@ -15,10 +15,21 @@ const indexSource = readFileSync(new URL('../src/index.js', import.meta.url), 'u
 
 /** Cross-origin access belongs to the public app API, never the same-origin admin or webhook. */
 test('cross-origin public endpoints do not advertise admin or Stripe headers', () => {
-  assert.match(
-    indexSource,
-    /const PUBLIC_CORS_PATHS = new Set\(\['\/v1\/register', '\/v1\/validate', '\/v1\/redeem'\]\)/,
-  );
+  const declaration = indexSource.match(/const PUBLIC_CORS_PATHS = new Set\(\[([^\]]*)\]\)/);
+  assert.ok(declaration, 'PUBLIC_CORS_PATHS not found');
+
+  const paths = declaration[1].match(/'[^']+'/g).map((quoted) => quoted.slice(1, -1));
+
+  // Only /v1 app endpoints. The rule rather than a fixed list, because the set legitimately grows:
+  // what must never happen is an admin or Stripe path appearing here, since advertising those
+  // cross-origin would let any page on the internet call them from a visitor's browser.
+  for (const path of paths) {
+    assert.ok(path.startsWith('/v1/'), `${path} must not be exposed cross-origin`);
+    assert.ok(!path.startsWith('/v1/stripe'), 'the Stripe webhook is server-to-server');
+  }
+  assert.ok(!paths.includes('/admin'), 'the admin panel must never be cross-origin');
+  assert.ok(!paths.some((path) => path.startsWith('/admin/')), 'nor any admin route');
+
   assert.match(indexSource, /'access-control-allow-headers': 'content-type'/);
   assert.doesNotMatch(
     indexSource,

@@ -17,10 +17,13 @@ import {
 } from './pages.js';
 import { adminPage } from './admin-page.js';
 import {
+  cancelKey,
   createKeys,
+  devicesByStatus,
   grantDevice,
   isAdmin,
   listKeys,
+  paidDevices,
   revokeDevice,
   searchDevices,
   summary,
@@ -109,6 +112,18 @@ export default {
         case '/health':
           return json({ ok: true, time: new Date().toISOString() });
 
+        // What this visitor would actually be charged.
+        //
+        // The app asked this question of the operating system and got a different answer: Windows
+        // reports the machine's locale, which follows where somebody is *from*, while the charge
+        // follows where the request comes *from*. A customer with a Brazilian Windows sitting in
+        // Portugal saw R$99,90 in the app and €9,90 on the payment page — the price changing between
+        // the click and the checkout, which is the moment trust is most easily lost.
+        //
+        // Public and unauthenticated: it reveals a price list that is printed on the buy page anyway.
+        case '/v1/price':
+          return withCors(await handlePrice(request));
+
         // The admin panel. Every route below the page itself checks the token; the page is served
         // to anyone because it is a login box with no data in it.
         case '/admin':
@@ -118,9 +133,11 @@ export default {
           return html(adminPage(), 200, ADMIN_CSP);
         case '/admin/summary':
         case '/admin/search':
+        case '/admin/list':
         case '/admin/grant':
         case '/admin/revoke':
         case '/admin/keys':
+        case '/admin/keys/cancel':
           return await handleAdmin(request, env, url);
 
         default:
@@ -156,6 +173,16 @@ async function handleAdmin(request, env, url) {
     case '/admin/search':
       return json({ devices: await searchDevices(url.searchParams.get('q'), env) });
 
+    case '/admin/list': {
+      // What the summary counts link to. `paid` is not a status but a question about the ledger,
+      // so it is named separately rather than being squeezed into the status filter.
+      const wanted = String(url.searchParams.get('status') ?? '').toLowerCase();
+      const devices = wanted === 'paid'
+        ? await paidDevices(env)
+        : await devicesByStatus(wanted, env);
+      return json({ devices });
+    }
+
     case '/admin/grant': {
       const body = await readJson(request);
       const deviceId = validDeviceId(body.device);
@@ -174,6 +201,14 @@ async function handleAdmin(request, env, url) {
       return json({ ok: true });
     }
 
+    case '/admin/keys/cancel': {
+      const body = await readJson(request);
+      const cancelled = await cancelKey(body.key, env);
+      // 404 rather than a silent success: "already used" and "never existed" both mean the code is
+      // still out there doing whatever it was going to do, and the panel should say so.
+      return cancelled ? json({ ok: true }) : json({ error: 'not_cancellable' }, 404);
+    }
+
     case '/admin/keys': {
       if (request.method !== 'POST') return json({ keys: await listKeys(env) });
       const body = await readJson(request);
@@ -186,6 +221,29 @@ async function handleAdmin(request, env, url) {
     default:
       return json({ error: 'not_found' }, 404);
   }
+}
+
+/**
+ * The price this request would be charged.
+ *
+ * One authority for a number that appears in three places — the app's blocking screen, the buy page
+ * and Stripe — and that must be identical in all of them. Deriving it separately in the client was
+ * the bug: two rules disagreeing produced a price that changed when the customer clicked.
+ */
+async function handlePrice(request) {
+  const currency = currencyForCountry(request.cf?.country);
+  const price = priceFor(currency);
+
+  return json({
+    currency,
+    // The formatted label, so the client never has to know how a currency is punctuated. "R$ 99,90"
+    // and "€9,90" differ in symbol, separator and placement, and getting that right in four
+    // languages is work the client should not repeat.
+    label: price.label,
+    // The raw amount as well, for anything that needs to compare rather than display.
+    amountMinor: price.amount,
+    termDays: LICENSE_PRODUCT.grantDays,
+  });
 }
 
 /**
@@ -445,9 +503,40 @@ async function handleRegister(request, env) {
     .bind(proof.deviceId)
     .first();
   if (existing && !existing.public_key) {
-    // Never let possession of the public short code claim a pre-migration paid row. Support must
-    // perform an audited transfer from that row to a freshly registered cryptographic identity.
-    return json({ error: 'identity_upgrade_required' }, 409);
+    // A row with no cryptographic identity. Two very different things look like this, and treating
+    // them the same locked real devices out of trials they were entitled to.
+    //
+    // **A row worth protecting** — one that was paid for, granted by hand, or redeemed. Possession
+    // of the fourteen-character public code must never be enough to claim it, or anyone who saw
+    // somebody's screen could take their licence. These still require an audited transfer.
+    //
+    // **A row worth nothing** — a bare TRIAL left by an earlier protocol version, holding no
+    // entitlement anybody paid for. Refusing these protects nothing and blocks the device from ever
+    // registering again: it cannot upgrade, because upgrading is what it is being refused.
+    const worthProtecting =
+      existing.status !== 'TRIAL' ||
+      existing.stripe_session_id != null ||
+      existing.purchased_at != null;
+
+    if (worthProtecting) {
+      return json({ error: 'identity_upgrade_required' }, 409);
+    }
+
+    // Adopt the row. The trial keeps its original `first_seen_at` and `trial_ends_at`, so this is
+    // not a way to obtain fresh days — the device gets exactly the time it already had.
+    const adopted = await env.DB.prepare(
+      `UPDATE devices SET public_key = ?, updated_at = ?
+       WHERE device_id = ? AND public_key IS NULL AND status = 'TRIAL'`,
+    )
+      .bind(proof.publicKey, iso(now), proof.deviceId)
+      .run();
+
+    // Conditional on public_key still being null, so two devices racing here cannot both adopt.
+    // The loser falls through to the equality check below and is refused as a mismatch.
+    if (statementChanges(adopted) > 0) {
+      await recordEvent(env, proof.deviceId, 'identity_adopted', null, now);
+      existing.public_key = proof.publicKey;
+    }
   }
   if (existing && !timingSafeEqual(existing.public_key, proof.publicKey)) {
     return json({ error: 'invalid_proof' }, 401);
@@ -1682,7 +1771,8 @@ async function recordEvent(env, deviceId, kind, detail, now) {
 
 async function readJson(request) {
   try {
-    return await request.json();
+    const parsed = await request.json();
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
   }
@@ -1748,7 +1838,7 @@ function json(body, status = 200) {
   });
 }
 
-const PUBLIC_CORS_PATHS = new Set(['/v1/register', '/v1/validate', '/v1/redeem']);
+const PUBLIC_CORS_PATHS = new Set(['/v1/register', '/v1/validate', '/v1/redeem', '/v1/price']);
 
 /** Adds browser access only after routing has established that this is a public app endpoint. */
 function withCors(response) {

@@ -332,6 +332,20 @@ test('the fresh schema and the P0 migration both apply cleanly', () => {
   legacy.close();
 });
 
+test('non-object JSON is rejected as a bad proof request rather than becoming an internal error', async () => {
+  const env = environment();
+  try {
+    for (const path of ['/v1/register', '/v1/validate', '/v1/redeem']) {
+      const response = await worker.fetch(postJson(path, null), env);
+      assert.equal(response.status, 400, path);
+      assert.notEqual((await response.json()).error, 'internal', path);
+    }
+    assert.equal(count(env, 'SELECT COUNT(*) AS n FROM device_proof_nonces'), 0);
+  } finally {
+    env.DB.close();
+  }
+});
+
 test('registration derives the public code, pins P-256 and stores no reported MAC', async () => {
   const env = environment();
   try {
