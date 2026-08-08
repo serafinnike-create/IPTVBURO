@@ -49,6 +49,8 @@ data class LicenseStrings(
     val quit: String,
     /** Leaves this screen while there is still a working app behind it. */
     val back: String,
+    /** Returns from the code field to the QR code and price. */
+    val backToPurchase: String,
     /** The term beside the price: "2 anos". Formatted with %d years. */
     val termYears: String,
     /**
@@ -826,6 +828,7 @@ data class DesktopStrings(
                         redeemFailed = "Código inválido ou já usado.",
                         quit = "Fechar",
                         back = "Voltar ao aplicativo",
+                        backToPurchase = "Prefiro pagar",
                         termYears = "%d anos",
                         priceEur = "€ 9,90 · 2 anos",
                         priceUsd = "US$ 9.90 · 2 anos",
@@ -1207,6 +1210,7 @@ data class DesktopStrings(
                         redeemFailed = "That code is not valid, or has already been used.",
                         quit = "Quit",
                         back = "Back to the app",
+                        backToPurchase = "Pay instead",
                         termYears = "%d years",
                         priceEur = "€9.90 · 2 years",
                         priceUsd = "$9.90 · 2 years",
@@ -1594,6 +1598,7 @@ data class DesktopStrings(
                         redeemFailed = "Code ungültig oder bereits verwendet.",
                         quit = "Schließen",
                         back = "Zurück zur App",
+                        backToPurchase = "Lieber bezahlen",
                         termYears = "%d Jahre",
                         priceEur = "9,90 € · 2 Jahre",
                         priceUsd = "9,90 $ · 2 Jahre",
@@ -1976,6 +1981,7 @@ data class DesktopStrings(
                         redeemFailed = "Codice non valido o già usato.",
                         quit = "Chiudi",
                         back = "Torna all'app",
+                        backToPurchase = "Preferisco pagare",
                         termYears = "%d anni",
                         priceEur = "9,90 € · 2 anni",
                         priceUsd = "9,90 $ · 2 anni",

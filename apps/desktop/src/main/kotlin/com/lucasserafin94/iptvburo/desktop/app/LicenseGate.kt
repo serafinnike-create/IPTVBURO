@@ -150,17 +150,27 @@ fun LicenseGate(
         // own scrim and this panel preserve the contrast of the price, device code and QR plate.
         SplashPosterWall(posters = backdropPosters)
 
+        // Two layers, and the split is what makes this work at all.
+        //
+        // The outer box is bounded and painted; the inner column scrolls inside it. Putting
+        // `verticalScroll` and a height on one modifier chain does not do this — the scroll measures
+        // its content at unbounded height and the panel grows past the window regardless, which is
+        // why the activation field stayed unreachable after the QR code was already shrunk.
         Column(
             modifier = Modifier
                 .padding(BuroSpacing.Md)
                 .widthIn(max = 600.dp)
-                // Bounded, which is what makes the scroll below actually scroll. Without a ceiling
-                // the panel simply grows past the bottom of the window and the content beneath the
-                // QR code — the key field most of all — cannot be reached on a short screen.
-                .fillMaxHeight(0.92f)
+                .fillMaxHeight(0.94f)
                 .clip(RoundedCornerShape(24.dp))
                 .background(BuroColors.Canvas.copy(alpha = 0.86f))
-                .border(1.dp, BuroColors.BorderSoft, RoundedCornerShape(24.dp))
+                .border(1.dp, BuroColors.BorderSoft, RoundedCornerShape(24.dp)),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+        Column(
+            modifier = Modifier
+                // Takes the space the outer column has left, and no more: `weight` is what bounds
+                // the scrollable area against a parent whose height is already decided.
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(BuroSpacing.Xl),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -248,20 +258,23 @@ fun LicenseGate(
                 }
             }
 
-            Spacer(Modifier.height(BuroSpacing.Md))
-            // Going back, when there is a working app to go back to. Quitting otherwise.
-            //
-            // Trapping somebody on this screen while their trial still has days left is a bug, and
-            // an alarming one: the app behind it works, and the only apparent way out is to close
-            // the program. Once the licence has lapsed there is nothing behind to return to, so the
-            // button becomes what it has to be.
-            TextButton(onClick = onDismiss ?: onQuit) {
-                Text(
-                    text = if (onDismiss != null) text.back else text.quit,
-                    color = BuroColors.TextSubtle,
-                    fontSize = 13.sp,
-                )
-            }
+        }
+
+        // Outside the scroll, so it is always on screen.
+        //
+        // Going back when there is a working app to go back to, quitting otherwise. Trapping
+        // somebody here while their trial still has days left is alarming: the app behind works, and
+        // the only apparent way out is to close the program.
+        TextButton(
+            onClick = onDismiss ?: onQuit,
+            modifier = Modifier.padding(bottom = BuroSpacing.Sm),
+        ) {
+            Text(
+                text = if (onDismiss != null) text.back else text.quit,
+                color = BuroColors.TextSubtle,
+                fontSize = 13.sp,
+            )
+        }
         }
     }
 
@@ -332,7 +345,18 @@ private fun DeviceIdentity(
     }
 }
 
-/** The price, the QR code, the browser button, and the key field. */
+/**
+ * Buying, or entering a code — one at a time.
+ *
+ * These were stacked, and the result was a column taller than a laptop window: headline, device
+ * panel, price, QR plate, button, divider, field. The field went off the bottom, and no amount of
+ * shrinking the parts fixed it, because there was simply more content than height.
+ *
+ * They are alternatives, not steps. Somebody either scans a code to pay or types a code they were
+ * given, never both, so only one is on screen and a link swaps between them. That removes the height
+ * problem rather than managing it, and it also makes the choice visible: a person holding a code can
+ * see the app accepts one without scrolling to find out.
+ */
 @Composable
 private fun PaymentSection(
     deviceId: String,
@@ -348,6 +372,24 @@ private fun PaymentSection(
 ) {
     val purchaseUrl = remember(deviceId, languageTag) {
         LicenseEndpoints.purchaseUrl(deviceId, languageTag)
+    }
+
+    // Which of the two is showing. Starts on buying, because that is what most people arriving here
+    // need; a failed redemption forces it back so the error is next to the field that caused it.
+    var enteringKey by remember { mutableStateOf(false) }
+    LaunchedEffect(keyFailed) { if (keyFailed) enteringKey = true }
+
+    if (enteringKey) {
+        KeyEntry(
+            text = text,
+            keyInput = keyInput,
+            keyFailed = keyFailed,
+            busy = busy,
+            onKeyChange = onKeyChange,
+            onRedeem = onRedeem,
+            onBack = { enteringKey = false },
+        )
+        return
     }
 
     // Only when the server has answered.
@@ -387,61 +429,96 @@ private fun PaymentSection(
         Text(text.openInBrowser, fontWeight = FontWeight.Bold)
     }
 
-    Spacer(Modifier.height(BuroSpacing.Md))
+    Spacer(Modifier.height(BuroSpacing.Sm))
 
-    // A visible divider rather than a gap, so the section below reads as a genuine alternative to
-    // paying rather than as a footnote to it. Somebody who was given a code should be able to see
-    // that this screen accepts one without having to scroll to find out.
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.weight(1f).height(1.dp).background(BuroColors.BorderSoft))
+    // A link, not a field. The field lives on its own view, reached from here, which is what keeps
+    // this column short enough to fit a laptop window.
+    TextButton(onClick = { enteringKey = true }) {
         Text(
             text = text.haveKey,
-            color = BuroColors.TextMuted,
-            fontSize = 12.5.sp,
-            modifier = Modifier.padding(horizontal = BuroSpacing.Sm),
+            color = BuroColors.Primary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
         )
-        Box(Modifier.weight(1f).height(1.dp).background(BuroColors.BorderSoft))
-    }
-    Spacer(Modifier.height(BuroSpacing.Sm))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        OutlinedTextField(
-            value = keyInput,
-            onValueChange = onKeyChange,
-            placeholder = { Text(text.keyPlaceholder, color = BuroColors.TextSubtle) },
-            singleLine = true,
-            isError = keyFailed,
-            modifier = Modifier.weight(1f),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { if (keyInput.isNotBlank()) onRedeem() }),
-        )
-        OutlinedButton(
-            onClick = onRedeem,
-            enabled = keyInput.isNotBlank() && !busy,
-            shape = RoundedCornerShape(10.dp),
-            modifier = Modifier.height(56.dp),
-        ) {
-            Text(text.redeem, color = BuroColors.Text)
-        }
-    }
-    if (keyFailed) {
-        Spacer(Modifier.height(BuroSpacing.Xxs))
-        Text(text.redeemFailed, color = BuroColors.Error, fontSize = 12.sp)
     }
 
-    Spacer(Modifier.height(BuroSpacing.Lg))
+    Spacer(Modifier.height(BuroSpacing.Xs))
     Text(
         text = text.whyNotLifetime,
         color = BuroColors.TextSubtle,
         fontSize = 11.5.sp,
         textAlign = TextAlign.Center,
     )
+}
+
+/**
+ * Entering a code that was handed out.
+ *
+ * Its own view rather than a section under the QR plate. Stacked, it was the last thing in a column
+ * taller than the window and could not be reached at all; alone, the field is the first thing the
+ * eye lands on — which is right, because somebody who came here to type a code has already decided.
+ */
+@Composable
+private fun KeyEntry(
+    text: LicenseStrings,
+    keyInput: String,
+    keyFailed: Boolean,
+    busy: Boolean,
+    onKeyChange: (String) -> Unit,
+    onRedeem: () -> Unit,
+    onBack: () -> Unit,
+) {
+    Text(
+        text = text.haveKey,
+        color = BuroColors.Text,
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Bold,
+    )
+    Spacer(Modifier.height(BuroSpacing.Md))
+
+    OutlinedTextField(
+        value = keyInput,
+        onValueChange = onKeyChange,
+        placeholder = { Text(text.keyPlaceholder, color = BuroColors.TextSubtle) },
+        singleLine = true,
+        isError = keyFailed,
+        modifier = Modifier.fillMaxWidth(),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { if (keyInput.isNotBlank()) onRedeem() }),
+    )
+
+    if (keyFailed) {
+        Spacer(Modifier.height(BuroSpacing.Xxs))
+        Text(text.redeemFailed, color = BuroColors.Error, fontSize = 12.sp)
+    }
+
+    Spacer(Modifier.height(BuroSpacing.Md))
+
+    Button(
+        onClick = onRedeem,
+        enabled = keyInput.isNotBlank() && !busy,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = BuroColors.Primary,
+            contentColor = BuroColors.OnPrimary,
+        ),
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth().height(48.dp),
+    ) {
+        if (busy) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                color = BuroColors.OnPrimary,
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Text(text.redeem, fontWeight = FontWeight.Bold)
+        }
+    }
+
+    Spacer(Modifier.height(BuroSpacing.Xs))
+    TextButton(onClick = onBack) {
+        Text(text.backToPurchase, color = BuroColors.TextMuted, fontSize = 13.sp)
+    }
 }
 
 /**
