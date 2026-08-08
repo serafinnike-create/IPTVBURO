@@ -1,6 +1,6 @@
 # Implementação atual do IPTV BURO
 
-- Data da auditoria: 2 de agosto de 2026
+- Data da auditoria: 9 de agosto de 2026
 - Branch: `agent/iptv-buro-0.2-preview`
 - Baseline anterior: `v0.1.0-alpha.1`
 - Tag da prévia atual: `v0.2.0-alpha.5`
@@ -14,6 +14,41 @@
 A milestone `0.2` amplia o vertical funcional publicado como prévia. Esta seção
 registra arquitetura, escopo, gates, hashes e as limitações que ainda impedem
 classificar o produto como uma versão estável.
+
+### Atualização operacional — 9 de agosto de 2026
+
+- `services/license-server` está rastreado no Git e o Worker Cloudflare responde
+  `200` em `/health`. A base D1 remota não possui migrations pendentes;
+- o contrato comercial vigente está formalizado no ADR-010: sete dias de teste,
+  pagamento único por dispositivo e entitlement de 730 dias, com preços-base de
+  EUR 9,90, USD 9,90 e BRL 99,90. Não é uma licença vitalícia;
+- o cliente Windows registra uma identidade criptográfica, assina cada operação,
+  valida a concessão assinada, aplica a política offline e apresenta compra,
+  QR code, resgate de chave e nova verificação. A tela bloqueada reutiliza o
+  mural cinematográfico de capas e mantém as ações visíveis em 1280 × 780;
+- o Worker implementa e testa os cinco eventos necessários no endpoint Stripe:
+  `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+  `charge.refunded`, `charge.dispute.created` e `charge.dispute.closed`;
+- a identidade Android agora também assina a prova de posse P-256 no formato
+  fixo aceito pelo Worker. O cliente Android completo e o bloqueio comercial
+  continuam pendentes: a verificação Ed25519 nativa só existe a partir da API
+  33, enquanto o aplicativo suporta API 23, e a compra Android deve usar Google
+  Play Billing conforme o ADR-004;
+- gate Gradle mais recente: 977 testes, 0 falhas, 0 erros e 2 ignorados; lint
+  Android com 0 erros e 32 avisos;
+- APK debug: 26.439.475 bytes, SHA-256
+  `C2503BE5CB006B9386CF292A2A9307B6AC3AD314555D01443260AD2F47E376DE`;
+- MSI Windows 2.0.0: 299.721.956 bytes, SHA-256
+  `E102AAA7ED0592FF53C61097A6982AF6EFBC1E61987E8C0EF9D044E76633AB1C`.
+  O banco MSI é legível, contém 876 arquivos e identifica produto `IPTVBURO`,
+  versão `2.0.0` e fabricante `IPTV BURO`;
+- o MSI ainda não possui assinatura Authenticode e o APK é uma build debug.
+  Ambos são candidatos locais, não artefatos públicos de produção;
+- a assinatura do endpoint e o fluxo de disputa possuem cobertura automatizada,
+  mas ainda falta confirmar no painel Stripe os cinco eventos e executar o E2E
+  sandbox compra → webhook 200 → ativação → reembolso/disputa;
+- a rota administrativa exige token, mas Cloudflare Access/MFA ainda precisa de
+  uma política de identidade definida antes de ser configurado.
 
 - cliente Xtream compartilhado para autenticação, categorias, TV ao vivo,
   filmes, séries e episódios;
