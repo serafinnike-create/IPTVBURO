@@ -2036,8 +2036,8 @@ private fun SettingsRow(
  * and apps cannot read the hardware MAC at all since Android 6. A key-derived code is stable and
  * cannot be typed into someone else's device to clone a paid licence.
  *
- * The card states plainly that activation is not live yet. ADR-004 requires that no control ever
- * implies a purchase can be completed while the licensing server does not exist.
+ * The card links only to the public presentation page. Checkout and the final activation remain
+ * server-authoritative; the app never receives card data or trusts a browser-side payment result.
  */
 @Composable
 private fun DeviceLicenceCard(
@@ -2047,6 +2047,7 @@ private fun DeviceLicenceCard(
     val clipboard = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
     val portal = stringResource(R.string.license_portal)
+    val portalLanguage = stringResource(R.string.license_portal_language)
 
     LaunchedEffect(copied) {
         if (copied) {
@@ -2135,7 +2136,7 @@ private fun DeviceLicenceCard(
             // Typing a 12-character code on a TV remote is painful, so the QR lets the user open
             // the activation page already filled in from their phone.
             ActivationQr(
-                url = "https://$portal?code=$deviceId",
+                url = "https://$portal?code=$deviceId&lang=$portalLanguage",
                 compact = compact,
             )
         }

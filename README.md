@@ -60,7 +60,7 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 | Portal Stalker/Ministra (MAC) | 🧪 Cliente e importação prontos; falta a tela de conexão |
 | Download de VOD | 🧪 Windows funcional; Android pendente. Diverge do GDD 6 por [ADR-008](docs/adr/ADR-008-UNRESTRICTED-VOD-DOWNLOAD.md) |
 | Multiview (até 4 canais) | 🧪 Implementado no Windows |
-| Licenciamento e site de ativação | 🚧 App exibe código e QR; `site/` pronto. Sem servidor, nenhuma compra é possível |
+| Licenciamento e site de ativação | 🧪 App exibe código e QR; site apresenta o produto e encaminha a compra ao Worker/Stripe. Validação de compra real ainda pendente |
 | Atualização automática no Windows | ✅ Funcional desde que o repositório passou a ser público |
 | Android mobile | 🧪 Mesma build adaptativa instalada em Android 15 |
 | Windows | 🧪 Compose Desktop, player compatível e MSI local aprovados |

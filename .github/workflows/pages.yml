@@ -8,9 +8,8 @@ on:
     paths: ['site/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
-# The site is static, so it needs no secrets and no server. Pages is deliberate here: activation
-# cannot process a payment without a backend, and a free static host makes that limit explicit
-# rather than hiding it behind a form that pretends to charge.
+# The presentation is static and carries no secrets. It validates only the public device-code shape,
+# then hands checkout and activation to the Cloudflare Worker, which remains the payment authority.
 permissions:
   contents: read
   pages: write

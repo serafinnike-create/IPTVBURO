@@ -1,0 +1,96 @@
+/**
+ * Contract tests for the public GitHub Pages presentation and activation handoff.
+ *
+ * The marketing page is intentionally static. It may explain the product and collect the public
+ * device code, but price authority, checkout creation, and activation stay in the Worker.
+ */
+
+import { strict as assert } from 'node:assert';
+import { existsSync, readFileSync } from 'node:fs';
+import { test } from 'node:test';
+
+const siteRoot = new URL('../../../site/', import.meta.url);
+const html = readFileSync(new URL('index.html', siteRoot), 'utf8');
+const script = readFileSync(new URL('site.js', siteRoot), 'utf8');
+
+test('the public site presents the product before asking for payment', () => {
+  for (const anchor of ['inicio', 'demonstracao', 'recursos', 'plataformas', 'pagamento', 'perguntas']) {
+    assert.ok(html.includes(`id="${anchor}"`), `missing public section: ${anchor}`);
+  }
+
+  assert.ok(html.includes('data-demo-tab="multiview"'), 'the interactive product tour is missing');
+  assert.ok(html.includes('assets/buro-reel.mp4'), 'the product reel is missing');
+  assert.ok(html.includes('7 dias grátis'), 'the trial must be stated before checkout');
+  assert.ok(html.includes('730 dias'), 'the real license term must be explicit');
+});
+
+test('the static page hands payment to the Worker without handling card data', () => {
+  assert.ok(script.includes("const WORKER_ORIGIN = 'https://iptvburo.iptvburo.workers.dev'"));
+  assert.ok(script.includes("new URL('/comprar', WORKER_ORIGIN)"));
+  assert.ok(script.includes("destination.searchParams.set('device'"));
+  assert.ok(script.includes("destination.searchParams.set('lang'"));
+  assert.ok(!/stripe[_-]secret|whsec_|sk_(?:test|live)_/i.test(`${html}\n${script}`), 'a payment secret reached the static site');
+  assert.ok(!/<input[^>]+(?:card|cvc|expiry)/i.test(html), 'the static page must not collect card data');
+  assert.ok(!/\bfetch\s*\(/.test(script), 'the static page should redirect, not call payment APIs');
+});
+
+test('device codes are normalized and checked before redirecting', () => {
+  assert.ok(script.includes("DEVICE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'"));
+  assert.ok(script.includes('DEVICE_PATTERN.test(input.value)'));
+  assert.ok(script.includes("params.get('code') || params.get('device')"), 'QR deep links should prefill the public code');
+  assert.ok(script.includes("input.value = formatDeviceCode"), 'manual entry should be normalized');
+});
+
+test('all four shipped languages are wired into the presentation and checkout handoff', () => {
+  for (const language of ['pt', 'en', 'de', 'it']) {
+    assert.ok(script.includes(`${language}: {`) || script.includes(`const ${language} = {`), `${language} copy is missing`);
+  }
+
+  assert.ok(script.includes('document.documentElement.lang'));
+  assert.ok(script.includes("url.searchParams.set('lang'"));
+  assert.ok(!script.includes('innerHTML ='), 'translated copy must not be injected as HTML');
+});
+
+test('every local image and video referenced by the public page exists', () => {
+  const references = [...html.matchAll(/(?:src|href|content)="((?:assets\/|buro-mark\.png|og\.png)[^"]*)"/g)]
+    .map((match) => match[1]);
+
+  assert.ok(references.length >= 8, 'too few product assets are connected');
+  for (const reference of new Set(references)) {
+    assert.ok(existsSync(new URL(reference, siteRoot)), `missing site asset: ${reference}`);
+  }
+});
+
+test('the public promise is current and legally bounded', () => {
+  const all = `${html}\n${script}`.toLowerCase();
+  assert.ok(all.includes('não vende, hospeda ou fornece conteúdo'));
+  assert.ok(all.includes('fontes de mídia que possui autorização'));
+  assert.ok(!all.includes('sem servidor, nenhuma compra'));
+  assert.ok(!all.includes('licença vitalícia'));
+  for (const provider of ['netflix', 'disney+', 'prime video', 'hbo max']) {
+    assert.ok(!all.includes(provider), `third-party entertainment brand leaked into the site: ${provider}`);
+  }
+});
+
+test('the app QR and the public metadata point to the deployed repository owner', () => {
+  const publicOrigin = 'https://serafinnike-create.github.io/IPTVBURO/';
+  assert.ok(html.includes(`<link rel="canonical" href="${publicOrigin}">`));
+  assert.ok(html.includes(`content="${publicOrigin}og.png"`));
+
+  const appSource = readFileSync(
+    new URL('../../../apps/android-tv/src/main/kotlin/com/lucasserafin94/iptvburo/ui/screens/AppShellScreen.kt', import.meta.url),
+    'utf8',
+  );
+  assert.ok(appSource.includes('?code=$deviceId&lang=$portalLanguage'));
+
+  const languageFolders = { values: 'en', 'values-pt-rBR': 'pt', 'values-de': 'de', 'values-it': 'it' };
+  for (const [folder, language] of Object.entries(languageFolders)) {
+    const strings = readFileSync(
+      new URL(`../../../apps/android-tv/src/main/res/${folder}/strings.xml`, import.meta.url),
+      'utf8',
+    );
+    assert.ok(strings.includes('<string name="license_portal">serafinnike-create.github.io/IPTVBURO</string>'));
+    assert.ok(strings.includes(`<string name="license_portal_language">${language}</string>`));
+    assert.ok(!strings.toLowerCase().includes('server is not live'));
+  }
+});

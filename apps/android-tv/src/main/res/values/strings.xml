@@ -143,13 +143,14 @@
     <string name="license_title">Device licence</string>
     <string name="license_device_code">Device code</string>
     <string name="license_generating">generating…</string>
-    <string name="license_state_unavailable">Not activated</string>
+    <string name="license_state_unavailable">Ready to activate</string>
     <string name="license_how_title">How to activate</string>
     <string name="license_step_1">1. Open %1$s on your phone or computer.</string>
     <string name="license_step_2">2. Enter the device code shown above.</string>
     <string name="license_step_3">3. Complete the one-off purchase to unlock this device.</string>
-    <string name="license_portal">lucasserafin94.github.io/IPTVBURO</string>
-    <string name="license_backend_pending">Activation is not available yet. The secure licensing server is not live, so no purchase can be completed and nothing is being charged.</string>
+    <string name="license_portal">serafinnike-create.github.io/IPTVBURO</string>
+    <string name="license_portal_language">en</string>
+    <string name="license_backend_pending">Try it free for 7 days. Then activate this device for 2 years through the secure portal. One-time payment, with no automatic renewal.</string>
     <string name="license_copy">Copy code</string>
     <string name="license_copied">Code copied</string>
     <string name="license_privacy">The code identifies this installation only. It is not your MAC address and carries no personal data.</string>
