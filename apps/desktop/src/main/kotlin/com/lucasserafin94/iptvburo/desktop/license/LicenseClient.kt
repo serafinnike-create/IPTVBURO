@@ -53,6 +53,19 @@ class LicenseClient(
         val now = clock()
         store.rememberFirstSeen(now)
 
+        // The earliest this machine was ever seen, across three locations the app writes to: its
+        // own directory, the user's home, and the Windows registry.
+        //
+        // Sent to the server so a reinstall cannot buy a fresh trial. The installation identity is
+        // a random id in one file; deleting it produces a device the server has never seen, and
+        // seven more free days, repeatable for ever. The markers make that harder — somebody has to
+        // find all three — and the server refuses to start a trial dated later than the earliest one
+        // reported.
+        //
+        // Not a proof of anything: a determined user can clear all three. It is a speed bump on the
+        // easy attack, which is deleting the app's folder, and it costs nothing to send.
+        val firstSeen = store.firstSeen()
+
         if (!server.isConfigured) {
             println("licence check skipped: this build has no server key")
             return LicenseStatus(
@@ -97,6 +110,12 @@ class LicenseClient(
                             identity = identity,
                             nonce = registrationNonce,
                             includeRegistration = true,
+                            // Only on registration, which is the one request where it changes an
+                            // outcome. Sending it on every validate would be noise the server has
+                            // no use for.
+                            extra = { body ->
+                                firstSeen?.let { seen -> body.addProperty("firstSeen", seen.toString()) }
+                            },
                         )
                     val signed = registration as? ServerAnswer.Signed
                         ?: return fallbackToStored(

@@ -56,6 +56,9 @@ const TRIAL_DAYS = 7;
 /** Two years, as the product sells. Matches LicensePolicy.PAID_DURATION. */
 const PAID_DAYS = LICENSE_PRODUCT.grantDays;
 
+/** Java Instant's UTC wire shape. Rejects Date.parse quirks such as "0" becoming January 2000. */
+const UTC_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
+
 /** A crashed event claim can be retried instead of remaining PROCESSING for ever. */
 const STRIPE_EVENT_CLAIM_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -545,17 +548,40 @@ async function handleRegister(request, env) {
     return json({ error: 'proof_replayed' }, 409);
   }
 
-  const trialEnds = addDays(now, TRIAL_DAYS);
+  // When this machine says it was first seen, from the markers the client keeps in three places.
+  //
+  // Reported by the client and therefore not trusted — but it can only ever *shorten* a trial, never
+  // extend one, so lying gains nothing. A reinstall produces a new random installation id and looks
+  // like a device the server has never met; without this, deleting one folder buys seven more free
+  // days, repeatable for ever.
+  //
+  // A date in the future would postpone the trial's start, so it is ignored. A strict wire shape is
+  // used before Date.parse: Java sends an ISO UTC Instant, while JavaScript also accepts surprising
+  // inputs such as "0" as January 2000. Valid old markers remain valid indefinitely; forgetting one
+  // after a year would let a yearly reinstall buy another trial.
+  const claimedText = String(body.firstSeen ?? '');
+  const claimed = UTC_INSTANT.test(claimedText) ? Date.parse(claimedText) : Number.NaN;
+  const usable = Number.isFinite(claimed) && claimed < now.getTime();
+  const firstSeen = usable ? new Date(claimed) : now;
+
+  // Counted from whichever is earlier. A machine that reports having been seen nine days ago has
+  // already used its week.
+  const trialEnds = addDays(firstSeen, TRIAL_DAYS);
   const inserted = await env.DB.prepare(
     `INSERT INTO devices (device_id, public_key, status, first_seen_at, trial_ends_at, updated_at)
      VALUES (?, ?, 'TRIAL', ?, ?, ?)
      ON CONFLICT(device_id) DO NOTHING`,
   )
-    .bind(proof.deviceId, proof.publicKey, iso(now), iso(trialEnds), iso(now))
+    // first_seen_at records what the machine reported, so support can see a device that arrived
+    // claiming to be older than its registration — the signature of a reinstall.
+    .bind(proof.deviceId, proof.publicKey, iso(firstSeen), iso(trialEnds), iso(now))
     .run();
 
   if (statementChanges(inserted) > 0) {
-    await recordEvent(env, proof.deviceId, 'registered', null, now);
+    // Noted when the claim is older than now: worth being able to find later, and the only place
+    // the difference between a fresh install and a returning one is visible.
+    const detail = firstSeen < now ? `first seen ${iso(firstSeen)}` : null;
+    await recordEvent(env, proof.deviceId, 'registered', detail, now);
   }
 
   // Close the small race between the pre-check and INSERT. Only the already-pinned same key may
