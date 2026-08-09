@@ -148,7 +148,7 @@
     <string name="license_step_1">1. Open %1$s on your phone or computer.</string>
     <string name="license_step_2">2. Enter the device code shown above.</string>
     <string name="license_step_3">3. Complete the one-off purchase to unlock this device.</string>
-    <string name="license_portal">serafinnike-create.github.io/IPTVBURO</string>
+    <string name="license_portal">iptvburo.pages.dev</string>
     <string name="license_portal_language">en</string>
     <string name="license_backend_pending">Try it free for 7 days. Then activate this device for 2 years through the secure portal. One-time payment, with no automatic renewal.</string>
     <string name="license_copy">Copy code</string>

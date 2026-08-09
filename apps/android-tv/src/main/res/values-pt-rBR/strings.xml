@@ -153,7 +153,7 @@
     <string name="license_step_1">1. Abra %1$s no celular ou computador.</string>
     <string name="license_step_2">2. Informe o código do aparelho mostrado acima.</string>
     <string name="license_step_3">3. Conclua a compra única para liberar este aparelho.</string>
-    <string name="license_portal">serafinnike-create.github.io/IPTVBURO</string>
+    <string name="license_portal">iptvburo.pages.dev</string>
     <string name="license_portal_language">pt</string>
     <string name="license_backend_pending">Teste grátis por 7 dias. Depois, ative este dispositivo por 2 anos no portal seguro. Pagamento único, sem renovação automática.</string>
     <string name="license_copy">Copiar código</string>

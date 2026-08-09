@@ -87,8 +87,8 @@ test('the public promise is current and legally bounded', () => {
   }
 });
 
-test('the app QR and the public metadata point to the deployed repository owner', () => {
-  const publicOrigin = 'https://serafinnike-create.github.io/IPTVBURO/';
+test('the app QR and the public metadata point to the clean Pages address', () => {
+  const publicOrigin = 'https://iptvburo.pages.dev/';
   assert.ok(html.includes(`<link rel="canonical" href="${publicOrigin}">`));
   assert.ok(html.includes(`content="${publicOrigin}og.png"`));
 
@@ -104,7 +104,7 @@ test('the app QR and the public metadata point to the deployed repository owner'
       new URL(`../../../apps/android-tv/src/main/res/${folder}/strings.xml`, import.meta.url),
       'utf8',
     );
-    assert.ok(strings.includes('<string name="license_portal">serafinnike-create.github.io/IPTVBURO</string>'));
+    assert.ok(strings.includes('<string name="license_portal">iptvburo.pages.dev</string>'));
     assert.ok(strings.includes(`<string name="license_portal_language">${language}</string>`));
     assert.ok(!strings.toLowerCase().includes('server is not live'));
   }
