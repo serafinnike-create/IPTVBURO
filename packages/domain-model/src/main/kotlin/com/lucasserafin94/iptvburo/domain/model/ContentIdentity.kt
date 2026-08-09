@@ -112,4 +112,6 @@ enum class ContentKind {
     SERIES,
     EPISODE,
     LIVE,
+    /** Appended to preserve the persisted ordinal/name order of every existing video kind. */
+    UNKNOWN,
 }

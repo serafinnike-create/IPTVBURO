@@ -15,6 +15,19 @@ A milestone `0.2` amplia o vertical funcional publicado como prévia. Esta seç�
 registra arquitetura, escopo, gates, hashes e as limitações que ainda impedem
 classificar o produto como uma versão estável.
 
+### Fundação Media SuperHub — Fase 0
+
+- `MediaKind` universal e mappers legados foram adicionados sem substituir os
+  tipos de vídeo;
+- capabilities de mídia, playback e fonte possuem defaults conservadores e
+  composição por interseção;
+- `MediaIdentity` preserva as chaves de vídeo e cria namespaces opacos para
+  faixa, álbum, artista, rádio, podcast, audiobook e capítulo;
+- `packages/media-source-spi` define validação, scan, resolução tardia e eventos
+  redigidos, sem alterar os adapters em produção;
+- Media SuperHub / áudio: fundação de domínio em implementação; nenhuma
+  vertical de usuário liberada.
+
 ### Atualização operacional — 9 de agosto de 2026
 
 - `services/license-server` está rastreado no Git e o Worker Cloudflare responde
@@ -34,12 +47,15 @@ classificar o produto como uma versão estável.
   continuam pendentes: a verificação Ed25519 nativa só existe a partir da API
   33, enquanto o aplicativo suporta API 23, e a compra Android deve usar Google
   Play Billing conforme o ADR-004;
-- gate Gradle mais recente: 977 testes, 0 falhas, 0 erros e 2 ignorados; lint
-  Android com 0 erros e 32 avisos;
-- APK debug: 26.439.475 bytes, SHA-256
-  `C2503BE5CB006B9386CF292A2A9307B6AC3AD314555D01443260AD2F47E376DE`;
-- MSI Windows 2.0.0: 299.721.956 bytes, SHA-256
-  `E102AAA7ED0592FF53C61097A6982AF6EFBC1E61987E8C0EF9D044E76633AB1C`.
+- gate Gradle mais recente: 1.071 testes, 0 falhas, 0 erros e 2 ignorados; lint
+  Android com 0 erros e 30 avisos;
+- Worker e site: 133 testes Node, 133 passaram e nenhum falhou;
+- APK debug: 26.482.020 bytes, SHA-256
+  `59C4B7C6CA8F1EA02FC17C86F1BFC7ADFD6CBC3544F97391F1525D2B394F4E53`;
+- AAB release: 7.530.964 bytes, SHA-256
+  `6F25B20D0FB0F546A769767800ACE440F4F97D134C7C86BD63BB80386E72EE3D`;
+- MSI Windows 2.0.0: 299.807.971 bytes, SHA-256
+  `C794F5E89A7CE4530BB6A049274F9F34894651672CEF0DF0BDF7A3177E65CC0D`.
   O banco MSI é legível, contém 876 arquivos e identifica produto `IPTVBURO`,
   versão `2.0.0` e fabricante `IPTV BURO`;
 - o MSI ainda não possui assinatura Authenticode e o APK é uma build debug.
