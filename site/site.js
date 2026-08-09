@@ -173,7 +173,7 @@
 
   function renderDemo(name, restart = true) {
     currentDemo = demoCopy[currentLanguage][name] ? name : 'home';
-    const [badge, title, description, rail, backdrop] = demoCopy[currentLanguage][currentDemo];
+    const [badge, title, description, rail] = demoCopy[currentLanguage][currentDemo];
     const stage = $('[data-demo-stage]');
     stage.dataset.demoStage = currentDemo;
     $('[data-stage-badge]').textContent = badge;
@@ -181,7 +181,6 @@
     $('[data-stage-description]').textContent = description;
     $('[data-stage-primary]').textContent = translations[currentLanguage][currentDemo === 'offline' ? 'downloadAction' : 'play'];
     $('[data-stage-secondary]').textContent = translations[currentLanguage][currentDemo === 'offline' ? 'offlineLibrary' : 'details'];
-    $('[data-stage-backdrop]').style.backgroundImage = `url('${backdrop}')`;
     $$('[data-content-rail] article').forEach((card, index) => { $('span', card).textContent = rail[index]; });
     $$('[data-demo-tab]').forEach((tab) => {
       const active = tab.dataset.demoTab === currentDemo;

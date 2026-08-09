@@ -58,6 +58,8 @@ test('the public site ships security and framing policies', () => {
   assert.ok(headers.includes("frame-ancestors 'none'"));
   assert.ok(headers.includes('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()'));
   assert.ok(headers.includes('X-Content-Type-Options: nosniff'));
+  assert.ok(!/\sstyle=/.test(html), 'inline styles would be blocked by the site policy');
+  assert.ok(!script.includes('.style.'), 'runtime inline styles would be blocked by the site policy');
 });
 
 test('interactive product tabs expose their relationship to the demo panel', () => {

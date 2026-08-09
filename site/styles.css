@@ -399,6 +399,12 @@ a { color: inherit; }
 .app-sidebar span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; }
 .app-sidebar .side-active { background: rgba(214, 169, 86, .16); color: var(--gold-light); }
 .stage-backdrop { position: absolute; inset: 0; z-index: -3; background: url("assets/nocturne.webp") center/cover; transition: background-image 460ms ease, opacity 460ms ease; }
+.app-stage[data-demo-stage="home"] .stage-backdrop,
+.app-stage[data-demo-stage="series"] .stage-backdrop { background-image: url("assets/category-series.webp"); }
+.app-stage[data-demo-stage="live"] .stage-backdrop { background-image: url("assets/category-live.webp"); }
+.app-stage[data-demo-stage="movies"] .stage-backdrop,
+.app-stage[data-demo-stage="offline"] .stage-backdrop { background-image: url("assets/category-cinema.webp"); }
+.app-stage[data-demo-stage="multiview"] .stage-backdrop { background-image: url("assets/category-sports.webp"); }
 .stage-gradient { position: absolute; inset: 0; z-index: -2; background: linear-gradient(90deg, #0a0b0f 3%, rgba(10, 11, 15, .93) 27%, rgba(10, 11, 15, .28) 74%, #0a0b0f 100%), linear-gradient(0deg, #0a0b0f 0%, transparent 54%); }
 .stage-copy { position: relative; z-index: 2; max-width: 410px; padding: 80px 24px 0 92px; transition: opacity 240ms ease, transform 240ms ease; }
 .stage-badge { color: var(--gold-light); font-size: 8px; font-weight: 850; letter-spacing: .16em; }
@@ -411,6 +417,10 @@ a { color: inherit; }
 .mini-secondary { border: 1px solid var(--border); background: rgba(17, 19, 25, .72); color: var(--text); }
 .content-rail { position: absolute; z-index: 3; inset: auto 22px 24px 78px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 11px; transition: opacity 240ms ease, transform 240ms ease; }
 .content-rail article { position: relative; min-height: 155px; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.poster-cinema { --poster: url("assets/category-cinema.webp"); }
+.poster-series { --poster: url("assets/category-series.webp"); }
+.poster-live { --poster: url("assets/category-live.webp"); }
+.poster-kids { --poster: url("assets/category-kids.webp"); }
 .content-rail article::before { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(9, 10, 13, .96), transparent 64%), var(--poster) center/cover; transition: transform 460ms ease; }
 .content-rail article:first-child { border-color: var(--gold); transform: translateY(-5px); box-shadow: 0 9px 30px rgba(0, 0, 0, .34); }
 .content-rail article:first-child::after { content: ""; position: absolute; inset: 0; border: 2px solid rgba(240, 200, 119, .42); border-radius: inherit; }
@@ -418,6 +428,10 @@ a { color: inherit; }
 .content-rail article span { position: absolute; inset: auto 10px 9px; z-index: 2; color: var(--ivory); font-size: 9px; font-weight: 760; }
 .multiview-grid { position: absolute; inset: 22px 22px 22px 74px; z-index: 5; display: none; grid-template-columns: 1fr 1fr; gap: 10px; opacity: 0; transform: scale(.98); transition: opacity 240ms ease, transform 240ms ease; }
 .multiview-grid span { min-height: 230px; border: 1px solid var(--border); border-radius: 10px; background: linear-gradient(0deg, rgba(9, 10, 13, .38), transparent), var(--tile) center/cover; }
+.tile-live { --tile: url("assets/category-live.webp"); }
+.tile-sports { --tile: url("assets/category-sports.webp"); }
+.tile-cinema { --tile: url("assets/category-cinema.webp"); }
+.tile-4k { --tile: url("assets/category-4k.webp"); }
 .app-stage[data-demo-stage="multiview"] .stage-copy, .app-stage[data-demo-stage="multiview"] .content-rail { opacity: 0; pointer-events: none; transform: translateY(10px); }
 .app-stage[data-demo-stage="multiview"] .multiview-grid { display: grid; opacity: 1; transform: scale(1); }
 .app-stage[data-demo-stage="live"] .stage-badge { color: var(--success); }
@@ -505,6 +519,8 @@ a { color: inherit; }
 .offline-progress-copy b { color: var(--secondary); }
 .offline-library-row { display: grid; grid-template-columns: 46px 1fr auto; align-items: center; gap: 11px; margin-top: 8px; padding: 9px; border: 1px solid var(--border); border-radius: 11px; background: rgba(17, 19, 25, .88); }
 .offline-library-row > span { width: 46px; height: 48px; border-radius: 8px; background: var(--thumb) center/cover; }
+.offline-library-row > .thumb-series { --thumb: url("assets/category-series.webp"); }
+.offline-library-row > .thumb-kids { --thumb: url("assets/category-kids.webp"); }
 .offline-library-row > div { display: grid; gap: 3px; }
 .offline-library-row b { font-size: 10px; }
 .offline-library-row small { color: var(--muted); font-size: 8px; }
