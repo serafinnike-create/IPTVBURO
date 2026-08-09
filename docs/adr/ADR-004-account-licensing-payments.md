@@ -9,10 +9,12 @@
 
 ## Contexto
 
-O produto oferece sete dias de avaliação sem cartão e compra única de EUR 9,99
-por dispositivo. Android distribuído pelo Google Play e Windows/portal possuem
-regras de cobrança diferentes. Uma credencial de playlist pertence ao provedor
-do usuário e nunca pode servir como conta ou licença do IPTV BURO.
+O produto oferece sete dias de avaliação sem cartão. O texto original deste ADR
+previa uma compra vitalícia de EUR 9,99 por dispositivo; esse termo é apenas
+histórico e foi substituído pelo preço e prazo definidos no ADR-010. Android
+distribuído pelo Google Play e Windows/portal possuem regras de cobrança
+diferentes. Uma credencial de playlist pertence ao provedor do usuário e nunca
+pode servir como conta ou licença do IPTV BURO.
 
 ## Decisão
 
@@ -42,11 +44,12 @@ em logs.
 
 ## Situação atual
 
-O domínio de licença e a identidade Android já existem. A interface exibe o
-código do dispositivo e informa corretamente que o servidor comercial ainda
-não está ativo. Cobrança real está bloqueada até existirem conta Stripe, produto
-no Play Console, domínio HTTPS, backend implantado e políticas comerciais
-aprovadas. Nenhum botão deve simular pagamento aprovado.
+O domínio de licença, as identidades criptográficas Android/Windows, o Worker
+Cloudflare e o Checkout Stripe do portal já existem. O backend só concede o
+entitlement após webhook assinado e mantém preço, moeda e prazo como contrato do
+servidor. A compra Android pelo Google Play, a conta do portal, restauração e
+transferência entre dispositivos continuam pendentes. Nenhum botão pode simular
+pagamento aprovado.
 
 ## Consequências
 
