@@ -7,7 +7,7 @@
   const languageNames = { pt: 'pt-BR', en: 'en', de: 'de', it: 'it' };
 
   const pt = {
-    skip: 'Pular para o conteúdo', menu: 'Abrir menu', language: 'Idioma',
+    skip: 'Pular para o conteúdo', menu: 'Abrir menu', closeMenu: 'Fechar menu', language: 'Idioma',
     navDemo: 'Demonstração', navFeatures: 'Funções', navPlatforms: 'Plataformas', navPricing: 'Ativar', navFaq: 'Perguntas', activate: 'Ativar dispositivo',
     heroEyebrow: 'PLAYER PREMIUM · SUA FONTE, SUA BIBLIOTECA', heroTitle: 'Tudo o que você assiste.<br>Finalmente no lugar certo.',
     heroLead: 'Organize TV ao vivo, filmes e séries das fontes autorizadas que você já possui — numa experiência rápida, privada e cinematográfica.',
@@ -31,7 +31,7 @@
 
   const en = {
     ...pt,
-    skip: 'Skip to content', menu: 'Open menu', language: 'Language', navDemo: 'Demo', navFeatures: 'Features', navPlatforms: 'Platforms', navPricing: 'Activate', navFaq: 'Questions', activate: 'Activate device',
+    skip: 'Skip to content', menu: 'Open menu', closeMenu: 'Close menu', language: 'Language', navDemo: 'Demo', navFeatures: 'Features', navPlatforms: 'Platforms', navPricing: 'Activate', navFaq: 'Questions', activate: 'Activate device',
     heroEyebrow: 'PREMIUM PLAYER · YOUR SOURCE, YOUR LIBRARY', heroTitle: 'Everything you watch.<br>Finally in the right place.', heroLead: 'Organize live TV, movies, and series from media sources you are authorized to use — in a fast, private, cinematic experience.', watchDemo: 'See how it works', startTrial: 'Start the 7-day trial', factTrial: 'free days', factTerm: 'years per payment', factContent: 'content supplied', explore: 'Explore', trustIntro: 'Built for the sources you already use', trustPrivate: 'Protected credentials',
     demoKicker: 'INTERACTIVE DEMO', demoTitle: 'Six screens. One library.', demoLead: 'Explore today’s features and discover IPTV BURO’s next major mobile experience.', demoHome: 'Home', demoHomeSub: 'Your evening, ready', demoLive: 'Live TV', demoLiveSub: 'Now and next', demoMovies: 'Movies', demoMoviesSub: 'Artwork and details', demoSeries: 'Series', demoSeriesSub: 'Organized seasons', demoMultiSub: 'Up to four channels', demoOffline: 'Downloads', demoOfflineSub: 'Coming to mobile', pauseTour: 'Pause tour', resumeTour: 'Resume tour', demoConnected: 'Source connected', play: 'Play', details: 'Details', downloadAction: 'Download', offlineLibrary: 'Downloads',
     motionTitle: 'An interface that turns down the noise.', motionLead: 'Gentle motion, clear focus, and room for what matters. On the sofa, at your computer, or on a smaller screen.', motionOne: 'Visible focus for remote, keyboard, and mouse', motionTwo: 'Adaptive layouts for TV, desktop, and mobile', motionThree: 'Portuguese, English, German, and Italian', motionCaption: 'IPTV BURO visual experience',
@@ -46,7 +46,7 @@
 
   const de = {
     ...pt,
-    skip: 'Zum Inhalt springen', menu: 'Menü öffnen', language: 'Sprache', navDemo: 'Demo', navFeatures: 'Funktionen', navPlatforms: 'Plattformen', navPricing: 'Aktivieren', navFaq: 'Fragen', activate: 'Gerät aktivieren',
+    skip: 'Zum Inhalt springen', menu: 'Menü öffnen', closeMenu: 'Menü schließen', language: 'Sprache', navDemo: 'Demo', navFeatures: 'Funktionen', navPlatforms: 'Plattformen', navPricing: 'Aktivieren', navFaq: 'Fragen', activate: 'Gerät aktivieren',
     heroEyebrow: 'PREMIUM-PLAYER · DEINE QUELLE, DEINE MEDIATHEK', heroTitle: 'Alles, was du ansiehst.<br>Endlich am richtigen Ort.', heroLead: 'Organisiere Live-TV, Filme und Serien aus Medienquellen, zu deren Nutzung du berechtigt bist — schnell, privat und filmisch.', watchDemo: 'So funktioniert es', startTrial: '7 Tage kostenlos testen', factTrial: 'Tage kostenlos', factTerm: 'Jahre pro Zahlung', factContent: 'Inhalte enthalten', explore: 'Entdecken', trustIntro: 'Für die Quellen, die du bereits nutzt', trustPrivate: 'Geschützte Zugangsdaten',
     demoKicker: 'INTERAKTIVE DEMO', demoTitle: 'Sechs Ansichten. Eine Mediathek.', demoLead: 'Entdecke die aktuellen Funktionen und das nächste große mobile Erlebnis von IPTV BURO.', demoHome: 'Start', demoHomeSub: 'Dein Abend ist bereit', demoLive: 'Live-TV', demoLiveSub: 'Jetzt und danach', demoMovies: 'Filme', demoMoviesSub: 'Cover und Details', demoSeries: 'Serien', demoSeriesSub: 'Geordnete Staffeln', demoMultiSub: 'Bis zu vier Sender', demoOffline: 'Downloads', demoOfflineSub: 'Demnächst mobil', pauseTour: 'Tour pausieren', resumeTour: 'Tour fortsetzen', demoConnected: 'Quelle verbunden', play: 'Abspielen', details: 'Details', downloadAction: 'Herunterladen', offlineLibrary: 'Downloads',
     motionTitle: 'Eine Oberfläche, die den Lärm leiser dreht.', motionLead: 'Sanfte Bewegung, klarer Fokus und Raum für das Wesentliche. Auf dem Sofa, am Computer oder auf einem kleineren Bildschirm.', motionOne: 'Sichtbarer Fokus für Fernbedienung, Tastatur und Maus', motionTwo: 'Adaptive Layouts für TV, Desktop und Mobilgeräte', motionThree: 'Portugiesisch, Englisch, Deutsch und Italienisch', motionCaption: 'Das visuelle Erlebnis von IPTV BURO',
@@ -61,7 +61,7 @@
 
   const it = {
     ...pt,
-    skip: 'Vai al contenuto', menu: 'Apri menu', language: 'Lingua', navDemo: 'Demo', navFeatures: 'Funzioni', navPlatforms: 'Piattaforme', navPricing: 'Attiva', navFaq: 'Domande', activate: 'Attiva dispositivo',
+    skip: 'Vai al contenuto', menu: 'Apri menu', closeMenu: 'Chiudi menu', language: 'Lingua', navDemo: 'Demo', navFeatures: 'Funzioni', navPlatforms: 'Piattaforme', navPricing: 'Attiva', navFaq: 'Domande', activate: 'Attiva dispositivo',
     heroEyebrow: 'PLAYER PREMIUM · LA TUA FONTE, LA TUA LIBRERIA', heroTitle: 'Tutto ciò che guardi.<br>Finalmente al posto giusto.', heroLead: 'Organizza TV in diretta, film e serie dalle fonti multimediali che sei autorizzato a usare — in un’esperienza veloce, privata e cinematografica.', watchDemo: 'Scopri come funziona', startTrial: 'Inizia i 7 giorni gratuiti', factTrial: 'giorni gratuiti', factTerm: 'anni per pagamento', factContent: 'contenuti forniti', explore: 'Esplora', trustIntro: 'Pensato per le fonti che già usi', trustPrivate: 'Credenziali protette',
     demoKicker: 'DEMO INTERATTIVA', demoTitle: 'Sei schermate. Una libreria.', demoLead: 'Esplora le funzioni attuali e scopri la prossima grande esperienza mobile di IPTV BURO.', demoHome: 'Home', demoHomeSub: 'La tua serata è pronta', demoLive: 'In diretta', demoLiveSub: 'Ora e dopo', demoMovies: 'Film', demoMoviesSub: 'Copertine e dettagli', demoSeries: 'Serie', demoSeriesSub: 'Stagioni organizzate', demoMultiSub: 'Fino a quattro canali', demoOffline: 'Download', demoOfflineSub: 'In arrivo su mobile', pauseTour: 'Metti in pausa il tour', resumeTour: 'Riprendi il tour', demoConnected: 'Fonte collegata', play: 'Riproduci', details: 'Dettagli', downloadAction: 'Scarica', offlineLibrary: 'Download',
     motionTitle: 'Un’interfaccia che abbassa il rumore.', motionLead: 'Movimenti delicati, messa a fuoco chiara e spazio per ciò che conta. Sul divano, al computer o su uno schermo più piccolo.', motionOne: 'Focus visibile per telecomando, tastiera e mouse', motionTwo: 'Layout adattivi per TV, desktop e mobile', motionThree: 'Portoghese, inglese, tedesco e italiano', motionCaption: 'Esperienza visiva IPTV BURO',
@@ -149,6 +149,7 @@
       if (value !== undefined) setRichText(element, value);
     });
     $('[data-language]').value = currentLanguage;
+    $('[data-payment-language]').value = currentLanguage;
     const meta = metadata[currentLanguage];
     document.title = meta.title;
     $('meta[name="description"]').content = meta.description;
@@ -165,6 +166,7 @@
     history.replaceState({}, '', url);
     renderDemo(currentDemo);
     updateTourButton();
+    updateNavigationButton($('[data-nav]').classList.contains('open'));
     const video = $('[data-brand-video]');
     $('[data-video-toggle]').setAttribute('aria-label', copy[video.paused ? 'videoPlay' : 'videoPause']);
   }
@@ -187,6 +189,8 @@
       tab.setAttribute('aria-selected', String(active));
       tab.tabIndex = active ? 0 : -1;
     });
+    const selectedTab = $(`[data-demo-tab="${currentDemo}"]`);
+    $('#demo-panel').setAttribute('aria-labelledby', selectedTab.id);
     if (restart) restartTour();
   }
 
@@ -258,18 +262,37 @@
   function setupNavigation() {
     const toggle = $('[data-nav-toggle]');
     const nav = $('[data-nav]');
+    const closeNavigation = (restoreFocus = false) => {
+      nav.classList.remove('open');
+      updateNavigationButton(false);
+      if (restoreFocus) toggle.focus();
+    };
     toggle.addEventListener('click', () => {
       const open = !nav.classList.contains('open');
       nav.classList.toggle('open', open);
-      toggle.setAttribute('aria-expanded', String(open));
+      updateNavigationButton(open);
     });
     $$('a[href^="#"]').forEach((link) => link.addEventListener('click', () => {
-      nav.classList.remove('open');
-      toggle.setAttribute('aria-expanded', 'false');
+      closeNavigation();
     }));
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && nav.classList.contains('open')) closeNavigation(true);
+    });
+    document.addEventListener('click', (event) => {
+      if (nav.classList.contains('open') && !nav.contains(event.target) && !toggle.contains(event.target)) closeNavigation();
+    });
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 760 && nav.classList.contains('open')) closeNavigation();
+    });
     const updateHeader = () => $('[data-header]').classList.toggle('scrolled', window.scrollY > 24);
     window.addEventListener('scroll', updateHeader, { passive: true });
     updateHeader();
+  }
+
+  function updateNavigationButton(open) {
+    const toggle = $('[data-nav-toggle]');
+    toggle.setAttribute('aria-expanded', String(open));
+    $('[data-nav-label]').textContent = translations[currentLanguage][open ? 'closeMenu' : 'menu'];
   }
 
   function setupDemo() {

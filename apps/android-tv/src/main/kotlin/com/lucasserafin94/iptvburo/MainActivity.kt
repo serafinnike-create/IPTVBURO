@@ -25,7 +25,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -50,6 +49,10 @@ import com.lucasserafin94.iptvburo.ui.screens.LanguageSelectionScreen
 import com.lucasserafin94.iptvburo.ui.screens.PlayerScreen
 import com.lucasserafin94.iptvburo.ui.screens.ProfilePickerScreen
 import com.lucasserafin94.iptvburo.ui.localization.AppLocaleController
+import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
+import com.lucasserafin94.iptvburo.ui.theme.BuroGold
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 import com.lucasserafin94.iptvburo.ui.theme.IptvBuroTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -198,7 +201,7 @@ private fun IptvBuroRoot(
 @Composable
 private fun BuroBootScreen() {
     Box(
-        modifier = Modifier.fillMaxSize().background(Color(0xFF090A0D)),
+        modifier = Modifier.fillMaxSize().background(BuroCanvas),
     ) {
         Image(
             painter = painterResource(R.drawable.buro_nocturne_hero),
@@ -213,9 +216,9 @@ private fun BuroBootScreen() {
                     .fillMaxSize()
                     .background(
                         Brush.horizontalGradient(
-                            0f to Color(0xFF090A0D),
-                            0.55f to Color(0xE6090A0D),
-                            1f to Color(0x33090A0D),
+                            0f to BuroCanvas,
+                            0.55f to BuroCanvas.copy(alpha = 0.90f),
+                            1f to BuroCanvas.copy(alpha = 0.20f),
                         ),
                     ),
         )
@@ -230,7 +233,7 @@ private fun BuroBootScreen() {
         ) {
             Text(
                 text = "IPTV  BURO",
-                color = Color(0xFFF6F7FA),
+                color = BuroTextPrimary,
                 fontSize = 34.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 3.sp,
@@ -239,12 +242,12 @@ private fun BuroBootScreen() {
             Spacer(Modifier.height(10.dp))
             Text(
                 text = stringResource(R.string.common_loading),
-                color = Color(0xFFB6BAC5),
+                color = BuroTextSecondary,
                 fontSize = 16.sp,
             )
             Spacer(Modifier.height(22.dp))
             CircularProgressIndicator(
-                color = Color(0xFF8B7CFF),
+                color = BuroGold,
             )
         }
     }

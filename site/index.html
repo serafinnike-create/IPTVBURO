@@ -32,7 +32,7 @@
     </a>
 
     <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="main-nav" data-nav-toggle>
-      <span class="sr-only" data-i18n="menu">Abrir menu</span>
+      <span class="sr-only" data-nav-label>Abrir menu</span>
       <span></span><span></span>
     </button>
 
@@ -109,22 +109,22 @@
 
       <div class="demo-layout reveal" data-demo-root>
         <div class="demo-controls" role="tablist" aria-label="Telas do aplicativo">
-          <button class="demo-tab active" type="button" role="tab" aria-selected="true" data-demo-tab="home">
+          <button class="demo-tab active" id="demo-tab-home" type="button" role="tab" aria-selected="true" aria-controls="demo-panel" data-demo-tab="home">
             <span aria-hidden="true">⌂</span><b data-i18n="demoHome">Início</b><small data-i18n="demoHomeSub">Sua noite, pronta</small>
           </button>
-          <button class="demo-tab" type="button" role="tab" aria-selected="false" data-demo-tab="live">
+          <button class="demo-tab" id="demo-tab-live" type="button" role="tab" aria-selected="false" aria-controls="demo-panel" data-demo-tab="live">
             <span aria-hidden="true">●</span><b data-i18n="demoLive">Ao vivo</b><small data-i18n="demoLiveSub">Agora e a seguir</small>
           </button>
-          <button class="demo-tab" type="button" role="tab" aria-selected="false" data-demo-tab="movies">
+          <button class="demo-tab" id="demo-tab-movies" type="button" role="tab" aria-selected="false" aria-controls="demo-panel" data-demo-tab="movies">
             <span aria-hidden="true">◆</span><b data-i18n="demoMovies">Filmes</b><small data-i18n="demoMoviesSub">Capas e detalhes</small>
           </button>
-          <button class="demo-tab" type="button" role="tab" aria-selected="false" data-demo-tab="series">
+          <button class="demo-tab" id="demo-tab-series" type="button" role="tab" aria-selected="false" aria-controls="demo-panel" data-demo-tab="series">
             <span aria-hidden="true">▤</span><b data-i18n="demoSeries">Séries</b><small data-i18n="demoSeriesSub">Temporadas organizadas</small>
           </button>
-          <button class="demo-tab" type="button" role="tab" aria-selected="false" data-demo-tab="multiview">
+          <button class="demo-tab" id="demo-tab-multiview" type="button" role="tab" aria-selected="false" aria-controls="demo-panel" data-demo-tab="multiview">
             <span aria-hidden="true">▦</span><b>Multiview</b><small data-i18n="demoMultiSub">Até quatro canais</small>
           </button>
-          <button class="demo-tab" type="button" role="tab" aria-selected="false" data-demo-tab="offline">
+          <button class="demo-tab" id="demo-tab-offline" type="button" role="tab" aria-selected="false" aria-controls="demo-panel" data-demo-tab="offline">
             <span aria-hidden="true">↓</span><b data-i18n="demoOffline">Downloads</b><small data-i18n="demoOfflineSub">Próximo no mobile</small>
           </button>
           <button class="tour-toggle" type="button" data-tour-toggle aria-pressed="false">
@@ -133,7 +133,7 @@
           </button>
         </div>
 
-        <div class="app-window" aria-live="polite">
+        <div class="app-window" id="demo-panel" role="tabpanel" aria-labelledby="demo-tab-home" aria-live="polite">
           <div class="window-bar">
             <span class="window-mark"><img src="buro-mark.png" alt="" width="22" height="22"> IPTV <b>BURO</b></span>
             <span class="window-status"><i></i><span data-i18n="demoConnected">Fonte conectada</span></span>
@@ -333,10 +333,11 @@
         <div class="price-value"><sup>€</sup><strong>9,90</strong><span>/<i>2</i> <em data-i18n="years">anos</em></span></div>
         <p class="regional-note" data-i18n="regionalPrice">O valor final e a moeda são confirmados antes do pagamento.</p>
 
-        <form class="activation-form" data-payment-form novalidate>
+        <form class="activation-form" action="https://iptvburo.iptvburo.workers.dev/comprar" method="get" data-payment-form>
           <label for="device-code" data-i18n="deviceCode">Código do dispositivo</label>
           <div class="code-field">
-            <input id="device-code" name="device" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="14" pattern="[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}){2}" placeholder="ABCD-EFGH-JKLM" aria-describedby="code-help code-status">
+            <input id="device-code" name="device" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="14" pattern="[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}){2}" placeholder="ABCD-EFGH-JKLM" aria-describedby="code-help code-status" required>
+            <input type="hidden" name="lang" value="pt" data-payment-language>
             <span class="code-check" aria-hidden="true" data-code-check>✓</span>
           </div>
           <p id="code-help" class="field-help" data-i18n="codeHelp">Encontre este código na tela de ativação do aplicativo.</p>

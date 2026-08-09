@@ -12,6 +12,7 @@ import { test } from 'node:test';
 const siteRoot = new URL('../../../site/', import.meta.url);
 const html = readFileSync(new URL('index.html', siteRoot), 'utf8');
 const script = readFileSync(new URL('site.js', siteRoot), 'utf8');
+const headers = readFileSync(new URL('_headers', siteRoot), 'utf8');
 
 test('the public site presents the product before asking for payment', () => {
   for (const anchor of ['inicio', 'demonstracao', 'recursos', 'plataformas', 'pagamento', 'perguntas']) {
@@ -40,6 +41,8 @@ test('Offline Vault is prominent without pretending the mobile gate already pass
 });
 
 test('the static page hands payment to the Worker without handling card data', () => {
+  assert.match(html, /<form[^>]+action="https:\/\/iptvburo\.iptvburo\.workers\.dev\/comprar"[^>]+method="get"/);
+  assert.ok(html.includes('name="lang"'), 'the non-JavaScript checkout fallback must preserve the language');
   assert.ok(script.includes("const WORKER_ORIGIN = 'https://iptvburo.iptvburo.workers.dev'"));
   assert.ok(script.includes("new URL('/comprar', WORKER_ORIGIN)"));
   assert.ok(script.includes("destination.searchParams.set('device'"));
@@ -47,6 +50,23 @@ test('the static page hands payment to the Worker without handling card data', (
   assert.ok(!/stripe[_-]secret|whsec_|sk_(?:test|live)_/i.test(`${html}\n${script}`), 'a payment secret reached the static site');
   assert.ok(!/<input[^>]+(?:card|cvc|expiry)/i.test(html), 'the static page must not collect card data');
   assert.ok(!/\bfetch\s*\(/.test(script), 'the static page should redirect, not call payment APIs');
+});
+
+test('the public site ships security and framing policies', () => {
+  assert.ok(headers.includes("default-src 'self'"));
+  assert.ok(headers.includes("form-action https://iptvburo.iptvburo.workers.dev"));
+  assert.ok(headers.includes("frame-ancestors 'none'"));
+  assert.ok(headers.includes('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()'));
+  assert.ok(headers.includes('X-Content-Type-Options: nosniff'));
+});
+
+test('interactive product tabs expose their relationship to the demo panel', () => {
+  for (const tab of ['home', 'live', 'movies', 'series', 'multiview', 'offline']) {
+    assert.ok(html.includes(`id="demo-tab-${tab}"`));
+    assert.match(html, new RegExp(`id="demo-tab-${tab}"[^>]+aria-controls="demo-panel"`));
+  }
+  assert.match(html, /id="demo-panel"[^>]+role="tabpanel"/);
+  assert.ok(script.includes("setAttribute('aria-labelledby', selectedTab.id)"));
 });
 
 test('device codes are normalized and checked before redirecting', () => {

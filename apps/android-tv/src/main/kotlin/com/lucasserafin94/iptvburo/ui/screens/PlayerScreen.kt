@@ -1,11 +1,12 @@
 package com.lucasserafin94.iptvburo.ui.screens
 
 import android.app.Activity
+import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
-import android.app.PictureInPictureParams
 import android.content.res.Configuration
+import android.graphics.Rect
 import android.media.AudioManager
 import android.os.Build
 import android.view.ViewGroup
@@ -56,6 +57,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.platform.LocalConfiguration
@@ -125,6 +128,7 @@ fun PlayerScreen(
     var controlsVisible by remember(player) { mutableStateOf(true) }
     var controlsLocked by remember(player) { mutableStateOf(false) }
     var playbackSpeed by remember(player) { mutableFloatStateOf(1f) }
+    var videoBounds by remember(player) { mutableStateOf<Rect?>(null) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val activity = context.findActivity()
@@ -139,6 +143,8 @@ fun PlayerScreen(
         )
     }
     val isFullscreen = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isInPictureInPicture =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity?.isInPictureInPictureMode == true
     var screenBrightness by remember(activity) {
         mutableFloatStateOf(
             activity?.window?.attributes?.screenBrightness?.takeIf { it >= 0f } ?: 0.65f,
@@ -147,6 +153,31 @@ fun PlayerScreen(
 
     LaunchedEffect(player) {
         player.volume = 1f
+    }
+
+    LaunchedEffect(isInPictureInPicture) {
+        if (isInPictureInPicture) controlsVisible = false
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        LaunchedEffect(activity, videoBounds) {
+            val sourceRect = videoBounds ?: return@LaunchedEffect
+            activity?.setPictureInPictureParams(
+                PictureInPictureParams.Builder()
+                    .setAutoEnterEnabled(true)
+                    .setSourceRectHint(sourceRect)
+                    .build(),
+            )
+        }
+        DisposableEffect(activity) {
+            onDispose {
+                activity?.setPictureInPictureParams(
+                    PictureInPictureParams.Builder()
+                        .setAutoEnterEnabled(false)
+                        .build(),
+                )
+            }
+        }
     }
 
     LaunchedEffect(controlsVisible, controlsLocked, playbackState.isPlaying) {
@@ -289,6 +320,15 @@ fun PlayerScreen(
     ) {
         VideoSurface(
             player = player,
+            modifier = Modifier.onGloballyPositioned { coordinates ->
+                val bounds = coordinates.boundsInWindow()
+                videoBounds = Rect(
+                    bounds.left.roundToInt(),
+                    bounds.top.roundToInt(),
+                    bounds.right.roundToInt(),
+                    bounds.bottom.roundToInt(),
+                )
+            },
         )
 
         if (controlsVisible) {
@@ -370,7 +410,13 @@ fun PlayerScreen(
                     },
                     onPictureInPicture = {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            activity?.enterPictureInPictureMode(PictureInPictureParams.Builder().build())
+                            val builder = PictureInPictureParams.Builder()
+                            videoBounds?.let(builder::setSourceRectHint)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                builder.setAutoEnterEnabled(true)
+                            }
+                            controlsVisible = false
+                            activity?.enterPictureInPictureMode(builder.build())
                         }
                     },
                     onToggleFullscreen = {
@@ -396,7 +442,11 @@ fun PlayerScreen(
                         controlsVisible = true
                     },
                     icon = {
-                        Icon(Icons.Default.LockOpen, contentDescription = "Desbloquear controles", tint = BuroTextPrimary)
+                        Icon(
+                            Icons.Default.LockOpen,
+                            contentDescription = stringResource(R.string.player_unlock_controls),
+                            tint = BuroTextPrimary,
+                        )
                     },
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = 18.dp),
                 )
@@ -468,7 +518,7 @@ private fun ResumeChoice(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Continuar assistindo?", color = BuroTextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.player_resume_question), color = BuroTextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         FocusSurface(
             onClick = onContinue,
             modifier = Modifier.width(260.dp).height(54.dp),
@@ -476,7 +526,11 @@ private fun ResumeChoice(
             focusedBackgroundColor = BuroTextPrimary,
             contentAlignment = Alignment.Center,
         ) {
-            Text("Continuar de ${formatResumeTime(positionMs)}", color = BuroCanvas, fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(R.string.player_resume_from, formatResumeTime(positionMs)),
+                color = BuroCanvas,
+                fontWeight = FontWeight.Bold,
+            )
         }
         FocusSurface(
             onClick = onStartOver,
@@ -485,7 +539,7 @@ private fun ResumeChoice(
             focusedBackgroundColor = BuroSurface,
             contentAlignment = Alignment.Center,
         ) {
-            Text("Assistir do início", color = BuroTextPrimary, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.player_start_over), color = BuroTextPrimary, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -520,6 +574,7 @@ private fun formatResumeTime(positionMs: Long): String {
 @OptIn(markerClass = [UnstableApi::class])
 private fun VideoSurface(
     player: ExoPlayer,
+    modifier: Modifier = Modifier,
 ) {
     AndroidView(
         factory = { context ->
@@ -538,7 +593,7 @@ private fun VideoSurface(
             it.player = player
             it.useController = false
         },
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
     )
 }
 
@@ -592,11 +647,11 @@ private fun PlayerTopBar(
                 overflow = TextOverflow.Ellipsis,
             )
             when {
-                isEpgLoading -> Text("Carregando guia…", color = BuroTextSecondary, fontSize = 13.sp)
+                isEpgLoading -> Text(stringResource(R.string.player_guide_loading), color = BuroTextSecondary, fontSize = 13.sp)
                 nowPlaying != null -> {
-                    Text("Agora · ${nowPlaying.title}", color = BuroTextPrimary.copy(alpha = 0.84f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(stringResource(R.string.player_now, nowPlaying.title), color = BuroTextPrimary.copy(alpha = 0.84f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     nextPlaying?.let { next ->
-                        Text("A seguir · ${next.title}", color = BuroTextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(stringResource(R.string.player_next, next.title), color = BuroTextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -640,7 +695,7 @@ private fun PlayerControls(
                     icon = {
                         Icon(
                             Icons.Default.FastRewind,
-                            contentDescription = "-10s",
+                            contentDescription = stringResource(R.string.player_seek_back_10),
                             tint = BuroTextPrimary,
                         )
                     },
@@ -658,7 +713,7 @@ private fun PlayerControls(
                         } else {
                             Icons.Default.PlayArrow
                         },
-                        contentDescription = null,
+                        contentDescription = stringResource(if (state.isPlaying) R.string.player_pause else R.string.player_play),
                         tint = BuroCanvas,
                         modifier = Modifier.size(34.dp),
                     )
@@ -671,7 +726,7 @@ private fun PlayerControls(
                     icon = {
                         Icon(
                             Icons.Default.FastForward,
-                            contentDescription = "+30s",
+                            contentDescription = stringResource(R.string.player_seek_forward_30),
                             tint = BuroTextPrimary,
                         )
                     },
@@ -682,7 +737,7 @@ private fun PlayerControls(
                 onClick = onCycleSpeed,
                 icon = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Speed, contentDescription = "Velocidade", tint = BuroTextPrimary, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.Speed, contentDescription = stringResource(R.string.player_speed), tint = BuroTextPrimary, modifier = Modifier.size(22.dp))
                         Text("${speed}x", color = BuroTextPrimary, fontSize = 10.sp)
                     }
                 },
@@ -690,7 +745,7 @@ private fun PlayerControls(
             if (canUsePictureInPicture) {
                 ControlButton(
                     onClick = onPictureInPicture,
-                    icon = { Icon(Icons.Default.PictureInPicture, contentDescription = "Picture-in-Picture", tint = BuroTextPrimary) },
+                    icon = { Icon(Icons.Default.PictureInPicture, contentDescription = stringResource(R.string.player_picture_in_picture), tint = BuroTextPrimary) },
                 )
             }
             ControlButton(
@@ -698,14 +753,14 @@ private fun PlayerControls(
                 icon = {
                     Icon(
                         if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                        contentDescription = if (isFullscreen) "Sair da tela cheia" else "Tela cheia",
+                        contentDescription = stringResource(if (isFullscreen) R.string.player_exit_fullscreen else R.string.player_enter_fullscreen),
                         tint = BuroTextPrimary,
                     )
                 },
             )
             ControlButton(
                 onClick = onLock,
-                icon = { Icon(Icons.Default.Lock, contentDescription = "Bloquear controles", tint = BuroTextPrimary) },
+                icon = { Icon(Icons.Default.Lock, contentDescription = stringResource(R.string.player_lock_controls), tint = BuroTextPrimary) },
             )
         }
 
@@ -717,9 +772,9 @@ private fun PlayerControls(
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.BrightnessHigh, contentDescription = "Brilho", tint = BuroTextPrimary)
+                Icon(Icons.Default.BrightnessHigh, contentDescription = stringResource(R.string.player_brightness), tint = BuroTextPrimary)
                 Slider(value = brightness, onValueChange = onBrightnessChanged, valueRange = 0.05f..1f, modifier = Modifier.weight(1f))
-                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Volume", tint = BuroTextPrimary)
+                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = stringResource(R.string.player_volume), tint = BuroTextPrimary)
                 Slider(value = volume, onValueChange = onVolumeChanged, valueRange = 0f..1f, modifier = Modifier.weight(1f))
             }
         }

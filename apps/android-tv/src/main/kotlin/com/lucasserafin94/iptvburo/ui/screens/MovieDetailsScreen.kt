@@ -164,7 +164,7 @@ internal fun MovieDetailsScreen(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Voltar",
+                            contentDescription = stringResource(R.string.common_back),
                             tint = BuroTextPrimary,
                         )
                     }

@@ -1,16 +1,16 @@
 {
   "manifestVersion": 1,
-  "updatedAt": "2026-08-02T03:25:00+02:00",
+  "updatedAt": "2026-08-09T12:00:00+02:00",
   "platforms": [
-    {"id":"android-tv","status":"TESTING","version":"0.2.0-alpha.1","build":"PASSING","hardware":"TV_PENDING","notes":["Media3 vertical works","Profiles, favorites and four locales implemented","GDD 4 runtime features pending"]},
-    {"id":"android-mobile","status":"TESTING","version":"0.2.0-alpha.1","build":"PASSING","hardware":"PARTIAL","notes":["Adaptive build installed on Android 15","Final visual pass blocked by locked device","Offline Vault hidden until entitlement exists"]},
+    {"id":"android-tv","status":"TESTING","version":"0.2.0-alpha.6","build":"PASSING","hardware":"TV_PENDING","notes":["Media3 video vertical passes automated tests","Profiles, favorites and four locales implemented","Physical TV and broad provider validation remain release gates"]},
+    {"id":"android-mobile","status":"TESTING","version":"0.2.0-alpha.6","build":"PASSING","hardware":"PARTIAL","notes":["Adaptive build installed on Android 15","Picture-in-picture uses the Android 12 transition contract","Offline Vault remains hidden until entitlement and device validation pass"]},
     {"id":"iphone-ipad","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":["GDD 5 and 6 documented"]},
     {"id":"apple-tv-macos","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":[]},
     {"id":"fire-tv","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":[]},
     {"id":"samsung-tizen","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":[]},
     {"id":"lg-webos","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":[]},
     {"id":"philips-titan","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":["Official toolchain access pending"]},
-    {"id":"windows","status":"PREVIEW","version":"0.2.0-alpha.1","build":"PASSING","hardware":"PARTIAL","notes":["Compose Desktop and MSI passing","JavaFX embedded player supports compatible H.264/AAC MP4 and HLS","Native broad-codec adapter remains a release gate"]},
-    {"id":"web-portal","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_APPLICABLE","notes":["Management only"]}
+    {"id":"windows","status":"TESTING","version":"2.0","build":"PASSING","hardware":"PARTIAL","notes":["Compose Desktop and MSI build pass","Bundled VLC 3.0.23 supports H.264, H.265/HEVC, AAC, MP4, MKV and HLS","Physical-device and provider coverage remain release gates"]},
+    {"id":"web-portal","status":"TESTING","version":null,"build":"PASSING","hardware":"NOT_APPLICABLE","notes":["Public product presentation and Stripe activation handoff are deployed","Account and device management are not implemented"]}
   ]
 }

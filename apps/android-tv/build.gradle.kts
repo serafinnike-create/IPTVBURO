@@ -63,6 +63,14 @@ android {
         compose = true
     }
 
+    // The app switches among PT-BR, EN, DE and IT at runtime. Keep every shipped locale in the
+    // base bundle so a language selected inside the app is never missing after an AAB install.
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
