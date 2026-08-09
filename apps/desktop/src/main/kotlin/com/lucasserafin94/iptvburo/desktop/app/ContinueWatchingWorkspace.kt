@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
+import com.lucasserafin94.iptvburo.desktop.ui.rememberRestoredListState
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.rememberScrollbarAdapter
@@ -90,7 +90,7 @@ fun ContinueWatchingWorkspace(
             return@Column
         }
 
-        val listState = rememberLazyListState()
+        val listState = rememberRestoredListState("continue-watching")
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
                 state = listState,

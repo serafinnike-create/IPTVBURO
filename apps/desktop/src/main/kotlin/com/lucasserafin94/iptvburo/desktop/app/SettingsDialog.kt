@@ -47,6 +47,7 @@ import com.lucasserafin94.iptvburo.desktop.playback.SubtitleColour
 import com.lucasserafin94.iptvburo.desktop.update.DESKTOP_VERSION
 import com.lucasserafin94.iptvburo.desktop.playback.SubtitleSize
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
@@ -110,10 +111,16 @@ fun SettingsDialog(
                     .fillMaxWidth(0.55f)
                     .heightIn(max = 760.dp)
                     .clip(BuroRadius.Large)
-                    .background(BuroColors.Surface)
-                    // A border now that nothing dims behind it: without the scrim the panel's edge
-                    // was the only thing separating it from the catalogue, and on a dark screen
-                    // that edge was invisible.
+                    // The canvas colour, not Surface.
+                    //
+                    // Surface is nine levels lighter than the background, which is right for a card
+                    // sitting on the canvas and wrong for a panel covering it: against a screen full
+                    // of bright posters the lighter grey read as washed out, as though the panel
+                    // were dimmed. Matching the canvas makes it read as part of the app.
+                    .background(BuroColors.Canvas)
+                    // The border does the separating now, and has to: with the panel the same
+                    // colour as what is behind it, the edge is the only thing that says where one
+                    // ends and the other begins.
                     .border(1.dp, BuroColors.Border, BuroRadius.Large)
                     // Consumes the click so pressing inside does not dismiss the dialog under it.
                     .clickable(enabled = false) {}
@@ -318,7 +325,26 @@ fun SettingsDialog(
                     // Deliberately the unfiltered list, not `xtreamCategories`: that one already has
                     // the hidden ones removed, so hiding a category also removed it from the switch
                     // that hid it, and there was then no way to bring it back.
-                    val categories = appState.allCategoriesForSettings
+                    // All three sections, not only whichever the catalogue happens to be showing.
+                    //
+                    // Reading the open section meant a user in Filmes could not reach a series
+                    // category at all: the switch for it was not on the screen, with nothing to say
+                    // why. Grouped by section so a list of several hundred rows stays navigable.
+                    val grouped =
+                        listOf(
+                            XtreamContentType.LIVE to text.live,
+                            XtreamContentType.MOVIE to text.movies,
+                            XtreamContentType.SERIES to text.series,
+                        ).map { (type, label) -> Triple(type, label, appState.categoriesForSettings(type)) }
+                            .filter { (_, _, list) -> list.isNotEmpty() }
+
+                    val categories = grouped.flatMap { (_, _, list) -> list }
+                    val hiddenByType = grouped.associate { (type, _, _) ->
+                        type to appState.hiddenCategoryIdsForSettings(type)
+                    }
+                    val lockedByType = grouped.associate { (type, _, _) ->
+                        type to appState.lockedCategoryIdsForSettings(type)
+                    }
                     if (categories.isNotEmpty()) {
                         item(key = "categories-header") {
                             HorizontalDivider(color = BuroColors.BorderSoft)
@@ -354,17 +380,35 @@ fun SettingsDialog(
                             }
                         }
                         if (categoriesExpanded) {
-                            items(categories, key = { category -> "cat-${category.providerId}" }) { category ->
-                                CategoryRow(
-                                    name = category.name,
-                                    hidden = category.providerId in appState.hiddenCategoryIds,
-                                    locked = appState.parentalLock.lockedCategoryIds.contains(category.providerId),
-                                    canLock = appState.hasParentalPin,
-                                    hideLabel = text.settingsText.categoryHide,
-                                    lockLabel = text.settingsText.categoryLock,
-                                    onHiddenChange = { hide -> appState.setCategoryHidden(category.providerId, hide) },
-                                    onLockedChange = { lock -> appState.setCategoryLocked(category.providerId, lock) },
-                                )
+                            grouped.forEach { (type, label, list) ->
+                                // A heading per section. Without one, several hundred rows from
+                                // three sections read as one undifferentiated list, and a category
+                                // named the same in films and series is indistinguishable.
+                                item(key = "cat-head-$type") {
+                                    Text(
+                                        text = "$label · ${list.size}",
+                                        color = BuroColors.Primary,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(top = BuroSpacing.Sm),
+                                    )
+                                }
+                                items(list, key = { category -> "cat-$type-${category.providerId}" }) { category ->
+                                    CategoryRow(
+                                        name = category.name,
+                                        hidden = category.providerId in hiddenByType[type].orEmpty(),
+                                        locked = category.providerId in lockedByType[type].orEmpty(),
+                                        canLock = appState.hasParentalPin,
+                                        hideLabel = text.settingsText.categoryHide,
+                                        lockLabel = text.settingsText.categoryLock,
+                                        onHiddenChange = { hide ->
+                                            appState.setCategoryHidden(category.providerId, hide, type)
+                                        },
+                                        onLockedChange = { lock ->
+                                            appState.setCategoryLocked(category.providerId, lock, type)
+                                        },
+                                    )
+                                }
                             }
                         }
                     }

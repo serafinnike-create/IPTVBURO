@@ -558,11 +558,8 @@ fun DesktopApp(
                     MultiviewOverlay(
                         tiles = appState.multiviewTiles(),
                         onClose = appState::closeMultiview,
-                        onRemoveTile = { index ->
-                            appState.multiviewChannelIds.getOrNull(index)?.let { providerId ->
-                                appState.toggleMultiviewChannel(providerId)
-                            }
-                        },
+                        onRemoveTile = appState::toggleMultiviewChannel,
+                        queuedCount = appState.multiviewChannelIds.size,
                     )
                 }
 
@@ -2390,19 +2387,29 @@ private fun DesktopProfileGate(
                                     style = MaterialTheme.typography.labelSmall,
                                 )
                             }
-                            Spacer(Modifier.height(BuroSpacing.Xxs))
-                            Row(
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
+                            Spacer(Modifier.height(BuroSpacing.Xs))
+                            // Stacked, not side by side.
+                            //
+                            // The tile is 130dp wide. Two buttons in a row left each about 55dp, so
+                            // "Confirmar?" wrapped onto three lines and stretched the tile out of
+                            // shape. One per line gives each the full width and keeps every tile the
+                            // same height whatever state it is in.
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
                                 // Editing is always available, including for the last profile: a
                                 // household with one profile is exactly who needs to change its
                                 // playlist without being made to create a second one first.
-                                TextButton(onClick = { onEditProfile(profile.id) }) {
+                                TextButton(
+                                    onClick = { onEditProfile(profile.id) },
+                                    contentPadding = PaddingValues(horizontal = BuroSpacing.Xs, vertical = 2.dp),
+                                ) {
                                     Text(
-                                        text = "✎  ${strings.settingsText.profileEdit}",
+                                        text = "✎ ${strings.settingsText.profileEdit}",
                                         color = BuroColors.TextMuted,
                                         style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1,
                                     )
                                 }
 
@@ -2419,6 +2426,7 @@ private fun DesktopProfileGate(
                                                 confirmingDelete = profile.id
                                             }
                                         },
+                                        contentPadding = PaddingValues(horizontal = BuroSpacing.Xs, vertical = 2.dp),
                                     ) {
                                         Text(
                                             text =
@@ -2434,6 +2442,11 @@ private fun DesktopProfileGate(
                                                     BuroColors.TextSubtle
                                                 },
                                             style = MaterialTheme.typography.labelSmall,
+                                            // One line always. The confirmation is longer than the
+                                            // label it replaces, and wrapping it is what deformed
+                                            // the tile.
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                         )
                                     }
                                 }

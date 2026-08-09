@@ -106,9 +106,21 @@ class VlcDesktopPlayer(
     @Volatile
     private var canvas: Canvas? = null
 
+    /** The loopback port this player holds, released on dispose so it can be handed out again. */
+    @Volatile
+    private var claimedPort: Int? = null
+
     fun createComponent(
         request: DesktopPlaybackRequest,
         onPointerActivity: () -> Unit = {},
+        /**
+         * A deliberate press on the picture, as distinct from mere activity.
+         *
+         * Multiview moves the sound to the tile that is clicked, and it cannot use
+         * [onPointerActivity] for that: activity fires on movement, so the audio would follow the
+         * pointer across the grid — worse than the control not working at all.
+         */
+        onClick: () -> Unit = {},
         onKey: (Int) -> Boolean = { false },
     ): JPanel {
         val canvas =
@@ -165,6 +177,13 @@ class VlcDesktopPlayer(
                         override fun mousePressed(event: java.awt.event.MouseEvent) {
                             requestFocusInWindow()
                             onPointerActivity()
+                            // A deliberate press, separate from mere activity.
+                            //
+                            // Multiview moves the sound to the tile that is clicked, and it cannot
+                            // use onPointerActivity for that: activity fires on movement, so the
+                            // audio would follow the pointer across the grid — worse than the
+                            // control not working at all.
+                            onClick()
                         }
 
                         override fun mouseEntered(event: java.awt.event.MouseEvent) = onPointerActivity()
@@ -275,11 +294,21 @@ class VlcDesktopPlayer(
         executeCommand("audio_track", mapOf("val" to trackId.toString()))
     }
 
-    /** Switches or disables subtitles. VLC uses -1 for off, which is why the "off" entry carries it. */
+    /**
+     * Switches or disables subtitles.
+     *
+     * VLC's HTTP interface takes `subtitle_track` with a `val`, and -1 turns them off — but only for
+     * a track it is managing. Captions burned into the video, and some broadcast teletext, are part
+     * of the picture as far as the decoder is concerned, and no command can remove them.
+     *
+     * Logged because "I pressed off and nothing happened" has two very different causes: the command
+     * never left, or it left and the stream ignored it. The response tells them apart.
+     */
     fun selectSubtitleTrack(trackId: Int) {
         // Same grace window as the audio switch: subtitles are re-attached to the running chain and
         // can produce the same brief `stopped`.
         switchingTrackUntil = System.currentTimeMillis() + TRACK_SWITCH_GRACE_MILLIS
+        println("[player] subtitle_track -> $trackId")
         executeCommand("subtitle_track", mapOf("val" to trackId.toString()))
     }
 
@@ -364,6 +393,9 @@ class VlcDesktopPlayer(
                 late
             }
         runCatching { leftBehind?.destroy() }
+        // Released only after both process sweeps. Releasing before destroy opened a small window
+        // where another tile could receive this port while the old VLC still owned it.
+        releaseClaimedPort()
     }
 
     /**
@@ -410,8 +442,11 @@ class VlcDesktopPlayer(
                             process = null
                             remote = null
                             previous
-                        }
+                    }
                     runCatching { orphan?.destroy() }
+                    // A retry allocates a new port. Keeping the failed attempt claimed leaked one
+                    // entry per retry and eventually made the in-process collision guard useless.
+                    releaseClaimedPort()
                     started.set(false)
                     snapshot =
                         snapshot.copy(
@@ -434,6 +469,7 @@ class VlcDesktopPlayer(
     private fun startVlc(canvas: Canvas, request: DesktopPlaybackRequest) {
         val executable = locateVlcExecutable() ?: error("Bundled VLC runtime was not found")
         val port = freeLoopbackPort()
+        claimedPort = port
         val password = randomPassword()
 
         // The native peer is not always realised by the time addNotify fires. When it is not, the
@@ -653,14 +689,50 @@ class VlcDesktopPlayer(
         runCatching {
             executor.execute {
                 runCatching { synchronized(processLock) { remote }?.command(command, parameters) }
+                    .onFailure { error ->
+                        // Only the command name and the exception type. A failure here used to be
+                        // entirely silent, which made "I pressed it and nothing happened"
+                        // indistinguishable from "the stream ignored it" — and the two need
+                        // opposite fixes.
+                        println("[player] command $command failed: ${error.javaClass.simpleName}")
+                    }
             }
         }
     }
 
     private fun locateVlcExecutable(): File? = findVlcExecutable()
 
-    private fun freeLoopbackPort(): Int =
-        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
+    /**
+     * A loopback port no other player in this process has just taken.
+     *
+     * Asking the OS for port 0 and closing the socket leaves a window between the answer and VLC
+     * binding it. One player at a time never noticed. Four starting together did: two could be
+     * handed the same port, the second VLC failed to bind its control interface, and its tile stayed
+     * black — which matched the report exactly, including that the number of black tiles varied
+     * between attempts.
+     *
+     * The claimed set closes that window from this process's side. It cannot help against another
+     * program taking the port, so the loop retries rather than trusting the first answer.
+     */
+    private fun freeLoopbackPort(): Int {
+        repeat(PORT_ATTEMPTS) {
+            val candidate = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
+            synchronized(claimedPorts) {
+                if (claimedPorts.add(candidate)) return candidate
+            }
+        }
+        // Every attempt collided, which should not happen. Returning the last answer is better than
+        // failing to start: a port clash produces one black tile, and giving up produces no player.
+        return ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
+    }
+
+    private fun releaseClaimedPort() {
+        val port = claimedPort ?: return
+        synchronized(claimedPorts) {
+            claimedPorts.remove(port)
+            if (claimedPort == port) claimedPort = null
+        }
+    }
 
     private fun randomPassword(): String {
         val bytes = ByteArray(24)
@@ -672,6 +744,17 @@ class VlcDesktopPlayer(
         /** Roughly two seconds in total; the peer normally arrives within a frame or two. */
         const val HANDLE_ATTEMPTS = 100
         const val HANDLE_POLL_MILLIS = 20L
+
+        /**
+         * Loopback ports handed out to players in this process and not yet released.
+         *
+         * Shared across instances on purpose: the collision this prevents only happens between
+         * players starting at the same moment, which is what multiview does four times over.
+         */
+        val claimedPorts = mutableSetOf<Int>()
+
+        /** Enough to clear a burst of four starting together; a collision is already unlikely. */
+        const val PORT_ATTEMPTS = 8
 
         const val VLC_VOLUME_MAX = 256
 
@@ -875,24 +958,58 @@ private fun JsonObject.readTracks(): PlaybackTracks {
                 ?: stream.string("Description")
                 ?: stream.string("Codec")
                 ?: "Faixa ${number + 1}"
-        // The key's number is the stream's position in the status document; the id the control
-        // interface expects back is the demuxer's, which starts at 1 rather than 0. Selecting by
-        // the key's number silently switched to the wrong track or to none at all.
-        val trackId = number + 1
-        when (stream.string("Type")?.lowercase()) {
-            "audio" -> audio += MediaTrack(trackId, label)
-            "subtitle", "subtitles" -> subtitles += MediaTrack(trackId, label)
+        // VLC's own remote-control interface lists the elementary-stream id beside each track.
+        // On the bundled VLC 3.0.23 those ids are the numbers in "Stream N" exactly. Adding one
+        // made Portuguese (Stream 1) select English (id 2), then made English send nonexistent id
+        // 3 and stop playback.
+        val trackId = number
+        // Matched loosely on purpose. VLC reports subtitle streams under several type names
+        // depending on the source — "Subtitle" from a file, "Teletext" and "DVB Subtitle" from a
+        // broadcast stream, which is most of what live TV carries. Matching only "subtitle" left
+        // live channels with visible captions and no control to turn them off, because as far as
+        // the player was concerned they had no subtitle tracks at all.
+        val type = stream.string("Type")?.lowercase().orEmpty()
+        when {
+            type == "audio" -> audio += MediaTrack(trackId, label)
+            type.contains("subtitle") || type.contains("teletext") ->
+                subtitles += MediaTrack(trackId, label)
             else -> Unit
         }
     }
+
+    // Whether anything is being displayed right now, whatever the stream list says.
+    //
+    // A broadcast can have a subtitle track selected that never appeared in the status document's
+    // stream list — the demuxer knows about it, the enumeration does not. Without this the player
+    // showed captions the viewer could see and offered no way to remove them.
+    val reportedSubtitle = longOrNull("subtitle_track")?.toInt()
+    val subtitleShowing = reportedSubtitle != null && reportedSubtitle >= 0
 
     return PlaybackTracks(
         audio = audio,
         // The off entry is synthesised: VLC exposes no track for "no subtitles", but it accepts -1
         // to turn them off, and without a row for it they could be switched on and never off.
-        subtitles = if (subtitles.isEmpty()) emptyList() else listOf(MediaTrack(-1, "Desligado")) + subtitles,
-        activeAudio = long("audio_track").toInt().takeIf { it >= 0 },
-        activeSubtitle = long("subtitle_track").toInt(),
+        //
+        // ## Captions this cannot remove
+        //
+        // Many live channels — sports especially — have the operator's captions burned into the
+        // picture upstream. To the decoder they are pixels, and no command removes them. Verified
+        // on a real channel: `subtitle_track -> -1` was sent, VLC accepted it without error, and the
+        // captions stayed.
+        //
+        // The off row is still offered whenever a track is selected, because the two cases are
+        // indistinguishable from here and the control is harmless when it has nothing to do. What is
+        // *not* done is offering it when no track exists at all: a button that visibly fails is
+        // worse than one that is absent, and on a burned-in stream that is the only honest state.
+        subtitles =
+            when {
+                subtitles.isNotEmpty() -> listOf(MediaTrack(-1, "Desligado")) + subtitles
+                subtitleShowing -> listOf(MediaTrack(-1, "Desligado"))
+                else -> emptyList()
+            },
+        // Stock VLC 3.0 status.json omits both fields. Missing is unknown, not track zero.
+        activeAudio = longOrNull("audio_track")?.toInt()?.takeIf { it >= 0 },
+        activeSubtitle = reportedSubtitle,
     )
 }
 
@@ -906,5 +1023,8 @@ internal data class PlaybackTracks(
 private fun JsonObject.string(name: String): String? = get(name)?.takeUnless { it.isJsonNull }?.asString
 
 private fun JsonObject.long(name: String): Long = get(name)?.takeUnless { it.isJsonNull }?.asLong ?: 0L
+
+private fun JsonObject.longOrNull(name: String): Long? =
+    get(name)?.takeUnless { it.isJsonNull }?.runCatching { asLong }?.getOrNull()
 
 private fun JsonObject.double(name: String): Double? = get(name)?.takeUnless { it.isJsonNull }?.asDouble

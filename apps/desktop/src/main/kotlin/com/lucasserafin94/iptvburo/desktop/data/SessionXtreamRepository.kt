@@ -492,6 +492,7 @@ class SessionXtreamRepository(
     fun libraryMatchCandidates(
         kidsMode: Boolean = false,
         lockedCategoryIds: Set<String> = emptySet(),
+        lockedCategoryIdsByContentType: Map<XtreamContentType, Set<String>> = emptyMap(),
     ): List<LibraryCandidate> {
         // Fetched if they are not in memory yet. Assinaturas can be the first screen a user opens,
         // and the film and series catalogues are only loaded when their own sections are visited —
@@ -515,13 +516,14 @@ class SessionXtreamRepository(
         val candidates = ArrayList<LibraryCandidate>(loaded.sumOf { (_, catalog) -> catalog.size })
         loaded.forEach { (contentType, catalog) ->
             val kind = if (contentType == XtreamContentType.SERIES) MatchKind.SERIES else MatchKind.MOVIE
+            val lockedForType = lockedCategoryIdsByContentType[contentType] ?: lockedCategoryIds
             val categoryNames =
                 synchronized(lock) {
                     categories[contentType].orEmpty().associate { category -> category.providerId to category.name }
                 }
             for (index in 0 until catalog.size) {
                 val item = catalog.itemAt(index)
-                if (item.categoryIds.any(lockedCategoryIds::contains)) continue
+                if (item.categoryIds.any(lockedForType::contains)) continue
                 if (kidsMode &&
                     !FamilyContentPolicy.isAllowedForKids(item.name, item.categoryIds.map(categoryNames::get))
                 ) {

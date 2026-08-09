@@ -46,6 +46,11 @@ class TrackIdMappingTest {
         val tracks = JsonParser.parseString(simple).asJsonObject.readTracksForTesting()
 
         assertEquals(listOf("Portuguese", "English"), tracks.audio.map { it.label })
+        assertEquals(
+            listOf(1, 2),
+            tracks.audio.map { it.id },
+            "these are the ids VLC 3.0.23 reports through its own atrack command",
+        )
     }
 
     /**
@@ -93,10 +98,7 @@ class TrackIdMappingTest {
 
         assertEquals(2, tracks.audio.size, "was ${tracks.audio}")
         assertEquals(listOf("Portuguese", "English"), tracks.audio.map { it.label })
-        assertTrue(
-            tracks.audio.all { track -> track.id > 0 },
-            "an id of zero or less is not a track VLC will accept: ${tracks.audio}",
-        )
+        assertEquals(listOf(2, 3), tracks.audio.map { it.id })
     }
 
     /** Keys out of order must not reorder the tracks: JsonObject makes no ordering promise. */
@@ -166,5 +168,116 @@ class TrackIdMappingTest {
             """.trimIndent()
 
         assertTrue(JsonParser.parseString(videoOnly).asJsonObject.readTracksForTesting().audio.isEmpty())
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Turning subtitles off
+    // -------------------------------------------------------------------------------------------
+
+    /**
+     * Broadcast subtitle types are recognised, not only "Subtitle".
+     *
+     * A live channel carries teletext or DVB subtitles, which VLC reports under those names. Matching
+     * only "subtitle" left a viewer reading captions on screen while the player believed the stream
+     * had no subtitle tracks and offered no control at all.
+     */
+    @Test
+    fun `teletext and dvb subtitles are recognised`() {
+        val broadcast =
+            """
+            {
+              "audio_track": 1,
+              "subtitle_track": 2,
+              "information": {
+                "category": {
+                  "Stream 0": {"Type": "Video", "Codec": "h264"},
+                  "Stream 1": {"Type": "Audio", "Language": "Portuguese"},
+                  "Stream 2": {"Type": "Teletext", "Language": "Portuguese"},
+                  "Stream 3": {"Type": "DVB Subtitle", "Language": "English"}
+                }
+              }
+            }
+            """.trimIndent()
+
+        val tracks = JsonParser.parseString(broadcast).asJsonObject.readTracksForTesting()
+
+        // Both, plus the synthesised off row.
+        assertEquals(3, tracks.subtitles.size)
+        assertEquals(-1, tracks.subtitles.first().id, "off must come first")
+    }
+
+    /**
+     * Subtitles that are on but not enumerated can still be turned off.
+     *
+     * A broadcast can have a subtitle track selected that never appears in the status document's
+     * stream list. Without an off row, the viewer sees captions and has no way to remove them —
+     * which is exactly how this was reported.
+     */
+    @Test
+    fun `an active subtitle always offers a way off`() {
+        val showingButUnlisted =
+            """
+            {
+              "audio_track": 1,
+              "subtitle_track": 4,
+              "information": {
+                "category": {
+                  "Stream 0": {"Type": "Video", "Codec": "h264"},
+                  "Stream 1": {"Type": "Audio", "Language": "Portuguese"}
+                }
+              }
+            }
+            """.trimIndent()
+
+        val tracks = JsonParser.parseString(showingButUnlisted).asJsonObject.readTracksForTesting()
+
+        assertEquals(1, tracks.subtitles.size, "the off row must exist")
+        assertEquals(-1, tracks.subtitles.single().id)
+    }
+
+    /**
+     * Nothing showing and nothing listed offers nothing.
+     *
+     * An off row on a stream with no subtitles at all is a control that does nothing, which makes
+     * the player look as though something is broken.
+     */
+    @Test
+    fun `no subtitles anywhere offers no control`() {
+        val none =
+            """
+            {
+              "audio_track": 1,
+              "subtitle_track": -1,
+              "information": {
+                "category": {
+                  "Stream 0": {"Type": "Video", "Codec": "h264"},
+                  "Stream 1": {"Type": "Audio", "Language": "Portuguese"}
+                }
+              }
+            }
+            """.trimIndent()
+
+        assertTrue(JsonParser.parseString(none).asJsonObject.readTracksForTesting().subtitles.isEmpty())
+    }
+
+    @Test
+    fun `missing active-track fields stay unknown rather than becoming track zero`() {
+        val stockVlcStatus =
+            """
+            {
+              "information": {
+                "category": {
+                  "Stream 0": {"Type": "Video", "Codec": "h264"},
+                  "Stream 1": {"Type": "Audio", "Language": "Portuguese"}
+                }
+              }
+            }
+            """.trimIndent()
+
+        val tracks = JsonParser.parseString(stockVlcStatus).asJsonObject.readTracksForTesting()
+
+        assertEquals(null, tracks.activeAudio)
+        assertEquals(null, tracks.activeSubtitle)
+        assertTrue(tracks.subtitles.isEmpty(), "an omitted field must not invent active subtitles")
     }
 }

@@ -281,12 +281,12 @@ fun XtreamDailyHome(
                         val heroItem = rotation.getOrNull(heroIndex) ?: snapshot.hero
                         // Fetched as the banner reaches each title rather than all five up front:
                         // four of them may never be seen if the user moves on.
-                        LaunchedEffect(heroItem?.providerId) {
+                        LaunchedEffect(heroItem?.contentType, heroItem?.providerId) {
                             heroItem?.let(appState::loadHeroSynopsis)
                         }
                         DailyHero(
                             item = heroItem,
-                            synopsis = heroItem?.providerId?.let { id -> appState.heroSynopsis[id] },
+                            synopsis = heroItem?.let(appState::heroSynopsisFor),
                             date = snapshot.date,
                             metrics = metrics,
                             text = text,

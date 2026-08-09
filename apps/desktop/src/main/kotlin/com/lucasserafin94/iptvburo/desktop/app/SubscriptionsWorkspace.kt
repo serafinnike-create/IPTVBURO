@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.rememberLazyListState
+import com.lucasserafin94.iptvburo.desktop.ui.rememberRestoredListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.MaterialTheme
@@ -314,7 +315,7 @@ private fun ProviderShelves(
         return
     }
 
-    val listState = rememberLazyListState()
+    val listState = rememberRestoredListState("subscriptions")
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(

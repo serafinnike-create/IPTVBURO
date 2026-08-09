@@ -138,6 +138,7 @@ fun BuroInteractiveSurface(
 fun BuroInteractiveRow(
     onClick: () -> Unit,
     selected: Boolean,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(10.dp),
     contentDescription: String? = null,
@@ -169,9 +170,10 @@ fun BuroInteractiveRow(
                 .clip(shape)
                 .background(surfaceColor)
                 .border(1.dp, BuroColors.Focus.copy(alpha = ringAlpha), shape)
-                .hoverable(interactionSource)
-                .focusable(interactionSource = interactionSource)
+                .hoverable(interactionSource, enabled = enabled)
+                .focusable(enabled = enabled, interactionSource = interactionSource)
                 .clickable(
+                    enabled = enabled,
                     interactionSource = interactionSource,
                     indication = null,
                     onClick = onClick,

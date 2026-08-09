@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import com.lucasserafin94.iptvburo.desktop.ui.rememberRestoredGridState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -141,7 +141,7 @@ fun HistoryGallery(
             return@Column
         }
 
-        val gridState = rememberLazyGridState()
+        val gridState = rememberRestoredGridState("history")
         Box(modifier = Modifier.weight(1f)) {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 150.dp),

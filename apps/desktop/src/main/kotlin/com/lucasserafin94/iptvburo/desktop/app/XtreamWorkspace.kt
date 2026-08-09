@@ -33,12 +33,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import com.lucasserafin94.iptvburo.desktop.playback.MULTIVIEW_MAX_TILES
+import com.lucasserafin94.iptvburo.desktop.ui.rememberRestoredGridState
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.draw.alpha
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -318,6 +320,35 @@ fun XtreamWorkspace(
 // Toolbar
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * The toolbar, composed with only what a multiview test needs.
+ *
+ * Exists because reading the wiring proved nothing: every link looked correct while the button was
+ * demonstrably not working for the user. A test that composes the real control and clicks it tells a
+ * broken chain apart from a button nobody can find, which four rounds of reasoning did not.
+ */
+@Composable
+internal fun XtreamToolbarForTesting(
+    selectedType: XtreamContentType,
+    multiviewCount: Int,
+    onOpenMultiview: () -> Unit,
+) {
+    XtreamToolbar(
+        selectedType = selectedType,
+        query = "",
+        status = XtreamStatus.Disconnected,
+        onQueryChange = {},
+        onTypeSelected = {},
+        onDisconnect = {},
+        selectedYear = null,
+        onYearSelected = {},
+        minimumRating = null,
+        onMinimumRatingSelected = {},
+        multiviewCount = multiviewCount,
+        onOpenMultiview = onOpenMultiview,
+    )
+}
+
 @Composable
 private fun XtreamToolbar(
     selectedType: XtreamContentType,
@@ -387,7 +418,43 @@ private fun XtreamToolbar(
             Spacer(Modifier.weight(1f))
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            // Scrollable, because a Row does not shrink children that carry no weight: once the
+            // filters, the pickers and this chip together exceed the toolbar's width, whatever sits
+            // last is simply laid out past the edge of the window and cannot be seen or clicked.
+            //
+            // That is what hid multiview. Every test passed — in a test there is nothing competing
+            // for the space — while on a real screen the button was measured off the edge. Four
+            // rounds of reasoning about the wiring found four other bugs and never this one.
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
+            // Multiview first, before the filters.
+            //
+            // Last in the row meant first to be pushed off. It is also the only control here that
+            // opens a different mode rather than narrowing a list, so it belongs at the start.
+            if (selectedType == XtreamContentType.LIVE) {
+                FilterChip(
+                    label =
+                        if (multiviewCount > 0) {
+                            "▦  ${text.settingsText.multiviewOpen} ($multiviewCount)"
+                        } else {
+                            "▦  ${text.settingsText.multiviewHint}"
+                        },
+                    selected = multiviewCount > 0,
+                    onClick = onOpenMultiview,
+                )
+                if (multiviewCount > 0) {
+                    Spacer(Modifier.width(BuroSpacing.Xs))
+                    FilterChip(
+                        label = text.settingsText.multiviewClear,
+                        selected = false,
+                        onClick = onClearMultiview,
+                    )
+                }
+                Spacer(Modifier.width(BuroSpacing.Md))
+            }
+
             if (selectedType != XtreamContentType.LIVE) {
                 val currentYear = Year.now().value
                 Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
@@ -423,20 +490,6 @@ private fun XtreamToolbar(
             // Multiview, live only and only once something is queued. Shown as a count rather than
             // a plain button so the toolbar says how many channels are waiting — with a cap of
             // four, "3 canais" is the whole state.
-            if (selectedType == XtreamContentType.LIVE && multiviewCount > 0) {
-                FilterChip(
-                    label = "▦  ${text.settingsText.multiviewOpen} ($multiviewCount)",
-                    selected = true,
-                    onClick = onOpenMultiview,
-                )
-                Spacer(Modifier.width(BuroSpacing.Xs))
-                FilterChip(
-                    label = text.settingsText.multiviewClear,
-                    selected = false,
-                    onClick = onClearMultiview,
-                )
-            }
-            Spacer(Modifier.weight(1f))
         }
     }
 }
@@ -695,7 +748,18 @@ private fun XtreamCatalogGrid(
     val page = appState.xtreamPage
     val live = appState.xtreamContentType == XtreamContentType.LIVE
     val gutter = if (wide) BuroSpacing.GutterWide else BuroSpacing.GutterCompact
-    val gridState = rememberLazyGridState()
+    // Resumes where this list was left.
+    //
+    // Opening a title removes this grid from the composition, and a plain rememberLazyGridState goes
+    // with it — so pressing back landed at the top, after however far the user had scrolled. This is
+    // the app's most repeated action, so that cost was paid constantly.
+    //
+    // Keyed on content type, category and search so that films, series and live each keep their own
+    // place: one shared key would restore the film offset onto the series grid, which looks
+    // deliberate and is worse than starting at the top.
+    val gridState = rememberRestoredGridState(
+        key = "catalog:${appState.xtreamContentType}:${appState.selectedCategoryId.orEmpty()}:${appState.searchQuery}",
+    )
     val gridFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     // Focus goes to the grid when the page opens, so the arrow keys work without a click first.
@@ -824,6 +888,22 @@ private fun XtreamCatalogGrid(
                         selected = item.providerId == appState.selectedXtreamItem?.providerId,
                         onClick = { onItemSelected(item.providerId) },
                         layout = appState.catalogLayout,
+                        // Adding to multiview, from the grid.
+                        //
+                        // It used to live only inside a channel's detail page, which meant the
+                        // feature could not be found: the toolbar chip that opens the grid appears
+                        // only once something is queued, so a user had to open a channel, notice a
+                        // button they were not looking for, go back, and repeat. Nobody does that.
+                        onToggleMultiview =
+                            if (DesktopPlatformCapabilities.current.multiviewSupported &&
+                                item.contentType == XtreamContentType.LIVE
+                            ) {
+                                { appState.toggleMultiviewChannel(item.providerId) }
+                            } else {
+                                null
+                            },
+                        inMultiview = item.providerId in appState.multiviewChannelIds,
+                        multiviewFull = appState.multiviewChannelIds.size >= MULTIVIEW_MAX_TILES,
                     )
                 }
             }
@@ -892,6 +972,10 @@ private fun XtreamCatalogCard(
     selected: Boolean,
     onClick: () -> Unit,
     layout: CatalogLayout = CatalogLayout.POSTER,
+    /** Null when this card cannot be added to multiview — anything that is not a live channel. */
+    onToggleMultiview: (() -> Unit)? = null,
+    inMultiview: Boolean = false,
+    multiviewFull: Boolean = false,
 ) {
     val live = item.contentType == XtreamContentType.LIVE
     val title = item.name.editorialTitle()
@@ -1013,6 +1097,57 @@ private fun XtreamCatalogCard(
                             .alpha(if (state.active) 1f else 0f)
                             .background(BuroScrim.cardFooter()),
                 )
+
+                // Add to multiview, on the card itself.
+                //
+                // Top left, opposite the rating. Always visible once a channel is queued so the set
+                // can be seen at a glance across the grid; otherwise only on hover, because a
+                // permanent icon on every tile is clutter for the majority who never use this.
+                if (onToggleMultiview != null && (state.active || inMultiview)) {
+                    BuroInteractiveRow(
+                        onClick = onToggleMultiview,
+                        selected = inMultiview,
+                        enabled = inMultiview || !multiviewFull,
+                        shape = BuroRadius.Pill,
+                        contentDescription =
+                            if (inMultiview) {
+                                text.settingsText.multiviewRemove
+                            } else if (multiviewFull) {
+                                text.settingsText.multiviewFull
+                            } else {
+                                text.settingsText.multiviewAdd
+                            },
+                        modifier = Modifier.align(Alignment.TopStart).padding(BuroSpacing.Xs),
+                    ) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .clip(BuroRadius.Pill)
+                                    .background(
+                                        if (inMultiview) {
+                                            BuroColors.Primary
+                                        } else {
+                                            BuroColors.Canvas.copy(alpha = 0.78f)
+                                        },
+                                    )
+                                    .padding(horizontal = BuroSpacing.Xs, vertical = 4.dp),
+                        ) {
+                            Text(
+                                text = "▦",
+                                // Dimmed rather than hidden when four are already queued: a control
+                                // that disappears looks broken, while one that is plainly inactive
+                                // says the limit has been reached.
+                                color =
+                                    when {
+                                        inMultiview -> BuroColors.OnPrimary
+                                        multiviewFull -> BuroColors.TextSubtle
+                                        else -> BuroColors.Text
+                                    },
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                    }
+                }
             }
             Spacer(Modifier.height(BuroSpacing.Xs))
             Text(

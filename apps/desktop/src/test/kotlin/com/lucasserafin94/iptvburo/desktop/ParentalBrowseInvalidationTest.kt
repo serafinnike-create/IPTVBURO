@@ -69,7 +69,7 @@ class ParentalBrowseInvalidationTest {
 
             // The first observation after the setter must already be safe. The asynchronous rebuild
             // may have completed, so either an empty surface or a newly filtered one is acceptable.
-            assertProtectedCategoryAbsent(state, NEUTRAL_RESTRICTED)
+            assertProtectedCategoryAbsent(state, NEUTRAL_RESTRICTED, XtreamContentType.MOVIE)
             assertTrue(state.movieDetailsStatus is MovieDetailsStatus.Idle)
             assertTrue(state.continueWatchingEntries.none { NEUTRAL_RESTRICTED in it.item.categoryIds })
             assertTrue(state.historyEntries.none { NEUTRAL_RESTRICTED in it.item.categoryIds })
@@ -77,11 +77,18 @@ class ParentalBrowseInvalidationTest {
             // Keep observing while the background page/Home rebuild runs: an older request must not
             // be able to republish the stale title between the clear and the final safe snapshot.
             repeat(40) {
-                assertProtectedCategoryAbsent(state, NEUTRAL_RESTRICTED)
+                assertProtectedCategoryAbsent(state, NEUTRAL_RESTRICTED, XtreamContentType.MOVIE)
                 delay(5)
             }
             waitForRefresh(state)
-            assertProtectedCategoryAbsent(state, NEUTRAL_RESTRICTED)
+            assertProtectedCategoryAbsent(state, NEUTRAL_RESTRICTED, XtreamContentType.MOVIE)
+            val refreshedHome = assertIs<DailyHomeStatus.Loaded>(state.dailyHomeStatus).snapshot
+            assertTrue(
+                allHomeItems(refreshedHome).any { item ->
+                    item.contentType == XtreamContentType.SERIES && NEUTRAL_RESTRICTED in item.categoryIds
+                },
+                "locking a movie category must not lock a series category that reuses its id",
+            )
         }
 
     @Test
@@ -190,13 +197,16 @@ class ParentalBrowseInvalidationTest {
     private fun assertProtectedCategoryAbsent(
         state: DesktopAppState,
         categoryId: String,
+        contentType: XtreamContentType? = null,
     ) {
         assertTrue(state.xtreamPage.items.none { categoryId in it.categoryIds }, "page=${state.xtreamPage.items.map { it.name }}")
         assertTrue(state.selectedXtreamItem?.categoryIds?.contains(categoryId) != true)
         val home = state.dailyHomeStatus as? DailyHomeStatus.Loaded
         if (home != null) {
             assertTrue(
-                allHomeItems(home.snapshot).none { categoryId in it.categoryIds },
+                allHomeItems(home.snapshot).none { item ->
+                    (contentType == null || item.contentType == contentType) && categoryId in item.categoryIds
+                },
                 "home=${allHomeItems(home.snapshot).map { it.name }}",
             )
         }

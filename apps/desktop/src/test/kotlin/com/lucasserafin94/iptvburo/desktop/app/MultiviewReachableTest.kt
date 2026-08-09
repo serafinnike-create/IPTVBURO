@@ -68,8 +68,15 @@ class MultiviewReachableTest {
     @Test
     fun `an empty multiview explains itself instead of vanishing`() {
         assertTrue(
-            overlaySource.contains("MultiviewUnavailable(onClose = onClose)"),
+            overlaySource.contains("MultiviewUnavailable(onClose = onClose"),
             "an empty overlay must render an explanation",
+        )
+        // And the right one of two. Telling somebody who queued nothing that "the channels did not
+        // respond" is nonsense, and telling somebody whose channels failed to "choose channels
+        // first" sends them to do something they already did.
+        assertTrue(
+            overlaySource.contains("nothingQueued = queuedCount == 0"),
+            "the two empty cases must be told apart",
         )
         assertFalse(
             Regex("""if \(tiles\.isEmpty\(\)\) return\s*\n""").containsMatchIn(overlaySource),
@@ -79,13 +86,21 @@ class MultiviewReachableTest {
 
     @Test
     fun `dropped tiles are logged`() {
-        // When every channel drops, the overlay is empty and the cause is invisible. Only the
-        // reason is logged, never a stream URL — those carry the subscription's credentials.
+        // When every channel drops, the overlay is empty and the cause is invisible.
         assertTrue(stateSource.contains("multiview: channel no longer in catalogue"))
         assertTrue(stateSource.contains("multiview: could not resolve a stream"))
 
+        // Counts may be interpolated; anything that could carry an address may not. A stream URL in
+        // a log the customer can read and send on hands over the subscription's credentials, which
+        // is the one thing these lines must never do.
+        val forbidden = listOf("uri", "url", "stream", "request", "providerId", "streamUri")
         Regex("""println\("multiview: [^"]*"\)""").findAll(stateSource).forEach { match ->
-            assertFalse(match.value.contains("$"), "a multiview log must not interpolate anything")
+            forbidden.forEach { term ->
+                assertFalse(
+                    match.value.contains("$$term", ignoreCase = true),
+                    "a multiview log interpolates $term: ${match.value}",
+                )
+            }
         }
     }
 
@@ -109,13 +124,57 @@ class MultiviewReachableTest {
 
         // Four films playing at once is not a thing anybody wants, and four decoders is the
         // heaviest thing this app can be asked to do.
+        //
+        // The toolbar button is no longer gated on a count — it appears whenever the live tab is
+        // open, because gating it meant nothing announced the feature until the user had already
+        // found it elsewhere. Still live-only.
         assertTrue(
-            workspace.contains("selectedType == XtreamContentType.LIVE && multiviewCount > 0"),
+            workspace.contains("if (selectedType == XtreamContentType.LIVE) {"),
             "the open button must be live-only",
         )
         assertTrue(
-            workspace.contains("item.contentType == XtreamContentType.LIVE && onToggleMultiview != null"),
+            workspace.contains("item.contentType == XtreamContentType.LIVE"),
             "the add button must be live-only",
+        )
+    }
+
+    /**
+     * The feature announces itself.
+     *
+     * Every piece worked, and nobody could use it: the only way in was a button inside a channel's
+     * detail page, and the toolbar chip that opens the grid appeared only once something had already
+     * been queued. A user had to already know multiview existed in order to find it.
+     */
+    @Test
+    fun `multiview is discoverable without opening a channel`() {
+        val workspace =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/XtreamWorkspace.kt")
+                .readText()
+
+        // On the card, in the grid.
+        assertTrue(
+            Regex("""XtreamCatalogCard\([\s\S]{0,1200}onToggleMultiview =""").containsMatchIn(workspace),
+            "the grid card must offer adding to multiview",
+        )
+        // And named in the toolbar before anything is queued.
+        assertTrue(workspace.contains("multiviewHint"), "the toolbar must say what this is")
+    }
+
+    /**
+     * Opening with nothing queued explains rather than doing nothing.
+     *
+     * A button that does not respond teaches nothing. The overlay says channels must be added.
+     */
+    @Test
+    fun `opening an empty multiview still opens`() {
+        val body = stateSource.substringAfter("fun openMultiview()").substringBefore("\n    fun ")
+
+        assertTrue(body.contains("multiviewOpen = true"), "openMultiview must open something")
+        // The guard that made an empty press do nothing at all, teaching the user nothing.
+        assertFalse(
+            Regex("""if \([^)]*(isNotEmpty\(\)|queued > 0)[^)]*\) multiviewOpen = true""")
+                .containsMatchIn(body),
+            "opening must not be conditional on something already being queued",
         )
     }
 
@@ -137,6 +196,19 @@ class MultiviewReachableTest {
     @Test
     fun `only one tile has audio`() {
         assertTrue(overlaySource.contains("controller.setVolume(if (hasAudio) 1.0 else 0.0)"))
-        assertTrue(overlaySource.contains("onFocus = { audioIndex = index }"), "clicking moves sound")
+        assertTrue(
+            overlaySource.contains("requestedAudioProviderId = tile.providerId"),
+            "clicking must move sound by stable channel identity",
+        )
+    }
+
+    @Test
+    fun `removing a displayed tile uses its identity rather than its filtered index`() {
+        assertTrue(overlaySource.contains("onRemoveTile: (String) -> Unit"))
+        assertTrue(overlaySource.contains("onRemoveTile(tile.providerId)"))
+        assertFalse(
+            appSource.contains("multiviewChannelIds.getOrNull(index)"),
+            "an unresolvable queued channel shifts indexes and would remove the wrong visible tile",
+        )
     }
 }

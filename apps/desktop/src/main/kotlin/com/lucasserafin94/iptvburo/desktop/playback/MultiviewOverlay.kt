@@ -40,6 +40,8 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 
 /** One occupied cell of the grid. */
 data class MultiviewTile(
+    /** The queued identity. Titles are not unique and failed tiles make list indexes unstable. */
+    val providerId: String,
     val request: DesktopPlaybackRequest,
     val title: String,
 )
@@ -70,7 +72,9 @@ data class MultiviewTile(
 fun MultiviewOverlay(
     tiles: List<MultiviewTile>,
     onClose: () -> Unit,
-    onRemoveTile: (Int) -> Unit,
+    onRemoveTile: (String) -> Unit,
+    /** How many channels the user queued, which may exceed [tiles] when some failed to resolve. */
+    queuedCount: Int = tiles.size,
 ) {
     // An empty overlay says so rather than vanishing.
     //
@@ -79,16 +83,22 @@ fun MultiviewOverlay(
     // URL cannot be resolved, which is a real failure the customer needs told about — not one to
     // hide by rendering nothing.
     if (tiles.isEmpty()) {
-        MultiviewUnavailable(onClose = onClose)
+        // Two different empties, and telling them apart matters. Nothing queued is a user who has
+        // not learnt how yet and needs telling; queued but unplayable is a genuine failure. Showing
+        // "the channels did not respond" to somebody who chose none would be nonsense.
+        MultiviewUnavailable(onClose = onClose, nothingQueued = queuedCount == 0)
         return
     }
-    var audioIndex by remember(tiles.size) { mutableStateOf(0) }
+    var requestedAudioProviderId by remember { mutableStateOf<String?>(null) }
+    val audioProviderId =
+        requestedAudioProviderId?.takeIf { selected -> tiles.any { it.providerId == selected } }
+            ?: tiles.first().providerId
 
     Box(modifier = Modifier.fillMaxSize().background(BuroColors.Canvas)) {
         Column(modifier = Modifier.fillMaxSize()) {
             MultiviewBar(
                 count = tiles.size,
-                audioTitle = tiles.getOrNull(audioIndex)?.title.orEmpty(),
+                audioTitle = tiles.firstOrNull { it.providerId == audioProviderId }?.title.orEmpty(),
                 onClose = onClose,
             )
 
@@ -118,15 +128,13 @@ fun MultiviewOverlay(
                                     continue
                                 }
                                 val tile = tiles[index]
-                                // Live channels carry no progress identity, so the title is the
-                                // stable key here. It is what distinguishes one tile from another.
-                                key(tile.request.progressIdentity?.contentId ?: tile.title) {
+                                key(tile.providerId) {
                                     MultiviewCell(
                                         tile = tile,
-                                        hasAudio = index == audioIndex,
+                                        hasAudio = tile.providerId == audioProviderId,
                                         modifier = Modifier.weight(1f).fillMaxHeight(),
-                                        onFocus = { audioIndex = index },
-                                        onRemove = { onRemoveTile(index) },
+                                        onFocus = { requestedAudioProviderId = tile.providerId },
+                                        onRemove = { onRemoveTile(tile.providerId) },
                                     )
                                 }
                             }
@@ -169,7 +177,22 @@ private fun MultiviewCell(
             ),
     ) {
         SwingPanel(
-            factory = { controller.createComponent(tile.request) },
+            factory = {
+                controller.createComponent(
+                    request = tile.request,
+                    // Clicking the picture moves the sound here.
+                    //
+                    // The only control was a small button in the header strip, and it did not work:
+                    // a SwingPanel is an AWT component that consumes pointer events before Compose
+                    // sees them, so a Compose click target sharing that space never fires. The canvas
+                    // inside already reports its own clicks, which is the one path that does arrive.
+                    //
+                    // Clicking the whole tile is also what the feature wants: somebody watching four
+                    // matches wants the sound from the one they are looking at, not from a strip they
+                    // have to aim at.
+                    onClick = onFocus,
+                )
+            },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -287,7 +310,7 @@ private fun MultiviewBar(
  * had failed or never existed.
  */
 @Composable
-private fun MultiviewUnavailable(onClose: () -> Unit) {
+private fun MultiviewUnavailable(onClose: () -> Unit, nothingQueued: Boolean) {
     val text = strings
     Box(
         modifier = Modifier.fillMaxSize().background(BuroColors.Canvas),
@@ -295,14 +318,14 @@ private fun MultiviewUnavailable(onClose: () -> Unit) {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = text.settingsText.multiviewUnavailable,
+                text = if (nothingQueued) text.settingsText.multiviewEmpty else text.settingsText.multiviewUnavailable,
                 color = BuroColors.Text,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(BuroSpacing.Xs))
             Text(
-                text = text.settingsText.multiviewUnavailableHint,
+                text = if (nothingQueued) text.settingsText.multiviewEmptyHint else text.settingsText.multiviewUnavailableHint,
                 color = BuroColors.TextMuted,
                 style = MaterialTheme.typography.bodyMedium,
             )
