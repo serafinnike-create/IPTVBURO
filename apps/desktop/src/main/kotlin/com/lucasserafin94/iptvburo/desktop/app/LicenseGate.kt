@@ -92,6 +92,18 @@ fun LicenseGate(
     /** Posters remembered from the last catalogue load; decorative and never interactive. */
     backdropPosters: List<String> = emptyList(),
     /**
+     * Loads the public price once. Injectable so layout tests never depend on production network
+     * timing; the default keeps the installed application's behaviour unchanged.
+     */
+    priceLoader: suspend () -> PriceQuote? = {
+        withContext(Dispatchers.IO) { client.price() }
+    },
+    /**
+     * The poster wall never affects foreground measurement. Tests may disable it to avoid an
+     * infinite decorative animation keeping the Compose test clock busy.
+     */
+    renderBackdrop: Boolean = true,
+    /**
      * How to go back, or null when there is nowhere to go back to.
      *
      * The same screen serves two situations. Opened from the countdown while a trial is running, it
@@ -129,7 +141,7 @@ fun LicenseGate(
     // a moment with no number at all.
     var quote by remember { mutableStateOf<PriceQuote?>(null) }
     LaunchedEffect(Unit) {
-        quote = withContext(Dispatchers.IO) { client.price() }
+        quote = priceLoader()
     }
 
     // The confirmation fades by itself. A permanent "Copied" beside the code would still be there
@@ -148,7 +160,9 @@ fun LicenseGate(
         // The lock screen is still part of the entertainment product, not a billing form pasted on
         // a black window. The same slow wall used during startup keeps visual continuity while its
         // own scrim and this panel preserve the contrast of the price, device code and QR plate.
-        SplashPosterWall(posters = backdropPosters)
+        if (renderBackdrop) {
+            SplashPosterWall(posters = backdropPosters)
+        }
 
         // Two layers, and the split is what makes this work at all.
         //

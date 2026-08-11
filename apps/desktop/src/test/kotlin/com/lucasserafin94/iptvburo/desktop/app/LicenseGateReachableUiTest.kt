@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.desktop.app
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import com.lucasserafin94.iptvburo.desktop.license.LicenseClient
 import com.lucasserafin94.iptvburo.desktop.license.LicenseStatus
+import com.lucasserafin94.iptvburo.desktop.license.PriceQuote
 import com.lucasserafin94.iptvburo.desktop.ui.BuroDesktopTheme
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.LocalDesktopStrings
@@ -47,6 +49,25 @@ class LicenseGateReachableUiTest {
         )
 
     /**
+     * Exercises the completed payment layout without a production network request or an infinite
+     * decorative animation. A fixed price is the taller, harder layout and therefore the useful
+     * state for the laptop-height assertion.
+     */
+    @Composable
+    private fun DeterministicLicenseGate(onDismiss: (() -> Unit)? = null) {
+        LicenseGate(
+            status = blockedStatus(),
+            client = LicenseClient(),
+            onRechecked = {},
+            onQuit = {},
+            languageTag = "pt-BR",
+            priceLoader = { PriceQuote(label = "€9,90", currency = "EUR", termDays = 730) },
+            renderBackdrop = false,
+            onDismiss = onDismiss,
+        )
+    }
+
+    /**
      * The route to the code field fits a laptop window without scrolling.
      *
      * This is the assertion the earlier tests were missing. They composed at the test harness's own
@@ -62,13 +83,7 @@ class LicenseGateReachableUiTest {
             BuroDesktopTheme {
                 CompositionLocalProvider(LocalDesktopStrings provides strings) {
                     Box(Modifier.size(width = 1280.dp, height = 780.dp)) {
-                        LicenseGate(
-                            status = blockedStatus(),
-                            client = LicenseClient(),
-                            onRechecked = {},
-                            onQuit = {},
-                            languageTag = "pt-BR",
-                        )
+                        DeterministicLicenseGate()
                     }
                 }
             }
@@ -91,13 +106,7 @@ class LicenseGateReachableUiTest {
         setContent {
             BuroDesktopTheme {
                 CompositionLocalProvider(LocalDesktopStrings provides strings) {
-                    LicenseGate(
-                        status = blockedStatus(),
-                        client = LicenseClient(),
-                        onRechecked = {},
-                        onQuit = {},
-                        languageTag = "pt-BR",
-                    )
+                    DeterministicLicenseGate()
                 }
             }
         }
@@ -110,13 +119,7 @@ class LicenseGateReachableUiTest {
         setContent {
             BuroDesktopTheme {
                 CompositionLocalProvider(LocalDesktopStrings provides strings) {
-                    LicenseGate(
-                        status = blockedStatus(),
-                        client = LicenseClient(),
-                        onRechecked = {},
-                        onQuit = {},
-                        languageTag = "pt-BR",
-                    )
+                    DeterministicLicenseGate()
                 }
             }
         }
@@ -137,13 +140,7 @@ class LicenseGateReachableUiTest {
         setContent {
             BuroDesktopTheme {
                 CompositionLocalProvider(LocalDesktopStrings provides strings) {
-                    LicenseGate(
-                        status = blockedStatus(),
-                        client = LicenseClient(),
-                        onRechecked = {},
-                        onQuit = {},
-                        languageTag = "pt-BR",
-                    )
+                    DeterministicLicenseGate()
                 }
             }
         }
@@ -167,13 +164,7 @@ class LicenseGateReachableUiTest {
         setContent {
             BuroDesktopTheme {
                 CompositionLocalProvider(LocalDesktopStrings provides strings) {
-                    LicenseGate(
-                        status = blockedStatus(),
-                        client = LicenseClient(),
-                        onRechecked = {},
-                        onQuit = {},
-                        languageTag = "pt-BR",
-                    )
+                    DeterministicLicenseGate()
                 }
             }
         }
@@ -192,14 +183,7 @@ class LicenseGateReachableUiTest {
         setContent {
             BuroDesktopTheme {
                 CompositionLocalProvider(LocalDesktopStrings provides strings) {
-                    LicenseGate(
-                        status = blockedStatus(),
-                        client = LicenseClient(),
-                        onRechecked = {},
-                        onQuit = {},
-                        languageTag = "pt-BR",
-                        onDismiss = {},
-                    )
+                    DeterministicLicenseGate(onDismiss = {})
                 }
             }
         }
@@ -212,13 +196,7 @@ class LicenseGateReachableUiTest {
         setContent {
             BuroDesktopTheme {
                 CompositionLocalProvider(LocalDesktopStrings provides strings) {
-                    LicenseGate(
-                        status = blockedStatus(),
-                        client = LicenseClient(),
-                        onRechecked = {},
-                        onQuit = {},
-                        languageTag = "pt-BR",
-                    )
+                    DeterministicLicenseGate()
                 }
             }
         }
