@@ -35,8 +35,9 @@ classificar o produto como uma versão estável.
   `Kernel32` do JNA e ainda não era chamado. Uma interface Job Object explícita
   foi adicionada e cada VLC iniciado agora é adotado pelo job;
 - gate local: 597 testes desktop em 106 suítes, 0 falhas, 0 erros e 0 ignorados;
-  o probe real confirmou que a API pública do novo repositório é acessível;
-- imagem distribuível limpa: 875 arquivos, 646.513.090 bytes; launcher
+  o probe real confirmou que a API pública do novo repositório é acessível; o
+  CI do PR #1 também passou no runner Linux em 5 min 9 s;
+- imagem distribuível limpa: 875 arquivos, 646.516.413 bytes; launcher
   SHA-256 `E5BDB7776E9898F752693C0E0780AF970186B8339C1366E4E7B57C1059E20F7C`.
   A auditoria não encontrou playlist, banco, keystore, chave TMDb embutida nem
   valores exatos da estação;
