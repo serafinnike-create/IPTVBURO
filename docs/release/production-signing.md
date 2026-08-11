@@ -54,3 +54,20 @@ Get-AuthenticodeSignature apps/desktop/build/compose/binaries/main/msi/IPTVBURO-
 Os dois estados devem ser `Valid`. Certificado ausente, expirado, sem timestamp ou editor inesperado
 bloqueia a release.
 
+### GitHub Actions
+
+O workflow `preview-release.yml` exige estes GitHub Actions Secrets:
+
+- `WINDOWS_SIGNING_CERTIFICATE_BASE64`: PFX de code signing convertido para Base64;
+- `WINDOWS_SIGNING_CERTIFICATE_PASSWORD`: senha do PFX;
+- `WINDOWS_TIMESTAMP_URL`: endpoint RFC 3161 HTTPS indicado pelo emissor.
+
+O runner grava o PFX somente na pasta temporária, importa-o em
+`Cert:\CurrentUser\My`, executa o pipeline protegido, valida o MSI e remove o
+arquivo e o certificado no bloco `finally`. Se qualquer segredo estiver ausente,
+o job falha antes da build e nenhuma release é criada.
+
+Antes do upload, `scripts/verify-clean-desktop-package.ps1` também inventaria a
+imagem do aplicativo, recusa arquivos com formato de playlist, banco ou keystore,
+confirma que não existe chave TMDb embutida e procura valores exatos da estação
+de build sem imprimi-los no log.

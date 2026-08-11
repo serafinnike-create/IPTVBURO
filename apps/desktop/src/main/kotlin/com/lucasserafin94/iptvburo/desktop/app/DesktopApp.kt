@@ -220,6 +220,47 @@ fun DesktopApp(
         }
 
         val text = strings
+        fun checkAndDownloadUpdate() {
+            if (updateBusy) return
+            scope.launch {
+                updateBusy = true
+                updateMessage = text.checkingUpdate
+                updateProgress = 0f
+                updateRelease = null
+                updateReadyToRestart = false
+                when (val result = releaseUpdater.check()) {
+                    UpdateCheckResult.UpToDate -> {
+                        updateMessage = text.upToDate
+                        updateBusy = false
+                    }
+                    is UpdateCheckResult.Failed -> {
+                        updateMessage = result.userMessage
+                        updateBusy = false
+                    }
+                    is UpdateCheckResult.Available -> {
+                        updateMessage = null
+                        updateRelease = result.release
+                        // downloadAndLaunch performs I/O on Dispatchers.IO. Marshal progress back
+                        // through the composition scope instead of mutating snapshot state there.
+                        releaseUpdater
+                            .downloadAndLaunch(result.release) { fraction ->
+                                scope.launch { updateProgress = fraction }
+                            }.onSuccess {
+                                // The installer waits for this process to leave. Keep the choice in
+                                // the user's hands instead of making the window disappear abruptly.
+                                updateProgress = 1f
+                                updateReadyToRestart = true
+                                updateBusy = false
+                            }.onFailure {
+                                updateRelease = null
+                                updateMessage = text.updateFailed
+                                updateBusy = false
+                            }
+                    }
+                }
+            }
+        }
+
         Surface(
             modifier =
                 Modifier
@@ -311,47 +352,7 @@ fun DesktopApp(
                             uses24HourClock = appState.uses24HourClock,
                             licenseStatus = appState.licenseStatus,
                             onOpenPurchase = { showLicenseDetails = true },
-                            onUpdate = {
-                                if (!updateBusy) {
-                                    scope.launch {
-                                        updateBusy = true
-                                        updateMessage = text.checkingUpdate
-                                        when (val result = releaseUpdater.check()) {
-                                            UpdateCheckResult.UpToDate -> {
-                                                updateMessage = text.upToDate
-                                                updateBusy = false
-                                            }
-                                            is UpdateCheckResult.Failed -> {
-                                                updateMessage = result.userMessage
-                                                updateBusy = false
-                                            }
-                                            is UpdateCheckResult.Available -> {
-                                                updateMessage = null
-                                                updateProgress = 0f
-                                                updateRelease = result.release
-                                                // Progress is reported so a multi-hundred-megabyte
-                                                // download does not look like a hang.
-                                                releaseUpdater
-                                                    .downloadAndLaunch(result.release) { fraction ->
-                                                        updateProgress = fraction
-                                                    }.onSuccess {
-                                                        // The installer is running; the app must
-                                                        // close for it to replace these files. The
-                                                        // user presses the button when ready rather
-                                                        // than having the window vanish under them.
-                                                        updateProgress = 1f
-                                                        updateReadyToRestart = true
-                                                        updateBusy = false
-                                                    }.onFailure {
-                                                        updateRelease = null
-                                                        updateMessage = text.updateFailed
-                                                        updateBusy = false
-                                                    }
-                                            }
-                                        }
-                                    }
-                                }
-                            },
+                            onUpdate = ::checkAndDownloadUpdate,
                         )
                         HorizontalDivider(color = BuroColors.BorderSoft)
                         // The content screen must be weighted. A Column measures an unweighted
@@ -856,28 +857,7 @@ fun DesktopApp(
                     appState = appState,
                     onDismiss = { parentalOpen = false },
                     updateBusy = updateBusy,
-                    onUpdate = {
-                        if (!updateBusy) {
-                            scope.launch {
-                                updateBusy = true
-                                updateMessage = text.checkingUpdate
-                                when (val result = releaseUpdater.check()) {
-                                    UpdateCheckResult.UpToDate -> {
-                                        updateMessage = text.upToDate
-                                        updateBusy = false
-                                    }
-                                    is UpdateCheckResult.Failed -> {
-                                        updateMessage = result.userMessage
-                                        updateBusy = false
-                                    }
-                                    is UpdateCheckResult.Available -> {
-                                        updateRelease = result.release
-                                        updateBusy = false
-                                    }
-                                }
-                            }
-                        }
-                    },
+                    onUpdate = ::checkAndDownloadUpdate,
                     sessionActive = appState.isXtreamSelected,
                     onEndSession = appState::disconnectXtream,
                     catalogRefreshing = appState.xtreamStatus is XtreamStatus.LoadingCatalog,
@@ -2620,6 +2600,7 @@ private fun DesktopLanguage.nativeName(): String =
     when (this) {
         DesktopLanguage.PORTUGUESE_BRAZIL -> "Português (Brasil)"
         DesktopLanguage.ENGLISH -> "English"
+        DesktopLanguage.SPANISH -> "Español"
         DesktopLanguage.GERMAN -> "Deutsch"
         DesktopLanguage.ITALIAN -> "Italiano"
     }

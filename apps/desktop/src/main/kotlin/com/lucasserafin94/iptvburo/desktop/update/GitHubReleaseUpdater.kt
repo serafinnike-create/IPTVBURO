@@ -1,6 +1,7 @@
 package com.lucasserafin94.iptvburo.desktop.update
 
 import com.google.gson.JsonParser
+import com.lucasserafin94.iptvburo.desktop.build.DESKTOP_RELEASE_VERSION
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -11,7 +12,10 @@ import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.time.Duration
 
-const val DESKTOP_VERSION = "2.0"
+const val DESKTOP_VERSION = DESKTOP_RELEASE_VERSION
+internal const val DESKTOP_RELEASE_REPOSITORY = "serafinnike-create/IPTVBURO"
+internal const val DESKTOP_RELEASES_URL =
+    "https://api.github.com/repos/$DESKTOP_RELEASE_REPOSITORY/releases?per_page=20"
 
 sealed interface UpdateCheckResult {
     data object UpToDate : UpdateCheckResult
@@ -35,7 +39,7 @@ class GitHubReleaseUpdater(
             .readTimeout(Duration.ofMinutes(10))
             .followRedirects(true)
             .build(),
-    private val releasesUrl: String = RELEASES_URL,
+    private val releasesUrl: String = DESKTOP_RELEASES_URL,
     private val currentVersion: String = DESKTOP_VERSION,
     private val updatesDirectory: Path = defaultUpdatesDirectory(),
     private val installerLauncher: (Path) -> Boolean = ::launchWindowsInstaller,
@@ -49,6 +53,10 @@ class GitHubReleaseUpdater(
                         .header("Accept", "application/vnd.github+json")
                         .header("X-GitHub-Api-Version", "2022-11-28")
                         .header("User-Agent", "IPTV-BURO-Updater/$currentVersion")
+                        // The button is an explicit refresh action. Do not let a local or proxy
+                        // cache turn it into a check against yesterday's release list.
+                        .header("Cache-Control", "no-cache")
+                        .header("Pragma", "no-cache")
                         .build()
                 client.newCall(request).execute().use { response ->
                     check(response.isSuccessful) { "GitHub responded with ${response.code}" }
@@ -145,7 +153,6 @@ class GitHubReleaseUpdater(
         }
 
     private companion object {
-        const val RELEASES_URL = "https://api.github.com/repos/serafinnike-create/IPTVBURO/releases?per_page=20"
         const val MAX_INSTALLER_BYTES = 1_000_000_000L
 
         fun defaultUpdatesDirectory(): Path {
@@ -366,8 +373,8 @@ private data class ParsedVersion(val numbers: List<Int>, val preRelease: String?
          * Parses "2.0", "2.0.1", "v2.0.1" and "0.2.0-alpha.5" alike.
          *
          * The patch number is optional, and that is not cosmetic. This project writes its shipped
-         * version with two numbers — DESKTOP_VERSION has been "1.1" and is now "2.0" — while the
-         * pattern used to demand three. An unparseable *current* version made compareVersions
+         * version with two numbers in older builds — DESKTOP_VERSION was "1.1" and then "2.0" —
+         * while the pattern used to demand three. An unparseable *current* version made compareVersions
          * return 1 for every candidate, so the updater offered the running build to itself as an
          * update, repeatedly, and there was no version it would ever consider itself up to date
          * against. A missing patch means zero, which is what "2.0" means.
@@ -415,7 +422,15 @@ private fun isWindowsInstallerName(value: String): Boolean =
 private fun requireTrustedDownloadUrl(value: String) {
     val uri = java.net.URI(value)
     require(uri.scheme == "https")
-    require(uri.host?.lowercase() in setOf("github.com", "objects.githubusercontent.com"))
+    require(uri.host.equals("github.com", ignoreCase = true))
+    require(uri.userInfo == null)
+    require(uri.port in setOf(-1, 443))
+    require(
+        uri.rawPath?.startsWith(
+            "/$DESKTOP_RELEASE_REPOSITORY/releases/download/",
+            ignoreCase = true,
+        ) == true,
+    )
 }
 
 private fun sha256(path: Path): String =

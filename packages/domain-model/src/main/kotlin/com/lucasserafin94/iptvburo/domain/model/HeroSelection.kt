@@ -20,7 +20,67 @@ data class HeroCandidate(
     val year: Int? = null,
     val rating: Double? = null,
     val hasArtwork: Boolean = true,
+    /**
+     * The categories the provider files this title under, for matching against what the user
+     * actually watches. Empty is ordinary — plenty of playlists carry no categories at all.
+     */
+    val categoryIds: List<String> = emptyList(),
 )
+
+/**
+ * What the viewer has shown an interest in, derived from what they have opened.
+ *
+ * Deliberately shallow. This counts categories, nothing else: no profile of the person, no attempt
+ * to infer taste beyond "you have watched four things filed under this". It lives on the machine,
+ * is rebuilt from history that the user can clear, and never leaves the app.
+ *
+ * Empty means "nothing known yet", which is the state every new installation starts in and the one
+ * the banner has to look right in.
+ */
+data class ViewerAffinity(
+    /** How many watched titles fell under each category id. */
+    val watchesByCategory: Map<String, Int> = emptyMap(),
+) {
+    /** Whether there is enough history for the preference to mean anything. */
+    val isKnown: Boolean get() = watchesByCategory.values.sum() >= MINIMUM_WATCHES
+
+    /**
+     * How well [candidate] matches what the viewer watches, from 0.0 to 1.0.
+     *
+     * The strongest category the title belongs to decides, rather than the sum: a film filed under
+     * six categories is not six times more relevant than one filed under the right single category.
+     */
+    fun affinityFor(candidate: HeroCandidate): Double {
+        if (!isKnown || candidate.categoryIds.isEmpty()) return 0.0
+        val strongest = watchesByCategory.values.maxOrNull()?.takeIf { it > 0 } ?: return 0.0
+        val best = candidate.categoryIds.mapNotNull { id -> watchesByCategory[id] }.maxOrNull() ?: 0
+        return best.toDouble() / strongest
+    }
+
+    companion object {
+        /**
+         * Below this the history is noise.
+         *
+         * Three titles is enough to see a pattern and few enough that the banner starts reflecting
+         * the viewer within a first evening. Under it the banner behaves exactly as it always has.
+         */
+        const val MINIMUM_WATCHES = 3
+
+        /** Builds an affinity from the categories of what has been watched, most recent first. */
+        fun from(watchedCategoryIds: List<List<String>>): ViewerAffinity {
+            val counts = mutableMapOf<String, Int>()
+            // Only the recent past. Taste changes, and a season watched a year ago should not
+            // outweigh what the viewer has been opening this week.
+            watchedCategoryIds.take(RECENT_WATCH_WINDOW).forEach { categories ->
+                categories.forEach { id -> counts[id] = (counts[id] ?: 0) + 1 }
+            }
+            return ViewerAffinity(counts)
+        }
+
+        /** How far back the preference looks. Recent enough to follow a change of taste. */
+        private const val RECENT_WATCH_WINDOW = 40
+    }
+}
 
 object HeroSelection {
     /**
@@ -33,6 +93,13 @@ object HeroSelection {
         candidates: List<HeroCandidate>,
         dayOfEpoch: Long,
         count: Int = DEFAULT_ROTATION,
+        /**
+         * What the viewer tends to watch, which nudges the ranking towards them.
+         *
+         * Defaulted to empty so every existing caller and test keeps its previous behaviour: with
+         * no history the banner scores exactly as it did before this existed.
+         */
+        affinity: ViewerAffinity = ViewerAffinity(),
     ): List<HeroCandidate> {
         // Artwork is not a preference here, it is a requirement: the banner is mostly image, and a
         // title without one renders as a large empty rectangle.
@@ -45,7 +112,7 @@ object HeroSelection {
         val ranked =
             usable
                 .sortedWith(
-                    compareByDescending<HeroCandidate> { candidate -> score(candidate) }
+                    compareByDescending<HeroCandidate> { candidate -> score(candidate, affinity) }
                         // Ties broken by id, not by input order, so a re-fetch that returns the same
                         // titles in a different order does not reshuffle the banner.
                         .thenBy { candidate -> candidate.id },
@@ -67,13 +134,18 @@ object HeroSelection {
      * An unrated title scores as mid-range rather than zero. Providers leave the field empty
      * constantly, and treating that as "bad" would bar most of a catalogue from the banner.
      */
-    private fun score(candidate: HeroCandidate): Double {
+    private fun score(candidate: HeroCandidate, affinity: ViewerAffinity): Double {
         val rating = candidate.rating?.takeIf { it > 0 } ?: NEUTRAL_RATING
         val recency =
             candidate.year
                 ?.let { year -> ((year - RECENCY_BASE_YEAR).coerceIn(0, RECENCY_SPAN)).toDouble() / RECENCY_SPAN }
                 ?: 0.0
-        return rating + recency * RECENCY_WEIGHT
+        // What the viewer watches, worth about a rating point and a half at most.
+        //
+        // Enough to bring a well-liked title from a category they favour ahead of an equally rated
+        // one they never open, and not enough to promote something poor. A banner that showed a
+        // weak title because it matched a habit would teach the viewer to ignore the banner.
+        return rating + recency * RECENCY_WEIGHT + affinity.affinityFor(candidate) * AFFINITY_WEIGHT
     }
 
     private const val DEFAULT_ROTATION = 5
@@ -94,4 +166,14 @@ object HeroSelection {
 
     /** At most one rating point of advantage for being new. Quality still wins. */
     private const val RECENCY_WEIGHT = 1.0
+
+    /**
+     * At most one and a half rating points for matching what the viewer watches.
+     *
+     * Chosen to be decisive between near-equals and powerless against a real quality gap: a 6.0 in
+     * a favoured category still loses to an 8.0 outside it. The banner is the largest thing on the
+     * screen, and filling it with something weak because it fits a pattern is how a recommendation
+     * feature loses the viewer's trust.
+     */
+    private const val AFFINITY_WEIGHT = 1.5
 }

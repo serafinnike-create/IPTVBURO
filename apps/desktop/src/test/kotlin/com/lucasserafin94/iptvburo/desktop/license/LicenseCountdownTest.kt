@@ -123,18 +123,28 @@ class LicenseCountdownTest {
     }
 
     @Test
-    fun `the countdown is translated into all four languages`() {
+    fun `the countdown is translated into every language`() {
         val strings = Path
             .of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/ui/DesktopStrings.kt")
             .readText()
 
+        // Derived from the enum, not a literal four.
+        //
+        // This said "four" and counted multiples of four, so adding Spanish broke it — for the
+        // wrong reason. A test that has to be edited every time a language is added is a test that
+        // gets edited without being read.
+        val languages = com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage.entries.size
+
         for (key in listOf("trialDaysLeft", "licenseDaysLeft", "licenseLastDay", "trialLastDay")) {
             val uses = Regex("""\b$key = "[^"]+"""").findAll(strings).count()
-            // A multiple of four rather than exactly four: `licenseDaysLeft` exists in both
-            // LicenseStrings and SettingsStrings, so it legitimately appears eight times. What
-            // matters is that no language is missing one — which a count not divisible by four
-            // would reveal.
-            assertTrue(uses > 0 && uses % 4 == 0, "$key appears $uses times; a language is missing")
+            // A multiple rather than exactly one per language: `licenseDaysLeft` exists in both
+            // LicenseStrings and SettingsStrings, so it legitimately appears twice per language.
+            // What matters is that none is missing — which a count not divisible by the number of
+            // languages would reveal.
+            assertTrue(
+                uses > 0 && uses % languages == 0,
+                "$key appears $uses times across $languages languages; one is missing",
+            )
         }
     }
 

@@ -69,11 +69,30 @@ Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
 ## [Unreleased]
 
+### Added
+
+- Candidato Windows `2.0.0-alpha.1` com versão única compartilhada pela UI e
+  pelo atualizador.
+- Gate de distribuição que recusa uma build quando a chave TMDb da estação de
+  desenvolvimento estiver habilitada.
+- Pipeline de release Windows que importa o certificado apenas no runner,
+  assina launcher e MSI, valida Authenticode e remove o certificado ao terminar.
+
+### Fixed
+
+- O botão de atualização passou a consultar sem cache o repositório atual
+  `serafinnike-create/IPTVBURO`; URLs de instaladores pertencentes a outro
+  repositório GitHub são recusadas.
+- A proteção contra processos VLC órfãos agora usa uma interface nativa Job
+  Object compatível com JNA e é aplicada a cada processo iniciado pelo player.
+
 ### Changed
 
 - O CI da `main` mantém `test`, `lint` e `assembleDebug` como gate, enquanto os
   APKs para download ficam centralizados em GitHub Releases para não depender da
   cota temporária de artefatos do Actions.
+- Builds desktop não incorporam mais automaticamente a chave TMDb de
+  `local.properties`; cada utilizador configura a própria chave por perfil.
 
 ## [0.1.0-alpha.1] - 2026-07-31
 

@@ -89,6 +89,7 @@ import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
 import com.lucasserafin94.iptvburo.domain.model.HeroCandidate
 import com.lucasserafin94.iptvburo.domain.model.HeroSelection
+import com.lucasserafin94.iptvburo.domain.model.ViewerAffinity
 import com.lucasserafin94.iptvburo.domain.model.LibraryCandidate
 import com.lucasserafin94.iptvburo.domain.model.LibraryOfferPolicy
 import com.lucasserafin94.iptvburo.domain.model.asExternalCandidate
@@ -997,6 +998,23 @@ class DesktopAppState(
      * Unlike Continue watching, finished titles stay: the question is "what did I watch?", and a
      * film seen to the end is the clearest answer there is.
      */
+    /**
+     * What this profile tends to watch, for the home banner.
+     *
+     * Built from the categories of what has actually been opened — nothing more. It never leaves
+     * the machine, is rebuilt from history the user can clear at any time, and falls back to
+     * "unknown" until there are a few titles to learn from, which is the state a new installation
+     * has to look right in.
+     *
+     * Read on the calling thread and handed to the selection as a value, so the selection itself
+     * stays pure and the same day always produces the same banner.
+     */
+    private val viewerAffinity: ViewerAffinity
+        get() =
+            ViewerAffinity.from(
+                historyEntries.map { entry -> entry.item.categoryIds },
+            )
+
     val historyEntries: List<DesktopContinueWatchingEntry>
         get() {
             // Read so Compose re-runs this when an entry is forgotten; the store is not observable.
@@ -2814,6 +2832,9 @@ class DesktopAppState(
         val kidsMode = activeProfile?.isKids == true
         val lockedCategoriesByType =
             XtreamContentType.entries.associateWith(::lockedCategoryIdsForBrowsing)
+        // Read here for the same reason as everything above it: `historyEntries` walks Compose
+        // snapshot state and the parental policy, neither of which belongs on an IO dispatcher.
+        val affinity = viewerAffinity
         dailyHomeStatus = DailyHomeStatus.Loading
         runCatching {
             withContext(Dispatchers.IO) {
@@ -2871,9 +2892,16 @@ class DesktopAppState(
                                     year = item.year,
                                     rating = item.rating,
                                     hasArtwork = !item.artworkUrl.isNullOrBlank(),
+                                    categoryIds = item.categoryIds,
                                 )
                             },
                         dayOfEpoch = date.toEpochDay(),
+                        // What this profile has been watching, so the banner leans towards it.
+                        //
+                        // Captured on the calling thread with the rest of the inputs, and passed as
+                        // a value: the selection stays pure, so the same day and the same catalogue
+                        // always produce the same banner rather than reshuffling on recomposition.
+                        affinity = affinity,
                     )
                 val heroPool =
                     heroRotation.mapNotNull { chosen ->
@@ -3333,11 +3361,20 @@ class DesktopAppState(
             return
         }
         if (xtreamStatus is XtreamStatus.LoadingCatalog) return
-        xtreamStatus = XtreamStatus.LoadingCatalog(contentType)
+
+        // Only when something is actually going to be fetched.
+        //
+        // This was set unconditionally, so switching between films and series with both catalogues
+        // already in memory raised the loading banner and dropped it again within a frame — the
+        // flicker reported on the favourites screen. Nothing was loading; the app was only saying
+        // so. A progress indicator that appears when there is no progress teaches the viewer that
+        // it means nothing.
+        val alreadyLoaded = contentType in xtreamSummary?.loadedContentTypes.orEmpty()
+        if (!alreadyLoaded) xtreamStatus = XtreamStatus.LoadingCatalog(contentType)
 
         runCatching {
             val summary =
-                if (contentType in xtreamSummary?.loadedContentTypes.orEmpty()) {
+                if (alreadyLoaded) {
                     xtreamSummary
                 } else {
                     withContext(Dispatchers.IO) {
@@ -3445,8 +3482,22 @@ class DesktopAppState(
             withContext(Dispatchers.IO) { xtreamRepository.shortEpg(selected.providerId) }
         }.onSuccess { epg ->
             if (selectedXtreamItemId == selected.providerId) {
-                val (now, next) = epg.nowAndNext(System.currentTimeMillis() / 1_000L)
-                liveEpgStatus = LiveEpgStatus.Loaded(now, next)
+                val nowSeconds = System.currentTimeMillis() / 1_000L
+                val (now, next) = epg.nowAndNext(nowSeconds)
+                liveEpgStatus =
+                    LiveEpgStatus.Loaded(
+                        now = now,
+                        next = next,
+                        // Everything still ahead, in order. What has already finished is dropped:
+                        // a schedule that opens on this morning's programmes makes the viewer
+                        // scroll to reach the part they are asking about.
+                        schedule =
+                            epg.programs
+                                .filter { program ->
+                                    (program.endEpochSeconds ?: Long.MAX_VALUE) > nowSeconds
+                                }
+                                .sortedBy { program -> program.startEpochSeconds ?: Long.MAX_VALUE },
+                    )
             }
         }.onFailure { error ->
             // Same reason as the film and series loaders: a cancelled fetch must not leave the
@@ -4618,6 +4669,16 @@ sealed interface LiveEpgStatus {
     data class Loaded(
         val now: XtreamEpgProgram?,
         val next: XtreamEpgProgram?,
+        /**
+         * Everything the provider sent, in order, for the full schedule.
+         *
+         * The client has always fetched several hours of programmes and the screen used two of
+         * them; the rest was parsed and thrown away. Showing the whole grid is what people expect
+         * from a live channel, and it costs nothing extra — the request is already made.
+         *
+         * Defaulted to empty so a caller that only has now-and-next still compiles.
+         */
+        val schedule: List<XtreamEpgProgram> = emptyList(),
     ) : LiveEpgStatus
 
     /** EPG is optional and must never block channel playback. */

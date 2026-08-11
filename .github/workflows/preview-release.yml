@@ -75,10 +75,53 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Windows preview
+      - name: Test clean Windows build
         shell: pwsh
         run: |
-          .\gradlew.bat :apps:desktop:test :apps:desktop:packageMsi --stacktrace
+          .\gradlew.bat :apps:desktop:clean :apps:desktop:test --stacktrace
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop tests failed.' }
+
+      - name: Build signed Windows preview
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
+          WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_BASE64) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_TIMESTAMP_URL)) {
+            throw 'The protected Windows signing secrets are not configured.'
+          }
+
+          $pfx = Join-Path $env:RUNNER_TEMP 'iptvburo-signing.pfx'
+          [IO.File]::WriteAllBytes(
+            $pfx,
+            [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERTIFICATE_BASE64)
+          )
+          $password = ConvertTo-SecureString `
+            $env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD `
+            -AsPlainText `
+            -Force
+          $certificate = Import-PfxCertificate `
+            -FilePath $pfx `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password $password
+          try {
+            $env:IPTVBURO_WINDOWS_CERT_THUMBPRINT = $certificate.Thumbprint
+            $env:IPTVBURO_TIMESTAMP_URL = $env:WINDOWS_TIMESTAMP_URL
+            .\scripts\sign-windows-release.ps1
+            if ($LASTEXITCODE -ne 0) { throw 'The signed Windows build failed.' }
+            .\scripts\verify-clean-desktop-package.ps1
+            if ($LASTEXITCODE -ne 0) { throw 'The desktop privacy audit failed.' }
+          }
+          finally {
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+            if ($null -ne $certificate) {
+              Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -Force -ErrorAction SilentlyContinue
+            }
+          }
+
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           $packages = @(
             Get-ChildItem `
@@ -87,6 +130,10 @@ jobs:
           )
           if ($packages.Count -ne 1) {
             throw "Expected exactly one MSI package; found $($packages.Count)."
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $packages[0].FullName
+          if ($signature.Status -ne 'Valid') {
+            throw "The MSI signature is not valid: $($signature.Status)"
           }
           Copy-Item `
             -LiteralPath $packages[0].FullName `

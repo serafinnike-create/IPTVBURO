@@ -715,6 +715,7 @@ class VlcDesktopPlayer(
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .redirectError(ProcessBuilder.Redirect.DISCARD)
                 .start()
+        ChildProcessJob.adopt(child)
         // Published immediately and under the lock. Assigning it only after the connect handshake
         // meant a dispose during those twelve seconds found no process to kill, and VLC kept
         // playing audio over a window the user had already closed.

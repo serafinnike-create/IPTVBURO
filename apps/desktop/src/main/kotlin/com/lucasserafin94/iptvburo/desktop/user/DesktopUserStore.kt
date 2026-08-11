@@ -80,7 +80,20 @@ data class StoredParentalLock(
 }
 
 enum class DesktopLanguage(val tag: String) {
-    PORTUGUESE_BRAZIL("pt-BR"), ENGLISH("en"), GERMAN("de"), ITALIAN("it");
+    PORTUGUESE_BRAZIL("pt-BR"),
+    ENGLISH("en"),
+
+    /**
+     * Neutral Spanish rather than a regional variant.
+     *
+     * The app sells across Latin America and Spain, and picking one country's vocabulary makes it
+     * read as foreign everywhere else. Where the two diverge — "ordenador" against "computadora",
+     * "móvil" against "celular" — the wording avoids the choice rather than taking a side.
+     */
+    SPANISH("es"),
+    GERMAN("de"),
+    ITALIAN("it"),
+    ;
 
     companion object {
         fun fromTag(tag: String?): DesktopLanguage = entries.firstOrNull { it.tag == tag } ?: PORTUGUESE_BRAZIL

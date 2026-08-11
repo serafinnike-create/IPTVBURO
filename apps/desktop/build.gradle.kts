@@ -21,7 +21,10 @@ plugins {
 }
 
 group = "com.lucasserafin94.iptvburo"
-version = "2.0"
+version = "2.0.0-alpha.1"
+
+val desktopReleaseVersion = version.toString()
+val windowsPackageVersion = "2.0.0"
 
 val vlcVersion = "3.0.23"
 val vlcArchiveSha256 = "992d19dbd0b8a7cde9167d2f7780b1ef6f92acc8a71acfa736101a21f35181e1"
@@ -40,13 +43,17 @@ val jbrJcefArchiveSha256 = "60cc64adcdd506d202a1ed3335897dee23975e6401e7fd240b7e
 val jbrJcefArchive = layout.buildDirectory.file("downloads/jbr_jcef-$jbrJcefVersion.tar.gz")
 
 /**
- * The TMDb key baked into this build, read from local.properties.
+ * A developer may opt in to the TMDb key from local.properties for a local `run` only.
  *
- * Deliberately not a source constant: this repository is public, and a key committed to it is
- * scraped and revoked within days. Empty when the file has no entry, in which case the app simply
- * behaves as if no key were configured and the user can paste their own in settings.
+ * The default is deliberately empty. In particular, a distributable must never inherit the
+ * workstation owner's personal key merely because local.properties happens to exist. Users can
+ * add their own key per profile in Settings.
  */
-val bundledTmdbKey: String =
+val includeLocalTmdbKey =
+    providers.gradleProperty("iptvburo.includeLocalTmdbKey")
+        .map { it.equals("true", ignoreCase = true) }
+        .getOrElse(false)
+val localTmdbKey: String =
     providers
         .fileContents(layout.projectDirectory.file("../../local.properties"))
         .asText
@@ -57,6 +64,7 @@ val bundledTmdbKey: String =
                 ?.trim()
                 .orEmpty()
         }.getOrElse("")
+val bundledTmdbKey = if (includeLocalTmdbKey) localTmdbKey else ""
 
 val generatedBuildConfig = layout.buildDirectory.dir("generated/buildconfig")
 
@@ -64,7 +72,9 @@ val generateBuildConfig by tasks.registering {
     description = "Writes the build-time constants the app reads at runtime."
     val output = generatedBuildConfig
     val key = bundledTmdbKey
+    val releaseVersion = desktopReleaseVersion
     inputs.property("tmdbKey", key)
+    inputs.property("desktopReleaseVersion", releaseVersion)
     outputs.dir(output)
     doLast {
         val directory =
@@ -73,10 +83,26 @@ val generateBuildConfig by tasks.registering {
             """
             package com.lucasserafin94.iptvburo.desktop.build
 
-            /** Generated at build time from local.properties; never committed. */
+            /** Generated at build time; never committed. */
             internal const val BUNDLED_TMDB_KEY: String = "$key"
+
+            /** GitHub release version embedded in this binary. */
+            internal const val DESKTOP_RELEASE_VERSION: String = "$releaseVersion"
             """.trimIndent() + System.lineSeparator(),
         )
+    }
+}
+
+val verifyCleanPublicDesktopBuild by tasks.registering {
+    group = "verification"
+    description = "Refuses public desktop packages that contain a workstation TMDb key."
+    val containsBundledKey = bundledTmdbKey.isNotEmpty()
+    inputs.property("bundledTmdbKeyPresent", containsBundledKey)
+    doLast {
+        require(!containsBundledKey) {
+            "A public Windows build cannot embed the local TMDb key. " +
+                "Remove -Piptvburo.includeLocalTmdbKey=true and rebuild."
+        }
     }
 }
 
@@ -318,7 +344,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "IPTVBURO"
-            packageVersion = "2.0.0"
+            packageVersion = windowsPackageVersion
             description = "IPTV BURO desktop player"
             vendor = "IPTV BURO"
             appResourcesRootDir.set(generatedAppResources)
@@ -330,6 +356,13 @@ compose.desktop {
 
             windows {
                 menuGroup = "IPTV BURO"
+                // `--win-shortcut` in jpackage's own terms, which is the *desktop* icon; the Start
+                // menu entry is `--win-menu`, requested by menuGroup above. The two are separate
+                // flags and it is easy to assume one implies the other — it does not.
+                //
+                // Neither appears when the app is installed by copying the app image into place
+                // rather than by running the MSI, which is how a development build is usually
+                // deployed. A missing desktop icon after such a copy is the copy, not this setting.
                 shortcut = true
                 perUserInstall = true
                 // Without this the installer, the shortcut and the taskbar all fall back to the
@@ -347,6 +380,19 @@ tasks.matching {
     it.name in setOf("run", "runDistributable", "createDistributable", "packageMsi", "prepareAppResources")
 }.configureEach {
     dependsOn(prepareBundledVlc, prepareBundledJcef)
+}
+
+tasks.matching {
+    it.name in
+        setOf(
+            "createDistributable",
+            "packageMsi",
+            "packageReleaseMsi",
+            "packageDistributionForCurrentOS",
+            "packageReleaseDistributionForCurrentOS",
+        )
+}.configureEach {
+    dependsOn(verifyCleanPublicDesktopBuild)
 }
 
 // The signed release script sets this marker only for the short packaging step between signing the

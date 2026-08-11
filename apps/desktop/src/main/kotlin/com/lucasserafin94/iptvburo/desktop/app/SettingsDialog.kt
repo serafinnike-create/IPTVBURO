@@ -616,6 +616,7 @@ private fun languageDisplayName(language: DesktopLanguage): String =
     when (language) {
         DesktopLanguage.PORTUGUESE_BRAZIL -> "Português (Brasil)"
         DesktopLanguage.ENGLISH -> "English"
+        DesktopLanguage.SPANISH -> "Español"
         DesktopLanguage.GERMAN -> "Deutsch"
         DesktopLanguage.ITALIAN -> "Italiano"
     }

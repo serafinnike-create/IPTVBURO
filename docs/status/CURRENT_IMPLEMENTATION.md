@@ -1,12 +1,11 @@
 # Implementação atual do IPTV BURO
 
-- Data da auditoria: 10 de agosto de 2026
-- Branch: `agent/iptv-buro-0.2-preview`
+- Data da auditoria: 12 de agosto de 2026
+- Branch: `codex/windows-clean-release`
 - Baseline anterior: `v0.1.0-alpha.1`
-- Tag da prévia atual: `v0.2.0-alpha.5`
-- Release:
-  `https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.2.0-alpha.5`
-- Versão pública atual: `0.2.0-alpha.5`, Android/Android TV e Windows x64
+- Tag mais recente no repositório atual: `v0.2.0-alpha.7`
+- Releases no repositório atual: nenhuma em 12 de agosto de 2026;
+- Candidato Windows: `v2.0.0-alpha.1`, ainda não publicado;
 - Milestone em validação: `0.2`, Android adaptativo e Compose Desktop
 
 ## Estado da milestone 0.2
@@ -15,10 +14,40 @@ A milestone `0.2` amplia o vertical funcional publicado como prévia. Esta seç�
 registra arquitetura, escopo, gates, hashes e as limitações que ainda impedem
 classificar o produto como uma versão estável.
 
+### Build Windows limpa e atualização — 12 de agosto de 2026
+
+- a versão do binário e a versão comparada pelo atualizador passaram a ser a
+  mesma (`2.0.0-alpha.1`), gerada pelo Gradle; isso evita uma UI anunciar uma
+  versão enquanto o cliente compara outra;
+- a chave TMDb de `local.properties` deixou de ser embutida por padrão. Existe
+  opt-in apenas para execução local, e qualquer tarefa de distribuição falha se
+  esse opt-in estiver ativo;
+- o pacote é composto somente por código, recursos do produto e runtimes
+  verificados. Playlists, fontes, credenciais DPAPI, perfis, histórico,
+  downloads e demais dados do usuário não são entradas da build;
+- `Verificar atualização` força revalidação no GitHub a cada clique, consulta
+  `serafinnike-create/IPTVBURO`, inclui pré-releases, ordena semanticamente e
+  recusa MSI sem digest SHA-256 ou hospedado em outro repositório;
+- o workflow Windows agora exige os três segredos de assinatura, importa o PFX
+  apenas no runner, assina launcher e MSI, verifica Authenticode e remove o
+  certificado antes de publicar;
+- a compilação revelou que `ChildProcessJob` usava APIs ausentes da interface
+  `Kernel32` do JNA e ainda não era chamado. Uma interface Job Object explícita
+  foi adicionada e cada VLC iniciado agora é adotado pelo job;
+- gate local: 597 testes desktop em 106 suítes, 0 falhas, 0 erros e 0 ignorados;
+  o probe real confirmou que a API pública do novo repositório é acessível;
+- imagem distribuível limpa: 875 arquivos, 646.513.090 bytes; launcher
+  SHA-256 `E5BDB7776E9898F752693C0E0780AF970186B8339C1366E4E7B57C1059E20F7C`.
+  A auditoria não encontrou playlist, banco, keystore, chave TMDb embutida nem
+  valores exatos da estação;
+- **publicação bloqueada corretamente**: esta máquina não possui certificado de
+  assinatura, `signtool` ou URL de timestamp configurados. Nenhum MSI sem
+  assinatura será enviado ao GitHub.
+
 ### Pagamentos, ativação e assinatura — endurecimento de 10 de agosto de 2026
 
 - o botão comercial Android agora usa Google Play Billing 9.1.0 e seleciona somente o produto
-  `iptvburo_730_days`, opção de aluguel `rent_730_days`, período `P730D`; não abre Stripe no
+  `iptvburo_730_days`, opção de compra consumível `buy_730_days`; não abre Stripe no
   navegador;
 - o app envia o token opaco ao Worker com prova P-256 vinculando instalação, nonce, hash do token e
   conta ofuscada. O app não concede nem reconhece a compra localmente;
@@ -58,6 +87,30 @@ classificar o produto como uma versão estável.
   redigidos, sem alterar os adapters em produção;
 - Media SuperHub / áudio: fundação de domínio em implementação; nenhuma
   vertical de usuário liberada.
+
+### Aviso legal, espanhol e marca — 11 de agosto de 2026
+
+- **Aviso legal reforçado**, agora em três parágrafos que respondem a três perguntas distintas:
+  o que o aplicativo é, o que o usuário declara ao continuar, e quem responde pelo quê. Além do
+  que já havia, o texto passou a afirmar que o app **não indexa nem busca** conteúdo, que **não
+  vem com nada instalado**, que o usuário **declara** ter autorização, que **não contorna DRM,
+  autenticação, paywall ou proteção técnica**, e que **não há vínculo** com provedores, emissoras
+  ou serviços de streaming. A coluna passou a alinhar ao topo: centralizada, um texto mais alto
+  que a tela começaria a ser lido pela metade;
+- **Espanhol** adicionado como quinto idioma: sete arquivos de recursos traduzidos (217 textos),
+  verificados por diferença de chaves contra o português — nenhuma faltando;
+- **Rótulos fixos da tela inicial traduzidos.** `RealHomeCatalog` é um objeto puro sem Context e
+  trazia os títulos dos trilhos e os selos em português no código, então a Home permanecia em
+  português em qualquer idioma. Passaram a chegar por `HomeLabels`, resolvido na tela, que é onde
+  há recursos. `HomeLabels.Fallback` mantém o texto antigo para testes e previews;
+- **Tela de idioma** passou a empilhar os idiomas em coluna: cinco lado a lado em um telefone
+  partiam "Português (Brasil)" em três linhas e "Español" no meio da palavra;
+- **Marca real na tela de termos**, no lugar do triângulo genérico: o mesmo vetor do ícone do
+  aplicativo, o anel dourado com o "B";
+- **"Perfil ativo"**, último texto fixo em português nas telas, virou recurso.
+
+Ressalva registrada: o texto do aviso foi escrito para reduzir risco, não por profissional do
+direito. Antes de publicar em loja, convém revisão jurídica.
 
 ### Elenco, episódios, filmografia e banner — 11 de agosto de 2026
 

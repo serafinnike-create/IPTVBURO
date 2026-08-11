@@ -1680,7 +1680,28 @@ internal fun XtreamItemDetail(
 }
 
 @Composable
+/**
+ * A programme start time as the viewer's own clock shows it.
+ *
+ * The provider sends epoch seconds in UTC; this renders them in the machine's zone, which is the
+ * only reading that answers "when is that on". A missing or unparseable time gives an em dash
+ * rather than a wrong hour — the schedule is still useful without one, and a confidently wrong time
+ * is worse than an obviously absent one.
+ */
+private fun Long?.asClockTime(): String =
+    this
+        ?.let { seconds ->
+            runCatching {
+                java.time.Instant.ofEpochSecond(seconds)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+            }.getOrNull()
+        }
+        ?: "—"
+
+@Composable
 private fun LiveEpgContent(status: LiveEpgStatus) {
+    val text = strings
     when (status) {
         LiveEpgStatus.Idle,
         LiveEpgStatus.Loading,
@@ -1706,6 +1727,49 @@ private fun LiveEpgContent(status: LiveEpgStatus) {
                     Spacer(Modifier.height(12.dp))
                     Text("A SEGUIR", color = BuroColors.TextSubtle, fontWeight = FontWeight.Bold)
                     Text(program.title, color = BuroColors.Text, style = MaterialTheme.typography.bodyLarge)
+                }
+
+                // The rest of the day, behind a press.
+                //
+                // The provider sends several hours of schedule and the screen showed two entries of
+                // it; the remainder was parsed and discarded. Collapsed by default because most
+                // visits are to answer "what is on now", and the full grid would push the buttons
+                // below the fold for a question nobody asked.
+                val later = status.schedule.drop(2)
+                if (later.isNotEmpty()) {
+                    var scheduleOpen by remember(status) { mutableStateOf(false) }
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(onClick = { scheduleOpen = !scheduleOpen }) {
+                        Text(
+                            text =
+                                if (scheduleOpen) {
+                                    text.settingsText.epgHideSchedule
+                                } else {
+                                    text.settingsText.epgShowSchedule.format(later.size)
+                                },
+                            maxLines = 1,
+                        )
+                    }
+                    if (scheduleOpen) {
+                        Spacer(Modifier.height(8.dp))
+                        later.forEach { program ->
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                                Text(
+                                    text = program.startEpochSeconds.asClockTime(),
+                                    color = BuroColors.Primary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.width(56.dp),
+                                )
+                                Text(
+                                    text = program.title,
+                                    color = BuroColors.TextMuted,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

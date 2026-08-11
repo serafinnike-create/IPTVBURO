@@ -120,8 +120,11 @@ class TmdbGuideStringsTest {
         DesktopLanguage.entries.forEach { language ->
             val body = DesktopStrings.of(language).tmdbGuide.tmdbStep6Body.lowercase()
 
+            // Each language's own word for the machine. Spanish says "ordenador" where Portuguese
+            // says "computador", and a list that assumed the two were spelled alike failed the
+            // moment Spanish was added — correctly, because the promise was what was being checked.
             assertTrue(
-                listOf("computador", "computer", "tuo computer").any { phrase -> phrase in body },
+                listOf("computador", "computer", "ordenador", "rechner").any { word -> word in body },
                 "$language does not tell the user the key stays on their machine: $body",
             )
         }
