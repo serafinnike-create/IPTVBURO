@@ -132,7 +132,15 @@ fun LicenseGate(
     var busy by remember { mutableStateOf(false) }
     var keyInput by remember { mutableStateOf("") }
     var keyFailed by remember { mutableStateOf(false) }
+    var enteringKey by remember { mutableStateOf(false) }
     var copied by remember { mutableStateOf(false) }
+
+    // A failed redemption stays on the code view so the error remains beside the field that caused
+    // it. The state lives here because the route into that view is fixed outside the scrolling
+    // purchase content.
+    LaunchedEffect(keyFailed) {
+        if (keyFailed) enteringKey = true
+    }
 
     // The price, from the server rather than from this machine's locale.
     //
@@ -240,6 +248,7 @@ fun LicenseGate(
                     languageTag = languageTag,
                     text = text,
                     quote = quote,
+                    enteringKey = enteringKey,
                     busy = busy,
                     keyInput = keyInput,
                     keyFailed = keyFailed,
@@ -251,6 +260,7 @@ fun LicenseGate(
                         busy = true
                         keyFailed = false
                     },
+                    onEnteringKeyChange = { enteringKey = it },
                 )
             } else {
                 Button(
@@ -279,6 +289,18 @@ fun LicenseGate(
 
         // Outside the scroll, so it is always on screen.
         //
+        // The activation-code route is the primary escape from the purchase flow for somebody who
+        // already paid or received a key. Its position is independent of QR size, translated font
+        // metrics and whether the live price has finished loading.
+        if (needsPayment && !enteringKey) {
+            ActivationCodeButton(
+                text = text,
+                onClick = { enteringKey = true },
+                modifier = Modifier.padding(horizontal = BuroSpacing.Xl),
+            )
+            Spacer(Modifier.height(BuroSpacing.Xs))
+        }
+
         // Going back when there is a working app to go back to, quitting otherwise. Trapping
         // somebody here while their trial still has days left is alarming: the app behind works, and
         // the only apparent way out is to close the program.
@@ -394,20 +416,17 @@ private fun PaymentSection(
     text: LicenseStrings,
     /** From the server. Null while it is being fetched, or if it could not be. */
     quote: PriceQuote?,
+    enteringKey: Boolean,
     busy: Boolean,
     keyInput: String,
     keyFailed: Boolean,
     onKeyChange: (String) -> Unit,
     onRedeem: () -> Unit,
+    onEnteringKeyChange: (Boolean) -> Unit,
 ) {
     val purchaseUrl = remember(deviceId, languageTag) {
         LicenseEndpoints.purchaseUrl(deviceId, languageTag)
     }
-
-    // Which of the two is showing. Starts on buying, because that is what most people arriving here
-    // need; a failed redemption forces it back so the error is next to the field that caused it.
-    var enteringKey by remember { mutableStateOf(false) }
-    LaunchedEffect(keyFailed) { if (keyFailed) enteringKey = true }
 
     if (enteringKey) {
         KeyEntry(
@@ -417,7 +436,7 @@ private fun PaymentSection(
             busy = busy,
             onKeyChange = onKeyChange,
             onRedeem = onRedeem,
-            onBack = { enteringKey = false },
+            onBack = { onEnteringKeyChange(false) },
         )
         return
     }
@@ -459,18 +478,25 @@ private fun PaymentSection(
         Text(text.openInBrowser, fontWeight = FontWeight.Bold)
     }
 
-    Spacer(Modifier.height(BuroSpacing.Xs))
+}
 
-    // A link, not a field. The field lives on its own view, reached from here, which is what keeps
-    // this column short enough to fit a laptop window.
-    //
-    // It is styled as a bordered button rather than as text: below a large gold button, a line of
-    // small coloured text does not read as something to press, and this is the only route for
-    // somebody holding a code.
+/**
+ * Fixed route to code activation.
+ *
+ * Price text and font metrics vary by platform and language, while this action must not. It sits
+ * outside the scroll so a customer holding a code can always reach it without discovering a hidden
+ * scrollbar below the QR plate.
+ */
+@Composable
+private fun ActivationCodeButton(
+    text: LicenseStrings,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     OutlinedButton(
-        onClick = { enteringKey = true },
+        onClick = onClick,
         shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth().height(44.dp),
+        modifier = modifier.fillMaxWidth().height(44.dp),
     ) {
         Text(
             text = text.haveKey,

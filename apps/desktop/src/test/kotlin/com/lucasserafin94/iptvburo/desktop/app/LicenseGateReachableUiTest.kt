@@ -11,7 +11,6 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import com.lucasserafin94.iptvburo.desktop.license.LicenseClient
@@ -111,7 +110,7 @@ class LicenseGateReachableUiTest {
             }
         }
 
-        onNodeWithText(strings.licenseText.haveKey).performScrollTo().assertIsDisplayed()
+        onNodeWithText(strings.licenseText.haveKey).assertIsDisplayed()
     }
 
     @Test
@@ -124,7 +123,7 @@ class LicenseGateReachableUiTest {
             }
         }
 
-        onNodeWithText(strings.licenseText.haveKey).performScrollTo().performClick()
+        onNodeWithText(strings.licenseText.haveKey).performClick()
 
         // Typing proves the field is both present and usable, which a placeholder assertion does
         // not: a disabled or unreachable field would still render its placeholder.
@@ -145,7 +144,7 @@ class LicenseGateReachableUiTest {
             }
         }
 
-        onNodeWithText(strings.licenseText.haveKey).performScrollTo().performClick()
+        onNodeWithText(strings.licenseText.haveKey).performClick()
 
         // Somebody who followed the link by mistake, or whose code turned out to be used, must be
         // able to get back to the QR code without restarting the app.
