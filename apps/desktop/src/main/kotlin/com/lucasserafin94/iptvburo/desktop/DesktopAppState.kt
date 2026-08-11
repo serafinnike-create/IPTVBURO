@@ -8,6 +8,11 @@ import androidx.compose.runtime.setValue
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.MusicLibraryLoader
 import com.lucasserafin94.iptvburo.desktop.data.SessionXtreamRepository
+import com.lucasserafin94.iptvburo.desktop.data.StreamingShelfDiskCache
+import com.lucasserafin94.iptvburo.metadata.TMDB_SERIES_NAMESPACE
+import com.lucasserafin94.iptvburo.metadata.TMDB_NAMESPACE
+import com.lucasserafin94.iptvburo.domain.model.ExternalTitleKind
+import com.lucasserafin94.iptvburo.domain.model.ExternalContentId
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceKind
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceSummary
 import com.lucasserafin94.iptvburo.desktop.model.ImportedCatalog
@@ -94,10 +99,10 @@ import com.lucasserafin94.iptvburo.domain.model.SeasonalCollections
 import com.lucasserafin94.iptvburo.domain.model.StreamingDiscoveryCapability
 import com.lucasserafin94.iptvburo.domain.model.StreamingDiscoveryProvider
 import com.lucasserafin94.iptvburo.domain.model.UserStreamingPreference
-import com.lucasserafin94.iptvburo.desktop.data.TmdbServiceShelf
+import com.lucasserafin94.iptvburo.metadata.TmdbServiceShelf
 import com.lucasserafin94.iptvburo.metadata.TmdbDiscoverKind
 import com.lucasserafin94.iptvburo.metadata.TmdbTitleDetails
-import com.lucasserafin94.iptvburo.desktop.data.TmdbStreamingCatalogue
+import com.lucasserafin94.iptvburo.metadata.TmdbStreamingCatalogue
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitle
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
@@ -237,6 +242,11 @@ class DesktopAppState(
         metadataClient = TmdbClient(key)
         streamingCatalogue = buildStreamingCatalogue(key, streamingRegion)
         shelfCache.clear()
+        // The disk cache is deliberately left alone. A key identifies who is asking, not what TMDb
+        // answers: the same region returns the same catalogue whoever holds the key, so the stored
+        // shelves are still correct. The forced load below fetches fresh ones regardless, and it
+        // bypasses the disk — so a user who has just fixed a broken key sees the result of the fix
+        // rather than yesterday's file.
         streamingShelves = emptyList()
         loadStreamingShelves(force = true)
     }
@@ -256,6 +266,14 @@ class DesktopAppState(
     private val castLookupsInFlight = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     /**
+     * How many faces to remember before dropping the oldest.
+     *
+     * Generous enough that a normal evening never evicts anything — a details page shows about a
+     * dozen — and finite so a session left open for a day cannot grow without bound.
+     */
+    private val MAX_CAST_PHOTOS = 600
+
+    /**
      * Fetches the photo for [name] if it has not been tried yet.
      *
      * A miss is cached as null, so a person TMDb does not know is not asked for again every time
@@ -266,7 +284,21 @@ class DesktopAppState(
         if (key.isBlank() || key in castPhotos || !metadataClient.isConfigured) return
         if (!castLookupsInFlight.add(key)) return
         val photo = withContext(Dispatchers.IO) { metadataClient.findPerson(name)?.profileImageUrl }
-        castPhotos = castPhotos + (key to photo)
+        // Bounded, because this app is left running for hours.
+        //
+        // Every actor ever seen was kept for the life of the session, along with its in-flight
+        // marker: browsing a few hundred titles in an evening accumulated thousands of entries that
+        // nothing ever released. Small individually, but it only ever grew.
+        //
+        // The oldest half goes when the cap is reached rather than one entry at a time — dropping a
+        // single name per insertion would evict a face that is on screen right now.
+        castPhotos =
+            if (castPhotos.size >= MAX_CAST_PHOTOS) {
+                castPhotos.entries.drop(castPhotos.size / 2).associate { it.key to it.value } +
+                    (key to photo)
+            } else {
+                castPhotos + (key to photo)
+            }
         castLookupsInFlight.remove(key)
     }
 
@@ -1517,6 +1549,16 @@ class DesktopAppState(
         java.util.concurrent.ConcurrentHashMap<TmdbDiscoverKind, List<TmdbServiceShelf>>()
 
     /**
+     * The same shelves, kept between sessions.
+     *
+     * [shelfCache] lives only as long as the window, so every launch re-fetched the whole section —
+     * one request per service, per kind — before anything could be shown, and threw the result away
+     * on close. What a service is carrying changes over days, so a day-old answer is the right one
+     * to open with while a fresh one is fetched behind it.
+     */
+    private val shelfDiskCache = StreamingShelfDiskCache()
+
+    /**
      * Stops background work that outlives the window.
      *
      * [streamingScope] is deliberately not tied to a composable — leaving the screen mid-load must
@@ -1566,9 +1608,28 @@ class DesktopAppState(
             println("[streaming] $kind already cached, skipping")
             return
         }
+
+        // Yesterday's answer, shown at once.
+        //
+        // Read before anything is fetched, so a returning user opens the section on a full page of
+        // covers instead of on a spinner. The disk cache expires itself after a day, so a hit here
+        // is by definition still current — there is nothing further to fetch.
+        if (!force) {
+            val region = streamingRegion
+            val stored = shelfDiskCache.read(kind, region)
+            if (!stored.isNullOrEmpty()) {
+                println("[streaming] $kind restored ${stored.size} shelves from disk")
+                shelfCache[kind] = stored
+                if (streamingKind == kind) streamingShelves = stored
+                return
+            }
+        }
         println("[streaming] loading $kind shelves for region $streamingRegion")
 
         streamingLoading = true
+        // Captured here, on the UI thread, for the same reason the kind is: both can change while
+        // the request is in flight, and the cache is keyed on them.
+        val requestedRegion = streamingRegion
         streamingScope.launch {
             val loaded =
                 runCatching { catalogue.shelves(kind) }
@@ -1585,6 +1646,11 @@ class DesktopAppState(
                     }.getOrDefault(emptyList())
             println("[streaming] loaded ${loaded.size} $kind shelves")
             shelfCache[kind] = loaded
+            // Kept for tomorrow. The region is the one this request was issued for, read before the
+            // suspend rather than after: a user who changes country mid-fetch would otherwise have
+            // the old country's shelves written under the new country's name, and see the wrong
+            // catalogue every launch for a day.
+            shelfDiskCache.write(kind, requestedRegion, loaded)
             // Cleared unconditionally, before the early return below. It used to be cleared only on
             // the path that also assigned the shelves, so switching filter mid-load left the flag
             // set for ever — and the guard at the top of this function then refused every later
@@ -1622,6 +1688,10 @@ class DesktopAppState(
         // The old region's shelves are wrong now, so they go rather than lingering under a new
         // label — including the cached ones for the filters the user is not currently looking at.
         shelfCache.clear()
+        // The stored ones too. They carry the old region in their header and would be rejected on
+        // read anyway, but leaving them means a user who switches back and forth gets an answer for
+        // a country they left — and the files would sit there unread for ever otherwise.
+        shelfDiskCache.clear()
         streamingShelves = emptyList()
         streamingOffers = OfferRanking.EMPTY
         loadStreamingShelves(force = true)
@@ -1907,16 +1977,36 @@ class DesktopAppState(
         private set
 
     /**
+     * How many tiles this subscription can actually sustain.
+     *
+     * Providers cap simultaneous connections per account, and exceeding the cap does not produce an
+     * error — the provider simply stops sending on the older streams. From inside the app that looks
+     * exactly like tiles going black for no reason, which is what it looked like for days: four
+     * channels started, two kept playing, two ended after about five seconds each.
+     *
+     * The number comes from the provider's own `max_connections`, which the client has always read
+     * and nothing has ever used. Where it is unknown, the app's own cap of four applies — a guess
+     * that is too low would take away a feature somebody has paid for.
+     *
+     * One connection is reserved for nothing: multiview is the only thing playing while it is open.
+     */
+    val multiviewCapacity: Int
+        get() =
+            (xtreamSummary?.account?.maximumConnections ?: MAX_MULTIVIEW_TILES)
+                .coerceIn(1, MAX_MULTIVIEW_TILES)
+
+    /**
      * Adds or removes a channel from the grid.
      *
      * Capped at four: beyond that each tile is too small to follow and the machine is running four
-     * decoders for pictures nobody can read.
+     * decoders for pictures nobody can read. Capped again at what the subscription allows, because
+     * queueing a fifth stream a provider will refuse only produces a black rectangle.
      */
     fun toggleMultiviewChannel(providerId: String) {
         multiviewChannelIds =
             when {
                 providerId in multiviewChannelIds -> multiviewChannelIds - providerId
-                multiviewChannelIds.size >= MAX_MULTIVIEW_TILES -> multiviewChannelIds
+                multiviewChannelIds.size >= multiviewCapacity -> multiviewChannelIds
                 else -> multiviewChannelIds + providerId
             }
     }
@@ -3737,6 +3827,8 @@ class DesktopAppState(
                         credits =
                             credits.map { credit ->
                                 PersonCredit(
+                                    id = credit.id,
+                                    isSeries = credit.isSeries,
                                     title = credit.title,
                                     year = credit.year,
                                     posterUrl = credit.posterUrl,
@@ -3801,8 +3893,74 @@ class DesktopAppState(
             } ?: return false
 
         closePerson()
-        selectXtreamItem(found.providerId)
+        // The item itself, not just its id.
+        //
+        // `selectXtreamItem` clears `dailySelectedItem` and then relies on the title being present
+        // in the current catalogue page — and `selectedXtreamItem` returns null outright while the
+        // destination is Home. So from the Home screen the selection resolved to nothing, the
+        // details branch was never taken, and the press dropped the user back to the start with the
+        // log cheerfully reporting success.
+        //
+        // `selectDailyItem` sets both halves, which is what every working path already uses.
+        selectDailyItem(found)
         return true
+    }
+
+    /**
+     * Opens a credit from a filmography: in this playlist if it is here, otherwise in Assinaturas.
+     *
+     * Previously a credit the playlist did not carry did nothing at all. The click searched a
+     * 41,000-item catalogue on a background thread with no indication on screen, then set a
+     * "missing" value that nothing ever read — so the app appeared to freeze and then to ignore the
+     * press. Both halves of that were wrong.
+     *
+     * A person's filmography is mostly films the user does not have; that is the ordinary case, not
+     * the failure. Sending those to Assinaturas answers the question they were actually asking —
+     * where can I watch this — and the library check inside that screen still puts "you already have
+     * this" first when it applies.
+     */
+    suspend fun openCredit(credit: PersonCredit): CreditDestination {
+        // Logged because this has now failed twice for reasons that looked identical from outside:
+        // the screen simply changed to something the user did not ask for. Each line below names
+        // which guard stopped it — the title only, never an address.
+        if (openTitleFromCredit(credit.title)) {
+            println("credit: opened from playlist")
+            // The caller has to open its own details page. Selecting the item is not the same as
+            // showing it: `detailsOpen` is a flag inside each screen, and setting the selection
+            // without it left the user on whatever was underneath — the Home.
+            return CreditDestination.PLAYLIST_ITEM
+        }
+
+        // Not in this playlist. Ask where it can be watched instead of stopping here.
+        //
+        // Both are needed: without an id there is nothing to look up, and without a configured
+        // catalogue there is nowhere to ask. Either way the press does nothing rather than opening
+        // an empty screen — which is the one case this function cannot improve on.
+        val tmdbId = credit.id
+        if (tmdbId == null) {
+            println("credit: no catalogue id, nothing to look up")
+            return CreditDestination.NOWHERE
+        }
+        if (streamingCatalogue == null) {
+            println("credit: no streaming catalogue — metadata key missing or blank")
+            return CreditDestination.NOWHERE
+        }
+        val external =
+            ExternalTitle(
+                id =
+                    ExternalContentId(
+                        namespace = if (credit.isSeries) TMDB_SERIES_NAMESPACE else TMDB_NAMESPACE,
+                        value = tmdbId.toString(),
+                    ),
+                title = credit.title,
+                kind = if (credit.isSeries) ExternalTitleKind.SERIES else ExternalTitleKind.MOVIE,
+                year = credit.year,
+                posterUrl = credit.posterUrl,
+                isDemo = false,
+            )
+        closePerson()
+        openStreamingTitle(external)
+        return CreditDestination.SUBSCRIPTIONS
     }
 
     fun closePerson() {
@@ -4177,7 +4335,35 @@ data class PersonFilmography(
 )
 
 /** One entry of a person's filmography, from the metadata service rather than the playlist. */
+/**
+ * Where a press on a credit ended up, so the screen can finish the job.
+ *
+ * The state alone cannot: showing a title from the playlist means setting a `detailsOpen` flag that
+ * lives inside each screen, and the state has no access to it. Returning the outcome is what lets
+ * the caller open its own page — without this, selecting the item silently left the user on
+ * whatever was underneath, which was the Home.
+ */
+enum class CreditDestination {
+    /** Found in the user's own playlist; the caller opens its details page. */
+    PLAYLIST_ITEM,
+
+    /** Not in the playlist; Assinaturas is now showing where it can be watched. */
+    SUBSCRIPTIONS,
+
+    /** Nothing could be done — no catalogue id, or no metadata key configured. */
+    NOWHERE,
+}
+
 data class PersonCredit(
+    /**
+     * TMDb's own id, so the credit can be opened even when the playlist does not carry it.
+     *
+     * Null when the metadata response omitted it; the credit still lists and still matches against
+     * the playlist by title.
+     */
+    val id: Int?,
+    /** Films and series are numbered separately, so the kind is part of the identity. */
+    val isSeries: Boolean,
     val title: String,
     val year: Int?,
     val posterUrl: String?,

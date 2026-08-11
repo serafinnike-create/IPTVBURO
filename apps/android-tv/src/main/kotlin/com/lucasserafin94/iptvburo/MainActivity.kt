@@ -2,7 +2,11 @@ package com.lucasserafin94.iptvburo
 
 import android.content.res.Configuration
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseEndpoints
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -11,7 +15,6 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -21,12 +24,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -37,15 +38,29 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.Lifecycle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.playback.PlaybackSessionFactory
 import com.lucasserafin94.iptvburo.playback.AndroidPlaybackProgressCoordinator
+import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
+import com.lucasserafin94.iptvburo.data.billing.GooglePlayBillingManager
+import com.lucasserafin94.iptvburo.data.billing.GooglePlayBillingOutcome
+import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.ui.AppContent
+import com.lucasserafin94.iptvburo.ui.BootStageUi
+import com.lucasserafin94.iptvburo.ui.LicenseUiState
 import com.lucasserafin94.iptvburo.ui.MainViewModel
+import com.lucasserafin94.iptvburo.ui.openStreamingOffer
+import com.lucasserafin94.iptvburo.ui.ParentalMessage
 import com.lucasserafin94.iptvburo.ui.screens.AppShellScreen
+import com.lucasserafin94.iptvburo.ui.screens.CatalogueGuardUi
+import com.lucasserafin94.iptvburo.ui.screens.GuardCategoryUi
+import com.lucasserafin94.iptvburo.ui.screens.BuroCinematicBackdrop
 import com.lucasserafin94.iptvburo.ui.screens.LegalOnboardingScreen
 import com.lucasserafin94.iptvburo.ui.screens.LanguageSelectionScreen
+import com.lucasserafin94.iptvburo.ui.screens.LicenseGateScreen
 import com.lucasserafin94.iptvburo.ui.screens.PlayerScreen
 import com.lucasserafin94.iptvburo.ui.screens.ProfilePickerScreen
 import com.lucasserafin94.iptvburo.ui.localization.AppLocaleController
@@ -60,12 +75,16 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
+    private lateinit var googlePlayBilling: GooglePlayBillingManager
 
     @Inject
     lateinit var playbackSessionFactory: PlaybackSessionFactory
 
     @Inject
     lateinit var playbackProgressCoordinator: AndroidPlaybackProgressCoordinator
+
+    @Inject
+    lateinit var licenseService: AndroidLicenseService
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLocaleController.wrapBaseContext(newBase))
@@ -91,15 +110,38 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        googlePlayBilling =
+            GooglePlayBillingManager(this, licenseService) { outcome ->
+                runOnUiThread {
+                    when (outcome) {
+                        GooglePlayBillingOutcome.Verified -> viewModel.refreshLicense()
+                        GooglePlayBillingOutcome.Pending ->
+                            Toast.makeText(this, R.string.play_billing_pending, Toast.LENGTH_LONG).show()
+                        GooglePlayBillingOutcome.Rejected ->
+                            Toast.makeText(this, R.string.play_billing_rejected, Toast.LENGTH_LONG).show()
+                        GooglePlayBillingOutcome.Unavailable ->
+                            Toast.makeText(this, R.string.play_billing_unavailable, Toast.LENGTH_LONG).show()
+                        GooglePlayBillingOutcome.Cancelled -> Unit
+                    }
+                }
+            }
+
         setContent {
             IptvBuroTheme {
                 IptvBuroRoot(
                     viewModel = viewModel,
                     playbackSessionFactory = playbackSessionFactory,
                     playbackProgressCoordinator = playbackProgressCoordinator,
+                    onPurchase = googlePlayBilling::launchPurchase,
+                    onRestore = googlePlayBilling::restorePurchases,
                 )
             }
         }
+    }
+
+    override fun onDestroy() {
+        if (::googlePlayBilling.isInitialized) googlePlayBilling.close()
+        super.onDestroy()
     }
 }
 
@@ -108,9 +150,27 @@ private fun IptvBuroRoot(
     viewModel: MainViewModel,
     playbackSessionFactory: PlaybackSessionFactory,
     playbackProgressCoordinator: AndroidPlaybackProgressCoordinator,
+    onPurchase: (String) -> Unit,
+    onRestore: (String) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val activity = LocalActivity.current as MainActivity
+    val blockedLicense = state.license as? LicenseUiState.Blocked
+
+    // The first ON_RESUME can happen before the asynchronous licence check reaches Blocked. Keying
+    // this effect to the resulting device id guarantees that a same-device reinstall is restored
+    // on its first screen, while the lifecycle hook below catches later returns from Play.
+    LaunchedEffect(blockedLicense?.deviceId) {
+        blockedLicense?.let { onRestore(it.deviceId) }
+    }
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        blockedLicense?.let { blocked ->
+            viewModel.refreshLicense()
+            onRestore(blocked.deviceId)
+        }
+    }
+
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -123,18 +183,48 @@ private fun IptvBuroRoot(
             onSelect = { tag -> AppLocaleController.applySelection(activity, tag) },
         )
 
-        state.isInitializing -> BuroBootScreen()
+        state.isInitializing -> BuroBootScreen(R.string.boot_preparing, state.bootStage)
 
         !state.hasAcceptedLegalNotice -> LegalOnboardingScreen(
             onAccept = viewModel::acceptLegalNotice,
         )
 
-        state.isProfilesLoading -> BuroBootScreen()
+        state.license is LicenseUiState.NotChecked || state.license is LicenseUiState.Checking ->
+            BuroBootScreen(R.string.license_checking)
+
+        state.license is LicenseUiState.Blocked -> {
+            val license = state.license as LicenseUiState.Blocked
+            LicenseGateScreen(
+                state = license,
+                onPurchase = onPurchase,
+                onRetry = viewModel::refreshLicense,
+                onRedeem = viewModel::redeemLicense,
+            )
+        }
+
+        state.isProfilesLoading -> BuroBootScreen(R.string.boot_preparing, state.bootStage)
+
+        // Held until the catalogue has actually produced something to show.
+        //
+        // The screen used to disappear the moment the profile list arrived, which on a catalogue of
+        // forty thousand items left the user looking at an empty home for several seconds — the app
+        // appeared to have opened onto nothing. A returning user with a configured source is
+        // precisely the case where the wait is longest and the reassurance most useful.
+        state.activeProfile != null &&
+            state.sources.isNotEmpty() &&
+            state.bootStage != BootStageUi.READY ->
+            BuroBootScreen(R.string.boot_preparing, state.bootStage)
 
         state.activeProfile == null -> ProfilePickerScreen(
             profiles = state.profiles,
             onSelect = viewModel::selectProfile,
             onCreate = viewModel::createProfile,
+            // The sign-in gate offers the playlist too: a new profile created here should be able
+            // to reuse one already configured, which is the whole point of per-profile lists.
+            // Editing and deleting stay absent — choosing who is watching is not the moment to
+            // rename or remove somebody.
+            sources = state.sources,
+            onSelectProfileSource = viewModel::selectProfileSource,
         )
 
         state.content is AppContent.Player -> {
@@ -147,6 +237,16 @@ private fun IptvBuroRoot(
                 playbackSessionFactory = playbackSessionFactory,
                 playbackProgressCoordinator = playbackProgressCoordinator,
                 activeProfileId = state.activeProfile?.id,
+                isFavorite = playerContent.channel.id in state.favoriteIds,
+                // Live television is excluded: a channel is not a title someone returns to from a
+                // favourites list, and the domain files favourites by content identity.
+                onToggleFavorite =
+                    if (playerContent.channel.contentType == CatalogContentType.LIVE) {
+                        null
+                    } else {
+                        { viewModel.toggleChannelFavorite(playerContent.channel) }
+                    },
+                subtitles = state.subtitles,
                 onBack = { viewModel.goBack() },
             )
         }
@@ -179,17 +279,95 @@ private fun IptvBuroRoot(
                 onPlayMovie = viewModel::playSelectedMovie,
                 onToggleMovieFavorite = viewModel::toggleSelectedMovieFavorite,
                 onOpenPerson = viewModel::openPerson,
+                onRequestCastPhotos = viewModel::ensureCastPhotos,
+                onCatalogueFilterChange = viewModel::setCatalogueFilter,
+                onCatalogueLayoutChange = viewModel::setCatalogueLayout,
                 onOpenEpisode = viewModel::openEpisode,
                 onDownloadMovie = viewModel::downloadSelectedMovie,
                 onDownloadEpisode = viewModel::downloadEpisode,
                 onCancelDownload = viewModel::cancelDownload,
                 onDeleteDownload = viewModel::deleteDownload,
+                onPlayDownload = viewModel::playDownload,
                 onSelectProfile = viewModel::selectProfile,
                 onCreateProfile = viewModel::createProfile,
+                availableAvatars = viewModel.availableAvatars(),
+                onUpdateProfile = viewModel::updateProfile,
+                onDeleteProfile = viewModel::deleteProfile,
+                onSelectProfileSource = viewModel::selectProfileSource,
                 onRequestProfileSelection = viewModel::requestProfileSelection,
+                onSaveTmdbKey = viewModel::saveTmdbKey,
+                onOpenPurchase = { deviceId ->
+                    val language = AppLocaleController.selectedLanguageTag(activity)
+                    val uri = Uri.parse(AndroidLicenseEndpoints.purchaseUrl(deviceId, language))
+                    runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+                    Unit
+                },
+                onRedeemLicense = viewModel::redeemLicense,
+                onSaveSharedTmdbKey = viewModel::saveSharedTmdbKey,
+                onSelectSubscriptionKind = viewModel::selectSubscriptionKind,
+                onSelectSubscriptionRegion = viewModel::selectSubscriptionRegion,
+                onOpenSubscriptionTitle = viewModel::openSubscriptionTitle,
+                onCloseSubscriptionTitle = viewModel::closeSubscriptionTitle,
+                onOpenSubscriptionOffer = { offer ->
+                    // The user's own copy opens in the app; every other row is a signpost to
+                    // somebody else's service and goes through the launcher's safety checks.
+                    val localId = offer.localContentId
+                    if (offer.isUserLibrary && localId != null) {
+                        viewModel.openChannelById(localId)
+                    } else {
+                        openStreamingOffer(activity, offer)
+                    }
+                },
+                onOpenPersonCredit = viewModel::openPersonCredit,
                 onSelectLanguage = { tag -> AppLocaleController.applySelection(activity, tag) },
+                guard =
+                    CatalogueGuardUi(
+                        hasPin = state.hasParentalPin,
+                        lockAdultCategories = state.parentalLock.lockAdultCategories,
+                        pinMessage =
+                            state.parentalMessage?.let { message ->
+                                stringResource(
+                                    when (message) {
+                                        ParentalMessage.BAD_FORMAT -> R.string.parental_pin_format
+                                        ParentalMessage.WRONG_PIN -> R.string.parental_wrong_pin
+                                    },
+                                )
+                            },
+                        subtitles = state.subtitles,
+                        categories =
+                            state.allCategories.mapNotNull { category ->
+                                category.id?.let { id ->
+                                    GuardCategoryUi(
+                                        id = id,
+                                        name = category.name,
+                                        // Blank when the count was never fetched, which is the
+                                        // case for this list; the row then simply omits the line.
+                                        sectionLabel =
+                                            if (category.channelCount > 0) {
+                                                stringResource(
+                                                    R.string.categories_channel_count,
+                                                    category.channelCount,
+                                                )
+                                            } else {
+                                                ""
+                                            },
+                                    )
+                                }
+                            },
+                        hiddenIds = state.hiddenCategoryIds,
+                        lockedIds = state.parentalLock.lockedCategoryIds,
+                        onSetPin = viewModel::setParentalPin,
+                        onClearPin = viewModel::clearParentalPin,
+                        onLockAdultChange = viewModel::setLockAdultCategories,
+                        onSubtitlesChange = viewModel::saveSubtitlePresentation,
+                        onHiddenChange = viewModel::setCategoryHidden,
+                        onLockedChange = viewModel::setCategoryLocked,
+                    ),
+                onSubmitParentalPin = viewModel::submitParentalPin,
+                onDismissParentalPrompt = viewModel::dismissParentalPrompt,
                 onLoadMore = viewModel::loadMoreChannels,
                 onRetryCatalog = viewModel::retryCatalog,
+                onRefreshCatalog = viewModel::refreshCatalog,
                 onOpenHomeItem = viewModel::openStory,
                 onRememberHomeFocus = viewModel::rememberLastFocusedHomeItem,
                 onBack = { viewModel.goBack() },
@@ -199,37 +377,21 @@ private fun IptvBuroRoot(
 }
 
 @Composable
-private fun BuroBootScreen() {
+private fun BuroBootScreen(messageResource: Int, stage: BootStageUi? = null) {
     Box(
         modifier = Modifier.fillMaxSize().background(BuroCanvas),
     ) {
-        Image(
-            painter = painterResource(R.drawable.buro_nocturne_hero),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            alignment = Alignment.CenterEnd,
-            contentScale = ContentScale.Crop,
-        )
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.horizontalGradient(
-                            0f to BuroCanvas,
-                            0.55f to BuroCanvas.copy(alpha = 0.90f),
-                            1f to BuroCanvas.copy(alpha = 0.20f),
-                        ),
-                    ),
-        )
+        BuroCinematicBackdrop()
         Column(
             modifier =
                 Modifier
-                    .align(Alignment.CenterStart)
+                    .align(Alignment.Center)
                     .safeDrawingPadding()
-                    .padding(horizontal = 48.dp)
-                    .widthIn(max = 520.dp),
-            horizontalAlignment = Alignment.Start,
+                    .padding(horizontal = 24.dp, vertical = 28.dp)
+                    .widthIn(max = 520.dp)
+                    .background(BuroCanvas.copy(alpha = 0.88f), androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
+                    .padding(horizontal = 28.dp, vertical = 30.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
                 text = "IPTV  BURO",
@@ -237,14 +399,25 @@ private fun BuroBootScreen() {
                 fontSize = 34.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 3.sp,
-                textAlign = TextAlign.Start,
+                textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                text = stringResource(R.string.common_loading),
+                text = stringResource(messageResource),
                 color = BuroTextSecondary,
                 fontSize = 16.sp,
             )
+            // What is actually happening, not just that something is. A catalogue of tens of
+            // thousands of items takes long enough that an unlabelled spinner reads as a hang.
+            stage?.let { current ->
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(current.labelResource()),
+                    color = BuroGold,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                )
+            }
             Spacer(Modifier.height(22.dp))
             CircularProgressIndicator(
                 color = BuroGold,
@@ -252,3 +425,11 @@ private fun BuroBootScreen() {
         }
     }
 }
+
+private fun BootStageUi.labelResource(): Int =
+    when (this) {
+        BootStageUi.PROFILES -> R.string.boot_stage_profiles
+        BootStageUi.CATALOGUE -> R.string.boot_stage_catalogue
+        BootStageUi.ARTWORK -> R.string.boot_stage_artwork
+        BootStageUi.READY -> R.string.boot_stage_ready
+    }

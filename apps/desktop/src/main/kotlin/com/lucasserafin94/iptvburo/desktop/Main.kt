@@ -75,6 +75,13 @@ private val MIN_HEIGHT = 560.dp
 private val WINDOW_MARGIN = 24.dp
 
 fun main() {
+    // First, so nothing printed during startup is lost.
+    //
+    // The installed app has no console: every diagnostic the code prints went to a stream nobody
+    // could read, and reproducing a fault meant running from Gradle — which a customer cannot do,
+    // and which does not reproduce a fault that only happens on their machine.
+    DiagnosticLog.start()
+
     // Started before the window and left to run on its own: it takes a few seconds, only happens
     // on the first launch after an install or update, and nothing on screen depends on it.
     //
@@ -133,20 +140,17 @@ fun main() {
                         ?.takeIf { !it.maximised }
                         ?.let { WindowPosition(it.x.dp, it.y.dp) }
                         ?: WindowPosition(Alignment.Center),
-                // Maximised on a first run, so Windows itself decides the bounds. Sizing by hand
-                // meant fighting the invisible 7px resize border the OS adds on each edge: a window
-                // asked for at the working-area height came back 14px larger and hung below the
-                // taskbar, taking the last row of the catalogue off screen with it.
+                // Always maximised, so Windows itself decides the bounds. Sizing by hand meant
+                // fighting the invisible 7px resize border the OS adds on each edge: a window asked
+                // for at the working-area height came back 14px larger and hung below the taskbar,
+                // taking the last row of the catalogue off screen with it.
                 //
-                // After that the user's own choice wins. Someone who deliberately made the window
-                // small wants it small again, and forcing maximised every launch would override a
-                // decision they made on purpose.
-                placement =
-                    if (savedGeometry == null || savedGeometry.maximised) {
-                        WindowPlacement.Maximized
-                    } else {
-                        WindowPlacement.Floating
-                    },
+                // This used to restore whatever size the window was last closed at, on the grounds
+                // that someone who made it small wanted it small. In practice it meant the app
+                // opened in a small window after any session that ended that way — including one
+                // that ended in the compact player — and a media app that opens small reads as
+                // broken. Resizing during a session still works; it simply is not remembered.
+                placement = WindowPlacement.Maximized,
             )
 
         // Remembered so leaving the compact overlay restores the window the user had, rather than

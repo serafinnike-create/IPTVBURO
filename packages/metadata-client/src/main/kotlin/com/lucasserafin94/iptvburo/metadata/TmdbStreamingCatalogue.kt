@@ -1,14 +1,10 @@
-package com.lucasserafin94.iptvburo.desktop.data
+package com.lucasserafin94.iptvburo.metadata
 
 import com.lucasserafin94.iptvburo.domain.model.ExternalContentId
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitle
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitleKind
 import com.lucasserafin94.iptvburo.domain.model.StreamingProvider
-import com.lucasserafin94.iptvburo.metadata.TmdbClient
-import com.lucasserafin94.iptvburo.metadata.TmdbDiscoverKind
-import com.lucasserafin94.iptvburo.metadata.TmdbTitleDetails
-import com.lucasserafin94.iptvburo.metadata.TmdbDiscoveredTitle
 
 /**
  * The real storefront: what every streaming service in a region currently carries.

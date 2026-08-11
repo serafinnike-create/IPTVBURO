@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -83,6 +85,11 @@ internal fun MovieDetailsScreen(
     onOpenPerson: (String) -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
+    /** How far the viewer already is, 0..1. Null when unwatched, which draws no bar at all. */
+    watchedFraction: Float? = null,
+    /** Photos already resolved, by lower-cased name. Absent means not looked up yet. */
+    castPhotos: Map<String, String?> = emptyMap(),
+    onRequestCastPhotos: (List<String>) -> Unit = {},
     offlineSupported: Boolean = AndroidPlatformCapabilities.offlineSupported,
     modifier: Modifier = Modifier,
 ) {
@@ -212,8 +219,44 @@ internal fun MovieDetailsScreen(
                 }
             }
 
+            watchedFraction?.let { fraction ->
+                item("progress") {
+                    Column(modifier = Modifier.width(contentWidth)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(BuroTextPrimary.copy(alpha = 0.18f)),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(fraction)
+                                    .height(4.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(BuroAccent),
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.details_watched_percent, (fraction * 100f).toInt()),
+                            color = BuroTextSecondary,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
+
             item("actions") {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // FlowRow, not Row. On a phone the first two buttons consume the full width, and
+                // in a plain Row everything after them was laid out past the right edge: Baixar and
+                // Trailer existed, were reported missing, and could not be reached by any gesture
+                // because the row did not scroll either. Wrapping keeps every action on screen at
+                // any width, and still forms a single line where there is room.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     BuroButton(
                         onClick = onPlay,
                         enabled = !isLoading && !isResolvingPlayback,
@@ -231,13 +274,34 @@ internal fun MovieDetailsScreen(
                             contentDescription = null,
                             tint = if (isFavorite) Color(0xFFE46C7A) else BuroTextPrimary,
                         )
-                        Text(if (isFavorite) "Na Minha BURO" else "Minha BURO")
+                        // Both labels measured, the longer one drawn invisibly underneath. The two
+                        // words differ in width ("Favoritar" / "Favoritado"), so the button
+                        // resized on every tap and the FlowRow reflowed — the button appeared to
+                        // jump to the next line at the moment it was pressed.
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = stringResource(R.string.details_favorite_added),
+                                color = Color.Transparent,
+                                maxLines = 1,
+                            )
+                            Text(
+                                stringResource(
+                                    if (isFavorite) {
+                                        R.string.details_favorite_added
+                                    } else {
+                                        R.string.details_favorite_add
+                                    },
+                                ),
+                                maxLines = 1,
+                            )
+                        }
                     }
                     if (offlineSupported) {
                         BuroButton(
                             onClick =
                                 when (downloadState) {
                                     is DownloadStateUi.Running -> onCancelDownload
+                                    DownloadStateUi.Preparing -> onCancelDownload
                                     DownloadStateUi.Completed -> onDeleteDownload
                                     DownloadStateUi.Idle,
                                     DownloadStateUi.Failed,
@@ -272,7 +336,7 @@ internal fun MovieDetailsScreen(
                             },
                             style = BuroButtonStyle.Secondary,
                         ) {
-                            Text("Trailer")
+                            Text(stringResource(R.string.details_trailer))
                         }
                     }
                 }
@@ -302,9 +366,12 @@ internal fun MovieDetailsScreen(
                     }
                     details.cast?.toCastNames()?.takeIf(List<String>::isNotEmpty)?.let { cast ->
                         item("cast") {
+                            // Asked for once the names are known, not on every recomposition: the
+                            // view model caches hits and misses alike, so a redraw costs nothing.
+                            LaunchedEffect(cast) { onRequestCastPhotos(cast) }
                             Column(modifier = Modifier.width(contentWidth)) {
                                 Text(
-                                    text = "Elenco",
+                                    text = stringResource(R.string.details_cast),
                                     color = BuroTextPrimary,
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
@@ -315,6 +382,7 @@ internal fun MovieDetailsScreen(
                                         CastPersonChip(
                                             name = actor,
                                             onClick = { onOpenPerson(actor) },
+                                            photoUrl = castPhotos[actor.lowercase()],
                                         )
                                     }
                                 }
@@ -352,6 +420,7 @@ internal fun MovieDetailsScreen(
 internal fun DownloadStateUi.label(): String =
     when (this) {
         DownloadStateUi.Idle -> stringResource(R.string.download_action)
+        DownloadStateUi.Preparing -> stringResource(R.string.download_preparing)
         is DownloadStateUi.Running ->
             if (fraction < 0f) {
                 stringResource(R.string.download_running_unknown)

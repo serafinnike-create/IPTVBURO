@@ -51,7 +51,11 @@ class AndroidDownloadManager @Inject constructor(
      * the shared media store where another app could read it.
      */
     private val rootDirectory: File
-        get() = File(contextProvider.get().getExternalFilesDir(null), VAULT_DIRECTORY)
+        get() {
+            val context = contextProvider.get()
+            val parent = context.getExternalFilesDir(null) ?: context.filesDir
+            return File(parent, VAULT_DIRECTORY)
+        }
 
     /** Whether this content type may be downloaded at all. */
     fun isDownloadable(contentType: CatalogContentType): Boolean =
@@ -78,7 +82,58 @@ class AndroidDownloadManager @Inject constructor(
             }
     }
 
-    fun delete(contentKey: String): Boolean = downloadedFile(contentKey)?.delete() == true
+    @Synchronized
+    fun delete(contentKey: String): Boolean {
+        val deleted = downloadedFile(contentKey)?.delete() == true
+        forget(contentKey)
+        return deleted
+    }
+
+    /**
+     * Persists only catalogue identity and a display title after the bytes are complete.
+     * Stream URLs, headers and credentials are deliberately absent.
+     */
+    @Synchronized
+    fun rememberCompleted(
+        contentKey: String,
+        title: String,
+        sourceId: String,
+        providerItemId: String?,
+        contentType: CatalogContentType,
+    ) {
+        val preferences = metadataPreferences()
+        val known = preferences.getStringSet(METADATA_KEYS, emptySet()).orEmpty().toMutableSet()
+        known += contentKey
+        preferences.edit()
+            .putStringSet(METADATA_KEYS, known)
+            .putString(metaKey(METADATA_TITLE, contentKey), title.take(240))
+            .putString(metaKey(METADATA_SOURCE, contentKey), sourceId)
+            .putString(metaKey(METADATA_PROVIDER_ITEM, contentKey), providerItemId)
+            .putString(metaKey(METADATA_CONTENT_TYPE, contentKey), contentType.name)
+            .apply()
+    }
+
+    /** Completed entries that still have a real file on disk. */
+    @Synchronized
+    fun storedDownloads(): List<StoredDownload> {
+        val preferences = metadataPreferences()
+        return preferences.getStringSet(METADATA_KEYS, emptySet()).orEmpty().mapNotNull { contentKey ->
+            val file = downloadedFile(contentKey) ?: return@mapNotNull null
+            StoredDownload(
+                contentKey = contentKey,
+                title = preferences.getString(metaKey(METADATA_TITLE, contentKey), null) ?: contentKey,
+                sourceId = preferences.getString(metaKey(METADATA_SOURCE, contentKey), null).orEmpty(),
+                providerItemId = preferences.getString(metaKey(METADATA_PROVIDER_ITEM, contentKey), null),
+                contentType =
+                    runCatching {
+                        CatalogContentType.valueOf(
+                            preferences.getString(metaKey(METADATA_CONTENT_TYPE, contentKey), null).orEmpty(),
+                        )
+                    }.getOrDefault(CatalogContentType.MOVIE),
+                file = file,
+            )
+        }
+    }
 
     fun cancel(contentKey: String) {
         cancelled[contentKey]?.set(true)
@@ -176,14 +231,47 @@ class AndroidDownloadManager @Inject constructor(
 
     private fun safeStem(contentKey: String): String = contentKey.replace(UNSAFE_NAME, "_").take(120)
 
+    private fun metadataPreferences() =
+        contextProvider.get().getSharedPreferences(METADATA_PREFERENCES, Context.MODE_PRIVATE)
+
+    private fun metaKey(prefix: String, contentKey: String): String = "$prefix$contentKey"
+
+    private fun forget(contentKey: String) {
+        val preferences = metadataPreferences()
+        val known = preferences.getStringSet(METADATA_KEYS, emptySet()).orEmpty().toMutableSet()
+        known -= contentKey
+        preferences.edit()
+            .putStringSet(METADATA_KEYS, known)
+            .remove(metaKey(METADATA_TITLE, contentKey))
+            .remove(metaKey(METADATA_SOURCE, contentKey))
+            .remove(metaKey(METADATA_PROVIDER_ITEM, contentKey))
+            .remove(metaKey(METADATA_CONTENT_TYPE, contentKey))
+            .apply()
+    }
+
     private companion object {
         const val BUFFER_BYTES = 1 shl 16
         const val PART_SUFFIX = ".part"
         const val VAULT_DIRECTORY = "offline-vault"
+        const val METADATA_PREFERENCES = "offline-vault-index"
+        const val METADATA_KEYS = "completed.keys"
+        const val METADATA_TITLE = "title:"
+        const val METADATA_SOURCE = "source:"
+        const val METADATA_PROVIDER_ITEM = "provider-item:"
+        const val METADATA_CONTENT_TYPE = "content-type:"
         val UNSAFE_NAME = Regex("""[^A-Za-z0-9._-]""")
         val SAFE_EXTENSION = Regex("""[A-Za-z0-9]{1,5}""")
     }
 }
+
+data class StoredDownload(
+    val contentKey: String,
+    val title: String,
+    val sourceId: String,
+    val providerItemId: String?,
+    val contentType: CatalogContentType,
+    val file: File,
+)
 
 sealed interface DownloadResult {
     data class Completed(val file: File, val bytes: Long) : DownloadResult

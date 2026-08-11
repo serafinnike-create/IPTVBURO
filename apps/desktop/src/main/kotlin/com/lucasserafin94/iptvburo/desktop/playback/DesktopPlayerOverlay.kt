@@ -1,6 +1,8 @@
 package com.lucasserafin94.iptvburo.desktop.playback
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -447,7 +449,15 @@ fun DesktopPlayerOverlay(
                 }
             }
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                // Scrollable, because a Row does not shrink children that carry no weight.
+                //
+                // Once the transport buttons, the rate, the subtitle and audio pickers, the
+                // brightness readout and the volume slider are all in here, the row wants more
+                // width than the window has. Without somewhere to overflow to, Compose took it out
+                // of the only flexible thing present — the button labels — and broke "Sair da tela
+                // cheia" one character per line, which stretched the bar to the height of the
+                // screen. Scrolling keeps every control at its natural size and reachable.
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -525,7 +535,26 @@ fun DesktopPlayerOverlay(
                 }
                 // Brightness before volume: a film too dark to follow is the more common complaint,
                 // and a viewer reaching for it is usually mid-scene.
-                Text("☀ ${(state.brightness * 100).toInt()}%", color = Color.White)
+                // Says when it takes effect, because it cannot take effect now.
+                //
+                // VLC builds the adjust filter with the video chain and its control interface has
+                // no command to change it afterwards — the slider moved and the picture did not,
+                // which reads as a broken control rather than as a deferred setting. The subtitle
+                // options carry the same limitation and say so in the same way.
+                Text(
+                    text = "☀ ${(state.brightness * 100).toInt()}%",
+                    color = Color.White,
+                )
+                if (state.brightness != 1.0) {
+                    // Literal, like every other label in this overlay. Introducing the strings
+                    // mechanism for one line would leave the file half-translated, which is worse
+                    // than consistently untranslated; the whole overlay is a separate job.
+                    Text(
+                        text = "vale para o próximo",
+                        color = Color.White.copy(alpha = 0.6f),
+                        maxLines = 1,
+                    )
+                }
                 Slider(
                     value = state.brightness.toFloat(),
                     onValueChange = { controller.setBrightness(it.toDouble()) },
@@ -545,9 +574,22 @@ fun DesktopPlayerOverlay(
                 // Escape never arrive - which left closing the whole app as the only way out.
                 if (isFullScreen) {
                     Spacer(Modifier.width(12.dp))
-                    OutlinedButton(onClick = onToggleFullScreen) { Text("⛶  Sair da tela cheia") }
+                    // Never wrapped.
+                    //
+                    // The controls sit in a Row that runs out of width once the volume slider and
+                    // the brightness readout are in it, and Compose then breaks the label one
+                    // character per line: the button became a tall vertical column of letters and
+                    // pushed the whole bar to the height of the screen.
+                    //
+                    // maxLines alone is not enough — a single line still needs somewhere to go —
+                    // so the label is short and the row is allowed to scroll instead.
+                    OutlinedButton(onClick = onToggleFullScreen) {
+                        Text("⛶  Sair da tela cheia", maxLines = 1, softWrap = false)
+                    }
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = closePlayer) { Text("Voltar ao app") }
+                    OutlinedButton(onClick = closePlayer) {
+                        Text("Voltar ao app", maxLines = 1, softWrap = false)
+                    }
                 }
             }
         }

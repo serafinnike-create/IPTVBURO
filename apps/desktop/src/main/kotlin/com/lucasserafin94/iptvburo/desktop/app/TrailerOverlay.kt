@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.desktop.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,7 +75,15 @@ fun TrailerOverlay(
                 .fillMaxSize()
                 .background(BuroColors.Scrim)
                 // A click outside closes it, the way any lightbox behaves.
-                .clickable(onClick = onClose),
+                //
+                // No indication: Material's default ripple on a window-sized target washes grey over
+                // the whole screen on hover. Here it sits on top of a scrim that is deliberately dark
+                // and even, so the ripple shows as a patch moving with the pointer.
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClose,
+                ),
         contentAlignment = Alignment.Center,
     ) {
         Column(

@@ -299,6 +299,14 @@ class SessionXtreamRepository(
         val requestedStart = safeRequestedPage * pageSize
         val pageItems = ArrayList<XtreamCatalogItem>(pageSize)
         var totalMatches = 0
+
+        /**
+         * Titles already listed, for the favourites screen only.
+         *
+         * Allocated whatever the mode, because a null here would need a branch at every use; it
+         * stays empty and costs nothing when the identity filter is not in play.
+         */
+        val seenIdentities = HashSet<ContentIdentity>()
         val categoryNames = synchronized(lock) { categories[contentType].orEmpty().associate { it.providerId to it.name } }
 
         repeat(catalogItems.size) { index ->
@@ -329,6 +337,20 @@ class SessionXtreamRepository(
                 if (lockedCategoryIds.isNotEmpty() && rowCategoryIds.any(lockedCategoryIds::contains)) {
                     return@repeat
                 }
+                // One row per title when listing favourites.
+                //
+                // A favourite is keyed on what the content *is* — kind, title, year — so that it
+                // survives replacing the playlist. Providers commonly carry the same film several
+                // times over for different qualities, and every one of those copies matches the one
+                // key: marking a film once made it appear four times on the favourites screen,
+                // which reads as the app saving it repeatedly.
+                //
+                // Only here. In the catalogue proper those copies are the choice of quality, and
+                // collapsing them would take away the ability to pick one.
+                if (allowedIdentities != null && !seenIdentities.add(catalogItems.identityAt(index))) {
+                    return@repeat
+                }
+
                 // Built only for the rows that actually appear on this page — eighty of them,
                 // not every match in the catalogue.
                 if (totalMatches in requestedStart until requestedStart + pageSize) {

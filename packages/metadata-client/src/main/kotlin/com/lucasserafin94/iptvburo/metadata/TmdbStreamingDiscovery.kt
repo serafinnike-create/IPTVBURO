@@ -1,11 +1,9 @@
-package com.lucasserafin94.iptvburo.desktop.data
+package com.lucasserafin94.iptvburo.metadata
 
 import com.lucasserafin94.iptvburo.domain.model.OfferType
 import com.lucasserafin94.iptvburo.domain.model.ProviderDeepLinks
 import com.lucasserafin94.iptvburo.domain.model.StreamingOffer
 import com.lucasserafin94.iptvburo.domain.model.StreamingProvider
-import com.lucasserafin94.iptvburo.metadata.TmdbWatchProvider
-import com.lucasserafin94.iptvburo.metadata.TmdbWatchProviders
 
 /**
  * Turning TMDb's watch-provider response into the offers the app ranks and renders.

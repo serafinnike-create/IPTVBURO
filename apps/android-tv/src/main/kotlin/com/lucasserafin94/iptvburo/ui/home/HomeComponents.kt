@@ -188,60 +188,24 @@ fun BuroHero(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(if (compact) 18.dp else 24.dp))
-            val sourcesLabel =
-                if (sourceCount == 0) {
-                    stringResource(R.string.buro_home_view_sources)
-                } else {
-                    stringResource(
-                        R.string.buro_home_view_sources_count,
-                        sourceCount,
-                    )
-                }
-            if (phonePortrait) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    HeroAction(
-                        label = if (item.isDemonstration) stringResource(R.string.buro_home_view_story) else "Ver detalhes",
-                        icon = Icons.Default.Info,
-                        primary = true,
-                        onClick = { onOpenItem(item.id) },
-                        onFocused = { onItemFocused(item.id) },
-                        requestFocus = requestFocus,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    HeroAction(
-                        label = sourcesLabel,
-                        icon = Icons.Default.FolderOpen,
-                        primary = false,
-                        onClick = onOpenSources,
-                        onFocused = { onItemFocused(item.id) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            } else {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    HeroAction(
-                        label = if (item.isDemonstration) stringResource(R.string.buro_home_view_story) else "Ver detalhes",
-                        icon = Icons.Default.Info,
-                        primary = true,
-                        onClick = { onOpenItem(item.id) },
-                        onFocused = { onItemFocused(item.id) },
-                        requestFocus = requestFocus,
-                    )
-                    HeroAction(
-                        label = sourcesLabel,
-                        icon = Icons.Default.FolderOpen,
-                        primary = false,
-                        onClick = onOpenSources,
-                        onFocused = { onItemFocused(item.id) },
-                    )
-                }
-            }
+            // One action, not two. The banner advertises a title, so the only thing it should offer
+            // is that title — "Ver fontes" was source administration sitting on the most prominent
+            // surface in the app, where the desktop puts Watch. Sources remain reachable from the
+            // navigation, which is where managing them belongs.
+            HeroAction(
+                label =
+                    if (item.isDemonstration) {
+                        stringResource(R.string.buro_home_view_story)
+                    } else {
+                        stringResource(R.string.buro_home_view_details)
+                    },
+                icon = Icons.Default.Info,
+                primary = true,
+                onClick = { onOpenItem(item.id) },
+                onFocused = { onItemFocused(item.id) },
+                requestFocus = requestFocus,
+                modifier = if (phonePortrait) Modifier.fillMaxWidth() else Modifier,
+            )
         }
     }
 }

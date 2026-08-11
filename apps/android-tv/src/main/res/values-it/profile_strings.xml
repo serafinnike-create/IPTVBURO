@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_picker_title">Chi sta guardando?</string>
+    <string name="profile_picker_subtitle">Ogni persona conserva preferiti, lingua e avanzamento.</string>
+    <string name="profile_picker_add">Aggiungi</string>
+    <string name="profile_picker_open_settings">Imposta la chiave TMDB per questo profilo</string>
+    <string name="profile_picker_name">Nome profilo</string>
+    <string name="profile_picker_child"> Bambino</string>
+    <string name="profile_picker_adult"> Adulto</string>
+    <string name="profile_picker_create">Crea profilo</string>
+    <string name="profile_edit_title">Modifica profilo</string>
+    <string name="profile_edit_avatar">Avatar</string>
+    <string name="profile_edit_kids_hint">Un profilo bambini nasconde i contenuti per adulti.</string>
+    <string name="profile_edit_save">Salva</string>
+    <string name="profile_edit_delete">Elimina questo profilo</string>
+    <string name="profile_edit_delete_confirm">Tocca di nuovo — preferiti e cronologia verranno rimossi</string>
+    <string name="profile_edit_open">Modifica</string>
+    <string name="profile_picker_kids_badge">Bambini</string>
+    <string name="profile_edit_choose_photo">Scegli una foto</string>
+    <string name="profile_edit_remove_photo">Rimuovi foto</string>
+    <string name="profile_edit_source">Playlist</string>
+    <string name="profile_edit_source_any">Qualsiasi</string>
+    <string name="profile_edit_source_new">Aggiungi playlist</string>
+    <!-- The profile a fresh install creates so favourites have somewhere to go. -->
+    <string name="profile_default_name">Il mio profilo</string>
+</resources>

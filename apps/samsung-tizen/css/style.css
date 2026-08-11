@@ -1,0 +1,186 @@
+/*
+  Tokens de "BURO Nocturne" (packages/design-tokens/tokens.json).
+  Mantidos manualmente por enquanto; uma etapa futura pode gerar este arquivo.
+
+  A TV renderiza a pagina numa area logica de 1920x1080 independente do painel
+  ser 4K. Por isso usamos pixels absolutos: 1px aqui = 1px logico na TV.
+*/
+:root {
+    --canvas: #090A0D;
+    --surface: #111319;
+    --elevated: #191C24;
+    --surface-hover: #222631;
+    --text-primary: #F6F7FA;
+    --text-secondary: #B6BAC5;
+    --text-muted: #7E8492;
+    --brand-primary: #D6A956;
+    --error: #FF6B6B;
+
+    --radius-medium: 16px;
+    --radius-large: 24px;
+    --motion-focus: 160ms;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    /*
+      CRITICO: o fundo precisa ser transparente para o video da AVPlay
+      aparecer. Um fundo opaco aqui esconde o video por completo.
+    */
+    background: transparent;
+    font-family: "Samsung One", "Helvetica Neue", Arial, sans-serif;
+    color: var(--text-primary);
+    /* A TV nao tem cursor; garante que nada selecione texto.
+       O prefixo -webkit- e obrigatorio: a Tizen usa WebKit/Chromium antigo. */
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: none;
+}
+
+#av-player {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1920px;
+    height: 1080px;
+}
+
+/*
+  Usamos top/right/bottom/left em vez de `inset`, e margin em vez de `gap`:
+  o Chromium das TVs Samsung mais antigas (e o do simulador) nao suporta
+  nenhum dos dois. `inset` exige Chromium 87+ e `gap` em flex exige 84+.
+*/
+#app {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: var(--canvas);
+    /*
+      Safe area: TVs cortam as bordas (overscan). Nada essencial
+      deve ficar a menos de 48px da borda.
+    */
+    padding: 60px 90px;
+}
+
+/* Quando o player esta ativo escondemos a UI para revelar o video. */
+body.playing #app {
+    display: none;
+}
+
+.app-title {
+    font-size: 52px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--brand-primary);
+}
+
+.app-subtitle {
+    margin-top: 8px;
+    font-size: 24px;
+    color: var(--text-muted);
+}
+
+.shelf {
+    margin-top: 64px;
+}
+
+.shelf-title {
+    font-size: 30px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+}
+
+.card-row {
+    display: flex;
+    list-style: none;
+}
+
+.card {
+    width: 400px;
+    height: 240px;
+    padding: 28px;
+    /* Espacamento entre cartoes; substitui `gap`, sem suporte no Chromium antigo. */
+    margin-right: 32px;
+    background: var(--elevated);
+    border-radius: var(--radius-large);
+    /*
+      A borda existe sempre (transparente) para que o foco nao
+      empurre o layout ao aparecer.
+    */
+    border: 3px solid transparent;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform var(--motion-focus) ease-out,
+                background-color var(--motion-focus) ease-out,
+                border-color var(--motion-focus) ease-out;
+}
+
+/*
+  Numa TV o usuario nao ve o ponteiro: o foco precisa ser OBVIO.
+  Escala + anel dourado + contraste, tudo junto.
+*/
+.card.focused {
+    background: var(--surface-hover);
+    border-color: var(--brand-primary);
+    transform: scale(1.045);
+}
+
+.card-name {
+    font-size: 30px;
+    font-weight: 600;
+}
+
+.card-kind {
+    font-size: 22px;
+    color: var(--text-muted);
+}
+
+.hint {
+    position: absolute;
+    bottom: 60px;
+    left: 90px;
+    font-size: 22px;
+    color: var(--text-muted);
+}
+
+.player-overlay {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    align-items: flex-end;
+    padding: 90px;
+    /* Nao pinta fundo: o video esta atras. */
+    background: transparent;
+}
+
+.player-overlay[hidden] {
+    display: none;
+}
+
+.player-status {
+    font-size: 28px;
+    padding: 16px 32px;
+    border-radius: var(--radius-medium);
+    /* Legibilidade sobre qualquer imagem de video. */
+    background: rgba(9, 10, 13, 0.82);
+    color: var(--text-primary);
+}
+
+.player-status.error {
+    color: var(--error);
+}

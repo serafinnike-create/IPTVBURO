@@ -1,5 +1,7 @@
 package com.lucasserafin94.iptvburo.ui.theme
 
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
@@ -46,6 +48,31 @@ val BuroTextSecondary: Color
 
 val BuroDanger: Color
     @Composable @ReadOnlyComposable get() = BuroTheme.colors.error
+
+/**
+ * Text-field colours for every typed field in the app.
+ *
+ * Material3's `OutlinedTextField` defaults to the *Material* palette rather than the theme's own,
+ * so a focused field drew a purple label and outline in an app that is otherwise gold and ivory —
+ * visible on the profile name field. Fixing it field by field would leave the next one added
+ * purple again, so this exists to be passed to all of them.
+ *
+ * Not `@ReadOnlyComposable`: `outlinedTextFieldColors()` is itself composable.
+ */
+val BuroFieldColors: TextFieldColors
+    @Composable get() =
+        OutlinedTextFieldDefaults.colors(
+            focusedTextColor = BuroTextPrimary,
+            unfocusedTextColor = BuroTextPrimary,
+            disabledTextColor = BuroTextSecondary,
+            cursorColor = BuroGold,
+            focusedBorderColor = BuroGold,
+            unfocusedBorderColor = BuroTextSecondary.copy(alpha = 0.45f),
+            focusedLabelColor = BuroGold,
+            unfocusedLabelColor = BuroTextSecondary,
+            focusedPlaceholderColor = BuroTextSecondary,
+            unfocusedPlaceholderColor = BuroTextSecondary,
+        )
 
 @Composable
 fun IptvBuroTheme(

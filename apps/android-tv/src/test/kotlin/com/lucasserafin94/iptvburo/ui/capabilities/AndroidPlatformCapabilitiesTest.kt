@@ -8,9 +8,11 @@ import org.junit.Test
 
 class AndroidPlatformCapabilitiesTest {
     @Test
-    fun `generated Android capability keeps offline UI hidden`() {
-        assertFalse(AndroidPlatformCapabilities.offlineSupported)
-        assertFalse(AppSection.DOWNLOADS in availableRibbonSections())
+    fun `offline is enabled on phones but remains hidden on television`() {
+        assertTrue(AndroidPlatformCapabilities.offlineSupported)
+        assertTrue(AndroidPlatformCapabilities.offlineSupported(isTelevision = false))
+        assertFalse(AndroidPlatformCapabilities.offlineSupported(isTelevision = true))
+        assertTrue(AppSection.DOWNLOADS in availableRibbonSections())
     }
 
     @Test

@@ -1,32 +1,26 @@
 package com.lucasserafin94.iptvburo.desktop.playback
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,6 +69,15 @@ fun MultiviewOverlay(
     onRemoveTile: (String) -> Unit,
     /** How many channels the user queued, which may exceed [tiles] when some failed to resolve. */
     queuedCount: Int = tiles.size,
+    /**
+     * Whether the window is borderless full screen, and how to switch.
+     *
+     * Four matches at once is precisely when somebody wants the whole monitor, and the single-title
+     * player has offered this since the beginning — its absence here read as an oversight rather
+     * than a decision.
+     */
+    isFullScreen: Boolean = false,
+    onToggleFullScreen: () -> Unit = {},
 ) {
     // An empty overlay says so rather than vanishing.
     //
@@ -90,6 +93,14 @@ fun MultiviewOverlay(
         return
     }
     var requestedAudioProviderId by remember { mutableStateOf<String?>(null) }
+
+    // What each tile is actually doing, polled for the badge in the bar.
+    //
+    // A tile that is loading, a tile whose stream the provider closed, and a tile that is simply
+    // dark all render as the same black rectangle. That is what made a grid coming up three-of-four
+    // impossible to interpret from the screen alone — and it is a question the customer will ask
+    // long before they ask for a log.
+    var tileStates by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     val audioProviderId =
         requestedAudioProviderId?.takeIf { selected -> tiles.any { it.providerId == selected } }
             ?: tiles.first().providerId
@@ -97,164 +108,168 @@ fun MultiviewOverlay(
     Box(modifier = Modifier.fillMaxSize().background(BuroColors.Canvas)) {
         Column(modifier = Modifier.fillMaxSize()) {
             MultiviewBar(
-                count = tiles.size,
-                audioTitle = tiles.firstOrNull { it.providerId == audioProviderId }?.title.orEmpty(),
+                tiles = tiles,
+                audioProviderId = audioProviderId,
+                onSelectAudio = { providerId -> requestedAudioProviderId = providerId },
+                isFullScreen = isFullScreen,
+                onToggleFullScreen = onToggleFullScreen,
                 onClose = onClose,
+                // Which tiles have a picture. Shown in the bar rather than over the video: the
+                // tiles are an embedded AWT surface that composites above the Compose scene, so
+                // anything drawn on top of them is simply not visible.
+                playingByProvider = tileStates,
             )
 
-            BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                // Two columns from two tiles up. A 1x2 strip on a wide monitor wastes half the
-                // screen on letterboxing, and a 2x2 grid matches how sports viewers actually
-                // arrange screens.
-                val columns = if (tiles.size == 1) 1 else 2
-                val rows = (tiles.size + columns - 1) / columns
-                val gap = BuroSpacing.Xs
+            // One embedded surface for the whole grid, not one per tile.
+            //
+            // A SwingPanel per cell does not work: each embedded AWT component is composited on its
+            // own layer above the Compose scene, and several of them do not lay out against one
+            // another — the second covers the first instead of taking half the space. With two
+            // channels one played and the other was a black rectangle over half the screen; with
+            // four, the number that worked varied between attempts.
+            //
+            // AWT has arranged sibling components correctly for thirty years. Letting it own the
+            // arrangement, inside a single embedded panel, removes the problem rather than working
+            // around it.
+            val surface = remember { MultiviewSurface() }
+            val currentIsFullScreen = rememberUpdatedState(isFullScreen)
+            val currentToggleFullScreen = rememberUpdatedState(onToggleFullScreen)
 
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(gap),
-                    verticalArrangement = Arrangement.spacedBy(gap),
-                ) {
-                    for (row in 0 until rows) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(gap),
-                        ) {
-                            for (column in 0 until columns) {
-                                val index = row * columns + column
-                                if (index >= tiles.size) {
-                                    // Keeps the last row aligned with the one above instead of
-                                    // stretching a lone tile across the full width.
-                                    Spacer(Modifier.weight(1f).fillMaxHeight())
-                                    continue
-                                }
-                                val tile = tiles[index]
-                                key(tile.providerId) {
-                                    MultiviewCell(
-                                        tile = tile,
-                                        hasAudio = tile.providerId == audioProviderId,
-                                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                                        onFocus = { requestedAudioProviderId = tile.providerId },
-                                        onRemove = { onRemoveTile(tile.providerId) },
-                                    )
-                                }
-                            }
+            DisposableEffect(surface) {
+                onDispose { surface.dispose() }
+            }
+
+            // Rebuilt whenever the set changes. Players already mounted are reused, so adding a
+            // fourth channel does not restart the three that are playing.
+            LaunchedEffect(surface, tiles.map(MultiviewTile::providerId)) {
+                surface.sync(
+                    tiles = tiles,
+                    onTileClicked = { providerId -> requestedAudioProviderId = providerId },
+                    // Any key leaves full screen.
+                    //
+                    // Not just Escape: in full screen there is no window chrome and no visible way
+                    // out, and somebody who reaches for the keyboard at that point is trying to get
+                    // back — whichever key they happen to hit. Windowed, keys are left alone so they
+                    // can mean something later.
+                    onKey = { keyCode ->
+                        if (multiviewKeyTogglesFullScreen(keyCode, currentIsFullScreen.value)) {
+                            currentToggleFullScreen.value()
+                            true
+                        } else {
+                            false
                         }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MultiviewCell(
-    tile: MultiviewTile,
-    hasAudio: Boolean,
-    modifier: Modifier,
-    onFocus: () -> Unit,
-    onRemove: () -> Unit,
-) {
-    val controller = remember(tile.request) { VlcDesktopPlayer() }
-
-    // Volume is driven from the engine rather than the UI: muting in Compose would still leave four
-    // decoders pulling audio, and the user would hear whichever one won.
-    DisposableEffect(controller, hasAudio) {
-        controller.setVolume(if (hasAudio) 1.0 else 0.0)
-        onDispose { }
-    }
-    DisposableEffect(controller) {
-        onDispose { controller.dispose() }
-    }
-
-    Box(
-        modifier = modifier
-            .clip(BuroRadius.Medium)
-            .background(BuroColors.Surface)
-            .border(
-                width = if (hasAudio) 2.dp else 1.dp,
-                color = if (hasAudio) BuroColors.Primary else BuroColors.BorderSoft,
-                shape = BuroRadius.Medium,
-            ),
-    ) {
-        SwingPanel(
-            factory = {
-                controller.createComponent(
-                    request = tile.request,
-                    // Clicking the picture moves the sound here.
-                    //
-                    // The only control was a small button in the header strip, and it did not work:
-                    // a SwingPanel is an AWT component that consumes pointer events before Compose
-                    // sees them, so a Compose click target sharing that space never fires. The canvas
-                    // inside already reports its own clicks, which is the one path that does arrive.
-                    //
-                    // Clicking the whole tile is also what the feature wants: somebody watching four
-                    // matches wants the sound from the one they are looking at, not from a strip they
-                    // have to aim at.
-                    onClick = onFocus,
+                    },
                 )
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
+            }
 
-        // Overlay strip. Kept to a single row so it never covers meaningful picture.
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .fillMaxWidth()
-                .background(BuroColors.Canvas.copy(alpha = 0.62f))
-                .padding(horizontal = BuroSpacing.Sm, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (hasAudio) {
-                Box(Modifier.size(7.dp).clip(CircleShape).background(BuroColors.Primary))
-                Spacer(Modifier.width(7.dp))
-            }
-            Text(
-                text = tile.title,
-                color = BuroColors.Text,
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            if (!hasAudio) {
-                BuroInteractiveRow(
-                    onClick = onFocus,
-                    selected = false,
-                    shape = BuroRadius.Pill,
-                    contentDescription = "Audio",
-                ) {
-                    Text(
-                        text = "🔈",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
+            // Exactly one tile carries sound. Driven at the engine because muting in Compose would
+            // still leave four decoders pulling audio, and the user would hear whichever won.
+            LaunchedEffect(surface, audioProviderId, tiles.size) {
+                tiles.forEach { tile ->
+                    surface.playerFor(tile.providerId)
+                        ?.setVolume(if (tile.providerId == audioProviderId) 1.0 else 0.0)
                 }
-                Spacer(Modifier.width(4.dp))
             }
-            BuroInteractiveRow(
-                onClick = onRemove,
-                selected = false,
-                shape = BuroRadius.Pill,
-                contentDescription = "Fechar",
+
+            LaunchedEffect(surface, tiles.map(MultiviewTile::providerId)) {
+                while (true) {
+                    tileStates =
+                        tiles.associate { tile ->
+                            tile.providerId to
+                                (surface.playerFor(tile.providerId)?.snapshot()?.playing ?: false)
+                        }
+                    kotlinx.coroutines.delay(TILE_STATE_POLL_MILLIS)
+                }
+            }
+
+            // No padding around the surface, and the box painted behind it.
+            //
+            // Padding here does not tint the gap — it exposes whatever Compose draws underneath,
+            // which is why a pale border framed the grid however dark the AWT panel was made. The
+            // seams between tiles belong to the panel's own background; the edge belongs to this.
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(BuroColors.Canvas),
             ) {
-                Text(
-                    text = "✕",
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                    color = BuroColors.TextMuted,
-                    style = MaterialTheme.typography.labelLarge,
+                SwingPanel(
+                    // The seams are this, and nothing else.
+                    //
+                    // SwingPanel's `background` defaults to Color.White, and it does not merely sit
+                    // behind the component — it assigns it, overwriting whatever the panel set for
+                    // itself on every recomposition. Darkening the panel in its own constructor was
+                    // therefore undone immediately, which is why the dividers stayed white through
+                    // several attempts at fixing them somewhere else.
+                    background = MultiviewSurface.SEAM_COLOUR,
+                    factory = { surface.component() },
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }
     }
 }
+
+/**
+ * Whether a key pressed over a tile should return the window to its normal size.
+ *
+ * Any key, not a chosen few. Borderless full screen hides the window controls and the app's own
+ * chrome, so somebody who wants out has nothing to aim at; they reach for the keyboard and press
+ * whatever comes first. Escape alone would leave anyone who tried Space or Backspace still trapped.
+ *
+ * Modifiers are the exception. Ctrl, Shift and Alt are pressed on the way to a shortcut rather than
+ * as a request, and dropping out of full screen while somebody holds Alt for Alt+Tab would fight
+ * them. Windowed, nothing is claimed at all — keys stay free to mean something later.
+ */
+internal fun multiviewKeyLeavesFullScreen(keyCode: Int, isFullScreen: Boolean): Boolean {
+    if (!isFullScreen) return false
+    return keyCode !in MODIFIER_KEYS
+}
+
+/** F11 also enters full screen, so the action remains reachable when the title bar is crowded. */
+internal fun multiviewKeyTogglesFullScreen(keyCode: Int, isFullScreen: Boolean): Boolean =
+    if (isFullScreen) {
+        multiviewKeyLeavesFullScreen(keyCode, isFullScreen = true)
+    } else {
+        keyCode == java.awt.event.KeyEvent.VK_F11
+    }
+
+/**
+ * How often the bar re-reads what each tile is doing.
+ *
+ * Twice a second: fast enough that the badge tracks a stall as it happens, slow enough that four
+ * players are not interrogated on every frame.
+ */
+private const val TILE_STATE_POLL_MILLIS = 500L
+
+private val MODIFIER_KEYS =
+    setOf(
+        java.awt.event.KeyEvent.VK_CONTROL,
+        java.awt.event.KeyEvent.VK_SHIFT,
+        java.awt.event.KeyEvent.VK_ALT,
+        java.awt.event.KeyEvent.VK_ALT_GRAPH,
+        java.awt.event.KeyEvent.VK_META,
+        java.awt.event.KeyEvent.VK_WINDOWS,
+        java.awt.event.KeyEvent.VK_CAPS_LOCK,
+        java.awt.event.KeyEvent.VK_NUM_LOCK,
+    )
 
 @Composable
 private fun MultiviewBar(
-    count: Int,
-    audioTitle: String,
+    tiles: List<MultiviewTile>,
+    audioProviderId: String,
+    onSelectAudio: (String) -> Unit,
+    isFullScreen: Boolean,
+    onToggleFullScreen: () -> Unit,
     onClose: () -> Unit,
+    /** Which tiles currently have a picture, by provider id. Absent means not yet known. */
+    playingByProvider: Map<String, Boolean> = emptyMap(),
 ) {
+    val text = strings
+    // Which channel takes the sound, as a menu rather than a label.
+    //
+    // The bar said "🔊 A&E FHD" and that was all it was — text. Pressing it did nothing, which is
+    // exactly what somebody trying to change the audio would press first.
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -270,26 +285,34 @@ private fun MultiviewBar(
         )
         Spacer(Modifier.width(BuroSpacing.Md))
         Text(
-            text = "$count",
+            text = "${tiles.size}",
             color = BuroColors.TextMuted,
             style = MaterialTheme.typography.labelLarge,
         )
-        Spacer(Modifier.weight(1f))
-        if (audioTitle.isNotBlank()) {
+        Spacer(Modifier.width(BuroSpacing.Md))
+
+        BuroInteractiveRow(
+            onClick = onToggleFullScreen,
+            selected = false,
+            shape = BuroRadius.Small,
+            contentDescription =
+                if (isFullScreen) text.settingsText.multiviewWindowed else text.settingsText.multiviewFullScreen,
+        ) {
             Text(
-                text = "🔊  $audioTitle",
-                color = BuroColors.TextMuted,
+                text = if (isFullScreen) "⤡" else "⛶",
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                color = BuroColors.Text,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.width(BuroSpacing.Md))
         }
+
+        Spacer(Modifier.width(BuroSpacing.Sm))
         BuroInteractiveRow(
             onClick = onClose,
             selected = false,
             shape = BuroRadius.Small,
-            contentDescription = "Fechar multiview",
+            contentDescription = strings.close,
         ) {
             Text(
                 text = "✕",
@@ -299,7 +322,103 @@ private fun MultiviewBar(
                 fontWeight = FontWeight.Bold,
             )
         }
+        Spacer(Modifier.width(BuroSpacing.Md))
+
+        // One button per channel, laid out in the bar — not a dropdown.
+        //
+        // A menu opened downwards from here lands on the video, and the video is an embedded AWT
+        // surface: it composites above the Compose scene, so the menu was drawn and immediately
+        // hidden behind it. The same DropdownMenu works in the single-title player only because its
+        // controls sit at the bottom and it opens upwards into Compose space.
+        //
+        // Four buttons is the whole set — the cap is four tiles — so a menu was never buying much
+        // anyway, and this way the choice is visible without a press. The one carrying sound is
+        // marked, which also answers "which am I hearing?" at a glance.
+        // Keep the window controls outside the flexible channel-name region. Four intrinsic title
+        // widths previously pushed full-screen and close completely off the right edge.
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = text.settingsText.multiviewAudioFrom,
+                color = BuroColors.TextSubtle,
+                style = MaterialTheme.typography.labelSmall,
+            )
+            Spacer(Modifier.width(BuroSpacing.Xs))
+
+            tiles.forEach { tile ->
+                val carriesAudio = tile.providerId == audioProviderId
+                BuroInteractiveRow(
+                    onClick = { onSelectAudio(tile.providerId) },
+                    selected = carriesAudio,
+                    modifier = Modifier.width(110.dp),
+                    shape = BuroRadius.Small,
+                    contentDescription = tile.title,
+                ) { state ->
+                    // A dot for a tile with no picture.
+                    //
+                    // Small and unobtrusive when everything is fine, and the difference between "the
+                    // app is broken" and "that channel stopped sending" when it is not — which the
+                    // customer cannot tell from a black rectangle, and neither could I.
+                    val stalled = playingByProvider[tile.providerId] == false
+                    Text(
+                        text =
+                            when {
+                                carriesAudio -> "🔊  ${tile.title}"
+                                stalled -> "•  ${tile.title}"
+                                else -> tile.title
+                            },
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        color = when {
+                            carriesAudio -> BuroColors.Primary
+                            // Dimmed rather than red. A channel that stops sending for a few
+                            // seconds is ordinary on live television, and an alarm colour every
+                            // time would train the user to ignore it.
+                            stalled -> BuroColors.TextSubtle
+                            state.active -> BuroColors.Text
+                            else -> BuroColors.TextMuted
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (carriesAudio) FontWeight.Bold else FontWeight.Normal,
+                        // Four channel names have to share the bar with two buttons, and a long name
+                        // must shorten rather than push the close button off the edge.
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false,
+                    )
+                }
+                Spacer(Modifier.width(BuroSpacing.Xxs))
+            }
+        }
+
     }
+}
+
+/**
+ * The bar alone, for tests that need to measure it without starting a video engine.
+ *
+ * The controls have gone missing twice — once behind four intrinsic channel widths that pushed them
+ * off the right edge, and once because a build without the fix was installed. Reading the code
+ * proved nothing either time; only composing it at a real width did.
+ */
+@Composable
+internal fun MultiviewBarForTesting(
+    tiles: List<MultiviewTile>,
+    audioProviderId: String,
+    isFullScreen: Boolean = false,
+    onSelectAudio: (String) -> Unit = {},
+    onToggleFullScreen: () -> Unit = {},
+    onClose: () -> Unit = {},
+) {
+    MultiviewBar(
+        tiles = tiles,
+        audioProviderId = audioProviderId,
+        onSelectAudio = onSelectAudio,
+        isFullScreen = isFullScreen,
+        onToggleFullScreen = onToggleFullScreen,
+        onClose = onClose,
+    )
 }
 
 /**

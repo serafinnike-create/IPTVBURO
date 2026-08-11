@@ -10,8 +10,9 @@ import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
-import worker from '../src/index.js';
+import worker, { reconcileGooglePlayPurchases } from '../src/index.js';
 import { LICENSE_PRODUCT } from '../src/checkout.js';
+import { purchaseTokenHash } from '../src/google-play.js';
 import { generateKeyPair } from '../src/signing.js';
 
 const SCHEMA = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
@@ -27,8 +28,27 @@ const DISPUTE_MIGRATION = readFileSync(
   new URL('../migrations/0003_stripe_dispute_lifecycle.sql', import.meta.url),
   'utf8',
 );
+const GOOGLE_PLAY_MIGRATION = readFileSync(
+  new URL('../migrations/0004_google_play_purchase_ledger.sql', import.meta.url),
+  'utf8',
+);
 const WEBHOOK_SECRET = 'local-fixture-webhook-signing-secret';
 const signingKeys = await generateKeyPair();
+const googleServicePair = await crypto.subtle.generateKey(
+  {
+    name: 'RSASSA-PKCS1-v1_5',
+    modulusLength: 2048,
+    publicExponent: new Uint8Array([1, 0, 1]),
+    hash: 'SHA-256',
+  },
+  true,
+  ['sign', 'verify'],
+);
+const googleServicePrivateDer = await crypto.subtle.exportKey('pkcs8', googleServicePair.privateKey);
+const googleServicePrivateKey =
+  '-----BEGIN PRIVATE KEY-----\n'
+  + Buffer.from(googleServicePrivateDer).toString('base64').match(/.{1,64}/g).join('\n')
+  + '\n-----END PRIVATE KEY-----';
 const deviceIdentityA = await generateTestDeviceIdentity('11111111-1111-4111-8111-111111111111');
 const deviceIdentityB = await generateTestDeviceIdentity('22222222-2222-4222-8222-222222222222');
 const DEVICE_A = deviceIdentityA.deviceId;
@@ -153,6 +173,24 @@ async function deviceProofBody(identity, action, { nonce = nextProofNonce(), reg
   };
 }
 
+async function googlePlayProofBody(identity, purchaseToken, accountId, nonce = nextProofNonce()) {
+  const tokenHash = await purchaseTokenHash(purchaseToken);
+  const canonical =
+    `iptvburo-google-play-purchase-v1\n${identity.deviceId}\n${nonce}\n${tokenHash}\n${accountId}`;
+  const signature = new Uint8Array(await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    identity.privateKey,
+    new TextEncoder().encode(canonical),
+  ));
+  return {
+    deviceId: identity.deviceId,
+    nonce,
+    proof: bytesToBase64Url(signature),
+    purchaseToken,
+    accountId,
+  };
+}
+
 function identityForDevice(deviceId) {
   if (deviceId === DEVICE_A) return deviceIdentityA;
   if (deviceId === DEVICE_B) return deviceIdentityB;
@@ -174,6 +212,14 @@ function environment() {
     SIGNING_KEY: signingKeys.privateKeyPkcs8Base64,
     STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
     STRIPE_SECRET_KEY: 'local-fixture-api-key',
+    STRIPE_MODE: 'test',
+    GOOGLE_PLAY_PACKAGE_NAME: 'com.lucasserafin94.iptvburo',
+    GOOGLE_PLAY_PRODUCT_ID: 'iptvburo_730_days',
+    GOOGLE_PLAY_PURCHASE_OPTION_ID: 'rent_730_days',
+    GOOGLE_PLAY_ACCEPT_TEST_PURCHASES: 'false',
+    GOOGLE_SERVICE_ACCOUNT_EMAIL: 'fixture@example.iam.gserviceaccount.com',
+    GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: googleServicePrivateKey,
+    GOOGLE_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
   };
 }
 
@@ -190,8 +236,9 @@ function stripeEvent({
   type,
   object,
   created = Date.parse('2026-08-08T12:00:00Z') / 1000,
+  livemode = false,
 }) {
-  return { id, type, created, data: { object } };
+  return { id, type, created, livemode, data: { object } };
 }
 
 function checkoutSession({
@@ -309,6 +356,7 @@ test('the fresh schema and the P0 migration both apply cleanly', () => {
   legacy.database.exec(DEVICE_MIGRATION);
   legacy.database.exec(DISPUTE_MIGRATION);
   legacy.database.exec(DISPUTE_MIGRATION);
+  legacy.database.exec(GOOGLE_PLAY_MIGRATION);
   assert.ok(
     legacy.database
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'stripe_events'")
@@ -329,6 +377,16 @@ test('the fresh schema and the P0 migration both apply cleanly', () => {
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'device_proof_nonces'")
       .get(),
   );
+  assert.ok(
+    legacy.database
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'google_play_purchases'")
+      .get(),
+  );
+  assert.ok(
+    legacy.database
+      .prepare("SELECT name FROM pragma_table_info('devices') WHERE name = 'google_purchase_token_hash'")
+      .get(),
+  );
   legacy.close();
 });
 
@@ -341,6 +399,165 @@ test('non-object JSON is rejected as a bad proof request rather than becoming an
       assert.notEqual((await response.json()).error, 'internal', path);
     }
     assert.equal(count(env, 'SELECT COUNT(*) AS n FROM device_proof_nonces'), 0);
+  } finally {
+    env.DB.close();
+  }
+});
+
+test('the signing-key check proves the deployed key without creating a trial device', async () => {
+  const env = environment();
+  try {
+    const nonce = nextProofNonce();
+    const response = await worker.fetch(postJson('/v1/signing-key-check', { nonce }), env);
+    assert.equal(response.status, 200);
+    const envelope = await response.json();
+    const key = await crypto.subtle.importKey(
+      'spki',
+      Buffer.from(signingKeys.publicKeySpkiBase64, 'base64'),
+      { name: 'Ed25519' },
+      false,
+      ['verify'],
+    );
+    assert.equal(
+      await crypto.subtle.verify(
+        'Ed25519',
+        key,
+        Buffer.from(envelope.signature, 'base64'),
+        new TextEncoder().encode(envelope.payload),
+      ),
+      true,
+    );
+    assert.deepEqual(JSON.parse(envelope.payload), {
+      nonce,
+      purpose: 'iptvburo-signing-key-check-v1',
+    });
+    assert.equal(count(env, 'SELECT COUNT(*) AS n FROM devices'), 0);
+  } finally {
+    env.DB.close();
+  }
+});
+
+test('route rate limiting rejects abusive registration before it reaches D1', async () => {
+  const env = environment();
+  env.REGISTRATION_RATE_LIMITER = { limit: async () => ({ success: false }) };
+  try {
+    const request = postJson('/v1/register', { invalid: true });
+    request.headers.set('cf-connecting-ip', '192.0.2.10');
+    const response = await worker.fetch(request, env);
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get('retry-after'), '60');
+    assert.equal((await response.json()).error, 'rate_limited');
+    assert.equal(count(env, 'SELECT COUNT(*) AS n FROM devices'), 0);
+  } finally {
+    env.DB.close();
+  }
+});
+
+test('chunked form bodies cannot bypass the checkout and activation size limit', async () => {
+  const env = environment();
+  const oversized = `device=${'A'.repeat(65 * 1024)}`;
+  try {
+    for (const path of ['/checkout', '/ativar']) {
+      const response = await worker.fetch(
+        new Request(`https://local.test${path}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: oversized,
+        }),
+        env,
+      );
+      assert.equal(response.status, 413);
+      assert.equal((await response.json()).error, 'bad_or_oversized_form');
+    }
+  } finally {
+    env.DB.close();
+  }
+});
+
+test('Google Play is verified server-side, acknowledged and restored only to the same account id', async (t) => {
+  const env = environment();
+  const purchaseToken = 'opaque-play-token-worker-integration-0001';
+  const accountId = 'c'.repeat(64);
+  const completion = '2026-08-10T08:00:00Z';
+  let acknowledgementCalls = 0;
+  let refundableQuantity = 1;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    const target = String(url);
+    if (target === 'https://oauth2.googleapis.com/token') {
+      return Response.json({ access_token: 'worker-integration-access-token' });
+    }
+    if (target.includes('/purchases/productsv2/tokens/')) {
+      return Response.json({
+        productLineItem: [{
+          productId: env.GOOGLE_PLAY_PRODUCT_ID,
+          productOfferDetails: {
+            purchaseOptionId: env.GOOGLE_PLAY_PURCHASE_OPTION_ID,
+            rentOfferDetails: {},
+            quantity: 1,
+            refundableQuantity,
+            consumptionState: 'CONSUMPTION_STATE_YET_TO_BE_CONSUMED',
+          },
+        }],
+        purchaseStateContext: { purchaseState: 'PURCHASED' },
+        obfuscatedExternalAccountId: accountId,
+        purchaseCompletionTime: completion,
+        acknowledgementState: 'ACKNOWLEDGEMENT_STATE_PENDING',
+      });
+    }
+    if (target.endsWith(':acknowledge')) {
+      acknowledgementCalls += 1;
+      return new Response('', { status: 200 });
+    }
+    throw new Error('UnexpectedGooglePlayCall');
+  });
+
+  try {
+    await registerDevice(env, deviceIdentityA);
+    const first = await worker.fetch(
+      postJson(
+        '/v1/google-play/purchase',
+        await googlePlayProofBody(deviceIdentityA, purchaseToken, accountId),
+      ),
+      env,
+    );
+    assert.equal(first.status, 200, await first.clone().text());
+    const firstEnvelope = await first.json();
+    assert.equal(JSON.parse(firstEnvelope.payload).state, 'ACTIVE');
+    assert.equal(row(env, 'SELECT status FROM devices WHERE device_id = ?', DEVICE_A).status, 'ACTIVE');
+    const stored = row(env, 'SELECT * FROM google_play_purchases');
+    assert.ok(stored.token_ciphertext.startsWith('v1.'));
+    assert.ok(!stored.token_ciphertext.includes(purchaseToken));
+    assert.equal(stored.status, 'PURCHASED');
+    assert.equal(stored.acknowledgement_state, 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED');
+    assert.equal(stored.expires_at, '2028-08-09T08:00:00.000Z');
+
+    // Reinstallation on the same Android account hash may move the entitlement, but the old
+    // installation is revoked atomically so one Play purchase never licenses two devices.
+    await registerDevice(env, deviceIdentityB);
+    const restored = await worker.fetch(
+      postJson(
+        '/v1/google-play/purchase',
+        await googlePlayProofBody(deviceIdentityB, purchaseToken, accountId),
+      ),
+      env,
+    );
+    assert.equal(restored.status, 200, await restored.clone().text());
+    assert.equal(row(env, 'SELECT status FROM devices WHERE device_id = ?', DEVICE_A).status, 'REVOKED');
+    assert.equal(row(env, 'SELECT status FROM devices WHERE device_id = ?', DEVICE_B).status, 'ACTIVE');
+    assert.equal(row(env, 'SELECT device_id FROM google_play_purchases').device_id, DEVICE_B);
+    assert.equal(acknowledgementCalls, 2);
+
+    // A full refund is visible as zero refundable quantity even if Google's top-level purchase
+    // state still says PURCHASED. The hourly server reconciliation revokes it without app help.
+    refundableQuantity = 0;
+    const reconciled = await reconcileGooglePlayPurchases(env, 50, new Date('2026-08-11T00:00:00Z'));
+    assert.deepEqual(reconciled, { checked: 1, changed: 1 });
+    assert.equal(row(env, 'SELECT status FROM google_play_purchases').status, 'REFUNDED');
+    assert.equal(row(env, 'SELECT status FROM devices WHERE device_id = ?', DEVICE_B).status, 'REVOKED');
+    assert.equal(
+      count(env, "SELECT COUNT(*) AS n FROM events WHERE kind = 'google_play_refunded'"),
+      1,
+    );
   } finally {
     env.DB.close();
   }
@@ -486,6 +703,13 @@ test('CORS is limited to the public app API and sensitive responses are never ca
     assert.equal(adminPreflight.status, 405);
     assert.equal(adminPreflight.headers.get('access-control-allow-origin'), null);
 
+    const playPreflight = await worker.fetch(new Request('https://local.test/v1/google-play/purchase', {
+      method: 'OPTIONS',
+      headers: { origin: 'https://hostile.example' },
+    }), env);
+    assert.equal(playPreflight.status, 405);
+    assert.equal(playPreflight.headers.get('access-control-allow-origin'), null);
+
     const adminPage = await worker.fetch(new Request('https://local.test/admin'), env);
     assert.equal(adminPage.status, 200);
     assert.equal(adminPage.headers.get('access-control-allow-origin'), null);
@@ -600,6 +824,30 @@ test('a valid signature is accepted when another v1 signature is also present', 
       timestamp: Math.floor(Date.now() / 1000) - 301,
     }), env);
     assert.equal(stale.status, 400);
+  } finally {
+    env.DB.close();
+  }
+});
+
+test('a signed live event cannot enter a test ledger and an undeclared mode fails closed', async () => {
+  const env = environment();
+  try {
+    const liveEvent = stripeEvent({
+      id: 'evt_wrong_mode_001',
+      type: 'customer.created',
+      object: { id: 'cus_wrong_mode' },
+      livemode: true,
+    });
+    const wrongMode = await deliver(env, liveEvent);
+    assert.equal(wrongMode.response.status, 400);
+    assert.equal(wrongMode.body.error, 'wrong_stripe_mode');
+    assert.equal(count(env, 'SELECT COUNT(*) AS n FROM stripe_events'), 0);
+
+    delete env.STRIPE_MODE;
+    const noMode = await deliver(env, { ...liveEvent, livemode: false });
+    assert.equal(noMode.response.status, 503);
+    assert.equal(noMode.body.error, 'stripe_mode_unconfigured');
+    assert.equal(count(env, 'SELECT COUNT(*) AS n FROM stripe_events'), 0);
   } finally {
     env.DB.close();
   }
@@ -843,6 +1091,69 @@ test('partial refunds are audited without revoking; a later full refund revokes'
       row(env, 'SELECT status FROM payments WHERE payment_intent_id = ?', 'pi_paid_001').status,
       'REFUNDED',
     );
+  } finally {
+    env.DB.close();
+  }
+});
+
+test('a full refund overrides DISPUTED and a later won event cannot restore access', async () => {
+  const env = environment();
+  try {
+    await pay(env, {
+      eventId: 'evt_refund_dispute_purchase',
+      sessionId: 'cs_refund_dispute_purchase',
+      paymentIntentId: 'pi_refund_dispute_purchase',
+    });
+    await deliver(env, stripeEvent({
+      id: 'evt_refund_dispute_opened',
+      type: 'charge.dispute.created',
+      object: disputeObject({
+        id: 'dp_refund_dispute',
+        chargeId: 'ch_refund_dispute',
+        paymentIntentId: 'pi_refund_dispute_purchase',
+      }),
+    }));
+    assert.equal(
+      row(env, 'SELECT status FROM payments WHERE payment_intent_id = ?', 'pi_refund_dispute_purchase').status,
+      'DISPUTED',
+    );
+
+    const refunded = await deliver(env, stripeEvent({
+      id: 'evt_refund_dispute_full',
+      type: 'charge.refunded',
+      object: {
+        id: 'ch_refund_dispute',
+        object: 'charge',
+        payment_intent: 'pi_refund_dispute_purchase',
+        amount: 990,
+        amount_refunded: 990,
+        refunded: true,
+        currency: 'eur',
+        metadata: {},
+      },
+    }));
+    assert.equal(refunded.response.status, 200);
+    assert.equal(
+      row(env, 'SELECT status FROM payments WHERE payment_intent_id = ?', 'pi_refund_dispute_purchase').status,
+      'REFUNDED',
+    );
+    assert.equal(row(env, 'SELECT status FROM devices WHERE device_id = ?', DEVICE_A).status, 'REFUNDED');
+
+    await deliver(env, stripeEvent({
+      id: 'evt_refund_dispute_closed',
+      type: 'charge.dispute.closed',
+      object: disputeObject({
+        id: 'dp_refund_dispute',
+        chargeId: 'ch_refund_dispute',
+        paymentIntentId: 'pi_refund_dispute_purchase',
+        status: 'won',
+      }),
+    }));
+    assert.equal(
+      row(env, 'SELECT status FROM payments WHERE payment_intent_id = ?', 'pi_refund_dispute_purchase').status,
+      'REFUNDED',
+    );
+    assert.equal(row(env, 'SELECT status FROM devices WHERE device_id = ?', DEVICE_A).status, 'REFUNDED');
   } finally {
     env.DB.close();
   }

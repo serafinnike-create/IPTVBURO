@@ -77,6 +77,13 @@ class RoomCatalogRepository @Inject constructor(
         categoryDao.observeItemCounts(sourceId, contentType?.name)
             .map { counts -> counts.associate { it.categoryId to it.itemCount } }
 
+    override fun observeCategoryArtwork(
+        sourceId: String,
+        contentType: CatalogContentType?,
+    ): Flow<Map<String, String>> =
+        channelDao.observeCategoryArtwork(sourceId, contentType?.name)
+            .map { rows -> rows.associate { it.categoryId to it.artworkUrl } }
+
     override fun observeChannels(
         sourceId: String,
         categoryId: String?,
@@ -149,6 +156,17 @@ class RoomCatalogRepository @Inject constructor(
         )
     }
 
+    override suspend fun findLibraryCandidates(titleFragment: String, limit: Int): List<Channel> =
+        withContext(ioDispatcher) {
+            val clean = titleFragment.trim()
+            // Too short a fragment matches most of a catalogue and tells the matcher nothing.
+            if (clean.length < MIN_LIBRARY_FRAGMENT) {
+                emptyList()
+            } else {
+                channelDao.findLibraryCandidates(clean, limit).map { it.toDomain() }
+            }
+        }
+
     override suspend fun getChannel(id: String): Channel? = withContext(ioDispatcher) {
         val entity = channelDao.getById(id) ?: return@withContext null
         val channel = entity.toDomain()
@@ -181,6 +199,15 @@ class RoomCatalogRepository @Inject constructor(
             )
         channel.copy(streamUri = url.toString())
     }
+
+    override suspend fun findStoredContent(
+        sourceId: String,
+        providerItemId: String,
+        contentType: CatalogContentType,
+    ): Channel? =
+        withContext(ioDispatcher) {
+            channelDao.findByProviderItem(sourceId, providerItemId, contentType.name)?.toDomain()
+        }
 
     override suspend fun findCompatibleMovieAlternative(
         sourceId: String,
@@ -869,6 +896,14 @@ class RoomCatalogRepository @Inject constructor(
         }
 
     private companion object {
+        /**
+         * Shortest fragment worth searching on.
+         *
+         * Two characters match a large share of any catalogue, which gives the matcher a pile of
+         * noise to sift and the database a scan for nothing.
+         */
+        const val MIN_LIBRARY_FRAGMENT = 3
+
         const val TAG = "CatalogRepository"
         const val MAX_DISPLAY_NAME_LENGTH = 120
         const val INSERT_BATCH_SIZE = 500

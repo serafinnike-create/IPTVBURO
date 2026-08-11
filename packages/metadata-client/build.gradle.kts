@@ -15,6 +15,9 @@ java {
 }
 
 dependencies {
+    // The streaming catalogue speaks in domain types (ExternalTitle, StreamingOffer) so both
+    // platforms consume one implementation instead of each mapping TMDb responses themselves.
+    api(project(":packages:domain-model"))
     api(libs.okhttp)
     implementation(libs.gson)
 

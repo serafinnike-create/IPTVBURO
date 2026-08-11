@@ -45,18 +45,39 @@ CREATE TABLE IF NOT EXISTS devices (
     -- idempotency key: a webhook Stripe delivers twice must not extend a licence twice.
     stripe_session_id TEXT,
 
+    -- SHA-256 of the Google Play purchase token that currently owns the entitlement. The opaque
+    -- token itself is encrypted in google_play_purchases and never appears in support output.
+    google_purchase_token_hash TEXT,
+
     -- Free-text, for the manual grants. "friend of Lucas", "paid cash", "reseller batch 3" — the
     -- answer to "why is this one active?" a year from now.
     note          TEXT,
 
+    -- The machine this device belongs to, as the stable installation UUID the client derives from
+    -- the Windows MachineGuid.
+    --
+    -- This is what closes the trial reset. The installation id used to be random, so deleting three
+    -- files on disk produced a device the server had never met, and it correctly granted a fresh
+    -- seven days — repeatable for ever. Anchored to the machine, the same computer comes back with
+    -- the same value and its earlier trial can be found.
+    --
+    -- Nullable: rows written before this existed have none, and a null anchor simply means the row
+    -- cannot be matched by machine, which is exactly the old behaviour.
+    machine_anchor TEXT,
+
     updated_at    TEXT NOT NULL
 );
+
+-- Given a machine, find the earliest trial it ever started. Not unique: one machine legitimately
+-- holds several device rows over its life, after a key rotation or a support-issued replacement.
+CREATE INDEX IF NOT EXISTS devices_machine_anchor ON devices (machine_anchor, first_seen_at);
 
 -- Legacy support tooling can still search historical MAC values. New rows leave this column NULL.
 CREATE INDEX IF NOT EXISTS devices_by_mac ON devices (mac_address);
 
 -- A refund arrives naming a Stripe session, and has to find the device it paid for.
 CREATE INDEX IF NOT EXISTS devices_by_session ON devices (stripe_session_id);
+CREATE INDEX IF NOT EXISTS devices_by_google_purchase ON devices (google_purchase_token_hash);
 
 -- A client-generated nonce is accepted once. Without this ledger a captured, otherwise valid proof
 -- could be replayed without possessing the private key. Payloads and proofs are intentionally not
@@ -64,7 +85,7 @@ CREATE INDEX IF NOT EXISTS devices_by_session ON devices (stripe_session_id);
 CREATE TABLE IF NOT EXISTS device_proof_nonces (
     device_id TEXT NOT NULL,
     nonce     TEXT NOT NULL,
-    action    TEXT NOT NULL CHECK (action IN ('register', 'validate', 'redeem')),
+    action    TEXT NOT NULL CHECK (action IN ('register', 'validate', 'redeem', 'google_play_purchase')),
     used_at   TEXT NOT NULL,
     PRIMARY KEY (device_id, nonce)
 );
@@ -134,6 +155,31 @@ CREATE TABLE IF NOT EXISTS stripe_events (
 );
 
 CREATE INDEX IF NOT EXISTS stripe_events_by_status ON stripe_events (status, updated_at);
+
+-- Google Play one-time rental purchases. The token hash is the stable idempotency key; the opaque
+-- token is AES-GCM encrypted so the Worker can re-query Google without leaving a bearer credential
+-- in readable D1 rows or admin output.
+CREATE TABLE IF NOT EXISTS google_play_purchases (
+    purchase_token_hash    TEXT PRIMARY KEY,
+    token_ciphertext       TEXT NOT NULL,
+    device_id              TEXT NOT NULL,
+    product_id             TEXT NOT NULL,
+    purchase_option_id     TEXT NOT NULL,
+    obfuscated_account_id  TEXT NOT NULL,
+    status                 TEXT NOT NULL CHECK (status IN ('PENDING', 'PURCHASED', 'CANCELLED', 'REFUNDED')),
+    acknowledgement_state  TEXT NOT NULL,
+    test_purchase          INTEGER NOT NULL DEFAULT 0 CHECK (test_purchase IN (0, 1)),
+    purchase_completed_at  TEXT,
+    expires_at             TEXT,
+    last_checked_at        TEXT,
+    created_at             TEXT NOT NULL,
+    updated_at             TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS google_play_purchases_by_device
+    ON google_play_purchases (device_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS google_play_purchases_by_status
+    ON google_play_purchases (status, updated_at);
 
 -- Keys handed out by hand: "someone asked to try it for a month".
 --

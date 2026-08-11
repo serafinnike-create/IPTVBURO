@@ -1,12 +1,10 @@
-package com.lucasserafin94.iptvburo.desktop.data
+package com.lucasserafin94.iptvburo.metadata
 
 import com.lucasserafin94.iptvburo.domain.model.BestOfferPolicy
 import com.lucasserafin94.iptvburo.domain.model.ExternalContentLauncher
 import com.lucasserafin94.iptvburo.domain.model.LaunchDecision
 import com.lucasserafin94.iptvburo.domain.model.OfferReason
 import com.lucasserafin94.iptvburo.domain.model.OfferType
-import com.lucasserafin94.iptvburo.metadata.TmdbWatchProvider
-import com.lucasserafin94.iptvburo.metadata.TmdbWatchProviders
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

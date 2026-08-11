@@ -1,5 +1,7 @@
 package com.lucasserafin94.iptvburo.desktop.platform
 
+import java.nio.file.Path
+import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -15,14 +17,29 @@ class DesktopPlatformCapabilitiesTest {
     fun `packaged preview contract matches what has actually shipped`() {
         val capabilities = DesktopPlatformCapabilities.current
 
-        // Released. Both were built, tested, and then invisible because this file said otherwise —
-        // which is the failure this manifest exists to prevent, working in the wrong direction.
+        // Released. Each was built, tested, and then invisible because this file said otherwise —
+        // the failure this manifest exists to prevent, working in the wrong direction. Downloads
+        // were reported as "you removed it"; they had never been switched on.
         assertTrue(capabilities.multiviewSupported)
         assertTrue(capabilities.audioSupported)
+        assertTrue(capabilities.offlineSupported)
+    }
 
-        // Not released. The gate is what keeps a half-built feature out of the interface, and the
-        // whole reason the UI reads this file instead of a Boolean somebody remembered to update.
-        assertFalse(capabilities.offlineSupported)
+    /**
+     * Downloading a film is released; the rest of the offline story is not.
+     *
+     * Queueing a whole season and fetching in the background are separate features that do not
+     * exist, and the sub-flags are what keep them from being claimed by the one that does.
+     */
+    @Test
+    fun `unbuilt offline features stay off`() {
+        val manifest = Path
+            .of("../../packages/platform-capabilities/windows-preview.json")
+            .readText()
+
+        assertTrue(Regex(""""backgroundJobs"\s*:\s*false""").containsMatchIn(manifest))
+        assertTrue(Regex(""""seasonQueue"\s*:\s*false""").containsMatchIn(manifest))
+        assertTrue(Regex(""""smartDownloads"\s*:\s*false""").containsMatchIn(manifest))
     }
 
     @Test

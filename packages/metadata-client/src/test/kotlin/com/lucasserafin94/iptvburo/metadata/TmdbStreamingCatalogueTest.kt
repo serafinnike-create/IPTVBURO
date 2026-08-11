@@ -1,6 +1,5 @@
-package com.lucasserafin94.iptvburo.desktop.data
+package com.lucasserafin94.iptvburo.metadata
 
-import com.lucasserafin94.iptvburo.metadata.TmdbClient
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse

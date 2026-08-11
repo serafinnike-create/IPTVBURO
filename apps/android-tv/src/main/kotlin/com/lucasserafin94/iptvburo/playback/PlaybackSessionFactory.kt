@@ -6,6 +6,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -24,9 +25,14 @@ class PlaybackSessionFactory @Inject constructor(
     private val okHttpClient: OkHttpClient,
 ) {
     fun create(channel: ChannelUi, autoPlay: Boolean = true): ExoPlayer {
-        val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
+        val httpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             .setUserAgent(USER_AGENT)
             .setDefaultRequestProperties(channel.requestHeaders)
+        // Wrapped rather than used directly. OkHttp speaks only HTTP, so a downloaded title —
+        // which is a file:// URI — could never be opened and every offline playback failed with
+        // "could not play this stream". DefaultDataSource keeps HTTP going through OkHttp and adds
+        // file, content and asset handling on top.
+        val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val mediaSourceFactory =
             DefaultMediaSourceFactory(dataSourceFactory)
                 .setLoadErrorHandlingPolicy(

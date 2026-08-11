@@ -46,16 +46,15 @@ function publicKeyFromClient() {
 /**
  * Asks the server for any signed answer.
  *
- * A device that does not exist is fine: what matters is that the response is signed, and the
- * signature is what gets checked. Registration is used because it is the one endpoint that answers
- * for a device the server has never seen.
+ * The dedicated check endpoint signs a fixed-purpose challenge. It does not create a trial, touch
+ * the device ledger or produce a document that an application could mistake for a licence.
  */
 async function signedAnswerFrom(base) {
   const nonce = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString('base64url');
-  const response = await fetch(`${base}/v1/register`, {
+  const response = await fetch(`${base}/v1/signing-key-check`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ deviceId: 'ZZZZ-ZZZZ-ZZZZ', nonce }),
+    body: JSON.stringify({ nonce }),
   });
 
   const text = await response.text();
@@ -97,9 +96,6 @@ const answer = await signedAnswerFrom(origin.replace(/\/$/, ''));
 if (!answer.ok) {
   console.error(`O servidor respondeu ${answer.status} e nao assinou nada.`);
   console.error(answer.body);
-  console.error('');
-  console.error('Isso pode ser normal se o endpoint exigir uma prova assinada do dispositivo.');
-  console.error('Nesse caso a verificacao tem de correr a partir do proprio app.');
   process.exit(1);
 }
 

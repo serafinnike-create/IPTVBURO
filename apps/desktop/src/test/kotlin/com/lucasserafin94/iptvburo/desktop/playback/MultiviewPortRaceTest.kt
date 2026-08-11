@@ -37,9 +37,20 @@ class MultiviewPortRaceTest {
     fun `a claimed port is released when the player closes`() {
         // Without this a long session leaks entries for ever, and the set eventually stops being a
         // useful guard.
-        val dispose = source.substringAfter("fun dispose()").take(1_200)
+        //
+        // Bounded by the end of the function rather than by a character count. A fixed window broke
+        // the moment a comment was added above the release — a test that fails when the code around
+        // it grows is testing the wrong thing.
+        val dispose = source.substringAfter("fun dispose()").substringBefore("\n    private fun")
 
         assertTrue(dispose.contains("releaseClaimedPort()"), "dispose must release the port")
+
+        // Order matters as much as presence. Releasing before the engine is gone hands the port to
+        // the next tile while the old VLC still owns it, and the new one then fails to bind.
+        assertTrue(
+            dispose.indexOf("destroyForcibly") < dispose.indexOf("releaseClaimedPort()"),
+            "the port is released only after the engine has actually been killed",
+        )
     }
 
     @Test

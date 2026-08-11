@@ -25,6 +25,15 @@ data class PlaybackProgress(
     val identity: PlaybackProgressIdentity,
     val positionMs: Long,
     val durationMs: Long,
+    /**
+     * How much has been watched, as a **fraction from 0.0 to 1.0** — not a percentage, despite the
+     * name. A finished title stores exactly 1.0.
+     *
+     * Said explicitly because the name invites the opposite reading, and two screens divided it by
+     * a hundred: the details page then reported "0% watched" on a half-watched film, and the
+     * episode list showed every episode as barely started. Neither failed loudly; both simply drew
+     * the wrong number.
+     */
     val progressPercent: Double,
     val lastWatchedAtEpochMillis: Long,
     val completedAtEpochMillis: Long? = null,
@@ -87,6 +96,10 @@ interface PlaybackProgressRepository {
     fun remove(identity: PlaybackProgressIdentity)
 
     fun continueWatching(profileId: String, limit: Int = 30): List<PlaybackProgress>
+
+    /** Most recently watched VOD, including completed titles. */
+    fun history(profileId: String, limit: Int = 60): List<PlaybackProgress> =
+        continueWatching(profileId, limit)
 }
 
 class GetResumeDecisionUseCase(private val repository: PlaybackProgressRepository) {

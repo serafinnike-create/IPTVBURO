@@ -17,7 +17,7 @@
     "hdr": false
   },
   "offline": {
-    "supported": false,
+    "supported": true,
     "backgroundJobs": false,
     "seasonQueue": false,
     "smartDownloads": false
@@ -33,6 +33,6 @@
     "The bundled VLC adapter is still a preview until the public codec, subtitle, GPU and HDR matrix passes.",
     "Multiview runs up to four live channels with audio from one. Four decoders at once is the heaviest thing this app does, so it is offered on live only — four matches is what people want it for, and four films is not.",
     "Music reads an M3U the user supplies per profile. No source of audio is bundled or provided; a profile without a file behaves exactly as the app did before music existed.",
-    "Offline remains hidden until its release gate passes."
+    "Films can be downloaded and played back offline, resumable across restarts. Queueing a season and fetching in the background are separate features that do not exist yet, which is what the sub-flags record."
   ]
 }

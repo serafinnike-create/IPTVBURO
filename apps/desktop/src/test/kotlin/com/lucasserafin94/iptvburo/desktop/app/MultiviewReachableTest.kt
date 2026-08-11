@@ -3,6 +3,7 @@ package com.lucasserafin94.iptvburo.desktop.app
 import java.nio.file.Path
 import kotlin.io.path.readText
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -187,6 +188,20 @@ class MultiviewReachableTest {
         )
     }
 
+    @Test
+    fun `window controls remain reachable with four channel names`() {
+        val bar = overlaySource.substringAfter("private fun MultiviewBar(")
+        val controls = bar.indexOf("onClick = onToggleFullScreen")
+        val channelNames = bar.indexOf("tiles.forEach")
+
+        assertTrue(controls >= 0, "the multiview bar must expose a full-screen control")
+        assertTrue(channelNames >= 0, "the multiview bar must expose the channel audio controls")
+        assertTrue(
+            controls < channelNames,
+            "fixed window controls must be laid out before channel names can consume the width",
+        )
+    }
+
     /**
      * Exactly one tile carries sound.
      *
@@ -195,9 +210,13 @@ class MultiviewReachableTest {
      */
     @Test
     fun `only one tile has audio`() {
-        assertTrue(overlaySource.contains("controller.setVolume(if (hasAudio) 1.0 else 0.0)"))
         assertTrue(
-            overlaySource.contains("requestedAudioProviderId = tile.providerId"),
+            overlaySource.contains("if (tile.providerId == audioProviderId) 1.0 else 0.0"),
+            "sound must be set at the engine: a muted Compose surface still leaves four decoders " +
+                "pulling audio and the user hears whichever wins",
+        )
+        assertTrue(
+            overlaySource.contains("requestedAudioProviderId = providerId"),
             "clicking must move sound by stable channel identity",
         )
     }
@@ -205,10 +224,51 @@ class MultiviewReachableTest {
     @Test
     fun `removing a displayed tile uses its identity rather than its filtered index`() {
         assertTrue(overlaySource.contains("onRemoveTile: (String) -> Unit"))
-        assertTrue(overlaySource.contains("onRemoveTile(tile.providerId)"))
         assertFalse(
             appSource.contains("multiviewChannelIds.getOrNull(index)"),
             "an unresolvable queued channel shifts indexes and would remove the wrong visible tile",
+        )
+    }
+
+    /**
+     * The grid is one embedded surface, not one per tile.
+     *
+     * This is the fault that made multiview look broken for days. Each embedded AWT component is
+     * composited on its own layer above the Compose scene, and several of them do not lay out
+     * against one another: with two channels one played and the other was a black rectangle over
+     * half the screen, and with four the number that worked varied between attempts.
+     *
+     * Every fix before this one addressed a real bug and none of them was that.
+     */
+    @Test
+    fun `the grid uses a single embedded surface`() {
+        val surface = Path
+            .of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/playback/MultiviewSurface.kt")
+            .readText()
+
+        assertEquals(
+            1,
+            Regex("""SwingPanel\(""").findAll(overlaySource).count(),
+            "more than one embedded panel is what caused the tiles to overlap",
+        )
+        assertTrue(surface.contains("GridLayout"), "AWT must own the arrangement")
+    }
+
+    /**
+     * Adding a channel does not restart the ones already playing.
+     *
+     * Restarting a live stream costs several seconds and drops the viewer out of whatever they were
+     * watching, so a fourth tile must not interrupt the other three.
+     */
+    @Test
+    fun `existing players survive a rebuild`() {
+        val surface = Path
+            .of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/playback/MultiviewSurface.kt")
+            .readText()
+
+        assertTrue(
+            surface.contains("mounted.getOrPut(tile.providerId)"),
+            "a player already mounted must be reused rather than recreated",
         )
     }
 }

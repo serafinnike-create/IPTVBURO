@@ -33,6 +33,25 @@ class AndroidDeviceInstallationIdentity internal constructor(
 ) {
     fun proof(action: AndroidDeviceProofAction, nonce: String): String {
         val message = canonicalDeviceProof(action, deviceId, nonce).toByteArray(StandardCharsets.UTF_8)
+        return signCanonical(message)
+    }
+
+    fun googlePlayPurchaseProof(
+        nonce: String,
+        purchaseTokenHash: String,
+        accountId: String,
+    ): String {
+        val message =
+            canonicalGooglePlayPurchaseProof(
+                deviceId = deviceId,
+                nonce = nonce,
+                purchaseTokenHash = purchaseTokenHash,
+                accountId = accountId,
+            ).toByteArray(StandardCharsets.UTF_8)
+        return signCanonical(message)
+    }
+
+    private fun signCanonical(message: ByteArray): String {
         val derSignature =
             Signature.getInstance(ECDSA_SIGNATURE).run {
                 initSign(privateKey)
@@ -87,6 +106,13 @@ internal fun canonicalDeviceProof(
     deviceId: String,
     nonce: String,
 ): String = "iptvburo-device-proof-v1\n${action.wireValue}\n$deviceId\n$nonce"
+
+internal fun canonicalGooglePlayPurchaseProof(
+    deviceId: String,
+    nonce: String,
+    purchaseTokenHash: String,
+    accountId: String,
+): String = "iptvburo-google-play-purchase-v1\n$deviceId\n$nonce\n$purchaseTokenHash\n$accountId"
 
 internal fun deriveDeviceId(publicKey: ByteArray, installationId: String): String {
     val digest =

@@ -29,7 +29,7 @@ import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
         PlaybackProgressEntity::class,
         LibraryEntryEntity::class,
     ],
-    version = 6,
+    version = 8,
     exportSchema = true,
 )
 abstract class IptvBuroDatabase : RoomDatabase() {
@@ -188,6 +188,33 @@ abstract class IptvBuroDatabase : RoomDatabase() {
          * favourites, not merely orphan them. Entries are carried across keyed on content identity
          * so they survive the next import.
          */
+        /**
+         * Adds `photo_uri` to `profiles`, so a profile can show a photograph the user chose.
+         *
+         * Nullable with no default: every existing profile keeps its drawn avatar, which is what a
+         * user who never picked a photo expects to still see after updating.
+         */
+        /**
+         * Adds `source_id` to `profiles`, so each profile can sign in to its own playlist.
+         *
+         * Nullable with no default, and no foreign key. Every existing profile keeps working
+         * exactly as before — null means "no preference", which is what a household with a single
+         * playlist should never have to think about.
+         */
+        val MIGRATION_7_8: Migration =
+            object : Migration(7, 8) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE profiles ADD COLUMN source_id TEXT")
+                }
+            }
+
+        val MIGRATION_6_7: Migration =
+            object : Migration(6, 7) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE profiles ADD COLUMN photo_uri TEXT")
+                }
+            }
+
         val MIGRATION_5_6: Migration =
             object : Migration(5, 6) {
                 override fun migrate(db: SupportSQLiteDatabase) {

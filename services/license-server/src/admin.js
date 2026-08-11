@@ -62,7 +62,9 @@ export async function devicesByStatus(status, env) {
 /** Everyone who has paid, for the third summary figure. */
 export async function paidDevices(env) {
   const { results } = await env.DB.prepare(
-    'SELECT * FROM devices WHERE stripe_session_id IS NOT NULL ORDER BY purchased_at DESC LIMIT 100',
+    `SELECT * FROM devices
+     WHERE stripe_session_id IS NOT NULL OR google_purchase_token_hash IS NOT NULL
+     ORDER BY purchased_at DESC LIMIT 100`,
   ).all();
   return results ?? [];
 }
@@ -117,6 +119,8 @@ export async function grantDevice(deviceId, days, note, env) {
      ON CONFLICT(device_id) DO UPDATE SET
        status = 'ACTIVE',
        expires_at = excluded.expires_at,
+       stripe_session_id = NULL,
+       google_purchase_token_hash = NULL,
        note = excluded.note,
        updated_at = excluded.updated_at`,
   )
@@ -241,7 +245,8 @@ export async function summary(env) {
   const active = await env.DB.prepare("SELECT COUNT(*) AS n FROM devices WHERE status = 'ACTIVE'").first();
   const trial = await env.DB.prepare("SELECT COUNT(*) AS n FROM devices WHERE status = 'TRIAL'").first();
   const paid = await env.DB.prepare(
-    'SELECT COUNT(*) AS n FROM devices WHERE stripe_session_id IS NOT NULL',
+    `SELECT COUNT(*) AS n FROM devices
+     WHERE stripe_session_id IS NOT NULL OR google_purchase_token_hash IS NOT NULL`,
   ).first();
   return { active: active?.n ?? 0, trial: trial?.n ?? 0, paid: paid?.n ?? 0 };
 }

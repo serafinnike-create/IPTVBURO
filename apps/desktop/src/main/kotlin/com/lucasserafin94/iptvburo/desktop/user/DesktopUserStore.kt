@@ -98,11 +98,20 @@ class DesktopUserStore(
     private val preferences: Preferences = Preferences.userRoot().node("com/lucasserafin94/iptvburo/user-v1"),
 ) {
     fun load(): DesktopUserSnapshot {
+        // No profile is invented for a new installation.
+        //
+        // This used to manufacture one called "Meu perfil" and save it immediately, so a customer
+        // opening the app for the first time was met by a profile somebody else had apparently
+        // made, offering only "Editar". The screen that asks for a name and a list — the one they
+        // are supposed to see — was never reached, and creating their own left two profiles behind.
+        //
+        // Empty is a real state and the setup flow already knows how to handle it: no profile means
+        // the app has never been set up, which is exactly what is true.
         val profiles = decodeProfiles(preferences.get(KEY_PROFILES, ""))
-            .ifEmpty { listOf(DesktopProfile(UUID.randomUUID().toString(), "Meu perfil", false)) }
-        if (preferences.get(KEY_PROFILES, "").isBlank()) saveProfiles(profiles)
         val active = preferences.get(KEY_ACTIVE_PROFILE, null)?.takeIf { id -> profiles.any { it.id == id } }
-        migrateLegacyFavorites(profiles.first().id)
+        // Only when there is something to migrate onto. Reading `first()` on an empty list is what
+        // made the fabricated profile necessary in the first place.
+        profiles.firstOrNull()?.let { first -> migrateLegacyFavorites(first.id) }
         val favorites = favoritesForProfile(active)
         return DesktopUserSnapshot(profiles, active, DesktopLanguage.fromTag(preferences.get(KEY_LANGUAGE, null)), favorites)
     }

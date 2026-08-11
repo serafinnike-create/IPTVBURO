@@ -32,7 +32,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,6 +77,9 @@ fun MusicWorkspace(
     val text = strings
     val scope = rememberCoroutineScope()
     val library = appState.musicLibrary
+
+    /** Whether the name-cleaning workshop is open over this section. */
+    var workshopOpen by remember { mutableStateOf(false) }
 
     // No playlist yet: explain what this section is and offer to add one here. The section used to
     // be hidden until a playlist existed, which made it undiscoverable - there was no way to learn
@@ -120,6 +126,9 @@ fun MusicWorkspace(
             queueSize = appState.playbackQueue.size,
             queueOpen = appState.queuePanelVisible,
             onToggleQueue = appState::toggleQueuePanel,
+            // Only offered when there is something to work on. The workshop's whole subject is a
+            // library's names, and an empty library has none.
+            onOpenWorkshop = { workshopOpen = true },
         )
         // Weighted, never fillMaxSize: an unweighted Column child is measured against unbounded
         // height, which lays the whole section out past the bottom of the window and puts it beyond
@@ -194,6 +203,12 @@ fun MusicWorkspace(
             }
         }
     }
+
+    // Over the section rather than replacing it: the workshop is a task somebody does *to* their
+    // library, and seeing it behind keeps the change in context.
+    if (workshopOpen) {
+        MusicWorkshopDialog(appState = appState, onDismiss = { workshopOpen = false })
+    }
 }
 
 /** The workspace's own navigation, mirroring the sidebar's ordering. */
@@ -204,6 +219,8 @@ private fun MusicSectionBar(
     queueSize: Int,
     queueOpen: Boolean,
     onToggleQueue: () -> Unit,
+    /** Opens the workshop, where names a playlist took from filenames get cleaned up. */
+    onOpenWorkshop: () -> Unit,
 ) {
     val text = strings
     val labels =
@@ -256,6 +273,26 @@ private fun MusicSectionBar(
             }
         }
         Spacer(Modifier.weight(1f))
+
+        // The workshop, before the queue.
+        //
+        // A playlist built from filenames is the ordinary case rather than the exception, so the way
+        // to fix it belongs in the bar rather than behind a settings screen.
+        BuroInteractiveRow(
+            onClick = onOpenWorkshop,
+            selected = false,
+            shape = BuroRadius.Pill,
+            contentDescription = text.settingsText.musicWorkshop,
+        ) { state ->
+            Text(
+                text = "✎  ${text.settingsText.musicWorkshop}",
+                modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs),
+                color = if (state.active) BuroColors.Text else BuroColors.TextMuted,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        Spacer(Modifier.width(BuroSpacing.Xs))
+
         // The queue toggle carries its own count, so the user can tell there is something queued
         // without opening the panel to find out.
         BuroInteractiveRow(

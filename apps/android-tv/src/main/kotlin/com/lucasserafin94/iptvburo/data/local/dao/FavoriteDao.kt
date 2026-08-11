@@ -29,4 +29,8 @@ interface FavoriteDao {
 
     @Query("DELETE FROM favorites WHERE profile_id = :profileId AND channel_id = :channelId")
     suspend fun remove(profileId: String, channelId: String)
+
+    /** Clears a deleted profile's favourites, so its rows do not outlive the profile itself. */
+    @Query("DELETE FROM favorites WHERE profile_id = :profileId")
+    suspend fun removeAllForProfile(profileId: String)
 }

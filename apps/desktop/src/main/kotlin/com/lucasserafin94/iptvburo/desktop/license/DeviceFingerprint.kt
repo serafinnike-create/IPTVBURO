@@ -216,7 +216,17 @@ class WindowsDeviceIdentityStore internal constructor(
     }
 
     private fun generateIdentity(): DeviceInstallationIdentity {
-        val installationId = UUID.randomUUID().toString()
+        // Anchored to the machine, so deleting the stored files does not mint a new device.
+        //
+        // A random UUID here is what made the trial resettable: remove three files and the app
+        // introduced itself as a machine the server had never met, which correctly granted a fresh
+        // seven days — repeatable for ever. The server's own defences are all keyed on the device
+        // id, so a new device id sidestepped every one of them at once.
+        //
+        // Falls back to random when no anchor can be read. On a machine whose registry is locked
+        // down the app must still work; losing the anti-reset property there is a far better
+        // outcome than refusing to run.
+        val installationId = MachineAnchor.installationUuid() ?: UUID.randomUUID().toString()
         val keyPair =
             KeyPairGenerator.getInstance("EC").apply {
                 initialize(ECGenParameterSpec(P256_CURVE))

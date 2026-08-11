@@ -3,6 +3,7 @@ package com.lucasserafin94.iptvburo.desktop.app
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -42,7 +44,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
-import com.lucasserafin94.iptvburo.desktop.data.TmdbStreamingCatalogue
+import com.lucasserafin94.iptvburo.metadata.TmdbStreamingCatalogue
 import com.lucasserafin94.iptvburo.desktop.playback.SubtitleColour
 import com.lucasserafin94.iptvburo.desktop.update.DESKTOP_VERSION
 import com.lucasserafin94.iptvburo.desktop.playback.SubtitleSize
@@ -86,6 +88,8 @@ fun SettingsDialog(
     catalogRefreshing: Boolean = false,
     onRefreshCatalog: () -> Unit = {},
     onOpenTmdbSettings: () -> Unit = {},
+    /** Opens the step-by-step guide, for a customer who has never registered a TMDb key. */
+    onOpenTmdbGuide: () -> Unit = {},
 ) {
     val text = strings
     val listState = rememberLazyListState()
@@ -95,10 +99,19 @@ fun SettingsDialog(
         modifier =
             Modifier
                 .fillMaxSize()
-                // No scrim. Dimming the whole app behind a settings panel made the library look
-                // switched off; the panel's own surface and elevation already separate it from what
-                // is behind. The click target stays, so tapping outside still closes it.
-                .clickable(onClick = onDismiss),
+                // No scrim, and no indication either.
+                //
+                // A plain `clickable` carries Material's default ripple, and on a full-screen click
+                // target that paints a grey wash over the entire app — the dimming this comment
+                // claimed to have removed. It was never a scrim; it was the hover state of a
+                // dismiss area the size of the window.
+                //
+                // The click target itself stays, so pressing outside the panel still closes it.
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -200,12 +213,28 @@ fun SettingsDialog(
                         HorizontalDivider(color = BuroColors.BorderSoft)
                         SettingsSection(text.metadataKeyLabel, text.metadataKeyUses) {
                             Column {
-                                Text(
-                                    text = text.metadataKeyHint,
-                                    color = BuroColors.Primary,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.clickable(onClick = onOpenTmdbSettings),
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = text.metadataKeyHint,
+                                        color = BuroColors.Primary,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.clickable(onClick = onOpenTmdbSettings),
+                                    )
+                                    Spacer(Modifier.width(BuroSpacing.Sm))
+                                    // The way in for somebody who has never done this.
+                                    //
+                                    // The link beside it goes straight to the API settings page,
+                                    // which cannot be reached without an account and cannot be
+                                    // used without knowing that "Developer" is the right answer.
+                                    // Anybody who does not already have a key stops there.
+                                    Text(
+                                        text = text.tmdbGuide.tmdbGuideButton,
+                                        color = BuroColors.TextMuted,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        textDecoration = TextDecoration.Underline,
+                                        modifier = Modifier.clickable(onClick = onOpenTmdbGuide),
+                                    )
+                                }
                                 Spacer(Modifier.height(BuroSpacing.Xs))
                                 OutlinedTextField(
                                     value = appState.metadataApiKey,

@@ -7,7 +7,7 @@
     {"id":"iphone-ipad","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":["GDD 5 and 6 documented"]},
     {"id":"apple-tv-macos","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":[]},
     {"id":"fire-tv","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":[]},
-    {"id":"samsung-tizen","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":[]},
+    {"id":"samsung-tizen","status":"SCAFFOLDED","version":"0.1.0-preview","build":"PASSING","hardware":"NOT_VALIDATED","notes":["App web em apps/samsung-tizen com navegacao D-pad e wrapper AVPlay","Toolchain completa: Tizen Studio, TV Extensions ate Tizen 10.0 e perfil de assinatura iptvburo","build-web e package geram .wgt assinado com sucesso","Aberto no TV Web Simulator; playback nao validado porque o simulador nao expoe webapis.avplay","Capability conservadora: offline, PiP e HDR desligados ate medicao em TV real","Nao integrado ao dominio compartilhado; usa apenas streams de teste publicos"]},
     {"id":"lg-webos","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":[]},
     {"id":"philips-titan","status":"NOT_STARTED","version":null,"build":"NOT_AVAILABLE","hardware":"NOT_VALIDATED","notes":["Official toolchain access pending"]},
     {"id":"windows","status":"TESTING","version":"2.0","build":"PASSING","hardware":"PARTIAL","notes":["Compose Desktop and MSI build pass","Bundled VLC 3.0.23 supports H.264, H.265/HEVC, AAC, MP4, MKV and HLS","Physical-device and provider coverage remain release gates"]},

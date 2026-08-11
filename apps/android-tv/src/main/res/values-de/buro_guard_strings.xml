@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="parental_title">Kanalsperre</string>
+    <string name="parental_hint">Eine vierstellige PIN hält ausgewählte Kategorien geschlossen. Sie schützt vor einem Kind im Raum, nicht vor einem entschlossenen Erwachsenen.</string>
+    <string name="parental_current_pin">Aktuelle PIN</string>
+    <string name="parental_new_pin">Neue PIN</string>
+    <string name="parental_set_pin">PIN festlegen</string>
+    <string name="parental_change_pin">PIN ändern</string>
+    <string name="parental_remove_pin">PIN entfernen</string>
+    <string name="parental_pin_format">Die PIN muss genau vier Ziffern haben.</string>
+    <string name="parental_wrong_pin">Falsche PIN.</string>
+    <string name="parental_lock_adult">Kategorien sperren, die der Anbieter als Erwachseneninhalt kennzeichnet</string>
+    <string name="parental_locked">Gesperrte Kategorie</string>
+    <string name="parental_unlock">PIN eingeben, um sie zu öffnen</string>
+    <string name="parental_unlock_confirm">Öffnen</string>
+
+    <string name="subtitles_title">Untertitel</string>
+    <string name="subtitles_hint">Gilt für den nächsten Titel, den Sie starten.</string>
+    <string name="subtitles_size">Größe</string>
+    <string name="subtitles_size_small">Klein</string>
+    <string name="subtitles_size_medium">Mittel</string>
+    <string name="subtitles_size_large">Groß</string>
+    <string name="subtitles_size_huge">Sehr groß</string>
+    <string name="subtitles_colour">Farbe</string>
+    <string name="subtitles_colour_white">Weiß</string>
+    <string name="subtitles_colour_yellow">Gelb</string>
+    <string name="subtitles_colour_grey">Grau</string>
+    <string name="subtitles_colour_green">Grün</string>
+    <string name="subtitles_colour_cyan">Cyan</string>
+    <string name="subtitles_background">Dunkler Kasten hinter dem Text</string>
+
+    <string name="categories_title">Kategorien</string>
+    <string name="categories_hint">verbergen Sie, was Sie nie sehen, und sperren Sie, was geschlossen bleiben soll</string>
+    <string name="category_hide">Verbergen</string>
+    <string name="category_lock">Sperren</string>
+    <string name="categories_channel_count">%1$d Einträge</string>
+</resources>

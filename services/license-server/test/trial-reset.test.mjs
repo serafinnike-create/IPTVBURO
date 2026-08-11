@@ -277,3 +277,99 @@ test('an older claim is recorded so support can see it', async () => {
     .get(who.deviceId);
   assert.ok(event?.detail?.includes('first seen'), 'a reinstall should be visible in the log');
 });
+
+/**
+ * The attack this whole mechanism exists to stop, run end to end.
+ *
+ * Delete the three files the app keeps — the DPAPI identity, `~/.iptvburo`, `~/.iptvburo-device` —
+ * and the client has no markers left to report. It generates a fresh P-256 key pair, so its public
+ * key is new and its device id with it, and it introduces itself as a machine the server has never
+ * met. Every existing defence is keyed on the device id, so a new one sidesteps all of them at once.
+ *
+ * What it cannot change is the machine. The installation id is now derived from the Windows
+ * MachineGuid, so it arrives identical, and the server finds the trial this computer already
+ * started.
+ */
+test('deleting every local marker does not buy a second trial', async () => {
+  const env = environment();
+  const machine = '88888888-8888-4888-8888-888888888888';
+  const fiveDaysAgo = new Date(Date.now() - 5 * DAY).toISOString();
+
+  // The honest first run, five days into its week.
+  const before = await identity(machine);
+  await worker.fetch(post(await registerBody(before, fiveDaysAgo)), env);
+  const originalEnd = deviceRow(env, before.deviceId).trial_ends_at;
+
+  // Everything on disk deleted: a new key pair, a new device id, and nothing to report.
+  const after = await identity(machine);
+  assert.notEqual(after.deviceId, before.deviceId, 'the attack does produce a new device id');
+  await worker.fetch(post(await registerBody(after)), env);
+
+  const row = deviceRow(env, after.deviceId);
+  assert.equal(
+    row.trial_ends_at,
+    originalEnd,
+    'the returning machine must keep the clock it already started, not receive a fresh week',
+  );
+});
+
+/**
+ * A genuinely new machine is unaffected.
+ *
+ * The cost of getting this wrong is the worst kind: a customer who has never run the app before,
+ * refused the trial they were offered. Nothing to find means nothing is applied.
+ */
+test('a different machine still gets its own full trial', async () => {
+  const env = environment();
+  const used = await identity('99999999-9999-4999-8999-999999999999');
+  await worker.fetch(
+    post(await registerBody(used, new Date(Date.now() - 6 * DAY).toISOString())),
+    env,
+  );
+
+  const fresh = await identity('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  await worker.fetch(post(await registerBody(fresh)), env);
+
+  const remaining = Date.parse(deviceRow(env, fresh.deviceId).trial_ends_at) - Date.now();
+  assert.ok(
+    remaining > 6.5 * DAY,
+    `a new machine should have its whole week, had ${Math.round(remaining / DAY)} days`,
+  );
+});
+
+/**
+ * The anchor is recorded, which is what makes the match possible at all.
+ *
+ * Pinned separately because a registration that silently stopped writing it would leave every
+ * defence above passing while the hole quietly reopened for new installations.
+ */
+test('the machine anchor is stored with the device', async () => {
+  const env = environment();
+  const machine = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const who = await identity(machine);
+
+  await worker.fetch(post(await registerBody(who)), env);
+
+  assert.equal(deviceRow(env, who.deviceId).machine_anchor, machine);
+});
+
+/**
+ * A machine that returns after its trial has fully run gets no more of it.
+ *
+ * The reinstall-after-expiry case, which is the one somebody actually tries: wait a week, delete
+ * the files, come back. The trial end stays in the past, so the app is locked exactly as it was.
+ */
+test('a machine returning after the trial expired stays expired', async () => {
+  const env = environment();
+  const machine = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const tenDaysAgo = new Date(Date.now() - 10 * DAY).toISOString();
+
+  const before = await identity(machine);
+  await worker.fetch(post(await registerBody(before, tenDaysAgo)), env);
+
+  const after = await identity(machine);
+  await worker.fetch(post(await registerBody(after)), env);
+
+  const endsAt = Date.parse(deviceRow(env, after.deviceId).trial_ends_at);
+  assert.ok(endsAt < Date.now(), 'a spent trial must not restart on reinstall');
+});

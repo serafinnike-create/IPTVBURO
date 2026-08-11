@@ -51,17 +51,31 @@ private val allRibbonDestinations =
         RibbonDestination(AppSection.MOVIES, R.string.buro_nav_movies),
         RibbonDestination(AppSection.SERIES, R.string.buro_nav_series),
         RibbonDestination(AppSection.MY_BURO, R.string.buro_nav_my_buro),
+        RibbonDestination(AppSection.CONTINUE_WATCHING, R.string.nav_continue_watching),
+        RibbonDestination(AppSection.HISTORY, R.string.nav_history),
+        RibbonDestination(AppSection.SUBSCRIPTIONS, R.string.nav_subscriptions),
         RibbonDestination(AppSection.DOWNLOADS, R.string.buro_nav_downloads),
         RibbonDestination(AppSection.PROFILE, R.string.buro_nav_profile),
+        RibbonDestination(AppSection.SOURCES, R.string.nav_sources),
+        RibbonDestination(AppSection.SETTINGS, R.string.nav_settings),
     )
 
+/**
+ * The destinations that may be shown, given what is actually configured.
+ *
+ * Both filters here exist for the same reason: a visible entry promises the app can do something,
+ * and an entry that opens onto nothing is worse than an absent one. Downloads waits on a real
+ * offline vault; Subscriptions waits on a metadata key, without which TMDb cannot answer at all.
+ */
 internal fun availableRibbonSections(
     offlineSupported: Boolean = AndroidPlatformCapabilities.offlineSupported,
+    subscriptionsVisible: Boolean = false,
 ): List<AppSection> =
     allRibbonDestinations
         .asSequence()
         .map(RibbonDestination::section)
         .filter { section -> section != AppSection.DOWNLOADS || offlineSupported }
+        .filter { section -> section != AppSection.SUBSCRIPTIONS || subscriptionsVisible }
         .toList()
 
 /**
@@ -74,14 +88,20 @@ internal fun availableRibbonSections(
 fun BuroRibbon(
     selectedSection: AppSection?,
     onSelect: (AppSection) -> Unit,
+    offlineSupported: Boolean = AndroidPlatformCapabilities.offlineSupported,
     modifier: Modifier = Modifier,
     selectedItemFocusRequester: FocusRequester? = null,
     onItemFocused: (AppSection) -> Unit = {},
     activeProfileName: String? = null,
     isKidsProfile: Boolean = false,
+    subscriptionsVisible: Boolean = false,
 ) {
     val colors = BuroTheme.colors
-    val availableSections = availableRibbonSections()
+    val availableSections =
+        availableRibbonSections(
+            offlineSupported = offlineSupported,
+            subscriptionsVisible = subscriptionsVisible,
+        )
     val availableDestinations =
         allRibbonDestinations.filter { destination -> destination.section in availableSections }
     val ribbonSelection =

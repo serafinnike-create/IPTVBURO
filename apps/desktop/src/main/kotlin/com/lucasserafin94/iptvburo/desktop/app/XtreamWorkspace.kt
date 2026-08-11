@@ -61,6 +61,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -92,6 +93,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.lucasserafin94.iptvburo.desktop.CreditDestination
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.DownloadState
 import com.lucasserafin94.iptvburo.desktop.MovieDetailsStatus
@@ -106,6 +108,7 @@ import com.lucasserafin94.iptvburo.desktop.platform.DesktopPlatformCapabilities
 import com.lucasserafin94.iptvburo.desktop.ui.CategoryBadge
 import com.lucasserafin94.iptvburo.desktop.ui.categoryLabel
 import com.lucasserafin94.iptvburo.desktop.CatalogLayout
+import com.lucasserafin94.iptvburo.desktop.PersonCredit
 import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableVertically
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollable
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableGrid
@@ -114,6 +117,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
+import com.lucasserafin94.iptvburo.desktop.ui.BuroSegmentedControl
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
@@ -175,7 +179,27 @@ fun XtreamWorkspace(
         val person = appState.selectedPerson
         if (person != null) {
             PersonFilmographyPage(
-                onOpenCredit = appState::openTitleFromCredit,
+                // Closed here too, for the same reason as on the Home screen: `personOpen` is this
+                // screen's own flag and decides whether the filmography is drawn, while
+                // `selectedPerson` lives in the app state. Clearing only the second left this branch
+                // taken with nothing to show, and the press dropped the user back to the catalogue.
+                // Closed here too, for the same reason as on the Home screen: `personOpen` is this
+                // screen's own flag and decides whether the filmography is drawn, while
+                // `selectedPerson` lives in the app state. Clearing only the second left this branch
+                // taken with nothing to show, and the press dropped the user back to the catalogue.
+                onOpenCredit = { credit ->
+                    // The same three flags as on the Home screen, moved together for the same
+                    // reason: selecting a title is not showing it, and clearing the shared state
+                    // alone leaves this branch drawing nothing.
+                    when (appState.openCredit(credit)) {
+                        CreditDestination.PLAYLIST_ITEM -> {
+                            personOpen = false
+                            detailsOpen = true
+                        }
+                        CreditDestination.SUBSCRIPTIONS -> personOpen = false
+                        CreditDestination.NOWHERE -> Unit
+                    }
+                },
                 person = person,
                 onBack = {
                     personOpen = false
@@ -382,22 +406,16 @@ private fun XtreamToolbar(
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // Segmented control rather than three filled buttons: only one type can be active, and
             // three competing gold buttons made every state read as "selected".
-            Row(
-                modifier =
-                    Modifier
-                        .clip(BuroRadius.Pill)
-                        .background(BuroColors.SurfaceRaised)
-                        .padding(3.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                XtreamContentType.entries.forEach { type ->
-                    ContentTypeButton(
-                        label = type.label(text),
-                        selected = type == selectedType,
-                        onClick = { onTypeSelected(type) },
-                    )
-                }
-            }
+            //
+            // The shared component, so the same choice looks the same on every screen that offers
+            // it. This was the original, copied out to the design system when continue watching and
+            // downloads needed it too.
+            BuroSegmentedControl(
+                options = XtreamContentType.entries,
+                selected = selectedType,
+                label = { type -> type.label(text) },
+                onSelect = onTypeSelected,
+            )
             Spacer(Modifier.width(BuroSpacing.Md))
             OutlinedTextField(
                 value = query,
@@ -903,7 +921,14 @@ private fun XtreamCatalogGrid(
                                 null
                             },
                         inMultiview = item.providerId in appState.multiviewChannelIds,
-                        multiviewFull = appState.multiviewChannelIds.size >= MULTIVIEW_MAX_TILES,
+                        // What this subscription actually sustains, not the app's own cap.
+                        //
+                        // A provider that allows two simultaneous connections simply stops sending
+                        // on the older streams when a third starts — no error, just tiles going
+                        // black after about five seconds. Offering a fourth slot the account cannot
+                        // use produces a broken-looking grid instead of a clear limit.
+                        multiviewFull = appState.multiviewChannelIds.size >= appState.multiviewCapacity,
+                        multiviewCapacity = appState.multiviewCapacity,
                     )
                 }
             }
@@ -976,6 +1001,8 @@ private fun XtreamCatalogCard(
     onToggleMultiview: (() -> Unit)? = null,
     inMultiview: Boolean = false,
     multiviewFull: Boolean = false,
+    /** How many tiles the subscription allows, so the message can name the real number. */
+    multiviewCapacity: Int = MULTIVIEW_MAX_TILES,
 ) {
     val live = item.contentType == XtreamContentType.LIVE
     val title = item.name.editorialTitle()
@@ -1113,7 +1140,7 @@ private fun XtreamCatalogCard(
                             if (inMultiview) {
                                 text.settingsText.multiviewRemove
                             } else if (multiviewFull) {
-                                text.settingsText.multiviewFull
+                                text.settingsText.multiviewFull.format(multiviewCapacity)
                             } else {
                                 text.settingsText.multiviewAdd
                             },
@@ -1310,7 +1337,11 @@ internal fun XtreamInternalDetailsPage(
                         null
                     },
                 inMultiview = item.providerId in appState.multiviewChannelIds,
-                multiviewFull = appState.multiviewChannelIds.size >= 4,
+                // The subscription's limit, not a literal four. A hardcoded cap here offered a
+                // fourth slot to an account that can sustain two, and the extra tiles simply went
+                // black — the provider stops sending rather than refusing.
+                multiviewFull = appState.multiviewChannelIds.size >= appState.multiviewCapacity,
+                multiviewCapacity = appState.multiviewCapacity,
             )
         }
 
@@ -1361,6 +1392,8 @@ internal fun XtreamItemDetail(
     inMultiview: Boolean = false,
     /** True once four channels are queued, which is as many as the grid holds. */
     multiviewFull: Boolean = false,
+    /** How many tiles the subscription allows, so the message can name the real number. */
+    multiviewCapacity: Int = MULTIVIEW_MAX_TILES,
 ) {
     val text = strings
     Box(
@@ -1602,7 +1635,7 @@ internal fun XtreamItemDetail(
                                 text =
                                     when {
                                         inMultiview -> "▦  ${text.settingsText.multiviewRemove}"
-                                        multiviewFull -> text.settingsText.multiviewFull
+                                        multiviewFull -> text.settingsText.multiviewFull.format(multiviewCapacity)
                                         else -> "▦  ${text.settingsText.multiviewAdd}"
                                     },
                                 fontWeight = FontWeight.SemiBold,
@@ -1848,12 +1881,18 @@ internal fun PersonFilmographyPage(
     onBack: () -> Unit,
     onOpenItem: (XtreamCatalogItem) -> Unit,
     // Returns false when this playlist does not carry the title, so the page can say so.
-    onOpenCredit: suspend (String) -> Boolean = { false },
+    onOpenCredit: suspend (PersonCredit) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
-    // The title the user asked for and this list does not have. Shown rather than swallowed: a
-    // click that silently does nothing reads as a broken button.
-    var missingCredit by remember { mutableStateOf<String?>(null) }
+
+    /**
+     * The credit currently being opened, or null when idle.
+     *
+     * Searching the playlist for a title sweeps every row of a catalogue that runs to tens of
+     * thousands of items. That takes long enough to look like a freeze, and the previous version
+     * gave no sign at all — the user pressed a poster and the app appeared to hang.
+     */
+    var openingCredit by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().background(BuroColors.Canvas)) {
         Row(
@@ -1938,13 +1977,22 @@ internal fun PersonFilmographyPage(
                                 Modifier
                                     .width(120.dp)
                                     .clip(BuroRadius.Small)
-                                    .clickable {
-                                        // A credit names a film the playlist may not carry at all,
-                                        // so the click either lands on it or says plainly that this
-                                        // list does not have it.
+                                    .clickable(enabled = openingCredit == null) {
+                                        // A credit names a film the playlist may not carry, which is
+                                        // the ordinary case rather than a failure: the click opens
+                                        // it here if it is here, and asks Assinaturas where it can
+                                        // be watched if it is not.
+                                        //
+                                        // The search sweeps a 41,000-item catalogue, so the card
+                                        // says it is working. Without that the app looked frozen —
+                                        // and the previous handler then set a value nothing read,
+                                        // so nothing happened at all.
                                         scope.launch {
-                                            if (!onOpenCredit(credit.title)) {
-                                                missingCredit = credit.title
+                                            openingCredit = credit.title
+                                            try {
+                                                onOpenCredit(credit)
+                                            } finally {
+                                                openingCredit = null
                                             }
                                         }
                                     },
@@ -1963,6 +2011,14 @@ internal fun PersonFilmographyPage(
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                     XtreamMonogram(credit.title, 34)
                                 }
+                            }
+                            // The card that was pressed says so while the catalogue is searched.
+                            if (openingCredit == credit.title) {
+                                LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                                    color = BuroColors.Primary,
+                                    trackColor = BuroColors.SurfaceRaised,
+                                )
                             }
                             Spacer(Modifier.height(4.dp))
                             Text(

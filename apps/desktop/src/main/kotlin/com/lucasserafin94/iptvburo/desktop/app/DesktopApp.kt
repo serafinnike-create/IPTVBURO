@@ -100,11 +100,12 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
+import com.lucasserafin94.iptvburo.desktop.ui.BuroSegmentedControl
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.LocalDesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.strings
-import com.lucasserafin94.iptvburo.desktop.data.TmdbStreamingCatalogue
+import com.lucasserafin94.iptvburo.metadata.TmdbStreamingCatalogue
 import com.lucasserafin94.iptvburo.desktop.download.formatDuration
 import com.lucasserafin94.iptvburo.desktop.download.formatRate
 import com.lucasserafin94.iptvburo.desktop.platform.openStreamingOfferExternally
@@ -128,7 +129,8 @@ import com.lucasserafin94.iptvburo.desktop.update.UpdateCheckResult
 import kotlinx.coroutines.launch
 
 /** Where TMDb issues the personal API key this app asks for. */
-private const val TMDB_API_SETTINGS_URL = "https://www.themoviedb.org/settings/api"
+/** Where an existing account manages its keys. The guide links here for the second visit onward. */
+internal const val TMDB_API_SETTINGS_URL = "https://www.themoviedb.org/settings/api"
 
 @Composable
 fun DesktopApp(
@@ -155,6 +157,9 @@ fun DesktopApp(
     var activePlayback by remember { mutableStateOf<DesktopPlaybackRequest?>(null) }
     var showXtreamLogin by remember { mutableStateOf(false) }
     var parentalOpen by remember { mutableStateOf(false) }
+
+    /** Whether the TMDb key walkthrough is showing, over the settings window. */
+    var tmdbGuideOpen by remember { mutableStateOf(false) }
     // Not persisted: collapsing is something a user does to see more of one screen, not a standing
     // preference, and a sidebar that stayed hidden across restarts would look like a missing menu.
     var sidebarCollapsed by remember { mutableStateOf(false) }
@@ -264,7 +269,13 @@ fun DesktopApp(
                         onHistory = appState::openHistory,
                         onDownloads = appState::openDownloads,
                         hasOffline = capabilities.offlineSupported,
-                        hasMusic = capabilities.audioSupported && appState.hasMusicLibrary,
+                        // Shown whenever music is released, not only once a playlist is loaded.
+                        //
+                        // Hiding it until a library existed meant a profile without an M3U had no
+                        // way to learn the feature was there, and nothing said why: the section was
+                        // simply absent, indistinguishable from not being built. The workspace
+                        // explains what to add instead.
+                        hasMusic = capabilities.audioSupported,
                         onMusic = appState::openMusic,
                         hasSubscriptions = appState.streamingDiscoveryCapability.isVisible,
                         onSubscriptions = appState::openSubscriptions,
@@ -557,9 +568,18 @@ fun DesktopApp(
                 if (capabilities.multiviewSupported && appState.multiviewOpen) {
                     MultiviewOverlay(
                         tiles = appState.multiviewTiles(),
-                        onClose = appState::closeMultiview,
+                        onClose = {
+                            // Closing the overlay must also restore the window frame. Previously the
+                            // catalogue was left trapped in borderless full screen after Multiview.
+                            if (isFullScreen) onToggleFullScreen()
+                            appState.closeMultiview()
+                        },
                         onRemoveTile = appState::toggleMultiviewChannel,
                         queuedCount = appState.multiviewChannelIds.size,
+                        // The same full-screen switch the single-title player has. Four matches at
+                        // once is exactly when somebody wants the whole monitor.
+                        isFullScreen = isFullScreen,
+                        onToggleFullScreen = onToggleFullScreen,
                     )
                 }
 
@@ -863,6 +883,17 @@ fun DesktopApp(
                     catalogRefreshing = appState.xtreamStatus is XtreamStatus.LoadingCatalog,
                     onRefreshCatalog = { scope.launch { appState.refreshCatalog() } },
                     onOpenTmdbSettings = { openUriExternally(java.net.URI(TMDB_API_SETTINGS_URL)) },
+                    onOpenTmdbGuide = { tmdbGuideOpen = true },
+                )
+            }
+
+            // Over the settings window rather than replacing it: the field being explained is
+            // behind this, and sending the user back through the settings tree after reading six
+            // steps would lose them the place they were about to paste into.
+            if (tmdbGuideOpen) {
+                TmdbKeyGuideDialog(
+                    onDismiss = { tmdbGuideOpen = false },
+                    onOpenSite = { url -> openUriExternally(java.net.URI(url)) },
                 )
             }
 
@@ -2681,6 +2712,33 @@ private fun DownloadRow(
     }
 }
 
+/** Which kind of download to list. */
+private enum class DownloadFilter {
+    ALL,
+    MOVIES,
+    SERIES,
+}
+
+/**
+ * How tightly the download rows are packed.
+ *
+ * Two rather than the catalogue's three: a download row carries a progress bar, a cancel and a
+ * delete, so it cannot collapse into a poster tile with nowhere to put them. Compact is the same
+ * row with less air and smaller artwork — enough to see a finished season at a glance.
+ */
+private enum class DownloadDensity {
+    COMFORTABLE,
+    COMPACT,
+}
+
+/**
+ * How many downloads before a search box earns its place.
+ *
+ * Below this the list fits on screen and a search field is furniture; above it, finding one episode
+ * among a season means scrolling past everything else.
+ */
+private const val SEARCHABLE_DOWNLOAD_COUNT = 8
+
 /**
  * Offline library.
  *
@@ -2723,6 +2781,107 @@ private fun DownloadsWorkspace(
             return@Column
         }
 
+        // Films apart from series, and a way to find one title among many.
+        //
+        // A download list grows without ever being tidied — every episode of a series lands beside
+        // every film — and past a screenful it stops being somewhere you can find anything.
+        var filter by remember { mutableStateOf(DownloadFilter.ALL) }
+        var query by remember { mutableStateOf("") }
+        var density by remember { mutableStateOf(DownloadDensity.COMFORTABLE) }
+
+        // The kind is read off the content key, which is `movie:…` or `series:…` by construction.
+        // Derived rather than stored: a second field would be one more thing to keep in step with
+        // the identity that already carries the answer.
+        val kindOf = { entry: DownloadEntry -> entry.contentKey.substringBefore(':') }
+        val kinds = entries.map(kindOf).toSet()
+
+        val visible =
+            entries.filter { entry ->
+                val matchesKind =
+                    when (filter) {
+                        DownloadFilter.ALL -> true
+                        DownloadFilter.MOVIES -> kindOf(entry) == "movie"
+                        DownloadFilter.SERIES -> kindOf(entry) == "series"
+                    }
+                matchesKind && (query.isBlank() || entry.title.contains(query.trim(), ignoreCase = true))
+            }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Always shown, not only when the list already holds both kinds.
+            //
+            // Hiding it behind a mix was a misjudgement: a customer with four films sees no control
+            // at all, cannot tell the feature exists, and reasonably reports it missing. A selector
+            // that is present and shows the same list twice costs nothing; one that appears only
+            // under a condition the user cannot see reads as a broken build.
+            BuroSegmentedControl(
+                options = DownloadFilter.entries,
+                selected = filter,
+                label = { option ->
+                    when (option) {
+                        DownloadFilter.ALL -> text.allItems
+                        DownloadFilter.MOVIES -> text.movies
+                        DownloadFilter.SERIES -> text.series
+                    }
+                },
+                onSelect = { chosen -> filter = chosen },
+            )
+            Spacer(Modifier.width(BuroSpacing.Md))
+
+            // Always offered, for the same reason as the selector above. A search box that appears
+            // only past some threshold is a control the user has to discover by accident.
+            OutlinedTextField(
+                value = query,
+                onValueChange = { value -> query = value },
+                modifier = Modifier.weight(1f).widthIn(max = 420.dp),
+                singleLine = true,
+                placeholder = { Text(text.searchCatalog) },
+                leadingIcon = { Text("⌕", color = BuroColors.TextSubtle) },
+                shape = BuroRadius.Small,
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = BuroColors.Primary,
+                        unfocusedBorderColor = BuroColors.Border,
+                        focusedContainerColor = BuroColors.Surface,
+                        unfocusedContainerColor = BuroColors.Surface,
+                    ),
+            )
+            Spacer(Modifier.width(BuroSpacing.Md))
+
+            // Roomy rows or tight ones, the same choice the catalogue offers.
+            //
+            // A download row carries a progress bar and two buttons, so it cannot become a wall of
+            // posters — compact here means the same row with less air and smaller artwork, which is
+            // what makes a finished season scannable rather than a page of scrolling.
+            BuroSegmentedControl(
+                options = listOf(DownloadDensity.COMFORTABLE, DownloadDensity.COMPACT),
+                selected = density,
+                label = { option ->
+                    when (option) {
+                        DownloadDensity.COMFORTABLE -> text.layoutList
+                        DownloadDensity.COMPACT -> text.layoutCompact
+                    }
+                },
+                onSelect = { chosen -> density = chosen },
+            )
+        }
+        Spacer(Modifier.height(BuroSpacing.Md))
+
+        // A filter that matches nothing says so, rather than showing an empty screen that looks
+        // like the downloads were lost.
+        if (visible.isEmpty()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = text.downloadsNoMatch,
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            return@Column
+        }
+
         // Weighted so the list scrolls within the remaining space. Unweighted, a Column gives its
         // child unbounded height and the lazy list lays every row out at once, running past the
         // window instead of scrolling.
@@ -2730,12 +2889,13 @@ private fun DownloadsWorkspace(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
         ) {
-            items(entries, key = { it.contentKey }) { entry ->
+            items(visible, key = { it.contentKey }) { entry ->
                 DownloadLibraryRow(
                     entry = entry,
                     onPlay = { onPlay(entry.contentKey) },
                     onCancel = { onCancel(entry.contentKey) },
                     onDelete = { onDelete(entry.contentKey) },
+                    compact = density == DownloadDensity.COMPACT,
                 )
             }
         }
@@ -2748,6 +2908,14 @@ private fun DownloadLibraryRow(
     onPlay: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
+    /**
+     * Tighter rows, for scanning a long list.
+     *
+     * The controls stay: a download row has a progress bar, a cancel and a delete, and a density
+     * that removed them would be a different screen rather than a denser one. Only the padding and
+     * the artwork shrink.
+     */
+    compact: Boolean = false,
 ) {
     val text = strings
     val stored = entry.state == DownloadState.Completed
@@ -2757,7 +2925,7 @@ private fun DownloadLibraryRow(
             .fillMaxWidth()
             .clip(BuroRadius.Medium)
             .background(BuroColors.Surface)
-            .padding(BuroSpacing.Md),
+            .padding(if (compact) BuroSpacing.Xs else BuroSpacing.Md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BuroRemoteArtwork(
@@ -2765,7 +2933,7 @@ private fun DownloadLibraryRow(
             contentDescription = entry.title,
             modifier =
                 Modifier
-                    .width(54.dp)
+                    .width(if (compact) 34.dp else 54.dp)
                     .aspectRatio(2f / 3f)
                     .clip(BuroRadius.Small)
                     .background(BuroColors.SurfaceRaised),

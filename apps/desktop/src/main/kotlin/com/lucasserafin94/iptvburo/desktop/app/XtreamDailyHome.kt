@@ -51,9 +51,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.DailyHomeStatus
+import com.lucasserafin94.iptvburo.desktop.CreditDestination
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.DesktopContinueWatchingEntry
-import com.lucasserafin94.iptvburo.desktop.data.TmdbServiceShelf
+import com.lucasserafin94.iptvburo.metadata.TmdbServiceShelf
 import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitle
@@ -185,7 +186,32 @@ fun XtreamDailyHome(
         val person = appState.selectedPerson
         if (person != null) {
             PersonFilmographyPage(
-                onOpenCredit = appState::openTitleFromCredit,
+                // The local flag has to fall with the shared state.
+                //
+                // `personOpen` lives in this screen and decides whether the filmography is drawn at
+                // all; `selectedPerson` lives in the app state. Clearing only the second left this
+                // branch still taken with nothing to show, so the page fell through to Home — which
+                // is exactly what a press on a credit did: the actor's screen vanished and the user
+                // was returned to the start.
+                onOpenCredit = { credit ->
+                    // Three flags decide what is on screen, and all three have to move together:
+                    // `personOpen` and `detailsOpen` belong to this screen, `selectedPerson` to the
+                    // app state. Clearing only the shared one left this branch taken with nothing
+                    // to draw; selecting the title without `detailsOpen` left the user on the Home
+                    // with the right film selected and no page showing it.
+                    when (appState.openCredit(credit)) {
+                        CreditDestination.PLAYLIST_ITEM -> {
+                            personOpen = false
+                            detailsOpen = true
+                        }
+                        // Assinaturas is a destination of its own, so this screen steps aside
+                        // entirely rather than opening a details page over it.
+                        CreditDestination.SUBSCRIPTIONS -> personOpen = false
+                        // Nothing could be done. The filmography stays open rather than dropping
+                        // the user somewhere they did not ask to go.
+                        CreditDestination.NOWHERE -> Unit
+                    }
+                },
                 person = person,
                 onBack = {
                     personOpen = false

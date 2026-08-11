@@ -29,6 +29,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,12 +42,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.DesktopContinueWatchingEntry
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
+import com.lucasserafin94.iptvburo.desktop.ui.BuroSegmentedControl
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
 import com.lucasserafin94.iptvburo.desktop.ui.strings
+
+/** Which kind of unfinished title to show. */
+private enum class ContinueFilter {
+    ALL,
+    MOVIES,
+    SERIES,
+}
 
 /**
  * Everything started and not finished, with the choice the user actually wants at that moment.
@@ -70,6 +83,45 @@ fun ContinueWatchingWorkspace(
             style = MaterialTheme.typography.headlineSmall,
         )
         Spacer(Modifier.height(BuroSpacing.Md))
+
+        // Films and series apart, because they are watched differently.
+        //
+        // Somebody resuming an episode is picking up a habit; somebody resuming a film is finishing
+        // one thing. Mixed into one list the two shuffle together and the list stops being a place
+        // to find anything — which is what "para ficar mais organizado" was asking for.
+        //
+        // Kept above the empty check so the filter is not offered when there is nothing to filter.
+        var filter by remember { mutableStateOf(ContinueFilter.ALL) }
+        val visible =
+            entries.filter { entry ->
+                when (filter) {
+                    ContinueFilter.ALL -> true
+                    ContinueFilter.MOVIES -> entry.item.contentType == XtreamContentType.MOVIE
+                    ContinueFilter.SERIES -> entry.item.contentType == XtreamContentType.SERIES
+                }
+            }
+
+        // Shown whenever there is anything to filter, not only when both kinds are present.
+        //
+        // Hiding it behind a mix was a misjudgement made on the downloads screen first: a customer
+        // whose list happens to hold one kind sees no control, cannot tell the feature exists, and
+        // reasonably reports it missing. A control that is present and shows the same list twice
+        // costs nothing.
+        if (entries.isNotEmpty()) {
+            BuroSegmentedControl(
+                options = ContinueFilter.entries,
+                selected = filter,
+                label = { option ->
+                    when (option) {
+                        ContinueFilter.ALL -> text.allItems
+                        ContinueFilter.MOVIES -> text.movies
+                        ContinueFilter.SERIES -> text.series
+                    }
+                },
+                onSelect = { chosen -> filter = chosen },
+            )
+            Spacer(Modifier.height(BuroSpacing.Md))
+        }
 
         if (entries.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -101,7 +153,7 @@ fun ContinueWatchingWorkspace(
                         .edgeScrollableVertically(listState),
                 verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
             ) {
-                items(entries, key = { entry -> entry.item.providerId }) { entry ->
+                items(visible, key = { entry -> entry.item.providerId }) { entry ->
                     ContinueRow(
                         entry = entry,
                         onResume = { onResume(entry) },

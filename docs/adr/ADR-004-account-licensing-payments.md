@@ -5,7 +5,8 @@
 
 > Atualização: os termos comerciais de EUR 9,99 vitalícios foram substituídos
 > pelo ADR-010. As decisões de identidade, assinatura e autoridade do backend
-> permanecem válidas.
+> permanecem válidas. A mecânica Android do item 3 foi substituída pelo aluguel
+> de 730 dias e verificação no servidor definidos no ADR-011.
 
 ## Contexto
 
@@ -23,8 +24,8 @@ pode servir como conta ou licença do IPTV BURO.
    derivado da chave pública e do UUID. Não usamos o endereço MAC real.
 2. A avaliação e a licença são entitlements assinados pelo backend. O cliente
    nunca se autolicencia e não decide sozinho se um recibo é válido.
-3. No Google Play, a compra será um produto único não consumível, validado e
-   reconhecido pelo backend com a API oficial de faturamento.
+3. No Google Play, a compra usa a opção de aluguel de 730 dias definida no
+   ADR-011, validada e reconhecida pelo backend com a API oficial.
 4. No Windows e no portal, a compra será um Checkout de pagamento único. O
    backend concede o entitlement somente após webhook assinado e verificado.
 5. O portal permite entrar, pagar, ativar por código, restaurar compra, consultar
@@ -45,11 +46,12 @@ em logs.
 ## Situação atual
 
 O domínio de licença, as identidades criptográficas Android/Windows, o Worker
-Cloudflare e o Checkout Stripe do portal já existem. O backend só concede o
-entitlement após webhook assinado e mantém preço, moeda e prazo como contrato do
-servidor. A compra Android pelo Google Play, a conta do portal, restauração e
-transferência entre dispositivos continuam pendentes. Nenhum botão pode simular
-pagamento aprovado.
+Cloudflare, o Checkout Stripe e a integração de compra/restauração Google Play
+já existem no código. O backend só concede entitlement após confirmar Stripe ou
+Google e mantém produto, preço/moeda quando aplicáveis e prazo como contrato do
+servidor. A configuração externa do Play Console, a conta do portal e a
+transferência explícita entre aparelhos continuam pendentes. Nenhum botão pode
+simular pagamento aprovado.
 
 ## Consequências
 

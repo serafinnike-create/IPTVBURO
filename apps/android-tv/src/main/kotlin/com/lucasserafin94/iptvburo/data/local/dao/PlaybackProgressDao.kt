@@ -28,4 +28,10 @@ interface PlaybackProgressDao {
             "ORDER BY last_watched_at_epoch_millis DESC LIMIT :limit",
     )
     fun continueWatching(profileId: String, limit: Int): List<PlaybackProgressEntity>
+
+    @Query(
+        "SELECT * FROM playback_progress WHERE profile_id = :profileId " +
+            "ORDER BY last_watched_at_epoch_millis DESC LIMIT :limit",
+    )
+    fun history(profileId: String, limit: Int): List<PlaybackProgressEntity>
 }

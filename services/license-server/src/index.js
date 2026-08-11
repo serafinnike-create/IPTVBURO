@@ -1,5 +1,12 @@
 import { signLicense } from './signing.js';
 import {
+  acknowledgeGooglePlayPurchase,
+  inspectGooglePlayPurchase,
+  openGooglePurchaseToken,
+  purchaseTokenHash,
+  sealGooglePurchaseToken,
+} from './google-play.js';
+import {
   createCheckoutSession,
   currencyForCountry,
   exactPriceFor,
@@ -68,13 +75,21 @@ const DEVICE_PROOF_RETENTION_DAYS = 30;
 /** Opportunistic cleanup is bounded so a licence check never turns into an unbounded delete. */
 const DEVICE_PROOF_CLEANUP_LIMIT = 100;
 
+/** Public requests are intentionally tiny; reject oversized bodies before parsing or signing. */
+const MAX_DEVICE_API_BODY_BYTES = 32 * 1024;
+const MAX_FORM_BODY_BYTES = 64 * 1024;
+const MAX_STRIPE_WEBHOOK_BODY_BYTES = 512 * 1024;
+
+/** Hourly refund reconciliation is bounded so one cron invocation cannot exhaust Worker limits. */
+const GOOGLE_PLAY_RECONCILIATION_LIMIT = 50;
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // Only the three public app endpoints need browser CORS. The admin panel, Checkout and Stripe
-    // all use this origin (or server-to-server requests), so advertising them cross-origin would
-    // widen the attack surface without enabling a product capability.
+    // Only the browser-facing public app endpoints need CORS. Admin, Checkout, Stripe and Google
+    // purchase verification are same-origin or native/server-to-server, so advertising them
+    // cross-origin would widen the attack surface without enabling a product capability.
     if (request.method === 'OPTIONS') {
       if (!PUBLIC_CORS_PATHS.has(url.pathname)) {
         return new Response(null, { status: 405, headers: { 'cache-control': 'no-store' } });
@@ -85,6 +100,9 @@ export default {
       });
     }
 
+    const limited = await enforceRouteRateLimit(request, env, url);
+    if (limited) return PUBLIC_CORS_PATHS.has(url.pathname) ? withCors(limited) : limited;
+
     try {
       switch (url.pathname) {
         case '/v1/register':
@@ -93,6 +111,10 @@ export default {
           return withCors(await handleValidate(request, env));
         case '/v1/redeem':
           return withCors(await handleRedeem(request, env));
+        case '/v1/google-play/purchase':
+          return withCors(await handleGooglePlayPurchase(request, env));
+        case '/v1/signing-key-check':
+          return await handleSigningKeyCheck(request, env);
         case '/v1/stripe-webhook':
           return await handleStripeWebhook(request, env);
 
@@ -153,6 +175,10 @@ export default {
       const failure = json({ error: 'internal' }, 500);
       return PUBLIC_CORS_PATHS.has(url.pathname) ? withCors(failure) : failure;
     }
+  },
+
+  async scheduled(_controller, env, context) {
+    context.waitUntil(reconcileGooglePlayPurchases(env));
   },
 };
 
@@ -250,6 +276,27 @@ async function handlePrice(request) {
 }
 
 /**
+ * Signs a fixed-purpose challenge without registering a disposable trial device.
+ *
+ * This is an operational key-pair check, not a licence: clients reject the payload because it has
+ * no device or entitlement state. Keeping the schema fixed also avoids exposing an arbitrary
+ * signing oracle while still proving that the deployed private key matches the key pinned in apps.
+ */
+async function handleSigningKeyCheck(request, env) {
+  if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
+  const body = await readJson(request);
+  const nonce = validProofNonce(body.nonce);
+  if (!nonce) return json({ error: 'bad_nonce' }, 400);
+  if (!env.SIGNING_KEY) return json({ error: 'signing_unavailable' }, 503);
+
+  const signed = await signLicense(
+    { purpose: 'iptvburo-signing-key-check-v1', nonce },
+    env.SIGNING_KEY,
+  );
+  return json({ payload: signed.payload, signature: signed.signature });
+}
+
+/**
  * The front page.
  *
  * A visitor with a device in the query string is going to buy, so they are sent to the purchase page
@@ -279,7 +326,8 @@ async function handleActivatePage(request, env) {
     }));
   }
 
-  const form = await request.formData();
+  const form = await readUrlEncodedForm(request, MAX_FORM_BODY_BYTES);
+  if (!form) return json({ error: 'bad_or_oversized_form' }, 413);
 
   // A POST has no query string, so the language rides in a hidden field. Without it, submitting the
   // form would silently drop back to the browser's language — which is precisely the case the
@@ -354,9 +402,9 @@ async function handleBuyPage(request, env) {
  */
 async function handleCheckout(request, env) {
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
-
   const url = new URL(request.url);
-  const form = await request.formData();
+  const form = await readUrlEncodedForm(request, MAX_FORM_BODY_BYTES);
+  if (!form) return json({ error: 'bad_or_oversized_form' }, 413);
 
   // The buy form carries the language, because a POST has no query string to read it from. It has to
   // survive the trip through Stripe as well: the customer comes back to /obrigado, and coming back
@@ -562,19 +610,52 @@ async function handleRegister(request, env) {
   const claimedText = String(body.firstSeen ?? '');
   const claimed = UTC_INSTANT.test(claimedText) ? Date.parse(claimedText) : Number.NaN;
   const usable = Number.isFinite(claimed) && claimed < now.getTime();
-  const firstSeen = usable ? new Date(claimed) : now;
+  const claimedFirstSeen = usable ? new Date(claimed) : now;
+
+  // What the server itself remembers about this machine, which beats anything the client says.
+  //
+  // The client's own markers are the honest path and cover the ordinary case, but they live on the
+  // same disk as everything else: deleting them was the whole attack. The installation id is now
+  // derived from the machine rather than drawn at random, so the same machine arrives with the same
+  // anchor however many times its files are removed — and the trial it started weeks ago is still
+  // here, in the server's own records, with the server's own dates.
+  //
+  // Only the earliest matters. A machine may hold several device rows over its life, and the first
+  // trial it ever started is the one that decides how much of the week is left.
+  const anchor = proof.installationId ?? null;
+  const remembered = anchor
+    ? await env.DB.prepare(
+        `SELECT MIN(first_seen_at) AS earliest FROM devices
+         WHERE machine_anchor = ? AND device_id <> ?`,
+      )
+        .bind(anchor, proof.deviceId)
+        .first()
+    : null;
+
+  const rememberedAt = remembered?.earliest ? Date.parse(remembered.earliest) : Number.NaN;
+  // The earlier of the two wins, because a trial cannot start twice. A returning machine keeps the
+  // clock it already started; a genuinely new one is unaffected, having nothing to be found.
+  const firstSeen =
+    Number.isFinite(rememberedAt) && rememberedAt < claimedFirstSeen.getTime()
+      ? new Date(rememberedAt)
+      : claimedFirstSeen;
 
   // Counted from whichever is earlier. A machine that reports having been seen nine days ago has
   // already used its week.
   const trialEnds = addDays(firstSeen, TRIAL_DAYS);
   const inserted = await env.DB.prepare(
-    `INSERT INTO devices (device_id, public_key, status, first_seen_at, trial_ends_at, updated_at)
-     VALUES (?, ?, 'TRIAL', ?, ?, ?)
+    `INSERT INTO devices
+       (device_id, public_key, status, first_seen_at, trial_ends_at, updated_at, machine_anchor)
+     VALUES (?, ?, 'TRIAL', ?, ?, ?, ?)
      ON CONFLICT(device_id) DO NOTHING`,
   )
     // first_seen_at records what the machine reported, so support can see a device that arrived
     // claiming to be older than its registration — the signature of a reinstall.
-    .bind(proof.deviceId, proof.publicKey, iso(firstSeen), iso(trialEnds), iso(now))
+    //
+    // machine_anchor is what makes the next such arrival recognisable at all: it is the stable
+    // installation id, and matching on it is how a deleted-files reinstall is reunited with the
+    // trial it already used.
+    .bind(proof.deviceId, proof.publicKey, iso(firstSeen), iso(trialEnds), iso(now), anchor)
     .run();
 
   if (statementChanges(inserted) > 0) {
@@ -635,6 +716,526 @@ async function handleRedeem(request, env) {
 }
 
 /**
+ * Verifies a Google Play rental purchase and binds it to a proved Android installation.
+ *
+ * The token is never trusted as a receipt. Google is queried server-to-server, the configured
+ * product and 730-day rental option are checked, and the token is encrypted before D1 persistence.
+ */
+async function handleGooglePlayPurchase(request, env) {
+  if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
+  const body = await readJson(request);
+  const now = new Date();
+  const authorization = await authorizeGooglePlayPurchase(body, env, now);
+  if (!authorization.ok) return json({ error: authorization.error }, authorization.status);
+  if (!env.GOOGLE_TOKEN_ENCRYPTION_KEY) {
+    return json({ error: 'google_play_unconfigured' }, 503);
+  }
+
+  const inspected = await inspectGooglePlayPurchase(
+    authorization.purchaseToken,
+    authorization.accountId,
+    env,
+  );
+  if (!inspected.ok) {
+    const status = inspected.retryable
+      ? 503
+      : inspected.reason === 'purchase_not_found'
+        ? 404
+        : inspected.reason === 'purchase_account_mismatch'
+          ? 403
+          : 409;
+    return json({ error: inspected.reason }, status);
+  }
+
+  let tokenCiphertext;
+  try {
+    tokenCiphertext = await sealGooglePurchaseToken(
+      authorization.purchaseToken,
+      env.GOOGLE_TOKEN_ENCRYPTION_KEY,
+    );
+  } catch {
+    return json({ error: 'google_play_unconfigured' }, 503);
+  }
+
+  const existing = await env.DB.prepare(
+    'SELECT * FROM google_play_purchases WHERE purchase_token_hash = ?',
+  )
+    .bind(inspected.purchaseTokenHash)
+    .first();
+  if (existing && existing.obfuscated_account_id !== authorization.accountId) {
+    return json({ error: 'purchase_already_bound' }, 409);
+  }
+
+  if (inspected.state === 'PENDING') {
+    await upsertGooglePlayLedger(
+      env,
+      authorization,
+      inspected,
+      tokenCiphertext,
+      existing?.device_id ?? authorization.deviceId,
+      now,
+    );
+    return json({ state: 'PENDING' }, 202);
+  }
+
+  if (inspected.state === 'CANCELLED' || inspected.state === 'REFUNDED') {
+    await cancelGooglePlayEntitlement(
+      env,
+      authorization,
+      inspected,
+      tokenCiphertext,
+      existing?.device_id ?? authorization.deviceId,
+      now,
+    );
+    return json(
+      { error: inspected.state === 'REFUNDED' ? 'purchase_refunded' : 'purchase_cancelled' },
+      409,
+    );
+  }
+
+  const completionTime = inspected.completionTime;
+  const expiresAt = addDays(completionTime, PAID_DAYS);
+  const timestamp = iso(now);
+  const completedAt = iso(completionTime);
+  const expiresAtText = iso(expiresAt);
+  const previousDeviceId = existing?.device_id;
+  const results = await env.DB.batch([
+    googlePlayLedgerUpsertStatement(
+      env,
+      authorization,
+      inspected,
+      tokenCiphertext,
+      authorization.deviceId,
+      'PURCHASED',
+      completedAt,
+      expiresAtText,
+      timestamp,
+    ),
+    env.DB.prepare(
+      `UPDATE devices
+       SET status = 'REVOKED', google_purchase_token_hash = NULL, updated_at = ?
+       WHERE device_id = ? AND device_id <> ? AND google_purchase_token_hash = ?`,
+    ).bind(
+      timestamp,
+      previousDeviceId ?? authorization.deviceId,
+      authorization.deviceId,
+      inspected.purchaseTokenHash,
+    ),
+    env.DB.prepare(
+      `UPDATE devices
+       SET status = 'ACTIVE', purchased_at = ?, expires_at = ?,
+           stripe_session_id = NULL, google_purchase_token_hash = ?, updated_at = ?
+       WHERE device_id = ? AND public_key IS NOT NULL
+         AND (purchased_at IS NULL OR ? >= purchased_at OR google_purchase_token_hash = ?)
+         AND NOT EXISTS (
+           SELECT 1 FROM events
+           WHERE device_id = ? AND kind = 'revoked' AND created_at >= ?
+         )`,
+    ).bind(
+      completedAt,
+      expiresAtText,
+      inspected.purchaseTokenHash,
+      timestamp,
+      authorization.deviceId,
+      completedAt,
+      inspected.purchaseTokenHash,
+      authorization.deviceId,
+      completedAt,
+    ),
+    env.DB.prepare(
+      `INSERT INTO events (device_id, kind, detail, created_at)
+       SELECT ?, 'google_play_purchased', ?, ?
+       WHERE EXISTS (
+         SELECT 1 FROM devices WHERE device_id = ? AND google_purchase_token_hash = ?
+       ) AND NOT EXISTS (
+         SELECT 1 FROM events
+         WHERE device_id = ? AND kind = 'google_play_purchased' AND detail = ?
+       )`,
+    ).bind(
+      authorization.deviceId,
+      inspected.purchaseTokenHash,
+      timestamp,
+      authorization.deviceId,
+      inspected.purchaseTokenHash,
+      authorization.deviceId,
+      inspected.purchaseTokenHash,
+    ),
+  ]);
+  if (statementChanges(results?.[0]) === 0) {
+    return json({ error: 'purchase_ledger_conflict' }, 409);
+  }
+
+  const needsAcknowledgement =
+    inspected.acknowledgementState !== 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED';
+  if (needsAcknowledgement) {
+    const acknowledged = await acknowledgeGooglePlayPurchase(
+      authorization.purchaseToken,
+      inspected.accessToken,
+      env,
+    );
+    if (!acknowledged) return json({ error: 'google_acknowledgement_pending' }, 503);
+    await env.DB.prepare(
+      `UPDATE google_play_purchases
+       SET acknowledgement_state = 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED', updated_at = ?
+       WHERE purchase_token_hash = ?`,
+    )
+      .bind(iso(new Date()), inspected.purchaseTokenHash)
+      .run();
+  }
+
+  return await respondWithLicense(env, authorization.deviceId, authorization.nonce, now);
+}
+
+async function authorizeGooglePlayPurchase(body, env, now) {
+  const deviceId = validDeviceId(body.deviceId);
+  const nonce = validProofNonce(body.nonce);
+  const proof = decodeProof(body.proof);
+  const accountId =
+    typeof body.accountId === 'string' && /^[a-f0-9]{64}$/.test(body.accountId)
+      ? body.accountId
+      : null;
+  const purchaseToken =
+    typeof body.purchaseToken === 'string' &&
+    body.purchaseToken.length >= 16 &&
+    body.purchaseToken.length <= 4_096 &&
+    /^[\x21-\x7E]+$/.test(body.purchaseToken)
+      ? body.purchaseToken
+      : null;
+  if (!deviceId || !nonce || !proof || !accountId || !purchaseToken) {
+    return { ok: false, error: 'bad_purchase_proof', status: 400 };
+  }
+
+  const device = await env.DB.prepare('SELECT * FROM devices WHERE device_id = ?')
+    .bind(deviceId)
+    .first();
+  const publicKey = canonicalPublicKey(device?.public_key);
+  if (!device) return { ok: false, error: 'not_registered', status: 404 };
+  if (!publicKey) return { ok: false, error: 'identity_upgrade_required', status: 409 };
+
+  const tokenHash = await purchaseTokenHash(purchaseToken);
+  const canonical =
+    `iptvburo-google-play-purchase-v1\n${deviceId}\n${nonce}\n${tokenHash}\n${accountId}`;
+  const verified = await verifyRawDeviceProof(decodeStandardBase64(publicKey), proof, canonical);
+  if (!verified) return { ok: false, error: 'invalid_proof', status: 401 };
+  if (!(await claimDeviceProof(env, deviceId, nonce, 'google_play_purchase', now))) {
+    return { ok: false, error: 'proof_replayed', status: 409 };
+  }
+  return { ok: true, deviceId, nonce, accountId, purchaseToken, tokenHash, device };
+}
+
+async function upsertGooglePlayLedger(
+  env,
+  authorization,
+  inspected,
+  tokenCiphertext,
+  deviceId,
+  now,
+) {
+  const timestamp = iso(now);
+  await googlePlayLedgerUpsertStatement(
+    env,
+    authorization,
+    inspected,
+    tokenCiphertext,
+    deviceId,
+    inspected.state,
+    null,
+    null,
+    timestamp,
+  ).run();
+}
+
+async function cancelGooglePlayEntitlement(
+  env,
+  authorization,
+  inspected,
+  tokenCiphertext,
+  deviceId,
+  now,
+) {
+  const timestamp = iso(now);
+  const status = inspected.state === 'REFUNDED' ? 'REFUNDED' : 'CANCELLED';
+  const eventKind = status === 'REFUNDED' ? 'google_play_refunded' : 'google_play_cancelled';
+  await env.DB.batch([
+    googlePlayLedgerUpsertStatement(
+      env,
+      authorization,
+      inspected,
+      tokenCiphertext,
+      deviceId,
+      status,
+      null,
+      null,
+      timestamp,
+    ),
+    env.DB.prepare(
+      `UPDATE devices
+       SET status = 'REVOKED', google_purchase_token_hash = NULL, updated_at = ?
+       WHERE device_id = ? AND google_purchase_token_hash = ?`,
+    ).bind(timestamp, deviceId, inspected.purchaseTokenHash),
+    env.DB.prepare(
+      `INSERT INTO events (device_id, kind, detail, created_at)
+       SELECT ?, ?, ?, ?
+       WHERE NOT EXISTS (
+         SELECT 1 FROM events
+         WHERE device_id = ? AND kind = ? AND detail = ?
+       )`,
+    ).bind(
+      deviceId,
+      eventKind,
+      inspected.purchaseTokenHash,
+      timestamp,
+      deviceId,
+      eventKind,
+      inspected.purchaseTokenHash,
+    ),
+  ]);
+}
+
+/**
+ * Re-checks active and pending purchases with Google even if the app never opens again.
+ *
+ * This is the durable fallback for missed Play notifications and full refunds: only the encrypted
+ * token is opened inside the Worker, one OAuth token is reused for the bounded batch, and failures
+ * leave the existing entitlement untouched for a later retry.
+ */
+export async function reconcileGooglePlayPurchases(
+  env,
+  limit = GOOGLE_PLAY_RECONCILIATION_LIMIT,
+  now = new Date(),
+) {
+  if (!env?.DB || !env.GOOGLE_TOKEN_ENCRYPTION_KEY) return { checked: 0, changed: 0 };
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || GOOGLE_PLAY_RECONCILIATION_LIMIT, 100));
+  const timestamp = iso(now);
+  const result = await env.DB.prepare(
+    `SELECT * FROM google_play_purchases
+     WHERE status = 'PENDING'
+        OR (status = 'PURCHASED' AND (expires_at IS NULL OR expires_at > ?))
+     ORDER BY COALESCE(last_checked_at, created_at) ASC
+     LIMIT ?`,
+  ).bind(timestamp, boundedLimit).all();
+  const purchases = Array.isArray(result?.results) ? result.results : [];
+  let checked = 0;
+  let changed = 0;
+  let accessToken = null;
+
+  for (const purchase of purchases) {
+    try {
+      const token = await openGooglePurchaseToken(
+        purchase.token_ciphertext,
+        env.GOOGLE_TOKEN_ENCRYPTION_KEY,
+      );
+      const inspected = await inspectGooglePlayPurchase(
+        token,
+        purchase.obfuscated_account_id,
+        env,
+        accessToken,
+      );
+      checked += 1;
+      if (inspected.accessToken) accessToken = inspected.accessToken;
+      if (!inspected.ok) {
+        await markGooglePlayChecked(env, purchase.purchase_token_hash, timestamp);
+        continue;
+      }
+
+      if (inspected.state === 'CANCELLED' || inspected.state === 'REFUNDED') {
+        await revokePersistedGooglePurchase(env, purchase, inspected.state, timestamp);
+        changed += 1;
+        continue;
+      }
+
+      if (inspected.state === 'PENDING') {
+        await env.DB.prepare(
+          `UPDATE google_play_purchases
+           SET status = 'PENDING', acknowledgement_state = ?, last_checked_at = ?, updated_at = ?
+           WHERE purchase_token_hash = ?`,
+        ).bind(
+          inspected.acknowledgementState || 'ACKNOWLEDGEMENT_STATE_PENDING',
+          timestamp,
+          timestamp,
+          purchase.purchase_token_hash,
+        ).run();
+        continue;
+      }
+
+      const completedAt = iso(inspected.completionTime);
+      const expiresAt = iso(addDays(inspected.completionTime, PAID_DAYS));
+      await grantPersistedGooglePurchase(
+        env,
+        purchase,
+        inspected,
+        completedAt,
+        expiresAt,
+        timestamp,
+      );
+      changed += purchase.status === 'PENDING' ? 1 : 0;
+
+      if (inspected.acknowledgementState !== 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED') {
+        const acknowledged = await acknowledgeGooglePlayPurchase(token, inspected.accessToken, env);
+        if (acknowledged) {
+          await env.DB.prepare(
+            `UPDATE google_play_purchases
+             SET acknowledgement_state = 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED',
+                 last_checked_at = ?, updated_at = ?
+             WHERE purchase_token_hash = ?`,
+          ).bind(timestamp, timestamp, purchase.purchase_token_hash).run();
+        }
+      }
+    } catch (error) {
+      // Never log the row or token. A corrupt envelope or temporary API problem is retried later.
+      console.error('google play reconciliation failed', error?.name);
+      await markGooglePlayChecked(env, purchase.purchase_token_hash, timestamp);
+    }
+  }
+
+  return { checked, changed };
+}
+
+async function markGooglePlayChecked(env, tokenHash, timestamp) {
+  await env.DB.prepare(
+    'UPDATE google_play_purchases SET last_checked_at = ? WHERE purchase_token_hash = ?',
+  ).bind(timestamp, tokenHash).run();
+}
+
+async function revokePersistedGooglePurchase(env, purchase, state, timestamp) {
+  const status = state === 'REFUNDED' ? 'REFUNDED' : 'CANCELLED';
+  const eventKind = status === 'REFUNDED' ? 'google_play_refunded' : 'google_play_cancelled';
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE google_play_purchases
+       SET status = ?, last_checked_at = ?, updated_at = ?
+       WHERE purchase_token_hash = ?`,
+    ).bind(status, timestamp, timestamp, purchase.purchase_token_hash),
+    env.DB.prepare(
+      `UPDATE devices
+       SET status = 'REVOKED', google_purchase_token_hash = NULL, updated_at = ?
+       WHERE device_id = ? AND google_purchase_token_hash = ?`,
+    ).bind(timestamp, purchase.device_id, purchase.purchase_token_hash),
+    env.DB.prepare(
+      `INSERT INTO events (device_id, kind, detail, created_at)
+       SELECT ?, ?, ?, ?
+       WHERE NOT EXISTS (
+         SELECT 1 FROM events WHERE device_id = ? AND kind = ? AND detail = ?
+       )`,
+    ).bind(
+      purchase.device_id,
+      eventKind,
+      purchase.purchase_token_hash,
+      timestamp,
+      purchase.device_id,
+      eventKind,
+      purchase.purchase_token_hash,
+    ),
+  ]);
+}
+
+async function grantPersistedGooglePurchase(
+  env,
+  purchase,
+  inspected,
+  completedAt,
+  expiresAt,
+  timestamp,
+) {
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE google_play_purchases
+       SET status = 'PURCHASED', acknowledgement_state = ?, purchase_completed_at = ?,
+           expires_at = ?, last_checked_at = ?, updated_at = ?
+       WHERE purchase_token_hash = ?`,
+    ).bind(
+      inspected.acknowledgementState || 'ACKNOWLEDGEMENT_STATE_PENDING',
+      completedAt,
+      expiresAt,
+      timestamp,
+      timestamp,
+      purchase.purchase_token_hash,
+    ),
+    env.DB.prepare(
+      `UPDATE devices
+       SET status = 'ACTIVE', purchased_at = ?, expires_at = ?, stripe_session_id = NULL,
+           google_purchase_token_hash = ?, updated_at = ?
+       WHERE device_id = ? AND public_key IS NOT NULL
+         AND (purchased_at IS NULL OR ? >= purchased_at OR google_purchase_token_hash = ?)`,
+    ).bind(
+      completedAt,
+      expiresAt,
+      purchase.purchase_token_hash,
+      timestamp,
+      purchase.device_id,
+      completedAt,
+      purchase.purchase_token_hash,
+    ),
+    env.DB.prepare(
+      `INSERT INTO events (device_id, kind, detail, created_at)
+       SELECT ?, 'google_play_purchased', ?, ?
+       WHERE EXISTS (
+         SELECT 1 FROM devices WHERE device_id = ? AND google_purchase_token_hash = ?
+       ) AND NOT EXISTS (
+         SELECT 1 FROM events
+         WHERE device_id = ? AND kind = 'google_play_purchased' AND detail = ?
+       )`,
+    ).bind(
+      purchase.device_id,
+      purchase.purchase_token_hash,
+      timestamp,
+      purchase.device_id,
+      purchase.purchase_token_hash,
+      purchase.device_id,
+      purchase.purchase_token_hash,
+    ),
+  ]);
+}
+
+function googlePlayLedgerUpsertStatement(
+  env,
+  authorization,
+  inspected,
+  tokenCiphertext,
+  deviceId,
+  status,
+  completedAt,
+  expiresAt,
+  timestamp,
+) {
+  return env.DB.prepare(
+    `INSERT INTO google_play_purchases (
+       purchase_token_hash, token_ciphertext, device_id, product_id, purchase_option_id,
+       obfuscated_account_id, status, acknowledgement_state, test_purchase,
+       purchase_completed_at, expires_at, last_checked_at, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(purchase_token_hash) DO UPDATE SET
+       token_ciphertext = excluded.token_ciphertext,
+       device_id = excluded.device_id,
+       status = excluded.status,
+       acknowledgement_state = excluded.acknowledgement_state,
+       test_purchase = excluded.test_purchase,
+       purchase_completed_at = COALESCE(excluded.purchase_completed_at, google_play_purchases.purchase_completed_at),
+       expires_at = COALESCE(excluded.expires_at, google_play_purchases.expires_at),
+       last_checked_at = excluded.last_checked_at,
+       updated_at = excluded.updated_at
+     WHERE google_play_purchases.product_id = excluded.product_id
+       AND google_play_purchases.purchase_option_id = excluded.purchase_option_id
+       AND google_play_purchases.obfuscated_account_id = excluded.obfuscated_account_id`,
+  ).bind(
+    inspected.purchaseTokenHash,
+    tokenCiphertext,
+    deviceId,
+    inspected.productId,
+    inspected.purchaseOptionId,
+    authorization.accountId,
+    status,
+    inspected.acknowledgementState || 'ACKNOWLEDGEMENT_STATE_PENDING',
+    inspected.testPurchase ? 1 : 0,
+    completedAt,
+    expiresAt,
+    timestamp,
+    timestamp,
+    timestamp,
+  );
+}
+
+/**
  * The redemption itself, shared by the app and the website form.
  *
  * One implementation rather than two, because single use is the property that makes a key worth
@@ -683,7 +1284,9 @@ async function redeemKey(deviceId, keyCode, env, now) {
     ).bind(deviceId, redeemedAt, keyCode, redeemedAt),
     env.DB.prepare(
       `UPDATE devices
-       SET status = 'ACTIVE', purchased_at = ?, expires_at = ?, note = ?, updated_at = ?
+       SET status = 'ACTIVE', purchased_at = ?, expires_at = ?,
+           stripe_session_id = NULL, google_purchase_token_hash = NULL,
+           note = ?, updated_at = ?
        WHERE device_id = ? AND public_key = ?
          AND EXISTS (
            SELECT 1 FROM redemption_keys
@@ -743,7 +1346,9 @@ async function verifyRegistrationProof(body) {
 
   const verified = await verifyDeviceProof(publicKeyBytes, proof, 'register', deviceId, nonce);
   if (!verified) return { ok: false, error: 'invalid_proof', status: 401 };
-  return { ok: true, deviceId, nonce, publicKey };
+  // The installation id travels on, because it is now anchored to the machine rather than drawn at
+  // random: it is what lets a returning machine be recognised after its stored files were deleted.
+  return { ok: true, deviceId, nonce, publicKey, installationId };
 }
 
 /** Authenticates validate/redeem exclusively with the key already pinned to the device row. */
@@ -782,6 +1387,14 @@ async function authorizeExistingDevice(body, action, env, now) {
 }
 
 async function verifyDeviceProof(publicKeyBytes, proof, action, deviceId, nonce) {
+  return await verifyRawDeviceProof(
+    publicKeyBytes,
+    proof,
+    canonicalDeviceProof(action, deviceId, nonce),
+  );
+}
+
+async function verifyRawDeviceProof(publicKeyBytes, proof, canonical) {
   try {
     const key = await crypto.subtle.importKey(
       'spki',
@@ -794,7 +1407,7 @@ async function verifyDeviceProof(publicKeyBytes, proof, action, deviceId, nonce)
       { name: 'ECDSA', hash: 'SHA-256' },
       key,
       proof,
-      new TextEncoder().encode(canonicalDeviceProof(action, deviceId, nonce)),
+      new TextEncoder().encode(canonical),
     );
   } catch {
     return false;
@@ -910,7 +1523,8 @@ const DEVICE_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 async function handleStripeWebhook(request, env) {
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
-  const payload = await request.text();
+  const payload = await readTextWithinLimit(request, MAX_STRIPE_WEBHOOK_BODY_BYTES);
+  if (payload === null) return json({ error: 'payload_too_large' }, 413);
   const signature = request.headers.get('stripe-signature');
 
   if (!(await isValidStripeSignature(payload, signature, env.STRIPE_WEBHOOK_SECRET))) {
@@ -925,6 +1539,9 @@ async function handleStripeWebhook(request, env) {
   }
 
   if (!validStripeEvent(event)) return json({ error: 'bad_event' }, 400);
+  const expectedLivemode = stripeLivemodeForEnvironment(env);
+  if (expectedLivemode === null) return json({ error: 'stripe_mode_unconfigured' }, 503);
+  if (event.livemode !== expectedLivemode) return json({ error: 'wrong_stripe_mode' }, 400);
   if (!SUPPORTED_STRIPE_EVENTS.has(event.type)) return json({ received: true, ignored: true });
 
   const now = new Date();
@@ -979,12 +1596,21 @@ function validStripeEvent(event) {
   return Boolean(
     event &&
       stripeObjectId(event.id) &&
+      typeof event.livemode === 'boolean' &&
       typeof event.type === 'string' &&
       event.type.length <= 100 &&
       event.data &&
       typeof event.data.object === 'object' &&
       event.data.object !== null,
   );
+}
+
+/** Fails closed when a deployment forgot to declare whether it accepts test or live events. */
+function stripeLivemodeForEnvironment(env) {
+  const mode = String(env.STRIPE_MODE ?? '').trim().toLowerCase();
+  if (mode === 'live') return true;
+  if (mode === 'test') return false;
+  return null;
 }
 
 /** Claims one delivery. Processed/ignored ids are acknowledged; a live claimant asks for a retry. */
@@ -1088,7 +1714,7 @@ async function processCheckoutPayment(event, env, now) {
     env.DB.prepare(
       `UPDATE devices
        SET status = 'ACTIVE', purchased_at = ?, expires_at = ?,
-           stripe_session_id = ?, updated_at = ?
+           stripe_session_id = ?, google_purchase_token_hash = NULL, updated_at = ?
        WHERE device_id = ? AND public_key IS NOT NULL
          AND EXISTS (
          SELECT 1 FROM payments WHERE checkout_session_id = ? AND paid_event_id = ?
@@ -1218,11 +1844,12 @@ async function processChargeRefund(event, env, now) {
       `UPDATE payments
        SET charge_id = ?,
            amount_refunded_minor = MAX(amount_refunded_minor, ?),
-           status = CASE
-             WHEN status IN ('REFUNDED', 'DISPUTED') THEN status
-             WHEN ? = 'REFUNDED' THEN 'REFUNDED'
-             ELSE 'PARTIALLY_REFUNDED'
-           END,
+            status = CASE
+              WHEN status = 'REFUNDED' THEN status
+              WHEN ? = 'REFUNDED' THEN 'REFUNDED'
+              WHEN status = 'DISPUTED' THEN status
+              ELSE 'PARTIALLY_REFUNDED'
+            END,
            updated_at = ?
        WHERE checkout_session_id = ?`,
     ).bind(chargeId, refundedAmount, nextStatus, nowText, payment.checkout_session_id),
@@ -1797,11 +2424,91 @@ async function recordEvent(env, deviceId, kind, detail, now) {
 
 async function readJson(request) {
   try {
-    const parsed = await request.json();
+    const contentType = String(request.headers.get('content-type') ?? '').toLowerCase();
+    if (!contentType.startsWith('application/json')) return {};
+    const text = await readTextWithinLimit(request, MAX_DEVICE_API_BODY_BYTES);
+    if (text === null) return {};
+    const parsed = JSON.parse(text);
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
   }
+}
+
+/** The product's HTML forms are URL-encoded; parsing a bounded copy closes chunked-body bypasses. */
+async function readUrlEncodedForm(request, maximumBytes) {
+  const contentType = String(request.headers.get('content-type') ?? '').toLowerCase();
+  if (!contentType.startsWith('application/x-www-form-urlencoded')) return null;
+  const text = await readTextWithinLimit(request, maximumBytes);
+  return text === null ? null : new URLSearchParams(text);
+}
+
+/** Reads a request stream without allowing a chunked body to bypass the declared-length check. */
+async function readTextWithinLimit(request, maximumBytes) {
+  if (declaredBodyExceeds(request, maximumBytes)) return null;
+  if (!request.body) return '';
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytesRead += value.byteLength;
+    if (bytesRead > maximumBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
+
+function declaredBodyExceeds(request, maximumBytes) {
+  const raw = request.headers.get('content-length');
+  if (raw === null) return false;
+  const declared = Number(raw);
+  return Number.isFinite(declared) && declared > maximumBytes;
+}
+
+/**
+ * Cloudflare's local rate-limit binding is a coarse abuse brake; cryptographic possession and D1
+ * idempotency remain the authority. Tests and offline tooling omit the binding deliberately.
+ */
+async function enforceRouteRateLimit(request, env, url) {
+  if (request.method === 'OPTIONS') return null;
+  const bindingName = rateLimitBindingFor(url.pathname);
+  const limiter = bindingName ? env[bindingName] : null;
+  if (!limiter || typeof limiter.limit !== 'function') return null;
+
+  // Cloudflare supplies this header at the edge. If it is unavailable in local tooling, skip rather
+  // than putting every local request into one shared "unknown" bucket.
+  const actor = request.headers.get('cf-connecting-ip');
+  if (!actor) return null;
+
+  try {
+    const result = await limiter.limit({ key: `${url.pathname}:${actor}` });
+    if (result?.success !== false) return null;
+    return json({ error: 'rate_limited' }, 429, { 'retry-after': '60' });
+  } catch (error) {
+    // Licence validation is an availability boundary. A limiter outage must not lock paid users out;
+    // the request still has to pass its normal proof/signature checks below.
+    console.error('rate limiter failed', error?.name);
+    return null;
+  }
+}
+
+function rateLimitBindingFor(pathname) {
+  if (pathname === '/v1/register') return 'REGISTRATION_RATE_LIMITER';
+  if (pathname === '/v1/validate' || pathname === '/v1/redeem') {
+    return 'LICENSE_API_RATE_LIMITER';
+  }
+  if (pathname === '/v1/google-play/purchase') return 'CHECKOUT_RATE_LIMITER';
+  if (pathname === '/v1/signing-key-check') return 'REGISTRATION_RATE_LIMITER';
+  if (pathname === '/checkout') return 'CHECKOUT_RATE_LIMITER';
+  if (pathname.startsWith('/admin/')) return 'ADMIN_RATE_LIMITER';
+  return null;
 }
 
 function addDays(from, days) {
@@ -1854,17 +2561,23 @@ function html(body, status = 200, policy = PUBLIC_CSP) {
   });
 }
 
-function json(body, status = 200) {
+function json(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       'content-type': 'application/json',
       'cache-control': 'no-store',
+      ...extraHeaders,
     },
   });
 }
 
-const PUBLIC_CORS_PATHS = new Set(['/v1/register', '/v1/validate', '/v1/redeem', '/v1/price']);
+const PUBLIC_CORS_PATHS = new Set([
+  '/v1/register',
+  '/v1/validate',
+  '/v1/redeem',
+  '/v1/price',
+]);
 
 /** Adds browser access only after routing has established that this is a public app endpoint. */
 function withCors(response) {

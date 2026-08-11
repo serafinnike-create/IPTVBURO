@@ -96,6 +96,19 @@ class TmdbClient(
                 val credit = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
                 val title = credit.string("title") ?: credit.string("name") ?: return@mapNotNull null
                 TmdbCredit(
+                    // The catalogue's own id and kind, which the response has always carried and
+                    // nothing here read. Without them a credit was only a title, and clicking one
+                    // could do nothing but search the user's playlist for a matching name — so a
+                    // film the playlist did not have led nowhere at all, when the whole point of
+                    // the subscriptions screen is to say where it *can* be watched.
+                    // Null rather than a reason to discard the credit.
+                    //
+                    // A row without an id can still be shown and still matched against the user's
+                    // own playlist by name; dropping it would silently remove a film from an
+                    // actor's filmography because of a field that only affects one of the two ways
+                    // it can be opened.
+                    id = credit.int("id"),
+                    isSeries = credit.string("media_type") == "tv",
                     title = title,
                     year = (credit.string("release_date") ?: credit.string("first_air_date"))
                         ?.take(4)
@@ -533,6 +546,15 @@ data class TmdbPerson(
 )
 
 data class TmdbCredit(
+    /**
+     * TMDb's own id, so a credit can be looked up rather than only matched by name.
+     *
+     * Null when the response omitted it. Such a credit is still listed and can still be matched
+     * against the user's playlist by title; only the Assinaturas route needs the id.
+     */
+    val id: Int?,
+    /** Films and series are numbered separately, so the kind is needed to resolve the id. */
+    val isSeries: Boolean,
     val title: String,
     val year: Int?,
     val posterUrl: String?,

@@ -34,9 +34,14 @@ import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.delay
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -56,6 +61,8 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.ui.ChannelUi
+import com.lucasserafin94.iptvburo.ui.ContinueWatchingUi
+import com.lucasserafin94.iptvburo.ui.ProviderShelfUi
 import com.lucasserafin94.iptvburo.ui.adaptive.BuroWindowClass
 import com.lucasserafin94.iptvburo.ui.adaptive.resolveBuroWindowClass
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
@@ -70,6 +77,11 @@ import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 fun LivingHomeScreen(
     sources: List<HomeSourceSummary>,
     catalogItems: List<ChannelUi> = emptyList(),
+    continueWatching: List<ContinueWatchingUi> = emptyList(),
+    /** Service shelves, drawn after the user's own content. Empty until they have loaded. */
+    streamingShelves: List<ProviderShelfUi> = emptyList(),
+    /** Real synopses for banner titles, keyed by channel id. */
+    synopses: Map<String, String> = emptyMap(),
     onItemFocused: (String) -> Unit,
     onOpenItem: (String) -> Unit,
     onImportSource: () -> Unit,
@@ -99,10 +111,10 @@ fun LivingHomeScreen(
         when (uiState) {
             LivingHomeUiState.Ready -> {
                 val section =
-                    if (catalogItems.isEmpty()) {
+                    if (catalogItems.isEmpty() && continueWatching.isEmpty()) {
                         DemoHomeCatalog.section(sources)
                     } else {
-                        RealHomeCatalog.section(sources, catalogItems)
+                        RealHomeCatalog.section(sources, catalogItems, continueWatching, streamingShelves, synopses)
                     }
                 val resolvedInitialFocusedItemId =
                     section.resolveInitialFocusId(initialFocusedItemId)
@@ -115,7 +127,7 @@ fun LivingHomeScreen(
                     onOpenItem = onOpenItem,
                     onOpenSources = onOpenSources,
                     onOpenSource = onOpenSource,
-                    showDemonstrationNotice = catalogItems.isEmpty(),
+                    showDemonstrationNotice = catalogItems.isEmpty() && continueWatching.isEmpty(),
                 )
             }
 
@@ -183,11 +195,31 @@ private fun ReadyHome(
             }
         }
 
-        item(key = section.hero.id) {
+        item(key = "home:hero") {
+            // The banner cycles through the day's rotation rather than holding one image, as the
+            // desktop's does. Ten seconds: long enough to read a title and press play, short enough
+            // that somebody who lingers sees more than one thing.
+            //
+            // Paused while the hero has focus, so a D-pad user reading it is not carried off it
+            // mid-sentence.
+            var heroIndex by remember(section.id) { mutableIntStateOf(0) }
+            var heroFocused by remember(section.id) { mutableStateOf(false) }
+            val rotation = section.heroRotation.ifEmpty { listOf(section.hero) }
+            LaunchedEffect(section.id, rotation.size, heroFocused) {
+                if (rotation.size <= 1 || heroFocused) return@LaunchedEffect
+                while (true) {
+                    delay(HERO_ROTATION_MILLIS)
+                    heroIndex = (heroIndex + 1) % rotation.size
+                }
+            }
+            val heroItem = rotation.getOrNull(heroIndex) ?: section.hero
             BuroHero(
-                item = section.hero,
+                item = heroItem,
                 sourceCount = sourceCount,
-                onItemFocused = onItemFocused,
+                onItemFocused = { id ->
+                    heroFocused = true
+                    onItemFocused(id)
+                },
                 onOpenItem = onOpenItem,
                 onOpenSources = onOpenSources,
                 // Touch phones must open at the beginning of the hero. Requesting focus
@@ -715,3 +747,6 @@ private data class HomeLayoutMetrics(
 
 private const val STATE_PRIMARY_ACTION_ID = "home:state:primary"
 private const val STATE_SECONDARY_ACTION_ID = "home:state:secondary"
+
+/** How long each banner title holds the screen. */
+private const val HERO_ROTATION_MILLIS = 10_000L

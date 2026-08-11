@@ -29,14 +29,40 @@ class DeviceFingerprintTest {
         }
     }
 
+    /**
+     * A fresh identity file on the same machine keeps the machine's own installation id.
+     *
+     * This inverts what the test here used to assert, deliberately. Two files producing two
+     * unrelated identities was the trial reset: delete the three files the app keeps, and it
+     * introduced itself as a computer the server had never met, which correctly granted another
+     * seven days — repeatable for ever, by anyone, with no skill required.
+     *
+     * The installation id is now derived from the Windows MachineGuid, so it survives the deletion
+     * and the server can find the trial this machine already started. The key pair is still freshly
+     * generated, and the device id still derives from both — so the two identities are genuinely
+     * different rows, joined by the anchor rather than confused with one another.
+     */
     @Test
-    fun `separate installations receive separate UUIDs keys and public codes`() {
+    fun `a new identity file on the same machine keeps the machine's installation id`() {
         val root = Files.createTempDirectory("iptvburo-identities")
         try {
             val first = WindowsDeviceIdentityStore(root.resolve("first.dpapi"), TestProtector).getOrCreate()
             val second = WindowsDeviceIdentityStore(root.resolve("second.dpapi"), TestProtector).getOrCreate()
 
-            assertNotEquals(first.installationId, second.installationId)
+            // The anchor, which is what makes a returning machine recognisable. On a host with no
+            // readable MachineGuid the code falls back to a random UUID, and there the old
+            // behaviour — and the old hole — necessarily remains; asserting equality there would
+            // fail for a reason that is not a fault.
+            if (MachineAnchor.installationUuid() != null) {
+                assertEquals(
+                    first.installationId,
+                    second.installationId,
+                    "deleting the identity file must not mint a new machine",
+                )
+            }
+
+            // Still a distinct cryptographic identity. The anchor identifies the machine; it does
+            // not let one installation impersonate another's pinned key.
             assertNotEquals(first.publicKeyDerBase64, second.publicKeyDerBase64)
             assertNotEquals(first.deviceId, second.deviceId)
         } finally {

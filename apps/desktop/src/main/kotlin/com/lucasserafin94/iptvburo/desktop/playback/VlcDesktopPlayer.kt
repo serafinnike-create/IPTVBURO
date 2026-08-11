@@ -38,9 +38,47 @@ class VlcDesktopPlayer(
      * what is played next.
      */
     private val subtitleStyle: SubtitleStyle = SubtitleStyle(),
+    /**
+     * Decoder policy for this player process.
+     *
+     * The single-title player keeps software decoding as its conservative compatibility default.
+     * Multiview opts into [VlcHardwareDecoding.AUTOMATIC]: four simultaneous software decoders can
+     * saturate the CPU even on capable notebooks, while VLC's `any` mode selects the available
+     * D3D11VA/DXVA path and falls back according to the bundled engine's own codec support.
+     */
+    private val hardwareDecoding: VlcHardwareDecoding = VlcHardwareDecoding.DISABLED,
+    /** Optional delay used by multiview so four provider requests do not arrive as one burst. */
+    private val startupDelayMillis: Long = 0L,
+    /**
+     * How much stream to buffer before playing, in milliseconds.
+     *
+     * The single-title player keeps VLC's own default: one stream has the connection to itself, and
+     * a short buffer means the picture appears quickly. Multiview asks for considerably more —
+     * four streams share one connection, and the log showed every tile falling to `stopped` and
+     * recovering seconds later, over and over, which is a starved buffer rather than a dead channel.
+     */
+    private val networkCachingMillis: Int = DEFAULT_NETWORK_CACHING_MILLIS,
+    /**
+     * A short label for the log, so four players can be told apart.
+     *
+     * Every line used to read `[player]`, which with a grid of four made the log almost useless:
+     * "one tile did not start" and "one tile started and stopped" produce the same set of words in
+     * a different order, and there was no way to know which tile any line belonged to.
+     *
+     * A tile number, never a channel name or provider id — those can carry an address.
+     */
+    private val logTag: String = "player",
 ) {
+    init {
+        require(startupDelayMillis in 0L..MAX_STARTUP_DELAY_MILLIS) {
+            "startupDelayMillis is outside the safe range"
+        }
+    }
+
     @Volatile
-    private var snapshot = DesktopPlaybackSnapshot(engineName = "VLC")
+    // Opens showing the brightness that is actually in force, which is the one the last title was
+    // given. Starting at 1.0 would put the slider somewhere the picture is not.
+    private var snapshot = DesktopPlaybackSnapshot(engineName = "VLC", brightness = pendingBrightness)
 
     private val disposed = AtomicBoolean(false)
     private val started = AtomicBoolean(false)
@@ -82,6 +120,33 @@ class VlcDesktopPlayer(
     /** Last state printed, so the poll does not log the same word twice a second. */
     private var lastLoggedState: String? = null
 
+    /** Whether this player has already reported giving up, so it says so once rather than forever. */
+    @Volatile
+    private var exhaustionLogged = false
+
+    /** When playback first began, so a stream that dies young can be told from one that ran. */
+    @Volatile
+    private var firstPlayingAt = 0L
+
+    /** Reported once per run, not on every poll of a stopped tile. */
+    @Volatile
+    private var shortLifeLogged = false
+
+    /**
+     * When playback stopped looking healthy, or 0 while it is fine.
+     *
+     * A live stream reports `stopped` for a poll or two over ordinary events — a buffer refilling, a
+     * segment boundary, a missing keyframe — and recovers on its own. Reconnecting at the first such
+     * report tore down a video output that was about to come back, and rebuilding it is exactly the
+     * black flash the user reported: `playing` → `stopped` → `retrying (1/3)` → `playing`, over and
+     * over, with the retry count never rising because the stream kept recovering.
+     *
+     * The app was causing the flicker it was trying to repair. A stop is only real once it has
+     * lasted, so the moment it began is recorded and judged by [shouldTreatStopAsDrop].
+     */
+    @Volatile
+    private var unhealthySince = 0L
+
     /** One silent retry per player, for the cold-start stall described in pollState. */
     /**
      * How many silent restarts this media has been given.
@@ -91,6 +156,18 @@ class VlcDesktopPlayer(
      * over about twelve seconds cover it without the user ever seeing a retry happen.
      */
     private val startRetries = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /**
+     * When the current run of uninterrupted playback began, or 0 while nothing is playing.
+     *
+     * The retry budget is for one bad patch, not for a whole evening. Left cumulative it made
+     * multiview decay exactly as reported: four decoders competing means every tile stumbles
+     * occasionally, each stumble spent one of three lifetime attempts, and within minutes the grid
+     * was down to whichever channel had been luckiest. A stream that has been playing steadily has
+     * demonstrably recovered, so it earns its attempts back.
+     */
+    @Volatile
+    private var steadySince = 0L
 
     /** The request currently playing, so the retry knows what to re-open. */
     @Volatile
@@ -197,6 +274,37 @@ class VlcDesktopPlayer(
     }
 
     /**
+     * The bare video surface, for callers that place it in an AWT container of their own.
+     *
+     * Multiview needs this rather than [createComponent]. Compose cuts a hole in its scene for the
+     * one component handed to `SwingPanel` and no deeper: with a `JPanel` per tile, the canvases
+     * were grandchildren inside that hole, Compose kept painting its own surface over the region,
+     * and every tile stayed black — while VLC reported `playing` and the audio came through, which
+     * is exactly what made it look like a decoding failure rather than a compositing one.
+     *
+     * Returning the canvas itself makes each video surface a direct child of the interop component,
+     * which is the arrangement the single-title player has always used and the reason it works.
+     */
+    fun createCanvas(
+        request: DesktopPlaybackRequest,
+        onPointerActivity: () -> Unit = {},
+        onClick: () -> Unit = {},
+        onKey: (Int) -> Boolean = { false },
+    ): Canvas =
+        createComponent(
+            request = request,
+            onPointerActivity = onPointerActivity,
+            onClick = onClick,
+            onKey = onKey,
+        ).let { panel ->
+            val canvas = panel.components.first() as Canvas
+            // Detached from the wrapper, which exists only for the single-title player. Left in
+            // place it would be reparented on the first add and AWT would log a warning.
+            panel.remove(canvas)
+            canvas
+        }
+
+    /**
      * Hides or restores the pointer over the video surface.
      *
      * A blank cursor rather than a real hide: AWT has no "hide" and this is how every Java video
@@ -263,16 +371,22 @@ class VlcDesktopPlayer(
     }
 
     /**
-     * Brightens or darkens the picture, 0.0 to 2.0 with 1.0 as the source's own.
+     * Remembers a brightness for the next title, 0.0 to 2.0 with 1.0 as the source's own.
      *
-     * VLC's adjust filter has to be switched on before any of its values take effect — sending
-     * `brightness` alone changes nothing at all, which is easy to mistake for a broken control.
+     * It cannot be changed on a title already playing, and the previous implementation quietly
+     * pretended otherwise. VLC's HTTP control interface supports a fixed list of commands — its own
+     * README names them: volume, seek, rate, the track selectors, the playlist verbs. `brightness`
+     * and `adjust` are not among them, so both were accepted by the socket, ignored by the engine,
+     * and the slider moved while the picture never changed.
+     *
+     * The value is therefore stored and passed on the command line when the next title starts,
+     * which is where the adjust filter is actually built. This is the same limitation the subtitle
+     * appearance settings have, and it is handled the same way rather than with a second mechanism.
      */
     fun setBrightness(value: Double) {
         val safe = value.coerceIn(BRIGHTNESS_MIN, BRIGHTNESS_MAX)
         snapshot = snapshot.copy(brightness = safe)
-        executeCommand("adjust", mapOf("val" to "1"))
-        executeCommand("brightness", mapOf("val" to safe.toString()))
+        pendingBrightness = safe
     }
 
     fun setVolume(value: Double) {
@@ -308,7 +422,7 @@ class VlcDesktopPlayer(
         // Same grace window as the audio switch: subtitles are re-attached to the running chain and
         // can produce the same brief `stopped`.
         switchingTrackUntil = System.currentTimeMillis() + TRACK_SWITCH_GRACE_MILLIS
-        println("[player] subtitle_track -> $trackId")
+        println("[$logTag] subtitle_track -> $trackId")
         executeCommand("subtitle_track", mapOf("val" to trackId.toString()))
     }
 
@@ -336,6 +450,7 @@ class VlcDesktopPlayer(
 
     private fun retryOnControlThread(request: DesktopPlaybackRequest) {
         if (disposed.get()) return
+        lastRequest = request
         val control = synchronized(processLock) { remote }
         if (control == null) {
             // No engine to talk to: relaunch it from scratch rather than reporting success.
@@ -355,6 +470,7 @@ class VlcDesktopPlayer(
         }
         runCatching {
             control.command("pl_stop")
+            control.command("pl_empty")
             control.command("in_play", mapOf("input" to request.uri.toVlcInput()))
         }.onSuccess {
             mediaStartedAt = System.currentTimeMillis()
@@ -393,6 +509,19 @@ class VlcDesktopPlayer(
                 late
             }
         runCatching { leftBehind?.destroy() }
+        // Insisted on, not merely requested.
+        //
+        // `destroy` sends a polite termination that a VLC busy in a network read can take seconds
+        // to act on, or ignore. Waiting briefly and then forcing it is what makes the guarantee
+        // real: without this, four multiview tiles could leave four engines behind, each holding a
+        // loopback port and a few hundred megabytes.
+        listOfNotNull(child, leftBehind).forEach { process ->
+            runCatching {
+                if (!process.waitFor(PROCESS_EXIT_GRACE_MILLIS, TimeUnit.MILLISECONDS)) {
+                    process.destroyForcibly()
+                }
+            }
+        }
         // Released only after both process sweeps. Releasing before destroy opened a small window
         // where another tile could receive this port while the old VLC still owned it.
         releaseClaimedPort()
@@ -420,19 +549,38 @@ class VlcDesktopPlayer(
         // will not play: the window is black and the clock reads 00:00 either way. Dimensions
         // only — no path, no MRL.
         println(
-            "[player] surface never became usable: displayable=${canvas.isDisplayable} " +
+            "[$logTag] surface never became usable: displayable=${canvas.isDisplayable} " +
                 "size=${canvas.width}x${canvas.height}",
         )
         error("The video surface was not ready")
     }
 
     private fun startIfNeeded(canvas: Canvas, request: DesktopPlaybackRequest) {
-        if (disposed.get() || !started.compareAndSet(false, true)) return
+        if (disposed.get()) return
+        // The poller re-opens live streams after a transient stop. Previously the retry budget was
+        // consumed while lastRequest stayed null, so no command was sent and a black tile could
+        // never recover.
+        lastRequest = request
+        if (!started.compareAndSet(false, true)) return
         this.canvas = canvas
         snapshot = snapshot.copy(loading = true, errorMessage = null)
         val launch = {
-            runCatching { startVlc(canvas, request) }
-                .onFailure {
+            runCatching {
+                if (startupDelayMillis > 0L) Thread.sleep(startupDelayMillis)
+                if (disposed.get()) error("The player was closed before its delayed start")
+                startVlc(canvas, request)
+            }
+                .onFailure { error ->
+                    // Said out loud, because this is the silent case.
+                    //
+                    // A start that throws left no trace at all: the tile went black and the log
+                    // simply never mentioned that player again, which is indistinguishable from a
+                    // tile that started fine and is quietly playing. With four of them that made a
+                    // grid coming up three-of-four impossible to account for.
+                    //
+                    // The exception type and message, never the cause chain — a wrapped IOException
+                    // from the HTTP control can carry the MRL, and the MRL carries the credentials.
+                    println("[$logTag] start failed: ${error::class.simpleName}")
                     // The failed attempt leaves a process behind and a latch that would refuse the
                     // next one, so a second try did nothing at all while the first VLC was still
                     // holding the video surface - two engines, one window, a broken picture.
@@ -480,7 +628,7 @@ class VlcDesktopPlayer(
         // Handle and surface size, never the input. A zero handle or a zero-sized canvas is the
         // difference between "VLC is running and drawing nowhere" and "VLC never started", and
         // from outside the two look identical: a black window with 00:00 / 00:00.
-        println("[player] starting: handle=$windowHandle surface=${canvas.width}x${canvas.height}")
+        println("[$logTag] starting: handle=$windowHandle surface=${canvas.width}x${canvas.height}")
         val child =
             ProcessBuilder(
                 executable.absolutePath,
@@ -493,8 +641,45 @@ class VlcDesktopPlayer(
                 "--drawable-hwnd=$windowHandle",
                 "--no-video-title-show",
                 "--no-qt-error-dialogs",
-                "--network-caching=1500",
+                // The buffer, sized for how many streams are competing.
+                //
+                // 1500ms is VLC's sensible default for one stream. Four at once share the same
+                // connection, the same disk and the same CPU, and the log showed every tile falling
+                // to `stopped` and recovering seconds later, over and over — a starved buffer, not
+                // a dead channel. A larger reservoir costs a slightly longer start and buys a grid
+                // that does not blink.
+                "--network-caching=$networkCachingMillis",
+                // The live path has its own reservoir, and it is the one that governs a channel.
+                //
+                // `network-caching` does not cover every live input; a stream arriving through the
+                // live path keeps buffering to its own default however large the network one is,
+                // which is why raising only that cut the stalls without stopping them.
+                "--live-caching=$networkCachingMillis",
                 "--file-caching=1000",
+                // Compensate for a wandering clock rather than resetting playback.
+                //
+                // A provider's live stream carries timestamps that drift, and beyond what the
+                // synchronisation algorithm is told to absorb, VLC restarts its clock — which stops
+                // and restarts the picture. This value is the *maximum jitter to compensate*, so it
+                // is raised, not lowered: zero would switch the compensation off entirely.
+                //
+                // Four streams from one provider drift together, which matches the measured
+                // pattern — every tile stalling on a cycle far too regular to be a network fault.
+                "--clock-jitter=$networkCachingMillis",
+                // Let VLC repair the connection itself.
+                //
+                // Without this the only recovery was the app's: stop, empty the playlist, reopen —
+                // which tears down the video output and rebuilds it, and that rebuild is the black
+                // flash the user sees. VLC's own reconnection re-establishes the HTTP stream while
+                // the output stays up, so a brief network stumble never reaches the screen.
+                "--http-reconnect",
+                // Keep the picture up while the buffer refills, rather than showing black.
+                //
+                // The default drops late frames, which on a stuttering live stream means the tile
+                // goes black for the moment it is behind. Holding the last frame reads as a pause;
+                // black reads as a fault.
+                "--no-drop-late-frames",
+                "--no-skip-frames",
                 // Pinned to the Direct3D 11 output. Left to choose, VLC can pick a module that
                 // ignores --drawable-hwnd entirely and opens its own window - or, off screen,
                 // renders nowhere at all, which looks exactly like a film that refuses to start.
@@ -505,7 +690,12 @@ class VlcDesktopPlayer(
                 // to insert it into. Declared here at its neutral value, it costs nothing until the
                 // brightness control is actually moved.
                 "--video-filter=adjust",
-                "--brightness=1.0",
+                // The remembered value, not a fixed 1.0.
+                //
+                // This is the only place brightness can be set at all: the filter is built with the
+                // video chain, and the HTTP control interface has no command to change it after the
+                // fact. Hardcoding 1.0 here is what made the slider permanently decorative.
+                "--brightness=$pendingBrightness",
                 // Subtitle appearance, declared at startup for the same reason as the adjust
                 // filter: the text renderer is built with the video chain, and changing these
                 // afterwards over the control interface has no effect on a running one.
@@ -515,10 +705,7 @@ class VlcDesktopPlayer(
                 // A background box behind the text, which is the difference between readable and
                 // not over a bright scene.
                 "--freetype-background-opacity=${if (subtitleStyle.background) 160 else 0}",
-                // Hardware decoding disabled. It is what fails first on 4K HDR and Dolby Vision
-                // files: the picture never arrives while the controls sit there at 00:00. Software
-                // decoding is slower but plays everything this catalogue carries.
-                "--avcodec-hw=none",
+                hardwareDecoding.vlcArgument,
                 "--quiet",
             ).directory(executable.parentFile)
                 // Discarded on purpose: VLC logs the MRL it was given, and for a provider source
@@ -540,6 +727,12 @@ class VlcDesktopPlayer(
                     null
                 }
             }
+        // Registered as soon as it exists, so the shutdown hook can reach it even if this player is
+        // never disposed. Removed again when it dies, so the set does not grow across an evening of
+        // channel changes.
+        liveProcesses.add(child)
+        child.onExit().thenRun { liveProcesses.remove(child) }
+
         if (abandoned != null) {
             abandoned.destroy()
             error("The player was closed while the engine was starting")
@@ -583,13 +776,37 @@ class VlcDesktopPlayer(
             // the distinction that has cost the most time here.
             if (stateName != lastLoggedState) {
                 lastLoggedState = stateName
-                println("[player] state=$stateName length=${status.long("length")}")
+                println("[$logTag] state=$stateName length=${status.long("length")}")
             }
             val playing = stateName == "playing"
             val paused = stateName == "paused"
             val ready = playing || paused || stateName == "stopped"
             val lengthSeconds = status.long("length")
-            if (playing) everPlayed = true
+            if (playing) {
+                if (!everPlayed) firstPlayingAt = System.currentTimeMillis()
+                everPlayed = true
+            }
+
+
+            // Steady playback returns the retry budget.
+            //
+            // Without this the three attempts were a lifetime allowance, and a live channel that
+            // hiccuped three times across an evening was dead for good. The wait matters as much as
+            // the reset: restoring on the first `playing` poll would let a stream that flaps between
+            // playing and stopped retry for ever, hammering the provider. Half a minute of real
+            // playback is a recovery; two seconds is a bounce.
+            if (playing && steadySince == 0L) steadySince = System.currentTimeMillis()
+            if (!playing) steadySince = 0L
+            if (
+                shouldRestoreRetryBudget(
+                    playing = playing,
+                    retriesUsed = startRetries.get(),
+                    steadyForMillis =
+                        if (steadySince == 0L) 0L else System.currentTimeMillis() - steadySince,
+                )
+            ) {
+                startRetries.set(0)
+            }
             // "Ended" means the title ran out, not merely that VLC is momentarily stopped.
             //
             // Switching audio track makes VLC tear the stream down and reopen it, and for a poll or
@@ -614,25 +831,127 @@ class VlcDesktopPlayer(
             // "opening" never reaches "stopped", so the retry never fired and the window stayed
             // black indefinitely — the case a user hit on a downloaded episode that VLC could open
             // perfectly well from a command line.
+            // A live channel that drops is reconnected; a film that ends is not.
+            //
+            // `!everPlayed` alone confined the retry to a first start that never happened, which is
+            // right for a film — one that reaches its end has ended, and re-opening it would replay
+            // it. A live stream carries no end: dropping out is a network event, and the only
+            // correct response is to open it again.
+            //
+            // This is what made multiview lose tiles one by one. Four decoders pulling four streams
+            // is the heaviest thing the app does, and any of them can stumble; with no reconnection
+            // each stumble was permanent, so the grid decayed to whichever tile happened to survive.
+            // A stream with no declared length is live. VLC reports -1 there, and 0 while it is
+            // still working the duration out — neither is a film, and a film always reports one
+            // once it has started. Read from the engine rather than carried on the request because
+            // the engine is what actually knows.
+            val liveStream = lengthSeconds <= 0L
+
+            val recoverable = !everPlayed || liveStream
+
+            // How long this player has looked unhealthy, so a momentary stop is not treated as a
+            // drop. Reset the instant playback resumes, so two brief stops minutes apart never add
+            // up to one long one.
+            // A stream that plays briefly and then stops is a different fault from one that stops
+            // after an hour.
+            //
+            // Playing for about as long as the buffer holds and then ending means no more data
+            // arrived: the source accepted the connection, delivered what it had, and closed. On a
+            // provider that limits simultaneous connections — or refuses several to one channel —
+            // that is what it looks like from here, and it is not something the player can fix.
+            // Logged with the duration so the two cases can be told apart at a glance.
+            if (!playing && !paused && !switchingTrack && everPlayed && !shortLifeLogged) {
+                val playedFor = System.currentTimeMillis() - firstPlayingAt
+                if (playedFor in 1..SHORT_LIFE_THRESHOLD_MILLIS) {
+                    shortLifeLogged = true
+                    println(
+                        "[$logTag] stream ended after only ${playedFor}ms of playback — " +
+                            "the source stopped sending",
+                    )
+                }
+            }
+            if (playing) shortLifeLogged = false
+
+            val healthy = playing || paused || switchingTrack
+            if (healthy) {
+                // How long the stumble lasted, reported once on recovery.
+                //
+                // This is the only direct measurement of the blinking: a stop that resolves itself
+                // never triggers anything, so without this it left no trace at all and there was no
+                // way to tell a grid that blinks constantly from one that is steady.
+                if (unhealthySince != 0L) {
+                    val stoppedFor = System.currentTimeMillis() - unhealthySince
+                    if (stoppedFor >= STUMBLE_LOG_THRESHOLD_MILLIS) {
+                        println("[$logTag] recovered by itself after ${stoppedFor}ms")
+                    }
+                }
+                unhealthySince = 0L
+            } else if (unhealthySince == 0L) {
+                unhealthySince = System.currentTimeMillis()
+            }
+            val unhealthyForMillis =
+                if (unhealthySince == 0L) 0L else System.currentTimeMillis() - unhealthySince
+
             if (
-                !everPlayed &&
+                recoverable &&
                 !playing &&
                 !paused &&
                 // Not while a track switch is settling: the stream is deliberately down, and
                 // re-issuing `in_play` here would restart the film from the beginning.
                 !switchingTrack &&
-                System.currentTimeMillis() - mediaStartedAt > FIRST_START_RETRY_MILLIS &&
-                startRetries.get() < MAX_START_RETRIES &&
-                startRetries.incrementAndGet() <= MAX_START_RETRIES
+                // Only once the stop has lasted. Reconnecting at the first `stopped` poll tore down
+                // a video output that was about to recover on its own, and rebuilding it is the
+                // black flash itself — the app producing the fault it was trying to repair.
+                shouldTreatStopAsDrop(unhealthyForMillis, networkCachingMillis) &&
+                // A live channel may always try again; a film gets a small allowance.
+                //
+                // Capping a live channel is what made the fourth tile go permanently black while
+                // its stream was alive: the log showed it stop and recover four times in under a
+                // minute, never reaching the thirty seconds of steady playback that would have
+                // returned its budget, and then give up for good. A channel carries no end, so a
+                // drop is always a network event and reopening is always right — the spacing below
+                // is what keeps that from becoming a flood.
+                mayReconnect(liveStream = liveStream, consecutiveFailures = startRetries.get()) &&
+                System.currentTimeMillis() - mediaStartedAt >
+                    reconnectBackoffMillis(startRetries.getAndIncrement())
             ) {
+                // The duration is the number that matters. "Reconnected" alone never said whether
+                // the grace was too short — a stop of 5s and a stop of 5 minutes read identically,
+                // and only one of them is a channel that actually went away.
+                println(
+                    "[$logTag] reconnecting (attempt ${startRetries.get()}) " +
+                        "after ${unhealthyForMillis}ms stopped",
+                )
                 lastRequest?.let { request ->
                     runCatching {
+                        // `in_play` appends to VLC's playlist. Retrying without clearing left several
+                        // identical entries behind and did not reliably release the failed network
+                        // input. Stop and empty first so every attempt is a genuinely fresh stream.
+                        control.command("pl_stop")
+                        control.command("pl_empty")
                         control.command("in_play", mapOf("input" to request.uri.toVlcInput()))
                         mediaStartedAt = System.currentTimeMillis()
                     }
                 }
                 return@runCatching
             }
+
+            // The moment a tile gives up, said plainly.
+            //
+            // Without this the log simply stops mentioning a player, and "exhausted its retries",
+            // "is a film that ended" and "is quietly fine" are indistinguishable — which is what
+            // made a grid decaying from four to three so hard to account for. Logged once, on the
+            // transition, so a stopped tile does not print twice a second for ever.
+            // Only a film can give up now, so only a film reports it. A live channel that has been
+            // trying for a while is a channel that is off air, and its attempts are already spaced
+            // out by the backoff — saying "gave up" about something still trying would be a lie.
+            if (recoverable && !playing && !paused && !switchingTrack && !exhaustionLogged) {
+                if (!liveStream && startRetries.get() >= MAX_FILM_RECONNECTS) {
+                    exhaustionLogged = true
+                    println("[$logTag] gave up after $MAX_FILM_RECONNECTS attempts, state=$stateName")
+                }
+            }
+            if (playing) exhaustionLogged = false
 
             snapshot =
                 snapshot.copy(
@@ -694,7 +1013,7 @@ class VlcDesktopPlayer(
                         // entirely silent, which made "I pressed it and nothing happened"
                         // indistinguishable from "the stream ignored it" — and the two need
                         // opposite fixes.
-                        println("[player] command $command failed: ${error.javaClass.simpleName}")
+                        println("[$logTag] command $command failed: ${error.javaClass.simpleName}")
                     }
             }
         }
@@ -745,6 +1064,39 @@ class VlcDesktopPlayer(
         const val HANDLE_ATTEMPTS = 100
         const val HANDLE_POLL_MILLIS = 20L
 
+        /** How long a VLC is given to exit politely before it is forced. */
+        const val PROCESS_EXIT_GRACE_MILLIS = VLC_PROCESS_EXIT_GRACE_MILLIS
+
+        /**
+         * Every VLC this process has started and not yet reaped.
+         *
+         * [dispose] is careful, but it only runs when the app closes in an orderly way. A crash, a
+         * kill from Task Manager, or a Stop-Process leaves each engine running — holding a loopback
+         * port and a few hundred megabytes with nothing left to own it. Four were found alive after
+         * a session had ended, which is what put this here.
+         *
+         * The registry is what the shutdown hook below has to work with: by the time it runs, the
+         * player objects may already be unreachable.
+         */
+        private val liveProcesses: MutableSet<Process> =
+            java.util.Collections.synchronizedSet(java.util.LinkedHashSet())
+
+        init {
+            // The last line of defence. It runs on Ctrl-C, on System.exit, and on an orderly kill;
+            // it cannot run on a power cut or a SIGKILL, and nothing in a JVM can.
+            //
+            // Failures are swallowed: this fires while the process is already going away, and an
+            // exception here would only turn a clean exit into an ugly one.
+            runCatching {
+                Runtime.getRuntime().addShutdownHook(
+                    Thread {
+                        synchronized(liveProcesses) { liveProcesses.toList() }
+                            .forEach { process -> runCatching { process.destroyForcibly() } }
+                    }.apply { name = "iptvburo-vlc-reaper" },
+                )
+            }
+        }
+
         /**
          * Loopback ports handed out to players in this process and not yet released.
          *
@@ -775,6 +1127,9 @@ class VlcDesktopPlayer(
         /** Silent restarts before giving up. Three covers a cold device; more would just stall. */
         const val MAX_START_RETRIES = 3
 
+        /** The fourth multiview tile starts after 2.25 s; anything longer feels broken. */
+        const val MAX_STARTUP_DELAY_MILLIS = 3_000L
+
         /**
          * How long a `stopped` report is ignored after a track switch.
          *
@@ -792,6 +1147,21 @@ class VlcDesktopPlayer(
         const val STALLED_MESSAGE =
             "O servidor respondeu, mas este vídeo não iniciou. Tente novamente ou escolha outro título."
     }
+}
+
+/** VLC's accepted hardware-decoder modes used by the desktop player. */
+enum class VlcHardwareDecoding(
+    val vlcValue: String,
+) {
+    /** Compatibility-first default for one full-size title. */
+    DISABLED("none"),
+
+    /** Let VLC select D3D11VA/DXVA when the codec and GPU support it. */
+    AUTOMATIC("any"),
+    ;
+
+    val vlcArgument: String
+        get() = "--avcodec-hw=$vlcValue"
 }
 
 /**
@@ -911,6 +1281,173 @@ internal fun isEnded(
     state == "stopped" &&
         lengthSeconds > 0L &&
         positionSeconds >= lengthSeconds - END_TOLERANCE_SECONDS
+
+/**
+ * Whether a player that has been playing steadily should have its retry budget returned.
+ *
+ * The budget covers one bad patch, not an entire evening. Held cumulative it made multiview decay
+ * exactly as reported — four decoders competing means every tile stumbles sooner or later, each
+ * stumble spent one of three lifetime attempts, and within minutes the grid was down to whichever
+ * channel had been luckiest. Entering full screen finished the job: resizing the window rebuilds
+ * every swap chain at once, and with the budget already spent nothing came back.
+ *
+ * The dwell is what separates a recovery from a bounce. A stream flapping between playing and
+ * stopped would otherwise restore its budget on every flap and retry against the provider for ever.
+ *
+ * @param steadyForMillis how long playback has been uninterrupted, or 0 when nothing is playing
+ */
+internal fun shouldRestoreRetryBudget(
+    playing: Boolean,
+    retriesUsed: Int,
+    steadyForMillis: Long,
+): Boolean =
+    playing && retriesUsed > 0 && steadyForMillis > STEADY_PLAYBACK_DWELL_MILLIS
+
+/** The dwell required, exposed so the test and the player cannot drift apart. */
+internal const val STEADY_PLAYBACK_DWELL_MILLIS = 30_000L
+
+/**
+ * How long a VLC is given to exit politely before it is forced.
+ *
+ * `destroy` is a request that an engine busy in a network read can take seconds to act on, or
+ * ignore. Four were found alive after a session had ended, each holding a loopback port and a few
+ * hundred megabytes — so the wait is bounded and then the kill is insisted on.
+ */
+internal const val VLC_PROCESS_EXIT_GRACE_MILLIS = 1_500L
+
+/** VLC's own default, kept for the single-title player where the stream has the line to itself. */
+internal const val DEFAULT_NETWORK_CACHING_MILLIS = 1_500
+
+/**
+ * The brightness the next title will start with, shared by every player in this process.
+ *
+ * It cannot be applied to a title already playing: the adjust filter is built with the video chain,
+ * and VLC's HTTP control interface has no command for it — the ones it does accept are listed in
+ * its own README, and `brightness` is not there. Sending it moved the slider and changed nothing.
+ *
+ * Held here rather than per instance so the setting survives moving from one title to the next,
+ * which is what a viewer who darkened a film expects when they start the next one.
+ */
+@Volatile
+internal var pendingBrightness: Double = 1.0
+
+/**
+ * The buffer each multiview tile asks for.
+ *
+ * Four streams share one connection, one disk and one CPU. At the single-stream default the log
+ * showed every tile falling to `stopped` and recovering seconds later, repeatedly — a starved
+ * buffer, not a dead channel. Five seconds is enough to ride out the gaps four decoders create for
+ * one another; the cost is a start that takes a few seconds longer, which is the right trade for a
+ * grid somebody is going to watch for an hour.
+ */
+internal const val MULTIVIEW_NETWORK_CACHING_MILLIS = 5_000
+
+/**
+ * Whether a player may attempt another reconnection.
+ *
+ * A live channel has no finite allowance. It carries no end, so a drop is always a network event and
+ * reopening is always the right answer — the only question is how often. Capping the attempts made
+ * the fourth tile go permanently black while its stream was perfectly alive: the log showed it stop
+ * and recover four times in under a minute, never reaching the thirty seconds of steady playback
+ * that would have returned its budget, and then give up for good.
+ *
+ * A film is the opposite case. One that reaches its end has ended, and reopening it would replay it
+ * from the beginning — so a title with a declared length keeps a strict, small allowance.
+ *
+ * The spacing is what protects the provider: attempts are separated by [reconnectBackoffMillis],
+ * which grows with each consecutive failure, so a channel that is genuinely off air is polled less
+ * and less rather than hammered.
+ *
+ * @param consecutiveFailures attempts since playback was last steady
+ */
+internal fun mayReconnect(
+    liveStream: Boolean,
+    consecutiveFailures: Int,
+): Boolean = if (liveStream) true else consecutiveFailures < MAX_FILM_RECONNECTS
+
+/**
+ * How long to wait before the next attempt, given how many have just failed.
+ *
+ * Doubling from four seconds, capped at a minute. A channel that comes back on the first attempt is
+ * interrupted for a few seconds; one that is genuinely off air settles into a quiet retry a minute
+ * apart rather than a request every four seconds for the rest of the evening.
+ */
+internal fun reconnectBackoffMillis(consecutiveFailures: Int): Long {
+    val doublings = consecutiveFailures.coerceIn(0, MAX_BACKOFF_DOUBLINGS)
+    return (FIRST_RECONNECT_DELAY_MILLIS shl doublings).coerceAtMost(MAX_RECONNECT_DELAY_MILLIS)
+}
+
+/** A film that will not start gets a handful of tries, then reports failure rather than looping. */
+internal const val MAX_FILM_RECONNECTS = 3
+
+internal const val FIRST_RECONNECT_DELAY_MILLIS = 4_000L
+internal const val MAX_RECONNECT_DELAY_MILLIS = 60_000L
+private const val MAX_BACKOFF_DOUBLINGS = 4
+
+/**
+ * Whether a stop has lasted long enough to be treated as a real drop.
+ *
+ * This is the rule behind the flicker: a live stream reports `stopped` for a poll or two over
+ * ordinary events — a buffer refilling, a segment boundary, a missing keyframe — and comes back on
+ * its own. Reconnecting at the first such report tore down a video output that was about to recover,
+ * and rebuilding it is the black flash itself. The log showed the loop plainly: `playing` →
+ * `stopped` → `retrying (1/3)` → `playing`, repeatedly, with the count never rising because the
+ * stream kept recovering. The app was causing the fault it was trying to repair.
+ *
+ * @param unhealthyForMillis how long playback has looked stopped, or 0 while it is healthy
+ */
+internal fun shouldTreatStopAsDrop(
+    unhealthyForMillis: Long,
+    networkCachingMillis: Int = DEFAULT_NETWORK_CACHING_MILLIS,
+): Boolean = unhealthyForMillis > stopGraceFor(networkCachingMillis)
+
+/**
+ * How long a stop must last, given how much this player buffers.
+ *
+ * The grace has to clear the buffer, not merely the poll interval. A player holding five seconds of
+ * stream can sit at `stopped` for most of that while it refills, so a fixed four-second grace would
+ * fire in the middle of an ordinary recovery — reconnecting a stream that was already coming back,
+ * which is precisely the flicker this whole mechanism exists to prevent.
+ */
+internal fun stopGraceFor(networkCachingMillis: Int): Long =
+    (networkCachingMillis + STOP_GRACE_HEADROOM_MILLIS)
+        .toLong()
+        .coerceAtLeast(STOP_GRACE_DWELL_MILLIS)
+
+/** The floor, for a player with little or no buffering configured. */
+internal const val STOP_GRACE_DWELL_MILLIS = 4_000L
+
+/**
+ * Added on top of the buffer, so the grace outlasts a full refill rather than matching it.
+ *
+ * Generous, and deliberately so. The measured session showed every stall lasting ~8400ms and every
+ * "recovery" arriving ~600ms after the app reconnected — the same 600ms every time, across every
+ * tile. That regularity is the signature of the app's own reconnection completing, not of a stream
+ * healing: playback was being interrupted while it was still refilling.
+ *
+ * `--http-reconnect` means VLC is already repairing the connection itself, without disturbing the
+ * video output. The app's reconnection tears that output down and rebuilds it, which is the black
+ * flash. So the app now waits far longer than any refill could take, and intervenes only when VLC
+ * has plainly failed rather than merely taken its time.
+ */
+internal const val STOP_GRACE_HEADROOM_MILLIS = 25_000
+
+/**
+ * Below this a stumble is not worth a log line.
+ *
+ * One poll's worth of `stopped` is normal on a live stream and invisible on screen. Logging those
+ * would bury the ones that matter under a line every few seconds, per tile.
+ */
+private const val STUMBLE_LOG_THRESHOLD_MILLIS = 1_000L
+
+/**
+ * Playback shorter than this counts as a stream that never really started.
+ *
+ * Fifteen seconds is well past any buffer the app asks for, so a stream that ends inside it did not
+ * stall — it ran out. That is the shape of a source which accepted the connection, sent what it had
+ * and closed, and it is worth naming because no amount of buffering or reconnection will fix it.
+ */
+private const val SHORT_LIFE_THRESHOLD_MILLIS = 15_000L
 
 /** Exposed under a distinct name so the test reads as what it checks rather than as internals. */
 internal fun isEndedForTesting(

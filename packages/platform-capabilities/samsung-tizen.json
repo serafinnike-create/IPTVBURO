@@ -1,0 +1,33 @@
+{
+  "platformId": "samsung-tizen",
+  "navigation": {
+    "dpad": true,
+    "touch": false,
+    "keyboard": false,
+    "mouse": false,
+    "voice": false
+  },
+  "playback": {
+    "engine": "Samsung AVPlay",
+    "hls": true,
+    "dash": true,
+    "seek": true,
+    "pip": false,
+    "multiview": false,
+    "hdr": false
+  },
+  "offline": {
+    "supported": false
+  },
+  "distribution": {
+    "channel": "Samsung Apps TV",
+    "nativePurchase": false
+  },
+  "notes": [
+    "Preview inicial: nenhuma capability foi validada em TV fisica ainda.",
+    "Navegacao e exclusivamente por D-pad do controle remoto; nao ha toque nem mouse.",
+    "AVPlay suporta HLS e DASH, mas os codecs reais dependem do modelo e do ano da TV.",
+    "Offline permanece desligado: o armazenamento gravavel do app Tizen e limitado e nao foi validado.",
+    "HDR e multiview seguem desligados ate medicao em hardware real."
+  ]
+}

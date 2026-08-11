@@ -349,6 +349,67 @@ tasks.matching {
     dependsOn(prepareBundledVlc, prepareBundledJcef)
 }
 
+// The signed release script sets this marker only for the short packaging step between signing the
+// generated launcher and signing the final MSI. Direct MSI tasks fail closed, while
+// createDistributable remains available for ordinary local smoke tests.
+val windowsSignedPipeline =
+    providers.environmentVariable("IPTVBURO_WINDOWS_SIGNING_PIPELINE")
+        .map { it.equals("true", ignoreCase = true) }
+        .getOrElse(false)
+val windowsSignTool = providers.environmentVariable("IPTVBURO_SIGNTOOL").orNull
+val windowsCertificateThumbprint =
+    providers.environmentVariable("IPTVBURO_WINDOWS_CERT_THUMBPRINT").orNull
+val windowsTimestampUrl = providers.environmentVariable("IPTVBURO_TIMESTAMP_URL").orNull
+val verifyWindowsReleaseSigning by tasks.registering {
+    group = "verification"
+    description = "Blocks direct or cached MSI tasks outside the protected signing pipeline."
+    doLast {
+        val requiredVariables =
+            listOf(
+                "IPTVBURO_SIGNTOOL",
+                "IPTVBURO_WINDOWS_CERT_THUMBPRINT",
+                "IPTVBURO_TIMESTAMP_URL",
+            )
+        require(
+            System.getenv("IPTVBURO_WINDOWS_SIGNING_PIPELINE").equals("true", ignoreCase = true) &&
+                requiredVariables.all { !System.getenv(it).isNullOrBlank() },
+        ) {
+            "Unsigned Windows installers are blocked. Use scripts/sign-windows-release.ps1 " +
+                "with the protected code-signing certificate."
+        }
+    }
+}
+tasks.matching { it.name in setOf("packageMsi", "packageReleaseMsi") }.configureEach {
+    dependsOn(verifyWindowsReleaseSigning)
+    notCompatibleWithConfigurationCache("Authenticode signing uses the protected Windows certificate store.")
+    doFirst {
+        require(
+            windowsSignedPipeline &&
+                !windowsSignTool.isNullOrBlank() &&
+                !windowsCertificateThumbprint.isNullOrBlank() &&
+                !windowsTimestampUrl.isNullOrBlank(),
+        ) {
+            "Unsigned Windows installers are blocked. Use scripts/sign-windows-release.ps1 " +
+                "with the protected code-signing certificate."
+        }
+        val launcher =
+            layout.buildDirectory.file("compose/binaries/main/app/IPTVBURO/IPTVBURO.exe")
+                .get().asFile
+        require(launcher.isFile) { "The Windows launcher was not generated before packaging." }
+        providers.exec {
+            commandLine(
+                windowsSignTool,
+                "sign", "/fd", "SHA256", "/sha1", windowsCertificateThumbprint,
+                "/s", "My", "/tr", windowsTimestampUrl, "/td", "SHA256",
+                launcher.absolutePath,
+            )
+        }.result.get().assertNormalExitValue()
+        providers.exec {
+            commandLine(windowsSignTool, "verify", "/pa", "/all", launcher.absolutePath)
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.test {
     useJUnitPlatform()
     // Gradle's own -D properties do not reach the forked test JVM, so the live-updater probe

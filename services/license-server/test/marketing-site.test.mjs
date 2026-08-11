@@ -25,7 +25,7 @@ test('the public site presents the product before asking for payment', () => {
   assert.ok(html.includes('730 dias'), 'the real license term must be explicit');
 });
 
-test('Offline Vault is prominent without pretending the mobile gate already passed', () => {
+test('Offline Vault is prominent without pretending the mobile release gate already passed', () => {
   const all = `${html}\n${script}`;
   assert.ok(html.includes('id="offline"'), 'Offline Vault needs its own product story');
   assert.ok(html.includes('data-demo-tab="offline"'), 'downloads need a place in the interactive tour');
@@ -36,7 +36,17 @@ test('Offline Vault is prominent without pretending the mobile gate already pass
   const androidCapabilities = JSON.parse(
     readFileSync(new URL('../../../packages/platform-capabilities/android-adaptive.json', import.meta.url), 'utf8'),
   );
-  assert.equal(androidCapabilities.offline.supported, false, 'the public copy must remain roadmap copy while the capability is gated');
+  const releaseManifest = JSON.parse(
+    readFileSync(new URL('../../../packages/release-manifest/platforms.json', import.meta.url), 'utf8'),
+  );
+  const androidMobile = releaseManifest.platforms.find((platform) => platform.id === 'android-mobile');
+  assert.equal(androidCapabilities.offline.supported, true, 'phone offline support is now a real capability');
+  assert.equal(androidCapabilities.offline.backgroundJobs, false, 'background download remains unavailable');
+  assert.notEqual(androidMobile?.status, 'RELEASE_READY', 'mobile has not passed its release gate');
+  assert.ok(
+    androidMobile?.notes.some((note) => /remains hidden/i.test(note)),
+    'the release manifest must explain why the implemented capability is not marketed as released',
+  );
   assert.ok(!/offline vault (?:já )?(?:está )?disponível no mobile/i.test(all));
 });
 

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
@@ -86,6 +90,14 @@ internal fun SeriesDetailsScreen(
     onOpenPerson: (String) -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
+    isFavorite: Boolean = false,
+    /** Null only where there is no series to favourite, which keeps the button honest. */
+    onToggleFavorite: (() -> Unit)? = null,
+    /** How far into each episode the viewer is, keyed by episode id. */
+    episodeProgress: Map<String, Float> = emptyMap(),
+    /** Actor photos already looked up, keyed by lower-cased name. */
+    castPhotos: Map<String, String?> = emptyMap(),
+    onRequestCastPhotos: (List<String>) -> Unit = {},
     offlineSupported: Boolean = AndroidPlatformCapabilities.offlineSupported,
     modifier: Modifier = Modifier,
 ) {
@@ -205,22 +217,65 @@ internal fun SeriesDetailsScreen(
                         )
                     }
                 }
-                details.youtubeTrailerId?.let { trailerId ->
-                    item(key = "series:trailer") {
-                        BuroButton(
-                            onClick = {
-                                runCatching {
-                                    androidContext.startActivity(
-                                        Intent(
-                                            Intent.ACTION_VIEW,
-                                            Uri.parse("https://www.youtube.com/watch?v=$trailerId"),
+                // Favourite and trailer together, the same pair a film gets. A series was the only
+                // kind of title with no way to favourite it from its own page, which meant the one
+                // thing people return to weekly was the one thing they could not mark.
+                item(key = "series:actions") {
+                    // FlowRow for the same reason the film screen uses one: in a plain Row the
+                    // second button is laid out past the right edge on a phone and cannot be
+                    // reached by any gesture.
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        onToggleFavorite?.let { toggle ->
+                            BuroButton(onClick = toggle, style = BuroButtonStyle.Secondary) {
+                                Icon(
+                                    if (isFavorite) {
+                                        Icons.Default.Favorite
+                                    } else {
+                                        Icons.Default.FavoriteBorder
+                                    },
+                                    contentDescription = null,
+                                    tint = if (isFavorite) Color(0xFFE46C7A) else BuroTextPrimary,
+                                )
+                                // The longer label drawn invisibly underneath, so toggling does not
+                                // resize the button and reflow the row it sits in.
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = stringResource(R.string.details_favorite_added),
+                                        color = Color.Transparent,
+                                        maxLines = 1,
+                                    )
+                                    Text(
+                                        stringResource(
+                                            if (isFavorite) {
+                                                R.string.details_favorite_added
+                                            } else {
+                                                R.string.details_favorite_add
+                                            },
                                         ),
+                                        maxLines = 1,
                                     )
                                 }
-                            },
-                            style = BuroButtonStyle.Secondary,
-                        ) {
-                            Text("Assistir ao trailer")
+                            }
+                        }
+                        details.youtubeTrailerId?.let { trailerId ->
+                            BuroButton(
+                                onClick = {
+                                    runCatching {
+                                        androidContext.startActivity(
+                                            Intent(
+                                                Intent.ACTION_VIEW,
+                                                Uri.parse("https://www.youtube.com/watch?v=$trailerId"),
+                                            ),
+                                        )
+                                    }
+                                },
+                                style = BuroButtonStyle.Secondary,
+                            ) {
+                                Text(stringResource(R.string.details_trailer))
+                            }
                         }
                     }
                 }
@@ -317,14 +372,24 @@ internal fun SeriesDetailsScreen(
                     }
                     details.cast?.toCastNames()?.takeIf(List<String>::isNotEmpty)?.let { cast ->
                         item(key = "series:cast") {
+                            // The same lookup a film does. Without it a series showed initials in
+                            // grey circles where the film beside it showed faces — the photos were
+                            // available all along and simply never asked for here.
+                            LaunchedEffect(cast) { onRequestCastPhotos(cast) }
                             Column(modifier = Modifier.fillMaxWidth()) {
-                                Text("Elenco", color = BuroTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = stringResource(R.string.details_cast),
+                                    color = BuroTextPrimary,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
                                 Spacer(Modifier.height(9.dp))
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     items(cast, key = { it.lowercase() }) { actor ->
                                         CastPersonChip(
                                             name = actor,
                                             onClick = { onOpenPerson(actor) },
+                                            photoUrl = castPhotos[actor.lowercase()],
                                         )
                                     }
                                 }
@@ -379,6 +444,7 @@ internal fun SeriesDetailsScreen(
                                                 downloadState = downloadStateOf(episode),
                                                 showDownloadAction = offlineSupported,
                                                 enabled = !isResolvingPlayback,
+                                                progress = episodeProgress[episode.id] ?: 0f,
                                                 modifier = Modifier.weight(1f),
                                             )
                                         }
@@ -405,6 +471,8 @@ private fun EpisodeCard(
     downloadState: DownloadStateUi,
     showDownloadAction: Boolean,
     enabled: Boolean,
+    /** How far into this episode the viewer is, 0..1. Zero means never started. */
+    progress: Float,
     modifier: Modifier = Modifier,
 ) {
     FocusSurface(
@@ -432,7 +500,46 @@ private fun EpisodeCard(
                         contentScale = ContentScale.Crop,
                     )
                 }
-                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = BuroTextPrimary)
+                // A tick over the thumbnail once it has been watched to the end, and a bar along
+                // its foot while it is part-way. A season runs to twenty episodes and a series to
+                // hundreds; without a mark on the row, remembering where you stopped is the
+                // viewer's problem to solve.
+                if (progress >= WATCHED_THRESHOLD) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(BuroCanvas.copy(alpha = 0.55f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = stringResource(R.string.series_episode_watched),
+                            tint = BuroGold,
+                        )
+                    }
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = BuroTextPrimary,
+                    )
+                    if (progress > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .align(Alignment.BottomStart)
+                                .background(BuroCanvas.copy(alpha = 0.7f)),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progress)
+                                    .fillMaxSize()
+                                    .background(BuroGold),
+                            )
+                        }
+                    }
+                }
             }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -470,6 +577,9 @@ private fun EpisodeCard(
                         onClick =
                             when (downloadState) {
                                 is DownloadStateUi.Running -> onCancelDownload
+                                // Cancelling while it prepares: a second tap means "stop", not
+                                // "start again", exactly as it does once bytes are moving.
+                                DownloadStateUi.Preparing -> onCancelDownload
                                 DownloadStateUi.Completed -> onDeleteDownload
                                 DownloadStateUi.Idle,
                                 DownloadStateUi.Failed,
@@ -515,3 +625,6 @@ private fun EpisodeCard(
         }
     }
 }
+
+/** Watched enough to be treated as finished; the last few per cent are usually credits. */
+private const val WATCHED_THRESHOLD = 0.92f

@@ -23,6 +23,12 @@ interface CatalogRepository {
         contentType: CatalogContentType? = null,
     ): Flow<Map<String?, Int>>
 
+    /** Representative item artwork keyed by category id. */
+    fun observeCategoryArtwork(
+        sourceId: String,
+        contentType: CatalogContentType? = null,
+    ): Flow<Map<String, String>> = kotlinx.coroutines.flow.flowOf(emptyMap())
+
     fun observeChannels(
         sourceId: String,
         categoryId: String? = null,
@@ -72,6 +78,21 @@ interface CatalogRepository {
     }
 
     suspend fun getChannel(id: String): Channel?
+
+    /**
+     * Local items whose name contains [titleFragment], as candidates for library matching.
+     *
+     * Candidates, not matches: the caller hands these to `LibraryMatchingPolicy`, which decides
+     * whether any of them is confident enough to claim as the user's own copy.
+     */
+    suspend fun findLibraryCandidates(titleFragment: String, limit: Int = 40): List<Channel>
+
+    /** Resolves persisted playback history without ever persisting a credential-bearing URL. */
+    suspend fun findStoredContent(
+        sourceId: String,
+        providerItemId: String,
+        contentType: CatalogContentType,
+    ): Channel? = null
 
     suspend fun findCompatibleMovieAlternative(
         sourceId: String,

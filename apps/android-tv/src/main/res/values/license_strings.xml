@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="boot_preparing">Preparing your private library…</string>
+    <string name="license_checking">Checking this device securely…</string>
+    <string name="license_gate_trial_ended_title">Your 7-day trial has ended</string>
+    <string name="license_gate_trial_ended_body">Activate this device to return to your profiles and sources. Your library remains stored locally.</string>
+    <string name="license_gate_expired_title">This device needs renewal</string>
+    <string name="license_gate_expired_body">Renew the device licence to continue using IPTV BURO.</string>
+    <string name="license_gate_revoked_title">Licence unavailable</string>
+    <string name="license_gate_revoked_body">This licence was withdrawn after a refund or payment dispute. Contact support if this is unexpected.</string>
+    <string name="license_gate_verify_title">Connect to verify this device</string>
+    <string name="license_gate_verify_body">The secure offline period ended. Connect to the internet and check again; no new payment is required.</string>
+    <string name="license_gate_unreachable_title">We could not verify the licence</string>
+    <string name="license_gate_unreachable_body">Check the internet connection and try again. IPTV BURO never unlocks from an unsigned answer.</string>
+    <string name="license_gate_not_activated_title">Activate this device</string>
+    <string name="license_gate_not_activated_body">Connect once to start the free 7-day trial, or activate with a purchase or key.</string>
+    <string name="license_gate_code_label">Device code</string>
+    <string name="license_gate_purchase">Activate / buy</string>
+    <string name="play_billing_pending">Payment is pending in Google Play. Access will activate automatically after confirmation.</string>
+    <string name="play_billing_rejected">Google Play could not verify this purchase for IPTV BURO.</string>
+    <string name="play_billing_unavailable">Google Play billing is unavailable right now. Check the connection and Play Store, then try again.</string>
+    <string name="license_gate_refresh">Check again</string>
+    <string name="license_gate_key_label">Activation key (optional)</string>
+    <string name="license_gate_key_hint">Enter a single-use key</string>
+    <string name="license_gate_redeem">Use key</string>
+    <string name="license_gate_working">Verifying…</string>
+    <string name="license_gate_redeem_failed">This key could not be activated. Check it and try again.</string>
+    <string name="license_gate_privacy">This code comes from an Android Keystore key, not from the phone MAC address.</string>
+    <string name="license_status_active">Active</string>
+    <plurals name="license_status_trial_days"><item quantity="one">Trial · %1$d day left</item><item quantity="other">Trial · %1$d days left</item></plurals>
+    <plurals name="license_status_active_days"><item quantity="one">Active · %1$d day left</item><item quantity="other">Active · %1$d days left</item></plurals>
+    <string name="license_status_offline">Offline verification</string>
+    <string name="tmdb_settings_title">TMDB artwork and trailers</string>
+    <string name="tmdb_settings_body">Optional per profile. A TMDB API v3 key fills missing trailers without sending playlist credentials.</string>
+    <string name="tmdb_settings_key_label">TMDB API v3 key</string>
+    <string name="tmdb_settings_key_hint">Paste a new key</string>
+    <string name="tmdb_settings_save">Save securely</string>
+    <string name="tmdb_settings_clear">Remove key</string>
+    <string name="tmdb_settings_configured">Configured for this profile</string>
+    <string name="tmdb_settings_not_configured">Not configured</string>
+    <string name="tmdb_settings_attribution">Uses TMDB data, but is not endorsed or certified by TMDB.</string>
+    <string name="tmdb_settings_needs_profile">Choose a profile first. The key is stored encrypted for one profile, so there is nowhere to save it until one is active.</string>
+    <string name="tmdb_settings_choose_profile">Choose a profile</string>
+    <string name="settings_metadata_section">Artwork, trailers and subscriptions</string>
+    <string name="catalog_refresh">Refresh catalog</string>
+    <string name="mobile_menu_open">Open navigation</string>
+    <string name="mobile_menu_close">Close navigation</string>
+    <string name="license_chip_action">Manage or extend</string>
+    <string name="boot_stage_profiles">Reading your profiles…</string>
+    <string name="boot_stage_catalogue">Opening your catalogue…</string>
+    <string name="boot_stage_artwork">Preparing artwork…</string>
+    <string name="boot_stage_ready">Almost there…</string>
+    <string name="tmdb_settings_shared_label">Household key</string>
+    <string name="tmdb_settings_shared_hint">Used by every profile that has not set its own.</string>
+    <string name="tmdb_settings_profile_label">Key for %1$s</string>
+    <string name="tmdb_settings_profile_hint">Overrides the household key for this profile only. TMDB limits requests per key.</string>
+</resources>

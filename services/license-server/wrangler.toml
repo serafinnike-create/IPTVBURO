@@ -24,6 +24,55 @@ workers_dev = true
 # enough, and an old version left answering is a way in that outlives the fix that closed it.
 preview_urls = false
 
+# Re-query Play hourly so a refund/cancellation still revokes access when the app is offline and a
+# real-time notification is delayed. Each invocation is bounded and rotates by last_checked_at.
+[triggers]
+crons = ["17 * * * *"]
+
+# A production deployment accepts only live Stripe events. Tests set STRIPE_MODE=test directly in
+# their isolated environment, so test and live webhook payloads can never share a ledger silently.
+[vars]
+STRIPE_MODE = "live"
+GOOGLE_PLAY_PACKAGE_NAME = "com.lucasserafin94.iptvburo"
+GOOGLE_PLAY_PRODUCT_ID = "iptvburo_730_days"
+GOOGLE_PLAY_PURCHASE_OPTION_ID = "rent_730_days"
+GOOGLE_PLAY_ACCEPT_TEST_PURCHASES = "false"
+
+# Coarse abuse brakes at Cloudflare's edge. Device possession proofs and webhook signatures remain
+# the security authority; these counters protect D1, Checkout and the admin token from high-volume
+# probing. Namespace ids are account-local positive integers and intentionally distinct.
+[[ratelimits]]
+name = "REGISTRATION_RATE_LIMITER"
+namespace_id = "26081001"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+[[ratelimits]]
+name = "LICENSE_API_RATE_LIMITER"
+namespace_id = "26081002"
+
+  [ratelimits.simple]
+  limit = 120
+  period = 60
+
+[[ratelimits]]
+name = "CHECKOUT_RATE_LIMITER"
+namespace_id = "26081003"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+[[ratelimits]]
+name = "ADMIN_RATE_LIMITER"
+namespace_id = "26081004"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60
+
 # Cinematic artwork is served by Cloudflare's static-assets pipeline. Requests matching files under
 # `public/` bypass the Worker by default; API and HTML routes continue through src/index.js.
 [assets]

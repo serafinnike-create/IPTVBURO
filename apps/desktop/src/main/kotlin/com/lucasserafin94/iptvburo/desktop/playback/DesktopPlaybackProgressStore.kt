@@ -50,7 +50,7 @@ class DesktopPlaybackProgressStore(
      * Unlike [continueWatching] this keeps finished titles: the history answers "what did I watch?",
      * and a film seen to the end is the clearest possible answer to that.
      */
-    fun history(
+    override fun history(
         profileId: String,
         limit: Int,
     ): List<PlaybackProgress> =

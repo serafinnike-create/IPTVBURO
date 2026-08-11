@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Parental PIN. The wording is careful not to promise more than four digits can deliver. -->
+    <string name="parental_title">Channel lock</string>
+    <string name="parental_hint">A four-digit PIN keeps chosen categories closed. It stops a child in the room, not a determined adult.</string>
+    <string name="parental_current_pin">Current PIN</string>
+    <string name="parental_new_pin">New PIN</string>
+    <string name="parental_set_pin">Set PIN</string>
+    <string name="parental_change_pin">Change PIN</string>
+    <string name="parental_remove_pin">Remove PIN</string>
+    <string name="parental_pin_format">The PIN must be exactly four digits.</string>
+    <string name="parental_wrong_pin">Wrong PIN.</string>
+    <string name="parental_lock_adult">Lock categories the provider marks as adult</string>
+    <string name="parental_locked">Locked category</string>
+    <string name="parental_unlock">enter the PIN to open it</string>
+    <string name="parental_unlock_confirm">Open</string>
+
+    <!-- Subtitles. -->
+    <string name="subtitles_title">Subtitles</string>
+    <string name="subtitles_hint">Applies to the next title you play.</string>
+    <string name="subtitles_size">Size</string>
+    <string name="subtitles_size_small">Small</string>
+    <string name="subtitles_size_medium">Medium</string>
+    <string name="subtitles_size_large">Large</string>
+    <string name="subtitles_size_huge">Very large</string>
+    <string name="subtitles_colour">Colour</string>
+    <string name="subtitles_colour_white">White</string>
+    <string name="subtitles_colour_yellow">Yellow</string>
+    <string name="subtitles_colour_grey">Grey</string>
+    <string name="subtitles_colour_green">Green</string>
+    <string name="subtitles_colour_cyan">Cyan</string>
+    <string name="subtitles_background">Dark box behind the text</string>
+
+    <!-- Hiding and locking categories. -->
+    <string name="categories_title">Categories</string>
+    <string name="categories_hint">hide the ones you never watch, lock the ones you want closed</string>
+    <string name="category_hide">Hide</string>
+    <string name="category_lock">Lock</string>
+    <!-- Under each category name, so a list of several hundred says which are worth keeping. -->
+    <string name="categories_channel_count">%1$d items</string>
+</resources>
