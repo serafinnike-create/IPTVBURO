@@ -15,6 +15,7 @@ import com.lucasserafin94.iptvburo.data.preferences.CatalogueGuard
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
 import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
+import com.lucasserafin94.iptvburo.data.licensing.RedeemOutcome
 import com.lucasserafin94.iptvburo.data.security.MetadataKeyStore
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
 import com.lucasserafin94.iptvburo.data.repository.LiveProgram
@@ -350,20 +351,30 @@ class MainViewModel @Inject constructor(
         }
         licenseJob =
             viewModelScope.launch {
-                val status = withContext(ioDispatcher) { licenseService.redeem(key) }
-                if (status == null) {
-                    mutableState.update {
-                        it.copy(
-                            license = blocked.copy(isWorking = false, activationFailed = true),
-                        )
-                    }
-                } else {
-                    mutableState.update {
-                        it.copy(
-                            license = status.toUiState(),
-                            deviceId = status.deviceId.takeIf(String::isNotBlank),
-                        )
-                    }
+                when (val outcome = withContext(ioDispatcher) { licenseService.redeem(key) }) {
+                    is RedeemOutcome.Failed ->
+                        mutableState.update {
+                            it.copy(
+                                license =
+                                    blocked.copy(
+                                        isWorking = false,
+                                        activationFailed = true,
+                                        // Carried so the gate can say *which* problem it was. A
+                                        // mistyped key, a key already bound to another device and
+                                        // a dead connection need three different actions from the
+                                        // user, and one sentence for all three told them nothing.
+                                        activationFailure = outcome.reason,
+                                    ),
+                            )
+                        }
+
+                    is RedeemOutcome.Activated ->
+                        mutableState.update {
+                            it.copy(
+                                license = outcome.status.toUiState(),
+                                deviceId = outcome.status.deviceId.takeIf(String::isNotBlank),
+                            )
+                        }
                 }
             }
     }

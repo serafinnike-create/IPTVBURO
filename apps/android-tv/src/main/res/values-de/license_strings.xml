@@ -25,6 +25,11 @@
     <string name="license_gate_redeem">Schlüssel verwenden</string>
     <string name="license_gate_working">Wird geprüft…</string>
     <string name="license_gate_redeem_failed">Dieser Schlüssel konnte nicht aktiviert werden. Prüfe ihn und versuche es erneut.</string>
+    <string name="license_gate_key_unknown">Schlüssel nicht gefunden. Prüfe Buchstaben und Zahlen und versuche es erneut.</string>
+    <string name="license_gate_key_in_use">Dieser Schlüssel ist bereits auf einem anderen Gerät aktiviert. Jeder Schlüssel gilt für nur ein Gerät.</string>
+    <string name="license_gate_key_expired">Dieser Schlüssel ist abgelaufen und kann nicht mehr aktiviert werden.</string>
+    <string name="license_gate_key_offline">Der Server war nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
+    <string name="license_gate_key_not_registered">Dieses Gerät ist noch nicht registriert. Tippe auf „Erneut prüfen“, um zu verbinden, und nutze dann deinen Schlüssel.</string>
     <string name="license_gate_privacy">Dieser Code stammt aus einem Android-Keystore-Schlüssel, nicht aus der MAC-Adresse des Telefons.</string>
     <string name="license_status_active">Aktiv</string>
     <plurals name="license_status_trial_days"><item quantity="one">Test · noch %1$d Tag</item><item quantity="other">Test · noch %1$d Tage</item></plurals>

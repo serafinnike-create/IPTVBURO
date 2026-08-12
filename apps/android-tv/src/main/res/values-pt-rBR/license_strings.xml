@@ -25,6 +25,11 @@
     <string name="license_gate_redeem">Usar chave</string>
     <string name="license_gate_working">Verificando…</string>
     <string name="license_gate_redeem_failed">Não foi possível ativar esta chave. Confira e tente novamente.</string>
+    <string name="license_gate_key_unknown">Chave não encontrada. Confira as letras e os números e tente novamente.</string>
+    <string name="license_gate_key_in_use">Esta chave já está ativada em outro aparelho. Cada chave funciona em um aparelho só.</string>
+    <string name="license_gate_key_expired">Esta chave expirou e não pode mais ser ativada.</string>
+    <string name="license_gate_key_offline">Não foi possível falar com o servidor. Verifique sua conexão e tente novamente.</string>
+    <string name="license_gate_key_not_registered">Este aparelho ainda não está registrado. Toque em “Verificar novamente” para conectar e depois use sua chave.</string>
     <string name="license_gate_privacy">Este código vem de uma chave do Android Keystore, não do MAC do celular.</string>
     <string name="license_status_active">Ativo</string>
     <plurals name="license_status_trial_days"><item quantity="one">Teste · falta %1$d dia</item><item quantity="other">Teste · faltam %1$d dias</item></plurals>

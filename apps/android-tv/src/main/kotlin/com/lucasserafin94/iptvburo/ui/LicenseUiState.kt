@@ -1,6 +1,7 @@
 package com.lucasserafin94.iptvburo.ui
 
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseStatus
+import com.lucasserafin94.iptvburo.data.licensing.RedeemFailure
 import com.lucasserafin94.iptvburo.domain.model.LicenseBlockReason
 
 sealed interface LicenseUiState {
@@ -19,6 +20,14 @@ sealed interface LicenseUiState {
         val reason: LicenseBlockReason,
         val isWorking: Boolean = false,
         val activationFailed: Boolean = false,
+        /**
+         * Why the last activation attempt failed, when one has been made.
+         *
+         * Null before the first attempt, and alongside [activationFailed] rather than replacing it
+         * so the flag keeps meaning "an attempt failed" even for a reason a future version does not
+         * have wording for.
+         */
+        val activationFailure: RedeemFailure? = null,
     ) : LicenseUiState
 }
 

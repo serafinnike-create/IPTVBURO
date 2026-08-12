@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.domain.model.LicenseBlockReason
+import com.lucasserafin94.iptvburo.data.licensing.RedeemFailure
 import com.lucasserafin94.iptvburo.ui.LicenseUiState
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
@@ -201,7 +202,22 @@ fun LicenseGateScreen(
                 if (state.activationFailed) {
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        text = stringResource(R.string.license_gate_redeem_failed),
+                        // Names the actual problem. "Could not activate" was shown for a mistyped
+                        // key, a key already bound to another device and a dead connection alike,
+                        // which left the user with no idea what to do next — and the server had
+                        // been distinguishing all three the whole time.
+                        text =
+                            stringResource(
+                                when (state.activationFailure) {
+                                    RedeemFailure.UNKNOWN_KEY -> R.string.license_gate_key_unknown
+                                    RedeemFailure.ALREADY_USED -> R.string.license_gate_key_in_use
+                                    RedeemFailure.EXPIRED -> R.string.license_gate_key_expired
+                                    RedeemFailure.UNREACHABLE -> R.string.license_gate_key_offline
+                                    RedeemFailure.NOT_REGISTERED ->
+                                        R.string.license_gate_key_not_registered
+                                    RedeemFailure.REFUSED, null -> R.string.license_gate_redeem_failed
+                                },
+                            ),
                         color = BuroDanger,
                         fontSize = 13.sp,
                     )

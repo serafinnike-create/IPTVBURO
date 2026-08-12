@@ -98,9 +98,14 @@ class AndroidLicenseClient @Inject constructor(
     }
 
     /** Redeems a single-use activation key through proof of possession of this installation. */
-    override fun redeem(key: String, now: Instant): AndroidLicenseStatus? {
-        val clean = key.trim().uppercase().takeIf { it.length in 4..128 } ?: return null
-        val identity = runCatching { AndroidDeviceIdentityProvider.getOrCreate(context) }.getOrNull() ?: return null
+    override fun redeem(key: String, now: Instant): RedeemOutcome {
+        // A key too short or too long to be one of ours never reaches the network. Reported as
+        // unknown rather than as a separate case: from the user's side a mistyped key and a key
+        // that does not exist are the same mistake with the same fix.
+        val clean = key.trim().uppercase().takeIf { it.length in 4..128 }
+            ?: return RedeemOutcome.Failed(RedeemFailure.UNKNOWN_KEY)
+        val identity = runCatching { AndroidDeviceIdentityProvider.getOrCreate(context) }.getOrNull()
+            ?: return RedeemOutcome.Failed(RedeemFailure.UNREACHABLE)
         val nonce = freshNonce()
         val answer =
             runCatching {
@@ -111,8 +116,20 @@ class AndroidLicenseClient @Inject constructor(
                     nonce = nonce,
                     extra = { body -> body.addProperty("key", clean) },
                 )
-            }.getOrNull() as? ServerAnswer.Signed ?: return null
-        return acceptLive(answer.licence, identity.deviceId, nonce, now)
+            }.getOrNull() ?: ServerAnswer.Unreachable
+
+        return when (answer) {
+            is ServerAnswer.Signed ->
+                acceptLive(answer.licence, identity.deviceId, nonce, now)
+                    ?.let(RedeemOutcome::Activated)
+                    // The server signed something this device cannot verify. Not a key problem, and
+                    // deliberately not reported as one: retrying is the only sensible advice.
+                    ?: RedeemOutcome.Failed(RedeemFailure.UNREACHABLE)
+
+            is ServerAnswer.Refused -> RedeemOutcome.Failed(answer.code.toRedeemFailure())
+
+            ServerAnswer.Unreachable -> RedeemOutcome.Failed(RedeemFailure.UNREACHABLE)
+        }
     }
 
     /**
@@ -240,6 +257,9 @@ class AndroidLicenseClient @Inject constructor(
                 addProperty("deviceId", identity.deviceId)
                 addProperty("nonce", nonce)
                 addProperty("proof", identity.proof(action, nonce))
+                // Refreshes the protected support panel for both existing and new installs. This
+                // contains no serial, MAC, Android ID, account or user-selected device name.
+                add("deviceProfile", AndroidDeviceProfile.report(context))
                 if (includeRegistration) {
                     addProperty("installationId", identity.installationId)
                     addProperty("publicKey", identity.publicKeyDerBase64)
@@ -298,7 +318,14 @@ class AndroidLicenseClient @Inject constructor(
 
 interface AndroidLicenseService {
     fun check(now: Instant = Instant.now()): AndroidLicenseStatus
-    fun redeem(key: String, now: Instant = Instant.now()): AndroidLicenseStatus?
+
+    /**
+     * Redeems an activation key.
+     *
+     * Returns why it failed rather than a bare null, so the screen can tell a mistyped key from a
+     * key already in use from having no signal — three problems with three different remedies.
+     */
+    fun redeem(key: String, now: Instant = Instant.now()): RedeemOutcome
     fun submitGooglePlayPurchase(
         purchaseToken: String,
         accountId: String,
@@ -312,6 +339,68 @@ sealed interface GooglePlayPurchaseSubmission {
     data object Rejected : GooglePlayPurchaseSubmission
     data object Unreachable : GooglePlayPurchaseSubmission
 }
+
+/**
+ * Why redeeming an activation key did not work.
+ *
+ * The server has always distinguished these — `unknown_key`, `already_used`, `key_expired` — and
+ * the client threw the distinction away by returning a bare null, so the screen could only ever
+ * say "could not activate". A user who mistyped a key, a user whose key was already bound to
+ * another device, and a user with no signal all saw the same sentence and had no idea which of
+ * them they were.
+ *
+ * Kept as a small closed set rather than passing the server's string to the UI: the wire codes are
+ * the Worker's vocabulary and should be translatable without the screen knowing them.
+ */
+enum class RedeemFailure {
+    /** No key by that name. Usually a typo. */
+    UNKNOWN_KEY,
+
+    /** The key exists but is already bound to a device. */
+    ALREADY_USED,
+
+    /** The key passed its validity date before anyone redeemed it. */
+    EXPIRED,
+
+    /**
+     * The server has never seen this device, so there is nothing to attach a key to.
+     *
+     * Observed on a real phone: after a reinstall the app tried to redeem before it had registered,
+     * and the Worker answered `not_registered`. Nothing is wrong with the key, so saying "check the
+     * key" sends the user to fix something that is not broken — the fix is to connect once, which
+     * is what the wording for this case says.
+     */
+    NOT_REGISTERED,
+
+    /** Refused for a reason this version does not have wording for. */
+    REFUSED,
+
+    /** The server was never reached: no signal, DNS, TLS. Not the user's fault and retryable. */
+    UNREACHABLE,
+}
+
+/** The outcome of redeeming a key: the new licence, or why there is not one. */
+sealed interface RedeemOutcome {
+    data class Activated(val status: AndroidLicenseStatus) : RedeemOutcome
+
+    data class Failed(val reason: RedeemFailure) : RedeemOutcome
+}
+
+/**
+ * Translates the Worker's error code into something the screen can word.
+ *
+ * The three named codes are the ones `redeemKey` returns in the Worker, with 404, 409 and 410
+ * respectively. Anything else is deliberately collapsed into REFUSED rather than guessed at: a
+ * wrong explanation is worse than a vague one, because the user acts on it.
+ */
+internal fun String.toRedeemFailure(): RedeemFailure =
+    when (this) {
+        "unknown_key" -> RedeemFailure.UNKNOWN_KEY
+        "already_used" -> RedeemFailure.ALREADY_USED
+        "key_expired" -> RedeemFailure.EXPIRED
+        "not_registered" -> RedeemFailure.NOT_REGISTERED
+        else -> RedeemFailure.REFUSED
+    }
 
 /** A signed document kept verbatim so verification never depends on JSON re-serialization. */
 internal data class SignedAndroidLicense(

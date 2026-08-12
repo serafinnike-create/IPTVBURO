@@ -10,6 +10,8 @@ import com.lucasserafin94.iptvburo.data.discovery.StreamingDiscoveryRepository
 import com.lucasserafin94.iptvburo.data.download.AndroidDownloadManager
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseStatus
+import com.lucasserafin94.iptvburo.data.licensing.RedeemFailure
+import com.lucasserafin94.iptvburo.data.licensing.RedeemOutcome
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
 import com.lucasserafin94.iptvburo.data.local.dao.FavoriteDao
 import com.lucasserafin94.iptvburo.data.local.dao.ProfileDao
@@ -646,7 +648,9 @@ private data object FakeLicenseService : AndroidLicenseService {
             clockSuspect = false,
         )
 
-    override fun redeem(key: String, now: Instant): AndroidLicenseStatus? = null
+    // These navigation tests never redeem; the reason is arbitrary but has to be a real one.
+    override fun redeem(key: String, now: Instant): RedeemOutcome =
+        RedeemOutcome.Failed(RedeemFailure.UNREACHABLE)
 }
 
 private data object FakeMetadataKeyStore : MetadataKeyStore {
