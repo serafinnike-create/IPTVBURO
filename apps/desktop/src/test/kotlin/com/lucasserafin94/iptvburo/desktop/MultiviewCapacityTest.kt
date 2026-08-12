@@ -21,15 +21,12 @@ class MultiviewCapacityTest {
     /**
      * The rule itself, matching [DesktopAppState.multiviewCapacity].
      *
-     * Kept as a function rather than reaching into app state, which needs a window, a repository
-     * and a profile to exist. What is worth pinning is the arithmetic and its edges.
+     * The production function is exercised directly. Duplicating its arithmetic in the test let
+     * the test keep passing while the real capacity calculation ignored active connections.
      */
-    private fun capacityFor(maxConnections: Int?, appCap: Int = 4): Int =
-        (maxConnections ?: appCap).coerceIn(1, appCap)
-
     @Test
     fun `a two-connection account is offered two tiles`() {
-        assertEquals(2, capacityFor(2))
+        assertEquals(2, availableMultiviewConnections(maximumConnections = 2, activeConnections = 0))
     }
 
     /**
@@ -40,8 +37,8 @@ class MultiviewCapacityTest {
      */
     @Test
     fun `a generous account is still capped by what the screen can show`() {
-        assertEquals(4, capacityFor(8))
-        assertEquals(4, capacityFor(100))
+        assertEquals(4, availableMultiviewConnections(maximumConnections = 8, activeConnections = 0))
+        assertEquals(4, availableMultiviewConnections(maximumConnections = 100, activeConnections = 0))
     }
 
     /**
@@ -53,7 +50,19 @@ class MultiviewCapacityTest {
      */
     @Test
     fun `an unknown limit falls back to the app's own cap`() {
-        assertEquals(4, capacityFor(null))
+        assertEquals(4, availableMultiviewConnections(maximumConnections = null, activeConnections = null))
+    }
+
+    @Test
+    fun `connections already active on the account are not offered as tiles`() {
+        assertEquals(2, availableMultiviewConnections(maximumConnections = 4, activeConnections = 2))
+        assertEquals(1, availableMultiviewConnections(maximumConnections = 4, activeConnections = 3))
+    }
+
+    @Test
+    fun `a stale fully-used count still leaves one recovery tile`() {
+        assertEquals(1, availableMultiviewConnections(maximumConnections = 4, activeConnections = 4))
+        assertEquals(1, availableMultiviewConnections(maximumConnections = 2, activeConnections = 99))
     }
 
     /**
@@ -64,8 +73,8 @@ class MultiviewCapacityTest {
      */
     @Test
     fun `a nonsensical limit still allows one tile`() {
-        assertEquals(1, capacityFor(0))
-        assertEquals(1, capacityFor(-3))
+        assertEquals(1, availableMultiviewConnections(maximumConnections = 0, activeConnections = 0))
+        assertEquals(1, availableMultiviewConnections(maximumConnections = -3, activeConnections = 0))
     }
 
     /**

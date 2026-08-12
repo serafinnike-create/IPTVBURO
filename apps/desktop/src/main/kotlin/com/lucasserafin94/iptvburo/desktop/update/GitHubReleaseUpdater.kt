@@ -61,11 +61,21 @@ class GitHubReleaseUpdater(
                 client.newCall(request).execute().use { response ->
                     check(response.isSuccessful) { "GitHub responded with ${response.code}" }
                     val releases = JsonParser.parseString(requireNotNull(response.body).string()).asJsonArray
+                    // Preview builds are the tester channel and may update to another preview. A
+                    // stable build is the customer channel: it must never cross into alpha/beta/rc,
+                    // even when that preview has a numerically newer major or minor version.
+                    //
+                    // Preview MSIs deliberately remain unsigned for now. Keeping the channel
+                    // decision here means that exception cannot leak into a stable installation.
+                    val runningPreview = isPreviewVersion(currentVersion)
                     val candidates =
                         releases.mapNotNull { element ->
                             val release = element.asJsonObject
                             if (release["draft"]?.asBoolean == true) return@mapNotNull null
                             val tag = release["tag_name"]?.asString?.removePrefix("v") ?: return@mapNotNull null
+                            val previewRelease =
+                                release["prerelease"]?.asBoolean == true || isPreviewVersion(tag)
+                            if (!runningPreview && previewRelease) return@mapNotNull null
                             if (!isNewerVersion(tag, currentVersion)) return@mapNotNull null
                             // A release can carry more than one installer: the versioned artefact
                             // and a legacy name from the packaging task. Picking the first match
@@ -75,7 +85,10 @@ class GitHubReleaseUpdater(
                                 release["assets"]?.asJsonArray
                                     ?.map { it.asJsonObject }
                                     ?.filter { candidate ->
-                                        candidate["name"]?.asString?.let(::isWindowsInstallerName) == true &&
+                                        candidate["name"]?.asString?.let { name ->
+                                            isWindowsInstallerName(name) &&
+                                                (runningPreview || !isUnsignedPreviewInstaller(name))
+                                        } == true &&
                                             candidate["digest"]?.asString?.startsWith("sha256:") == true
                                     }
                                     .orEmpty()
@@ -397,6 +410,9 @@ private val UNINSTALL_KEYS =
 
 internal fun isNewerVersion(candidate: String, current: String): Boolean = compareVersions(candidate, current) > 0
 
+/** Whether [version] belongs to the tester channel rather than the stable customer channel. */
+internal fun isPreviewVersion(version: String): Boolean = ParsedVersion.parse(version)?.preRelease != null
+
 internal fun compareVersions(left: String, right: String): Int {
     val leftVersion = ParsedVersion.parse(left) ?: return -1
     val rightVersion = ParsedVersion.parse(right) ?: return 1
@@ -460,6 +476,10 @@ private fun comparePreRelease(left: String, right: String): Int {
 
 private fun isWindowsInstallerName(value: String): Boolean =
     value.matches(Regex("(?i)IPTV[-_]?BURO[-_A-Za-z0-9.]*\\.msi"))
+
+/** The explicit marker emitted by preview-release.yml when no Authenticode certificate is present. */
+private fun isUnsignedPreviewInstaller(value: String): Boolean =
+    value.contains("-unsigned", ignoreCase = true)
 
 private fun requireTrustedDownloadUrl(value: String) {
     val uri = java.net.URI(value)

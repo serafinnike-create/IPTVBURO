@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -199,7 +200,10 @@ fun DesktopPlayerOverlay(
 
     // Nothing requested focus, so key events never reached the handler and F11 did nothing at all.
     val playerFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { playerFocus.requestFocus() } }
+    var playerFocusAttached by remember { mutableStateOf(false) }
+    LaunchedEffect(playerFocusAttached) {
+        if (playerFocusAttached) playerFocus.requestFocus()
+    }
 
     val closePlayer = closePlayerRef
     Column(
@@ -232,6 +236,10 @@ fun DesktopPlayerOverlay(
                 }
             }
             .focusRequester(playerFocus)
+            // A FocusRequester cannot be used until its modifier is attached. Requesting from a
+            // plain LaunchedEffect raced the first layout and emitted "not initialized", leaving
+            // F11 and Space inactive until the user clicked the player.
+            .onGloballyPositioned { playerFocusAttached = true }
             .focusable(),
     ) {
         // Hidden in full screen so the picture is not letterboxed by a 64 dp bar. It is not the only

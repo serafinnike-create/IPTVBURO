@@ -105,6 +105,7 @@ import com.lucasserafin94.iptvburo.metadata.TmdbServiceShelf
 import com.lucasserafin94.iptvburo.metadata.TmdbDiscoverKind
 import com.lucasserafin94.iptvburo.metadata.TmdbTitleDetails
 import com.lucasserafin94.iptvburo.metadata.TmdbStreamingCatalogue
+import com.lucasserafin94.iptvburo.metadata.TmdbShelfLoadResult
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitle
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
@@ -260,6 +261,7 @@ class DesktopAppState(
         // bypasses the disk — so a user who has just fixed a broken key sees the result of the fix
         // rather than yesterday's file.
         streamingShelves = emptyList()
+        streamingLoadFailed = false
         loadStreamingShelves(force = true)
     }
 
@@ -1528,6 +1530,10 @@ class DesktopAppState(
     var streamingShelves by mutableStateOf<List<TmdbServiceShelf>>(emptyList())
         private set
 
+    /** True only when the current shelf request failed, never for a valid empty catalogue. */
+    var streamingLoadFailed by mutableStateOf(false)
+        private set
+
     /**
      * Synopsis for the title currently in the home banner, keyed by content type and provider id.
      *
@@ -1641,6 +1647,7 @@ class DesktopAppState(
         // Shown at once if already fetched; otherwise the shelves empty and the loader fills them,
         // which reads as a load rather than as the previous kind lingering under a new label.
         streamingShelves = shelfCache[kind].orEmpty()
+        streamingLoadFailed = false
         loadStreamingShelves()
     }
 
@@ -1670,6 +1677,7 @@ class DesktopAppState(
         val catalogue = streamingCatalogue
         if (catalogue == null) {
             println("[streaming] no catalogue: metadata key missing or blank")
+            streamingLoadFailed = false
             return
         }
         val kind = streamingKind
@@ -1686,6 +1694,7 @@ class DesktopAppState(
         }
         if (!force && shelfCache[kind]?.isNotEmpty() == true) {
             println("[streaming] $kind already cached, skipping")
+            if (streamingKind == kind) streamingLoadFailed = false
             return
         }
 
@@ -1700,20 +1709,24 @@ class DesktopAppState(
             if (!stored.isNullOrEmpty()) {
                 println("[streaming] $kind restored ${stored.size} shelves from disk")
                 shelfCache[kind] = stored
-                if (streamingKind == kind) streamingShelves = stored
+                if (streamingKind == kind) {
+                    streamingShelves = stored
+                    streamingLoadFailed = false
+                }
                 return
             }
         }
         println("[streaming] loading $kind shelves for region $streamingRegion")
 
         streamingLoading = true
+        if (streamingKind == kind) streamingLoadFailed = false
         loadingKind = kind
         // Captured here, on the UI thread, for the same reason the kind is: both can change while
         // the request is in flight, and the cache is keyed on them.
         val requestedRegion = streamingRegion
         streamingScope.launch {
-            val loaded =
-                runCatching { catalogue.shelves(kind) }
+            val result =
+                runCatching { catalogue.loadShelves(kind) }
                     .onFailure { error ->
                         // Printed rather than swallowed. An empty section and a crashed load look
                         // identical on screen, and this one hid a null scope for a whole build.
@@ -1724,9 +1737,12 @@ class DesktopAppState(
                         // the console. The failure type is what distinguishes the cases anyone
                         // actually needs to tell apart.
                         println("[streaming] shelf load failed: ${error::class.simpleName}")
-                    }.getOrDefault(emptyList())
+                    }.getOrDefault(TmdbShelfLoadResult.Unavailable)
+            val failed = result is TmdbShelfLoadResult.Unavailable
+            val loaded = (result as? TmdbShelfLoadResult.Loaded)?.shelves.orEmpty()
+            if (failed) println("[streaming] shelf load unavailable")
             println("[streaming] loaded ${loaded.size} $kind shelves")
-            shelfCache[kind] = loaded
+            if (!failed) shelfCache[kind] = loaded
             // Kept for tomorrow. The region is the one this request was issued for, read before the
             // suspend rather than after: a user who changes country mid-fetch would otherwise have
             // the old country's shelves written under the new country's name, and see the wrong
@@ -1750,6 +1766,7 @@ class DesktopAppState(
             // because the state was never actually set. Snapshot state is safe to write from any
             // thread; every other loader in this class does the same.
             streamingShelves = loaded
+            streamingLoadFailed = failed
         }
     }
 
@@ -1778,6 +1795,7 @@ class DesktopAppState(
         // a country they left — and the files would sit there unread for ever otherwise.
         shelfDiskCache.clear()
         streamingShelves = emptyList()
+        streamingLoadFailed = false
         streamingOffers = OfferRanking.EMPTY
         loadStreamingShelves(force = true)
     }
@@ -2072,16 +2090,21 @@ class DesktopAppState(
      * exactly like tiles going black for no reason, which is what it looked like for days: four
      * channels started, two kept playing, two ended after about five seconds each.
      *
-     * The number comes from the provider's own `max_connections`, which the client has always read
-     * and nothing has ever used. Where it is unknown, the app's own cap of four applies — a guess
-     * that is too low would take away a feature somebody has paid for.
+     * The provider reports both `max_connections` and `active_cons`. Four permitted connections
+     * with two already in use on a television or phone leaves room for two tiles here, not four.
+     * Ignoring the active count lets every tile start and then makes the provider turn older ones
+     * black a few seconds later.
      *
-     * One connection is reserved for nothing: multiview is the only thing playing while it is open.
+     * Where the maximum is unknown, the app's own cap applies: no reliable subtraction is possible.
      */
     val multiviewCapacity: Int
-        get() =
-            (xtreamSummary?.account?.maximumConnections ?: MAX_MULTIVIEW_TILES)
-                .coerceIn(1, MAX_MULTIVIEW_TILES)
+        get() {
+            val account = xtreamSummary?.account
+            return availableMultiviewConnections(
+                maximumConnections = account?.maximumConnections,
+                activeConnections = account?.activeConnections,
+            )
+        }
 
     /**
      * Adds or removes a channel from the grid.
@@ -4662,7 +4685,26 @@ private const val HISTORY_LIMIT = 200
  * Four is the practical ceiling on a single screen: beyond that each tile is too small to follow,
  * and the machine is decoding streams nobody can read. It is also the layout the grid is built for.
  */
-private const val MAX_MULTIVIEW_TILES = 4
+internal const val MAX_MULTIVIEW_TILES = 4
+
+/**
+ * Connections this Windows session can still open without exceeding the provider's account limit.
+ *
+ * At least one tile remains available when a panel reports an inconsistent or stale count. Xtream
+ * panels commonly lag for a few seconds after a stream closes; turning the entire feature off on
+ * `active_cons == max_connections` would trap the user even after that connection had gone away.
+ */
+internal fun availableMultiviewConnections(
+    maximumConnections: Int?,
+    activeConnections: Int?,
+    appLimit: Int = MAX_MULTIVIEW_TILES,
+): Int {
+    val safeAppLimit = appLimit.coerceAtLeast(1)
+    val providerLimit = maximumConnections ?: return safeAppLimit
+    val normalizedLimit = providerLimit.coerceAtLeast(1)
+    val alreadyInUse = activeConnections?.coerceIn(0, normalizedLimit) ?: 0
+    return (normalizedLimit - alreadyInUse).coerceIn(1, safeAppLimit)
+}
 
 /** Sections of the music workspace, mirroring the sidebar's own ordering. */
 enum class MusicSection { HOME, ARTISTS, PLAYLISTS, RADIO, DOWNLOADS }

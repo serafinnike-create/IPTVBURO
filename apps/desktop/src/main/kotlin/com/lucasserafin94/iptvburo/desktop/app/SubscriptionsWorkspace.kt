@@ -96,6 +96,9 @@ fun SubscriptionsWorkspace(
     /** Which of films, series or upcoming the shelves are showing. */
     kind: TmdbDiscoverKind = TmdbDiscoverKind.MOVIES,
     onSelectKind: (TmdbDiscoverKind) -> Unit = {},
+    /** A failed TMDb request, distinct from a successful catalogue with no shelves. */
+    loadFailed: Boolean = false,
+    onRetry: () -> Unit = {},
     modifier: Modifier = Modifier,
     /**
      * Returns to the shelves from a title's offers.
@@ -158,6 +161,10 @@ fun SubscriptionsWorkspace(
                     showDemoBadge = capability.requiresDemoLabel,
                     onSelectTitle = onSelectTitle,
                     emptyMessage = text.subscriptionsNoShelves,
+                    loadFailed = loadFailed,
+                    failureMessage = text.subscriptionsLoadFailed,
+                    retryLabel = text.tryAgain,
+                    onRetry = onRetry,
                 )
             } else {
                 OfferList(
@@ -309,9 +316,21 @@ private fun ProviderShelves(
     showDemoBadge: Boolean,
     onSelectTitle: (ExternalTitleDetails) -> Unit,
     emptyMessage: String,
+    loadFailed: Boolean,
+    failureMessage: String,
+    retryLabel: String,
+    onRetry: () -> Unit,
 ) {
     if (shelves.isEmpty()) {
-        ProviderShelvesEmpty(message = emptyMessage)
+        if (loadFailed) {
+            ProviderShelvesFailure(
+                message = failureMessage,
+                retryLabel = retryLabel,
+                onRetry = onRetry,
+            )
+        } else {
+            ProviderShelvesEmpty(message = emptyMessage)
+        }
         return
     }
 
@@ -341,6 +360,40 @@ private fun ProviderShelves(
             modifier = Modifier.align(Alignment.CenterEnd),
             adapter = rememberScrollbarAdapter(listState),
         )
+    }
+}
+
+/** A recoverable request error. Unlike the valid empty state, it always offers another attempt. */
+@Composable
+private fun ProviderShelvesFailure(
+    message: String,
+    retryLabel: String,
+    onRetry: () -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = message,
+                color = BuroColors.TextSubtle,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(BuroSpacing.Md))
+            BuroInteractiveRow(
+                onClick = onRetry,
+                selected = false,
+                shape = BuroRadius.Pill,
+                contentDescription = retryLabel,
+            ) {
+                Text(
+                    text = retryLabel,
+                    modifier = Modifier.padding(horizontal = BuroSpacing.Lg, vertical = BuroSpacing.Sm),
+                    color = BuroColors.Primary,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
     }
 }
 

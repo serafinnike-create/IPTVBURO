@@ -77,6 +77,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -260,7 +261,10 @@ fun XtreamDailyHome(
                 val homeState = rememberLazyListState()
                 val homeScope = rememberCoroutineScope()
                 val homeFocus = remember { FocusRequester() }
-                LaunchedEffect(Unit) { runCatching { homeFocus.requestFocus() } }
+                var homeFocusAttached by remember { mutableStateOf(false) }
+                LaunchedEffect(homeFocusAttached) {
+                    if (homeFocusAttached) homeFocus.requestFocus()
+                }
                 Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = homeState,
@@ -271,6 +275,7 @@ fun XtreamDailyHome(
                         Modifier
                             .fillMaxSize()
                             .focusRequester(homeFocus)
+                            .onGloballyPositioned { homeFocusAttached = true }
                             .focusable()
                             .onPointerEvent(PointerEventType.Enter) {
                                 runCatching { homeFocus.requestFocus() }

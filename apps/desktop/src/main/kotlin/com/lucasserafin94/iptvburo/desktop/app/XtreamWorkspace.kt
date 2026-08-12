@@ -48,6 +48,7 @@ import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.LocalScrollbarStyle
@@ -782,7 +783,10 @@ private fun XtreamCatalogGrid(
     val gridFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     // Focus goes to the grid when the page opens, so the arrow keys work without a click first.
-    LaunchedEffect(Unit) { runCatching { gridFocus.requestFocus() } }
+    var gridFocusAttached by remember { mutableStateOf(false) }
+    LaunchedEffect(gridFocusAttached) {
+        if (gridFocusAttached) gridFocus.requestFocus()
+    }
 
     // A new page reuses the same list; without this the grid keeps the previous scroll offset and
     // the first row of the new page opens already scrolled past.
@@ -845,6 +849,7 @@ private fun XtreamCatalogGrid(
                     Modifier
                         .fillMaxSize()
                         .focusRequester(gridFocus)
+                        .onGloballyPositioned { gridFocusAttached = true }
                         .focusable()
                         .onPointerEvent(PointerEventType.Enter) {
                             runCatching { gridFocus.requestFocus() }

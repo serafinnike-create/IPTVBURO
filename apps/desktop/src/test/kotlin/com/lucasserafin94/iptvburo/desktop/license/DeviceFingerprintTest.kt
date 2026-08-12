@@ -37,13 +37,17 @@ class DeviceFingerprintTest {
      * introduced itself as a computer the server had never met, which correctly granted another
      * seven days — repeatable for ever, by anyone, with no skill required.
      *
-     * The installation id is now derived from the Windows MachineGuid, so it survives the deletion
-     * and the server can find the trial this machine already started. The key pair is still freshly
-     * generated, and the device id still derives from both — so the two identities are genuinely
-     * different rows, joined by the anchor rather than confused with one another.
+     * The installation id is derived from the Windows MachineGuid, so it survives the deletion and
+     * the server can find the trial this machine already started.
+     *
+     * The **device id** must survive it too, and that is what this now asserts. It did not: the key
+     * pair was regenerated, the device id is a hash of the key *and* the installation id, so the
+     * same machine came back with a different public code. A customer who reinstalled lost a
+     * thirty-day licence they had paid for and was dropped back to the trial — the anchor was
+     * carrying the machine's identity while the random key threw it away again.
      */
     @Test
-    fun `a new identity file on the same machine keeps the machine's installation id`() {
+    fun `a new identity file on the same machine reproduces the same device`() {
         val root = Files.createTempDirectory("iptvburo-identities")
         try {
             val first = WindowsDeviceIdentityStore(root.resolve("first.dpapi"), TestProtector).getOrCreate()
@@ -59,12 +63,54 @@ class DeviceFingerprintTest {
                     second.installationId,
                     "deleting the identity file must not mint a new machine",
                 )
+                // The whole point of the fix: the public code the server knows this machine by.
+                assertEquals(
+                    first.deviceId,
+                    second.deviceId,
+                    "reinstalling must not change the device code and lose a paid licence",
+                )
+                // Same key, so the signature the server pinned still verifies. Regenerating it was
+                // what made the device id move.
+                assertEquals(first.publicKeyDerBase64, second.publicKeyDerBase64)
             }
+        } finally {
+            @OptIn(kotlin.io.path.ExperimentalPathApi::class)
+            root.deleteRecursively()
+        }
+    }
 
-            // Still a distinct cryptographic identity. The anchor identifies the machine; it does
-            // not let one installation impersonate another's pinned key.
-            assertNotEquals(first.publicKeyDerBase64, second.publicKeyDerBase64)
-            assertNotEquals(first.deviceId, second.deviceId)
+    /**
+     * The reproduced key must be a working key, not merely an identical one.
+     *
+     * The server pins the public key at registration and verifies a signature on every request, so
+     * a rebuilt identity that produced the same bytes but could not sign would fail in the least
+     * obvious way possible: the right device code, refused.
+     */
+    @Test
+    fun `a reproduced identity still signs a proof its own public key verifies`() {
+        if (MachineAnchor.installationUuid() == null) return
+        val root = Files.createTempDirectory("iptvburo-identities")
+        try {
+            val first = WindowsDeviceIdentityStore(root.resolve("first.dpapi"), TestProtector).getOrCreate()
+            val second = WindowsDeviceIdentityStore(root.resolve("second.dpapi"), TestProtector).getOrCreate()
+
+            val proof = second.proof(DeviceProofAction.VALIDATE, "abcdefghijklmnopqrstuv")
+            val canonical = canonicalDeviceProof(DeviceProofAction.VALIDATE, second.deviceId, "abcdefghijklmnopqrstuv")
+
+            // Verified against the *first* identity's key, which is the one the server would hold.
+            val publicKey =
+                KeyFactory.getInstance("EC")
+                    .generatePublic(X509EncodedKeySpec(Base64.getDecoder().decode(first.publicKeyDerBase64)))
+            val verifier =
+                Signature.getInstance("SHA256withECDSAinP1363Format").apply {
+                    initVerify(publicKey)
+                    update(canonical.toByteArray(StandardCharsets.UTF_8))
+                }
+
+            assertTrue(
+                verifier.verify(Base64.getUrlDecoder().decode(proof)),
+                "the rebuilt identity must sign what the server already trusts",
+            )
         } finally {
             @OptIn(kotlin.io.path.ExperimentalPathApi::class)
             root.deleteRecursively()

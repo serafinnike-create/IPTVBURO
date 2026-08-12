@@ -1270,7 +1270,18 @@ async function redeemKey(deviceId, keyCode, env, now) {
     .first();
 
   if (!key) return { ok: false, error: 'unknown_key', status: 404 };
-  if (key.redeemed_by) return { ok: false, error: 'already_used', status: 409 };
+  // Used by *somebody else*, rather than used at all.
+  //
+  // This refused the buyer their own key. A customer who reinstalled — and whose device id
+  // therefore changed, see the identity fix that ships with this — was told their key was already
+  // spent, on a licence they had paid for hours earlier. The only way out was to buy it again.
+  //
+  // Single use is still exactly single use: the key binds to the first device that redeems it and
+  // no other device can ever take it. What changes is that the owner is no longer locked out of
+  // the thing they own.
+  if (key.redeemed_by && key.redeemed_by !== deviceId) {
+    return { ok: false, error: 'already_used', status: 409 };
+  }
   if (key.valid_until && new Date(key.valid_until) < now) {
     return { ok: false, error: 'key_expired', status: 410 };
   }
@@ -1284,12 +1295,18 @@ async function redeemKey(deviceId, keyCode, env, now) {
   const expiresAt = addDays(now, grantDays);
   const results = await env.DB.batch([
     env.DB.prepare(
+      // Free, or already this device's.
+      //
+      // This is the statement that makes single use real: two machines racing for the same key
+      // both reach here, and only one changes a row. Admitting `redeemed_by = ?` alongside NULL
+      // lets the owner re-redeem without weakening that — a second device still finds the row
+      // claimed by an id that is not its own, and still changes nothing.
       `UPDATE redemption_keys
        SET redeemed_by = ?, redeemed_at = ?
        WHERE key_code = ?
-         AND redeemed_by IS NULL
+         AND (redeemed_by IS NULL OR redeemed_by = ?)
          AND (valid_until IS NULL OR valid_until >= ?)`,
-    ).bind(deviceId, redeemedAt, keyCode, redeemedAt),
+    ).bind(deviceId, redeemedAt, keyCode, deviceId, redeemedAt),
     env.DB.prepare(
       `UPDATE devices
        SET status = 'ACTIVE', purchased_at = ?, expires_at = ?,
@@ -1324,7 +1341,10 @@ async function redeemKey(deviceId, keyCode, env, now) {
       .bind(keyCode)
       .first();
     if (!current) return { ok: false, error: 'unknown_key', status: 404 };
-    if (current.redeemed_by) return { ok: false, error: 'already_used', status: 409 };
+    // Same rule as above: only another device's claim is a refusal.
+    if (current.redeemed_by && current.redeemed_by !== deviceId) {
+      return { ok: false, error: 'already_used', status: 409 };
+    }
     if (current.valid_until && new Date(current.valid_until) < now) {
       return { ok: false, error: 'key_expired', status: 410 };
     }

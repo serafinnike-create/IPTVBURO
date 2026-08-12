@@ -29,6 +29,7 @@ class SubscriptionsStringsTest {
                 text.subscriptionsEmptyBody,
                 text.subscriptionsBrowseByService,
                 text.subscriptionsNoShelves,
+                text.subscriptionsLoadFailed,
                 text.subscriptionsBackToServices,
                 text.subscriptionsSelectedTitle,
             ).forEach { value ->
@@ -65,6 +66,10 @@ class SubscriptionsStringsTest {
             assertTrue(
                 text.subscriptionsBackToServices != english.subscriptionsBackToServices,
                 "$language still shows the English 'back to services'",
+            )
+            assertTrue(
+                text.subscriptionsLoadFailed != english.subscriptionsLoadFailed,
+                "$language still shows the English load failure",
             )
         }
     }

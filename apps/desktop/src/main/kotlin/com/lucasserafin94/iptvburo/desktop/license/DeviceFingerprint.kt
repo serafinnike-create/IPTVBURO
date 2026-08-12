@@ -13,9 +13,11 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.security.KeyFactory
+import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.PrivateKey
+import java.security.SecureRandom
 import java.security.Signature
 import java.security.interfaces.ECPrivateKey
 import java.security.interfaces.ECPublicKey
@@ -215,6 +217,34 @@ class WindowsDeviceIdentityStore internal constructor(
         }
     }
 
+    private fun randomKeyPair(): KeyPair =
+        KeyPairGenerator.getInstance("EC").apply {
+            initialize(ECGenParameterSpec(P256_CURVE))
+        }.generateKeyPair()
+
+    /**
+     * The one key pair this machine always produces.
+     *
+     * `SecureRandom.getInstance("SHA1PRNG")` with a fixed seed is deterministic by specification —
+     * the same seed yields the same stream on every JVM — which is what makes the identity
+     * reproducible after a reinstall. That is a deliberate use of a PRNG as a key derivation
+     * function, and it is safe here for one reason: the seed is not a password or a nonce, it is a
+     * machine value already treated as the anchor of this identity, hashed with a salt of this
+     * app's own.
+     *
+     * The seed is a fresh SHA-256 over a distinct label rather than the anchor itself, so the bytes
+     * feeding the key are not the same bytes that appear in the installation id.
+     */
+    private fun deterministicKeyPair(anchor: String): KeyPair {
+        val seed =
+            MessageDigest.getInstance("SHA-256")
+                .digest("$KEY_SEED_LABEL\n$anchor".toByteArray(StandardCharsets.UTF_8))
+        val random = SecureRandom.getInstance("SHA1PRNG").apply { setSeed(seed) }
+        return KeyPairGenerator.getInstance("EC").apply {
+            initialize(ECGenParameterSpec(P256_CURVE), random)
+        }.generateKeyPair()
+    }
+
     private fun generateIdentity(): DeviceInstallationIdentity {
         // Anchored to the machine, so deleting the stored files does not mint a new device.
         //
@@ -226,11 +256,24 @@ class WindowsDeviceIdentityStore internal constructor(
         // Falls back to random when no anchor can be read. On a machine whose registry is locked
         // down the app must still work; losing the anti-reset property there is a far better
         // outcome than refusing to run.
-        val installationId = MachineAnchor.installationUuid() ?: UUID.randomUUID().toString()
-        val keyPair =
-            KeyPairGenerator.getInstance("EC").apply {
-                initialize(ECGenParameterSpec(P256_CURVE))
-            }.generateKeyPair()
+        val anchor = MachineAnchor.installationUuid()
+        val installationId = anchor ?: UUID.randomUUID().toString()
+        // Derived from the machine when there is an anchor, random only when there is not.
+        //
+        // The anchor above existed so that "deleting the stored files does not mint a new device",
+        // and the freshly generated key pair defeated exactly that: the device id is a hash of the
+        // public key *and* the installation id, so a new key produced a new id on the very same
+        // machine. A paying customer who reinstalled came back as a stranger and lost the licence
+        // they had bought hours earlier.
+        //
+        // Seeding the key from the anchor makes the whole identity reproducible: same machine, same
+        // key, same device id, however many times the app is installed. The private key is no less
+        // secret than before — it is derived from a registry value only this machine's users can
+        // read, salted with a constant of this app's own, and it never leaves the DPAPI blob.
+        //
+        // Without an anchor the key stays random, because a deterministic key from a random seed
+        // would be no more stable and would only add a way to get it wrong.
+        val keyPair = if (anchor != null) deterministicKeyPair(anchor) else randomKeyPair()
         val publicBytes = keyPair.public.encoded
         return DeviceInstallationIdentity(
             installationId = installationId,
@@ -336,6 +379,14 @@ internal fun canonicalUuid(value: String): String {
 
 private const val P1363_SIGNATURE = "SHA256withECDSAinP1363Format"
 private const val P256_CURVE = "secp256r1"
+
+/**
+ * Label mixed into the key seed, so the bytes deriving the key differ from the installation id.
+ *
+ * Versioned: changing this string changes every derived key and therefore every device id, which
+ * would orphan the licences of everyone who has paid. It is not a knob to turn.
+ */
+private const val KEY_SEED_LABEL = "iptvburo-device-key-v1"
 private const val PROOF_DOMAIN = "iptvburo-device-proof-v1"
 private const val UUID_TEXT_LENGTH = 36
 private const val DEVICE_ID_CHARACTERS = 12

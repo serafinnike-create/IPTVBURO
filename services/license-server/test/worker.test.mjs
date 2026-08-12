@@ -1882,3 +1882,73 @@ test('every admin data route refuses an unauthenticated caller', async () => {
     env.DB.close();
   }
 });
+
+/**
+ * The buyer can redeem their own key again.
+ *
+ * A customer reinstalled, their device id changed, and the key they had paid for came back
+ * "already used" — against their own licence, bought hours earlier. The only way out was to buy it
+ * a second time. Re-redeeming must extend the licence they already own.
+ */
+test('the device that owns a key may redeem it again', async () => {
+  const env = environment();
+  try {
+    await registerDevice(env, deviceIdentityA);
+    env.DB.prepare(
+      `INSERT INTO redemption_keys (key_code, grant_days, created_at)
+       VALUES ('OWN-KEY', 30, '2026-08-08T12:00:00Z')`,
+    ).run();
+
+    const first = await worker.fetch(
+      postJson('/v1/redeem', { ...(await deviceProofBody(deviceIdentityA, 'redeem')), key: 'OWN-KEY' }),
+      env,
+    );
+    assert.equal(first.status, 200);
+
+    const second = await worker.fetch(
+      postJson('/v1/redeem', { ...(await deviceProofBody(deviceIdentityA, 'redeem')), key: 'OWN-KEY' }),
+      env,
+    );
+
+    assert.equal(second.status, 200, 'the owner must not be locked out of their own key');
+    assert.equal(row(env, "SELECT redeemed_by FROM redemption_keys WHERE key_code = 'OWN-KEY'").redeemed_by, DEVICE_A);
+    assert.equal(row(env, `SELECT status FROM devices WHERE device_id = '${DEVICE_A}'`).status, 'ACTIVE');
+  } finally {
+    env.DB.close();
+  }
+});
+
+/**
+ * And nobody else may, which is the property the key is sold on.
+ *
+ * Worth pinning beside the test above: the change that lets the owner back in must never become a
+ * change that lets a second machine in. A key posted publicly still unlocks exactly one device.
+ */
+test('a second device is still refused a key that another device owns', async () => {
+  const env = environment();
+  try {
+    await registerDevice(env, deviceIdentityA);
+    await registerDevice(env, deviceIdentityB);
+    env.DB.prepare(
+      `INSERT INTO redemption_keys (key_code, grant_days, created_at)
+       VALUES ('MINE-ONLY', 30, '2026-08-08T12:00:00Z')`,
+    ).run();
+
+    const owner = await worker.fetch(
+      postJson('/v1/redeem', { ...(await deviceProofBody(deviceIdentityA, 'redeem')), key: 'MINE-ONLY' }),
+      env,
+    );
+    assert.equal(owner.status, 200);
+
+    const intruder = await worker.fetch(
+      postJson('/v1/redeem', { ...(await deviceProofBody(deviceIdentityB, 'redeem')), key: 'MINE-ONLY' }),
+      env,
+    );
+
+    assert.equal(intruder.status, 409);
+    assert.equal(row(env, "SELECT redeemed_by FROM redemption_keys WHERE key_code = 'MINE-ONLY'").redeemed_by, DEVICE_A);
+    assert.equal(row(env, `SELECT status FROM devices WHERE device_id = '${DEVICE_B}'`).status, 'TRIAL');
+  } finally {
+    env.DB.close();
+  }
+});

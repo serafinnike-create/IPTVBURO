@@ -501,6 +501,7 @@ data class DesktopStrings(
     // Browse-by-service shelves (GDD 9)
     val subscriptionsBrowseByService: String,
     val subscriptionsNoShelves: String,
+    val subscriptionsLoadFailed: String,
     val subscriptionsBackToServices: String,
     val subscriptionsSelectedTitle: String,
 ) {
@@ -919,6 +920,7 @@ data class DesktopStrings(
                 subscriptionsEmptyBody = "No se encontró nada para este título.",
                 subscriptionsBrowseByService = "Por servicio",
                 subscriptionsNoShelves = "Todavía no hay servicios que mostrar.",
+                subscriptionsLoadFailed = "No pudimos cargar los servicios. Comprueba la conexión e inténtalo de nuevo.",
                 subscriptionsBackToServices = "Volver a los servicios",
                 subscriptionsSelectedTitle = "Título seleccionado",
                 licenseText =
@@ -1376,6 +1378,7 @@ data class DesktopStrings(
                 subscriptionsEmptyBody = "Nada encontrado para este título.",
                 subscriptionsBrowseByService = "Por serviço",
                 subscriptionsNoShelves = "Nenhum serviço para mostrar ainda.",
+                subscriptionsLoadFailed = "Não foi possível carregar os serviços. Confira a conexão e tente novamente.",
                 subscriptionsBackToServices = "Voltar aos serviços",
                 subscriptionsSelectedTitle = "Título selecionado",
                 licenseText =
@@ -1832,6 +1835,7 @@ data class DesktopStrings(
                 subscriptionsEmptyBody = "Nothing found for this title.",
                 subscriptionsBrowseByService = "By service",
                 subscriptionsNoShelves = "No services to show yet.",
+                subscriptionsLoadFailed = "We could not load the services. Check your connection and try again.",
                 subscriptionsBackToServices = "Back to services",
                 subscriptionsSelectedTitle = "Selected title",
                 licenseText =
@@ -2291,6 +2295,7 @@ data class DesktopStrings(
                 subscriptionsEmptyBody = "Für diesen Titel wurde nichts gefunden.",
                 subscriptionsBrowseByService = "Nach Dienst",
                 subscriptionsNoShelves = "Noch keine Dienste vorhanden.",
+                subscriptionsLoadFailed = "Die Dienste konnten nicht geladen werden. Verbindung prüfen und erneut versuchen.",
                 subscriptionsBackToServices = "Zurück zu den Diensten",
                 subscriptionsSelectedTitle = "Ausgewählter Titel",
                 licenseText =
@@ -2748,6 +2753,7 @@ data class DesktopStrings(
                 subscriptionsEmptyBody = "Nessun risultato per questo titolo.",
                 subscriptionsBrowseByService = "Per servizio",
                 subscriptionsNoShelves = "Nessun servizio da mostrare per ora.",
+                subscriptionsLoadFailed = "Impossibile caricare i servizi. Controlla la connessione e riprova.",
                 subscriptionsBackToServices = "Torna ai servizi",
                 subscriptionsSelectedTitle = "Titolo selezionato",
                 licenseText =

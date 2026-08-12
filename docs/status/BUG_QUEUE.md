@@ -152,6 +152,25 @@ Hoje o app não exibe a chave em lugar nenhum — a tela de ativação mostra o
 a data de validade e um botão de copiar, com o aviso de que perdê-la significa
 comprar de novo.
 
+### A tela de ativação não diz nada (reportado em 2026-08-13)
+
+Ao digitar uma chave, a tela não informa **o que aquela chave é**. O usuário quer
+ver, antes ou depois de colar:
+
+- de quantos dias é a chave (30 dias, 365 dias…);
+- se ela está livre, **em uso por este aparelho**, ou já usada por outro;
+- até quando vale.
+
+Hoje o servidor sabe tudo isso — `grant_days`, `redeemed_by`, `valid_until` —, e
+os erros que ele devolve já distinguem os casos (`already_used`, `key_expired`,
+`unknown_key`). O que falta é uma consulta **antes** do resgate e uma tela que
+mostre a resposta em vez de só reagir ao sucesso ou à falha.
+
+Cuidado ao implementar: um endpoint que descreve qualquer chave transforma o
+servidor num oráculo para adivinhar códigos. Deve ficar atrás do mesmo rate
+limiter do resgate e **nunca** revelar o dispositivo dono — apenas "livre", "sua"
+ou "em uso", que é o que o usuário precisa saber.
+
 ### Reinstalação legítima vs. fraude
 
 Vale registrar o limite: com a chave presa ao dispositivo, alguém que troca de PC

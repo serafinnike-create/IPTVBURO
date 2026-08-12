@@ -85,11 +85,12 @@ class GitHubReleaseUpdaterTest {
                     """
                     [{
                       "draft": false,
+                      "prerelease": true,
                       "tag_name": "v0.2.0-alpha.5",
                       "name": "Preview 0.2 alpha 5",
                       "assets": [{
-                        "name": "IPTVBURO-0.2.6.msi",
-                        "browser_download_url": "https://github.com/serafinnike-create/IPTVBURO/releases/download/v0.2.0-alpha.5/IPTVBURO-0.2.6.msi",
+                        "name": "IPTV-BURO-v0.2.0-alpha.5-windows-x64-unsigned.msi",
+                        "browser_download_url": "https://github.com/serafinnike-create/IPTVBURO/releases/download/v0.2.0-alpha.5/IPTV-BURO-v0.2.0-alpha.5-windows-x64-unsigned.msi",
                         "size": 1234,
                         "digest": "sha256:${"0".repeat(64)}"
                       }]
@@ -108,6 +109,99 @@ class GitHubReleaseUpdaterTest {
             val request = server.takeRequest()
             assertEquals("no-cache", request.getHeader("Cache-Control"))
             assertEquals("no-cache", request.getHeader("Pragma"))
+        }
+    }
+
+    @Test
+    fun `stable installs ignore newer unsigned previews`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """
+                    [{
+                      "draft": false,
+                      "prerelease": true,
+                      "tag_name": "v2.1.0-alpha.1",
+                      "assets": [{
+                        "name": "IPTV-BURO-v2.1.0-alpha.1-windows-x64-unsigned.msi",
+                        "browser_download_url": "https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.1.0-alpha.1/IPTV-BURO-v2.1.0-alpha.1-windows-x64-unsigned.msi",
+                        "size": 1234,
+                        "digest": "sha256:${"1".repeat(64)}"
+                      }]
+                    }]
+                    """.trimIndent(),
+                ),
+            )
+
+            val result =
+                GitHubReleaseUpdater(
+                    releasesUrl = server.url("/releases").toString(),
+                    currentVersion = "2.0.0",
+                ).check()
+
+            assertIs<UpdateCheckResult.UpToDate>(result)
+        }
+    }
+
+    @Test
+    fun `stable installs ignore unsigned stable assets`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """
+                    [{
+                      "draft": false,
+                      "prerelease": false,
+                      "tag_name": "v2.0.1",
+                      "assets": [{
+                        "name": "IPTV-BURO-v2.0.1-windows-x64-unsigned.msi",
+                        "browser_download_url": "https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.1/IPTV-BURO-v2.0.1-windows-x64-unsigned.msi",
+                        "size": 1234,
+                        "digest": "sha256:${"2".repeat(64)}"
+                      }]
+                    }]
+                    """.trimIndent(),
+                ),
+            )
+
+            val result =
+                GitHubReleaseUpdater(
+                    releasesUrl = server.url("/releases").toString(),
+                    currentVersion = "2.0.0",
+                ).check()
+
+            assertIs<UpdateCheckResult.UpToDate>(result)
+        }
+    }
+
+    @Test
+    fun `stable installs accept a newer stable installer`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """
+                    [{
+                      "draft": false,
+                      "prerelease": false,
+                      "tag_name": "v2.0.1",
+                      "assets": [{
+                        "name": "IPTV-BURO-v2.0.1-windows-x64.msi",
+                        "browser_download_url": "https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.1/IPTV-BURO-v2.0.1-windows-x64.msi",
+                        "size": 1234,
+                        "digest": "sha256:${"3".repeat(64)}"
+                      }]
+                    }]
+                    """.trimIndent(),
+                ),
+            )
+
+            val result =
+                GitHubReleaseUpdater(
+                    releasesUrl = server.url("/releases").toString(),
+                    currentVersion = "2.0.0",
+                ).check()
+
+            assertIs<UpdateCheckResult.Available>(result)
         }
     }
 

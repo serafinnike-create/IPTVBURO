@@ -407,6 +407,8 @@ fun DesktopApp(
                                 onSelectTitle = { details -> appState.openStreamingTitle(details.title) },
                                 kind = appState.streamingKind,
                                 onSelectKind = appState::selectStreamingKind,
+                                loadFailed = appState.streamingLoadFailed,
+                                onRetry = { appState.loadStreamingShelves(force = true) },
                                 page = appState.streamingPage,
                                 onOpenTrailerExternally = { id -> appState.openPublicTrailer(id) },
                                 // Clearing the ranking is what returns the screen to its shelves,
