@@ -115,6 +115,12 @@ object AndroidDeviceIdentityProvider {
      * It is hashed with a fixed salt rather than sent as-is, so the value that leaves the phone
      * cannot be correlated with `ANDROID_ID` observed anywhere else.
      *
+     * **The result must be a v4-shaped UUID.** The Worker's `validInstallationId` matches exactly
+     * that pattern and answers `bad_identity` for anything else, so a plain hash — which is what
+     * this returned at first — makes every registration fail with no hint as to why. The digest is
+     * therefore folded into UUID form rather than sent raw. It is a hash wearing a UUID's clothes:
+     * derived, not random, which is the whole point.
+     *
      * The random UUID stays as the fallback for the case where the platform returns nothing: a
      * device that cannot be identified stably is still usable, it simply loses the reinstall
      * grace, which is strictly better than refusing to run.
@@ -134,7 +140,7 @@ object AndroidDeviceIdentityProvider {
             MessageDigest.getInstance("SHA-256").digest(
                 (INSTALLATION_ID_SALT + androidId).toByteArray(StandardCharsets.UTF_8),
             )
-        return Base64.encodeToString(digest, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+        return digest.toVersion4Uuid()
     }
 
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
@@ -147,6 +153,31 @@ object AndroidDeviceIdentityProvider {
 
     /** A value several buggy devices returned for every app; treated as no answer at all. */
     private const val BROKEN_ANDROID_ID = "9774d56d682e549c"
+}
+
+/**
+ * Formats the first 16 bytes of a digest as a v4-shaped UUID.
+ *
+ * Deliberately not a real random UUID: the value has to be *derived*, so that the same phone
+ * produces the same installation id after a reinstall. It only has to *look* like a v4 UUID,
+ * because that is the shape the Worker's `validInstallationId` accepts, and a value it rejects
+ * fails registration with `bad_identity` and no explanation the user can act on.
+ *
+ * The version and variant nibbles are forced exactly as RFC 4122 lays them out. Doing so discards
+ * six bits of the digest, leaving 122 — far more than enough to keep two phones apart.
+ */
+internal fun ByteArray.toVersion4Uuid(): String {
+    val bytes = copyOf(16)
+    bytes[6] = ((bytes[6].toInt() and 0x0F) or 0x40).toByte() // version 4
+    bytes[8] = ((bytes[8].toInt() and 0x3F) or 0x80).toByte() // variant 10xx
+    val hex = bytes.joinToString("") { byte -> "%02x".format(byte.toInt() and 0xFF) }
+    return buildString {
+        append(hex, 0, 8).append('-')
+        append(hex, 8, 12).append('-')
+        append(hex, 12, 16).append('-')
+        append(hex, 16, 20).append('-')
+        append(hex, 20, 32)
+    }
 }
 
 internal fun canonicalDeviceProof(
