@@ -21,10 +21,32 @@ plugins {
 }
 
 group = "com.lucasserafin94.iptvburo"
-version = "2.0.0-alpha.3"
+version = "2.0.0-alpha.4"
 
 val desktopReleaseVersion = version.toString()
-val windowsPackageVersion = "2.0.0"
+
+/**
+ * The version Windows Installer sees, which must increase with every shipped preview.
+ *
+ * MSI only understands `a.b.c` with numbers, so `2.0.0-alpha.3` cannot be handed over as it is —
+ * which is why this used to be the constant "2.0.0". That constant is what deleted a customer's
+ * app during an update: every preview declared the same ProductVersion under the same UpgradeCode,
+ * so Windows saw no upgrade to perform, the reinstall did nothing, and the script's fallback
+ * removed the old product and then failed to put anything back.
+ *
+ * The preview number becomes the patch field instead, so alpha.3 ships as 2.0.3 and genuinely
+ * outranks alpha.2's 2.0.2. A final release keeps its own patch number.
+ */
+val windowsPackageVersion =
+    Regex("""^(\d+)\.(\d+)(?:\.(\d+))?(?:-[A-Za-z]+\.(\d+))?$""")
+        .matchEntire(desktopReleaseVersion)
+        ?.let { match ->
+            val (major, minor, patch, preview) = match.destructured
+            // A preview's number wins the patch slot; a final build keeps the patch it declared.
+            val effectivePatch = preview.ifEmpty { patch.ifEmpty { "0" } }
+            "$major.$minor.$effectivePatch"
+        }
+        ?: error("Cannot derive an MSI version from '$desktopReleaseVersion'.")
 
 val vlcVersion = "3.0.23"
 val vlcArchiveSha256 = "992d19dbd0b8a7cde9167d2f7780b1ef6f92acc8a71acfa736101a21f35181e1"

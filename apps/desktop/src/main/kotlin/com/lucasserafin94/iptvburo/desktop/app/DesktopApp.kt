@@ -3122,8 +3122,21 @@ private fun UpdateOverlay(
                     )
                 }
                 Spacer(Modifier.height(BuroSpacing.Xs))
+                // The size in megabytes as well as the percentage.
+                //
+                // This is a ~290 MB download: on a slow line a bar that moves a percent a minute
+                // is indistinguishable from one that has stalled, and "45% de 286 MB" is what tells
+                // the user it is working and roughly how much longer it will take.
+                val totalMegabytes = release.sizeBytes / 1_048_576.0
+                val doneMegabytes = totalMegabytes * progress.coerceIn(0f, 1f)
                 Text(
-                    text = "${text.downloading}  ${(progress * 100).toInt()}%",
+                    text =
+                        if (release.sizeBytes > 0) {
+                            "${text.downloading}  ${(progress * 100).toInt()}%  " +
+                                "(${"%.0f".format(doneMegabytes)} / ${"%.0f".format(totalMegabytes)} MB)"
+                        } else {
+                            "${text.downloading}  ${(progress * 100).toInt()}%"
+                        },
                     color = BuroColors.TextSubtle,
                     style = MaterialTheme.typography.bodySmall,
                 )

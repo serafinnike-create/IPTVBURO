@@ -285,10 +285,22 @@ internal fun writeUpdateScript(
         if (code == null) {
             "rem no installed product registered; nothing to remove"
         } else {
+            // Removal is the last resort, and the reinstall after it is retried before giving up.
+            //
+            // This is the step that deleted a customer's app: the uninstall succeeded, the install
+            // that followed did not, and the script then jumped to :failed — which relaunches a
+            // build that no longer exists. One failed attempt is not proof the installer cannot
+            // work; a second attempt without /passive lets Windows surface whatever it is
+            // objecting to instead of failing silently behind a progress bar.
             """
+            echo Removendo a versao anterior...
             msiexec.exe /x $code /passive /norestart
+            echo Instalando a nova versao...
             msiexec.exe /i "${installer.toAbsolutePath()}" /passive /norestart
-            if errorlevel 1 goto :failed
+            if not errorlevel 1 goto :done
+            rem Second attempt, visible, so a blocked install shows the user why.
+            msiexec.exe /i "${installer.toAbsolutePath()}" /norestart
+            if errorlevel 1 goto :removed_and_failed
             """.trimIndent()
         }
     Files.writeString(
@@ -303,15 +315,37 @@ internal fun writeUpdateScript(
         :install
         rem Install over the existing product first. If this succeeds nothing is ever removed, so a
         rem failure cannot leave the machine with no app.
+        echo Atualizando o IPTV BURO...
         msiexec.exe /i "${installer.toAbsolutePath()}" /passive /norestart REINSTALLMODE=amus
         if not errorlevel 1 goto :done
         $retryAfterRemoval
         goto :done
 
         :failed
-        rem The update did not apply. The installer and this script are kept so it can be retried by
-        rem hand, and the old build is started if it is still there.
+        rem The update did not apply and nothing was removed, so the old build is still installed.
+        rem The installer and this script are kept so it can be retried by hand.
         $relaunch
+        exit /b 1
+
+        :removed_and_failed
+        rem The worst case: the old product was removed and the new one would not install. There is
+        rem no app to relaunch, so say so plainly and leave the installer where the user can run it.
+        rem Silently exiting here is what made the app appear to simply vanish.
+        echo.
+        echo =====================================================================
+        echo  A atualizacao nao pode ser concluida e a versao anterior foi
+        echo  removida pelo Windows.
+        echo.
+        echo  O instalador foi mantido em:
+        echo  "${installer.toAbsolutePath()}"
+        echo.
+        echo  Abra esse arquivo para reinstalar o IPTV BURO.
+        echo =====================================================================
+        echo.
+        rem Opens the folder holding the installer, so the file is one click away rather than a path
+        rem the user has to copy out of a console window.
+        explorer.exe /select,"${installer.toAbsolutePath()}"
+        pause
         exit /b 1
 
         :done

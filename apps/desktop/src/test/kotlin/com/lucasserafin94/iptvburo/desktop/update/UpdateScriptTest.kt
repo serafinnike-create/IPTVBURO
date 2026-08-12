@@ -127,6 +127,63 @@ class UpdateScriptTest {
         }
     }
 
+    /**
+     * The case that deleted a customer's app.
+     *
+     * The old product was removed, the install that followed failed, and the script jumped to
+     * :failed — which relaunches a build that no longer exists. The window was started minimised,
+     * so nothing was on screen either: from the outside the app simply vanished.
+     *
+     * After a removal has happened, failure must reach its own label, tell the user plainly, and
+     * leave the installer somewhere they can run it — never the silent path.
+     */
+    @Test
+    fun `a failure after removal reports itself instead of vanishing`() {
+        withDirectory { directory ->
+            val code = "{A49CCA56-12E0-3ACF-81D3-649F5B7460D5}"
+            val body =
+                Files.readString(
+                    writeUpdateScript(
+                        installer = directory.resolve("a.msi"),
+                        pid = 1,
+                        launcher = null,
+                        installedProductCode = code,
+                    ),
+                )
+
+            assertTrue(":removed_and_failed" in body, "the post-removal failure needs its own path")
+            // It must not fall into :failed, whose whole job is relaunching the old build.
+            val removeAt = body.indexOf("/x $code")
+            val recoveryAt = body.indexOf("goto :removed_and_failed")
+            assertTrue(removeAt in 0..<recoveryAt, "the recovery path belongs after the removal")
+            // The user is told where the installer is, and it is not deleted.
+            val label = body.indexOf(":removed_and_failed")
+            val deleteAt = body.indexOf("del \"%~f0\"")
+            assertTrue(label in 0..<deleteAt, "the recovery path must not reach the delete")
+            assertTrue("pause" in body.substring(label), "the message must stay on screen")
+        }
+    }
+
+    /** One failed install is not proof it cannot work; the retry is visible so Windows can explain. */
+    @Test
+    fun `the reinstall after a removal is retried before giving up`() {
+        withDirectory { directory ->
+            val installer = directory.resolve("a.msi")
+            val body =
+                Files.readString(
+                    writeUpdateScript(
+                        installer = installer,
+                        pid = 1,
+                        launcher = null,
+                        installedProductCode = "{A49CCA56-12E0-3ACF-81D3-649F5B7460D5}",
+                    ),
+                )
+
+            val attempts = Regex(Regex.escape("""/i "${installer.toAbsolutePath()}"""")).findAll(body).count()
+            assertTrue(attempts >= 3, "expected install, retry and visible retry; found $attempts")
+        }
+    }
+
     /** A failed update must leave the installer behind so it can be retried. */
     @Test
     fun `the script only deletes itself on success`() {

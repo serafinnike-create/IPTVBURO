@@ -21,6 +21,21 @@ atualização**. O caminho foi verificado antes de publicar, não presumido:
 
 Corrigidos e publicados: BUG-001, BUG-002, BUG-004, BUG-006, BUG-007, BUG-008.
 
+⚠️ **BUG-009 — a atualização pelo app apagava o aplicativo.** Corrigido.
+
+A correção principal está na **versão do MSI**, que viaja dentro do pacote novo —
+não no script, que é escrito pela build antiga. Por isso ela vale mesmo para quem
+está na `alpha.1`/`alpha.2`/`alpha.3`:
+
+O script antigo tenta `msiexec /i` primeiro e só desinstala se esse passo falhar.
+Ele falhava porque as versões eram idênticas (`2.0.0` dos dois lados). Com a
+`alpha.4` declarando `2.0.4`, o Windows reconhece um upgrade legítimo, o primeiro
+passo conclui e o passo destrutivo nunca é alcançado.
+
+As melhorias no próprio script (mensagem de recuperação, retry visível) só entram
+em vigor a partir da próxima atualização, mas são a rede de segurança — não a
+correção. Detalhes no BUG-009.
+
 **Auditado depois de publicar:** capa, sinopse e trailer na tela de Assinaturas
 (itens 2 e 3 do BUG-006). O caminho está inteiro e correto do cliente até o
 composable, e a API devolve os dados — não havia um segundo defeito ali. A única
@@ -32,6 +47,92 @@ verificadas por teste automatizado e contra a API do TMDb, mas ninguém abriu a
 alpha.3 instalada e olhou a tela. Vale um teste de instalação limpa.
 
 ---
+
+---
+
+## BUG-009 — A atualização pelo app APAGOU o aplicativo
+
+**Status:** ✅ CORRIGIDO em 2026-08-12 — o mais grave reportado até aqui
+**Reportado em:** 2026-08-12
+**Ambiente:** `v2.0.0-alpha.1` instalado do GitHub, atualizado pelo próprio app
+
+### Sintoma
+
+Atualizar por **Opções → Buscar atualização** funcionou aparentemente: barra de
+progresso, pedido para reiniciar. Depois de reiniciar, **o aplicativo não existia
+mais** — sumiu da máquina. Nada foi instalado no lugar.
+
+### Causa raiz — `windowsPackageVersion` era a constante `"2.0.0"`
+
+Em `apps/desktop/build.gradle.kts`, a versão que o Windows Installer enxerga era
+fixa:
+
+```kotlin
+val windowsPackageVersion = "2.0.0"   // alpha.1, alpha.2 e alpha.3, todas iguais
+```
+
+Com o mesmo `upgradeUuid` e o **mesmo ProductVersion**, o Windows não vê upgrade
+nenhum a fazer. A sequência que o script executa era então:
+
+1. `msiexec /i ... REINSTALLMODE=amus` — não faz nada útil, retorna erro;
+2. cai no fallback: `msiexec /x {ProductCode}` — **desinstala o app**;
+3. `msiexec /i ...` de novo — falha pelo mesmo motivo;
+4. `goto :failed`, que tenta relançar um app que **acabou de ser removido**.
+
+Resultado: máquina sem aplicativo. E como o script roda com `/min` (janela
+minimizada), o usuário não via mensagem alguma — o app simplesmente sumia.
+
+O comentário no próprio código já dizia *"doing it first is what once deleted the
+app outright"*, ou seja, essa classe de falha já tinha sido vista antes; o que
+faltava era a causa real, que é a versão constante.
+
+### Correção aplicada
+
+**1. A versão do MSI passa a crescer a cada preview.** O número do preview vira o
+campo de patch:
+
+| versão do app | ProductVersion do MSI |
+| --- | --- |
+| 2.0.0-alpha.2 | 2.0.2 |
+| 2.0.0-alpha.3 | 2.0.3 |
+| 2.0.0-alpha.4 | 2.0.4 |
+
+Assim o Windows reconhece um upgrade de verdade e a primeira tentativa (`/i`)
+resolve, sem nunca chegar ao passo que desinstala.
+
+Quem está com uma build antiga (ProductVersion `2.0.0`) atualiza normalmente,
+porque `2.0.4 > 2.0.0`.
+
+**2. O caminho de falha deixou de ser silencioso e destrutivo.** Se a remoção
+chegar a acontecer e a instalação falhar, o script agora:
+
+- tenta instalar de novo, e depois mais uma vez **sem** `/passive`, para o Windows
+  poder mostrar o que está bloqueando;
+- se ainda assim falhar, vai para `:removed_and_failed` — um caminho novo, que
+  **não** tenta relançar um app inexistente;
+- explica na tela que a versão anterior foi removida, informa onde está o
+  instalador, abre a pasta dele no Explorer e usa `pause` para a mensagem não
+  desaparecer.
+
+**3. Feedback melhor durante a atualização** (pedido junto):
+
+- a porcentagem agora vem acompanhada do tamanho: `45%  (129 / 286 MB)` — numa
+  linha lenta, um percentual sozinho não distingue "baixando" de "travado";
+- a mensagem de reinício explica o ciclo completo: o app fecha, o Windows
+  instala, e **o app abre sozinho** — em PT, EN, ES, DE e IT.
+
+### Testes
+
+Dois testes novos em `UpdateScriptTest`, ambos cobrindo exatamente o que
+aconteceu: que a falha depois de uma remoção tem caminho próprio, não passa pelo
+relançamento, não apaga o instalador e mantém a mensagem na tela; e que a
+reinstalação é tentada mais de uma vez antes de desistir. Total do arquivo: 12.
+
+### Ainda não confirmado
+
+A correção é sólida por construção, mas **não foi testada com uma instalação real
+sendo atualizada** — isso exige uma máquina com a build antiga instalada. É o
+próximo teste que vale fazer.
 
 ---
 
