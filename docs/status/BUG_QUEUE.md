@@ -50,6 +50,75 @@ alpha.3 instalada e olhou a tela. Vale um teste de instalação limpa.
 
 ---
 
+## TAREFA-011 — Nitidez em 4K e fluidez de 30 a 360 Hz
+
+**Status:** pendente — investigado, não implementado
+**Solicitado em:** 2026-08-12
+
+### Pedido
+
+Otimizar para monitores de 30, 60, 120, 144, 165, 240 e 360 Hz, e para telas 4K:
+imagem lisa, sem serrilhado, tudo fluido.
+
+### O que já foi medido (não é suposição)
+
+**A fluidez em alta taxa já deve funcionar.** As 50 animações do app são baseadas
+em *tempo* (`tween`, `animateFloat`, `infiniteRepeatable`), não em contagem de
+quadros, e o Compose Desktop sincroniza com o monitor. Uma animação de 220 ms
+dura 220 ms em 60 Hz e em 360 Hz — só fica mais suave. **Não há taxa de quadros
+fixa em lugar nenhum do código.** Isso precisa ser confirmado num monitor real de
+alta taxa, mas por construção não há nada a corrigir aqui.
+
+**O serrilhado em 4K, por outro lado, tem causa concreta e medida.** As imagens
+são pedidas ao TMDb em resoluções pensadas para 1080p e ampliadas na tela:
+
+| elemento | pedido ao TMDb | tamanho em 4K @200% | fator |
+| --- | --- | --- | --- |
+| pôster do detalhe (248 dp) | `w342` | 496 px | **1,45× ampliado** |
+| fundo (backdrop, tela cheia) | `w1280` | 3840 px | **3× ampliado** |
+| foto do elenco | `w185` | 370 px | **2× ampliado** |
+
+O fundo é o pior caso: além de 3× de ampliação, ele ainda recebe um `scale()` de
+Ken Burns até 1,08 ([XtreamWorkspace.kt:1264](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/XtreamWorkspace.kt#L1264)),
+que amplia mais ainda o borrão.
+
+Nenhuma configuração de DPI, renderizador (Skia/Direct3D) ou qualidade de
+filtragem existe hoje — está tudo no padrão.
+
+### O que fazer
+
+1. **Pedir a imagem no tamanho certo para a tela.** O TMDb oferece `w500`, `w780`,
+   `w1280` e `original` para pôster, e `w1280`/`original` para fundo. A escolha
+   deve considerar a densidade real (`LocalDensity`), não uma constante — em 1080p
+   o `w342` continua correto e baixar `original` seria desperdício de banda e
+   memória.
+2. **Informar o tamanho de destino ao Coil.** `BuroRemoteArtwork` não passa
+   `.size(...)`, então o Coil decodifica no tamanho original e o Compose reescala.
+   Passar o tamanho do destino faz a decodificação já sair na medida certa —
+   melhora nitidez **e** reduz memória.
+3. **Revisar a filtragem de escala.** Verificar se vale `FilterQuality.High` nos
+   pôsteres; é mais caro por quadro, então precisa ser medido antes de adotar.
+4. **Conferir o DPI awareness do instalador.** Sem declaração de
+   *per-monitor DPI aware*, o Windows pode aplicar escala por bitmap — o que borra
+   tudo, inclusive texto, e nenhuma correção de imagem resolve.
+5. **Testar o vídeo separadamente.** O player é o VLC, fora do Compose: a
+   nitidez dele depende do stream e do decodificador, não destas mudanças.
+
+### Cuidado ao implementar
+
+Pedir `original` para tudo é a solução preguiçosa e **piora** o app: uma
+prateleira de 20 pôsteres em resolução máxima é dezenas de MB por trilho, contra
+um heap de 768 MB — exatamente o tipo de pressão de memória que já causou
+travamento (ver AUDITORIA-010). A escolha tem que ser proporcional à tela.
+
+### Como verificar
+
+Comparar capturas em 1080p e em 4K, antes e depois, ampliando a mesma região.
+Medir também a memória e o tempo de carregamento de uma prateleira, para provar
+que a nitidez não custou fluidez.
+
+---
+
 ## AUDITORIA-010 — Segurança, estabilidade e desempenho (varredura completa)
 
 **Status:** ✅ CONCLUÍDA em 2026-08-12
