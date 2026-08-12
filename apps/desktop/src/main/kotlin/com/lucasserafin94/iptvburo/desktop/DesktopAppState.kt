@@ -3252,6 +3252,14 @@ class DesktopAppState(
                             password = rememberedPassword,
                         )
                     }
+                }.onFailure { error ->
+                    // Swallowed on purpose — this must not fail a working login — but no longer
+                    // silently. A user whose session was never persisted starts the next session
+                    // with a catalogue on disk and no credentials, and every action that needs the
+                    // provider then fails in a way that reads as their list being broken. The type
+                    // only: the message can name the file, and the DPAPI blob's path is not worth
+                    // putting in a log that gets pasted into chats.
+                    println("BURO session not remembered: ${error::class.simpleName}")
                 }
                 xtreamSummary = summary
                 selectedSourceId = summary.sourceId
@@ -4460,54 +4468,14 @@ class DesktopAppState(
     }
 
     /**
-     * A message for a failure that really did come from the provider.
+     * The user-facing text for a failure.
      *
-     * Only ever called on an [XtreamClientException]; anything else goes through
-     * [toSafeFailureMessage]. That split matters more than it looks. This `when` used to run on any
-     * throwable, with a `null` branch catching everything that was not an Xtream failure — so an
-     * OutOfMemoryError, a parsing bug or a failure anywhere else in building the Home was reported
-     * to the user as "the server did not return a compatible Xtream catalogue".
-     *
-     * That is not a small wording problem. It blames the customer's provider for a fault in this
-     * app, it is the message they read while their catalogue is plainly loaded and working, and it
-     * sends anyone diagnosing the fault — including the person who wrote this — to the wrong place
-     * entirely.
-     */
-    private fun XtreamClientException.toSafeXtreamMessage(): String =
-        when (reason) {
-            XtreamFailureReason.INVALID_SERVER -> "O endereço do servidor não é válido."
-            XtreamFailureReason.AUTHENTICATION -> "O servidor recusou o usuário ou a senha."
-            XtreamFailureReason.NETWORK -> "Não foi possível alcançar o servidor."
-            XtreamFailureReason.HTTP -> "O servidor respondeu com um erro HTTP."
-            XtreamFailureReason.RESPONSE_TOO_LARGE ->
-                "O catálogo excedeu o limite seguro desta prévia."
-            // Names the log, because this is the one reason a user can do nothing about on their
-            // own. A customer met this card over a catalogue that had plainly loaded, and the only
-            // way to tell a genuinely odd provider from a fault in this app was a file nothing on
-            // screen mentioned.
-            XtreamFailureReason.INVALID_RESPONSE ->
-                "O servidor não retornou um catálogo Xtream compatível. " +
-                    "Detalhes em ${DiagnosticLog.location()}"
-        }
-
-    /**
-     * A message for any failure, attributing it to the provider only when it came from there.
-     *
-     * Everything else is reported as a fault in the app, because that is what it is. The exception
-     * type is included so a screenshot is worth something diagnostically, while the *message* is
-     * deliberately left out: it can carry a URL, and a URL here carries the subscriber's
-     * credentials.
+     * The mapping itself lives in [FailureMessages], where it is tested. It has misled twice on
+     * real installations by blaming the customer's provider for faults that were not theirs, so it
+     * is worth a test rather than a comment promising care.
      */
     private fun Throwable.toSafeFailureMessage(): String =
-        when (this) {
-            is XtreamClientException -> toSafeXtreamMessage()
-            is OutOfMemoryError ->
-                "Não houve memória suficiente para montar esta tela. " +
-                    "Isso é uma limitação do aplicativo, não da sua lista."
-            else ->
-                "Não foi possível montar esta tela (${this::class.simpleName}). " +
-                    "Isso é uma falha do aplicativo, não da sua lista."
-        }
+        FailureMessages.forFailure(this, DiagnosticLog.location().toString())
 
     private companion object {
         const val MAX_SEARCH_LENGTH = 120
