@@ -75,6 +75,12 @@ CREATE TABLE IF NOT EXISTS devices (
     app_version  TEXT,
     last_seen_at TEXT,
 
+    -- Approximate network country supplied by Cloudflare. Only the two-letter country code is
+    -- retained: never the IP address, city, coordinates or provider. A VPN can change this value.
+    activation_country TEXT,
+    last_country       TEXT,
+    country_updated_at TEXT,
+
     -- Admin "delete" is reversible archival. The row and its entitlement history must survive,
     -- both for audit and so deleting it cannot manufacture a new seven-day trial.
     archived_at   TEXT,
@@ -94,6 +100,7 @@ CREATE INDEX IF NOT EXISTS devices_by_mac ON devices (mac_address);
 CREATE INDEX IF NOT EXISTS devices_by_session ON devices (stripe_session_id);
 CREATE INDEX IF NOT EXISTS devices_by_google_purchase ON devices (google_purchase_token_hash);
 CREATE INDEX IF NOT EXISTS devices_by_last_seen ON devices (last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS devices_by_last_country ON devices (last_country, last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS devices_by_archive ON devices (archived_at, updated_at DESC);
 
 -- A client-generated nonce is accepted once. Without this ledger a captured, otherwise valid proof

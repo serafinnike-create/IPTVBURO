@@ -27,6 +27,7 @@ const ADMIN_DEVICE_COLUMNS = `
   devices.purchased_at, devices.expires_at, devices.note, devices.updated_at,
   devices.device_type, devices.platform, devices.manufacturer, devices.model,
   devices.os_version, devices.app_version, devices.last_seen_at,
+  devices.activation_country, devices.last_country, devices.country_updated_at,
   devices.archived_at, devices.archived_note,
   CASE
     WHEN devices.google_purchase_token_hash IS NOT NULL THEN 'GOOGLE_PLAY'
@@ -108,7 +109,7 @@ export async function paidDevices(env) {
   return results ?? [];
 }
 
-/** Finds devices by code, model, manufacturer, platform, legacy MAC or note. */
+/** Finds devices by code, model, manufacturer, platform, country, legacy MAC or note. */
 export async function searchDevices(query, env) {
   const term = `%${String(query ?? '').trim().toUpperCase()}%`;
   const { results } = await env.DB.prepare(
@@ -121,10 +122,12 @@ export async function searchDevices(query, env) {
         OR UPPER(COALESCE(platform, '')) LIKE ?
         OR UPPER(COALESCE(device_type, '')) LIKE ?
         OR UPPER(COALESCE(app_version, '')) LIKE ?
+        OR UPPER(COALESCE(activation_country, '')) LIKE ?
+        OR UPPER(COALESCE(last_country, '')) LIKE ?
      ORDER BY archived_at IS NOT NULL, COALESCE(last_seen_at, updated_at) DESC
      LIMIT 50`,
   )
-    .bind(term, term, term, term, term, term, term, term)
+    .bind(term, term, term, term, term, term, term, term, term, term)
     .all();
   return results ?? [];
 }

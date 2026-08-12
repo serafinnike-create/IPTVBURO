@@ -134,10 +134,11 @@ export function adminPage() {
 
     <div class="panel">
       <h2>Dispositivos</h2>
+      <p class="sub">País aproximado pela rede (pode mudar com VPN ou rede móvel). IP e localização exata não são armazenados.</p>
       <form class="toolbar" onsubmit="event.preventDefault(); search()">
         <label class="field">
-          <span>Código, modelo, fabricante, plataforma ou nota</span>
-          <input id="query" autocomplete="off" placeholder="Ex.: Samsung, Windows, código...">
+          <span>Código, modelo, fabricante, plataforma, país ou nota</span>
+          <input id="query" autocomplete="off" placeholder="Ex.: Samsung, Windows, BR, código...">
         </label>
         <label class="field">
           <span>Mostrar</span>
@@ -334,6 +335,8 @@ export function adminPage() {
       + fact('Sistema', esc(device.os_version || platformLabel(device.platform)))
       + fact('Versão do app', esc(device.app_version || 'Ainda não informado'))
       + fact('Último contato', dateTime(device.last_seen_at || device.updated_at))
+      + fact('País da ativação', countryLabel(device.activation_country))
+      + fact('Último país de uso', countryLabel(device.last_country))
       + fact('Origem', sourceLabel(device.source))
       + fact('Tempo restante', remaining(device))
       + fact('Válido até', date(device.expires_at || device.trial_ends_at))
@@ -548,6 +551,21 @@ export function adminPage() {
       MANUAL: 'Liberação manual',
       TRIAL: 'Teste gratuito',
     }[value] || 'Não identificada');
+  }
+
+  function countryLabel(value) {
+    const code = String(value || '').toUpperCase();
+    if (!/^[A-Z]{2}$/.test(code)) return 'Ainda não informado';
+    const flag = String.fromCodePoint(...Array.from(code).map(function (letter) {
+      return 127397 + letter.charCodeAt(0);
+    }));
+    let name = code;
+    try {
+      if (typeof Intl.DisplayNames === 'function') {
+        name = new Intl.DisplayNames(['pt-BR'], { type: 'region' }).of(code) || code;
+      }
+    } catch (_) { /* Older admin browsers keep the safe ISO code. */ }
+    return flag + ' ' + esc(name) + ' (' + esc(code) + ')';
   }
 
   function eventLabel(value) {

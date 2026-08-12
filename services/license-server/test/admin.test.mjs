@@ -104,13 +104,16 @@ test('the token is kept in session storage, not a cookie', () => {
 test('the admin panel identifies hardware and separates support actions', () => {
   const page = adminPage();
 
-  for (const field of ['manufacturer', 'model', 'os_version', 'app_version', 'last_seen_at', 'source']) {
+  for (const field of ['manufacturer', 'model', 'os_version', 'app_version', 'last_seen_at', 'source', 'activation_country', 'last_country']) {
     assert.ok(page.includes(field), `the device card should render ${field}`);
   }
   assert.ok(page.includes('Detalhes e histórico'));
   assert.ok(page.includes('Bloquear'));
   assert.ok(page.includes('Apagar da lista'));
   assert.ok(page.includes('Restaurar na lista'));
+  assert.ok(page.includes('País da ativação'));
+  assert.ok(page.includes('Último país de uso'));
+  assert.ok(page.includes('IP e localização exata não são armazenados'));
 });
 
 test('deleting a device is presented as audited archival rather than physical deletion', () => {

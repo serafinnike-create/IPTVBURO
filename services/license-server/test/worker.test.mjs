@@ -36,6 +36,10 @@ const DEVICE_PROFILE_MIGRATION = readFileSync(
   new URL('../migrations/0006_device_admin_profile.sql', import.meta.url),
   'utf8',
 );
+const DEVICE_COUNTRY_MIGRATION = readFileSync(
+  new URL('../migrations/0007_device_country.sql', import.meta.url),
+  'utf8',
+);
 const WEBHOOK_SECRET = 'local-fixture-webhook-signing-secret';
 const signingKeys = await generateKeyPair();
 const googleServicePair = await crypto.subtle.generateKey(
@@ -235,6 +239,11 @@ function postJson(path, body) {
   });
 }
 
+function withCountry(request, country) {
+  Object.defineProperty(request, 'cf', { value: { country } });
+  return request;
+}
+
 function stripeEvent({
   id,
   type,
@@ -362,6 +371,7 @@ test('the fresh schema and the P0 migration both apply cleanly', () => {
   legacy.database.exec(DISPUTE_MIGRATION);
   legacy.database.exec(GOOGLE_PLAY_MIGRATION);
   legacy.database.exec(DEVICE_PROFILE_MIGRATION);
+  legacy.database.exec(DEVICE_COUNTRY_MIGRATION);
   assert.ok(
     legacy.database
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'stripe_events'")
@@ -395,6 +405,11 @@ test('the fresh schema and the P0 migration both apply cleanly', () => {
   assert.ok(
     legacy.database
       .prepare("SELECT name FROM pragma_table_info('devices') WHERE name = 'model'")
+      .get(),
+  );
+  assert.ok(
+    legacy.database
+      .prepare("SELECT name FROM pragma_table_info('devices') WHERE name = 'last_country'")
       .get(),
   );
   legacy.close();
@@ -2039,6 +2054,38 @@ test('key info reports days and availability without redeeming', async () => {
     assert.equal(body.grantDays, 30);
     // Looking must not spend it.
     assert.equal(row(env, "SELECT redeemed_by FROM redemption_keys WHERE key_code = 'LOOK-ONLY'").redeemed_by, null);
+  } finally {
+    env.DB.close();
+  }
+});
+
+test('country comes from Cloudflare without storing an IP or replacing the activation country', async () => {
+  const env = environment();
+  try {
+    const registration = await deviceProofBody(deviceIdentityA, 'register', { registration: true });
+    const registered = await worker.fetch(withCountry(postJson('/v1/register', registration), 'BR'), env);
+    assert.equal(registered.status, 200);
+
+    const validation = await deviceProofBody(deviceIdentityA, 'validate');
+    const validated = await worker.fetch(withCountry(postJson('/v1/validate', validation), 'DE'), env);
+    assert.equal(validated.status, 200);
+
+    const stored = row(
+      env,
+      `SELECT activation_country, last_country, country_updated_at
+       FROM devices WHERE device_id = ?`,
+      DEVICE_A,
+    );
+    assert.equal(stored.activation_country, 'BR');
+    assert.equal(stored.last_country, 'DE');
+    assert.ok(stored.country_updated_at);
+    for (const privateLocation of ['ip', 'ip_address', 'city', 'latitude', 'longitude']) {
+      assert.equal(
+        env.DB.database.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('devices') WHERE name = ?")
+          .get(privateLocation).n,
+        0,
+      );
+    }
   } finally {
     env.DB.close();
   }

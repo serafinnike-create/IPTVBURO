@@ -705,7 +705,7 @@ async function handleRegister(request, env) {
   if (!timingSafeEqual(registered.public_key, proof.publicKey)) {
     return json({ error: 'invalid_proof' }, 401);
   }
-  await observeDevice(env, proof.deviceId, body.deviceProfile, now);
+  await observeDevice(env, proof.deviceId, body.deviceProfile, request.cf?.country, now);
   return await respondWithLicense(env, proof.deviceId, proof.nonce, now);
 }
 
@@ -721,7 +721,7 @@ async function handleValidate(request, env) {
   const authorization = await authorizeExistingDevice(body, 'validate', env, now);
   if (!authorization.ok) return json({ error: authorization.error }, authorization.status);
 
-  await observeDevice(env, authorization.deviceId, body.deviceProfile, now);
+  await observeDevice(env, authorization.deviceId, body.deviceProfile, request.cf?.country, now);
   await expireIfDue(env, authorization.device, now);
   await recordEvent(env, authorization.deviceId, 'validated', null, now);
   return await respondWithLicense(env, authorization.deviceId, authorization.nonce, now);
@@ -741,7 +741,7 @@ async function handleRedeem(request, env) {
   const now = new Date();
   const authorization = await authorizeExistingDevice(body, 'redeem', env, now);
   if (!authorization.ok) return json({ error: authorization.error }, authorization.status);
-  await observeDevice(env, authorization.deviceId, body.deviceProfile, now);
+  await observeDevice(env, authorization.deviceId, body.deviceProfile, request.cf?.country, now);
 
   const outcome = await redeemKey(authorization.deviceId, keyCode, env, now);
   if (!outcome.ok) return json({ error: outcome.error }, outcome.status);
@@ -1473,8 +1473,9 @@ async function verifyRegistrationProof(body) {
  * entitlement continues to depend only on the pinned key and signed server state. Hostnames,
  * serials, MAC addresses, Android IDs and OS account names are neither accepted nor stored.
  */
-async function observeDevice(env, deviceId, reported, now) {
+async function observeDevice(env, deviceId, reported, reportedCountry, now) {
   const profile = normaliseDeviceProfile(reported);
+  const country = normaliseCountry(reportedCountry);
   await env.DB.prepare(
     `UPDATE devices SET
        device_type = COALESCE(?, device_type),
@@ -1483,6 +1484,9 @@ async function observeDevice(env, deviceId, reported, now) {
        model = COALESCE(?, model),
        os_version = COALESCE(?, os_version),
        app_version = COALESCE(?, app_version),
+       activation_country = COALESCE(activation_country, ?),
+       last_country = COALESCE(?, last_country),
+       country_updated_at = CASE WHEN ? IS NULL THEN country_updated_at ELSE ? END,
        last_seen_at = ?
      WHERE device_id = ?`,
   )
@@ -1493,10 +1497,20 @@ async function observeDevice(env, deviceId, reported, now) {
       profile?.model ?? null,
       profile?.osVersion ?? null,
       profile?.appVersion ?? null,
+      country,
+      country,
+      country,
+      country ? iso(now) : null,
       iso(now),
       deviceId,
     )
     .run();
+}
+
+/** Cloudflare country codes are coarse routing metadata, not client-reported location. */
+function normaliseCountry(value) {
+  const country = String(value ?? '').trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(country) && country !== 'XX' ? country : null;
 }
 
 function normaliseDeviceProfile(value) {

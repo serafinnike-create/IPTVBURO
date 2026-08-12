@@ -51,13 +51,15 @@ function insertDevice(env, overrides = {}) {
     model: 'QN90D',
     platform: 'ANDROID',
     deviceType: 'ANDROID_TV',
+    activationCountry: 'BR',
+    lastCountry: 'DE',
     ...overrides,
   };
   env.DB.database.prepare(
     `INSERT INTO devices (
        device_id, status, first_seen_at, trial_ends_at, updated_at,
-       manufacturer, model, platform, device_type
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       manufacturer, model, platform, device_type, activation_country, last_country
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     row.deviceId,
     row.status,
@@ -68,6 +70,8 @@ function insertDevice(env, overrides = {}) {
     row.model,
     row.platform,
     row.deviceType,
+    row.activationCountry,
+    row.lastCountry,
   );
   return row.deviceId;
 }
@@ -83,6 +87,8 @@ test('admin search finds model and returns only support-safe device fields', asy
   assert.equal(found.device_id, deviceId);
   assert.equal(found.model, 'QN90D');
   assert.equal(found.source, 'GOOGLE_PLAY');
+  assert.equal(found.activation_country, 'BR');
+  assert.equal(found.last_country, 'DE');
   for (const privateField of ['public_key', 'machine_anchor', 'google_purchase_token_hash', 'mac_address']) {
     assert.equal(Object.hasOwn(found, privateField), false, `${privateField} must not leave D1`);
   }
