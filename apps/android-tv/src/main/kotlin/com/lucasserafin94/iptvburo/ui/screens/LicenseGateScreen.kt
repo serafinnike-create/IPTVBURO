@@ -55,13 +55,14 @@ fun LicenseGateScreen(
     onRetry: () -> Unit,
     onRedeem: (String) -> Unit,
     modifier: Modifier = Modifier,
+    backdropPosters: List<String> = emptyList(),
 ) {
     var key by remember { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
     val copy = copyFor(state.reason)
 
     Box(modifier = modifier.fillMaxSize().background(BuroCanvas)) {
-        BuroCinematicBackdrop()
+        BuroCinematicBackdrop(posterUrls = backdropPosters)
         Column(
             modifier =
                 Modifier
