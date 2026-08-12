@@ -185,8 +185,11 @@ um teste que exercita `resetAll` já removeu esse nó, e remover duas vezes lan�
 
 ## TAREFA-003 — Republicar o release do GitHub após as correções
 
-**Status:** aguardando autorização explícita do usuário
+**Status:** autorizado pelo usuário em 2026-08-12; em execução
 **Solicitado em:** 2026-08-12
+
+**Decisão do usuário:** apagar o `v2.0.0-alpha.1` de vez (não rebaixar), depois
+de corrigir os bugs. Versão nova: `v2.0.0-alpha.2`.
 
 ### Pedido
 
