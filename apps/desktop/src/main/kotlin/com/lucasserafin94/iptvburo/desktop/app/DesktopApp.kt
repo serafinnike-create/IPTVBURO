@@ -603,6 +603,17 @@ fun DesktopApp(
                         isFavorite = appState.playingIsFavorite,
                         onToggleFavorite = appState::togglePlayingFavorite,
                         subtitleStyle = appState.subtitleStyle,
+                        audioOutput = appState.audioOutput,
+                        onSelectAudioOutput = { mode ->
+                            // The engine has to be rebuilt, because VLC constructs its audio chain
+                            // with the rest of the pipeline. Restarting it from zero would throw the
+                            // viewer back to the opening titles, so the request is rebuilt carrying
+                            // the position playback had reached — the same value the checkpoint
+                            // already records, reused rather than invented.
+                            val resumeAt = appState.lastCheckpointMillis(request)
+                            appState.selectAudioOutput(mode)
+                            activePlayback = request.copy(startPositionMillis = resumeAt)
+                        },
                         onClose = {
                             if (isFullScreen) onToggleFullScreen()
                             activePlayback = null

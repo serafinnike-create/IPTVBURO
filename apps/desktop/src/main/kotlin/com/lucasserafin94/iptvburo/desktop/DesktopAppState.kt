@@ -83,6 +83,7 @@ import com.lucasserafin94.iptvburo.domain.model.ParentalPin
 import com.lucasserafin94.iptvburo.domain.model.PlaybackContentType
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressIdentity
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgress
+import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
 import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
 import com.lucasserafin94.iptvburo.domain.model.BestOfferPolicy
@@ -3985,6 +3986,36 @@ class DesktopAppState(
 
     fun checkpointPlayback(request: DesktopPlaybackRequest, positionMs: Long, durationMs: Long) {
         playbackProgressCoordinator.checkpoint(request.progressIdentity, positionMs, durationMs)
+    }
+
+    /**
+     * Where playback had reached, for restarting the engine without losing the viewer's place.
+     *
+     * Changing the speaker layout rebuilds the VLC process, because the audio chain is constructed
+     * with the rest of the pipeline. Restarting from zero would throw somebody back to the opening
+     * titles for changing a setting, so the stored checkpoint — written every twelve seconds
+     * already — is reused rather than a new mechanism invented for this.
+     *
+     * Zero when nothing is stored, which starts the title from the beginning: the honest answer
+     * when there is no record of a position.
+     */
+    fun lastCheckpointMillis(request: DesktopPlaybackRequest): Long =
+        (playbackProgressCoordinator.resumeDecision(request.progressIdentity) as? ResumeDecision.ResumeFrom)
+            ?.positionMs
+            ?: 0L
+
+    /**
+     * Speaker layout for playback, remembered per profile.
+     *
+     * Defaults to [AudioOutputMode.SYSTEM] — leave the sound card alone — because asking for more
+     * speakers than Windows is configured for can silence playback rather than improve it.
+     */
+    var audioOutput by mutableStateOf(userStore.audioOutput(activeProfileId))
+        private set
+
+    fun selectAudioOutput(mode: AudioOutputMode) {
+        audioOutput = mode
+        activeProfileId?.let { profileId -> userStore.setAudioOutput(profileId, mode) }
     }
 
     fun completePlayback(request: DesktopPlaybackRequest, durationMs: Long) {

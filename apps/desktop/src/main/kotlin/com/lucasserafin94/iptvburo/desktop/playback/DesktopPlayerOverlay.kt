@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.layout
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import kotlinx.coroutines.delay
 
 /** How long the pointer must rest before the controls fade in full screen. */
@@ -77,11 +78,17 @@ fun DesktopPlayerOverlay(
     onToggleFavorite: () -> Unit = {},
     /** How subtitles are drawn. Applied when the engine starts, so it reaches the next title. */
     subtitleStyle: SubtitleStyle = SubtitleStyle(),
+    /** Speaker layout asked of the sound card. Applied when the engine starts, like the style. */
+    audioOutput: AudioOutputMode = AudioOutputMode.SYSTEM,
+    /** Changes the layout. The engine restarts, so playback resumes from where it was. */
+    onSelectAudioOutput: (AudioOutputMode) -> Unit = {},
     onClose: () -> Unit,
 ) {
-    // Keyed on the style as well as the request: VLC builds its text renderer with the video chain,
-    // so a changed subtitle setting only reaches the engine through a fresh player.
-    val controller = remember(request, subtitleStyle) { VlcDesktopPlayer(subtitleStyle) }
+    // Keyed on the style and the audio mode as well as the request: VLC builds its text renderer
+    // and its audio chain with the video chain, so a change to either only reaches the engine
+    // through a fresh player.
+    val controller =
+        remember(request, subtitleStyle, audioOutput) { VlcDesktopPlayer(subtitleStyle, audioOutput) }
     var state by remember(request) { mutableStateOf(DesktopPlaybackSnapshot()) }
 
     DisposableEffect(controller) {
@@ -530,6 +537,27 @@ fun DesktopPlayerOverlay(
                     val nextIndex = (PLAYBACK_RATES.indexOf(current) + 1) % PLAYBACK_RATES.size
                     controller.setPlaybackRate(PLAYBACK_RATES[nextIndex])
                 }
+                // Speaker layout, cycled like the rate beside it.
+                //
+                // The options offered depend on what the track actually carries: a 5.1 mix is not
+                // offered an upmix to 5.1, because there is nothing to upmix and a control that
+                // claims to add what is already there teaches people the controls mean nothing.
+                //
+                // Changing this restarts the engine — VLC builds the audio chain with the rest of
+                // the pipeline — so the label says which layout is being asked for rather than
+                // pretending the change is instant.
+                TransportButton(
+                    label = audioOutputLabel(audioOutput),
+                    enabled = state.ready,
+                ) {
+                    // Two channels assumed, which is what the great majority of provider streams
+                    // carry and the case the upmix exists for. Reading the real count from VLC is
+                    // worth doing later; assuming stereo only ever offers one option too many,
+                    // never one too few, and every option remains safe to pick.
+                    val options = AudioOutputMode.optionsFor(channels = 2)
+                    val next = options[(options.indexOf(audioOutput) + 1) % options.size]
+                    onSelectAudioOutput(next)
+                }
                 // Cycles rather than opening a menu: six values, and a viewer fixing a squashed
                 // picture wants to see the next one immediately, not pick from a list.
                 OutlinedButton(
@@ -725,3 +753,18 @@ private fun formatPlaybackTime(valueMillis: Double): String {
     val seconds = totalSeconds % 60
     return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%02d:%02d".format(minutes, seconds)
 }
+
+/**
+ * Short label for the speaker layout button.
+ *
+ * Names the *output* rather than claiming a format: "5.1" here means "send to six speakers", and
+ * the app does not pretend a stereo track became a 5.1 mix by arriving at more of them.
+ */
+private fun audioOutputLabel(mode: AudioOutputMode): String =
+    when (mode) {
+        AudioOutputMode.SYSTEM -> "Áudio: padrão"
+        AudioOutputMode.STEREO -> "Áudio: 2.0"
+        AudioOutputMode.SURROUND_51 -> "Áudio: 5.1"
+        AudioOutputMode.SURROUND_71 -> "Áudio: 7.1"
+        AudioOutputMode.HEADPHONES -> "Áudio: fone"
+    }

@@ -3,6 +3,7 @@ package com.lucasserafin94.iptvburo.desktop.user
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.UUID
+import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import java.util.prefs.Preferences
 
 /**
@@ -491,6 +492,26 @@ class DesktopUserStore(
      * requires a signature from the private key in the DPAPI blob, and a key nobody can read back
      * is a key the customer has already lost.
      */
+    /**
+     * Speaker layout for this profile, or the system default.
+     *
+     * Per profile rather than global: one household member may watch on headphones and another on a
+     * 5.1 set, and a shared setting would make each of them change it back.
+     *
+     * An unknown stored value falls back to the system default rather than failing. A preference
+     * written by a newer build must never stop an older one from playing anything.
+     */
+    fun audioOutput(profileId: String?): AudioOutputMode {
+        val stored = profileId?.let { preferences.get(audioOutputKey(it), null) } ?: return AudioOutputMode.SYSTEM
+        return runCatching { AudioOutputMode.valueOf(stored) }.getOrDefault(AudioOutputMode.SYSTEM)
+    }
+
+    fun setAudioOutput(profileId: String, mode: AudioOutputMode) {
+        preferences.put(audioOutputKey(profileId), mode.name)
+    }
+
+    private fun audioOutputKey(profileId: String): String = "$KEY_AUDIO_OUTPUT.$profileId"
+
     fun activationKey(): String? = preferences.get(KEY_ACTIVATION_KEY, null)?.takeIf(String::isNotBlank)
 
     fun setActivationKey(value: String?) {
@@ -627,6 +648,7 @@ class DesktopUserStore(
         const val KEY_TERMS_ACCEPTED = "terms-accepted"
         const val KEY_METADATA_KEY = "metadata-api-key"
         const val KEY_ACTIVATION_KEY = "activation-key"
+        const val KEY_AUDIO_OUTPUT = "audio-output"
         const val KEY_LEGACY_FAVORITES = "favorites"
         const val KEY_CLOCK_24H = "clock-24h"
         const val KEY_SUBTITLE_SIZE = "subtitle-size"

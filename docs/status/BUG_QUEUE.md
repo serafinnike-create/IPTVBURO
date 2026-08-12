@@ -311,7 +311,7 @@ prova o protocolo inteiro antes de existir uma terceira plataforma.
 
 ## TAREFA-014 — Seletor de áudio 2.0 / 5.1 / 7.1 na tela do filme
 
-**Status:** pesquisado — **é possível**, não implementado
+**Status:** ✅ IMPLEMENTADO em 2026-08-13
 **Solicitado em:** 2026-08-13
 
 ### Resposta curta

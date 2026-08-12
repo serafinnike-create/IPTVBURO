@@ -10,6 +10,7 @@ import java.awt.Color
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.InetAddress
+import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import java.net.ServerSocket
 import java.net.URI
 import java.nio.charset.StandardCharsets
@@ -38,6 +39,14 @@ class VlcDesktopPlayer(
      * what is played next.
      */
     private val subtitleStyle: SubtitleStyle = SubtitleStyle(),
+    /**
+     * Speaker layout to ask the sound card for, and whether to render binaurally.
+     *
+     * Declared at startup for the same reason the subtitle style is: VLC builds the audio chain
+     * with the rest of the pipeline, and there is no control-interface command to rebuild it on a
+     * running player. Changing this therefore applies to the next title, and the UI says so.
+     */
+    private val audioOutput: AudioOutputMode = AudioOutputMode.SYSTEM,
     /**
      * Decoder policy for this player process.
      *
@@ -706,6 +715,10 @@ class VlcDesktopPlayer(
                 // not over a bright scene.
                 "--freetype-background-opacity=${if (subtitleStyle.background) 160 else 0}",
                 hardwareDecoding.vlcArgument,
+                // Empty for the system default, which is the important case: any explicit speaker
+                // setting overrides a working Windows configuration, and asking for more speakers
+                // than the card has can silence playback rather than improve it.
+                *audioOutput.vlcArguments().toTypedArray(),
                 "--quiet",
             ).directory(executable.parentFile)
                 // Discarded on purpose: VLC logs the MRL it was given, and for a provider source
