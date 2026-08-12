@@ -5,6 +5,134 @@ sintoma observado, a causa investigada no código e o que ainda falta confirmar.
 
 ---
 
+## BUG-006 — Assinaturas: "disponível somente no app", sem capa, sinopse, trailer nem foto do elenco
+
+**Status:** causa principal identificada por leitura de código; correção pendente
+**Reportado em:** 2026-08-12
+**Ambiente:** `v2.0.0-alpha.2` instalado do GitHub, chave TMDb adicionada pelo usuário
+
+### Sintomas relatados
+
+Depois de adicionar a chave da API do TMDb, a seção **Assinaturas** passou a
+aparecer. Ao abrir um filme qualquer nela:
+
+1. aparece "disponível somente no aplicativo TV Guru" — não mostra onde comprar
+   ou assinar de verdade;
+2. não aparece capa nem sinopse;
+3. não aparece trailer;
+4. em **Filmes** (catálogo normal), as fotos do elenco não carregam.
+
+### Causa identificada — item 1
+
+`TmdbStreamingCatalogue` responde duas perguntas por caminhos diferentes, e um
+deles é falho:
+
+- `pageFor()` usa o **id numérico do TMDb** — correto
+  ([TmdbStreamingCatalogue.kt:72-75](../../packages/metadata-client/src/main/kotlin/com/lucasserafin94/iptvburo/metadata/TmdbStreamingCatalogue.kt#L72-L75));
+- `detailsFor()` — que responde *onde assistir* — joga o id fora e busca por
+  **texto do título + ano**
+  ([TmdbStreamingCatalogue.kt:78](../../packages/metadata-client/src/main/kotlin/com/lucasserafin94/iptvburo/metadata/TmdbStreamingCatalogue.kt#L78)).
+
+Pior: `TmdbClient.watchProviders()` chama `findMovieId()` e monta a URL fixa
+`movie/$movieId/watch/providers`
+([TmdbClient.kt:226-232](../../packages/metadata-client/src/main/kotlin/com/lucasserafin94/iptvburo/metadata/TmdbClient.kt#L226-L232)),
+e `findMovieId` pesquisa em `search/movie`
+([TmdbClient.kt:484-496](../../packages/metadata-client/src/main/kotlin/com/lucasserafin94/iptvburo/metadata/TmdbClient.kt#L484-L496)).
+
+Ou seja:
+
+- **para série, está errado por construção** — procura uma série no endpoint de
+  filmes, então acha o filme errado ou nada;
+- **para filme, é uma busca por texto** que já tinha o id exato na mão; título
+  traduzido, com pontuação diferente ou ano ausente devolve outro filme ou nenhum.
+
+Quando não acha, a lista de ofertas fica vazia e a tela cai no texto de
+indisponibilidade — que é exatamente o "disponível somente no TV Guru".
+
+Vale notar que o próprio código já avisa disso: o comentário em
+`TmdbStreamingCatalogue.kt:60-62` diz que "null não é o mesmo que indisponível, e
+quem chama não deve renderizar assim". A tela está fazendo justamente isso.
+
+### Correção proposta — item 1
+
+1. `detailsFor()` deve receber o id do TMDb, como `pageFor()` já faz.
+2. `watchProviders()` precisa aceitar `isSeries` e usar `tv/{id}/watch/providers`
+   quando for série, espelhando `titleDetails()`.
+3. A interface precisa distinguir **"o TMDb não sabe"** de **"não há oferta nesta
+   região"**. São coisas diferentes e hoje as duas viram a mesma frase.
+
+### Ainda não investigado
+
+- **Itens 2 e 3** (capa, sinopse, trailer na tela de Assinaturas): `pageFor()`
+  usa o id correto e devolve `overview`, `posterUrl` e `youtubeTrailerId`, então
+  a suspeita é que a tela não esteja chamando `pageFor` ou não esteja lendo o
+  resultado. Precisa ser confirmado lendo o composable de Assinaturas.
+- **Item 4** (fotos do elenco): `ensureCastPhoto` sai cedo quando
+  `!metadataClient.isConfigured`
+  ([DesktopAppState.kt:286](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/DesktopAppState.kt#L286)).
+  `rebuildMetadataClients()` troca o cliente ao salvar a chave, então é preciso
+  verificar se a tela de detalhe já aberta continua com o cliente antigo, e se as
+  fotos voltam ao reabrir o filme depois de configurar a chave. Confirmar antes
+  de mexer.
+
+---
+
+## BUG-007 — Espaço e clique não pausam o vídeo
+
+**Status:** causa provável identificada; precisa de confirmação em máquina real
+**Reportado em:** 2026-08-12 (segundo testador, outro computador)
+**Ambiente:** `v2.0.0-alpha.2` instalado do GitHub, Windows
+
+### Sintoma
+
+Durante a reprodução, a barra de espaço não pausa, e clicar no vídeo também não.
+
+### Causa provável
+
+O handler existe e está correto
+([DesktopPlayerOverlay.kt:216-219](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/playback/DesktopPlayerOverlay.kt#L216-L219)),
+com foco pedido na abertura
+([DesktopPlayerOverlay.kt:190-191](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/playback/DesktopPlayerOverlay.kt#L190-L191)).
+O problema é que **a superfície de vídeo do VLC é uma janela nativa embutida**, e
+quando ela recebe o clique, o foco de teclado vai para ela — o evento nunca chega
+ao Compose.
+
+Isso não é especulação: o próprio código já registra esse comportamento em outro
+contexto, em `DesktopPlayerOverlay.kt:227`, explicando que a barra flutuante em
+tela cheia existe porque "confiar só no F11 deixava o usuário preso quando a
+superfície de vídeo embutida detinha o foco do teclado e a tecla nunca chegava".
+
+Ou seja: o mesmo mecanismo que quebrava o F11 quebra o espaço. E isso também
+explica o clique — não há handler de clique **sobre a superfície de vídeo**; os
+dois `onClick = controller::togglePlayback` existentes
+([:336](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/playback/DesktopPlayerOverlay.kt#L336),
+[:469](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/playback/DesktopPlayerOverlay.kt#L469))
+são dos botões da barra de controles, não do vídeo.
+
+Há ainda uma segunda condição: o espaço só age se `state.ready` for verdadeiro.
+`ready` exige que o VLC já tenha reportado `playing`, `paused` ou `stopped`
+([VlcDesktopPlayer.kt:784](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/playback/VlcDesktopPlayer.kt#L784)),
+então nos primeiros segundos a tecla é ignorada de propósito. Se o testador
+apertou logo no início, esse é um segundo motivo somado ao primeiro.
+
+### Correção proposta
+
+1. Devolver o foco ao Compose sempre que a superfície de vídeo o tomar, ou
+   instalar um `KeyEventDispatcher` no nível da janela AWT — que recebe a tecla
+   independentemente de quem tem o foco dentro dela.
+2. Adicionar clique para pausar sobre a área do vídeo (comportamento padrão de
+   qualquer player), tomando cuidado para não conflitar com o duplo clique de
+   tela cheia.
+3. Verificar se vale tratar o espaço mesmo antes de `ready`, enfileirando a ação.
+
+### Como confirmar
+
+Reproduzir um vídeo, esperar passar da abertura, clicar uma vez sobre a imagem e
+então apertar espaço. Se o espaço funcionar **antes** de clicar no vídeo e parar
+de funcionar **depois**, a causa de foco está confirmada.
+
+---
+
 ## BUG-001 — "Catálogo Xtream compatível" aparece com o catálogo já carregado; app às vezes trava
 
 **Status:** ✅ CORRIGIDO em 2026-08-12
