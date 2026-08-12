@@ -132,6 +132,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'The unsigned Windows preview build failed.' }
           }
 
+          # jpackage builds the MSI through a temporary image that is removed afterwards. Create a
+          # stable app image for the privacy audit instead of relying on leftovers from another task.
+          .\gradlew.bat :apps:desktop:createDistributable --no-daemon --stacktrace
+          if ($LASTEXITCODE -ne 0) { throw 'The desktop audit image build failed.' }
           .\scripts\verify-clean-desktop-package.ps1
           if ($LASTEXITCODE -ne 0) { throw 'The desktop privacy audit failed.' }
 
