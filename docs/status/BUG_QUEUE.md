@@ -50,6 +50,75 @@ alpha.3 instalada e olhou a tela. Vale um teste de instalação limpa.
 
 ---
 
+## AUDITORIA-010 — Segurança, estabilidade e desempenho (varredura completa)
+
+**Status:** ✅ CONCLUÍDA em 2026-08-12
+**Escopo:** aplicativo Windows e site
+
+### Segurança — o que foi verificado e estava certo
+
+Vale registrar o que **não** precisou mudar, para a próxima auditoria não repetir
+o trabalho:
+
+- nenhum `println` no app ou nos pacotes registra URL, usuário, senha ou token;
+- os modelos com dados sensíveis (`Channel`, `ParsedChannel`, `XtreamCredentials`,
+  `XtreamCatalogItem`) têm `toString` com redação;
+- nenhum `TrustManager` ou `HostnameVerifier` customizado — não há como o app
+  aceitar um certificado inválido;
+- `local.properties`, que contém a chave TMDb real, está no `.gitignore` e a
+  chave **não** aparece no APK gerado (verificado no binário);
+- as credenciais Xtream ficam num blob DPAPI, ilegível fora da conta do usuário.
+
+Três "achados" da varredura automática foram falsos positivos, verificados um a
+um: `ImportedCatalog` só contém `Channel` (que redige), `PendingEntry` e
+`ParsedStream` são `private` e nunca impressos.
+
+### Correções aplicadas
+
+**1. Teto de resposta bufferizada (memória).** `request()` mantém o corpo como
+bytes, String e árvore JSON **ao mesmo tempo**, e usava o mesmo teto de 512 MiB
+do caminho streaming — contra um heap de 768 MB. Uma resposta grande podia tomar
+o heap inteiro e matar o app com `OutOfMemoryError`. Agora o caminho bufferizado
+tem teto próprio de 32 MiB, com `require` impedindo que ele ultrapasse o do
+streaming. Dois testes fixam isso.
+
+**2. Marcador preso em `ensureCastPhoto`.** O `remove` do marcador "em andamento"
+só rodava depois de uma busca bem-sucedida. Uma exceção do TMDb deixava aquele
+nome marcado para sempre: a foto nunca mais carregava naquela sessão, e o
+conjunto crescia uma entrada por falha, sem nada limpar.
+
+**3. `heroSynopsis` sem limite.** Só era esvaziado ao trocar de fonte. Cada
+entrada é um parágrafo de sinopse e o destaque roda, então uma sessão longa
+acumulava uma por título já exibido. Limitado como as fotos do elenco.
+
+**4. Polling de link compartilhado.** O tratador acordava uma corrotina **uma vez
+por segundo durante toda a sessão** para olhar um slot quase sempre vazio — 3.600
+despertares por hora num app ocioso, para um evento que a maioria nunca dispara.
+A thread que escuta já sabia a hora exata; agora ela sinaliza. A retentativa para
+link que chega antes do catálogo passou a ser keyed no `xtreamSummary`, que é o
+único momento em que a resposta pode mudar.
+
+**5. Cabeçalhos do site.** O CSP já era forte, mas faltava **HSTS** — sem ele, a
+primeira visita por http pode ser interceptada antes do redirecionamento.
+Adicionados `Strict-Transport-Security`, `Cross-Origin-Opener-Policy` e
+`Cross-Origin-Resource-Policy` (este último `cross-origin` só em `/t/`, senão
+bloquearia a capa do TMDb que a página existe para mostrar). O
+`assetlinks.json` passou a ser servido como `application/json` com CORS aberto,
+que é o que o Android exige.
+
+### Verificado e já correto (não mexido)
+
+- `CompactXtreamCatalog` é realmente colunar (`IntArray` para numéricos), não
+  aloca um objeto por item;
+- `page()` só materializa a página visível, não o catálogo;
+- o executor do player tem `shutdownNow` e threads daemon;
+- o `shutdownHook` do VLC **não** é daemon — e está certo assim, um hook daemon
+  não roda;
+- as flags da JVM (`-Xmx768m`, G1 com pausa de 100 ms, devolução de heap ao SO)
+  estão bem escolhidas e documentadas.
+
+---
+
 ## BUG-009 — A atualização pelo app APAGOU o aplicativo
 
 **Status:** ✅ CORRIGIDO em 2026-08-12 — o mais grave reportado até aqui
