@@ -2091,6 +2091,30 @@ test('country comes from Cloudflare without storing an IP or replacing the activ
   }
 });
 
+test('an old device records current use without inventing a historical activation country', async () => {
+  const env = environment();
+  try {
+    await registerDevice(env, deviceIdentityA);
+    env.DB.database.prepare(
+      'UPDATE devices SET activation_country = NULL, last_country = NULL, country_updated_at = NULL WHERE device_id = ?',
+    ).run(DEVICE_A);
+
+    const validation = await deviceProofBody(deviceIdentityA, 'validate');
+    const response = await worker.fetch(withCountry(postJson('/v1/validate', validation), 'PT'), env);
+    assert.equal(response.status, 200);
+
+    const stored = row(
+      env,
+      'SELECT activation_country, last_country FROM devices WHERE device_id = ?',
+      DEVICE_A,
+    );
+    assert.equal(stored.activation_country, null);
+    assert.equal(stored.last_country, 'PT');
+  } finally {
+    env.DB.close();
+  }
+});
+
 /** The customer's own key reads as theirs, not as unavailable. */
 test('key info tells the owner the key is theirs', async () => {
   const env = environment();
