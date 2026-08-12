@@ -3,12 +3,19 @@
 - Estado: aceito para implementação incremental
 - Data: 2 de agosto de 2026
 
+> Atualização: os termos comerciais de EUR 9,99 vitalícios foram substituídos
+> pelo ADR-010. As decisões de identidade, assinatura e autoridade do backend
+> permanecem válidas. A mecânica Android do item 3 foi substituída pelo aluguel
+> de 730 dias e verificação no servidor definidos no ADR-011.
+
 ## Contexto
 
-O produto oferece sete dias de avaliação sem cartão e compra única de EUR 9,99
-por dispositivo. Android distribuído pelo Google Play e Windows/portal possuem
-regras de cobrança diferentes. Uma credencial de playlist pertence ao provedor
-do usuário e nunca pode servir como conta ou licença do IPTV BURO.
+O produto oferece sete dias de avaliação sem cartão. O texto original deste ADR
+previa uma compra vitalícia de EUR 9,99 por dispositivo; esse termo é apenas
+histórico e foi substituído pelo preço e prazo definidos no ADR-010. Android
+distribuído pelo Google Play e Windows/portal possuem regras de cobrança
+diferentes. Uma credencial de playlist pertence ao provedor do usuário e nunca
+pode servir como conta ou licença do IPTV BURO.
 
 ## Decisão
 
@@ -17,8 +24,8 @@ do usuário e nunca pode servir como conta ou licença do IPTV BURO.
    derivado da chave pública e do UUID. Não usamos o endereço MAC real.
 2. A avaliação e a licença são entitlements assinados pelo backend. O cliente
    nunca se autolicencia e não decide sozinho se um recibo é válido.
-3. No Google Play, a compra será um produto único não consumível, validado e
-   reconhecido pelo backend com a API oficial de faturamento.
+3. No Google Play, a compra usa a opção de aluguel de 730 dias definida no
+   ADR-011, validada e reconhecida pelo backend com a API oficial.
 4. No Windows e no portal, a compra será um Checkout de pagamento único. O
    backend concede o entitlement somente após webhook assinado e verificado.
 5. O portal permite entrar, pagar, ativar por código, restaurar compra, consultar
@@ -38,11 +45,13 @@ em logs.
 
 ## Situação atual
 
-O domínio de licença e a identidade Android já existem. A interface exibe o
-código do dispositivo e informa corretamente que o servidor comercial ainda
-não está ativo. Cobrança real está bloqueada até existirem conta Stripe, produto
-no Play Console, domínio HTTPS, backend implantado e políticas comerciais
-aprovadas. Nenhum botão deve simular pagamento aprovado.
+O domínio de licença, as identidades criptográficas Android/Windows, o Worker
+Cloudflare, o Checkout Stripe e a integração de compra/restauração Google Play
+já existem no código. O backend só concede entitlement após confirmar Stripe ou
+Google e mantém produto, preço/moeda quando aplicáveis e prazo como contrato do
+servidor. A configuração externa do Play Console, a conta do portal e a
+transferência explícita entre aparelhos continuam pendentes. Nenhum botão pode
+simular pagamento aprovado.
 
 ## Consequências
 

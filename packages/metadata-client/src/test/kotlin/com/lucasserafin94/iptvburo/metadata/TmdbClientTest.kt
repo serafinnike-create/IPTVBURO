@@ -510,4 +510,47 @@ class TmdbClientTest {
 
         assertEquals(listOf("First", "No Priority"), client().watchProviderDirectory("BR").map(TmdbWatchProvider::name))
     }
+
+    /**
+     * A credit carries the id and kind needed to open it outside the user's own playlist.
+     *
+     * Without these a credit was only a title, so clicking one could do nothing but search the
+     * playlist for a matching name — and a film the playlist did not have led nowhere at all. The
+     * response has always carried both; nothing read them.
+     */
+    @Test
+    fun `credits carry the catalogue id and whether they are a series`() {
+        server.enqueue(
+            json(
+                """{"cast":[
+                  {"id":603,"media_type":"movie","title":"The Matrix","popularity":9.0},
+                  {"id":1399,"media_type":"tv","name":"Game of Thrones","popularity":8.0}
+                ]}""",
+            ),
+        )
+
+        val credits = client().filmography(42)
+
+        assertEquals(603, credits[0].id)
+        assertEquals(false, credits[0].isSeries)
+        assertEquals(1399, credits[1].id)
+        assertEquals(true, credits[1].isSeries, "a tv credit must be resolvable as a series")
+    }
+
+    /**
+     * A credit without an id is listed rather than discarded.
+     *
+     * Dropping it would silently remove a film from an actor's filmography over a field that only
+     * affects one of the two ways the credit can be opened — it can still be matched against the
+     * user's own playlist by name.
+     */
+    @Test
+    fun `a credit missing its id is still listed`() {
+        server.enqueue(json("""{"cast":[{"title":"Untitled","popularity":1.0}]}"""))
+
+        val credits = client().filmography(42)
+
+        assertEquals(1, credits.size)
+        assertNull(credits.single().id)
+    }
 }

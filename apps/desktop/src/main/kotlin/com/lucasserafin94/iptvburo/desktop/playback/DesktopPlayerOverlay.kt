@@ -1,6 +1,8 @@
 package com.lucasserafin94.iptvburo.desktop.playback
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +37,7 @@ import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -63,9 +66,21 @@ fun DesktopPlayerOverlay(
     onToggleFullScreen: () -> Unit,
     isCompact: Boolean = false,
     onToggleCompact: () -> Unit = {},
+    /**
+     * Whether the title playing is a favourite, or null when it cannot be one.
+     *
+     * Null hides the control rather than showing a heart that does nothing — a downloaded file and
+     * a local playlist entry have no catalogue item to favourite.
+     */
+    isFavorite: Boolean? = null,
+    onToggleFavorite: () -> Unit = {},
+    /** How subtitles are drawn. Applied when the engine starts, so it reaches the next title. */
+    subtitleStyle: SubtitleStyle = SubtitleStyle(),
     onClose: () -> Unit,
 ) {
-    val controller = remember(request) { VlcDesktopPlayer() }
+    // Keyed on the style as well as the request: VLC builds its text renderer with the video chain,
+    // so a changed subtitle setting only reaches the engine through a fresh player.
+    val controller = remember(request, subtitleStyle) { VlcDesktopPlayer(subtitleStyle) }
     var state by remember(request) { mutableStateOf(DesktopPlaybackSnapshot()) }
 
     DisposableEffect(controller) {
@@ -353,6 +368,12 @@ fun DesktopPlayerOverlay(
             // of the drag flooded VLC with commands and made the picture stutter its way across the
             // film; the seek now happens once, when the thumb is released.
             var scrubTo by remember { mutableStateOf<Float?>(null) }
+
+            // Where the pointer is over the bar, whether or not a drag is happening. Only the drag
+            // used to show a time, so a user hovering to find a scene saw nothing — they had to
+            // commit to a drag to learn where they were pointing.
+            var hoverFraction by remember { mutableStateOf<Float?>(null) }
+            var barWidth by remember { mutableStateOf(0) }
             val playedFraction =
                 if (state.durationMillis > 0.0) {
                     (state.positionMillis / state.durationMillis).toFloat().coerceIn(0f, 1f)
@@ -360,7 +381,17 @@ fun DesktopPlayerOverlay(
                     0f
                 }
 
-            Box(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .onSizeChanged { size -> barWidth = size.width }
+                        .onPointerEvent(PointerEventType.Move) { event ->
+                            val x = event.changes.firstOrNull()?.position?.x ?: return@onPointerEvent
+                            hoverFraction = if (barWidth > 0) (x / barWidth).coerceIn(0f, 1f) else null
+                        }
+                        .onPointerEvent(PointerEventType.Exit) { hoverFraction = null },
+            ) {
                 Slider(
                     value = scrubTo ?: playedFraction,
                     onValueChange = { scrubTo = it },
@@ -374,7 +405,10 @@ fun DesktopPlayerOverlay(
                 // The time under the thumb while dragging. A frame preview is not possible here -
                 // VLC's control interface cannot render an arbitrary frame without interrupting
                 // playback - but the timestamp answers the same question: where will this land?
-                scrubTo?.let { fraction ->
+                // The drag position when dragging, otherwise wherever the pointer is. Both answer
+                // "where will this land?", and a hover is how a user looks for a scene without
+                // committing to a jump.
+                (scrubTo ?: hoverFraction.takeIf { state.durationMillis > 0.0 })?.let { fraction ->
                     val targetMillis = state.durationMillis * fraction
                     Box(
                         modifier =
@@ -415,7 +449,15 @@ fun DesktopPlayerOverlay(
                 }
             }
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                // Scrollable, because a Row does not shrink children that carry no weight.
+                //
+                // Once the transport buttons, the rate, the subtitle and audio pickers, the
+                // brightness readout and the volume slider are all in here, the row wants more
+                // width than the window has. Without somewhere to overflow to, Compose took it out
+                // of the only flexible thing present — the button labels — and broke "Sair da tela
+                // cheia" one character per line, which stretched the bar to the height of the
+                // screen. Scrolling keeps every control at its natural size and reachable.
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -431,6 +473,21 @@ fun DesktopPlayerOverlay(
                     "${formatPlaybackTime(state.positionMillis)} / ${formatPlaybackTime(state.durationMillis)}",
                     color = Color.White,
                 )
+
+                // Filled and gold when the title is a favourite, outlined and grey when it is not —
+                // so the heart answers "is this saved?" before it is pressed, rather than only
+                // acting when it is. Absent entirely for sources that cannot be favourited.
+                isFavorite?.let { favourite ->
+                    Spacer(Modifier.width(12.dp))
+                    TextButton(onClick = onToggleFavorite) {
+                        Text(
+                            text = if (favourite) "♥" else "♡",
+                            color = if (favourite) Color(0xFFD6A956) else Color(0xFFB8B4AC),
+                            style = MaterialTheme.typography.headlineSmall,
+                        )
+                    }
+                }
+
                 Spacer(Modifier.weight(1f))
                 // Stepped through a fixed list rather than matched against overlapping ranges: VLC
                 // reports the rate back as a float, so 1.2499999 fell through every branch and the
@@ -443,9 +500,24 @@ fun DesktopPlayerOverlay(
                     val nextIndex = (PLAYBACK_RATES.indexOf(current) + 1) % PLAYBACK_RATES.size
                     controller.setPlaybackRate(PLAYBACK_RATES[nextIndex])
                 }
-                // Audio and subtitle pickers, only when the title actually carries a choice: a menu
-                // with one entry is a control that cannot do anything.
-                if (state.audioTracks.size > 1) {
+                // Cycles rather than opening a menu: six values, and a viewer fixing a squashed
+                // picture wants to see the next one immediately, not pick from a list.
+                OutlinedButton(
+                    onClick = {
+                        val values = PlaybackAspectRatio.entries
+                        val next = values[(values.indexOf(state.aspectRatio) + 1) % values.size]
+                        controller.setAspectRatio(next)
+                    },
+                    enabled = state.ready,
+                ) {
+                    Text(state.aspectRatio.label)
+                }
+
+                // Shown whenever a track exists, not only when there is a choice. A single-entry
+                // menu still answers "what language is this?", and hiding the control entirely made
+                // the player look as though it had no track support at all — which is how it read
+                // on a film with one audio track and no subtitles.
+                if (state.audioTracks.isNotEmpty()) {
                     TrackPicker(
                         label = "Áudio",
                         tracks = state.audioTracks,
@@ -461,6 +533,35 @@ fun DesktopPlayerOverlay(
                         onSelect = controller::selectSubtitleTrack,
                     )
                 }
+                // Brightness before volume: a film too dark to follow is the more common complaint,
+                // and a viewer reaching for it is usually mid-scene.
+                // Says when it takes effect, because it cannot take effect now.
+                //
+                // VLC builds the adjust filter with the video chain and its control interface has
+                // no command to change it afterwards — the slider moved and the picture did not,
+                // which reads as a broken control rather than as a deferred setting. The subtitle
+                // options carry the same limitation and say so in the same way.
+                Text(
+                    text = "☀ ${(state.brightness * 100).toInt()}%",
+                    color = Color.White,
+                )
+                if (state.brightness != 1.0) {
+                    // Literal, like every other label in this overlay. Introducing the strings
+                    // mechanism for one line would leave the file half-translated, which is worse
+                    // than consistently untranslated; the whole overlay is a separate job.
+                    Text(
+                        text = "vale para o próximo",
+                        color = Color.White.copy(alpha = 0.6f),
+                        maxLines = 1,
+                    )
+                }
+                Slider(
+                    value = state.brightness.toFloat(),
+                    onValueChange = { controller.setBrightness(it.toDouble()) },
+                    valueRange = 0.5f..1.8f,
+                    enabled = state.ready,
+                    modifier = Modifier.width(120.dp),
+                )
                 Text("Volume ${(state.volume * 100).toInt()}%", color = Color.White)
                 Slider(
                     value = state.volume.toFloat(),
@@ -473,9 +574,22 @@ fun DesktopPlayerOverlay(
                 // Escape never arrive - which left closing the whole app as the only way out.
                 if (isFullScreen) {
                     Spacer(Modifier.width(12.dp))
-                    OutlinedButton(onClick = onToggleFullScreen) { Text("⛶  Sair da tela cheia") }
+                    // Never wrapped.
+                    //
+                    // The controls sit in a Row that runs out of width once the volume slider and
+                    // the brightness readout are in it, and Compose then breaks the label one
+                    // character per line: the button became a tall vertical column of letters and
+                    // pushed the whole bar to the height of the screen.
+                    //
+                    // maxLines alone is not enough — a single line still needs somewhere to go —
+                    // so the label is short and the row is allowed to scroll instead.
+                    OutlinedButton(onClick = onToggleFullScreen) {
+                        Text("⛶  Sair da tela cheia", maxLines = 1, softWrap = false)
+                    }
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = closePlayer) { Text("Voltar ao app") }
+                    OutlinedButton(onClick = closePlayer) {
+                        Text("Voltar ao app", maxLines = 1, softWrap = false)
+                    }
                 }
             }
         }

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="boot_preparing">Deine private Mediathek wird vorbereitet…</string>
+    <string name="license_checking">Dieses Gerät wird sicher geprüft…</string>
+    <string name="license_gate_trial_ended_title">Die 7-tägige Testphase ist beendet</string>
+    <string name="license_gate_trial_ended_body">Aktiviere dieses Gerät, um zu Profilen und Quellen zurückzukehren. Deine Mediathek bleibt lokal gespeichert.</string>
+    <string name="license_gate_expired_title">Dieses Gerät muss verlängert werden</string>
+    <string name="license_gate_expired_body">Verlängere die Gerätelizenz, um IPTV BURO weiter zu verwenden.</string>
+    <string name="license_gate_revoked_title">Lizenz nicht verfügbar</string>
+    <string name="license_gate_revoked_body">Diese Lizenz wurde nach einer Erstattung oder Zahlungsanfechtung entzogen. Kontaktiere bei Bedarf den Support.</string>
+    <string name="license_gate_verify_title">Zum Prüfen des Geräts verbinden</string>
+    <string name="license_gate_verify_body">Der sichere Offline-Zeitraum ist abgelaufen. Stelle eine Internetverbindung her und prüfe erneut; keine neue Zahlung ist nötig.</string>
+    <string name="license_gate_unreachable_title">Die Lizenz konnte nicht geprüft werden</string>
+    <string name="license_gate_unreachable_body">Prüfe die Internetverbindung und versuche es erneut. IPTV BURO entsperrt nie mit einer unsignierten Antwort.</string>
+    <string name="license_gate_not_activated_title">Dieses Gerät aktivieren</string>
+    <string name="license_gate_not_activated_body">Verbinde dich einmal, um die 7-tägige Testphase zu starten, oder aktiviere per Kauf oder Schlüssel.</string>
+    <string name="license_gate_code_label">Gerätecode</string>
+    <string name="license_gate_purchase">Aktivieren / kaufen</string>
+    <string name="play_billing_pending">Die Zahlung ist bei Google Play ausstehend. Der Zugriff wird nach der Bestätigung automatisch aktiviert.</string>
+    <string name="play_billing_rejected">Google Play konnte diesen Kauf für IPTV BURO nicht bestätigen.</string>
+    <string name="play_billing_unavailable">Google Play Billing ist momentan nicht verfügbar. Prüfe die Verbindung und den Play Store und versuche es erneut.</string>
+    <string name="license_gate_refresh">Erneut prüfen</string>
+    <string name="license_gate_key_label">Aktivierungsschlüssel (optional)</string>
+    <string name="license_gate_key_hint">Einmalschlüssel eingeben</string>
+    <string name="license_gate_redeem">Schlüssel verwenden</string>
+    <string name="license_gate_working">Wird geprüft…</string>
+    <string name="license_gate_redeem_failed">Dieser Schlüssel konnte nicht aktiviert werden. Prüfe ihn und versuche es erneut.</string>
+    <string name="license_gate_privacy">Dieser Code stammt aus einem Android-Keystore-Schlüssel, nicht aus der MAC-Adresse des Telefons.</string>
+    <string name="license_status_active">Aktiv</string>
+    <plurals name="license_status_trial_days"><item quantity="one">Test · noch %1$d Tag</item><item quantity="other">Test · noch %1$d Tage</item></plurals>
+    <plurals name="license_status_active_days"><item quantity="one">Aktiv · noch %1$d Tag</item><item quantity="other">Aktiv · noch %1$d Tage</item></plurals>
+    <string name="license_status_offline">Offline-Prüfung</string>
+    <string name="tmdb_settings_title">TMDB-Bilder und Trailer</string>
+    <string name="tmdb_settings_body">Optional pro Profil. Ein TMDB-API-v3-Schlüssel ergänzt fehlende Trailer, ohne Zugangsdaten der Wiedergabeliste zu senden.</string>
+    <string name="tmdb_settings_key_label">TMDB API-v3-Schlüssel</string>
+    <string name="tmdb_settings_key_hint">Neuen Schlüssel einfügen</string>
+    <string name="tmdb_settings_save">Sicher speichern</string>
+    <string name="tmdb_settings_clear">Schlüssel entfernen</string>
+    <string name="tmdb_settings_configured">Für dieses Profil eingerichtet</string>
+    <string name="tmdb_settings_not_configured">Nicht eingerichtet</string>
+    <string name="tmdb_settings_attribution">Verwendet TMDB-Daten, wird aber nicht von TMDB unterstützt oder zertifiziert.</string>
+    <string name="tmdb_settings_needs_profile">Wählen Sie zuerst ein Profil. Der Schlüssel wird verschlüsselt für ein Profil gespeichert; ohne aktives Profil gibt es keinen Speicherort.</string>
+    <string name="tmdb_settings_choose_profile">Profil wählen</string>
+    <string name="settings_metadata_section">Bilder, Trailer und Abonnements</string>
+    <string name="catalog_refresh">Katalog aktualisieren</string>
+    <string name="mobile_menu_open">Navigation öffnen</string>
+    <string name="mobile_menu_close">Navigation schließen</string>
+    <string name="license_chip_action">Verwalten oder verlängern</string>
+    <string name="boot_stage_profiles">Profile werden gelesen…</string>
+    <string name="boot_stage_catalogue">Katalog wird geöffnet…</string>
+    <string name="boot_stage_artwork">Bilder werden vorbereitet…</string>
+    <string name="boot_stage_ready">Fast fertig…</string>
+    <string name="tmdb_settings_shared_label">Haushaltsschlüssel</string>
+    <string name="tmdb_settings_shared_hint">Wird von jedem Profil ohne eigenen Schlüssel verwendet.</string>
+    <string name="tmdb_settings_profile_label">Schlüssel für %1$s</string>
+    <string name="tmdb_settings_profile_hint">Ersetzt den Haushaltsschlüssel nur für dieses Profil. TMDB begrenzt Anfragen pro Schlüssel.</string>
+</resources>

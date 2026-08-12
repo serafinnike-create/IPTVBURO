@@ -1,14 +1,23 @@
 package com.lucasserafin94.iptvburo.ui
 
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.res.Configuration
+import android.content.res.Resources
 import com.lucasserafin94.iptvburo.core.logging.AppLogger
+import com.lucasserafin94.iptvburo.data.discovery.NoShelfCache
+import com.lucasserafin94.iptvburo.data.discovery.StreamingDiscoveryRepository
 import com.lucasserafin94.iptvburo.data.download.AndroidDownloadManager
+import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
+import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseStatus
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
 import com.lucasserafin94.iptvburo.data.local.dao.FavoriteDao
 import com.lucasserafin94.iptvburo.data.local.dao.ProfileDao
 import com.lucasserafin94.iptvburo.data.local.entity.ChannelEntity
 import com.lucasserafin94.iptvburo.data.local.entity.FavoriteEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ProfileEntity
+import com.lucasserafin94.iptvburo.data.preferences.CatalogueGuard
+import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
 import com.lucasserafin94.iptvburo.data.repository.UserLibraryRepository
 import com.lucasserafin94.iptvburo.data.repository.CatalogPage
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
@@ -16,7 +25,9 @@ import com.lucasserafin94.iptvburo.data.repository.PlaylistImportResult
 import com.lucasserafin94.iptvburo.data.repository.XtreamImportRequest
 import com.lucasserafin94.iptvburo.data.repository.XtreamImportResult
 import com.lucasserafin94.iptvburo.data.repository.XtreamImportStage
+import com.lucasserafin94.iptvburo.data.security.MetadataKeyStore
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
+import com.lucasserafin94.iptvburo.domain.model.CatalogueFilter
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.domain.model.Episode
@@ -24,7 +35,15 @@ import com.lucasserafin94.iptvburo.domain.model.MovieDetails
 import com.lucasserafin94.iptvburo.domain.model.SeriesDetails
 import com.lucasserafin94.iptvburo.domain.model.Source
 import com.lucasserafin94.iptvburo.domain.model.SourceType
+import com.lucasserafin94.iptvburo.domain.model.LicenseDecision
+import com.lucasserafin94.iptvburo.domain.model.PlaybackProgress
+import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressIdentity
+import com.lucasserafin94.iptvburo.domain.model.ParentalLock
+import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressRepository
+import com.lucasserafin94.iptvburo.domain.model.SubtitlePresentation
 import java.io.InputStream
+import java.time.Duration
+import java.time.Instant
 import javax.inject.Provider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +71,56 @@ class MainViewModelNavigationTest {
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    /**
+     * These two assert ADR-008, which deliberately reversed the GDD 6 rule: VOD downloads are
+     * offered on phones without the source declaring offline authorisation. They previously
+     * asserted the opposite, from when the capability was off.
+     *
+     * The television case is not covered by that reversal and is asserted separately below.
+     */
+    @Test
+    fun `downloads destination opens on a phone under ADR-008`() = runTest {
+        val viewModel = createViewModel(FakeCatalogRepository())
+        runCurrent()
+
+        viewModel.selectSection(AppSection.DOWNLOADS)
+
+        assertEquals(AppSection.DOWNLOADS, viewModel.state.value.section)
+        assertEquals(AppContent.Downloads, viewModel.state.value.content)
+    }
+
+    @Test
+    fun `downloads destination stays rejected on a television`() = runTest {
+        val viewModel = createViewModel(FakeCatalogRepository(), isTelevision = true)
+        runCurrent()
+
+        viewModel.selectSection(AppSection.DOWNLOADS)
+
+        assertEquals(AppSection.HOME, viewModel.state.value.section)
+        assertEquals(AppContent.Home, viewModel.state.value.content)
+    }
+
+    /**
+     * Found on a device: deleting the profile you were using left the app on "opening your
+     * catalogue" forever.
+     *
+     * The profile observation set the stage to CATALOGUE unconditionally, so with no active profile
+     * the boot screen waited on a catalogue that had nobody to load for. With no profile there is
+     * nothing left to prepare, and the picker is what should be on screen.
+     */
+    @Test
+    fun `boot finishes when there is no active profile so the picker can be reached`() = runTest {
+        val viewModel = createViewModel(FakeCatalogRepository())
+        runCurrent()
+
+        assertNull(viewModel.state.value.activeProfile)
+        assertEquals(
+            "A boot stage short of READY holds the loading screen up with nothing to wait for.",
+            BootStageUi.READY,
+            viewModel.state.value.bootStage,
+        )
     }
 
     @Test
@@ -114,6 +183,80 @@ class MainViewModelNavigationTest {
         assertEquals(0, repository.observeChannelsCalls)
         assertEquals(5, viewModel.state.value.categories.first { it.id == null }.channelCount)
         assertEquals(5, viewModel.state.value.categories.first { it.id == category.id }.channelCount)
+    }
+
+    @Test
+    fun `named categories keep their own representative artwork`() = runTest {
+        // Named: the fourth positional parameter is sortOrder, not contentType.
+        val releases = Category("releases", "local", "Lançamentos", contentType = CatalogContentType.MOVIE)
+        val action = Category("action", "local", "Ação", contentType = CatalogContentType.MOVIE)
+        val repository =
+            FakeCatalogRepository(
+                // Xtream: MOVIES picks the first Xtream source and falls back to a placeholder
+                // when there is none, so an M3U source left this test with no categories at all.
+                sources = listOf(source("local", SourceType.XTREAM)),
+                categories = listOf(releases, action),
+                categoryCounts = mapOf(releases.id to 4, action.id to 3),
+                categoryArtwork =
+                    mapOf(
+                        releases.id to "https://example.test/releases.jpg",
+                        action.id to "https://example.test/action.jpg",
+                    ),
+            )
+        val viewModel = createViewModel(repository)
+        runCurrent()
+
+        viewModel.selectSection(AppSection.MOVIES)
+        runCurrent()
+
+        assertEquals(
+            "https://example.test/releases.jpg",
+            viewModel.state.value.categories.first { it.id == releases.id }.artworkUrl,
+        )
+        assertEquals(
+            "https://example.test/action.jpg",
+            viewModel.state.value.categories.first { it.id == action.id }.artworkUrl,
+        )
+    }
+
+    /**
+     * Found on a device: "Series | Netflix · 1716 itens" opened onto "this source has no
+     * compatible channels".
+     *
+     * A genre chosen in one category stayed in force in the next. Where the new category has no
+     * title of that genre the grid narrows to nothing, while the count on the card — which is not
+     * filtered — keeps saying there are more than a thousand. The filter describes one list and
+     * must not outlive it.
+     */
+    @Test
+    fun `opening a category clears the filter left over from the previous one`() = runTest {
+        val repository =
+            FakeCatalogRepository(
+                pageLoader = { _, _ ->
+                    CatalogPage(listOf(catalogChannel("item-0")), offset = 0, totalCount = 1)
+                },
+            )
+        val viewModel = createViewModel(repository)
+        runCurrent()
+        viewModel.openSource(SourceUi("source", "Synthetic source", 1))
+        viewModel.openCategory(CategoryUi(null, "", 1))
+        runCurrent()
+
+        viewModel.setCatalogueFilter(CatalogueFilter(genre = "a genre this category alone has"))
+        assertTrue(viewModel.state.value.catalogueFilter.isActive)
+
+        // Back to the category list and into another one — the path a user actually takes, and the
+        // only one `openCategory` accepts: it reads the open Categories destination.
+        viewModel.goBack()
+        runCurrent()
+        viewModel.openCategory(CategoryUi("other", "Another category", 1))
+        runCurrent()
+
+        assertFalse(
+            "A stale genre empties the next category while its count still promises items.",
+            viewModel.state.value.catalogueFilter.isActive,
+        )
+        assertEquals(1, viewModel.state.value.visibleChannels.size)
     }
 
     @Test
@@ -390,15 +533,60 @@ class MainViewModelNavigationTest {
         assertEquals(AppContent.Home, viewModel.state.value.content)
     }
 
+    @Test
+    fun `selecting a profile without sources opens source connection`() = runTest {
+        val viewModel = createViewModel(FakeCatalogRepository())
+        runCurrent()
+
+        viewModel.selectProfile(viewModel.state.value.profiles.single().id)
+        runCurrent()
+
+        assertEquals(AppSection.SOURCES, viewModel.state.value.section)
+        assertEquals(AppContent.Sources, viewModel.state.value.content)
+    }
+
+    @Test
+    fun `selecting a profile with a source opens home`() = runTest {
+        val repository = FakeCatalogRepository(sources = listOf(source("local", SourceType.LOCAL_M3U)))
+        val viewModel = createViewModel(repository)
+        runCurrent()
+
+        viewModel.selectProfile(viewModel.state.value.profiles.single().id)
+        runCurrent()
+
+        assertEquals(AppSection.HOME, viewModel.state.value.section)
+        assertEquals(AppContent.Home, viewModel.state.value.content)
+    }
+
     private fun TestScope.createViewModel(
         repository: FakeCatalogRepository,
         logger: AppLogger = NoOpLogger,
+        isTelevision: Boolean = false,
     ): MainViewModel {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
+        // Only the ui-mode flag is read, by the offline capability gate. A throwing provider was
+        // fine until that gate started consulting the device form factor; a phone-shaped
+        // Configuration keeps these assertions on the branch a phone actually takes.
+        val configuration =
+            Configuration().apply {
+                uiMode =
+                    if (isTelevision) {
+                        Configuration.UI_MODE_TYPE_TELEVISION
+                    } else {
+                        Configuration.UI_MODE_TYPE_NORMAL
+                    }
+            }
         val contextProvider =
             Provider<Context> {
-                error("Android context is not used by these assertions")
+                object : ContextWrapper(null) {
+                    // Resources itself cannot be constructed off-device, and the gate only reads
+                    // the configuration, so the accessor is what gets stubbed.
+                    override fun getResources(): Resources =
+                        object : Resources(null, null, null) {
+                            override fun getConfiguration(): Configuration = configuration
+                        }
+                }
             }
         return MainViewModel(
             contextProvider = contextProvider,
@@ -407,16 +595,78 @@ class MainViewModelNavigationTest {
             userLibraryRepository = UserLibraryRepository(FakeProfileDao(), FakeFavoriteDao(), dispatcher),
             // The manager resolves storage lazily, so these navigation assertions never touch it.
             downloadManager = AndroidDownloadManager(contextProvider, OkHttpClient(), dispatcher),
+            licenseService = FakeLicenseService,
+            metadataKeyStore = FakeMetadataKeyStore,
+            // Builds no catalogue: FakeMetadataKeyStore has no key, so every discovery call is a
+            // no-op and these navigation assertions never reach the network.
+            streamingDiscoveryRepository = StreamingDiscoveryRepository(OkHttpClient(), NoShelfCache, dispatcher),
+            okHttpClient = OkHttpClient(),
+            playbackProgressRepository = FakePlaybackProgressRepository,
+            // Empty fakes: nothing hidden and no PIN, which is what these navigation assertions
+            // assume. The DataStore-backed implementations cannot start on a plain JVM context.
+            catalogueGuardPreferences = FakeCatalogueGuard,
+            subtitlePreferences = FakeSubtitleSettings,
             logger = logger,
             ioDispatcher = dispatcher,
         )
     }
 }
 
+/** Nothing hidden, nothing locked, no PIN: the state a fresh install is in. */
+private data object FakeCatalogueGuard : CatalogueGuard {
+    override val hiddenCategoryIds = flowOf(emptySet<String>())
+    override val parentalLock = flowOf(ParentalLock(lockAdultCategories = false))
+    override val hasPin = flowOf(false)
+
+    override suspend fun setCategoryHidden(categoryId: String, hidden: Boolean) = Unit
+
+    override suspend fun setCategoryLocked(categoryId: String, locked: Boolean) = Unit
+
+    override suspend fun setLockAdultCategories(locked: Boolean) = Unit
+
+    override suspend fun setPin(newPin: String, currentPin: String?): Boolean = false
+
+    override suspend fun clearPin(currentPin: String): Boolean = false
+
+    override suspend fun checkPin(candidate: String): Boolean = false
+}
+
+private data object FakeSubtitleSettings : SubtitleSettings {
+    override val presentation = flowOf(SubtitlePresentation())
+
+    override suspend fun save(presentation: SubtitlePresentation) = Unit
+}
+
+private data object FakeLicenseService : AndroidLicenseService {
+    override fun check(now: Instant): AndroidLicenseStatus =
+        AndroidLicenseStatus(
+            decision = LicenseDecision.Allowed(Duration.ofDays(7), isTrial = true),
+            deviceId = "TEST-TEST-TEST",
+            offline = false,
+            clockSuspect = false,
+        )
+
+    override fun redeem(key: String, now: Instant): AndroidLicenseStatus? = null
+}
+
+private data object FakeMetadataKeyStore : MetadataKeyStore {
+    override fun save(profileId: String, apiKey: String) = Unit
+    override fun read(profileId: String): String? = null
+    override fun isConfigured(profileId: String): Boolean = false
+}
+
+private data object FakePlaybackProgressRepository : PlaybackProgressRepository {
+    override fun find(identity: PlaybackProgressIdentity): PlaybackProgress? = null
+    override fun save(progress: PlaybackProgress) = Unit
+    override fun remove(identity: PlaybackProgressIdentity) = Unit
+    override fun continueWatching(profileId: String, limit: Int): List<PlaybackProgress> = emptyList()
+}
+
 private class FakeCatalogRepository(
     private val sources: List<Source> = emptyList(),
     private val categories: List<Category> = emptyList(),
     private val categoryCounts: Map<String?, Int> = emptyMap(),
+    private val categoryArtwork: Map<String, String> = emptyMap(),
     private val pageLoader: (offset: Int, limit: Int) -> CatalogPage =
         { offset, _ -> CatalogPage(emptyList(), offset, 0) },
     private val resolvedChannels: Map<String, Channel> = emptyMap(),
@@ -448,6 +698,11 @@ private class FakeCatalogRepository(
         contentType: CatalogContentType?,
     ): Flow<Map<String?, Int>> = flowOf(categoryCounts)
 
+    override fun observeCategoryArtwork(
+        sourceId: String,
+        contentType: CatalogContentType?,
+    ): Flow<Map<String, String>> = flowOf(categoryArtwork)
+
     override fun observeChannels(
         sourceId: String,
         categoryId: String?,
@@ -467,6 +722,10 @@ private class FakeCatalogRepository(
         pageRequests += offset to limit
         return pageLoader(offset, limit)
     }
+
+    // No local library in these navigation fixtures, so nothing is ever claimed as owned.
+    override suspend fun findLibraryCandidates(titleFragment: String, limit: Int): List<Channel> =
+        emptyList()
 
     override suspend fun getChannel(id: String): Channel? {
         getChannelRequests += id
@@ -587,6 +846,7 @@ private class FakeFavoriteDao : FavoriteDao {
     override suspend fun loadChannels(profileId: String, limit: Int): List<ChannelEntity> = emptyList()
     override suspend fun add(favorite: FavoriteEntity) = Unit
     override suspend fun remove(profileId: String, channelId: String) = Unit
+    override suspend fun removeAllForProfile(profileId: String) = Unit
 }
 
 private data object NoOpLogger : AppLogger {

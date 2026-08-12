@@ -17,7 +17,7 @@
     "hdr": false
   },
   "offline": {
-    "supported": false,
+    "supported": true,
     "backgroundJobs": false,
     "seasonQueue": false,
     "smartDownloads": false
@@ -28,6 +28,6 @@
   },
   "notes": [
     "HDR follows the device and selected media track; there is no fake universal toggle.",
-    "Offline remains hidden until provider eligibility and backend entitlement are implemented."
+    "Offline VOD follows ADR-008 on phones and remains hidden on Android TV."
   ]
 }

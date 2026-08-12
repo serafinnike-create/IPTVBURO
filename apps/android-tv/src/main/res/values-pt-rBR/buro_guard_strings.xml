@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="parental_title">Bloqueio de canais</string>
+    <string name="parental_hint">Uma senha de quatro dígitos mantém fechadas as categorias escolhidas. Protege de uma criança na sala, não de um adulto determinado.</string>
+    <string name="parental_current_pin">Senha atual</string>
+    <string name="parental_new_pin">Nova senha</string>
+    <string name="parental_set_pin">Definir senha</string>
+    <string name="parental_change_pin">Alterar senha</string>
+    <string name="parental_remove_pin">Remover senha</string>
+    <string name="parental_pin_format">A senha precisa ter exatamente quatro dígitos.</string>
+    <string name="parental_wrong_pin">Senha incorreta.</string>
+    <string name="parental_lock_adult">Bloquear categorias que a fonte marca como adulto</string>
+    <string name="parental_locked">Categoria bloqueada</string>
+    <string name="parental_unlock">digite a senha para abrir</string>
+    <string name="parental_unlock_confirm">Abrir</string>
+
+    <string name="subtitles_title">Legendas</string>
+    <string name="subtitles_hint">Vale para o próximo título que você abrir.</string>
+    <string name="subtitles_size">Tamanho</string>
+    <string name="subtitles_size_small">Pequeno</string>
+    <string name="subtitles_size_medium">Médio</string>
+    <string name="subtitles_size_large">Grande</string>
+    <string name="subtitles_size_huge">Muito grande</string>
+    <string name="subtitles_colour">Cor</string>
+    <string name="subtitles_colour_white">Branco</string>
+    <string name="subtitles_colour_yellow">Amarelo</string>
+    <string name="subtitles_colour_grey">Cinza</string>
+    <string name="subtitles_colour_green">Verde</string>
+    <string name="subtitles_colour_cyan">Ciano</string>
+    <string name="subtitles_background">Fundo escuro atrás do texto</string>
+
+    <string name="categories_title">Categorias</string>
+    <string name="categories_hint">oculte as que você nunca assiste, bloqueie as que quer fechadas</string>
+    <string name="category_hide">Ocultar</string>
+    <string name="category_lock">Bloquear</string>
+    <string name="categories_channel_count">%1$d itens</string>
+</resources>

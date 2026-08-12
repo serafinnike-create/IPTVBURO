@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_picker_title">Who is watching?</string>
+    <string name="profile_picker_subtitle">Each person keeps their own favorites, language, and progress.</string>
+    <string name="profile_picker_add">Add</string>
+    <string name="profile_picker_open_settings">Set the TMDB key for this profile</string>
+    <string name="profile_picker_name">Profile name</string>
+    <string name="profile_picker_child"> Child</string>
+    <string name="profile_picker_adult"> Adult</string>
+    <string name="profile_picker_create">Create profile</string>
+    <string name="profile_edit_title">Edit profile</string>
+    <string name="profile_edit_avatar">Avatar</string>
+    <string name="profile_edit_kids_hint">A kids profile hides adult content.</string>
+    <string name="profile_edit_save">Save</string>
+    <string name="profile_edit_delete">Delete this profile</string>
+    <string name="profile_edit_delete_confirm">Tap again to delete — favourites and history go too</string>
+    <string name="profile_edit_open">Edit</string>
+    <string name="profile_picker_kids_badge">Kids</string>
+    <string name="profile_edit_choose_photo">Choose a photo</string>
+    <string name="profile_edit_remove_photo">Remove photo</string>
+    <string name="profile_edit_source">Playlist</string>
+    <string name="profile_edit_source_any">Any</string>
+    <string name="profile_edit_source_new">Add another…</string>
+    <!-- The profile a fresh install creates so favourites have somewhere to go. -->
+    <string name="profile_default_name">My profile</string>
+</resources>

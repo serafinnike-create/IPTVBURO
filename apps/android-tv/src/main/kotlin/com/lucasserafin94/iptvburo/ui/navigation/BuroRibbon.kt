@@ -34,6 +34,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.ui.AppSection
+import com.lucasserafin94.iptvburo.ui.capabilities.AndroidPlatformCapabilities
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroChip
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroSpacing
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroTheme
@@ -43,16 +44,39 @@ private data class RibbonDestination(
     @param:StringRes val labelResource: Int,
 )
 
-private val ribbonDestinations =
+private val allRibbonDestinations =
     listOf(
         RibbonDestination(AppSection.HOME, R.string.buro_nav_home),
         RibbonDestination(AppSection.LIVE, R.string.buro_nav_live),
         RibbonDestination(AppSection.MOVIES, R.string.buro_nav_movies),
         RibbonDestination(AppSection.SERIES, R.string.buro_nav_series),
         RibbonDestination(AppSection.MY_BURO, R.string.buro_nav_my_buro),
+        RibbonDestination(AppSection.CONTINUE_WATCHING, R.string.nav_continue_watching),
+        RibbonDestination(AppSection.HISTORY, R.string.nav_history),
+        RibbonDestination(AppSection.SUBSCRIPTIONS, R.string.nav_subscriptions),
         RibbonDestination(AppSection.DOWNLOADS, R.string.buro_nav_downloads),
         RibbonDestination(AppSection.PROFILE, R.string.buro_nav_profile),
+        RibbonDestination(AppSection.SOURCES, R.string.nav_sources),
+        RibbonDestination(AppSection.SETTINGS, R.string.nav_settings),
     )
+
+/**
+ * The destinations that may be shown, given what is actually configured.
+ *
+ * Both filters here exist for the same reason: a visible entry promises the app can do something,
+ * and an entry that opens onto nothing is worse than an absent one. Downloads waits on a real
+ * offline vault; Subscriptions waits on a metadata key, without which TMDb cannot answer at all.
+ */
+internal fun availableRibbonSections(
+    offlineSupported: Boolean = AndroidPlatformCapabilities.offlineSupported,
+    subscriptionsVisible: Boolean = false,
+): List<AppSection> =
+    allRibbonDestinations
+        .asSequence()
+        .map(RibbonDestination::section)
+        .filter { section -> section != AppSection.DOWNLOADS || offlineSupported }
+        .filter { section -> section != AppSection.SUBSCRIPTIONS || subscriptionsVisible }
+        .toList()
 
 /**
  * Compact, D-pad-first primary navigation for IPTV BURO.
@@ -64,16 +88,25 @@ private val ribbonDestinations =
 fun BuroRibbon(
     selectedSection: AppSection?,
     onSelect: (AppSection) -> Unit,
+    offlineSupported: Boolean = AndroidPlatformCapabilities.offlineSupported,
     modifier: Modifier = Modifier,
     selectedItemFocusRequester: FocusRequester? = null,
     onItemFocused: (AppSection) -> Unit = {},
     activeProfileName: String? = null,
     isKidsProfile: Boolean = false,
+    subscriptionsVisible: Boolean = false,
 ) {
     val colors = BuroTheme.colors
+    val availableSections =
+        availableRibbonSections(
+            offlineSupported = offlineSupported,
+            subscriptionsVisible = subscriptionsVisible,
+        )
+    val availableDestinations =
+        allRibbonDestinations.filter { destination -> destination.section in availableSections }
     val ribbonSelection =
         selectedSection?.takeIf { candidate ->
-            ribbonDestinations.any { destination -> destination.section == candidate }
+            availableDestinations.any { destination -> destination.section == candidate }
         }
     val focusTarget = ribbonSelection ?: AppSection.HOME
 
@@ -86,9 +119,9 @@ fun BuroRibbon(
         val compact = maxWidth < 600.dp
         val visibleDestinations =
             if (compact) {
-                ribbonDestinations.filterNot { it.section == AppSection.PROFILE }
+                availableDestinations.filterNot { it.section == AppSection.PROFILE }
             } else {
-                ribbonDestinations
+                availableDestinations
             }
         val ribbonState = rememberLazyListState()
         LaunchedEffect(compact, focusTarget) {

@@ -87,77 +87,90 @@ private fun OnboardingScaffold(
     ) {
         val maxPanelHeight = maxHeight
         val panelScroll = rememberScrollState()
-        Column(
+        // The scrollbar is drawn beside the panel, so it needs a Box sized to the panel to align
+        // against. Scrolling worked before this — the wheel moved it — but with no bar there was
+        // nothing on screen saying the form continued below the fold, so it read as cut off.
+        Box(
+            // Wraps the panel, not the window: the bar has to sit against the panel's own right
+            // edge. Height caps here and the column inside is left to shrink to its content, so a
+            // short step stays a short panel instead of being stretched to fill the cap.
             modifier =
                 Modifier
+                    .padding(BuroSpacing.Xl)
                     .widthIn(max = 620.dp)
-                    .heightIn(max = maxPanelHeight)
-                    .fillMaxWidth()
-                    // As a panel it gets a surface and a rounded edge, so it reads as sitting over
-                    // the app; during first-run it is the whole screen and needs neither.
-                    .then(
-                        if (onDismiss == null) {
-                            Modifier
-                        } else {
-                            Modifier
-                                .padding(BuroSpacing.Xl)
-                                .clip(BuroRadius.Large)
-                                .background(BuroColors.Surface)
-                        },
-                    ).verticalScroll(panelScroll)
-                    .padding(BuroSpacing.Xl),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                    .heightIn(max = maxPanelHeight * 0.92f),
         ) {
-            if (onDismiss != null) {
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onDismiss) {
-                        Text(
-                            text = "✕",
-                            color = BuroColors.TextMuted,
-                            style = MaterialTheme.typography.titleMedium,
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        // As a panel it gets a surface and a rounded edge, so it reads as sitting
+                        // over the app; during first-run it is the whole screen and needs neither.
+                        .then(
+                            if (onDismiss == null) {
+                                Modifier
+                            } else {
+                                Modifier
+                                    .clip(BuroRadius.Large)
+                                    .background(BuroColors.Surface)
+                            },
+                        ).verticalScroll(panelScroll)
+                        .padding(BuroSpacing.Xl),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (onDismiss != null) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = onDismiss) {
+                            Text(
+                                text = "✕",
+                                color = BuroColors.TextMuted,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = "IPTV BURO",
+                    color = BuroColors.Primary,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Spacer(Modifier.height(BuroSpacing.Lg))
+                content()
+                Spacer(Modifier.height(BuroSpacing.Xl))
+                // Three dots, not a number: the count is small enough to read at a glance and does
+                // not need translating.
+                Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
+                    repeat(TOTAL_STEPS) { index ->
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(if (index == step) 8.dp else 6.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (index == step) BuroColors.Primary else BuroColors.BorderSoft,
+                                    ),
                         )
                     }
                 }
             }
-            Text(
-                text = "IPTV BURO",
-                color = BuroColors.Primary,
-                style = MaterialTheme.typography.labelSmall,
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(panelScroll),
+                modifier =
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        // Inset by the panel's own radius so the bar sits inside the rounded
+                        // surface rather than riding on its edge.
+                        .padding(vertical = BuroSpacing.Sm, horizontal = 4.dp),
+                style =
+                    LocalScrollbarStyle.current.copy(
+                        thickness = 8.dp,
+                        unhoverColor = BuroColors.BorderSoft,
+                        hoverColor = BuroColors.Primary,
+                    ),
             )
-            Spacer(Modifier.height(BuroSpacing.Lg))
-            content()
-            Spacer(Modifier.height(BuroSpacing.Xl))
-            // Three dots, not a number: the count is small enough to read at a glance and does not
-            // need translating.
-            Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
-                repeat(TOTAL_STEPS) { index ->
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(if (index == step) 8.dp else 6.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (index == step) BuroColors.Primary else BuroColors.BorderSoft,
-                                ),
-                    )
-                }
-            }
         }
-        VerticalScrollbar(
-            adapter = rememberScrollbarAdapter(panelScroll),
-            modifier =
-                Modifier
-                    .align(Alignment.CenterEnd)
-                    .fillMaxHeight()
-                    .padding(vertical = BuroSpacing.Xl),
-            style =
-                LocalScrollbarStyle.current.copy(
-                    thickness = 8.dp,
-                    unhoverColor = BuroColors.BorderSoft,
-                    hoverColor = BuroColors.Primary,
-                ),
-        )
     }
 }
 
@@ -243,6 +256,14 @@ class AccountSetupDraft {
      * Músicas entry.
      */
     val musicPlaylist = mutableStateOf<Path?>(null)
+
+    /**
+     * This profile's own TMDb key, blank when it should use the shared one.
+     *
+     * Held with the rest of the draft for the same reason as everything else here: a failed
+     * connection returns to this screen, and a key the user pasted must still be there.
+     */
+    val metadataKey = mutableStateOf("")
 }
 
 /**
@@ -273,8 +294,16 @@ fun AccountSetupGate(
         username: String,
         password: String,
         musicPlaylist: Path?,
+        /** This profile's own TMDb key; blank means it uses the shared one. */
+        metadataKey: String,
     ) -> Unit,
-    onUseSaved: (profileName: String, avatarIndex: Int, sourceId: String, musicPlaylist: Path?) -> Unit,
+    onUseSaved: (
+        profileName: String,
+        avatarIndex: Int,
+        sourceId: String,
+        musicPlaylist: Path?,
+        metadataKey: String,
+    ) -> Unit,
 ) {
     // Hoisted out of this composable so a failed connection can return here with everything the
     // user typed still in place. Held in remember alone, the state died with the screen and the
@@ -287,6 +316,7 @@ fun AccountSetupGate(
     var password by draft.password
     var reusedSourceId by draft.reusedSourceId
     var musicPlaylist by draft.musicPlaylist
+    var metadataKey by draft.metadataKey
     var revealPassword by remember { mutableStateOf(false) }
 
     val canSubmit =
@@ -423,12 +453,55 @@ fun AccountSetupGate(
             text = text,
         )
 
+        // The TMDb key belongs to the profile, so it is asked for here rather than in the settings
+        // menu — which is install-wide, and where a per-profile field read as another global one.
+        //
+        // Optional and blank by default: a household normally has one key, and leaving this empty
+        // inherits it. It is filled in when someone wants their own TMDb account's quota used —
+        // TMDb rate-limits per key, so several heavy users on one throttle each other.
+        Spacer(Modifier.height(BuroSpacing.Lg))
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = text.settingsText.profileKeyLabel,
+                    color = BuroColors.Text,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.width(BuroSpacing.Xs))
+                Text(
+                    // Reuses the music playlist's tag: it is the same word in all four languages,
+                    // and DesktopStrings is close enough to the JVM's argument ceiling that a
+                    // duplicate field would be a poor trade.
+                    text = text.musicPlaylistOptional,
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier =
+                        Modifier
+                            .clip(BuroRadius.Pill)
+                            .background(BuroColors.SurfaceRaised)
+                            .padding(horizontal = BuroSpacing.Xs, vertical = 2.dp),
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = text.settingsText.profileKeyHint,
+                color = BuroColors.TextMuted,
+                style = MaterialTheme.typography.labelSmall,
+            )
+            Spacer(Modifier.height(BuroSpacing.Xs))
+            OnboardingField(
+                value = metadataKey,
+                onValueChange = { metadataKey = it.trim() },
+                label = text.metadataKeyPlaceholder,
+            )
+        }
+
         Spacer(Modifier.height(BuroSpacing.Lg))
         Button(
             onClick = {
                 val saved = reusedSourceId
                 if (saved != null) {
-                    onUseSaved(profileName, avatarIndex, saved, musicPlaylist)
+                    onUseSaved(profileName, avatarIndex, saved, musicPlaylist, metadataKey)
                 } else {
                     onCreate(
                         profileName,
@@ -438,6 +511,7 @@ fun AccountSetupGate(
                         username,
                         password,
                         musicPlaylist,
+                        metadataKey,
                     )
                 }
             },

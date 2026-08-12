@@ -468,8 +468,9 @@ Se não houver correspondência confiável:
 
 - 7 dias grátis;
 - sem cartão no início;
-- € 9,99;
+- € 9,90 de preço-base;
 - compra única;
+- validade de 730 dias, sem renovação automática;
 - licença por dispositivo;
 - restauração vinculada ao recibo/conta;
 - futura opção de pacote familiar.

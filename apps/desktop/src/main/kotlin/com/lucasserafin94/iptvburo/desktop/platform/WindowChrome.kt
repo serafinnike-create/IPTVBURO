@@ -36,6 +36,18 @@ object WindowChrome {
             if (applied != 0) {
                 Dwm.INSTANCE.DwmSetWindowAttribute(hwnd, ATTRIBUTE_LEGACY, enabled, 4)
             }
+
+            // The window border, which the dark title bar does not cover.
+            //
+            // Windows draws a one-pixel frame around the window in its own accent colour, and on a
+            // light accent that is a pale line along the bottom edge of an otherwise black app. It
+            // is not part of the Compose scene — no amount of dark backgrounds inside reaches it —
+            // and it was reported as "a white line at the bottom".
+            //
+            // Windows 11 build 22000 and later only; the call simply returns an error on anything
+            // older, which is why it is not checked.
+            val border = com.sun.jna.ptr.IntByReference(BORDER_COLOUR)
+            Dwm.INSTANCE.DwmSetWindowAttribute(hwnd, ATTRIBUTE_BORDER_COLOUR, border, 4)
         }
     }
 
@@ -113,6 +125,18 @@ object WindowChrome {
     private const val ATTRIBUTE_MODERN = 20
     private const val ATTRIBUTE_LEGACY = 19
 
+    /** DWMWA_BORDER_COLOR. Windows 11 build 22000 and later; older builds return an error. */
+    private const val ATTRIBUTE_BORDER_COLOUR = 34
+
+    /**
+     * The border, painted as the app's own canvas rather than the system accent.
+     *
+     * COLORREF is 0x00BBGGRR — blue and red are the reverse of the usual hex order — so the app's
+     * `Canvas` of #08090A is written here as 0x000A0908. Matching it makes the frame disappear
+     * into the window instead of outlining it in whatever colour the user picked for Windows.
+     */
+    private const val BORDER_COLOUR = 0x000A0908
+
     private const val GWL_STYLE = -16
     private const val WS_OVERLAPPEDWINDOW = 0x00CF0000
     private const val MONITOR_DEFAULTTONEAREST = 2
@@ -162,6 +186,14 @@ object WindowChrome {
             hwnd: WinDef.HWND,
             attribute: Int,
             value: WinDef.BOOLByReference,
+            size: Int,
+        ): Int
+
+        /** The COLORREF overload, for the border colour. */
+        fun DwmSetWindowAttribute(
+            hwnd: WinDef.HWND,
+            attribute: Int,
+            value: com.sun.jna.ptr.IntByReference,
             size: Int,
         ): Int
 

@@ -2,11 +2,17 @@ package com.lucasserafin94.iptvburo.desktop
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.MusicLibraryLoader
 import com.lucasserafin94.iptvburo.desktop.data.SessionXtreamRepository
+import com.lucasserafin94.iptvburo.desktop.data.StreamingShelfDiskCache
+import com.lucasserafin94.iptvburo.metadata.TMDB_SERIES_NAMESPACE
+import com.lucasserafin94.iptvburo.metadata.TMDB_NAMESPACE
+import com.lucasserafin94.iptvburo.domain.model.ExternalTitleKind
+import com.lucasserafin94.iptvburo.domain.model.ExternalContentId
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceKind
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceSummary
 import com.lucasserafin94.iptvburo.desktop.model.ImportedCatalog
@@ -16,14 +22,29 @@ import com.lucasserafin94.iptvburo.desktop.model.XtreamSessionSummary
 import com.lucasserafin94.iptvburo.desktop.platform.ExternalOpenResult
 import com.lucasserafin94.iptvburo.desktop.platform.openUriExternally
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackRequest
+import com.lucasserafin94.iptvburo.desktop.playback.MultiviewTile
+import com.lucasserafin94.iptvburo.desktop.playback.SubtitleColour
+import com.lucasserafin94.iptvburo.desktop.playback.SubtitleSize
+import com.lucasserafin94.iptvburo.desktop.playback.SubtitleStyle
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackProgressCoordinator
 import com.lucasserafin94.iptvburo.desktop.security.XtreamLoginInput
 import com.lucasserafin94.iptvburo.desktop.security.RememberedXtreamStore
 import com.lucasserafin94.iptvburo.desktop.security.XtreamSource
 import com.lucasserafin94.iptvburo.desktop.security.XtreamSourceLibrary
+import com.lucasserafin94.iptvburo.desktop.license.LicenseClient
+import com.lucasserafin94.iptvburo.desktop.license.LicenseStatus
+import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.RememberedScroll
+import com.lucasserafin94.iptvburo.desktop.user.MusicCorrection
+import com.lucasserafin94.iptvburo.desktop.user.MusicCorrectionStore
+import com.lucasserafin94.iptvburo.desktop.user.CategoryPreferenceIdentity
+import com.lucasserafin94.iptvburo.domain.model.MusicTidyProposal
+import com.lucasserafin94.iptvburo.domain.model.MusicTidying
+import com.lucasserafin94.iptvburo.domain.model.shelfDeduplicationKey
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
+import com.lucasserafin94.iptvburo.desktop.user.StoredParentalLock
 import com.lucasserafin94.iptvburo.desktop.user.ListeningHistoryStore
 import com.lucasserafin94.iptvburo.desktop.user.MusicPlayCountStore
 import com.lucasserafin94.iptvburo.desktop.user.MusicPlaylistStore
@@ -57,6 +78,8 @@ import com.lucasserafin94.iptvburo.playlist.MusicPlaylistMapper
 import com.lucasserafin94.iptvburo.domain.model.PlaybackQueue
 import com.lucasserafin94.iptvburo.domain.model.QueueEntry
 import com.lucasserafin94.iptvburo.domain.model.QueueMediaKind
+import com.lucasserafin94.iptvburo.domain.model.ParentalLock
+import com.lucasserafin94.iptvburo.domain.model.ParentalPin
 import com.lucasserafin94.iptvburo.domain.model.PlaybackContentType
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressIdentity
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgress
@@ -66,6 +89,7 @@ import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
 import com.lucasserafin94.iptvburo.domain.model.HeroCandidate
 import com.lucasserafin94.iptvburo.domain.model.HeroSelection
+import com.lucasserafin94.iptvburo.domain.model.ViewerAffinity
 import com.lucasserafin94.iptvburo.domain.model.LibraryCandidate
 import com.lucasserafin94.iptvburo.domain.model.LibraryOfferPolicy
 import com.lucasserafin94.iptvburo.domain.model.asExternalCandidate
@@ -76,9 +100,10 @@ import com.lucasserafin94.iptvburo.domain.model.SeasonalCollections
 import com.lucasserafin94.iptvburo.domain.model.StreamingDiscoveryCapability
 import com.lucasserafin94.iptvburo.domain.model.StreamingDiscoveryProvider
 import com.lucasserafin94.iptvburo.domain.model.UserStreamingPreference
-import com.lucasserafin94.iptvburo.desktop.data.TmdbServiceShelf
+import com.lucasserafin94.iptvburo.metadata.TmdbServiceShelf
 import com.lucasserafin94.iptvburo.metadata.TmdbDiscoverKind
-import com.lucasserafin94.iptvburo.desktop.data.TmdbStreamingCatalogue
+import com.lucasserafin94.iptvburo.metadata.TmdbTitleDetails
+import com.lucasserafin94.iptvburo.metadata.TmdbStreamingCatalogue
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitle
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
@@ -99,8 +124,15 @@ import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+
+/** Provider ids are reused between film and series catalogues, so both parts form the cache key. */
+internal fun heroSynopsisKey(
+    contentType: XtreamContentType,
+    providerId: String,
+): String = "${contentType.name}:$providerId"
 
 @Stable
 class DesktopAppState(
@@ -122,7 +154,37 @@ class DesktopAppState(
      */
     private val listeningHistoryStore: ListeningHistoryStore = ListeningHistoryStore(legacyCounts = playCountStore),
     private val musicPlaylistStore: MusicPlaylistStore = MusicPlaylistStore(),
+    /** Names the user corrected, overlaid on the playlist each time it is read. */
+    private val correctionStore: MusicCorrectionStore = MusicCorrectionStore(),
+    val licenseClient: LicenseClient = LicenseClient(),
 ) {
+    /**
+     * What the licence server last said about this machine.
+     *
+     * Null while the first check is in flight, which is what the splash screen covers. Anything else
+     * is a decision: [LicenseStatus.allowsUse] tells the shell whether to show the app or the gate.
+     *
+     * Held here rather than checked where it is needed, because it must be asked exactly once per
+     * launch. A check per screen would be a network round trip every time the user navigated.
+     */
+    var licenseStatus by mutableStateOf<LicenseStatus?>(null)
+        private set
+
+    /**
+     * Runs the launch check.
+     *
+     * Off the main thread: it makes a network call, and a frozen window while somebody waits on a
+     * server is the thing that makes an application feel broken.
+     */
+    suspend fun checkLicense() {
+        val result = withContext(Dispatchers.IO) { licenseClient.check() }
+        licenseStatus = result
+    }
+
+    /** After the gate rechecks or redeems a key, so a newly paid customer gets in without a restart. */
+    fun onLicenseRechecked(status: LicenseStatus) {
+        licenseStatus = status
+    }
     /**
      * Cast metadata, keyed by the user's own TMDb key.
      *
@@ -132,6 +194,63 @@ class DesktopAppState(
 
     var metadataApiKey by mutableStateOf(userStore.metadataApiKey().orEmpty())
         private set
+
+    /**
+     * The key actually used for requests: this profile's own, then the shared one, then the
+     * bundled one.
+     *
+     * Three levels rather than two because each answers a different need. The bundled key makes the
+     * app work out of the box; the shared key is a household that pasted its own; a per-profile key
+     * is for the case where one person wants their own TMDb account's quota used — TMDb rate-limits
+     * per key, so several heavy users on one key throttle each other.
+     */
+    private fun effectiveMetadataKey(): String? =
+        userStore.effectiveMetadataApiKey(activeProfileId) ?: BUNDLED_TMDB_KEY.ifBlank { null }
+
+    /**
+     * This profile's own key, empty when it uses the shared one.
+     *
+     * Separate from [metadataApiKey], which is the shared value: the settings screen shows both, so
+     * it can say which is in use rather than leaving the user to guess.
+     */
+    // Starts empty rather than reading the store: `activeProfileId` is declared further down and is
+    // not initialised yet at this point. It is filled by the init block below, once the profile is
+    // known, and by every later profile switch.
+    var profileMetadataApiKey by mutableStateOf("")
+        private set
+
+    /**
+     * Sets or clears this profile's own key.
+     *
+     * Clearing it falls back to the shared key rather than switching metadata off, which is what
+     * makes "usar a mesma" the natural default: leave the field empty and the profile inherits.
+     */
+    fun updateProfileMetadataApiKey(value: String) {
+        val profileId = activeProfileId ?: return
+        profileMetadataApiKey = value
+        userStore.setProfileMetadataApiKey(profileId, value)
+        rebuildMetadataClients()
+    }
+
+    /**
+     * Rebuilds everything that bakes the key into its requests.
+     *
+     * Both clients, not one: Assinaturas has its own, and updating only the cast-photo client left
+     * the shelves on the previous key — a half-applied setting the user cannot diagnose.
+     */
+    private fun rebuildMetadataClients() {
+        val key = effectiveMetadataKey()
+        metadataClient = TmdbClient(key)
+        streamingCatalogue = buildStreamingCatalogue(key, streamingRegion)
+        shelfCache.clear()
+        // The disk cache is deliberately left alone. A key identifies who is asking, not what TMDb
+        // answers: the same region returns the same catalogue whoever holds the key, so the stored
+        // shelves are still correct. The forced load below fetches fresh ones regardless, and it
+        // bypasses the disk — so a user who has just fixed a broken key sees the result of the fix
+        // rather than yesterday's file.
+        streamingShelves = emptyList()
+        loadStreamingShelves(force = true)
+    }
 
     val isMetadataConfigured: Boolean
         get() = metadataClient.isConfigured
@@ -148,6 +267,14 @@ class DesktopAppState(
     private val castLookupsInFlight = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     /**
+     * How many faces to remember before dropping the oldest.
+     *
+     * Generous enough that a normal evening never evicts anything — a details page shows about a
+     * dozen — and finite so a session left open for a day cannot grow without bound.
+     */
+    private val MAX_CAST_PHOTOS = 600
+
+    /**
      * Fetches the photo for [name] if it has not been tried yet.
      *
      * A miss is cached as null, so a person TMDb does not know is not asked for again every time
@@ -158,26 +285,36 @@ class DesktopAppState(
         if (key.isBlank() || key in castPhotos || !metadataClient.isConfigured) return
         if (!castLookupsInFlight.add(key)) return
         val photo = withContext(Dispatchers.IO) { metadataClient.findPerson(name)?.profileImageUrl }
-        castPhotos = castPhotos + (key to photo)
+        // Bounded, because this app is left running for hours.
+        //
+        // Every actor ever seen was kept for the life of the session, along with its in-flight
+        // marker: browsing a few hundred titles in an evening accumulated thousands of entries that
+        // nothing ever released. Small individually, but it only ever grew.
+        //
+        // The oldest half goes when the cap is reached rather than one entry at a time — dropping a
+        // single name per insertion would evict a face that is on screen right now.
+        castPhotos =
+            if (castPhotos.size >= MAX_CAST_PHOTOS) {
+                castPhotos.entries.drop(castPhotos.size / 2).associate { it.key to it.value } +
+                    (key to photo)
+            } else {
+                castPhotos + (key to photo)
+            }
         castLookupsInFlight.remove(key)
     }
 
     fun castPhotoFor(name: String): String? = castPhotos[name.trim().lowercase(Locale.ROOT)]
 
+    /**
+     * Sets the shared key, used by every profile that has not set its own.
+     *
+     * Clearing it falls back to the bundled key rather than to nothing: emptying the field should
+     * restore the default behaviour, not switch cast photos off entirely.
+     */
     fun updateMetadataApiKey(value: String) {
         metadataApiKey = value
         userStore.setMetadataApiKey(value)
-        // Falling back to the bundled key rather than to nothing: clearing the field should restore
-        // the default behaviour, not switch cast photos off entirely.
-        val effectiveKey = value.takeIf(String::isNotBlank) ?: BUNDLED_TMDB_KEY.ifBlank { null }
-        metadataClient = TmdbClient(effectiveKey)
-        // Assinaturas has its own client and would otherwise keep using the previous key: pasting a
-        // personal key fixed cast photos while leaving the shelves on the old one, which is exactly
-        // the kind of half-applied setting a user cannot diagnose.
-        streamingCatalogue = buildStreamingCatalogue(effectiveKey, streamingRegion)
-        shelfCache.clear()
-        streamingShelves = emptyList()
-        loadStreamingShelves(force = true)
+        rebuildMetadataClients()
     }
     /**
      * Photo chosen during setup, before the profile it belongs to exists.
@@ -226,6 +363,9 @@ class DesktopAppState(
 
     var dailyHomeStatus by mutableStateOf<DailyHomeStatus>(DailyHomeStatus.Idle)
         private set
+
+    /** Rejects a Home snapshot built under an older profile or parental policy. */
+    private var dailyHomeRequestGeneration = 0L
 
     /**
      * Bumped whenever the Home must be rebuilt from a catalogue that has changed underneath it.
@@ -298,14 +438,34 @@ class DesktopAppState(
      * Restored from the store rather than defaulted, so the choice survives closing the app - the
      * point of offering it at all.
      */
-    var catalogLayout by mutableStateOf(
-        CatalogLayout.fromId(userStore.catalogLayout(initialUserSnapshot.activeProfileId)),
+    /**
+     * The layout of each section, kept apart.
+     *
+     * One shared value meant switching Films to a list also switched Series and Live — but the
+     * three are browsed differently. Posters suit films, a dense list suits four hundred live
+     * channels, and someone who wants both had to keep changing it back.
+     */
+    private var catalogLayouts by mutableStateOf(
+        XtreamContentType.entries.associateWith { type ->
+            CatalogLayout.fromId(userStore.catalogLayout(initialUserSnapshot.activeProfileId, type.name))
+        },
     )
-        private set
+
+    /** The layout of the section currently open. */
+    val catalogLayout: CatalogLayout
+        get() = catalogLayouts[xtreamContentType] ?: CatalogLayout.POSTER
 
     fun selectCatalogLayout(layout: CatalogLayout) {
-        catalogLayout = layout
-        activeProfileId?.let { profileId -> userStore.setCatalogLayout(profileId, layout.id) }
+        val type = xtreamContentType
+        catalogLayouts = catalogLayouts + (type to layout)
+        activeProfileId?.let { profileId -> userStore.setCatalogLayout(profileId, type.name, layout.id) }
+    }
+
+    private fun reloadCatalogLayouts() {
+        catalogLayouts =
+            XtreamContentType.entries.associateWith { type ->
+                CatalogLayout.fromId(userStore.catalogLayout(activeProfileId, type.name))
+            }
     }
 
     var xtreamSearchQuery by mutableStateOf("")
@@ -334,14 +494,29 @@ class DesktopAppState(
     private var xtreamPageRequestGeneration = 0L
 
     fun selectProfile(id: String?) {
-        activeProfileId = id?.takeIf { candidate -> profiles.any { it.id == candidate } }
+        val nextProfileId = id?.takeIf { candidate -> profiles.any { it.id == candidate } }
+        if (nextProfileId != activeProfileId) RememberedScroll.clear()
+        activeProfileId = nextProfileId
         userStore.setActiveProfile(activeProfileId)
         favoriteKeys = userStore.favoritesForProfile(activeProfileId)
-        catalogLayout = CatalogLayout.fromId(userStore.catalogLayout(activeProfileId))
+        reloadCatalogLayouts()
         xtreamCategories = visibleXtreamCategories(xtreamContentType)
         if (selectedXtreamCategoryId !in xtreamCategories.map(XtreamCategory::providerId)) {
             selectedXtreamCategoryId = null
         }
+        // The TMDb key can be per profile, so switching who is watching switches which key the
+        // requests carry. Without this the new profile would keep using the previous one's — and
+        // silently spend their quota.
+        profileMetadataApiKey = userStore.profileMetadataApiKey(activeProfileId).orEmpty()
+        rebuildMetadataClients()
+        // The parental lock and the hidden categories are per profile too, and both are read
+        // through the preferences store rather than from observed state.
+        // Session unlocks are per profile as well. Carrying one into the next profile let a Kids
+        // profile inherit a category the adult had opened with their PIN.
+        unlockedCategories.clear()
+        parentalRevision += 1
+        hiddenCategoriesRevision += 1
+        invalidateParentalBrowseSurfaces()
     }
 
     suspend fun selectProfileAndRefresh(id: String?) {
@@ -368,6 +543,60 @@ class DesktopAppState(
     }
 
     /**
+     * Renames a profile and changes its avatar or Kids setting.
+     *
+     * Everything here is cosmetic or local. Changing the *playlist* is a different operation with
+     * different consequences — it swaps the account the profile signs in to — and lives in
+     * [startEditingProfileSource] so that a rename cannot disconnect somebody by accident.
+     */
+    fun updateProfile(
+        profileId: String,
+        name: String,
+        isKids: Boolean,
+        avatarIndex: Int,
+    ) {
+        val clean = name.trim().take(24)
+        if (clean.isBlank()) return
+
+        val updated = profiles.map { profile ->
+            if (profile.id == profileId) {
+                profile.copy(name = clean, isKids = isKids, avatarIndex = avatarIndex)
+            } else {
+                profile
+            }
+        }
+        if (updated == profiles) return
+
+        // `profiles` is itself Compose state, so assigning it redraws every screen reading it —
+        // including the catalogue, which is what makes a Kids change take effect immediately rather
+        // than at the next launch.
+        profiles = updated
+        userStore.saveProfiles(profiles)
+    }
+
+    /**
+     * Opens the account step so an existing profile can be pointed at a different playlist.
+     *
+     * The same screen used when adding a profile, because the decision is the same one: reuse a
+     * connected account or enter another. [editingProfileId] is what tells that screen it is editing
+     * rather than creating, so it saves onto the existing profile instead of making a sixth.
+     */
+    fun startEditingProfileSource(profileId: String) {
+        if (profiles.none { it.id == profileId }) return
+        editingProfileId = profileId
+        onboarding = OnboardingStep.Account
+    }
+
+    /**
+     * The profile whose playlist is being changed, or null when the account step is adding one.
+     *
+     * Cleared whenever the step is left by any route, including cancelling — a stale value here
+     * would make the *next* profile creation silently overwrite this one instead.
+     */
+    var editingProfileId by mutableStateOf<String?>(null)
+        private set
+
+    /**
      * Opens the account step so a new profile can be given a playlist.
      *
      * Creating a profile from the gate only ever asked for a name and an avatar, so the choice
@@ -375,6 +604,7 @@ class DesktopAppState(
      * playlists — was reachable only during first-run setup.
      */
     fun startAddingProfile() {
+        editingProfileId = null
         onboarding = OnboardingStep.Account
     }
 
@@ -385,6 +615,9 @@ class DesktopAppState(
      * the step stays modal.
      */
     fun cancelAddingProfile() {
+        // Cleared on every exit, not only on success. A left-over value would make the next profile
+        // creation overwrite the profile that was being edited instead of adding one.
+        editingProfileId = null
         if (activeProfileId != null) onboarding = OnboardingStep.Done
     }
 
@@ -423,6 +656,7 @@ class DesktopAppState(
         downloads = emptyMap()
         profiles = emptyList()
         activeProfileId = null
+        unlockedCategories.clear()
         forgetSelectedSource()
     }
 
@@ -484,13 +718,33 @@ class DesktopAppState(
         input: XtreamLoginInput,
         /** Optional music M3U. Null is the ordinary case and leaves the app unchanged. */
         musicPlaylistPath: Path? = null,
+        /** This profile's own TMDb key. Blank is the ordinary case: it inherits the shared one. */
+        metadataKey: String = "",
     ) {
         onboarding = OnboardingStep.Connecting
         val server = input.copyServer()
         val username = input.copyUsername()
         val password = input.copyPassword()
         try {
-            connectXtream(input)
+            // Reported, because this is the longest wait the app ever asks for: a first catalogue
+            // read on a new account. Without a callback the preparation screen's bar sat at 0% for
+            // the whole of it, which is worse than showing no bar at all.
+            connectXtream(input) { fraction, stage ->
+                // Translated, unlike the older startup messages beside it: this screen is the first
+                // thing a new user of any language sees, and a Portuguese sentence under a German
+                // setup flow is simply a bug.
+                val text = DesktopStrings.of(language).settingsText
+                startupProgressWithin(
+                    from = 0f,
+                    to = 0.9f,
+                    fraction = fraction,
+                    message =
+                        when (stage) {
+                            is SessionXtreamRepository.XtreamLoadStage.Authenticating -> text.startupAuthenticating
+                            else -> text.startupOrganising
+                        },
+                )
+            }
             val status = xtreamStatus
             if (status is XtreamStatus.Error) {
                 onboarding = OnboardingStep.Failed(status.message)
@@ -498,18 +752,37 @@ class DesktopAppState(
             }
             val source = sourceLibrary.create(listLabel.ifBlank { profileName })
             sourceLibrary.store(source.id).save(server, username, password)
+
+            // Editing an existing profile rather than creating one.
+            //
+            // Only the playlist changes. Name, avatar and Kids belong to the editor dialog and are
+            // not on this screen, so taking them from here would silently overwrite them with this
+            // form's defaults — a user who came to change their playlist would find their profile
+            // renamed and no longer a Kids profile.
+            val existing = editingProfileId?.let { id -> profiles.firstOrNull { it.id == id } }
             val profile =
-                DesktopProfile(
-                    id = UUID.randomUUID().toString(),
-                    name = profileName.trim().ifBlank { "Meu perfil" },
-                    isKids = false,
-                    avatarIndex = avatarIndex,
-                    sourceId = source.id,
-                    musicPlaylistPath = musicPlaylistPath?.toString(),
-                )
-            profiles = listOf(profile) + profiles.filterNot { it.name == profile.name }
+                existing?.copy(sourceId = source.id)
+                    ?: DesktopProfile(
+                        id = UUID.randomUUID().toString(),
+                        name = profileName.trim().ifBlank { "Meu perfil" },
+                        isKids = false,
+                        avatarIndex = avatarIndex,
+                        sourceId = source.id,
+                        musicPlaylistPath = musicPlaylistPath?.toString(),
+                    )
+
+            profiles =
+                if (existing != null) {
+                    profiles.map { if (it.id == profile.id) profile else it }
+                } else {
+                    listOf(profile) + profiles.filterNot { it.name == profile.name }
+                }
+            editingProfileId = null
             userStore.saveProfiles(profiles)
             attachPendingPhoto(profile.id)
+            // Stored before selectProfile, which rebuilds the metadata clients: written after, the
+            // new profile's first requests would still carry the previous key.
+            if (metadataKey.isNotBlank()) userStore.setProfileMetadataApiKey(profile.id, metadataKey)
             selectProfile(profile.id)
             loadMusicLibrary()
             onboarding = OnboardingStep.Done
@@ -539,6 +812,8 @@ class DesktopAppState(
         sourceId: String,
         /** Optional music M3U, chosen per profile even when the video playlist is shared. */
         musicPlaylistPath: Path? = null,
+        /** This profile's own TMDb key. Blank is the ordinary case: it inherits the shared one. */
+        metadataKey: String = "",
     ) {
         val input = sourceLibrary.store(sourceId).load()
         if (input == null) {
@@ -552,24 +827,51 @@ class DesktopAppState(
             onboarding = OnboardingStep.Failed(status.message)
             return
         }
+        // Editing points the existing profile at this playlist instead of adding another. Only
+        // sourceId changes: the rest of the profile belongs to the editor dialog, not to this form.
+        val existing = editingProfileId?.let { id -> profiles.firstOrNull { it.id == id } }
         val profile =
-            DesktopProfile(
-                id = UUID.randomUUID().toString(),
-                name = profileName.trim().ifBlank { "Meu perfil" },
-                isKids = false,
-                avatarIndex = avatarIndex,
-                sourceId = sourceId,
-                musicPlaylistPath = musicPlaylistPath?.toString(),
-            )
-        profiles = profiles + profile
+            existing?.copy(sourceId = sourceId)
+                ?: DesktopProfile(
+                    id = UUID.randomUUID().toString(),
+                    name = profileName.trim().ifBlank { "Meu perfil" },
+                    isKids = false,
+                    avatarIndex = avatarIndex,
+                    sourceId = sourceId,
+                    musicPlaylistPath = musicPlaylistPath?.toString(),
+                )
+
+        profiles =
+            if (existing != null) {
+                profiles.map { if (it.id == profile.id) profile else it }
+            } else {
+                profiles + profile
+            }
+        editingProfileId = null
         userStore.saveProfiles(profiles)
         attachPendingPhoto(profile.id)
+        // Before selectProfile, which rebuilds the metadata clients from whichever key applies.
+        if (metadataKey.isNotBlank()) userStore.setProfileMetadataApiKey(profile.id, metadataKey)
         selectProfile(profile.id)
         loadMusicLibrary()
         onboarding = OnboardingStep.Done
     }
 
     fun isFavorite(item: XtreamCatalogItem): Boolean = favoriteKey(item) in favoriteKeys
+
+    /**
+     * Whether the title currently playing is a favourite, or null when it cannot be one.
+     *
+     * Null for a downloaded file or a local playlist entry: those have no catalogue item behind
+     * them, and a heart that cannot be pressed is worse than no heart.
+     */
+    val playingIsFavorite: Boolean?
+        get() = selectedXtreamItem?.let { item -> isFavorite(item) }
+
+    /** Adds or removes the title currently playing from favourites. */
+    fun togglePlayingFavorite() {
+        selectedXtreamItem?.let(::toggleFavorite)
+    }
 
     fun toggleFavorite(item: XtreamCatalogItem) {
         val profileId = activeProfileId ?: return
@@ -690,6 +992,86 @@ class DesktopAppState(
                 ?: xtreamPage.items.firstOrNull()
         }
 
+    /**
+     * Everything this profile has watched, most recent first.
+     *
+     * Unlike Continue watching, finished titles stay: the question is "what did I watch?", and a
+     * film seen to the end is the clearest answer there is.
+     */
+    /**
+     * What this profile tends to watch, for the home banner.
+     *
+     * Built from the categories of what has actually been opened — nothing more. It never leaves
+     * the machine, is rebuilt from history the user can clear at any time, and falls back to
+     * "unknown" until there are a few titles to learn from, which is the state a new installation
+     * has to look right in.
+     *
+     * Read on the calling thread and handed to the selection as a value, so the selection itself
+     * stays pure and the same day always produces the same banner.
+     */
+    private val viewerAffinity: ViewerAffinity
+        get() =
+            ViewerAffinity.from(
+                historyEntries.map { entry -> entry.item.categoryIds },
+            )
+
+    val historyEntries: List<DesktopContinueWatchingEntry>
+        get() {
+            // Read so Compose re-runs this when an entry is forgotten; the store is not observable.
+            @Suppress("UNUSED_EXPRESSION")
+            continueWatchingRevision
+            val profileId = activeProfileId ?: return emptyList()
+            val lockedByType =
+                mapOf(
+                    XtreamContentType.MOVIE to lockedCategoryIdsForBrowsing(XtreamContentType.MOVIE),
+                    XtreamContentType.SERIES to lockedCategoryIdsForBrowsing(XtreamContentType.SERIES),
+                )
+            val kidsMode = activeProfile?.isKids == true
+            return playbackProgressCoordinator
+                .history(profileId, HISTORY_LIMIT)
+                .mapNotNull { progress ->
+                    val item =
+                        when (progress.identity.contentType) {
+                            PlaybackContentType.MOVIE ->
+                                xtreamRepository.itemByContentKey(
+                                    XtreamContentType.MOVIE,
+                                    progress.identity.contentId,
+                                )
+                            PlaybackContentType.EPISODE ->
+                                progress.identity.seriesId?.let { seriesId ->
+                                    xtreamRepository.itemByProviderId(XtreamContentType.SERIES, seriesId)
+                                }
+                        }
+                    item
+                        ?.takeIf { found ->
+                            xtreamRepository.isAllowedForBrowsing(
+                                found,
+                                kidsMode,
+                                lockedByType[found.contentType].orEmpty(),
+                            )
+                        }?.let { found -> DesktopContinueWatchingEntry(found, progress) }
+                }
+        }
+
+    /** Forgets one title. The file and any download are untouched — this is only the record. */
+    fun forgetHistoryEntry(entry: DesktopContinueWatchingEntry) {
+        playbackProgressCoordinator.forget(entry.progress.identity)
+        continueWatchingRevision += 1
+    }
+
+    /** Forgets everything this profile has watched. */
+    fun clearHistory() {
+        val profileId = activeProfileId ?: return
+        playbackProgressCoordinator.clearHistory(profileId)
+        continueWatchingRevision += 1
+    }
+
+    /** Opens the history section. */
+    fun openHistory() {
+        favoritesOnly = false
+        destination = DesktopDestination.HISTORY
+    }
+
     val continueWatchingEntries: List<DesktopContinueWatchingEntry>
         get() {
             // Read so Compose re-runs this when an entry is forgotten. The list comes from the
@@ -697,6 +1079,12 @@ class DesktopAppState(
             @Suppress("UNUSED_EXPRESSION")
             continueWatchingRevision
             val profileId = activeProfileId ?: return emptyList()
+            val lockedByType =
+                mapOf(
+                    XtreamContentType.MOVIE to lockedCategoryIdsForBrowsing(XtreamContentType.MOVIE),
+                    XtreamContentType.SERIES to lockedCategoryIdsForBrowsing(XtreamContentType.SERIES),
+                )
+            val kidsMode = activeProfile?.isKids == true
             return playbackProgressCoordinator.continueWatching(profileId)
                 .asSequence()
                 // No source filter. Progress is recorded against LIBRARY_SCOPE so it survives a
@@ -716,7 +1104,14 @@ class DesktopAppState(
                                 xtreamRepository.itemByProviderId(XtreamContentType.SERIES, it)
                             }
                     }
-                    item?.let { DesktopContinueWatchingEntry(it, progress) }
+                    item
+                        ?.takeIf { found ->
+                            xtreamRepository.isAllowedForBrowsing(
+                                found,
+                                kidsMode,
+                                lockedByType[found.contentType].orEmpty(),
+                            )
+                        }?.let { found -> DesktopContinueWatchingEntry(found, progress) }
                 }
                 .toList()
         }
@@ -820,6 +1215,7 @@ class DesktopAppState(
         // profile. Carrying it across would leave rows that either resolve to nothing or, worse,
         // resolve to a different track that happens to reuse the id.
         playbackQueue = PlaybackQueue.EMPTY
+        val profileId = activeProfileId
         val path = activeProfile?.musicPlaylistPath
         if (path.isNullOrBlank()) {
             musicLibrary = MusicLibrary.EMPTY
@@ -827,11 +1223,157 @@ class DesktopAppState(
         }
         val loaded =
             withContext(Dispatchers.IO) {
-                runCatching { musicLoader.load(Path.of(path)) }.getOrNull()
+                runCatching {
+                    applyCorrections(
+                        musicLoader.load(Path.of(path)) ?: MusicLibrary.EMPTY,
+                        profileId,
+                    )
+                }.getOrNull()
             }
+        // A fast profile switch can leave the older disk read finishing last. Never publish that
+        // library (or its corrections) into the profile that is now active.
+        if (activeProfileId != profileId) return
+        // Corrections are applied once, here, rather than at each place a name is displayed.
+        // Anything downstream — shelves, artist grouping, search, the queue — then works from the
+        // corrected names without knowing corrections exist, which is what stops a track appearing
+        // under its tidy name on one screen and its filename on another.
         musicLibrary = loaded ?: MusicLibrary.EMPTY
         reloadMusicUserData()
     }
+
+    /**
+     * Overlays this profile's corrections onto a freshly parsed library.
+     *
+     * The artist and genre groupings are rebuilt rather than carried over, because they are derived
+     * from the names: correcting "01 - Pink Floyd - Time.mp3" and leaving the groupings alone would
+     * fix the track's label while still filing it under an artist called "01".
+     *
+     * Returns the library untouched when there is nothing to apply, so the ordinary case costs one
+     * map lookup rather than a rebuild.
+     */
+    private fun applyCorrections(
+        library: MusicLibrary,
+        profileId: String? = activeProfileId,
+    ): MusicLibrary {
+        val corrections = correctionStore.correctionsFor(profileId)
+        if (corrections.isEmpty() || library.isEmpty) return library
+
+        var changed = false
+        val tracks = library.tracks.map { track ->
+            val correction = corrections[track.id] ?: return@map track
+            changed = true
+            track.copy(title = correction.title, artist = correction.artist)
+        }
+        if (!changed) return library
+
+        return MusicLibrary(
+            tracks = tracks,
+            artists = MusicPlaylistMapper.artistsFrom(tracks),
+            genres = MusicPlaylistMapper.genresFrom(tracks),
+        )
+    }
+
+    /**
+     * What a bulk tidy would change, without changing anything.
+     *
+     * Computed on demand rather than held, because it is only wanted while the workshop is open and
+     * it changes with every correction the user makes.
+     */
+    fun musicTidyProposals(): List<MusicTidyProposal> =
+        MusicTidying.proposalsFor(musicLibrary.tracks)
+
+    /** Groups of tracks that appear to be the same recording, for the workshop's duplicate view. */
+    fun musicDuplicateGroups(): List<List<MusicTrack>> =
+        MusicTidying.duplicateGroups(musicLibrary.tracks)
+
+    /** Groups sharing one stream address, which is a certainty rather than a judgement. */
+    fun musicSameAddressGroups(): List<List<MusicTrack>> =
+        MusicTidying.sameAddressGroups(musicLibrary.tracks)
+
+    /** Applies one correction and rebuilds the library so every screen sees it at once. */
+    suspend fun correctMusicTrack(
+        trackId: String,
+        title: String,
+        artist: String?,
+    ): Boolean {
+        val clean = title.trim()
+        if (clean.isBlank()) return false
+
+        val profileId = activeProfileId
+        val stored =
+            withContext(Dispatchers.IO) {
+                correctionStore.put(
+                    profileId,
+                    MusicCorrection(trackId = trackId, title = clean, artist = artist?.trim()?.takeIf(String::isNotBlank)),
+                )
+            }
+        if (!stored || activeProfileId != profileId) return false
+        rebuildMusicLibrary()
+        return true
+    }
+
+    /** Applies every proposal from a tidy at once. */
+    suspend fun applyMusicTidy(proposals: List<MusicTidyProposal>): Int {
+        if (proposals.isEmpty()) return 0
+        val profileId = activeProfileId
+        val stored =
+            withContext(Dispatchers.IO) {
+                correctionStore.putAll(
+                    profileId,
+                    proposals.map { proposal ->
+                        MusicCorrection(proposal.trackId, proposal.title, proposal.artist)
+                    },
+                )
+            }
+        if (activeProfileId != profileId) return stored
+        rebuildMusicLibrary()
+        return stored
+    }
+
+    /** Restores one track to whatever the playlist says. */
+    suspend fun undoMusicCorrection(trackId: String) {
+        val profileId = activeProfileId
+        withContext(Dispatchers.IO) { correctionStore.remove(profileId, trackId) }
+        if (activeProfileId != profileId) return
+        rebuildMusicLibrary()
+    }
+
+    /** Undoes every correction, which is the way back from a tidy the user did not want. */
+    suspend fun undoAllMusicCorrections() {
+        val profileId = activeProfileId
+        withContext(Dispatchers.IO) { correctionStore.clear(profileId) }
+        if (activeProfileId != profileId) return
+        rebuildMusicLibrary()
+    }
+
+    /** How many tracks currently carry a correction, for the workshop to report. */
+    fun musicCorrectionCount(): Int = correctionStore.correctionsFor(activeProfileId).size
+
+    /**
+     * Re-reads the playlist and re-applies corrections.
+     *
+     * From disk rather than from memory: an undo has to recover the original name, and the only
+     * place that still holds it is the file.
+     */
+    private suspend fun rebuildMusicLibrary() {
+        val profileId = activeProfileId
+        val path = activeProfile?.musicPlaylistPath ?: return
+        val rebuilt =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    musicLoader.load(Path.of(path))?.let { parsed ->
+                        applyCorrections(parsed, profileId)
+                    }
+                }.getOrNull()
+            } ?: return
+        if (activeProfileId != profileId) return
+        musicLibrary = rebuilt
+        musicRevision += 1
+    }
+
+    /** Bumped whenever corrections change, so screens reading the library redraw. */
+    var musicRevision by mutableStateOf(0)
+        private set
 
     /**
      * Reloads the per-profile music data that lives beside the library: history and playlists.
@@ -951,6 +1493,62 @@ class DesktopAppState(
     var streamingShelves by mutableStateOf<List<TmdbServiceShelf>>(emptyList())
         private set
 
+    /**
+     * Synopsis for the title currently in the home banner, keyed by content type and provider id.
+     *
+     * The banner had a fixed sentence about the daily selection where the film's own description
+     * belongs — the largest text on the screen said nothing about what the user was looking at. The
+     * catalogue item carries no plot; it comes from a separate details call, so it is fetched in the
+     * background and the banner shows the fixed line until it lands.
+     */
+    private var heroSynopsis by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
+
+    fun heroSynopsisFor(item: XtreamCatalogItem): String? =
+        heroSynopsis[heroSynopsisKey(item.contentType, item.providerId)]
+
+    /**
+     * Fetches the synopsis for a banner title, once.
+     *
+     * Cached by content type plus provider id so the ten-second rotation does not re-fetch the same
+     * five titles all day. Provider ids alone are unsafe because Xtream commonly reuses them across
+     * film and series catalogues. Failures are silent: the banner falls back to its fixed line.
+     */
+    fun loadHeroSynopsis(item: XtreamCatalogItem) {
+        // Series as well as films. Only films were fetched, so a series in the banner — which the
+        // daily selection shows as often as a film — always fell back to the fixed line about the
+        // selection itself, which reads as a description of the title and describes nothing.
+        //
+        // Live channels are excluded: a channel has no plot, and asking for one is a request that
+        // can only fail.
+        val fetch: suspend () -> String? =
+            when (item.contentType) {
+                XtreamContentType.MOVIE -> {
+                    { xtreamRepository.movieDetails(item.providerId).plot }
+                }
+                XtreamContentType.SERIES -> {
+                    { xtreamRepository.seriesDetails(item.providerId).plot }
+                }
+                else -> return
+            }
+
+        val cacheKey = heroSynopsisKey(item.contentType, item.providerId)
+        if (heroSynopsis.containsKey(cacheKey)) return
+        val requestGeneration = dailyHomeRequestGeneration
+
+        streamingScope.launch {
+            val plot =
+                runCatching { withContext(Dispatchers.IO) { fetch() } }
+                    .getOrNull()
+                    ?.takeIf(String::isNotBlank)
+                    ?: return@launch
+            // A profile/provider/policy switch invalidates the Home while this network request is
+            // running. Its old synopsis must not be published into the new catalogue afterwards.
+            if (requestGeneration != dailyHomeRequestGeneration) return@launch
+            heroSynopsis = heroSynopsis + (cacheKey to plot)
+        }
+    }
+
     /** Which kind of title the shelves are showing. */
     var streamingKind by mutableStateOf(TmdbDiscoverKind.MOVIES)
         private set
@@ -961,7 +1559,34 @@ class DesktopAppState(
      * Each kind is a full round of requests — one per service — and re-fetching on every tap of a
      * filter would make the buttons feel broken on a slow connection.
      */
-    private val shelfCache = mutableMapOf<TmdbDiscoverKind, List<TmdbServiceShelf>>()
+    private val shelfCache =
+        // Concurrent, not a plain HashMap. It is written from the loader coroutine on
+        // Dispatchers.Default and read and cleared from the UI thread — switching filter, changing
+        // region, pasting a new API key. Two threads on a HashMap can corrupt its internal table,
+        // and the classic symptom is a lookup that never returns.
+        java.util.concurrent.ConcurrentHashMap<TmdbDiscoverKind, List<TmdbServiceShelf>>()
+
+    /**
+     * The same shelves, kept between sessions.
+     *
+     * [shelfCache] lives only as long as the window, so every launch re-fetched the whole section —
+     * one request per service, per kind — before anything could be shown, and threw the result away
+     * on close. What a service is carrying changes over days, so a day-old answer is the right one
+     * to open with while a fresh one is fetched behind it.
+     */
+    private val shelfDiskCache = StreamingShelfDiskCache()
+
+    /**
+     * Stops background work that outlives the window.
+     *
+     * [streamingScope] is deliberately not tied to a composable — leaving the screen mid-load must
+     * not strand the section empty — which means nothing else ever cancels it. On close that leaves
+     * TMDb requests in flight against a window that is gone, holding the process open until they
+     * time out.
+     */
+    fun dispose() {
+        streamingScope.cancel()
+    }
 
     /** Switches the shelves between films, series and upcoming releases. */
     fun selectStreamingKind(kind: TmdbDiscoverKind) {
@@ -1001,20 +1626,54 @@ class DesktopAppState(
             println("[streaming] $kind already cached, skipping")
             return
         }
+
+        // Yesterday's answer, shown at once.
+        //
+        // Read before anything is fetched, so a returning user opens the section on a full page of
+        // covers instead of on a spinner. The disk cache expires itself after a day, so a hit here
+        // is by definition still current — there is nothing further to fetch.
+        if (!force) {
+            val region = streamingRegion
+            val stored = shelfDiskCache.read(kind, region)
+            if (!stored.isNullOrEmpty()) {
+                println("[streaming] $kind restored ${stored.size} shelves from disk")
+                shelfCache[kind] = stored
+                if (streamingKind == kind) streamingShelves = stored
+                return
+            }
+        }
         println("[streaming] loading $kind shelves for region $streamingRegion")
 
         streamingLoading = true
+        // Captured here, on the UI thread, for the same reason the kind is: both can change while
+        // the request is in flight, and the cache is keyed on them.
+        val requestedRegion = streamingRegion
         streamingScope.launch {
             val loaded =
                 runCatching { catalogue.shelves(kind) }
                     .onFailure { error ->
                         // Printed rather than swallowed. An empty section and a crashed load look
                         // identical on screen, and this one hid a null scope for a whole build.
-                        // The message carries no URL or key — only the failure type.
-                        println("[streaming] shelf load failed: ${error::class.simpleName}: ${error.message}")
+                        //
+                        // The type only, never the message. TMDb takes the API key as a query
+                        // parameter, and OkHttp puts the full request URL into its IOException
+                        // messages — so printing `error.message` could put the user's own key on
+                        // the console. The failure type is what distinguishes the cases anyone
+                        // actually needs to tell apart.
+                        println("[streaming] shelf load failed: ${error::class.simpleName}")
                     }.getOrDefault(emptyList())
             println("[streaming] loaded ${loaded.size} $kind shelves")
             shelfCache[kind] = loaded
+            // Kept for tomorrow. The region is the one this request was issued for, read before the
+            // suspend rather than after: a user who changes country mid-fetch would otherwise have
+            // the old country's shelves written under the new country's name, and see the wrong
+            // catalogue every launch for a day.
+            shelfDiskCache.write(kind, requestedRegion, loaded)
+            // Cleared unconditionally, before the early return below. It used to be cleared only on
+            // the path that also assigned the shelves, so switching filter mid-load left the flag
+            // set for ever — and the guard at the top of this function then refused every later
+            // load, leaving the streaming section permanently empty for that session.
+            streamingLoading = false
             // Only if the user has not switched filters while this was in flight — otherwise a slow
             // request would overwrite the shelves they are now looking at.
             if (streamingKind != kind) return@launch
@@ -1023,10 +1682,7 @@ class DesktopAppState(
             // never ran its body: the shelves loaded, the log said so, and the screen stayed empty
             // because the state was never actually set. Snapshot state is safe to write from any
             // thread; every other loader in this class does the same.
-            run {
-                streamingShelves = loaded
-                streamingLoading = false
-            }
+            streamingShelves = loaded
         }
     }
 
@@ -1050,6 +1706,10 @@ class DesktopAppState(
         // The old region's shelves are wrong now, so they go rather than lingering under a new
         // label — including the cached ones for the filters the user is not currently looking at.
         shelfCache.clear()
+        // The stored ones too. They carry the old region in their header and would be rejected on
+        // read anyway, but leaving them means a user who switches back and forth gets an answer for
+        // a country they left — and the files would sit there unread for ever otherwise.
+        shelfDiskCache.clear()
         streamingShelves = emptyList()
         streamingOffers = OfferRanking.EMPTY
         loadStreamingShelves(force = true)
@@ -1089,10 +1749,16 @@ class DesktopAppState(
         val localOnly = LibraryOfferPolicy.withLibraryOffer(emptyList(), candidate, libraryMatchCandidates())
         selectedStreamingTitle = ExternalTitleDetails(title = title, offers = localOnly)
         streamingOffers = BestOfferPolicy.rank(localOnly, streamingPreference)
+        // Dropped before the new lookup starts, or the previous film's artwork shows under this
+        // film's name for as long as the request takes.
+        streamingPage = null
         destination = DesktopDestination.SUBSCRIPTIONS
         streamingLoading = true
 
         streamingScope.launch {
+            // The page and the availability are independent: a synopsis is worth showing even when
+            // nobody can say where the film streams, and the reverse.
+            streamingPage = runCatching { catalogue.pageFor(title) }.getOrNull()
             val details = runCatching { catalogue.detailsFor(title) }.getOrNull()
             val offers =
                 LibraryOfferPolicy.withLibraryOffer(
@@ -1109,6 +1775,15 @@ class DesktopAppState(
 
     /** The title whose offers are on screen, so the local copy can be resolved when pressed. */
     var selectedStreamingTitle by mutableStateOf<ExternalTitleDetails?>(null)
+        private set
+
+    /**
+     * Artwork, synopsis, cast and trailer for the title on screen.
+     *
+     * Null while loading and when TMDb knows nothing. The screen draws what it has rather than
+     * waiting for everything — most of the page is worth showing without the rest.
+     */
+    var streamingPage by mutableStateOf<TmdbTitleDetails?>(null)
         private set
 
     /**
@@ -1179,13 +1854,25 @@ class DesktopAppState(
      * owns. The question is about the library, so it has to be asked of the library.
      */
     private fun libraryMatchCandidates(): List<LibraryCandidate> =
-        runCatching { xtreamRepository.libraryMatchCandidates() }.getOrDefault(emptyList())
+        runCatching {
+            xtreamRepository.libraryMatchCandidates(
+                kidsMode = activeProfile?.isKids == true,
+                lockedCategoryIdsByContentType =
+                    mapOf(
+                        XtreamContentType.MOVIE to lockedCategoryIdsForBrowsing(XtreamContentType.MOVIE),
+                        XtreamContentType.SERIES to lockedCategoryIdsForBrowsing(XtreamContentType.SERIES),
+                    ),
+            )
+        }.getOrDefault(emptyList())
 
     /** Opens the Assinaturas area at its shelves, loading them if this is the first visit. */
     fun openSubscriptions() {
         favoritesOnly = false
         streamingOffers = OfferRanking.EMPTY
         selectedStreamingTitle = null
+        // Cleared with the selection, or the previous film's artwork and synopsis would sit behind
+        // the next one until its own lookup returned.
+        streamingPage = null
         destination = DesktopDestination.SUBSCRIPTIONS
         loadStreamingShelves()
     }
@@ -1205,7 +1892,406 @@ class DesktopAppState(
                 )
             }
 
-    /** Records which services this profile says it pays for. */
+    /**
+     * Bumped whenever the parental lock changes, so the settings screen redraws.
+     *
+     * The preferences store is not observable state: everything below reads through it, so setting
+     * a PIN or locking a category wrote to disk and changed nothing on screen. The switches simply
+     * did not move.
+     */
+    var parentalRevision by mutableStateOf(0)
+        private set
+
+    /** Rejects parental refreshes started before a newer setting was saved. */
+    private var parentalPolicyGeneration = 0L
+
+    /**
+     * The active profile's parental lock, as the policy consumes it.
+     *
+     * Read fresh rather than cached: switching profile must switch the lock, and a stale copy here
+     * would leave a child's session governed by the parent's settings.
+     */
+    val parentalLock: ParentalLock
+        get() {
+            // Read so Compose re-runs this when the lock changes.
+            @Suppress("UNUSED_EXPRESSION")
+            parentalRevision
+            return userStore.parentalLock(activeProfileId).let { stored ->
+                ParentalLock(
+                    lockedCategoryIds = explicitCategoryIds(xtreamContentType, stored.lockedCategoryIds),
+                    lockAdultCategories = stored.lockAdultCategories,
+                )
+            }
+        }
+
+    /** Whether this profile has a PIN at all. Without one nothing can be asked for. */
+    val hasParentalPin: Boolean
+        get() {
+            @Suppress("UNUSED_EXPRESSION")
+            parentalRevision
+            return userStore.parentalLock(activeProfileId).hasPin
+        }
+
+    /**
+     * Category ids unlocked for this session.
+     *
+     * Held in memory only: entering the PIN opens a category until the app closes, and persisting
+     * that would mean a lock that quietly stopped applying after the first time it was satisfied.
+     */
+    private val unlockedCategories = mutableStateListOf<String>()
+
+    /**
+     * Every category whose content must stay out of listings and search this session.
+     *
+     * A category the user has already unlocked is absent, which is the whole point of unlocking:
+     * once the PIN has been given, its titles behave like any other.
+     */
+    fun lockedCategoryIdsForBrowsing(
+        contentType: XtreamContentType = xtreamContentType,
+    ): Set<String> {
+        // Read once, not once per category. `hasParentalPin` and `parentalLock` each hit the Java
+        // Preferences store and re-parse a packed string, and this runs on every page of the
+        // catalogue — with a provider's several hundred categories that was several hundred
+        // preference reads per keystroke in the search box.
+        val stored = userStore.parentalLock(activeProfileId)
+        if (!stored.hasPin) return emptySet()
+        val lock = ParentalLock(lockAdultCategories = stored.lockAdultCategories)
+        return xtreamRepository.categories(contentType)
+            .filter { category ->
+                val identity = CategoryPreferenceIdentity.scoped(contentType, category.providerId)
+                identity !in unlockedCategories &&
+                    (CategoryPreferenceIdentity.matches(stored.lockedCategoryIds, contentType, category.providerId) ||
+                        lock.requiresPin(null, category.name))
+            }.map(XtreamCategory::providerId)
+            .toSet()
+    }
+
+    private fun explicitCategoryIds(
+        contentType: XtreamContentType,
+        storedIds: Set<String>,
+    ): Set<String> =
+        xtreamRepository.categories(contentType)
+            .asSequence()
+            .filter { category ->
+                CategoryPreferenceIdentity.matches(storedIds, contentType, category.providerId)
+            }.map(XtreamCategory::providerId)
+            .toSet()
+
+    /**
+     * Channels chosen for the multiview grid, in the order they were added.
+     *
+     * Live only, and deliberately so. Four films at once is not something anyone wants; four
+     * matches at once is the thing people buy a second screen for, and it is the one case where
+     * running several engines is worth what it costs.
+     *
+     * Provider ids rather than items, so a catalogue refresh underneath does not leave the grid
+     * holding stale copies.
+     */
+    var multiviewChannelIds by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** Whether the grid is on screen. Separate from its contents, which survive closing it. */
+    var multiviewOpen by mutableStateOf(false)
+        private set
+
+    /**
+     * How many tiles this subscription can actually sustain.
+     *
+     * Providers cap simultaneous connections per account, and exceeding the cap does not produce an
+     * error — the provider simply stops sending on the older streams. From inside the app that looks
+     * exactly like tiles going black for no reason, which is what it looked like for days: four
+     * channels started, two kept playing, two ended after about five seconds each.
+     *
+     * The number comes from the provider's own `max_connections`, which the client has always read
+     * and nothing has ever used. Where it is unknown, the app's own cap of four applies — a guess
+     * that is too low would take away a feature somebody has paid for.
+     *
+     * One connection is reserved for nothing: multiview is the only thing playing while it is open.
+     */
+    val multiviewCapacity: Int
+        get() =
+            (xtreamSummary?.account?.maximumConnections ?: MAX_MULTIVIEW_TILES)
+                .coerceIn(1, MAX_MULTIVIEW_TILES)
+
+    /**
+     * Adds or removes a channel from the grid.
+     *
+     * Capped at four: beyond that each tile is too small to follow and the machine is running four
+     * decoders for pictures nobody can read. Capped again at what the subscription allows, because
+     * queueing a fifth stream a provider will refuse only produces a black rectangle.
+     */
+    fun toggleMultiviewChannel(providerId: String) {
+        multiviewChannelIds =
+            when {
+                providerId in multiviewChannelIds -> multiviewChannelIds - providerId
+                multiviewChannelIds.size >= multiviewCapacity -> multiviewChannelIds
+                else -> multiviewChannelIds + providerId
+            }
+    }
+
+    fun openMultiview() {
+        // Logged because this has now failed to open for three separate reasons, each looking the
+        // same from outside: the screen simply did not change. The counts say which stage lost it —
+        // nothing queued, or queued but nothing resolvable.
+        val queued = multiviewChannelIds.size
+        val resolvable = multiviewTiles().size
+        println("multiview: opening with $queued queued, $resolvable playable")
+
+        // Opened whatever the state, so the overlay can explain itself.
+        //
+        // Returning early is what made this look dead: with nothing queued the button did nothing
+        // at all, and the user had no way to learn that channels must be added first. The overlay
+        // says so instead.
+        multiviewOpen = true
+    }
+
+    fun closeMultiview() {
+        multiviewOpen = false
+    }
+
+    /** Empties the grid, which also closes it: an empty multiview has nothing to show. */
+    fun clearMultiview() {
+        multiviewChannelIds = emptyList()
+        multiviewOpen = false
+    }
+
+    /**
+     * The grid's tiles, resolved to playable requests.
+     *
+     * Built on demand rather than stored: a channel that has left the catalogue since it was chosen
+     * simply drops out, instead of leaving a tile that plays nothing.
+     */
+    fun multiviewTiles(): List<MultiviewTile> =
+        multiviewChannelIds.mapNotNull { providerId ->
+            val item =
+                xtreamRepository.itemByProviderId(XtreamContentType.LIVE, providerId)
+                    // Logged, because a tile that vanishes here takes the whole feature with it when
+                    // every channel does the same: the overlay opens with nothing in it and the user
+                    // sees a button that appears to do nothing. Only the reason, never the provider
+                    // id's stream URL.
+                    ?: run {
+                        println("multiview: channel no longer in catalogue")
+                        return@mapNotNull null
+                    }
+            val request =
+                prepareXtreamPlayback(
+                    XtreamPlaybackTarget.CatalogItem(
+                        providerId = item.providerId,
+                        contentType = item.contentType,
+                        containerExtension = item.containerExtension,
+                        contentKey = item.contentIdentity().key,
+                    ),
+                    item.name,
+                    0L,
+                ) ?: run {
+                    println("multiview: could not resolve a stream for a queued channel")
+                    return@mapNotNull null
+                }
+            MultiviewTile(providerId = item.providerId, request = request, title = item.name)
+        }
+
+    /** Whether [categoryId] is currently behind the PIN. */
+    fun isCategoryLocked(
+        categoryId: String?,
+        categoryName: String?,
+        contentType: XtreamContentType = xtreamContentType,
+    ): Boolean {
+        if (!hasParentalPin) return false
+        val identity = categoryId?.let { id -> CategoryPreferenceIdentity.scoped(contentType, id) }
+        if (identity != null && identity in unlockedCategories) return false
+        val stored = userStore.parentalLock(activeProfileId)
+        if (categoryId != null &&
+            CategoryPreferenceIdentity.matches(stored.lockedCategoryIds, contentType, categoryId)
+        ) {
+            return true
+        }
+        return stored.lockAdultCategories && ParentalLock(lockAdultCategories = true).requiresPin(null, categoryName)
+    }
+
+    /**
+     * Checks [pin] and, when it is right, unlocks [categoryId] for this session.
+     *
+     * Returns false for a wrong PIN and for a profile with none — the caller shows the same refusal
+     * either way, because telling them apart would say whether a PIN exists.
+     */
+    fun unlockCategory(
+        categoryId: String?,
+        pin: String,
+        contentType: XtreamContentType = xtreamContentType,
+    ): Boolean {
+        val stored = userStore.parentalLock(activeProfileId)
+        val salt = stored.salt ?: return false
+        val hash = stored.hash ?: return false
+        if (!ParentalPin(salt, hash).matches(pin)) return false
+        categoryId?.let { id ->
+            val identity = CategoryPreferenceIdentity.scoped(contentType, id)
+            if (identity !in unlockedCategories) unlockedCategories += identity
+        }
+        return true
+    }
+
+    /**
+     * The category waiting on the PIN, or null when nothing is.
+     *
+     * Kept here rather than in a screen so the lock cannot be bypassed by reaching the catalogue
+     * some other way: every path into a category goes through [selectXtreamCategory], and that is
+     * where the question is asked.
+     */
+    var pendingPinCategory by mutableStateOf<XtreamCategory?>(null)
+        private set
+
+    /** Abandons the PIN prompt, leaving the category unopened. */
+    fun dismissPinPrompt() {
+        pendingPinCategory = null
+    }
+
+    /**
+     * Answers the pending prompt.
+     *
+     * On success the category is unlocked for this session and opened; on failure the prompt stays
+     * up so the attempt can be repeated, and the caller reports a wrong PIN.
+     */
+    suspend fun submitPendingPin(pin: String): Boolean {
+        val category = pendingPinCategory ?: return false
+        if (!unlockCategory(category.providerId, pin, category.contentType)) return false
+        pendingPinCategory = null
+        openXtreamCategory(category.providerId)
+        return true
+    }
+
+    /**
+     * Sets or changes the PIN.
+     *
+     * Returns false when [pin] is not four digits, or when a PIN already exists and [currentPin]
+     * does not match it — changing a lock must require opening it first.
+     */
+    fun setParentalPin(
+        pin: String,
+        currentPin: String? = null,
+    ): Boolean {
+        val profileId = activeProfileId ?: return false
+        val stored = userStore.parentalLock(profileId)
+
+        if (stored.hasPin) {
+            val salt = stored.salt ?: return false
+            val hash = stored.hash ?: return false
+            if (currentPin == null || !ParentalPin(salt, hash).matches(currentPin)) return false
+        }
+
+        val salt = java.util.UUID.randomUUID().toString()
+        val created = ParentalPin.of(pin, salt) ?: return false
+        userStore.setParentalLock(profileId, stored.copy(salt = created.salt, hash = created.hash))
+        parentalRevision += 1
+        // A newly created PIN activates the default adult-category rule immediately. Keeping the
+        // already-rendered Home or catalogue here exposed exactly what the PIN had just protected.
+        invalidateParentalBrowseSurfaces()
+        return true
+    }
+
+    /** Removes the PIN and every category lock, once the current PIN is given. */
+    fun clearParentalPin(currentPin: String): Boolean {
+        val profileId = activeProfileId ?: return false
+        val stored = userStore.parentalLock(profileId)
+        val salt = stored.salt ?: return false
+        val hash = stored.hash ?: return false
+        if (!ParentalPin(salt, hash).matches(currentPin)) return false
+
+        userStore.setParentalLock(profileId, StoredParentalLock())
+        unlockedCategories.clear()
+        parentalRevision += 1
+        invalidateParentalBrowseSurfaces()
+        return true
+    }
+
+    /** Locks or unlocks a category by id. Takes effect only while a PIN exists. */
+    fun setCategoryLocked(
+        categoryId: String,
+        locked: Boolean,
+        contentType: XtreamContentType = xtreamContentType,
+    ) {
+        val profileId = activeProfileId ?: return
+        val stored = userStore.parentalLock(profileId)
+        val migrated = CategoryPreferenceIdentity.migrateLegacy(stored.lockedCategoryIds)
+        val identity = CategoryPreferenceIdentity.scoped(contentType, categoryId)
+        val next = if (locked) migrated + identity else migrated - identity
+        if (next == stored.lockedCategoryIds) return
+        userStore.setParentalLock(profileId, stored.copy(lockedCategoryIds = next))
+        // A category the user just unlocked in settings must not stay open from an earlier PIN
+        // entry, and one they just locked must ask again immediately.
+        unlockedCategories.remove(identity)
+        parentalRevision += 1
+        invalidateParentalBrowseSurfaces()
+    }
+
+    /** Whether adult-named categories are locked without being listed one by one. */
+    fun setLockAdultCategories(enabled: Boolean) {
+        val profileId = activeProfileId ?: return
+        val stored = userStore.parentalLock(profileId)
+        if (stored.lockAdultCategories == enabled) return
+        userStore.setParentalLock(profileId, stored.copy(lockAdultCategories = enabled))
+        unlockedCategories.clear()
+        parentalRevision += 1
+        invalidateParentalBrowseSurfaces()
+    }
+
+    /**
+     * Removes every already-rendered surface before rebuilding it under the new parental policy.
+     *
+     * Clearing first is the security boundary. Reloading a filtered page afterwards is not enough:
+     * on a large catalogue the previous Home, search result and details page can stay visible for
+     * seconds while that work runs. Generations also stop an older in-flight Home/page request from
+     * publishing its stale, less restrictive result after the settings change.
+     */
+    private fun invalidateParentalBrowseSurfaces() {
+        val policyGeneration = ++parentalPolicyGeneration
+        xtreamPageRequestGeneration += 1
+        dailyHomeRequestGeneration += 1
+
+        xtreamPage = XtreamCatalogPage.empty()
+        selectedXtreamItemId = null
+        dailySelectedItem = null
+        pendingDetailsRequest = null
+        pendingPinCategory = null
+        seriesDetailsStatus = SeriesDetailsStatus.Idle
+        movieDetailsStatus = MovieDetailsStatus.Idle
+        liveEpgStatus = LiveEpgStatus.Idle
+        selectedPerson = null
+        movieAppearances.clear()
+        dailyHomeStatus = DailyHomeStatus.Idle
+        heroSynopsis = emptyMap()
+        // History and Continue watching resolve items directly instead of reading xtreamPage. Their
+        // getters now apply the policy too; this bump makes a visible row recompute immediately.
+        continueWatchingRevision += 1
+
+        if (xtreamSummary == null) return
+        val contentType = xtreamContentType
+        val rebuildHome = destination == DesktopDestination.HOME
+        xtreamStatus = XtreamStatus.LoadingCatalog(contentType)
+        streamingScope.launch {
+            try {
+                refreshXtreamPage(pageIndex = 0)
+                if (rebuildHome) loadDailyHome()
+                if (policyGeneration == parentalPolicyGeneration) {
+                    xtreamStatus = XtreamStatus.Connected
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (policyGeneration == parentalPolicyGeneration) {
+                    xtreamStatus = XtreamStatus.Error(error.toSafeXtreamMessage())
+                }
+            }
+        }
+    }
+
+    /**
+     * Records which services this profile says it pays for.
+     *
+     * No screen calls this yet. When one does, it will need a revision counter like
+     * [parentalRevision]: [streamingPreference] reads straight out of the preferences store, which
+     * Compose does not watch, so the switches would not move. That exact omission shipped twice in
+     * the settings screen — see [PreferenceRecompositionTest].
+     */
     fun setStreamingServices(providerIds: Set<String>) {
         val profileId = activeProfileId ?: return
         val stored = userStore.streamingPreference(profileId)
@@ -1739,6 +2825,16 @@ class DesktopAppState(
             dailyHomeStatus = DailyHomeStatus.Idle
             return
         }
+        val requestGeneration = ++dailyHomeRequestGeneration
+        // Snapshot-backed state and preferences are captured before entering the IO dispatcher.
+        // More importantly, one immutable policy is used for the whole Home build: a parental
+        // change invalidates this generation instead of allowing a half-old snapshot to publish.
+        val kidsMode = activeProfile?.isKids == true
+        val lockedCategoriesByType =
+            XtreamContentType.entries.associateWith(::lockedCategoryIdsForBrowsing)
+        // Read here for the same reason as everything above it: `historyEntries` walks Compose
+        // snapshot state and the parental policy, neither of which belongs on an IO dispatcher.
+        val affinity = viewerAffinity
         dailyHomeStatus = DailyHomeStatus.Loading
         runCatching {
             withContext(Dispatchers.IO) {
@@ -1759,10 +2855,30 @@ class DesktopAppState(
                     latestSummary = xtreamRepository.loadCatalog(XtreamContentType.SERIES)
                 }
                 onCatalogueStage(0.96f, "Montando a tela inicial…")
-                val kidsMode = activeProfile?.isKids == true
-                val movies = dailyPage(XtreamContentType.MOVIE, date.dayOfYear * 31 + date.year, kidsMode, 18)
-                val series = dailyPage(XtreamContentType.SERIES, date.dayOfYear * 17 + date.year, kidsMode, 18)
-                val live = dailyPage(XtreamContentType.LIVE, date.dayOfYear * 7 + date.year, kidsMode, 14)
+                val movies =
+                    dailyPage(
+                        XtreamContentType.MOVIE,
+                        date.dayOfYear * 31 + date.year,
+                        kidsMode,
+                        lockedCategoriesByType.getValue(XtreamContentType.MOVIE),
+                        18,
+                    )
+                val series =
+                    dailyPage(
+                        XtreamContentType.SERIES,
+                        date.dayOfYear * 17 + date.year,
+                        kidsMode,
+                        lockedCategoriesByType.getValue(XtreamContentType.SERIES),
+                        18,
+                    )
+                val live =
+                    dailyPage(
+                        XtreamContentType.LIVE,
+                        date.dayOfYear * 7 + date.year,
+                        kidsMode,
+                        lockedCategoriesByType.getValue(XtreamContentType.LIVE),
+                        14,
+                    )
                 // Scored rather than picked by date arithmetic. The old rule was
                 // `dayOfYear % poolSize`, which changed daily and did nothing else — it could put
                 // an unrated piece of catalogue filler in the largest slot on the screen.
@@ -1776,9 +2892,16 @@ class DesktopAppState(
                                     year = item.year,
                                     rating = item.rating,
                                     hasArtwork = !item.artworkUrl.isNullOrBlank(),
+                                    categoryIds = item.categoryIds,
                                 )
                             },
                         dayOfEpoch = date.toEpochDay(),
+                        // What this profile has been watching, so the banner leans towards it.
+                        //
+                        // Captured on the calling thread with the rest of the inputs, and passed as
+                        // a value: the selection stays pure, so the same day and the same catalogue
+                        // always produce the same banner rather than reshuffling on recomposition.
+                        affinity = affinity,
                     )
                 val heroPool =
                     heroRotation.mapNotNull { chosen ->
@@ -1792,13 +2915,33 @@ class DesktopAppState(
                     // First of the rotation, already scored and ordered by HeroSelection.
                     hero = heroPool.firstOrNull(),
                     heroRotation = heroPool,
+                    // What came out this year, scanned across the whole catalogue rather than a
+                    // page. A provider back-fills older films constantly, so "recently added" and
+                    // "new" are different questions — this answers the second.
+                    releasesThisYear =
+                        xtreamRepository.releasesForYear(
+                            XtreamContentType.MOVIE,
+                            date.year,
+                            18,
+                            kidsMode,
+                            lockedCategoriesByType.getValue(XtreamContentType.MOVIE),
+                        ),
+                    seriesThisYear =
+                        xtreamRepository.releasesForYear(
+                            XtreamContentType.SERIES,
+                            date.year,
+                            18,
+                            kidsMode,
+                            lockedCategoriesByType.getValue(XtreamContentType.SERIES),
+                        ),
                     movies = movies,
                     series = series,
                     live = live,
-                    seasonal = seasonalShelf(date, kidsMode),
+                    seasonal = seasonalShelf(date, kidsMode, lockedCategoriesByType),
                 ) to latestSummary
             }
         }.onSuccess { (snapshot, latestSummary) ->
+            if (requestGeneration != dailyHomeRequestGeneration) return@onSuccess
             // Reported once per load so the real counts can be read from the log rather than
             // inferred. The shelves have been "fixed" twice against a cause never observed.
             println(
@@ -1813,9 +2956,31 @@ class DesktopAppState(
                 dailyHomeStatus = DailyHomeStatus.Idle
             } else {
                 dailyHomeStatus = DailyHomeStatus.Loaded(snapshot)
+                // Kept for the *next* launch's loading screen. Storing them now, from a home that
+                // is already built, is the only way the backdrop can be on screen during a wait
+                // rather than after it.
+                userStore.setBackdropPosters(
+                    (snapshot.movies + snapshot.series)
+                        .mapNotNull { item -> item.artworkUrl?.takeIf(String::isNotBlank) }
+                        .distinct(),
+                )
             }
         }
             .onFailure { error ->
+                // A request invalidated by a profile or parental-policy change owns none of the
+                // current state. In particular, it must not clear the newer request's Loading flag.
+                if (requestGeneration != dailyHomeRequestGeneration) {
+                    error.rethrowIfCancellation()
+                    return@onFailure
+                }
+                // Cleared *before* the rethrow, not after: a rethrow leaves this lambda immediately,
+                // so anything below it never runs on the cancellation path.
+                //
+                // This is the worst instance of the pattern the film, series, EPG and import loaders
+                // all had. A cancelled build of the home — which happens whenever the composable
+                // that launched it goes away — left the first screen of the app showing its skeleton
+                // with nothing in flight and no way back until a restart.
+                if (dailyHomeStatus is DailyHomeStatus.Loading) dailyHomeStatus = DailyHomeStatus.Idle
                 error.rethrowIfCancellation()
                 dailyHomeStatus = DailyHomeStatus.Error(error.toSafeXtreamMessage())
             }
@@ -1834,17 +2999,27 @@ class DesktopAppState(
     private fun seasonalShelf(
         date: LocalDate,
         kidsMode: Boolean,
+        lockedCategoryIdsByType: Map<XtreamContentType, Set<String>>,
     ): DailySeasonalShelf? {
         val collection = SeasonalCollections.primaryCollectionFor(date) ?: return null
         val found = LinkedHashMap<String, XtreamCatalogItem>()
         for (term in collection.searchTerms) {
             for (type in listOf(XtreamContentType.MOVIE, XtreamContentType.SERIES)) {
                 xtreamRepository
-                    .page(type, null, term, 0, pageSize = SEASONAL_TERM_PAGE_SIZE, kidsMode = kidsMode)
+                    .page(
+                        type,
+                        null,
+                        term,
+                        0,
+                        pageSize = SEASONAL_TERM_PAGE_SIZE,
+                        kidsMode = kidsMode,
+                        lockedCategoryIds = lockedCategoryIdsByType[type].orEmpty(),
+                    )
                     .items
-                    // Keyed on the editorial title so the same film shipped as "HD" and "4K" does
-                    // not take two slots on a shelf that only has room for a handful.
-                    .forEach { item -> found.putIfAbsent(editorialCatalogKey(item.name), item) }
+                    // Keyed so the same film shipped as "HD" and "4K" does not take two slots on a
+                    // shelf that only has room for a handful — and likewise for the channel
+                    // prefixes and language tags that the weaker key used to let through.
+                    .forEach { item -> found.putIfAbsent(item.name.shelfDeduplicationKey(), item) }
             }
             if (found.size >= SEASONAL_SHELF_SIZE) break
         }
@@ -1859,15 +3034,36 @@ class DesktopAppState(
         type: XtreamContentType,
         seed: Int,
         kidsMode: Boolean,
+        lockedCategoryIds: Set<String>,
         pageSize: Int,
     ): List<XtreamCatalogItem> {
         val fetchSize = (pageSize * 4).coerceAtMost(80)
-        val first = xtreamRepository.page(type, null, "", 0, pageSize = fetchSize, kidsMode = kidsMode)
+        val first =
+            xtreamRepository.page(
+                type,
+                null,
+                "",
+                0,
+                pageSize = fetchSize,
+                kidsMode = kidsMode,
+                lockedCategoryIds = lockedCategoryIds,
+            )
         val pageIndex = rotatingPageIndex(seed, first.pageCount)
         val candidates = if (pageIndex == 0) first.items else {
-            xtreamRepository.page(type, null, "", pageIndex, pageSize = fetchSize, kidsMode = kidsMode).items
+            xtreamRepository.page(
+                type,
+                null,
+                "",
+                pageIndex,
+                pageSize = fetchSize,
+                kidsMode = kidsMode,
+                lockedCategoryIds = lockedCategoryIds,
+            ).items
         }
-        return candidates.distinctBy { editorialCatalogKey(it.name) }.take(pageSize)
+        // The same key the releases shelf uses. `editorialCatalogKey` did a weaker version of this
+        // job — no accents, no pipes, no trailing single-letter tags — so the daily shelves carried
+        // the same duplicate pairs that were reported on Lançamentos, just less visibly.
+        return candidates.distinctBy { it.name.shelfDeduplicationKey() }.take(pageSize)
     }
 
     suspend fun importLocalPlaylist(path: Path) {
@@ -1891,6 +3087,12 @@ class DesktopAppState(
                     warningCount = catalog.warnings.size,
                 )
         }.onFailure { error ->
+            // Reset before rethrowing, for the same reason as the film, series and EPG loaders: a
+            // cancelled import — closing the dialog, or the screen that launched it going away —
+            // otherwise left importStatus on Loading, and the guard at the top of this function
+            // then refused every later import. The user was left with a spinner and an app that
+            // silently ignored the file picker.
+            if (importStatus is ImportStatus.Loading) importStatus = ImportStatus.Idle
             error.rethrowIfCancellation()
             importStatus = ImportStatus.Error(error.toSafeImportMessage())
         }
@@ -1944,11 +3146,27 @@ class DesktopAppState(
                 selectedXtreamCategoryId = null
                 selectedXtreamYear = null
                 xtreamSearchQuery = ""
-                xtreamPage = xtreamRepository.page(XtreamContentType.LIVE, null, "", 0)
+                xtreamPage =
+                    xtreamRepository.page(
+                        XtreamContentType.LIVE,
+                        null,
+                        "",
+                        0,
+                        kidsMode = activeProfile?.isKids == true,
+                        lockedCategoryIds = lockedCategoryIdsForBrowsing(),
+                    )
                 selectedXtreamItemId = xtreamPage.items.firstOrNull()?.providerId
                 xtreamStatus = XtreamStatus.Connected
             }.onFailure { error ->
                 input.clear()
+                // The same reset the other loaders needed, and the most damaging place to omit it:
+                // the guard at the top of this function returns early while the status is
+                // Connecting, so a cancelled connection left the app permanently unable to connect
+                // to anything — every later attempt returned immediately and silently.
+                //
+                // Disconnected rather than Idle, because that is this status's resting state: the
+                // attempt did not happen, and there is no session.
+                if (xtreamStatus is XtreamStatus.Connecting) xtreamStatus = XtreamStatus.Disconnected
                 error.rethrowIfCancellation()
                 xtreamRepository.clear()
                 clearXtreamUiState()
@@ -1972,6 +3190,27 @@ class DesktopAppState(
      */
     var isStarting by mutableStateOf(true)
         private set
+
+    /**
+     * Whether this launch is the first that will read a catalogue on this machine.
+     *
+     * Read once at construction, not on every recomposition: the flag is written when the load
+     * finishes, and re-reading it would make the explanation vanish from under the user's eyes at
+     * the exact moment the wait ends.
+     */
+    val isFirstStartup: Boolean = !userStore.hasCompletedFirstStartup()
+
+    /**
+     * Artwork for the loading screen's backdrop.
+     *
+     * Read from the previous session, not from this one. The backdrop has to be on screen *during*
+     * the wait, and at that moment nothing is loaded yet — a value derived from the current home
+     * would only arrive once the home was built, which is precisely when the loading screen goes
+     * away. Written at the end of each load for the next launch to use.
+     *
+     * Empty on a true first run, when the wall uses the bundled fictional artwork.
+     */
+    val backdropPosters: List<String> = userStore.backdropPosters()
 
     /** Session, connect, catalogues, home, done. */
     private val STARTUP_STEPS = 5
@@ -2056,6 +3295,10 @@ class DesktopAppState(
                     startupProgressWithin(from = progress, to = progress, fraction = 1f, message = message)
                 }
                 startupStep(5, "Pronto")
+                // Only here, where a catalogue really did load. Marking it in the `finally` would
+                // count a failed connection as a completed first run, and the user who then fixed
+                // their credentials would never get the explanation they were owed.
+                userStore.markFirstStartupComplete()
             }
         } finally {
             // In a finally so no path - no saved session, a provider that refuses, an exception -
@@ -2086,7 +3329,10 @@ class DesktopAppState(
                 var latest: XtreamSessionSummary? = null
                 // The type on screen goes first so the visible grid is repopulated soonest.
                 for (contentType in listOf(current) + (loaded - current)) {
-                    latest = xtreamRepository.loadCatalog(contentType)
+                    // forceRefresh, or this would answer from the disk cache and the button would
+                    // appear to do nothing — the user pressed it precisely because they want what
+                    // the provider has now.
+                    latest = xtreamRepository.loadCatalog(contentType, forceRefresh = true)
                 }
                 requireNotNull(latest)
             }
@@ -2115,11 +3361,20 @@ class DesktopAppState(
             return
         }
         if (xtreamStatus is XtreamStatus.LoadingCatalog) return
-        xtreamStatus = XtreamStatus.LoadingCatalog(contentType)
+
+        // Only when something is actually going to be fetched.
+        //
+        // This was set unconditionally, so switching between films and series with both catalogues
+        // already in memory raised the loading banner and dropped it again within a frame — the
+        // flicker reported on the favourites screen. Nothing was loading; the app was only saying
+        // so. A progress indicator that appears when there is no progress teaches the viewer that
+        // it means nothing.
+        val alreadyLoaded = contentType in xtreamSummary?.loadedContentTypes.orEmpty()
+        if (!alreadyLoaded) xtreamStatus = XtreamStatus.LoadingCatalog(contentType)
 
         runCatching {
             val summary =
-                if (contentType in xtreamSummary?.loadedContentTypes.orEmpty()) {
+                if (alreadyLoaded) {
                     xtreamSummary
                 } else {
                     withContext(Dispatchers.IO) {
@@ -2145,7 +3400,27 @@ class DesktopAppState(
         }
     }
 
+    /**
+     * Opens a category, asking for the PIN first when one guards it.
+     *
+     * The check lives here rather than in the rail because this is the single door into a
+     * category: a locked one must not open and then hide itself, since the page underneath has
+     * already loaded by then and the titles have already been seen.
+     */
     suspend fun selectXtreamCategory(categoryId: String?) {
+        val locked =
+            categoryId?.let { id ->
+                xtreamRepository.categories(xtreamContentType).firstOrNull { it.providerId == id }
+            }?.takeIf(::categoryNeedsPin)
+        if (locked != null) {
+            pendingPinCategory = locked
+            return
+        }
+        openXtreamCategory(categoryId)
+    }
+
+    /** Opens a category with no questions asked. Every caller must have cleared the lock first. */
+    private suspend fun openXtreamCategory(categoryId: String?) {
         selectedXtreamCategoryId = categoryId
         seriesDetailsStatus = SeriesDetailsStatus.Idle
         movieDetailsStatus = MovieDetailsStatus.Idle
@@ -2207,10 +3482,27 @@ class DesktopAppState(
             withContext(Dispatchers.IO) { xtreamRepository.shortEpg(selected.providerId) }
         }.onSuccess { epg ->
             if (selectedXtreamItemId == selected.providerId) {
-                val (now, next) = epg.nowAndNext(System.currentTimeMillis() / 1_000L)
-                liveEpgStatus = LiveEpgStatus.Loaded(now, next)
+                val nowSeconds = System.currentTimeMillis() / 1_000L
+                val (now, next) = epg.nowAndNext(nowSeconds)
+                liveEpgStatus =
+                    LiveEpgStatus.Loaded(
+                        now = now,
+                        next = next,
+                        // Everything still ahead, in order. What has already finished is dropped:
+                        // a schedule that opens on this morning's programmes makes the viewer
+                        // scroll to reach the part they are asking about.
+                        schedule =
+                            epg.programs
+                                .filter { program ->
+                                    (program.endEpochSeconds ?: Long.MAX_VALUE) > nowSeconds
+                                }
+                                .sortedBy { program -> program.startEpochSeconds ?: Long.MAX_VALUE },
+                    )
             }
         }.onFailure { error ->
+            // Same reason as the film and series loaders: a cancelled fetch must not leave the
+            // status on Loading, or the guard above refuses every retry.
+            if (liveEpgStatus is LiveEpgStatus.Loading) liveEpgStatus = LiveEpgStatus.Idle
             error.rethrowIfCancellation()
             if (selectedXtreamItemId == selected.providerId) {
                 liveEpgStatus = LiveEpgStatus.Unavailable
@@ -2253,6 +3545,11 @@ class DesktopAppState(
                 }
             }
         }.onFailure { error ->
+            // Reset before rethrowing. A coroutine cancelled mid-fetch — which happens whenever the
+            // effect that started it recomposes, and reliably when the page is opened from
+            // Assinaturas — used to leave the status on Loading. The guard at the top then refused
+            // every retry, so the page kept its spinner with nothing in flight.
+            if (movieDetailsStatus is MovieDetailsStatus.Loading) movieDetailsStatus = MovieDetailsStatus.Idle
             error.rethrowIfCancellation()
             movieDetailsStatus = MovieDetailsStatus.Error(error.toSafeXtreamMessage())
         }
@@ -2273,6 +3570,9 @@ class DesktopAppState(
                 seriesDetailsStatus = SeriesDetailsStatus.Loaded(details)
             }
         }.onFailure { error ->
+            // Same reason as the film loader above: a cancelled fetch must not strand the status on
+            // Loading, or the guard refuses every retry and the page keeps a spinner for ever.
+            if (seriesDetailsStatus is SeriesDetailsStatus.Loading) seriesDetailsStatus = SeriesDetailsStatus.Idle
             error.rethrowIfCancellation()
             seriesDetailsStatus = SeriesDetailsStatus.Error(error.toSafeXtreamMessage())
         }
@@ -2578,6 +3878,8 @@ class DesktopAppState(
                         credits =
                             credits.map { credit ->
                                 PersonCredit(
+                                    id = credit.id,
+                                    isSeries = credit.isSeries,
                                     title = credit.title,
                                     year = credit.year,
                                     posterUrl = credit.posterUrl,
@@ -2611,6 +3913,12 @@ class DesktopAppState(
     suspend fun openTitleFromCredit(title: String): Boolean {
         val wanted = title.editorialCatalogTitle().lowercase(Locale.ROOT).trim()
         if (wanted.isBlank()) return false
+        val kidsMode = activeProfile?.isKids == true
+        val lockedByType =
+            mapOf(
+                XtreamContentType.MOVIE to lockedCategoryIdsForBrowsing(XtreamContentType.MOVIE),
+                XtreamContentType.SERIES to lockedCategoryIdsForBrowsing(XtreamContentType.SERIES),
+            )
 
         val found =
             withContext(Dispatchers.Default) {
@@ -2619,7 +3927,15 @@ class DesktopAppState(
                 sequenceOf(XtreamContentType.MOVIE, XtreamContentType.SERIES)
                     .mapNotNull { type ->
                         xtreamRepository
-                            .page(type, null, wanted, 0, pageSize = 20)
+                            .page(
+                                type,
+                                null,
+                                wanted,
+                                0,
+                                pageSize = 20,
+                                kidsMode = kidsMode,
+                                lockedCategoryIds = lockedByType[type].orEmpty(),
+                            )
                             .items
                             .firstOrNull { item ->
                                 item.name.editorialCatalogTitle().lowercase(Locale.ROOT).trim() == wanted
@@ -2628,8 +3944,74 @@ class DesktopAppState(
             } ?: return false
 
         closePerson()
-        selectXtreamItem(found.providerId)
+        // The item itself, not just its id.
+        //
+        // `selectXtreamItem` clears `dailySelectedItem` and then relies on the title being present
+        // in the current catalogue page — and `selectedXtreamItem` returns null outright while the
+        // destination is Home. So from the Home screen the selection resolved to nothing, the
+        // details branch was never taken, and the press dropped the user back to the start with the
+        // log cheerfully reporting success.
+        //
+        // `selectDailyItem` sets both halves, which is what every working path already uses.
+        selectDailyItem(found)
         return true
+    }
+
+    /**
+     * Opens a credit from a filmography: in this playlist if it is here, otherwise in Assinaturas.
+     *
+     * Previously a credit the playlist did not carry did nothing at all. The click searched a
+     * 41,000-item catalogue on a background thread with no indication on screen, then set a
+     * "missing" value that nothing ever read — so the app appeared to freeze and then to ignore the
+     * press. Both halves of that were wrong.
+     *
+     * A person's filmography is mostly films the user does not have; that is the ordinary case, not
+     * the failure. Sending those to Assinaturas answers the question they were actually asking —
+     * where can I watch this — and the library check inside that screen still puts "you already have
+     * this" first when it applies.
+     */
+    suspend fun openCredit(credit: PersonCredit): CreditDestination {
+        // Logged because this has now failed twice for reasons that looked identical from outside:
+        // the screen simply changed to something the user did not ask for. Each line below names
+        // which guard stopped it — the title only, never an address.
+        if (openTitleFromCredit(credit.title)) {
+            println("credit: opened from playlist")
+            // The caller has to open its own details page. Selecting the item is not the same as
+            // showing it: `detailsOpen` is a flag inside each screen, and setting the selection
+            // without it left the user on whatever was underneath — the Home.
+            return CreditDestination.PLAYLIST_ITEM
+        }
+
+        // Not in this playlist. Ask where it can be watched instead of stopping here.
+        //
+        // Both are needed: without an id there is nothing to look up, and without a configured
+        // catalogue there is nowhere to ask. Either way the press does nothing rather than opening
+        // an empty screen — which is the one case this function cannot improve on.
+        val tmdbId = credit.id
+        if (tmdbId == null) {
+            println("credit: no catalogue id, nothing to look up")
+            return CreditDestination.NOWHERE
+        }
+        if (streamingCatalogue == null) {
+            println("credit: no streaming catalogue — metadata key missing or blank")
+            return CreditDestination.NOWHERE
+        }
+        val external =
+            ExternalTitle(
+                id =
+                    ExternalContentId(
+                        namespace = if (credit.isSeries) TMDB_SERIES_NAMESPACE else TMDB_NAMESPACE,
+                        value = tmdbId.toString(),
+                    ),
+                title = credit.title,
+                kind = if (credit.isSeries) ExternalTitleKind.SERIES else ExternalTitleKind.MOVIE,
+                year = credit.year,
+                posterUrl = credit.posterUrl,
+                isDemo = false,
+            )
+        closePerson()
+        openStreamingTitle(external)
+        return CreditDestination.SUBSCRIPTIONS
     }
 
     fun closePerson() {
@@ -2682,7 +4064,10 @@ class DesktopAppState(
 
     fun disconnectXtream() {
         rememberedXtreamStore.clear()
-        xtreamRepository.clear()
+        // Including the disk copy: the user is deliberately signing out, and leaving their whole
+        // catalogue cached would be a surprise. The ordinary `clear()` runs on every sign-in and
+        // must not touch it.
+        xtreamRepository.clearIncludingDiskCache()
         val wasSelected = isXtreamSelected
         clearXtreamUiState()
         xtreamStatus = XtreamStatus.Disconnected
@@ -2724,6 +4109,12 @@ class DesktopAppState(
         val releaseYear = selectedXtreamYear
         val minimumRating = selectedXtreamMinimumRating
         val allowedIdentities = if (favoritesOnly) favoriteIdentities() else null
+        // Read here with the rest of the inputs, not inside the worker below. It reads
+        // `unlockedCategories` — a Compose snapshot list — and the user's preferences, and neither
+        // belongs on a background dispatcher: every other input to this call is captured on the
+        // calling thread for exactly that reason.
+        val lockedCategories = lockedCategoryIdsForBrowsing()
+        val kidsMode = activeProfile?.isKids == true
         val page =
             withContext(Dispatchers.Default) {
                 xtreamRepository.page(
@@ -2734,7 +4125,8 @@ class DesktopAppState(
                     releaseYear = releaseYear,
                     minimumRating = minimumRating,
                     allowedIdentities = allowedIdentities,
-                    kidsMode = activeProfile?.isKids == true,
+                    kidsMode = kidsMode,
+                    lockedCategoryIds = lockedCategories,
                 )
             }
         if (requestGeneration == xtreamPageRequestGeneration) {
@@ -2745,6 +4137,7 @@ class DesktopAppState(
 
     private fun clearXtreamUiState() {
         xtreamPageRequestGeneration += 1
+        dailyHomeRequestGeneration += 1
         xtreamSummary = null
         xtreamContentType = XtreamContentType.LIVE
         xtreamCategories = emptyList()
@@ -2761,16 +4154,155 @@ class DesktopAppState(
         favoritesOnly = false
         dailyHomeStatus = DailyHomeStatus.Idle
         dailySelectedItem = null
+        heroSynopsis = emptyMap()
+        unlockedCategories.clear()
     }
 
-    private fun visibleXtreamCategories(contentType: XtreamContentType): List<XtreamCategory> =
+    /**
+     * The categories this profile may see, in order of how absolute each rule is.
+     *
+     * A Kids profile removes adult categories outright — the child never learns they exist. A
+     * hidden category is the user's own tidying and is equally gone. A PIN-locked one stays
+     * visible: the point is that a parent can reach it and a child cannot, and hiding it would make
+     * the parent's own catalogue smaller.
+     */
+    private fun visibleXtreamCategories(contentType: XtreamContentType): List<XtreamCategory> {
+        val hidden = userStore.hiddenCategories(activeProfileId)
+        return xtreamRepository
+            .categories(contentType)
+            .let { categories ->
+                if (activeProfile?.isKids == true) {
+                    categories.filterNot { FamilyContentPolicy.isExplicitAdultLabel(it.name) }
+                } else {
+                    categories
+                }
+            }.filterNot { category ->
+                CategoryPreferenceIdentity.matches(hidden, contentType, category.providerId)
+            }
+    }
+
+    /**
+     * Whether opening [category] needs the PIN.
+     *
+     * Consulted by the catalogue before it pages: a locked category shows its name and asks, rather
+     * than listing what is inside.
+     */
+    fun categoryNeedsPin(category: XtreamCategory): Boolean =
+        isCategoryLocked(category.providerId, category.name, category.contentType)
+
+    /**
+     * How subtitles are drawn on the next title played.
+     *
+     * Read from three stored strings rather than one object so a value written by a later build
+     * falls back to the default instead of discarding the whole setting.
+     */
+    var subtitleStyle by mutableStateOf(
+        userStore.subtitleStyle().let { (size, colour, background) ->
+            SubtitleStyle(
+                size = runCatching { SubtitleSize.valueOf(size) }.getOrDefault(SubtitleSize.MEDIUM),
+                textColour = runCatching { SubtitleColour.valueOf(colour) }.getOrDefault(SubtitleColour.WHITE),
+                background = background,
+            )
+        },
+    )
+        private set
+
+    fun changeSubtitleStyle(style: SubtitleStyle) {
+        subtitleStyle = style
+        userStore.setSubtitleStyle(style.size.name, style.textColour.name, style.background)
+    }
+
+    /** Whether the clock reads 24-hour. */
+    var uses24HourClock by mutableStateOf(userStore.uses24HourClock())
+        private set
+
+    /** Named `change…` because `set…` collides on the JVM with the property's own setter. */
+    fun changeClockFormat(use24Hour: Boolean) {
+        uses24HourClock = use24Hour
+        userStore.setUses24HourClock(use24Hour)
+    }
+
+    /**
+     * Bumped whenever a category is hidden or restored, so the settings list redraws.
+     *
+     * The preferences store is not observable state, so writing to it changes nothing Compose is
+     * watching. Hiding a category appeared to work only because it also rewrote `xtreamCategories`
+     * — which is observed — and that recomposition happened to refresh the row; restoring one wrote
+     * the same unobserved store and redrew nothing, so the button did nothing at all.
+     */
+    var hiddenCategoriesRevision by mutableStateOf(0)
+        private set
+
+    /** Categories this profile has chosen to hide, for the settings list. */
+    val hiddenCategoryIds: Set<String>
+        get() {
+            return hiddenCategoryIdsForSettings(xtreamContentType)
+        }
+
+    fun hiddenCategoryIdsForSettings(
+        contentType: XtreamContentType,
+    ): Set<String> {
+        @Suppress("UNUSED_EXPRESSION")
+        hiddenCategoriesRevision
+        return explicitCategoryIds(contentType, userStore.hiddenCategories(activeProfileId))
+    }
+
+    fun lockedCategoryIdsForSettings(contentType: XtreamContentType): Set<String> {
+        @Suppress("UNUSED_EXPRESSION")
+        parentalRevision
+        return explicitCategoryIds(contentType, userStore.parentalLock(activeProfileId).lockedCategoryIds)
+    }
+
+    /**
+     * Every category of the section currently open, hidden ones included.
+     *
+     * The settings list must show what is hidden, or hiding one removes it from the only place it
+     * could be restored from — which is exactly what happened: a hidden category vanished from its
+     * own switch and could never be brought back.
+     */
+    val allCategoriesForSettings: List<XtreamCategory>
+        get() = categoriesForSettings(xtreamContentType)
+
+    /**
+     * Every category of one section, hidden ones included.
+     *
+     * Settings shows all three sections rather than only whichever happens to be open. Reading the
+     * current section meant a user in Filmes could not reach a series category at all — the switch
+     * for it simply was not on the screen, and there was nothing to say why.
+     */
+    fun categoriesForSettings(contentType: XtreamContentType): List<XtreamCategory> =
         xtreamRepository.categories(contentType).let { categories ->
+            // A Kids profile still never sees adult categories, even here: the point of that
+            // profile is that the content is not present, and a settings list is not an
+            // exception to it.
             if (activeProfile?.isKids == true) {
                 categories.filterNot { FamilyContentPolicy.isExplicitAdultLabel(it.name) }
             } else {
                 categories
             }
         }
+
+    /** Hides or restores a category. Hidden ones vanish from the rail and from paging. */
+    fun setCategoryHidden(
+        categoryId: String,
+        hidden: Boolean,
+        contentType: XtreamContentType = xtreamContentType,
+    ) {
+        val profileId = activeProfileId ?: return
+        val current = CategoryPreferenceIdentity.migrateLegacy(userStore.hiddenCategories(profileId))
+        val identity = CategoryPreferenceIdentity.scoped(contentType, categoryId)
+        userStore.setHiddenCategories(
+            profileId,
+            if (hidden) current + identity else current - identity,
+        )
+        // The rail is built from this, so it has to be rebuilt for the change to show.
+        xtreamCategories = visibleXtreamCategories(xtreamContentType)
+        // And the settings list reads the preferences store directly, which Compose does not watch.
+        hiddenCategoriesRevision += 1
+        if (contentType == xtreamContentType && selectedXtreamCategoryId == categoryId && hidden) {
+            selectedXtreamCategoryId = null
+        }
+    }
 
     private fun Throwable.toSafeImportMessage(): String =
         when (this) {
@@ -2780,6 +4312,19 @@ class DesktopAppState(
             else ->
                 "Não foi possível importar a lista. Verifique se o arquivo é M3U/M3U8 válido e tente novamente."
         }
+
+    /**
+     * Last, so every property above it is initialised.
+     *
+     * The per-profile TMDb key cannot be read where it is declared: `activeProfileId` is declared
+     * further down the class and does not exist yet at that point — the compiler says so. Reading
+     * it here, once construction is complete, is the only correct place.
+     */
+    init {
+        profileMetadataApiKey = userStore.profileMetadataApiKey(activeProfileId).orEmpty()
+        // And the clients, which were built from the shared key alone before the profile was known.
+        if (profileMetadataApiKey.isNotBlank()) rebuildMetadataClients()
+    }
 
     private fun Throwable.rethrowIfCancellation() {
         if (this is CancellationException) throw this
@@ -2841,7 +4386,35 @@ data class PersonFilmography(
 )
 
 /** One entry of a person's filmography, from the metadata service rather than the playlist. */
+/**
+ * Where a press on a credit ended up, so the screen can finish the job.
+ *
+ * The state alone cannot: showing a title from the playlist means setting a `detailsOpen` flag that
+ * lives inside each screen, and the state has no access to it. Returning the outcome is what lets
+ * the caller open its own page — without this, selecting the item silently left the user on
+ * whatever was underneath, which was the Home.
+ */
+enum class CreditDestination {
+    /** Found in the user's own playlist; the caller opens its details page. */
+    PLAYLIST_ITEM,
+
+    /** Not in the playlist; Assinaturas is now showing where it can be watched. */
+    SUBSCRIPTIONS,
+
+    /** Nothing could be done — no catalogue id, or no metadata key configured. */
+    NOWHERE,
+}
+
 data class PersonCredit(
+    /**
+     * TMDb's own id, so the credit can be opened even when the playlist does not carry it.
+     *
+     * Null when the metadata response omitted it; the credit still lists and still matches against
+     * the playlist by title.
+     */
+    val id: Int?,
+    /** Films and series are numbered separately, so the kind is part of the identity. */
+    val isSeries: Boolean,
     val title: String,
     val year: Int?,
     val posterUrl: String?,
@@ -2891,7 +4464,23 @@ enum class CatalogLayout(val id: String) {
     }
 }
 
-enum class DesktopDestination { HOME, CATALOG, FAVORITES, DOWNLOADS, CONTINUE, MUSIC, SUBSCRIPTIONS }
+enum class DesktopDestination { HOME, CATALOG, FAVORITES, DOWNLOADS, CONTINUE, MUSIC, SUBSCRIPTIONS, HISTORY }
+
+/**
+ * How far back the history goes.
+ *
+ * Bounded because every entry is a preferences read and a catalogue lookup; two hundred covers what
+ * anyone scrolls to and keeps the section instant.
+ */
+private const val HISTORY_LIMIT = 200
+
+/**
+ * Channels the multiview grid holds at once.
+ *
+ * Four is the practical ceiling on a single screen: beyond that each tile is too small to follow,
+ * and the machine is decoding streams nobody can read. It is also the layout the grid is built for.
+ */
+private const val MAX_MULTIVIEW_TILES = 4
 
 /** Sections of the music workspace, mirroring the sidebar's own ordering. */
 enum class MusicSection { HOME, ARTISTS, PLAYLISTS, RADIO, DOWNLOADS }
@@ -2931,6 +4520,14 @@ data class DailyHomeSnapshot(
      * day, and a user who came back an hour later saw nothing new on the largest surface in the app.
      */
     val heroRotation: List<XtreamCatalogItem> = emptyList(),
+    /**
+     * Films released this year, newest catalogue-wide rather than page-wide.
+     *
+     * Empty when the provider carries nothing from this year, in which case the rail is not drawn —
+     * a heading over an empty row reads as a fault.
+     */
+    val releasesThisYear: List<XtreamCatalogItem> = emptyList(),
+    val seriesThisYear: List<XtreamCatalogItem> = emptyList(),
     val movies: List<XtreamCatalogItem>,
     val series: List<XtreamCatalogItem>,
     val live: List<XtreamCatalogItem>,
@@ -3001,13 +4598,9 @@ internal fun String.editorialCatalogTitle(): String =
         ).replace(Regex("""\s+"""), " ")
         .trim()
 
-internal fun editorialCatalogKey(title: String): String =
-    title
-        .lowercase(Locale.ROOT)
-        .replace(Regex("\\[[^]]{1,12}]"), " ")
-        .replace(Regex("\\b(4k|uhd|fhd|hd|sd|h\\.?265|hevc|multi|dual)\\b"), " ")
-        .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
-        .trim()
+// editorialCatalogKey lived here and is gone: every shelf now uses shelfDeduplicationKey, which
+// does the same job and also handles accents, pipe-separated labels and trailing language tags —
+// the shapes that were still reaching the screen as duplicate posters.
 
 sealed interface ImportStatus {
     data object Idle : ImportStatus
@@ -3076,6 +4669,16 @@ sealed interface LiveEpgStatus {
     data class Loaded(
         val now: XtreamEpgProgram?,
         val next: XtreamEpgProgram?,
+        /**
+         * Everything the provider sent, in order, for the full schedule.
+         *
+         * The client has always fetched several hours of programmes and the screen used two of
+         * them; the rest was parsed and thrown away. Showing the whole grid is what people expect
+         * from a live channel, and it costs nothing extra — the request is already made.
+         *
+         * Defaulted to empty so a caller that only has now-and-next still compiles.
+         */
+        val schedule: List<XtreamEpgProgram> = emptyList(),
     ) : LiveEpgStatus
 
     /** EPG is optional and must never block channel playback. */

@@ -28,5 +28,6 @@ include(
     ":packages:test-fixtures",
     ":packages:stalker-client",
     ":packages:metadata-client",
+    ":packages:media-source-spi",
     ":packages:xtream-client",
 )

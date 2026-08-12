@@ -9,6 +9,27 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ChannelDao {
+    /**
+     * One stable, non-empty image per category. `MIN` is intentional: it keeps the result
+     * deterministic without loading every catalogue row merely to decorate the category grid.
+     */
+    @Query(
+        """
+        SELECT category_id AS categoryId, MIN(logo_url) AS artworkUrl
+        FROM channels
+        WHERE source_id = :sourceId
+          AND (:contentType IS NULL OR content_type = :contentType)
+          AND category_id IS NOT NULL
+          AND logo_url IS NOT NULL
+          AND TRIM(logo_url) != ''
+        GROUP BY category_id
+        """,
+    )
+    fun observeCategoryArtwork(
+        sourceId: String,
+        contentType: String?,
+    ): Flow<List<CategoryArtworkProjection>>
+
     @Query(
         """
         SELECT * FROM channels
@@ -100,6 +121,35 @@ interface ChannelDao {
     suspend fun getById(id: String): ChannelEntity?
 
     @Query(
+        "SELECT * FROM channels WHERE source_id = :sourceId " +
+            "AND provider_item_id = :providerItemId AND content_type = :contentType LIMIT 1",
+    )
+    suspend fun findByProviderItem(
+        sourceId: String,
+        providerItemId: String,
+        contentType: String,
+    ): ChannelEntity?
+
+    /**
+     * Films and series whose name contains [titleFragment], across every source.
+     *
+     * Deliberately loose: this only gathers *candidates*, and `LibraryMatchingPolicy` decides which
+     * of them is confident enough to claim as the user's own copy. A tighter query here would hide
+     * real matches from a policy built to judge them — a provider writing "O Poderoso Chefão [4K]"
+     * still has the film, and an exact-title query would never find it.
+     */
+    @Query(
+        """
+        SELECT * FROM channels
+        WHERE content_type IN ('MOVIE', 'SERIES')
+          AND name LIKE '%' || :titleFragment || '%' COLLATE NOCASE
+        ORDER BY sort_order, id
+        LIMIT :limit
+        """,
+    )
+    suspend fun findLibraryCandidates(titleFragment: String, limit: Int = 40): List<ChannelEntity>
+
+    @Query(
         """
         SELECT * FROM channels
         WHERE source_id = :sourceId
@@ -156,3 +206,8 @@ interface ChannelDao {
     @Query("DELETE FROM channels WHERE source_id = :sourceId")
     suspend fun deleteForSource(sourceId: String)
 }
+
+data class CategoryArtworkProjection(
+    val categoryId: String,
+    val artworkUrl: String,
+)

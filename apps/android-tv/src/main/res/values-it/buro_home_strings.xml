@@ -61,6 +61,7 @@
 
     <string name="buro_home_import_source">Importa fonte</string>
     <string name="buro_home_view_story">Apri la storia</string>
+    <string name="buro_home_view_details">Vedi dettagli</string>
     <string name="buro_home_view_sources">Vedi fonti</string>
     <string name="buro_home_view_sources_count">Vedi fonti (%1$d)</string>
     <string name="buro_home_back">Indietro</string>

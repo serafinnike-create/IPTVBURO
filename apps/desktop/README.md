@@ -81,9 +81,27 @@ de comando, nos logs ou na persistência do aplicativo. O vídeo é incorporado 
 janela do IPTV BURO e recebe controles reais de volume, seek, velocidade e tela
 cheia.
 
-`Verificar atualização` consulta os releases do repositório, aceita apenas uma
-versão semanticamente mais nova e um MSI publicado pelo GitHub, exige o digest
-`sha256:` do asset, verifica o arquivo local e só então abre o instalador.
+`Verificar atualização` faz uma consulta sem cache a cada clique aos releases de
+`serafinnike-create/IPTVBURO`, aceita apenas uma versão semanticamente mais nova
+e um MSI publicado nesse mesmo repositório, exige o digest `sha256:` do asset,
+verifica o arquivo local e só então abre o instalador.
+
+## Build pública limpa
+
+Por padrão, nenhuma chave de `local.properties` é incluída no binário. A build
+pública não contém playlist, fonte, credencial, perfil, histórico, download ou
+registo do utilizador da máquina que compilou o aplicativo. Para uma execução
+local de desenvolvimento, a chave TMDb pode ser habilitada explicitamente com
+`-Piptvburo.includeLocalTmdbKey=true`; qualquer tarefa de distribuição recusa
+essa opção.
+
+```powershell
+.\gradlew.bat :apps:desktop:clean :apps:desktop:test :apps:desktop:createDistributable
+```
+
+O MSI público exige Authenticode. Depois de configurar o certificado fora do
+repositório, execute `scripts/sign-windows-release.ps1`; `packageMsi` direto é
+bloqueado para impedir a publicação acidental de um instalador sem assinatura.
 
 Download offline continua oculto até a fonte ou o backend declarar autorização
 para o item. Brilho global do monitor e HDR forçado também não são simulados: são

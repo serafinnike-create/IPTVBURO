@@ -29,6 +29,9 @@ class RoomPlaybackProgressRepository @Inject constructor(
     override fun continueWatching(profileId: String, limit: Int): List<PlaybackProgress> =
         dao.continueWatching(profileId, limit).map { it.toDomain() }
 
+    override fun history(profileId: String, limit: Int): List<PlaybackProgress> =
+        dao.history(profileId, limit).map { it.toDomain() }
+
     private fun PlaybackProgress.toEntity() = PlaybackProgressEntity(
         profileId = identity.profileId,
         sourceId = identity.sourceId,

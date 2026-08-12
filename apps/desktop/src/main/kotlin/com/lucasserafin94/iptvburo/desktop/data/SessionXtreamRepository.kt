@@ -8,6 +8,7 @@ import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
 import com.lucasserafin94.iptvburo.domain.model.LibraryCandidate
 import com.lucasserafin94.iptvburo.domain.model.MatchKind
+import com.lucasserafin94.iptvburo.domain.model.shelfDeduplicationKey
 import com.lucasserafin94.iptvburo.xtream.XtreamAccount
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
@@ -50,6 +51,15 @@ class SessionXtreamRepository(
      * again - the exact duplicate download this guards against.
      */
     private val fetchLocks = EnumMap<XtreamContentType, Any>(XtreamContentType::class.java)
+
+    /**
+     * The catalogue kept between launches.
+     *
+     * A returning user waited for the whole list to be downloaded and parsed again before anything
+     * appeared — for a catalogue that changes over days. Measured on a real-sized list: 41,717
+     * items read back from disk in 132 ms.
+     */
+    private val diskCache = CatalogDiskCache()
 
     /**
      * What the initial load is doing right now.
@@ -115,7 +125,13 @@ class SessionXtreamRepository(
                 }.toMap()
 
             onProgress(0.35f, XtreamLoadStage.Channels)
-            val liveCatalog = loadCatalogItems(nextVault, XtreamContentType.LIVE)
+            // The live catalogue is the largest single payload of the sign-in, and on a returning
+            // launch it is almost always identical to the copy already on disk. Reading that
+            // instead is the difference between a wait measured in seconds and one measured in
+            // milliseconds — 41,717 items come back in about 130 ms.
+            val fingerprint = synchronized(lock) { sourceId }
+            val cachedLive = fingerprint?.let { diskCache.read(XtreamContentType.LIVE, it) }
+            val liveCatalog = cachedLive?.catalog ?: loadCatalogItems(nextVault, XtreamContentType.LIVE)
             onProgress(1f, XtreamLoadStage.Channels)
             synchronized(lock) {
                 checkGeneration(currentGeneration)
@@ -123,6 +139,17 @@ class SessionXtreamRepository(
                 categories.putAll(loadedCategories)
                 catalogs[XtreamContentType.LIVE] = liveCatalog
                 summaryLocked()
+            }.also {
+                // Only when it came from the provider: rewriting a copy that was just read from
+                // disk would refresh its timestamp and keep a stale catalogue alive for ever.
+                if (cachedLive == null && fingerprint != null) {
+                    diskCache.write(
+                        contentType = XtreamContentType.LIVE,
+                        accountFingerprint = fingerprint,
+                        catalog = liveCatalog,
+                        categories = loadedCategories[XtreamContentType.LIVE].orEmpty(),
+                    )
+                }
             }
         } catch (error: Throwable) {
             clearIfGeneration(currentGeneration)
@@ -141,7 +168,17 @@ class SessionXtreamRepository(
      * calls this for MOVIE and SERIES while the user clicking a content tab calls it for the same
      * type, and the two used to miss the cache together and stream a 30,000-item catalogue twice.
      */
-    fun loadCatalog(contentType: XtreamContentType): XtreamSessionSummary {
+    /**
+     * Loads a catalogue, from disk when there is a fresh copy and from the provider otherwise.
+     *
+     * @param forceRefresh bypasses the disk cache. This is what "Atualizar listas" does: the user
+     *   is explicitly asking for what the provider has now, and answering from a file would make
+     *   that button appear broken.
+     */
+    fun loadCatalog(
+        contentType: XtreamContentType,
+        forceRefresh: Boolean = false,
+    ): XtreamSessionSummary {
         synchronized(lock) {
             catalogs[contentType]?.let { return summaryLocked() }
         }
@@ -157,11 +194,45 @@ class SessionXtreamRepository(
                 currentGeneration = generation
                 vault = requireNotNull(credentialVault) { "No Xtream session is active." }
             }
+
+            // Disk before network. A provider's catalogue changes over days, and re-downloading
+            // and re-parsing 41,717 items is most of the wait a returning user sits through — for
+            // a list that is almost always identical to the one they saw an hour ago.
+            //
+            // Skipped when the caller asked for fresh data, which is what Atualizar listas does.
+            // The same id the rest of the app uses to tell one subscription from another: a salted
+            // hash of server and username, never the credentials themselves.
+            val fingerprint = synchronized(lock) { sourceId }
+            if (!forceRefresh && fingerprint != null) {
+                diskCache.read(contentType, fingerprint)?.let { cached ->
+                    return synchronized(lock) {
+                        checkGeneration(currentGeneration)
+                        catalogs[contentType] = cached.catalog
+                        // Categories travel with the catalogue: they are fetched in the same round
+                        // and a catalogue without them shows every title under no category at all.
+                        if (cached.categories.isNotEmpty()) categories[contentType] = cached.categories
+                        summaryLocked()
+                    }
+                }
+            }
+
             val loaded = loadCatalogItems(vault, contentType)
             return synchronized(lock) {
                 checkGeneration(currentGeneration)
                 catalogs[contentType] = loaded
                 summaryLocked()
+            }.also {
+                // Written after publishing, so a slow disk never delays the screen. The categories
+                // are read back out of memory rather than passed in, since the fetch above may
+                // have refreshed them.
+                fingerprint?.let { account ->
+                    diskCache.write(
+                        contentType = contentType,
+                        accountFingerprint = account,
+                        catalog = loaded,
+                        categories = synchronized(lock) { categories[contentType].orEmpty() },
+                    )
+                }
             }
         }
     }
@@ -185,10 +256,15 @@ class SessionXtreamRepository(
      */
     fun itemByContentKey(contentType: XtreamContentType, contentKey: String): XtreamCatalogItem? {
         val catalog = synchronized(lock) { catalogs[contentType] } ?: return null
-        repeat(catalog.size) { index ->
-            if (catalog.identityAt(index).key == contentKey) return catalog.itemAt(index)
-        }
-        return null
+        // Indexed rather than scanned. This used to walk the catalogue building a full
+        // XtreamCatalogItem per row just to read its identity — 41,698 objects per lookup on a real
+        // list — and the history screen makes two hundred of these, on every keystroke in its
+        // search box.
+        //
+        // Under the same lock as the lookup above: the index is built lazily inside the catalogue,
+        // so two threads calling this at once would otherwise race on building it.
+        val index = synchronized(lock) { catalog.indexOfContentKey(contentKey) }
+        return index.takeIf { it >= 0 }?.let(catalog::itemAt)
     }
 
     /**
@@ -204,6 +280,14 @@ class SessionXtreamRepository(
         minimumRating: Double? = null,
         allowedIdentities: Set<ContentIdentity>? = null,
         kidsMode: Boolean = false,
+        /**
+         * Categories behind the PIN that has not been entered this session.
+         *
+         * Filtered here rather than at the category rail because the rail is not the only way in:
+         * with no category selected the catalogue lists everything, and a search matches across all
+         * of them. A lock that only guarded the rail left every locked title one search away.
+         */
+        lockedCategoryIds: Set<String> = emptySet(),
     ): XtreamCatalogPage {
         require(pageSize in 1..MAX_PAGE_SIZE) { "Invalid page size." }
         val catalogItems =
@@ -215,6 +299,14 @@ class SessionXtreamRepository(
         val requestedStart = safeRequestedPage * pageSize
         val pageItems = ArrayList<XtreamCatalogItem>(pageSize)
         var totalMatches = 0
+
+        /**
+         * Titles already listed, for the favourites screen only.
+         *
+         * Allocated whatever the mode, because a null here would need a branch at every use; it
+         * stays empty and costs nothing when the identity filter is not in play.
+         */
+        val seenIdentities = HashSet<ContentIdentity>()
         val categoryNames = synchronized(lock) { categories[contentType].orEmpty().associate { it.providerId to it.name } }
 
         repeat(catalogItems.size) { index ->
@@ -228,15 +320,41 @@ class SessionXtreamRepository(
                     allowedIdentities,
                 )
             ) {
-                val item = catalogItems.itemAt(index)
+                // The exclusions are answered from the columns, before any object is built.
+                // `itemAt` allocates a whole XtreamCatalogItem — decoding category ids, composing
+                // an artwork URL — and building one only to discard it, for every row of a 41,698
+                // item catalogue, is most of the cost of turning a page.
+                val rowCategoryIds = catalogItems.categoryIdsAt(index)
                 val allowedForKids =
                     !kidsMode || FamilyContentPolicy.isAllowedForKids(
-                        item.name,
-                        item.categoryIds.map(categoryNames::get),
+                        catalogItems.nameAt(index),
+                        rowCategoryIds.map(categoryNames::get),
                     )
                 if (!allowedForKids) return@repeat
+                // Any locked category is enough to hide the title: an item carried by both a locked
+                // and an open category is still the locked one's content, and showing it would make
+                // the lock trivial to work around.
+                if (lockedCategoryIds.isNotEmpty() && rowCategoryIds.any(lockedCategoryIds::contains)) {
+                    return@repeat
+                }
+                // One row per title when listing favourites.
+                //
+                // A favourite is keyed on what the content *is* — kind, title, year — so that it
+                // survives replacing the playlist. Providers commonly carry the same film several
+                // times over for different qualities, and every one of those copies matches the one
+                // key: marking a film once made it appear four times on the favourites screen,
+                // which reads as the app saving it repeatedly.
+                //
+                // Only here. In the catalogue proper those copies are the choice of quality, and
+                // collapsing them would take away the ability to pick one.
+                if (allowedIdentities != null && !seenIdentities.add(catalogItems.identityAt(index))) {
+                    return@repeat
+                }
+
+                // Built only for the rows that actually appear on this page — eighty of them,
+                // not every match in the catalogue.
                 if (totalMatches in requestedStart until requestedStart + pageSize) {
-                    pageItems += item
+                    pageItems += catalogItems.itemAt(index)
                 }
                 totalMatches += 1
             }
@@ -261,6 +379,10 @@ class SessionXtreamRepository(
                 minimumRating = minimumRating,
                 allowedIdentities = allowedIdentities,
                 kidsMode = kidsMode,
+                // The clamped request is still the same protected browse operation. Dropping this
+                // argument here made an out-of-range page recurse without the parental filter and
+                // return a locked title from the provider's unfiltered last page.
+                lockedCategoryIds = lockedCategoryIds,
             )
         }
         return XtreamCatalogPage(
@@ -319,7 +441,91 @@ class SessionXtreamRepository(
      * Live channels are left out: a channel is a stream, not a work, and matching one against a
      * film would only ever produce noise.
      */
-    fun libraryMatchCandidates(): List<LibraryCandidate> {
+    /**
+     * This year's releases across the whole catalogue, newest first.
+     *
+     * Scans every item rather than a page: what arrived this year is scattered through forty
+     * thousand entries, and a page-based answer would show whichever slice happened to be first.
+     *
+     * Filtered to [year] alone. A provider adds titles constantly, most of them older films being
+     * back-filled, so "recently added" and "new" are different questions — and the one the user is
+     * asking is what came out this year.
+     */
+    fun releasesForYear(
+        type: XtreamContentType,
+        year: Int,
+        limit: Int,
+        kidsMode: Boolean,
+        lockedCategoryIds: Set<String> = emptySet(),
+    ): List<XtreamCatalogItem> {
+        if (synchronized(lock) { catalogs[type] } == null) {
+            runCatching { loadCatalog(type) }
+        }
+        val catalog = synchronized(lock) { catalogs[type] } ?: return emptyList()
+
+        val categoryNames = synchronized(lock) { categories[type].orEmpty().associate { it.providerId to it.name } }
+
+        val matches = ArrayList<XtreamCatalogItem>(limit * 4)
+        for (index in 0 until catalog.size) {
+            val item = catalog.itemAt(index)
+            if (item.year != year) continue
+            if (item.categoryIds.any(lockedCategoryIds::contains)) continue
+            if (kidsMode &&
+                !FamilyContentPolicy.isAllowedForKids(item.name, item.categoryIds.map(categoryNames::get))
+            ) {
+                continue
+            }
+            matches += item
+        }
+
+        // Best first within the year: a provider's newest entries arrive unordered, and rating is
+        // the only signal available for what is worth surfacing.
+        return matches
+            .sortedByDescending { item -> item.rating ?: 0.0 }
+            // The shelf key, not the matching one. Stripping quality words was not enough: the
+            // copies that still reached the screen differed by a channel prefix, a pipe-separated
+            // tag, a bracketed language marker or a trailing single letter — none of which the
+            // conservative matcher removes, and all of which are the same film.
+            .distinctBy { item -> item.name.shelfDeduplicationKey() }
+            .take(limit)
+    }
+
+    /**
+     * Applies the same parental policy used by [page] to an item resolved outside paging.
+     *
+     * Continue-watching and history resolve persisted identities directly, so they cannot rely on
+     * a page having filtered the item first. Keeping this check in the repository also gives those
+     * Home rows the category names needed by the conservative Kids policy.
+     */
+    fun isAllowedForBrowsing(
+        item: XtreamCatalogItem,
+        kidsMode: Boolean,
+        lockedCategoryIds: Set<String>,
+    ): Boolean {
+        if (item.categoryIds.any(lockedCategoryIds::contains)) return false
+        if (!kidsMode) return true
+        val categoryNames =
+            synchronized(lock) {
+                categories[item.contentType].orEmpty().associate { category -> category.providerId to category.name }
+            }
+        return FamilyContentPolicy.isAllowedForKids(item.name, item.categoryIds.map(categoryNames::get))
+    }
+
+    fun libraryMatchCandidates(
+        kidsMode: Boolean = false,
+        lockedCategoryIds: Set<String> = emptySet(),
+        lockedCategoryIdsByContentType: Map<XtreamContentType, Set<String>> = emptyMap(),
+    ): List<LibraryCandidate> {
+        // Fetched if they are not in memory yet. Assinaturas can be the first screen a user opens,
+        // and the film and series catalogues are only loaded when their own sections are visited —
+        // so this used to run against an empty map and answer "you own nothing", silently, for
+        // every title. loadCatalog is a no-op when the catalogue is already there.
+        listOf(XtreamContentType.MOVIE, XtreamContentType.SERIES).forEach { type ->
+            if (synchronized(lock) { catalogs[type] } == null) {
+                runCatching { loadCatalog(type) }
+            }
+        }
+
         val loaded =
             synchronized(lock) {
                 listOf(XtreamContentType.MOVIE, XtreamContentType.SERIES)
@@ -332,8 +538,19 @@ class SessionXtreamRepository(
         val candidates = ArrayList<LibraryCandidate>(loaded.sumOf { (_, catalog) -> catalog.size })
         loaded.forEach { (contentType, catalog) ->
             val kind = if (contentType == XtreamContentType.SERIES) MatchKind.SERIES else MatchKind.MOVIE
+            val lockedForType = lockedCategoryIdsByContentType[contentType] ?: lockedCategoryIds
+            val categoryNames =
+                synchronized(lock) {
+                    categories[contentType].orEmpty().associate { category -> category.providerId to category.name }
+                }
             for (index in 0 until catalog.size) {
                 val item = catalog.itemAt(index)
+                if (item.categoryIds.any(lockedForType::contains)) continue
+                if (kidsMode &&
+                    !FamilyContentPolicy.isAllowedForKids(item.name, item.categoryIds.map(categoryNames::get))
+                ) {
+                    continue
+                }
                 candidates +=
                     LibraryCandidate(
                         // Prefixed with the content type: provider ids are numbered per catalogue,
@@ -417,6 +634,14 @@ class SessionXtreamRepository(
      * instead of failing with no active session. The generation is deliberately not bumped: nothing
      * is being invalidated, only re-read.
      */
+    /**
+     * Drops the in-memory catalogues so the next [loadCatalog] fetches again.
+     *
+     * The disk copy goes too. It exists to answer "what did the provider have recently", and a
+     * caller asking for a refresh is asking precisely for what it has *now* — leaving the file in
+     * place would have the next load answer from it and make the refresh a no-op. A test caught
+     * that before it shipped.
+     */
     fun clearCatalogCache() {
         synchronized(lock) {
             // Only the item catalogues. Categories are fetched during connect, not by loadCatalog,
@@ -424,6 +649,20 @@ class SessionXtreamRepository(
             // repopulate it until the user signed in again.
             catalogs.clear()
         }
+        diskCache.clear()
+    }
+
+    /**
+     * Forgets the session **and** the catalogue kept on disk.
+     *
+     * Separate from [clear], which runs on every authentication — including the one that restores a
+     * saved session at startup, where deleting the cache would defeat the whole point of having
+     * one. This is for signing out: leaving a subscription's entire catalogue on disk after the
+     * user has deliberately disconnected would be a surprise.
+     */
+    fun clearIncludingDiskCache() {
+        clear()
+        diskCache.clear()
     }
 
     fun clear() {

@@ -9,6 +9,15 @@ internal enum class PlaybackPhase {
 
 internal enum class PlaybackFailure {
     CONNECTION,
+
+    /**
+     * The provider answered, and said this stream is not there.
+     *
+     * Separate from [CONNECTION] because the advice is opposite: a 404 or a 403 is a channel the
+     * playlist still lists but the provider has removed or will not serve, and telling somebody to
+     * check their network sends them to look at the one thing that is working.
+     */
+    STREAM_GONE,
     UNSUPPORTED_MEDIA,
     UNKNOWN,
 }
@@ -21,6 +30,15 @@ internal data class PlaybackUiState(
     val failure: PlaybackFailure? = null,
     val hasEnded: Boolean = false,
     val focusPlayWhenReady: Boolean = false,
+    /**
+     * Where playback is and how long the item runs, in milliseconds.
+     *
+     * Both are zero for a live stream, which has no duration to report and no position within one.
+     * The controls use that to decide whether a scrubber makes sense at all: a bar that fills to
+     * 100% and stays there would misdescribe live television.
+     */
+    val positionMillis: Long = 0L,
+    val durationMillis: Long = 0L,
 )
 
 internal sealed interface PlaybackUiEvent {
@@ -123,10 +141,22 @@ internal fun reducePlaybackUiState(
             )
     }
 
-internal fun playbackFailureFromErrorCode(errorCode: Int): PlaybackFailure =
-    when (errorCode / ERROR_CODE_FAMILY_SIZE) {
-        IO_ERROR_FAMILY -> PlaybackFailure.CONNECTION
-        DECODER_ERROR_FAMILY -> PlaybackFailure.UNSUPPORTED_MEDIA
+/**
+ * What to tell the viewer, from the player's error code and the HTTP status behind it.
+ *
+ * [httpStatus] is null unless the failure came from an HTTP response. It is what separates "your
+ * network is down" from "this channel is gone", which look identical in the error code alone.
+ */
+internal fun playbackFailureFromErrorCode(
+    errorCode: Int,
+    httpStatus: Int? = null,
+): PlaybackFailure =
+    when {
+        // The provider replied and refused. 404 is a dead channel still in the playlist; 401 and
+        // 403 are the account not being allowed this stream. Neither is fixed by checking wifi.
+        httpStatus in setOf(401, 403, 404, 410) -> PlaybackFailure.STREAM_GONE
+        errorCode / ERROR_CODE_FAMILY_SIZE == IO_ERROR_FAMILY -> PlaybackFailure.CONNECTION
+        errorCode / ERROR_CODE_FAMILY_SIZE == DECODER_ERROR_FAMILY -> PlaybackFailure.UNSUPPORTED_MEDIA
         else -> PlaybackFailure.UNKNOWN
     }
 

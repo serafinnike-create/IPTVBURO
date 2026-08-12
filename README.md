@@ -9,7 +9,7 @@ Transforma fontes de mídia autorizadas pelo usuário em uma biblioteca organiza
 ![Status](https://img.shields.io/badge/status-em%20desenvolvimento-7c3aed)
 ![GDD](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%209.0-2563eb)
 ![Android TV](https://img.shields.io/badge/Android%20TV-v0.2.0--alpha.5-3ddc84)
-![Windows](https://img.shields.io/badge/Windows-v1.1-e2b458)
+![Windows](https://img.shields.io/badge/Windows-v2.0.0--alpha.1%20candidate-e2b458)
 ![Multiplataforma](https://img.shields.io/badge/escopo-universal-0f766e)
 ![Offline Mobile](https://img.shields.io/badge/Offline%20Vault-planejado-f59e0b)
 
@@ -43,7 +43,7 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 |---|---|
 | GDDs 1.0 a 9.0 | ✅ Documentados na `main` |
 | Aplicação Android/Android TV | 🧪 Prévia `v0.2.0-alpha.5` |
-| Aplicação Windows | 🧪 Prévia `v1.1` |
+| Aplicação Windows | 🧪 Candidato `v2.0.0-alpha.1`; publicação aguarda assinatura Authenticode |
 | **Onde assistir** (GDD 9) — prateleira por serviço, com capas | 🧪 Windows, dados reais do TMDb |
 | **Já está na sua lista** — o título encontrado no catálogo do usuário | 🧪 Só um casamento confiante produz a linha |
 | Redirecionamento ao serviço oficial | ✅ Nunca reproduz stream protegido; recusa endereço com token ou mídia |
@@ -60,8 +60,8 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 | Portal Stalker/Ministra (MAC) | 🧪 Cliente e importação prontos; falta a tela de conexão |
 | Download de VOD | 🧪 Windows funcional; Android pendente. Diverge do GDD 6 por [ADR-008](docs/adr/ADR-008-UNRESTRICTED-VOD-DOWNLOAD.md) |
 | Multiview (até 4 canais) | 🧪 Implementado no Windows |
-| Licenciamento e site de ativação | 🚧 App exibe código e QR; `site/` pronto. Sem servidor, nenhuma compra é possível |
-| Atualização automática no Windows | ✅ Funcional desde que o repositório passou a ser público |
+| Licenciamento e site de ativação | 🧪 App exibe código e QR; site apresenta o produto e encaminha a compra ao Worker/Stripe. Validação de compra real ainda pendente |
+| Atualização no Windows | ✅ O botão consulta sempre `serafinnike-create/IPTVBURO` e só aceita MSI mais novo, assinado e com SHA-256 do GitHub |
 | Android mobile | 🧪 Mesma build adaptativa instalada em Android 15 |
 | Windows | 🧪 Compose Desktop, player compatível e MSI local aprovados |
 | Continuidade de reprodução por perfil | 🧪 Android e Windows implementados; migração Android validada em aparelho físico |
@@ -111,14 +111,15 @@ O fluxo importação → categoria → canal → primeiro frame foi validado em 
 
 A prévia usa assinatura de desenvolvimento e não é uma versão de loja.
 
-### Preview multiplataforma v0.2.0-alpha.5
+### Candidato Windows v2.0.0-alpha.1
 
 O Windows restaura a fonte via DPAPI e oferece perfis, idiomas, favoritos,
 catálogo paginado, detalhes e filmografia na mesma janela, continuidade por
 perfil e Home editorial diária. O instalador inclui o VLC oficial para reprodução
 H.264/H.265/HEVC, AAC, MP4, MKV e HLS, com play/pause, seek, volume, velocidade e
-tela cheia. O botão `Verificar atualização` baixa somente um MSI mais novo do
-GitHub Releases e valida o digest SHA-256 antes de executá-lo.
+tela cheia. A cada clique, o botão `Verificar atualização` força uma consulta
+nova ao GitHub Releases de `serafinnike-create/IPTVBURO`, baixa somente um MSI
+semanticamente mais novo e valida o digest SHA-256 antes de executá-lo.
 
 Nesta revisão, o Android usa apenas um painel de controles, altera o volume real
 de mídia do aparelho e oferece rotação/tela cheia. A Home separa o ano real de
@@ -126,21 +127,21 @@ lançamento da data de entrada na fonte, restaura o hero corretamente com uma
 fonte real e mantém os cinco destinos visíveis no celular. No Windows, a versão
 fica visível no topo e o player aceita F11, Escape e Espaço além dos controles.
 
-A `alpha.5` acrescenta arte cinematográfica original às categorias no Android e
-Windows, sem logotipos de terceiros, e transforma o elenco informado pela fonte
-em cartões de pessoa clicáveis também nas séries. O cofre DPAPI do Windows
-agora fica fora da pasta do instalador e migra automaticamente o arquivo legado,
-evitando perder a fonte nas próximas atualizações.
+O candidato `2.0.0-alpha.1` é gerado sem playlists, fontes, credenciais, perfis,
+histórico, downloads, registos de utilizador ou chave TMDb da máquina de build.
+O cofre DPAPI e todos os demais dados do utilizador vivem fora do instalador. A
+chave TMDb passa a ser configurada pelo próprio utilizador, por perfil.
 
-Esta continua sendo uma prévia: download offline depende de autorização explícita
-da fonte/backend; HDR forçado, brilho global do monitor e seleção completa de
-faixas ainda não são anunciados como funções estáveis.
+Esta continua sendo uma prévia. A publicação do instalador está bloqueada até o
+launcher e o MSI possuírem assinatura Authenticode válida e com timestamp. O
+workflow recusa publicar quando os segredos de assinatura não estão configurados.
 
-- [GitHub Pre-release v0.2.0-alpha.5](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.2.0-alpha.5)
-- [Instalador Windows x64](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.5/IPTVBURO-0.2.6.msi)
-- [APK Android/Android TV](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.5/android-tv-debug.apk)
-- MSI: 163.982.391 bytes — SHA-256 `25A2BFB33C4FE8EC860686992F8988FDF62DA6E0383429A9DC60ED5326C9A846`;
-- APK: 34.253.491 bytes — SHA-256 `C34C24CFA7DBF49A82E70C3D494D396C6062484E31D40D173FD4735EFC9CD18D`.
+- [Releases do repositório atual](https://github.com/serafinnike-create/IPTVBURO/releases)
+- versão preparada: `v2.0.0-alpha.1`;
+- artefato esperado: `IPTV-BURO-v2.0.0-alpha.1-windows-x64.msi`;
+- validação local: 597 testes, 0 falhas; imagem limpa com 875 arquivos e
+  auditoria de privacidade aprovada;
+- estado: candidato local; ainda não publicado por falta do certificado de assinatura.
 
 ### Build
 
@@ -154,8 +155,13 @@ Requisitos:
 Windows:
 
 ```powershell
-.\gradlew.bat test :apps:android-tv:lintDebug :apps:android-tv:assembleDebug :apps:desktop:packageMsi
+.\gradlew.bat test :apps:android-tv:lintDebug :apps:android-tv:assembleDebug
+.\gradlew.bat :apps:desktop:clean :apps:desktop:test :apps:desktop:createDistributable
 ```
+
+O MSI público não pode ser criado diretamente. Com o certificado protegido
+configurado, use `./scripts/sign-windows-release.ps1`; o script assina e verifica
+o launcher e o instalador antes de produzir o artefato.
 
 Linux/macOS:
 
@@ -172,7 +178,7 @@ apps/android-tv/build/outputs/apk/debug/android-tv-debug.apk
 MSI local:
 
 ```text
-apps/desktop/build/compose/binaries/main/msi/IPTVBURO-0.2.6.msi
+apps/desktop/build/compose/binaries/main/msi/IPTVBURO-2.0.0.msi
 ```
 
 Documentação do estado atual:
@@ -294,6 +300,13 @@ Princípios:
 
 ## Roadmap resumido
 
+### Agora — fechar a prévia Windows 2.0
+
+- configurar certificado Authenticode e timestamp no GitHub Secrets;
+- publicar `v2.0.0-alpha.1` com MSI assinado e `SHA256SUMS.txt`;
+- validar instalação e atualização numa conta Windows limpa;
+- manter dados pessoais e chaves fora de todos os artefatos.
+
 ### Onda 1 — consolidar Android TV
 
 - completar Cinematic System;
@@ -362,7 +375,7 @@ Princípios:
 - não haverá bypass de proteção ou autorização;
 - conteúdo offline permanece privado e autorizado;
 - teste gratuito proposto: 7 dias;
-- compra única proposta: € 9,99 por dispositivo;
+- compra única: preço-base de € 9,90 por dispositivo, válida por 730 dias e sem renovação automática;
 - regras finais dependem de validação jurídica, fiscal e das lojas.
 
 <div align="center">

@@ -1,0 +1,4 @@
+/assets/*
+  Cache-Control: public, max-age=86400
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff

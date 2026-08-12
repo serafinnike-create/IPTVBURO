@@ -60,6 +60,7 @@
 
     <string name="buro_home_import_source">Quelle importieren</string>
     <string name="buro_home_view_story">Story ansehen</string>
+    <string name="buro_home_view_details">Details ansehen</string>
     <string name="buro_home_view_sources">Quellen ansehen</string>
     <string name="buro_home_view_sources_count">Quellen ansehen (%1$d)</string>
     <string name="buro_home_back">Zurück</string>

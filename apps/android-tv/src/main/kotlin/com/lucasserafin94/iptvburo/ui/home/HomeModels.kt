@@ -24,6 +24,16 @@ data class HomeSection(
     val id: String,
     val hero: HomeItem,
     val rails: List<HomeRail>,
+    /**
+     * The banner's rotation, [hero] first.
+     *
+     * The banner cycles through these rather than holding one image, as the desktop's does: ten
+     * seconds is long enough to read a title and press play, short enough that somebody who lingers
+     * sees more than one thing on the largest surface in the app.
+     *
+     * Defaults to just [hero], so a catalogue with nothing else to offer behaves exactly as before.
+     */
+    val heroRotation: List<HomeItem> = listOf(hero),
 ) {
     init {
         require(id.isNotBlank()) { "A home section id cannot be blank." }
@@ -115,6 +125,14 @@ enum class HomeRailKind {
     CONTINUE_WATCHING,
     LIVE_NOW,
     EDITORIAL,
+
+    /**
+     * What a streaming service currently carries — the Home counterpart of the Assinaturas shelves.
+     *
+     * These are not in the user's playlist and are never playable from here: opening one leads to
+     * the "where to watch" page, which says where it can actually be watched.
+     */
+    STREAMING_SERVICE,
 }
 
 enum class HomeItemKind {

@@ -2,7 +2,9 @@ package com.lucasserafin94.iptvburo.stalker
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import java.io.FilterInputStream
 import java.io.IOException
+import java.io.InputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import okhttp3.HttpUrl
@@ -22,9 +24,20 @@ import okhttp3.Request
  * Nothing here writes the portal URL, MAC or token to logs or exception messages.
  */
 class StalkerClient(
-    private val httpClient: OkHttpClient = OkHttpClient(),
+    httpClient: OkHttpClient = OkHttpClient(),
     private val timeZone: String = "Europe/London",
+    private val maximumResponseBytes: Int = DEFAULT_MAXIMUM_RESPONSE_BYTES,
 ) {
+    private val httpClient =
+        httpClient.newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+
+    init {
+        require(maximumResponseBytes > 0) { "maximumResponseBytes must be positive" }
+    }
+
     /**
      * Performs the handshake and returns a session token.
      *
@@ -247,9 +260,32 @@ class StalkerClient(
                                 StalkerFailureReason.NETWORK,
                                 "portal returned ${response.code}",
                             )
-                        else -> response.body?.string().orEmpty()
+                        else -> {
+                            val responseBody = response.body
+                            val declaredLength = responseBody.contentLength()
+                            if (declaredLength > maximumResponseBytes) {
+                                throw StalkerClientException(
+                                    StalkerFailureReason.MALFORMED,
+                                    "portal response exceeded safety limit",
+                                )
+                            }
+                            responseBody
+                                .byteStream()
+                                .use { input ->
+                                    MaximumBytesInputStream(
+                                        delegate = input,
+                                        maximumBytes = maximumResponseBytes.toLong(),
+                                    ).readBytes()
+                                }
+                                .toString(StandardCharsets.UTF_8)
+                        }
                     }
                 }
+            } catch (tooLarge: StalkerResponseTooLargeException) {
+                throw StalkerClientException(
+                    StalkerFailureReason.MALFORMED,
+                    "portal response exceeded safety limit",
+                )
             } catch (io: IOException) {
                 // The message can contain the portal host, so it is not propagated.
                 throw StalkerClientException(StalkerFailureReason.NETWORK, "portal unreachable")
@@ -307,6 +343,9 @@ class StalkerClient(
         /** Portals do not advertise a lifetime; ten minutes keeps a session fresh cheaply. */
         const val TOKEN_LIFETIME_MILLIS = 10 * 60 * 1_000L
 
+        /** Stalker calls are paged; a larger body is treated as an unsafe or malformed response. */
+        const val DEFAULT_MAXIMUM_RESPONSE_BYTES = 8 * 1024 * 1024
+
         /** Pulls the stream URL out of `ffmpeg http://host/path extra args`. */
         fun extractUrl(command: String): String? =
             command
@@ -314,6 +353,41 @@ class StalkerClient(
                 .firstOrNull { token -> token.startsWith("http://") || token.startsWith("https://") }
     }
 }
+
+private class MaximumBytesInputStream(
+    delegate: InputStream,
+    private val maximumBytes: Long,
+) : FilterInputStream(delegate) {
+    private var bytesRead = 0L
+
+    override fun read(): Int {
+        if (bytesRead >= maximumBytes) return probeOverflow()
+        val value = super.read()
+        if (value >= 0) bytesRead += 1
+        return value
+    }
+
+    override fun read(
+        buffer: ByteArray,
+        offset: Int,
+        length: Int,
+    ): Int {
+        if (length == 0) return 0
+        if (bytesRead >= maximumBytes) return probeOverflow()
+        val allowed = minOf(length.toLong(), maximumBytes - bytesRead).toInt()
+        val count = super.read(buffer, offset, allowed)
+        if (count > 0) bytesRead += count
+        return count
+    }
+
+    private fun probeOverflow(): Int {
+        val value = super.read()
+        if (value == -1) return -1
+        throw StalkerResponseTooLargeException()
+    }
+}
+
+private class StalkerResponseTooLargeException : IOException()
 
 private fun StalkerContentType.portalType(): String =
     when (this) {

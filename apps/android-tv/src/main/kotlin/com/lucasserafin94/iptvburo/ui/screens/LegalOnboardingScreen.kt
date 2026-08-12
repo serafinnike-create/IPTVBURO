@@ -1,5 +1,6 @@
 package com.lucasserafin94.iptvburo.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -75,7 +77,10 @@ fun LegalOnboardingScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                // Top rather than centred: the notice is now longer than a phone screen, and
+                // centring a column taller than its viewport pushes the first paragraph off the
+                // top — the reader would start half-way through what they are agreeing to.
+                verticalArrangement = Arrangement.Top,
             ) {
                 BrandMark(
                     compact = true,
@@ -147,12 +152,22 @@ private fun LegalCard(
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(if (compact) 8.dp else 18.dp))
-        Text(
-            text = stringResource(R.string.legal_body),
-            color = BuroTextSecondary,
-            fontSize = if (compact) 14.sp else 18.sp,
-            lineHeight = if (compact) 20.sp else 27.sp,
-        )
+        // Three paragraphs rather than one, because they answer three different questions: what
+        // the app is, what the user is declaring by continuing, and who is answerable for what.
+        // Run together they read as boilerplate nobody finishes.
+        listOf(
+            R.string.legal_body,
+            R.string.legal_body_two,
+            R.string.legal_body_three,
+        ).forEachIndexed { index, paragraph ->
+            if (index > 0) Spacer(Modifier.height(if (compact) 10.dp else 16.dp))
+            Text(
+                text = stringResource(paragraph),
+                color = BuroTextSecondary,
+                fontSize = if (compact) 13.sp else 16.sp,
+                lineHeight = if (compact) 19.sp else 24.sp,
+            )
+        }
         Spacer(Modifier.height(if (compact) 10.dp else 20.dp))
         Text(
             text = stringResource(R.string.legal_privacy),
@@ -199,11 +214,13 @@ private fun BrandMark(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "▶",
-                color = BuroCanvas,
-                fontSize = if (compact) 48.sp else 70.sp,
-                textAlign = TextAlign.Center,
+            // The product's own mark — the gold aperture ring around the ivory B — rather than a
+            // generic play triangle. It is the same vector the launcher icon uses, so the first
+            // screen anybody sees shows the same logo as the icon they tapped to get here.
+            Image(
+                painter = painterResource(R.drawable.ic_launcher_foreground),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
             )
         }
         Spacer(Modifier.height(if (compact) 12.dp else 24.dp))

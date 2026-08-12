@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=1920, height=1080">
+    <title>IPTV BURO</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!--
+      O video da AVPlay NAO e desenhado por este elemento.
+      A Samsung desenha o video numa camada de hardware ATRAS da pagina.
+      Este <object> apenas reserva o espaco e obriga o fundo a ficar transparente.
+    -->
+    <object id="av-player" type="application/avplayer"></object>
+
+    <main id="app">
+        <header class="app-header">
+            <h1 class="app-title">IPTV BURO</h1>
+            <p class="app-subtitle">Preview Samsung Tizen &middot; nao validado em TV fisica</p>
+        </header>
+
+        <section class="shelf" aria-label="Canais de demonstracao">
+            <h2 class="shelf-title">Fontes de teste</h2>
+            <ul id="channel-list" class="card-row"></ul>
+        </section>
+
+        <p class="hint">
+            Use as setas do controle para navegar &middot; ENTER para reproduzir &middot; RETURN para parar
+        </p>
+    </main>
+
+    <div id="player-overlay" class="player-overlay" hidden>
+        <div class="player-status" id="player-status">Carregando&hellip;</div>
+    </div>
+
+    <script src="js/keys.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

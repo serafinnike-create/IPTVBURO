@@ -27,7 +27,9 @@ fun XtreamCatalogItem.episodeContentKey(episode: XtreamEpisode): String =
     buildString {
         append(contentIdentity().key)
         append("|s")
-        append(episode.seasonNumber ?: 0)
+        // No fallback: the season number is non-null. The episode number below keeps its `?: 0`
+        // because that one genuinely can be absent, and a key must still be produced for it.
+        append(episode.seasonNumber)
         append("e")
         append(episode.episodeNumber ?: 0)
     }

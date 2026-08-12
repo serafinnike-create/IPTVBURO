@@ -60,6 +60,7 @@
 
     <string name="buro_home_import_source">Import source</string>
     <string name="buro_home_view_story">View story</string>
+    <string name="buro_home_view_details">View details</string>
     <string name="buro_home_view_sources">View sources</string>
     <string name="buro_home_view_sources_count">View sources (%1$d)</string>
     <string name="buro_home_back">Back</string>

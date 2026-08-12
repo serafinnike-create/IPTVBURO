@@ -1,0 +1,89 @@
+# Cloudflare Worker configuration for the licence server.
+#
+# Deploy:
+#   npx wrangler d1 create iptvburo-licencas      # once; paste the id below
+#   npx wrangler d1 execute iptvburo-licencas --file=schema.sql --remote
+#   npx wrangler secret put SIGNING_KEY           # from generate-keys.mjs
+#   npx wrangler secret put STRIPE_WEBHOOK_SECRET # from the Stripe dashboard
+#   npx wrangler secret put ADMIN_TOKEN           # any long random string, for the admin panel
+#   npx wrangler deploy
+#
+# Secrets are set with `wrangler secret`, never in this file. This file is committed; the signing
+# key is the one value that makes every licence forgeable if it leaks.
+
+name = "iptvburo"
+main = "src/index.js"
+compatibility_date = "2026-08-08"
+
+# The free tier covers 100,000 requests a day. The app asks once per launch, so that is roughly
+# 100,000 daily launches before anything needs paying for.
+workers_dev = true
+
+# Every deploy would otherwise get its own versioned address serving the same Worker — the admin
+# panel, the validation endpoint, all of it, on URLs nobody is watching. One published address is
+# enough, and an old version left answering is a way in that outlives the fix that closed it.
+preview_urls = false
+
+# Re-query Play hourly so a refund/cancellation still revokes access when the app is offline and a
+# real-time notification is delayed. Each invocation is bounded and rotates by last_checked_at.
+[triggers]
+crons = ["17 * * * *"]
+
+# A production deployment accepts only live Stripe events. Tests set STRIPE_MODE=test directly in
+# their isolated environment, so test and live webhook payloads can never share a ledger silently.
+[vars]
+STRIPE_MODE = "live"
+GOOGLE_PLAY_PACKAGE_NAME = "com.lucasserafin94.iptvburo"
+GOOGLE_PLAY_PRODUCT_ID = "iptvburo_730_days"
+GOOGLE_PLAY_PURCHASE_OPTION_ID = "rent_730_days"
+GOOGLE_PLAY_ACCEPT_TEST_PURCHASES = "false"
+
+# Coarse abuse brakes at Cloudflare's edge. Device possession proofs and webhook signatures remain
+# the security authority; these counters protect D1, Checkout and the admin token from high-volume
+# probing. Namespace ids are account-local positive integers and intentionally distinct.
+[[ratelimits]]
+name = "REGISTRATION_RATE_LIMITER"
+namespace_id = "26081001"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+[[ratelimits]]
+name = "LICENSE_API_RATE_LIMITER"
+namespace_id = "26081002"
+
+  [ratelimits.simple]
+  limit = 120
+  period = 60
+
+[[ratelimits]]
+name = "CHECKOUT_RATE_LIMITER"
+namespace_id = "26081003"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+[[ratelimits]]
+name = "ADMIN_RATE_LIMITER"
+namespace_id = "26081004"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60
+
+# Cinematic artwork is served by Cloudflare's static-assets pipeline. Requests matching files under
+# `public/` bypass the Worker by default; API and HTML routes continue through src/index.js.
+[assets]
+directory = "./public/"
+
+[[d1_databases]]
+# `DB` is what the code calls it. Wrangler suggests a binding derived from the database name, but
+# the name belongs to the account and the binding belongs to the code — keeping them separate means
+# renaming the database never touches a line of JavaScript.
+binding = "DB"
+database_name = "iptvburo-licencas"
+# Not a secret: this identifies the database within an account that is already protected by the API
+# token. It is committed so a deploy from a clean checkout finds the right database.
+database_id = "64918680-412f-44c9-aae4-e34918ec40af"

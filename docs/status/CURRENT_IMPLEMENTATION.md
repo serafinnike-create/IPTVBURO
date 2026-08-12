@@ -1,12 +1,11 @@
 # Implementação atual do IPTV BURO
 
-- Data da auditoria: 2 de agosto de 2026
-- Branch: `agent/iptv-buro-0.2-preview`
+- Data da auditoria: 12 de agosto de 2026
+- Branch: `codex/windows-clean-release`
 - Baseline anterior: `v0.1.0-alpha.1`
-- Tag da prévia atual: `v0.2.0-alpha.5`
-- Release:
-  `https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.2.0-alpha.5`
-- Versão pública atual: `0.2.0-alpha.5`, Android/Android TV e Windows x64
+- Tag mais recente no repositório atual: `v0.2.0-alpha.7`
+- Releases no repositório atual: nenhuma em 12 de agosto de 2026;
+- Candidato Windows: `v2.0.0-alpha.1`, ainda não publicado;
 - Milestone em validação: `0.2`, Android adaptativo e Compose Desktop
 
 ## Estado da milestone 0.2
@@ -14,6 +13,408 @@
 A milestone `0.2` amplia o vertical funcional publicado como prévia. Esta seção
 registra arquitetura, escopo, gates, hashes e as limitações que ainda impedem
 classificar o produto como uma versão estável.
+
+### Build Windows limpa e atualização — 12 de agosto de 2026
+
+- a versão do binário e a versão comparada pelo atualizador passaram a ser a
+  mesma (`2.0.0-alpha.1`), gerada pelo Gradle; isso evita uma UI anunciar uma
+  versão enquanto o cliente compara outra;
+- a chave TMDb de `local.properties` deixou de ser embutida por padrão. Existe
+  opt-in apenas para execução local, e qualquer tarefa de distribuição falha se
+  esse opt-in estiver ativo;
+- o pacote é composto somente por código, recursos do produto e runtimes
+  verificados. Playlists, fontes, credenciais DPAPI, perfis, histórico,
+  downloads e demais dados do usuário não são entradas da build;
+- `Verificar atualização` força revalidação no GitHub a cada clique, consulta
+  `serafinnike-create/IPTVBURO`, inclui pré-releases, ordena semanticamente e
+  recusa MSI sem digest SHA-256 ou hospedado em outro repositório;
+- o workflow Windows agora exige os três segredos de assinatura, importa o PFX
+  apenas no runner, assina launcher e MSI, verifica Authenticode e remove o
+  certificado antes de publicar;
+- a compilação revelou que `ChildProcessJob` usava APIs ausentes da interface
+  `Kernel32` do JNA e ainda não era chamado. Uma interface Job Object explícita
+  foi adicionada e cada VLC iniciado agora é adotado pelo job;
+- gate local: 597 testes desktop em 106 suítes, 0 falhas, 0 erros e 0 ignorados;
+  o probe real confirmou que a API pública do novo repositório é acessível; o
+  CI do PR #1 também passou no runner Linux em 5 min 9 s;
+- imagem distribuível limpa: 875 arquivos, 646.516.413 bytes; launcher
+  SHA-256 `E5BDB7776E9898F752693C0E0780AF970186B8339C1366E4E7B57C1059E20F7C`.
+  A auditoria não encontrou playlist, banco, keystore, chave TMDb embutida nem
+  valores exatos da estação;
+- **publicação bloqueada corretamente**: esta máquina não possui certificado de
+  assinatura, `signtool` ou URL de timestamp configurados. Nenhum MSI sem
+  assinatura será enviado ao GitHub.
+
+### Pagamentos, ativação e assinatura — endurecimento de 10 de agosto de 2026
+
+- o botão comercial Android agora usa Google Play Billing 9.1.0 e seleciona somente o produto
+  `iptvburo_730_days`, opção de compra consumível `buy_730_days`; não abre Stripe no
+  navegador;
+- o app envia o token opaco ao Worker com prova P-256 vinculando instalação, nonce, hash do token e
+  conta ofuscada. O app não concede nem reconhece a compra localmente;
+- o Worker consulta `purchases.productsv2`, valida conta/produto/opção/aluguel/quantidade/estado,
+  cifra o token em AES-GCM no D1, concede 730 dias e reconhece a entrega no servidor;
+- pendência, restauração no mesmo aparelho, transferência atômica entre identidades da mesma conta,
+  cancelamento e reembolso integral são cobertos. Uma reconciliação horária revoga mesmo sem o app
+  voltar a abrir; erro temporário do Google não revoga por suposição;
+- Stripe agora separa eventos live/test, limita corpos/rotas, mantém idempotência e garante que
+  reembolso integral prevaleça sobre disputa. Formulários chunked também têm limite real de stream;
+- Android release falha antes de compilar sem keystore protegido. O MSI direto é bloqueado; o script
+  de release assina e verifica launcher e MSI com Authenticode e timestamp;
+- validação local: 1.137 testes JVM, zero falhas/erros e três ignorados; Android lint com zero erros e
+  52 avisos; 142 testes Worker/site, todos aprovados; dry-run do Worker aprovado;
+- APK debug atual: 32.599.482 bytes, SHA-256
+  `62B9EB4297A852916B16EAB9759590E7A7E92C887C09C9769CEC3658E61D7F8B`;
+- aparelho Xiaomi 25028RN03Y: build `0.2.0-alpha.6-debug` instalada e processo em execução. Compra
+  Play real não é validável por instalação ADB;
+- **produção Android ainda bloqueada**: o Worker remoto ainda não possui os três segredos Google,
+  produto/faixa Play e E2E fechado não foram confirmados, Cloudflare Access/MFA não protege
+  `/admin*` e os certificados de release não foram fornecidos;
+- o Worker endurecido foi implantado em produção como versão
+  `dab4d7fe-6fae-4838-ac17-2b2782c86692`; a migration
+  `0004_google_play_purchase_ledger.sql` foi aplicada preservando 4 dispositivos, 74 nonces e 3
+  pagamentos. Health, preço EUR 9,90/730 dias, chave de assinatura, rejeição de webhook sem
+  assinatura e ausência de CORS na rota Google foram confirmados após o deploy.
+
+### Fundação Media SuperHub — Fase 0
+
+- `MediaKind` universal e mappers legados foram adicionados sem substituir os
+  tipos de vídeo;
+- capabilities de mídia, playback e fonte possuem defaults conservadores e
+  composição por interseção;
+- `MediaIdentity` preserva as chaves de vídeo e cria namespaces opacos para
+  faixa, álbum, artista, rádio, podcast, audiobook e capítulo;
+- `packages/media-source-spi` define validação, scan, resolução tardia e eventos
+  redigidos, sem alterar os adapters em produção;
+- Media SuperHub / áudio: fundação de domínio em implementação; nenhuma
+  vertical de usuário liberada.
+
+### Aviso legal, espanhol e marca — 11 de agosto de 2026
+
+- **Aviso legal reforçado**, agora em três parágrafos que respondem a três perguntas distintas:
+  o que o aplicativo é, o que o usuário declara ao continuar, e quem responde pelo quê. Além do
+  que já havia, o texto passou a afirmar que o app **não indexa nem busca** conteúdo, que **não
+  vem com nada instalado**, que o usuário **declara** ter autorização, que **não contorna DRM,
+  autenticação, paywall ou proteção técnica**, e que **não há vínculo** com provedores, emissoras
+  ou serviços de streaming. A coluna passou a alinhar ao topo: centralizada, um texto mais alto
+  que a tela começaria a ser lido pela metade;
+- **Espanhol** adicionado como quinto idioma: sete arquivos de recursos traduzidos (217 textos),
+  verificados por diferença de chaves contra o português — nenhuma faltando;
+- **Rótulos fixos da tela inicial traduzidos.** `RealHomeCatalog` é um objeto puro sem Context e
+  trazia os títulos dos trilhos e os selos em português no código, então a Home permanecia em
+  português em qualquer idioma. Passaram a chegar por `HomeLabels`, resolvido na tela, que é onde
+  há recursos. `HomeLabels.Fallback` mantém o texto antigo para testes e previews;
+- **Tela de idioma** passou a empilhar os idiomas em coluna: cinco lado a lado em um telefone
+  partiam "Português (Brasil)" em três linhas e "Español" no meio da palavra;
+- **Marca real na tela de termos**, no lugar do triângulo genérico: o mesmo vetor do ícone do
+  aplicativo, o anel dourado com o "B";
+- **"Perfil ativo"**, último texto fixo em português nas telas, virou recurso.
+
+Ressalva registrada: o texto do aviso foi escrito para reduzir risco, não por profissional do
+direito. Antes de publicar em loja, convém revisão jurídica.
+
+### Elenco, episódios, filmografia e banner — 11 de agosto de 2026
+
+- **Fotos do elenco em séries.** A ficha de série nunca pedia as fotos, ao contrário da de filme —
+  o mesmo `onRequestCastPhotos` foi ligado, e o rótulo "Elenco", fixo em português nos dois lugares,
+  virou recurso traduzido;
+- **Episódios assistidos** ganham um visto dourado sobre a miniatura quando terminados e uma barra
+  de progresso quando parciais. O progresso é buscado com a mesma identidade que o player grava
+  (`providerEpisodeId` como `contentId`);
+- **Bug de escala encontrado no caminho, não relatado.** `PlaybackProgress.progressPercent` guarda
+  uma **fração 0..1**, mas o nome sugere porcentagem e duas telas dividiam por cem outra vez: a
+  ficha do filme mostrava "0% assistido" num filme metade assistido, e todo episódio pareceria
+  recém-começado. Nada falhava — apenas desenhava o número errado. Corrigido nas duas, o campo
+  documentado e um teste adicionado;
+- **Séries em Continuar assistindo e no Histórico.** Episódios individuais não são gravados na
+  tabela de canais (só séries), então a busca por id de episódio falhava sempre e o item era
+  descartado em silêncio. Agora o episódio resolve para a série que o contém, que também é o que
+  faz sentido mostrar. Seletor Todos/Filmes/Séries adicionado às duas telas;
+- **Filmografia do ator.** As linhas eram inertes: tocar um filme não fazia nada, sem qualquer sinal
+  de que não era um botão. `PersonCreditUi` passou a carregar o id do TMDb (que a resposta já
+  trazia) e a linha abre "Onde assistir" — verificado com "Mortos S.A.", que listou Claro video,
+  Apple TV Store, Amazon Video e Google Play. Créditos sem id continuam listados, mas não fingem
+  ser clicáveis;
+- **Sinopse real no banner.** O texto era uma frase genérica mandando abrir o título para saber do
+  que se trata. As sinopses dos primeiros títulos da rotação são buscadas depois do READY (nunca
+  antes: não vale segurar a tela inicial por isso), cobrindo filmes **e** séries — só filmes
+  deixaria a maioria com a frase antiga — e cortadas em fim de frase quando possível;
+- **Downloads** ganharam seletor Filmes/Séries e modo Compacto. O tipo é lido da própria chave
+  (`|s<temporada>e<episódio>`), sem novo campo, para que downloads já existentes não ficassem com
+  um valor errado;
+- **Lançamentos** passaram a separar filmes e séries do ano corrente, em vez de exibir o ano
+  anterior logo abaixo; o ano anterior continua como reserva para fontes com poucos títulos novos;
+- **Botão de atualizar** segura o giro por 900 ms. Com prateleiras em cache o trabalho termina em
+  menos de um quadro, e um indicador que aparece e some não é um retorno visual.
+
+Limitação declarada: a recomendação por hábito pedida para o banner **não foi implementada**.
+`ViewingTaste` existe em `packages/domain-model` com testes, mas a linha do catálogo (`ChannelUi`)
+não carrega gênero, então não há do que derivar preferência sem uma consulta por título. O banner
+segue com a rotação sazonal e diária.
+
+### Player, guia da chave e auditoria de licença — 11 de agosto de 2026
+
+- **Guia "Como consigo uma chave?"** no cartão TMDB: quatro passos numerados com diagramas
+  desenhados (não capturas do site do TMDB, que seriam interface de terceiros, precisariam de
+  quatro traduções e ficariam erradas no próximo redesenho deles) e um botão que abre o site;
+- **Botão de formato da imagem** no player: Original, Preencher, Esticar e 16:9, alternados por
+  toque. O rótulo atual fica no próprio botão;
+- **Brilho e volume viraram seletores −/+** numa linha só, com a porcentagem no meio. Antes eram
+  dois sliders de largura total, que custavam duas faixas de tela; o "+" do volume ainda saía pela
+  borda direita, então a linha é uma `FlowRow` que quebra em vez de cortar;
+- **Vídeo voltou a letterbox.** Uma tentativa de fixá-lo em 16:9 no topo cortava as laterais de
+  qualquer filme mais largo — dar espaço aos controles se faz reduzindo os controles, não a imagem;
+- **Erro de reprodução passou a dizer a verdade.** Um canal ao vivo falhava com "verifique a rede".
+  O log revelou `ERROR_CODE_IO_BAD_HTTP_STATUS` com **HTTP 404**: o canal foi removido pelo
+  provedor mas continua na lista. Todo erro de I/O virava "conexão"; agora 401/403/404/410 têm
+  mensagem própria. O `PlaybackException` também passou a ser registrado (código e status, nunca a
+  URL, que carrega credenciais) — antes não deixava rastro algum;
+- **Auditoria de licença** (a pedido): o desenho está correto — bloqueio total antes de qualquer
+  conteúdo, decisões contra a hora assinada pelo servidor e não a do aparelho, revogação imediata
+  ignorando a tolerância offline, identidade com chave no Android Keystore. Tolerâncias offline:
+  **14 dias** para licença paga, **2 dias** no teste. **Um furo real foi encontrado e corrigido**:
+  o marcador `firstSeen`, que impede que reinstalar renove o teste, era gravado apenas no
+  `SharedPreferences` do app — apagado na desinstalação, o que dava mais 7 dias a cada reinstalação.
+  Passou a ser gravado também em armazenamento externo, que sobrevive. Não é à prova de tudo (o
+  desktop tem a mesma limitação declarada) e pode falhar em Android 11+ por escopo de armazenamento.
+
+### Correções de campo Android — perfis, catálogo e player — 11 de agosto de 2026
+
+Rodada inteiramente reativa, a partir de defeitos relatados e reproduzidos no aparelho.
+
+- **Criar perfil parecia impossível.** "Adicionar" estava numa `LazyRow` centralizada: com dois
+  perfis ele era desenhado além da borda direita, sem nada indicando que a linha rolava. Trocado
+  por `FlowRow`, que quebra para a linha de baixo. Mesmo defeito, mesma correção que os botões do
+  player e da ficha de filme;
+- **Criar ou trocar de perfil travava o app** em "Abrindo seu catálogo", indefinidamente.
+  `observeProfiles` colocava `bootStage = CATALOGUE`, mas `loadHomeItems` — o único caminho até
+  READY — só era chamado pela observação de fontes, que não reemite quando o perfil muda porque as
+  fontes não mudaram. A Home passou a ser recarregada na troca de perfil, o que também é correto
+  por si só: cada perfil pode apontar para uma lista diferente. A correção anterior (10 de agosto)
+  tratava apenas o caso sem perfil ativo e não cobria este;
+- **Categoria com contagem certa abrindo vazia.** "Series | Netflix · 1716 itens" mostrava "esta
+  fonte não possui canais compatíveis". O `CatalogueFilter` nunca era limpo, então um gênero
+  escolhido numa categoria continuava valendo na seguinte e zerava o resultado, enquanto a
+  contagem do cartão — que não é filtrada — seguia prometendo mil itens. Limpo em
+  `loadInitialChannels`, com teste de regressão;
+- **Brilho não funcionava.** `window.attributes.apply { screenBrightness = value }` atribuía ao
+  estado do composable, não a `LayoutParams.screenBrightness`: o nome era sombreado e a janela
+  recebia os próprios atributos sem alteração;
+- **Brilho e volume eram inalcançáveis.** Os dois sliders dividiam uma linha de 360dp com dois
+  ícones, sobrando cerca de cem pixels para cada. Agora ocupam uma linha cada, com largura toda;
+- **Volume não subia** com o aparelho já no máximo, porque só controlava o volume do sistema.
+  Passou a controlar também o ganho do próprio player;
+- **O botão de favoritar pulava de linha** ao ser tocado: "Favoritar" e "Favoritado" têm larguras
+  diferentes e a `FlowRow` refluía. O rótulo mais longo é desenhado invisível por baixo, fixando a
+  largura;
+- **O vídeo nunca ficava em tela cheia** — a barra de status permanecia sobre a imagem. O player
+  passou a esconder as barras do sistema e a restaurá-las ao sair (não na TV, onde já ficam ocultas
+  no app inteiro);
+- **Em retrato o player era desorganizado**: imagem estreita no meio e controles por cima dela.
+  O vídeo agora é 16:9 ancorado no topo e os controles ficam abaixo, com lugar próprio. Em paisagem
+  segue ocupando tudo;
+- **Botão de atualizar lista** adicionado à barra de topo da Home. As telas de catálogo já tinham o
+  seu; a Home, onde o app abre, não tinha nenhum;
+- **Nome do perfil padrão** deixou de ser fixo em português.
+
+### Paridade Android — Configurações, player e defeitos de campo — 10 de agosto de 2026
+
+Rodada verificada no aparelho (Android 16, lista real de 41 mil itens). Tudo abaixo foi visto
+funcionando em tela, não apenas compilado.
+
+Novas funções, portadas do Windows:
+
+- **Bloqueio de canais**: PIN de quatro dígitos em `CatalogueGuardPreferences`, sobre o
+  `ParentalLock`/`ParentalPin` já existentes em `packages/domain-model` — a mesma regra que o
+  Windows usa, então uma categoria tratada como adulta lá é tratada igual aqui. O PIN é guardado
+  como sal + hash, nunca em claro. Trocar ou remover exige o PIN atual;
+- **Ocultar categorias**: lista completa das 98 categorias da fonte, com switch por categoria.
+  A lista de Configurações lê `allCategories` (sem filtro) e não `categories` (filtrada), senão
+  ocultar uma categoria também removeria o switch que a traria de volta;
+- **Legendas**: `SubtitlePresentation` novo em `packages/domain-model` (tamanho, cor, caixa escura),
+  com ids estáveis e teste de round-trip. Aplicado no Media3 via `CaptionStyleCompat` mais
+  `setApplyEmbeddedStyles(false)` — sem isso um stream com estilo próprio ignora a escolha;
+- **Séries** ganharam favorito e trailer, que só filmes tinham. `AppContent.SeriesDetails` passou a
+  carregar `channelId`, que é a chave dos favoritos;
+- **Favoritos** ganharam seletor Filmes/Séries/Ao Vivo, oferecido apenas para os tipos presentes;
+- **Cache diário das prateleiras de Assinaturas** (`ShelfCache`): o TMDB reconstrói essas listas uma
+  vez por dia, então a segunda visita no mesmo dia lê do aparelho. Chaveado por dia, região e tipo;
+  lista vazia nunca é gravada, para não fixar uma falha de rede pelo resto do dia. Salvar chave
+  força `refresh`, trocar filtro não;
+- **Trailer** na ficha "Onde assistir" — o id já era buscado e simplesmente nunca era desenhado.
+
+Defeitos corrigidos:
+
+- **Reprodução de download falhava sempre.** `PlaybackSessionFactory` usava `OkHttpDataSource`
+  direto, que só fala HTTP, então um título baixado (`file://`) nunca abria. Agora é embrulhado em
+  `DefaultDataSource.Factory`, que mantém o HTTP no OkHttp e adiciona file/content/asset.
+  Verificado: série baixada reproduzindo;
+- **Excluir o perfil ativo travava o app** em "abrindo seu catálogo". `observeProfiles` colocava
+  `bootStage = CATALOGUE` incondicionalmente, então sem perfil ativo a tela de carregamento
+  esperava um catálogo que não tinha para quem carregar. Teste de regressão adicionado;
+- **Item de prateleira da Home abria o item demonstrativo.** O id `streaming:<serviço>:<id>` não é
+  uma linha do catálogo, então caía no placeholder. Agora abre "Onde assistir" com a biblioteca do
+  usuário em primeiro lugar;
+- **Campos de texto em roxo com texto preto.** `OutlinedTextField` usa a paleta do Material, não a
+  do tema. `BuroFieldColors` foi definido uma vez e aplicado aos cinco campos, para que o próximo
+  campo adicionado não volte a nascer roxo;
+- **Nome do perfil padrão estava fixo em português** (`"Meu perfil"`), então uma instalação em
+  inglês, alemão ou italiano abria com esse nome. Passou a vir de `profile_default_name`.
+
+Limitações desta rodada:
+
+- a contagem de itens não é buscada para a lista de categorias em Configurações (seriam três
+  consultas sobre centenas de categorias), então a linha é omitida em vez de mostrar "0 itens";
+- o botão de trailer só aparece quando o TMDB devolve um trailer para aquele título;
+- Ao Vivo não aparece no seletor de Favoritos enquanto não houver canal favoritado.
+
+### Paridade Android — Assinaturas e chave TMDB — 9 de agosto de 2026
+
+- `TmdbStreamingCatalogue` e `TmdbStreamingDiscovery` foram movidos de `apps/desktop` para
+  `packages/metadata-client`. Android e Windows passaram a compartilhar a mesma implementação de
+  "onde assistir" em vez de duas que podem divergir;
+- o Android ganhou a tela **Assinaturas**: prateleiras por serviço, filtros de filmes, séries, esta
+  semana e em breve, ficha com sinopse, elenco e ofertas por serviço;
+- o destino aparece no ribbon e no menu lateral do telefone **somente quando existe chave TMDB
+  configurada**, pela mesma `StreamingDiscoveryCapability` do Windows. `selectSection` repete o
+  guard, então nenhuma outra rota abre a tela vazia;
+- cada linha de oferta carrega o crédito `Streaming data provided by JustWatch`, exigido por item
+  pelos termos deles; a biblioteca do próprio usuário não recebe esse crédito;
+- nenhuma oferta recebe preço, porque o TMDB não devolve preço em bucket algum. Disponibilidade
+  desconhecida é apresentada como "não podemos dizer", nunca como "indisponível";
+- a chave é lida do armazenamento cifrado apenas no ponto de uso, nunca fica no estado de UI e a
+  classe do repositório não é `data class`, para não vazar por `toString()`;
+- o card de chave TMDB nas Configurações deixou de renderizar um campo desabilitado quando não há
+  perfil ativo. Ele agora explica que a chave é cifrada por perfil e oferece o seletor de perfis;
+- textos novos em PT-BR, EN, DE e IT;
+- **limitação**: o corte passou em teste, lint e APK, mas não foi exercitado contra a API do TMDB
+  com uma chave real nem inspecionado em aparelho físico.
+
+#### Correção do fluxo da chave — 10 de agosto de 2026
+
+O relato do usuário foi "coloquei chave TMDB e nada aconteceu". Eram quatro defeitos distintos,
+todos corrigidos adotando o modelo que o Windows já usava:
+
+1. **Salvar a chave não recarregava nada.** O Windows chama `rebuildMetadataClients()` ao salvar; o
+   Android apenas atualizava um booleano. O destino aparecia e ficava vazio até reiniciar o app.
+   `saveTmdbKey` agora limpa o cache da chave anterior e dispara `loadSubscriptionShelves(force)`.
+2. **Não havia chave embutida.** O Windows lê `tmdb.apiKey` de `local.properties` em tempo de build,
+   e por isso funciona sem configuração. O Android passou a gerar o mesmo `BuildConfig` a partir do
+   mesmo arquivo — que continua no `.gitignore`, então a chave não entra no repositório.
+3. **A resolução de chave estava duplicada em quatro lugares**, cada um consultando somente a chave
+   do perfil. Trailer, elenco, capability e Assinaturas podiam discordar entre si. Agora existe um
+   único `StreamingDiscoveryRepository.effectiveKey`: chave do perfil, senão a da build. Limpar o
+   campo volta ao padrão em vez de desligar os metadados.
+4. **A tela Perfis não falava da chave**, que é onde o usuário foi procurar. Ela ganhou um atalho
+   para Configurações; o seletor inicial não o mostra, porque ali ainda não existe perfil onde
+   guardar a chave.
+
+O invariante entre capability e resolução de chave está travado por teste: o destino é visível
+exatamente quando uma chave será encontrada na hora do pedido.
+
+#### Verificação em aparelho físico — 10 de agosto de 2026
+
+Instalado e exercitado num Xiaomi 25028RN03Y, Android 15, arm64-v8a. Assinaturas abriu com dados
+reais do TMDB, sem configuração nenhuma, e a ficha mostrou pôster, nota, duração, gêneros, ofertas
+com o crédito JustWatch por item, sinopse e elenco com fotos.
+
+A execução no aparelho revelou dois defeitos que teste, lint e APK não pegam:
+
+- **Nenhuma imagem carregava em todo o app.** O Coil 3 separou a rede em artefato próprio e não
+  registra um fetcher sozinho; sem isso, todo modelo `http(s)` falha silenciosamente enquanto os
+  locais continuam funcionando. `IptvBuroApplication` passou a implementar
+  `SingletonImageLoader.Factory` com `OkHttpNetworkFetcherFactory`, cache de memória proporcional ao
+  heap do processo e cache em disco de 128 MB. Isso conserta capas do catálogo, fotos de elenco e as
+  prateleiras de Assinaturas de uma vez;
+- **O botão "Serviços" ocupava a linha inteira** e empurrava o título para fora da tela.
+  `FocusSurface` propaga as constraints mínimas ao conteúdo, então um filho com `fillMaxSize` cresce
+  até a largura da linha. Corrigido no botão e nos chips de filtro com `wrapContentWidth`.
+
+#### Segunda verificação em aparelho — 10 de agosto de 2026
+
+Rodada de verificação visual, tela a tela, no mesmo Xiaomi. **Confirmado funcionando**: herói da Home
+rotacionando entre destaques; chip de licença no menu lateral com a contagem de dias em vermelho nos
+últimos sete; guias Continuar assistindo e Histórico; Assinaturas mostrando `IPTV BURO — Já está na
+sua biblioteca` como primeira oferta e abrindo o título dentro do app; editor de perfil com foto real
+do usuário **persistida após salvar**, o que exercita a migration 6→7 no aparelho e não apenas em
+teste; player com barra de tempo, arraste funcionando e sliders discretos.
+
+Três defeitos de layout foram encontrados e corrigidos nesta rodada:
+
+- **o alternador de formato não mudava nada de visível.** `COMPACT` usava `GridCells.Adaptive(104.dp)`,
+  que numa tela de 360 dp ainda resolvia para duas colunas — idêntico a `POSTER`. E `LIST` trocava a
+  contagem de colunas enquanto o card impunha proporção 2:3, desenhando um pôster por tela. Agora
+  `COMPACT` usa três colunas fixas e `LIST` tem desenho próprio: miniatura à esquerda, nome com
+  espaço para ser lido;
+- **os menus suspensos de filtro abriam quase brancos**, porque `DropdownMenu` do Material desenha a
+  própria superfície. Passaram a usar a paleta do app;
+- **faltavam controles no player.** Mesma causa dos botões da ficha de filme: uma `Row` sem quebra,
+  com os últimos itens — legendas e favorito — desenhados além da borda direita e inalcançáveis.
+  Trocada por `FlowRow`.
+
+#### Progresso de reprodução gravado como concluído — 10 de agosto de 2026
+
+Defeito encontrado inspecionando o banco do aparelho, não por teste. Após assistir quatro minutos de
+um filme de 112 minutos, a linha gravada era:
+
+```text
+pos=112.2min  dur=112.2min  pct=1.000  completed=YES
+```
+
+**Causa.** O ExoPlayer devolve `currentPosition == duration` depois de `stop()` ou de ter chegado ao
+fim. Três dos quatro checkpoints do player — `onDispose`, `ON_STOP` e o botão Voltar — liam a posição
+exatamente nesse instante. Só o checkpoint periódico, que exige `isPlaying`, estava correto.
+
+**Efeito.** Todo título saía do player marcado como assistido por inteiro, e por isso *Continuar
+assistindo* nunca tinha nada. Pior: `SavePlaybackCheckpointUseCase` recusa mover para trás um registro
+concluído — regra correta, para um retrocesso nos créditos não desfazer a conclusão — de modo que um
+título falsamente concluído fica preso assim permanentemente. O registro observado tinha revisão 562.
+
+**Correção.** O player passou a amostrar a posição a cada segundo *enquanto está realmente tocando* e
+os checkpoints de saída usam esse valor, em vez de perguntar ao player num momento em que ele já não
+sabe responder. Coberto por `PlaybackCheckpointPositionTest` no domínio.
+
+**Limitação.** A correção está compilada, instalada e coberta por testes, mas **não foi confirmada em
+execução**: o teste que a confirmaria exigia estado limpo, e a limpeza apagou a playlist do aparelho.
+A confirmação depende de reimportar uma lista e repetir o cenário — assistir dois minutos, sair, e
+conferir se o título aparece em *Continuar assistindo* com a porcentagem real.
+
+### Atualização operacional — 9 de agosto de 2026
+
+- `services/license-server` está rastreado no Git e o Worker Cloudflare responde
+  `200` em `/health`. A base D1 remota não possui migrations pendentes;
+- o contrato comercial vigente está formalizado no ADR-010: sete dias de teste,
+  pagamento único por dispositivo e entitlement de 730 dias, com preços-base de
+  EUR 9,90, USD 9,90 e BRL 99,90. Não é uma licença vitalícia;
+- o cliente Windows registra uma identidade criptográfica, assina cada operação,
+  valida a concessão assinada, aplica a política offline e apresenta compra,
+  QR code, resgate de chave e nova verificação. A tela bloqueada reutiliza o
+  mural cinematográfico de capas e mantém as ações visíveis em 1280 × 780;
+- o Worker implementa e testa os cinco eventos necessários no endpoint Stripe:
+  `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+  `charge.refunded`, `charge.dispute.created` e `charge.dispute.closed`;
+- a identidade Android assina a prova de posse P-256 e o cliente valida a
+  concessão Ed25519 também nas APIs antigas pelo provider criptográfico incluído;
+  a integração Google Play está no código, mas sua ativação externa/E2E continua
+  bloqueada pelos gates listados acima;
+- gate Gradle mais recente: 1.137 testes, 0 falhas, 0 erros e 3 ignorados; lint
+  Android com 0 erros e 52 avisos;
+- Worker e site: 142 testes Node, 142 passaram e nenhum falhou;
+- APK debug: 26.482.020 bytes, SHA-256
+  `59C4B7C6CA8F1EA02FC17C86F1BFC7ADFD6CBC3544F97391F1525D2B394F4E53`;
+- AAB release: 7.530.964 bytes, SHA-256
+  `6F25B20D0FB0F546A769767800ACE440F4F97D134C7C86BD63BB80386E72EE3D`;
+- MSI Windows 2.0.0: 299.807.971 bytes, SHA-256
+  `C794F5E89A7CE4530BB6A049274F9F34894651672CEF0DF0BDF7A3177E65CC0D`.
+  O banco MSI é legível, contém 876 arquivos e identifica produto `IPTVBURO`,
+  versão `2.0.0` e fabricante `IPTV BURO`;
+- o MSI ainda não possui assinatura Authenticode e o APK é uma build debug.
+  Ambos são candidatos locais, não artefatos públicos de produção;
+- a assinatura do endpoint e o fluxo de disputa possuem cobertura automatizada,
+  mas ainda falta confirmar no painel Stripe os cinco eventos e executar o E2E
+  sandbox compra → webhook 200 → ativação → reembolso/disputa;
+- a rota administrativa exige token, mas Cloudflare Access/MFA ainda precisa de
+  uma política de identidade definida antes de ser configurado.
 
 - cliente Xtream compartilhado para autenticação, categorias, TV ao vivo,
   filmes, séries e episódios;
@@ -50,11 +451,17 @@ classificar o produto como uma versão estável.
 - o play Windows agora abre diretamente e fica acima da sinopse na ficha para
   continuar acessível em escala de 125%; detalhes, ator e filmografia permanecem
   dentro da mesma janela;
-- o downloader genérico Windows foi removido. Download permanece oculto em
-  Android, TV e Windows até a fonte/backend autorizar o item e a implementação
-  cumprir integralmente o Cofre Offline do GDD 6;
+- o downloader genérico Windows foi removido. Este item descrevia a política
+  anterior, substituída pelo
+  [`ADR-008`](../adr/ADR-008-UNRESTRICTED-VOD-DOWNLOAD.md): o proprietário liberou
+  download de VOD sem a fonte declarar autorização offline, e a capability
+  Android `offline.supported` passou a `true` para telefone. TV ao vivo continua
+  recusada, Android TV continua sem o destino, e nenhuma URL assinada vai para o
+  disco, log ou nome de arquivo;
 - domínio de entitlement e identidade criptográfica de instalação Android foram
-  adicionados; pagamento real aguarda backend, Stripe e Google Play Billing;
+  adicionados; o Worker Cloudflare e o Checkout Stripe para Windows/portal estão
+  implantados em preview. Google Play Billing está integrado localmente e aguarda
+  Play Console, segredos, migration remota e E2E fechado;
 - ADRs de licenciamento/player e auditorias de playback, importação e logging
   documentam os gates que ainda bloqueiam a primeira versão Windows estável.
 - EPG curto Xtream agora é consultado sob demanda e apresenta **Agora/A seguir**

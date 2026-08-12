@@ -2,13 +2,97 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [2.0.0] - 2026-08-07 (Windows)
+
+### Corrigido
+
+- **O atualizador oferecia a própria versão em execução como atualização.** A
+  versão publicada é escrita com dois números (`1.1`, `2.0`) e o comparador
+  exigia três, então a versão atual não era reconhecida e qualquer release
+  parecia mais recente. Afeta quem já tem a 1.1 instalada.
+- **O índice de plugins do VLC era descartado a cada abertura.** Ele era gerado
+  durante o build e o instalador copiava os plugins para outro diretório com
+  novas datas, o que invalidava cada entrada — 363 erros `stale plugins cache`
+  numa instalação real. Agora é gerado uma vez, na primeira execução, onde os
+  plugins ficam de facto. Verificado: 0 erros na instalação da 2.0.
+- **Um filme começado e abandonado deixava a tela presa a carregar.** Seis
+  carregadores tinham a mesma falha: uma requisição cancelada não repunha o
+  estado, e a proteção contra requisições duplicadas recusava toda tentativa
+  seguinte. Dois deles eram novos (importação de lista e a tela inicial) e um
+  impedia a app de se ligar a qualquer conta depois de uma ligação cancelada.
+- **Um download vazio era guardado como concluído.** Um servidor que respondia
+  200 sem conteúdo produzia um ficheiro de 0 bytes que a biblioteca listava como
+  baixado e oferecia para assistir.
+- **Buscar no histórico ignorava acentos.** "chefao" não encontrava
+  "O Poderoso Chefão".
+- **Uma categoria oculta não podia ser reexibida.** A lista de opções mostrava
+  apenas as categorias visíveis, então ocultar uma removia-a do próprio
+  interruptor que a ocultava.
+- **A chave da API do TMDb podia ser impressa na consola.** O TMDb recebe a
+  chave como parâmetro de URL e o OkHttp inclui o URL completo nas mensagens de
+  erro; uma linha de log imprimia essa mensagem.
+- **A tela de histórico travava a interface por mais de quatro segundos.** A
+  busca por título percorria o catálogo inteiro construindo um objeto por linha
+  — 41.698 objetos por consulta, 200 consultas por tela. Medido: 4238 ms antes,
+  56 ms na primeira abertura e 0 ms depois.
+- **Trocar de filtro em Assinaturas enquanto as prateleiras carregavam deixava
+  a seção vazia pelo resto da sessão.** A marca de "carregando" não era limpa no
+  caminho que sai cedo, e a proteção contra carregamentos duplicados recusava
+  todos os seguintes.
+- **O cache de prateleiras era um mapa comum partilhado entre threads.** Escrito
+  pelo carregador em segundo plano e lido pela interface; um `HashMap` sob acesso
+  concorrente pode corromper-se, e o sintoma clássico é uma consulta que nunca
+  retorna.
+- **Requisições ao TMDb continuavam em voo depois de fechar a janela**, segurando
+  o processo aberto até expirarem.
+
+### Adicionado
+
+- Controle parental completo: PIN de 4 dígitos ao abrir uma categoria
+  bloqueada, e o conteúdo bloqueado deixa de aparecer na busca e nas listagens
+  gerais — não apenas na barra de categorias.
+- Histórico como galeria de capas, com busca e "apagar tudo".
+- Tela de preparação na primeira execução, com percentagem, aviso de que só
+  desta vez demora mais, e explicação de como obter a chave gratuita do TMDb.
+  Traduzida nos quatro idiomas.
+
+### Alterado
+
+- O instalador ficou 7 MB menor: o player JavaFX, substituído pelo VLC há
+  várias versões, foi removido junto com as quatro dependências que arrastava.
+- A tela de opções já não escurece a aplicação por trás.
+- Paginar o catálogo ficou três vezes mais barato: os testes que descartam uma
+  linha passaram a ler duas colunas em vez de construir o objeto inteiro para
+  depois deitá-lo fora. Medido sobre 41.698 itens: 31 ms antes, 10 ms depois.
+- Verificar quais categorias estão bloqueadas passou a ler as preferências uma
+  vez por página, em vez de duas vezes por categoria.
+
 ## [Unreleased]
+
+### Added
+
+- Candidato Windows `2.0.0-alpha.1` com versão única compartilhada pela UI e
+  pelo atualizador.
+- Gate de distribuição que recusa uma build quando a chave TMDb da estação de
+  desenvolvimento estiver habilitada.
+- Pipeline de release Windows que importa o certificado apenas no runner,
+  assina launcher e MSI, valida Authenticode e remove o certificado ao terminar.
+
+### Fixed
+
+- O botão de atualização passou a consultar sem cache o repositório atual
+  `serafinnike-create/IPTVBURO`; URLs de instaladores pertencentes a outro
+  repositório GitHub são recusadas.
+- A proteção contra processos VLC órfãos agora usa uma interface nativa Job
+  Object compatível com JNA e é aplicada a cada processo iniciado pelo player.
 
 ### Changed
 
 - O CI da `main` mantém `test`, `lint` e `assembleDebug` como gate, enquanto os
   APKs para download ficam centralizados em GitHub Releases para não depender da
   cota temporária de artefatos do Actions.
+- Builds desktop não incorporam mais automaticamente a chave TMDb de
+  `local.properties`; cada utilizador configura a própria chave por perfil.
 
 ## [0.1.0-alpha.1] - 2026-07-31
 

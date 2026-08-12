@@ -47,6 +47,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,8 +67,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.awt.Frame
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.DesktopDestination
@@ -82,22 +85,27 @@ import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceSummary
 import com.lucasserafin94.iptvburo.desktop.model.PlaybackReadiness
 import com.lucasserafin94.iptvburo.desktop.model.playbackReadiness
 import com.lucasserafin94.iptvburo.desktop.platform.ExternalOpenResult
+import com.lucasserafin94.iptvburo.desktop.platform.DesktopPlatformCapabilities
 import com.lucasserafin94.iptvburo.desktop.platform.chooseLocalPlaylist
 import com.lucasserafin94.iptvburo.desktop.platform.chooseM3uFile
 import com.lucasserafin94.iptvburo.desktop.platform.openChannelExternally
+import com.lucasserafin94.iptvburo.desktop.license.LicenseStatus
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackRequest
+import com.lucasserafin94.iptvburo.desktop.playback.MultiviewOverlay
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlayerOverlay
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.desktop.ui.BuroMark
 import com.lucasserafin94.iptvburo.desktop.ui.BuroDesktopTheme
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
+import com.lucasserafin94.iptvburo.desktop.ui.BuroSegmentedControl
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.LocalDesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.strings
-import com.lucasserafin94.iptvburo.desktop.data.TmdbStreamingCatalogue
+import com.lucasserafin94.iptvburo.metadata.TmdbStreamingCatalogue
 import com.lucasserafin94.iptvburo.desktop.download.formatDuration
 import com.lucasserafin94.iptvburo.desktop.download.formatRate
 import com.lucasserafin94.iptvburo.desktop.platform.openStreamingOfferExternally
@@ -121,7 +129,8 @@ import com.lucasserafin94.iptvburo.desktop.update.UpdateCheckResult
 import kotlinx.coroutines.launch
 
 /** Where TMDb issues the personal API key this app asks for. */
-private const val TMDB_API_SETTINGS_URL = "https://www.themoviedb.org/settings/api"
+/** Where an existing account manages its keys. The guide links here for the second visit onward. */
+internal const val TMDB_API_SETTINGS_URL = "https://www.themoviedb.org/settings/api"
 
 @Composable
 fun DesktopApp(
@@ -134,11 +143,33 @@ fun DesktopApp(
     onExitForUpdate: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val capabilities = DesktopPlatformCapabilities.current
+    val visibleDestination =
+        when (appState.destination) {
+            DesktopDestination.DOWNLOADS ->
+                if (capabilities.offlineSupported) appState.destination else DesktopDestination.HOME
+            DesktopDestination.MUSIC ->
+                if (capabilities.audioSupported) appState.destination else DesktopDestination.HOME
+            else -> appState.destination
+        }
     var pendingExternalChannel by remember { mutableStateOf<Channel?>(null) }
     var externalOpenResult by remember { mutableStateOf<ExternalOpenResult?>(null) }
     var activePlayback by remember { mutableStateOf<DesktopPlaybackRequest?>(null) }
     var showXtreamLogin by remember { mutableStateOf(false) }
+    var parentalOpen by remember { mutableStateOf(false) }
+
+    /** Whether the TMDb key walkthrough is showing, over the settings window. */
+    var tmdbGuideOpen by remember { mutableStateOf(false) }
+    // Not persisted: collapsing is something a user does to see more of one screen, not a standing
+    // preference, and a sidebar that stayed hidden across restarts would look like a missing menu.
+    var sidebarCollapsed by remember { mutableStateOf(false) }
     var showProfileGate by remember { mutableStateOf(false) }
+    // The purchase details, opened from the countdown chip. The same screen the gate shows, reached
+    // before being locked out rather than only afterwards.
+    var showLicenseDetails by remember { mutableStateOf(false) }
+    // Which profile the editor is open for, or null when it is closed. Held as an id rather than as
+    // the profile so an edit that renames it does not leave a stale copy on screen.
+    var editingProfile by remember { mutableStateOf<String?>(null) }
     val releaseUpdater = remember { GitHubReleaseUpdater() }
     var updateBusy by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
@@ -157,11 +188,79 @@ fun DesktopApp(
         }
     }
 
+    // Once per launch, not once per screen. `Unit` rather than a changing key because a licence is a
+    // property of the machine and the launch, and re-asking on every navigation would be a network
+    // round trip the customer pays for in latency.
+    LaunchedEffect(Unit) {
+        appState.checkLicense()
+    }
+
     BuroDesktopTheme {
         CompositionLocalProvider(
             LocalDesktopStrings provides DesktopStrings.of(appState.language),
         ) {
+        // The licence check, inside the theme and the strings so the blocking screen is styled and
+        // translated, and before everything else so a blocked app never composes a catalogue it is
+        // not allowed to show.
+        //
+        // The first check runs off the main thread and the app waits on it. That wait is deliberate:
+        // showing the catalogue first and blocking a moment later would mean an expired licence gets
+        // a usable app for as long as the network takes.
+        val licenseStatus = appState.licenseStatus
+        if (licenseStatus != null && !licenseStatus.allowsUse) {
+            LicenseGate(
+                status = licenseStatus,
+                client = appState.licenseClient,
+                onRechecked = appState::onLicenseRechecked,
+                onQuit = onExitForUpdate,
+                languageTag = appState.language.tag,
+                backdropPosters = appState.backdropPosters,
+            )
+            return@CompositionLocalProvider
+        }
+
         val text = strings
+        fun checkAndDownloadUpdate() {
+            if (updateBusy) return
+            scope.launch {
+                updateBusy = true
+                updateMessage = text.checkingUpdate
+                updateProgress = 0f
+                updateRelease = null
+                updateReadyToRestart = false
+                when (val result = releaseUpdater.check()) {
+                    UpdateCheckResult.UpToDate -> {
+                        updateMessage = text.upToDate
+                        updateBusy = false
+                    }
+                    is UpdateCheckResult.Failed -> {
+                        updateMessage = result.userMessage
+                        updateBusy = false
+                    }
+                    is UpdateCheckResult.Available -> {
+                        updateMessage = null
+                        updateRelease = result.release
+                        // downloadAndLaunch performs I/O on Dispatchers.IO. Marshal progress back
+                        // through the composition scope instead of mutating snapshot state there.
+                        releaseUpdater
+                            .downloadAndLaunch(result.release) { fraction ->
+                                scope.launch { updateProgress = fraction }
+                            }.onSuccess {
+                                // The installer waits for this process to leave. Keep the choice in
+                                // the user's hands instead of making the window disappear abruptly.
+                                updateProgress = 1f
+                                updateReadyToRestart = true
+                                updateBusy = false
+                            }.onFailure {
+                                updateRelease = null
+                                updateMessage = text.updateFailed
+                                updateBusy = false
+                            }
+                    }
+                }
+            }
+        }
+
         Surface(
             modifier =
                 Modifier
@@ -192,9 +291,9 @@ fun DesktopApp(
                         sources = appState.sourceSummaries,
                         selectedSourceId = appState.selectedSourceId,
                         onSourceSelected = appState::selectSource,
-                        destination = appState.destination,
+                        destination = visibleDestination,
                         catalogType = appState.xtreamContentType,
-                        downloads = appState.downloadEntries,
+                        downloads = if (capabilities.offlineSupported) appState.downloadEntries else emptyList(),
                         onCancelDownload = appState::cancelDownload,
                         onHome = appState::openHome,
                         onMovies = {
@@ -208,11 +307,21 @@ fun DesktopApp(
                         },
                         onFavorites = { scope.launch { appState.setFavoritesOnly(true) } },
                         onContinueWatching = appState::openContinueWatching,
+                        onHistory = appState::openHistory,
                         onDownloads = appState::openDownloads,
-                        hasMusic = appState.hasMusicLibrary,
+                        hasOffline = capabilities.offlineSupported,
+                        // Shown whenever music is released, not only once a playlist is loaded.
+                        //
+                        // Hiding it until a library existed meant a profile without an M3U had no
+                        // way to learn the feature was there, and nothing said why: the section was
+                        // simply absent, indistinguishable from not being built. The workspace
+                        // explains what to add instead.
+                        hasMusic = capabilities.audioSupported,
                         onMusic = appState::openMusic,
                         hasSubscriptions = appState.streamingDiscoveryCapability.isVisible,
                         onSubscriptions = appState::openSubscriptions,
+                        collapsed = sidebarCollapsed,
+                        onToggleCollapsed = { sidebarCollapsed = !sidebarCollapsed },
                     )
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                         TopBar(
@@ -239,47 +348,11 @@ fun DesktopApp(
                             onMetadataApiKeyChange = appState::updateMetadataApiKey,
                             streamingRegion = appState.streamingRegion,
                             onSelectRegion = appState::changeStreamingRegion,
-                            onUpdate = {
-                                if (!updateBusy) {
-                                    scope.launch {
-                                        updateBusy = true
-                                        updateMessage = text.checkingUpdate
-                                        when (val result = releaseUpdater.check()) {
-                                            UpdateCheckResult.UpToDate -> {
-                                                updateMessage = text.upToDate
-                                                updateBusy = false
-                                            }
-                                            is UpdateCheckResult.Failed -> {
-                                                updateMessage = result.userMessage
-                                                updateBusy = false
-                                            }
-                                            is UpdateCheckResult.Available -> {
-                                                updateMessage = null
-                                                updateProgress = 0f
-                                                updateRelease = result.release
-                                                // Progress is reported so a multi-hundred-megabyte
-                                                // download does not look like a hang.
-                                                releaseUpdater
-                                                    .downloadAndLaunch(result.release) { fraction ->
-                                                        updateProgress = fraction
-                                                    }.onSuccess {
-                                                        // The installer is running; the app must
-                                                        // close for it to replace these files. The
-                                                        // user presses the button when ready rather
-                                                        // than having the window vanish under them.
-                                                        updateProgress = 1f
-                                                        updateReadyToRestart = true
-                                                        updateBusy = false
-                                                    }.onFailure {
-                                                        updateRelease = null
-                                                        updateMessage = text.updateFailed
-                                                        updateBusy = false
-                                                    }
-                                            }
-                                        }
-                                    }
-                                }
-                            },
+                            onOpenParental = { parentalOpen = true },
+                            uses24HourClock = appState.uses24HourClock,
+                            licenseStatus = appState.licenseStatus,
+                            onOpenPurchase = { showLicenseDetails = true },
+                            onUpdate = ::checkAndDownloadUpdate,
                         )
                         HorizontalDivider(color = BuroColors.BorderSoft)
                         // The content screen must be weighted. A Column measures an unweighted
@@ -289,13 +362,13 @@ fun DesktopApp(
                         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         // Music is checked before the source, because it is fed by its own playlist
                         // and does not need the video provider to be connected at all.
-                        if (appState.destination == DesktopDestination.MUSIC) {
+                        if (visibleDestination == DesktopDestination.MUSIC) {
                             MusicWorkspace(
                                 appState = appState,
                                 onPlay = { request -> activePlayback = request },
                                 ownerWindow = ownerWindow,
                             )
-                        } else if (appState.destination == DesktopDestination.SUBSCRIPTIONS) {
+                        } else if (visibleDestination == DesktopDestination.SUBSCRIPTIONS) {
                             // Like Music, checked before the source: it answers where a title can be
                             // watched elsewhere, which does not need the video provider connected.
                             SubscriptionsWorkspace(
@@ -333,6 +406,8 @@ fun DesktopApp(
                                 onSelectTitle = { details -> appState.openStreamingTitle(details.title) },
                                 kind = appState.streamingKind,
                                 onSelectKind = appState::selectStreamingKind,
+                                page = appState.streamingPage,
+                                onOpenTrailerExternally = { id -> appState.openPublicTrailer(id) },
                                 // Clearing the ranking is what returns the screen to its shelves,
                                 // which is exactly what opening the area already does.
                                 onBackToShelves = { appState.openSubscriptions() },
@@ -359,7 +434,7 @@ fun DesktopApp(
                                 },
                                 onConnectXtream = { showXtreamLogin = true },
                             )
-                        } else if (appState.destination == DesktopDestination.CONTINUE) {
+                        } else if (visibleDestination == DesktopDestination.CONTINUE) {
                             ContinueWatchingWorkspace(
                                 entries = appState.continueWatchingEntries,
                                 onResume = { entry ->
@@ -380,7 +455,24 @@ fun DesktopApp(
                                 },
                                 onForget = appState::forgetProgress,
                             )
-                        } else if (appState.destination == DesktopDestination.DOWNLOADS) {
+                        } else if (visibleDestination == DesktopDestination.HISTORY) {
+                            // Covers rather than the Continue watching rows. History answers "have
+                            // I seen this?", which is recognition, and a wall of posters answers it
+                            // at a glance where a list has to be read line by line.
+                            HistoryGallery(
+                                entries = appState.historyEntries,
+                                onResume = { entry ->
+                                    activePlayback =
+                                        appState.prepareXtreamPlayback(
+                                            entry.playbackTarget(),
+                                            entry.item.name,
+                                            entry.progress.positionMs,
+                                        )
+                                },
+                                onForget = appState::forgetHistoryEntry,
+                                onClearAll = appState::clearHistory,
+                            )
+                        } else if (visibleDestination == DesktopDestination.DOWNLOADS) {
                             DownloadsWorkspace(
                                 entries = appState.downloadEntries,
                                 onPlay = { key ->
@@ -394,7 +486,7 @@ fun DesktopApp(
                                 onCancel = appState::cancelDownload,
                                 onDelete = appState::deleteDownload,
                             )
-                        } else if (appState.isXtreamSelected && appState.destination == DesktopDestination.HOME) {
+                        } else if (appState.isXtreamSelected && visibleDestination == DesktopDestination.HOME) {
                             XtreamDailyHome(
                                 appState = appState,
                                 onOpenExternal = { pending ->
@@ -447,6 +539,51 @@ fun DesktopApp(
                     onDismiss = appState::dismissStatus,
                 )
 
+                // Above the catalogue and below the player: a locked category must be answered
+                // before its titles appear, but a film already playing is not interrupted by it.
+                appState.pendingPinCategory?.let { category ->
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(BuroColors.Scrim),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ParentalUnlockDialog(
+                            categoryName = category.name,
+                            onSubmit = { pin -> appState.submitPendingPin(pin) },
+                            onDismiss = appState::dismissPinPrompt,
+                        )
+                    }
+                }
+
+                // Opening multiview closes the single player.
+                //
+                // They are alternatives, not layers. Left running, the single player drew on top —
+                // so pressing "watch together" while a channel was playing changed nothing visible,
+                // and the feature looked broken. It also freed a decoder before four more start,
+                // which on a laptop is the difference between four streams and a stutter.
+                LaunchedEffect(appState.multiviewOpen) {
+                    if (appState.multiviewOpen) activePlayback = null
+                }
+
+                // Above the catalogue, below the single-title player: opening one channel full
+                // screen from inside the grid should replace it rather than draw underneath.
+                if (capabilities.multiviewSupported && appState.multiviewOpen) {
+                    MultiviewOverlay(
+                        tiles = appState.multiviewTiles(),
+                        onClose = {
+                            // Closing the overlay must also restore the window frame. Previously the
+                            // catalogue was left trapped in borderless full screen after Multiview.
+                            if (isFullScreen) onToggleFullScreen()
+                            appState.closeMultiview()
+                        },
+                        onRemoveTile = appState::toggleMultiviewChannel,
+                        queuedCount = appState.multiviewChannelIds.size,
+                        // The same full-screen switch the single-title player has. Four matches at
+                        // once is exactly when somebody wants the whole monitor.
+                        isFullScreen = isFullScreen,
+                        onToggleFullScreen = onToggleFullScreen,
+                    )
+                }
+
                 activePlayback?.let { request ->
                     DesktopPlayerOverlay(
                         request = request,
@@ -458,6 +595,9 @@ fun DesktopApp(
                         onToggleFullScreen = onToggleFullScreen,
                         isCompact = isCompact,
                         onToggleCompact = onToggleCompact,
+                        isFavorite = appState.playingIsFavorite,
+                        onToggleFavorite = appState::togglePlayingFavorite,
+                        subtitleStyle = appState.subtitleStyle,
                         onClose = {
                             if (isFullScreen) onToggleFullScreen()
                             activePlayback = null
@@ -479,10 +619,16 @@ fun DesktopApp(
                 // fetched, so the first thing the user sees is complete rather than half-filled.
                 // Above the onboarding branch: a returning user must not glimpse a setup screen
                 // between launching the app and their catalogue appearing.
-                if (appState.isStarting) {
+                //
+                // Not while the language has yet to be chosen: on a true first run there is no
+                // session to restore, so the splash would flash by in Portuguese — a language the
+                // user has not picked — in front of the screen that asks them to pick one.
+                if (appState.isStarting && !appState.needsLanguageSetup) {
                     SplashScreen(
                         message = appState.startupMessage.ifBlank { text.loadingCatalog },
                         progress = appState.startupProgress,
+                        backdropPosters = appState.backdropPosters,
+                        isFirstRun = appState.isFirstStartup,
                     )
                 }
                 // First run is an ordered sequence — language, copyright, account, connection — and
@@ -520,7 +666,10 @@ fun DesktopApp(
                                 null
                             },
                         onPickMusicPlaylist = { chooseM3uFile(ownerWindow, text.musicPlaylistTitle) },
-                        onCreate = { profileName, avatarIndex, listLabel, server, username, password, musicPlaylist ->
+                        onCreate = {
+                            profileName, avatarIndex, listLabel, server, username, password,
+                            musicPlaylist, metadataKey,
+                            ->
                             scope.launch {
                                 appState.completeSetup(
                                     profileName = profileName,
@@ -533,16 +682,18 @@ fun DesktopApp(
                                             password.toCharArray(),
                                         ),
                                     musicPlaylistPath = musicPlaylist,
+                                    metadataKey = metadataKey,
                                 )
                             }
                         },
-                        onUseSaved = { profileName, avatarIndex, sourceId, musicPlaylist ->
+                        onUseSaved = { profileName, avatarIndex, sourceId, musicPlaylist, metadataKey ->
                             scope.launch {
                                 appState.completeSetupWithSavedSource(
                                     profileName = profileName,
                                     avatarIndex = avatarIndex,
                                     sourceId = sourceId,
                                     musicPlaylistPath = musicPlaylist,
+                                    metadataKey = metadataKey,
                                 )
                             }
                         },
@@ -565,6 +716,7 @@ fun DesktopApp(
                             scope.launch { appState.selectProfileAndRefresh(profileId) }
                         },
                         onAddProfile = appState::startAddingProfile,
+                        onEditProfile = { profileId -> editingProfile = profileId },
                         onDelete = appState::deleteProfile,
                         onReset = appState::resetEverything,
                         // Dismissable only when a profile is already active. On first launch there
@@ -578,11 +730,101 @@ fun DesktopApp(
                     )
                 }
 
+                // Purchase details, opened from the countdown chip while the app still works. The
+                // same content as the blocking screen — device code, QR, price — but reached by
+                // choice rather than by being locked out.
+                if (showLicenseDetails) {
+                    appState.licenseStatus?.let { status ->
+                        LicenseGate(
+                            status = status,
+                            client = appState.licenseClient,
+                            onRechecked = { rechecked ->
+                                appState.onLicenseRechecked(rechecked)
+                                // Closed on a result that lets the app run: a customer who just paid
+                                // should land back in the app, not on the screen that asked them to.
+                                if (rechecked.allowsUse) showLicenseDetails = false
+                            },
+                            onQuit = { showLicenseDetails = false },
+                            languageTag = appState.language.tag,
+                            backdropPosters = appState.backdropPosters,
+                            // Opened by choice, from the countdown, while the app still works. There
+                            // is always a way back. The blocking use above passes nothing, because
+                            // closing it would reveal an app the customer may not use.
+                            onDismiss = { showLicenseDetails = false },
+                        )
+                    }
+                }
+
+                // Editing a profile. Composed outside the gate's `else if` so it survives the gate
+                // being dismissed, and keyed on the profile so a deleted one cannot leave a dialog
+                // editing something that no longer exists.
+                appState.profiles.firstOrNull { it.id == editingProfile }?.let { profile ->
+                    ProfileEditorDialog(
+                        profile = profile,
+                        musicPath = profile.musicPlaylistPath?.let(java.nio.file.Path::of),
+                        photo = appState.photoRevision.let { appState.photoFor(profile.id) },
+                        // Null when the profile has no playlist of its own, which the dialog renders
+                        // as "use whichever is connected" rather than as an empty field.
+                        sourceLabel =
+                            profile.sourceId?.let { id ->
+                                appState.savedSources().firstOrNull { it.id == id }?.label
+                            },
+                        onSave = { name, isKids, avatarIndex ->
+                            appState.updateProfile(profile.id, name, isKids, avatarIndex)
+                            editingProfile = null
+                        },
+                        onChangeSource = {
+                            // Leaves for the account screen, which owns credentials and connection.
+                            editingProfile = null
+                            appState.startEditingProfileSource(profile.id)
+                        },
+                        onChooseMusic = {
+                            val chosen =
+                                chooseM3uFile(ownerWindow, text.settingsText.profileMusicChoose)
+                            if (chosen != null) {
+                                scope.launch { appState.setMusicPlaylist(profile.id, chosen) }
+                            }
+                        },
+                        onClearMusic = {
+                            scope.launch { appState.setMusicPlaylist(profile.id, null) }
+                        },
+                        onPickPhoto = {
+                            // Applied straight to the profile rather than staged: unlike creation,
+                            // this profile already exists, so there is nothing to hold it against.
+                            chooseImageFile(ownerWindow, text.avatarChoosePhotoTitle)
+                                ?.let { chosen -> appState.setProfilePhoto(profile.id, chosen) }
+                        },
+                        onClearPhoto = { appState.setProfilePhoto(profile.id, null) },
+                        onDismiss = { editingProfile = null },
+                    )
+                }
+
+                // The longest wait in the app's life: the account has just been created and the
+                // whole catalogue is being read for the first time. The small overlay used here
+                // says "authenticating" over an empty library and explains none of that, so on a
+                // first run the full preparation screen is shown instead.
+                val preparingFirstCatalogue =
+                    appState.isFirstStartup &&
+                        !appState.isStarting &&
+                        (
+                            appState.xtreamStatus is XtreamStatus.Connecting ||
+                                appState.xtreamStatus is XtreamStatus.LoadingCatalog
+                        )
+                if (preparingFirstCatalogue) {
+                    SplashScreen(
+                        message = appState.startupMessage.ifBlank { text.loadingCatalog },
+                        progress = appState.startupProgress,
+                        backdropPosters = appState.backdropPosters,
+                        isFirstRun = true,
+                    )
+                }
+
                 AnimatedVisibility(
                     // Not while starting: the splash already says this, and two panels stacked
                     // saying the same thing is what the user kept seeing over their catalogue.
                     visible =
                         !appState.isStarting &&
+                            !preparingFirstCatalogue &&
                             (
                                 appState.importStatus is ImportStatus.Loading ||
                                     appState.xtreamStatus is XtreamStatus.Connecting
@@ -607,6 +849,31 @@ fun DesktopApp(
                     onConnect = { input ->
                         scope.launch { appState.connectXtream(input) }
                     },
+                )
+            }
+
+            if (parentalOpen) {
+                SettingsDialog(
+                    appState = appState,
+                    onDismiss = { parentalOpen = false },
+                    updateBusy = updateBusy,
+                    onUpdate = ::checkAndDownloadUpdate,
+                    sessionActive = appState.isXtreamSelected,
+                    onEndSession = appState::disconnectXtream,
+                    catalogRefreshing = appState.xtreamStatus is XtreamStatus.LoadingCatalog,
+                    onRefreshCatalog = { scope.launch { appState.refreshCatalog() } },
+                    onOpenTmdbSettings = { openUriExternally(java.net.URI(TMDB_API_SETTINGS_URL)) },
+                    onOpenTmdbGuide = { tmdbGuideOpen = true },
+                )
+            }
+
+            // Over the settings window rather than replacing it: the field being explained is
+            // behind this, and sending the user back through the settings tree after reading six
+            // steps would lose them the place they were about to paste into.
+            if (tmdbGuideOpen) {
+                TmdbKeyGuideDialog(
+                    onDismiss = { tmdbGuideOpen = false },
+                    onOpenSite = { url -> openUriExternally(java.net.URI(url)) },
                 )
             }
 
@@ -664,13 +931,25 @@ private fun SourceSidebar(
     onLive: () -> Unit,
     onFavorites: () -> Unit,
     onContinueWatching: () -> Unit,
+    onHistory: () -> Unit,
     onDownloads: () -> Unit,
+    hasOffline: Boolean,
     hasMusic: Boolean,
     onMusic: () -> Unit,
     hasSubscriptions: Boolean,
     onSubscriptions: () -> Unit,
+    collapsed: Boolean,
+    onToggleCollapsed: () -> Unit,
 ) {
     val text = strings
+
+    // Collapsed: a narrow strip carrying the name vertically and the control to bring it back. The
+    // content beside it gets the width, which on a shelf of posters is another card and a half.
+    if (collapsed) {
+        CollapsedSidebar(onExpand = onToggleCollapsed)
+        return
+    }
+
     Column(
         modifier =
             Modifier
@@ -679,7 +958,19 @@ private fun SourceSidebar(
                 .background(BuroColors.Surface)
                 .padding(horizontal = 18.dp, vertical = 22.dp),
     ) {
-        Brand()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Brand()
+            Text(
+                text = "‹",
+                color = BuroColors.TextMuted,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.clickable(onClick = onToggleCollapsed).padding(BuroSpacing.Xs),
+            )
+        }
         Spacer(Modifier.height(30.dp))
         SectionLabel(text.library)
         Spacer(Modifier.height(10.dp))
@@ -715,22 +1006,31 @@ private fun SourceSidebar(
             onClick = onContinueWatching,
         )
         NavigationItem(
+            label = text.settingsText.historyTitle,
+            selected = destination == DesktopDestination.HISTORY,
+            onClick = onHistory,
+        )
+        NavigationItem(
             label = text.favorites,
             selected = destination == DesktopDestination.FAVORITES,
             onClick = onFavorites,
         )
-        NavigationItem(
-            label = text.downloads,
-            selected = destination == DesktopDestination.DOWNLOADS,
-            onClick = onDownloads,
-        )
+        if (hasOffline) {
+            NavigationItem(
+                label = text.downloads,
+                selected = destination == DesktopDestination.DOWNLOADS,
+                onClick = onDownloads,
+            )
+        }
         // Last, after Downloads, and only when the user actually supplied a music playlist. An
         // entry leading to an empty section is worse than no entry at all.
-        NavigationItem(
-            label = text.music,
-            selected = destination == DesktopDestination.MUSIC,
-            onClick = onMusic,
-        )
+        if (hasMusic) {
+            NavigationItem(
+                label = text.music,
+                selected = destination == DesktopDestination.MUSIC,
+                onClick = onMusic,
+            )
+        }
         // Only while something can actually answer "where can I watch this" — currently the demo
         // catalogue. With nothing behind it the entry disappears rather than opening a dead screen.
         if (hasSubscriptions) {
@@ -777,17 +1077,65 @@ private fun SourceSidebar(
     }
 }
 
+/**
+ * The sidebar reduced to a strip: the mark, the name written downwards, and the way back.
+ *
+ * The letters are stacked rather than rotated. Compose can rotate a Text, but a rotated glyph on a
+ * strip this narrow renders soft and reads worse than the plain characters — and the name is short
+ * enough that stacking is legible.
+ */
+@Composable
+private fun CollapsedSidebar(onExpand: () -> Unit) {
+    val text = strings
+    Column(
+        modifier =
+            Modifier
+                .width(56.dp)
+                .fillMaxHeight()
+                .background(BuroColors.Surface)
+                .clickable(onClick = onExpand)
+                .padding(vertical = 22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // Drawn rather than loaded: the PNG carries an opaque black square, which showed as a dark
+        // tile around the ring on every surface that is not exactly the same black.
+        BuroMark(size = 32.dp)
+        Spacer(Modifier.height(20.dp))
+
+        Text(
+            // One letter per line. Built from the letters alone so no stray separator is stacked.
+            text = "IPTVBURO".toCharArray().joinToString("\n"),
+            color = BuroColors.TextMuted,
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center,
+            lineHeight = 14.sp,
+        )
+
+        Spacer(Modifier.weight(1f))
+        // The affordance, at the bottom where a collapse control usually lives. The whole strip is
+        // clickable too — a 56dp target is easy to miss if only the arrow works.
+        Text(
+            text = "›",
+            color = BuroColors.Primary,
+            style = MaterialTheme.typography.titleLarge,
+        )
+        Text(
+            text = text.settingsText.expandSidebar,
+            color = BuroColors.TextSubtle,
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center,
+            lineHeight = 11.sp,
+        )
+    }
+}
+
 @Composable
 private fun Brand() {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        // The real mark rather than a letter in a rounded square. The same asset is the window and
-        // taskbar icon, so the app is recognisable by one shape everywhere it appears.
-        Image(
-            painter = painterResource("brand/buro-mark-512.png"),
-            contentDescription = null,
-            modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)),
-            contentScale = ContentScale.Fit,
-        )
+        // The real mark, drawn rather than loaded — see BuroMark. The window and taskbar icon still
+        // use the bitmap, since AWT cannot take a composable, so the app is recognisable by one
+        // shape everywhere it appears.
+        BuroMark(size = 42.dp)
         Spacer(Modifier.width(12.dp))
         Column {
             Text(
@@ -921,6 +1269,11 @@ private fun TopBar(
     onMetadataApiKeyChange: (String) -> Unit,
     streamingRegion: String,
     onSelectRegion: (String) -> Unit,
+    onOpenParental: () -> Unit,
+    uses24HourClock: Boolean,
+    /** Null while the first check is still in flight, which is when there is nothing to say. */
+    licenseStatus: LicenseStatus?,
+    onOpenPurchase: () -> Unit,
 ) {
     val text = strings
     // A Row does not shrink unweighted children: once their intrinsic widths exceed the space they
@@ -1003,9 +1356,26 @@ private fun TopBar(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            // How long is left, and how to buy.
+            //
+            // Shown here rather than only at the moment of blocking, because a customer who
+            // discovers their trial is over by finding the app locked has been ambushed. Absent
+            // entirely once a paid licence has more than a month to run: a permanent countdown on
+            // something already paid for reads as nagging.
+            licenseStatus?.let { status ->
+                LicenseChip(
+                    status = status,
+                    languageTag = language.tag,
+                    onOpenPurchase = onOpenPurchase,
+                )
+                Spacer(Modifier.width(BuroSpacing.Md))
+            }
             // Profile first, then a single settings entry. Four loose language buttons plus an
             // update button plus two status pills made the header read as a debug toolbar; the
             // language belongs inside settings, where a user looks for it once and never again.
+            // Before the profile chip: the eye lands on the right of a header looking for status,
+            // and the time is the thing most often wanted there.
+            HeaderClock(uses24Hour = uses24HourClock, languageTag = language.tag)
             Spacer(Modifier.width(BuroSpacing.Md))
             if (showProfile) {
                 ProfileChip(
@@ -1016,21 +1386,24 @@ private fun TopBar(
                 )
                 Spacer(Modifier.width(BuroSpacing.Sm))
             }
-            SettingsMenu(
-                language = language,
-                onSelectLanguage = onSelectLanguage,
-                updateBusy = updateBusy,
-                onUpdate = onUpdate,
-                sessionActive = sessionActive,
-                onEndSession = onEndSession,
-                catalogRefreshing = catalogRefreshing,
-                onRefreshCatalog = onRefreshCatalog,
-                metadataApiKey = metadataApiKey,
-                onMetadataApiKeyChange = onMetadataApiKeyChange,
-                streamingRegion = streamingRegion,
-                onSelectRegion = onSelectRegion,
-                text = text,
-            )
+            // Opens the settings dialog directly. There used to be a DropdownMenu here holding
+            // half the settings, with the other half behind an item inside it — and a
+            // DropdownMenu scrolls its content without ever drawing a scrollbar, so everything
+            // below its fold was reported as missing. One screen, one scrollbar.
+            BuroInteractiveRow(
+                onClick = onOpenParental,
+                selected = false,
+                shape = CircleShape,
+                contentDescription = text.settings,
+            ) {
+                Box(modifier = Modifier.size(38.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "⚙",
+                        color = BuroColors.TextMuted,
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                }
+            }
         }
     }
 }
@@ -1143,230 +1516,6 @@ private fun regionName(code: String): String =
         "IT" -> "Itália"
         else -> code
     }
-
-@Composable
-private fun SettingsMenu(
-    language: DesktopLanguage,
-    onSelectLanguage: (DesktopLanguage) -> Unit,
-    updateBusy: Boolean,
-    onUpdate: () -> Unit,
-    sessionActive: Boolean,
-    onEndSession: () -> Unit,
-    catalogRefreshing: Boolean,
-    onRefreshCatalog: () -> Unit,
-    metadataApiKey: String,
-    onMetadataApiKeyChange: (String) -> Unit,
-    streamingRegion: String,
-    onSelectRegion: (String) -> Unit,
-    text: DesktopStrings,
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box {
-        BuroInteractiveRow(
-            onClick = { expanded = true },
-            selected = expanded,
-            shape = CircleShape,
-            contentDescription = text.settings,
-        ) {
-            Box(modifier = Modifier.size(38.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "⚙",
-                    color = BuroColors.TextMuted,
-                    style = MaterialTheme.typography.headlineSmall,
-                )
-            }
-        }
-
-        // The menu's own scroll state, so a scrollbar can be drawn against it. DropdownMenu scrolls
-        // its content itself but shows no indicator, so the settings below the fold — the update
-        // button, the version, the session line — looked as though they did not exist. Passing this
-        // in rather than wrapping in verticalScroll: the wrapper crashes with "measured with an
-        // infinity maximum height", since the menu already measures unbounded.
-        val menuScroll = androidx.compose.foundation.rememberScrollState()
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            scrollState = menuScroll,
-            modifier =
-                Modifier
-                    .background(BuroColors.SurfaceRaised)
-                    .heightIn(max = 560.dp)
-                    .width(360.dp),
-        ) {
-            // Language and region as compact rows rather than one full-height menu item each. Nine
-            // options at menu-item height overflowed the screen, and a DropdownMenu scrolls without
-            // ever showing a scrollbar — so the settings below simply looked absent. Laid out this
-            // way the whole menu fits, which is a better answer than an indicator for a scroll the
-            // user should not have needed.
-            SettingsSectionLabel(text.languageLabel, text.languageHint)
-            FlowRow(
-                modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs).width(320.dp),
-                horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
-                verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
-            ) {
-                DesktopLanguage.entries.forEach { option ->
-                    SettingsChip(
-                        label = option.nativeName(),
-                        selected = option == language,
-                        onClick = {
-                            onSelectLanguage(option)
-                            expanded = false
-                        },
-                    )
-                }
-            }
-            SettingsSectionLabel(text.subscriptionsRegion, text.regionHint)
-            FlowRow(
-                modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs).width(320.dp),
-                horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
-                verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
-            ) {
-                TmdbStreamingCatalogue.SUPPORTED_REGIONS.forEach { option ->
-                    SettingsChip(
-                        label = regionName(option),
-                        selected = option == streamingRegion,
-                        onClick = {
-                            onSelectRegion(option)
-                            expanded = false
-                        },
-                    )
-                }
-            }
-            HorizontalDivider(color = BuroColors.BorderSoft)
-            // The metadata key lives in the menu rather than a settings page: it is pasted once and
-            // never touched again, and a whole screen for one field would be its own kind of noise.
-            DropdownMenuItem(
-                text = {
-                    Column(modifier = Modifier.width(320.dp).padding(vertical = 4.dp)) {
-                        Text(
-                            text = text.metadataKeyLabel,
-                            color = BuroColors.Text,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        // What the key actually powers. It started out fetching cast photos and now
-                        // also drives posters, trailers and the whole Assinaturas area, so a label
-                        // naming only the first of those undersells what leaving it blank costs.
-                        Text(
-                            text = text.metadataKeyUses,
-                            color = BuroColors.TextSubtle,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        // The hint is the link. Sending the user to the page that issues the key is
-                        // more use than telling them the address and making them type it.
-                        TextButton(
-                            onClick = { openUriExternally(java.net.URI(TMDB_API_SETTINGS_URL)) },
-                            contentPadding = PaddingValues(0.dp),
-                        ) {
-                            Text(
-                                text = text.metadataKeyHint,
-                                color = BuroColors.Primary,
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        }
-                        Spacer(Modifier.height(BuroSpacing.Xs))
-                        OutlinedTextField(
-                            value = metadataApiKey,
-                            onValueChange = onMetadataApiKeyChange,
-                            singleLine = true,
-                            placeholder = {
-                                Text(
-                                    text = text.metadataKeyPlaceholder,
-                                    color = BuroColors.TextSubtle,
-                                )
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = BuroRadius.Small,
-                            colors =
-                                TextFieldDefaults.colors(
-                                    focusedTextColor = BuroColors.Text,
-                                    unfocusedTextColor = BuroColors.Text,
-                                    focusedContainerColor = BuroColors.Surface,
-                                    unfocusedContainerColor = BuroColors.Surface,
-                                    focusedIndicatorColor = BuroColors.Primary,
-                                    unfocusedIndicatorColor = BuroColors.BorderSoft,
-                                    cursorColor = BuroColors.Primary,
-                                ),
-                        )
-                        // There is no Save button — the key applies as it is typed — so without a
-                        // line saying so the user is left wondering whether anything happened.
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text =
-                                if (metadataApiKey.isNotBlank()) {
-                                    text.metadataKeySaved
-                                } else {
-                                    text.metadataKeyUsingBundled
-                                },
-                            color =
-                                if (metadataApiKey.isNotBlank()) BuroColors.Success else BuroColors.TextSubtle,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                },
-                // Not dismissable by click: the row holds a text field, and closing the menu on
-                // every keystroke's click would make it impossible to type into.
-                onClick = {},
-            )
-            HorizontalDivider(color = BuroColors.BorderSoft)
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        text = if (updateBusy) "…" else text.checkUpdate,
-                        color = BuroColors.Text,
-                    )
-                },
-                enabled = !updateBusy,
-                onClick = {
-                    onUpdate()
-                    expanded = false
-                },
-            )
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        text = "IPTV BURO v$DESKTOP_VERSION",
-                        color = BuroColors.TextSubtle,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                },
-                enabled = false,
-                onClick = {},
-            )
-            // Session controls belong here rather than in the catalogue toolbar: they are consulted
-            // rarely and were taking permanent width from the browsing surface.
-            if (sessionActive) {
-                HorizontalDivider(color = BuroColors.BorderSoft)
-                DropdownMenuItem(
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier.size(6.dp).clip(CircleShape).background(BuroColors.Success),
-                            )
-                            Spacer(Modifier.width(BuroSpacing.Xs))
-                            Text(
-                                text = text.sessionActive,
-                                color = BuroColors.TextSubtle,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
-                    },
-                    enabled = false,
-                    onClick = {},
-                )
-                DropdownMenuItem(
-                    text = { Text(text = text.endSession, color = BuroColors.Error) },
-                    onClick = {
-                        onEndSession()
-                        expanded = false
-                    },
-                )
-            }
-        }
-    }
-}
 
 /** Compact segmented control. Four loose text buttons read as debug UI at this size. */
 @Composable
@@ -2168,6 +2317,7 @@ private fun DesktopProfileGate(
     photoFor: (String) -> java.nio.file.Path?,
     onSelect: (String?) -> Unit,
     onAddProfile: () -> Unit,
+    onEditProfile: (String) -> Unit,
     onDelete: (String) -> Unit,
     onReset: () -> Unit,
     onDismiss: (() -> Unit)?,
@@ -2248,36 +2398,68 @@ private fun DesktopProfileGate(
                                     style = MaterialTheme.typography.labelSmall,
                                 )
                             }
-                            // Only offered while more than one profile exists: removing the last
-                            // one would leave the gate with nothing to choose. Two taps, because
-                            // deleting a profile discards its favourites.
-                            if (profiles.size > 1) {
-                                Spacer(Modifier.height(BuroSpacing.Xs))
+                            Spacer(Modifier.height(BuroSpacing.Xs))
+                            // Stacked, not side by side.
+                            //
+                            // The tile is 130dp wide. Two buttons in a row left each about 55dp, so
+                            // "Confirmar?" wrapped onto three lines and stretched the tile out of
+                            // shape. One per line gives each the full width and keeps every tile the
+                            // same height whatever state it is in.
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                // Editing is always available, including for the last profile: a
+                                // household with one profile is exactly who needs to change its
+                                // playlist without being made to create a second one first.
                                 TextButton(
-                                    onClick = {
-                                        if (confirmingDelete == profile.id) {
-                                            onDelete(profile.id)
-                                            confirmingDelete = null
-                                        } else {
-                                            confirmingDelete = profile.id
-                                        }
-                                    },
+                                    onClick = { onEditProfile(profile.id) },
+                                    contentPadding = PaddingValues(horizontal = BuroSpacing.Xs, vertical = 2.dp),
                                 ) {
                                     Text(
-                                        text =
-                                            if (confirmingDelete == profile.id) {
-                                                strings.confirmRemoveProfile
-                                            } else {
-                                                strings.removeProfile
-                                            },
-                                        color =
-                                            if (confirmingDelete == profile.id) {
-                                                BuroColors.Error
-                                            } else {
-                                                BuroColors.TextSubtle
-                                            },
+                                        text = "✎ ${strings.settingsText.profileEdit}",
+                                        color = BuroColors.TextMuted,
                                         style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1,
                                     )
+                                }
+
+                                // Removal, unlike editing, needs more than one profile: taking the
+                                // last one away would leave this gate with nothing to choose. Two
+                                // taps, because deleting a profile discards its favourites.
+                                if (profiles.size > 1) {
+                                    TextButton(
+                                        onClick = {
+                                            if (confirmingDelete == profile.id) {
+                                                onDelete(profile.id)
+                                                confirmingDelete = null
+                                            } else {
+                                                confirmingDelete = profile.id
+                                            }
+                                        },
+                                        contentPadding = PaddingValues(horizontal = BuroSpacing.Xs, vertical = 2.dp),
+                                    ) {
+                                        Text(
+                                            text =
+                                                if (confirmingDelete == profile.id) {
+                                                    strings.confirmRemoveProfile
+                                                } else {
+                                                    strings.removeProfile
+                                                },
+                                            color =
+                                                if (confirmingDelete == profile.id) {
+                                                    BuroColors.Error
+                                                } else {
+                                                    BuroColors.TextSubtle
+                                                },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            // One line always. The confirmation is longer than the
+                                            // label it replaces, and wrapping it is what deformed
+                                            // the tile.
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -2418,6 +2600,7 @@ private fun DesktopLanguage.nativeName(): String =
     when (this) {
         DesktopLanguage.PORTUGUESE_BRAZIL -> "Português (Brasil)"
         DesktopLanguage.ENGLISH -> "English"
+        DesktopLanguage.SPANISH -> "Español"
         DesktopLanguage.GERMAN -> "Deutsch"
         DesktopLanguage.ITALIAN -> "Italiano"
     }
@@ -2510,6 +2693,33 @@ private fun DownloadRow(
     }
 }
 
+/** Which kind of download to list. */
+private enum class DownloadFilter {
+    ALL,
+    MOVIES,
+    SERIES,
+}
+
+/**
+ * How tightly the download rows are packed.
+ *
+ * Two rather than the catalogue's three: a download row carries a progress bar, a cancel and a
+ * delete, so it cannot collapse into a poster tile with nowhere to put them. Compact is the same
+ * row with less air and smaller artwork — enough to see a finished season at a glance.
+ */
+private enum class DownloadDensity {
+    COMFORTABLE,
+    COMPACT,
+}
+
+/**
+ * How many downloads before a search box earns its place.
+ *
+ * Below this the list fits on screen and a search field is furniture; above it, finding one episode
+ * among a season means scrolling past everything else.
+ */
+private const val SEARCHABLE_DOWNLOAD_COUNT = 8
+
 /**
  * Offline library.
  *
@@ -2552,6 +2762,107 @@ private fun DownloadsWorkspace(
             return@Column
         }
 
+        // Films apart from series, and a way to find one title among many.
+        //
+        // A download list grows without ever being tidied — every episode of a series lands beside
+        // every film — and past a screenful it stops being somewhere you can find anything.
+        var filter by remember { mutableStateOf(DownloadFilter.ALL) }
+        var query by remember { mutableStateOf("") }
+        var density by remember { mutableStateOf(DownloadDensity.COMFORTABLE) }
+
+        // The kind is read off the content key, which is `movie:…` or `series:…` by construction.
+        // Derived rather than stored: a second field would be one more thing to keep in step with
+        // the identity that already carries the answer.
+        val kindOf = { entry: DownloadEntry -> entry.contentKey.substringBefore(':') }
+        val kinds = entries.map(kindOf).toSet()
+
+        val visible =
+            entries.filter { entry ->
+                val matchesKind =
+                    when (filter) {
+                        DownloadFilter.ALL -> true
+                        DownloadFilter.MOVIES -> kindOf(entry) == "movie"
+                        DownloadFilter.SERIES -> kindOf(entry) == "series"
+                    }
+                matchesKind && (query.isBlank() || entry.title.contains(query.trim(), ignoreCase = true))
+            }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Always shown, not only when the list already holds both kinds.
+            //
+            // Hiding it behind a mix was a misjudgement: a customer with four films sees no control
+            // at all, cannot tell the feature exists, and reasonably reports it missing. A selector
+            // that is present and shows the same list twice costs nothing; one that appears only
+            // under a condition the user cannot see reads as a broken build.
+            BuroSegmentedControl(
+                options = DownloadFilter.entries,
+                selected = filter,
+                label = { option ->
+                    when (option) {
+                        DownloadFilter.ALL -> text.allItems
+                        DownloadFilter.MOVIES -> text.movies
+                        DownloadFilter.SERIES -> text.series
+                    }
+                },
+                onSelect = { chosen -> filter = chosen },
+            )
+            Spacer(Modifier.width(BuroSpacing.Md))
+
+            // Always offered, for the same reason as the selector above. A search box that appears
+            // only past some threshold is a control the user has to discover by accident.
+            OutlinedTextField(
+                value = query,
+                onValueChange = { value -> query = value },
+                modifier = Modifier.weight(1f).widthIn(max = 420.dp),
+                singleLine = true,
+                placeholder = { Text(text.searchCatalog) },
+                leadingIcon = { Text("⌕", color = BuroColors.TextSubtle) },
+                shape = BuroRadius.Small,
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = BuroColors.Primary,
+                        unfocusedBorderColor = BuroColors.Border,
+                        focusedContainerColor = BuroColors.Surface,
+                        unfocusedContainerColor = BuroColors.Surface,
+                    ),
+            )
+            Spacer(Modifier.width(BuroSpacing.Md))
+
+            // Roomy rows or tight ones, the same choice the catalogue offers.
+            //
+            // A download row carries a progress bar and two buttons, so it cannot become a wall of
+            // posters — compact here means the same row with less air and smaller artwork, which is
+            // what makes a finished season scannable rather than a page of scrolling.
+            BuroSegmentedControl(
+                options = listOf(DownloadDensity.COMFORTABLE, DownloadDensity.COMPACT),
+                selected = density,
+                label = { option ->
+                    when (option) {
+                        DownloadDensity.COMFORTABLE -> text.layoutList
+                        DownloadDensity.COMPACT -> text.layoutCompact
+                    }
+                },
+                onSelect = { chosen -> density = chosen },
+            )
+        }
+        Spacer(Modifier.height(BuroSpacing.Md))
+
+        // A filter that matches nothing says so, rather than showing an empty screen that looks
+        // like the downloads were lost.
+        if (visible.isEmpty()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = text.downloadsNoMatch,
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            return@Column
+        }
+
         // Weighted so the list scrolls within the remaining space. Unweighted, a Column gives its
         // child unbounded height and the lazy list lays every row out at once, running past the
         // window instead of scrolling.
@@ -2559,12 +2870,13 @@ private fun DownloadsWorkspace(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
         ) {
-            items(entries, key = { it.contentKey }) { entry ->
+            items(visible, key = { it.contentKey }) { entry ->
                 DownloadLibraryRow(
                     entry = entry,
                     onPlay = { onPlay(entry.contentKey) },
                     onCancel = { onCancel(entry.contentKey) },
                     onDelete = { onDelete(entry.contentKey) },
+                    compact = density == DownloadDensity.COMPACT,
                 )
             }
         }
@@ -2577,6 +2889,14 @@ private fun DownloadLibraryRow(
     onPlay: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
+    /**
+     * Tighter rows, for scanning a long list.
+     *
+     * The controls stay: a download row has a progress bar, a cancel and a delete, and a density
+     * that removed them would be a different screen rather than a denser one. Only the padding and
+     * the artwork shrink.
+     */
+    compact: Boolean = false,
 ) {
     val text = strings
     val stored = entry.state == DownloadState.Completed
@@ -2586,7 +2906,7 @@ private fun DownloadLibraryRow(
             .fillMaxWidth()
             .clip(BuroRadius.Medium)
             .background(BuroColors.Surface)
-            .padding(BuroSpacing.Md),
+            .padding(if (compact) BuroSpacing.Xs else BuroSpacing.Md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BuroRemoteArtwork(
@@ -2594,7 +2914,7 @@ private fun DownloadLibraryRow(
             contentDescription = entry.title,
             modifier =
                 Modifier
-                    .width(54.dp)
+                    .width(if (compact) 34.dp else 54.dp)
                     .aspectRatio(2f / 3f)
                     .clip(BuroRadius.Small)
                     .background(BuroColors.SurfaceRaised),

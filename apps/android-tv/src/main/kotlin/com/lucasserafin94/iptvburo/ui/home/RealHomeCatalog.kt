@@ -1,28 +1,135 @@
 package com.lucasserafin94.iptvburo.ui.home
 
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
+import com.lucasserafin94.iptvburo.domain.model.SeasonalCollection
+import com.lucasserafin94.iptvburo.domain.model.SeasonalCollections
 import com.lucasserafin94.iptvburo.ui.ChannelUi
+import com.lucasserafin94.iptvburo.ui.dailyEditorialRank
+import com.lucasserafin94.iptvburo.ui.localEditorialDay
+import com.lucasserafin94.iptvburo.ui.ContinueWatchingUi
+import com.lucasserafin94.iptvburo.ui.ProviderShelfUi
+import com.lucasserafin94.iptvburo.ui.SubscriptionTitleUi
+import java.time.LocalDate
 import java.util.Calendar
+import java.util.Locale
 
 /** Builds a small, stable home document from locally indexed catalog rows. */
 object RealHomeCatalog {
     fun section(
         sources: List<HomeSourceSummary>,
         catalogItems: List<ChannelUi>,
+        continueWatching: List<ContinueWatchingUi> = emptyList(),
+        /**
+         * Service shelves from the discovery catalogue, drawn after the user's own content.
+         *
+         * After, deliberately: the playlist is what the user owns and came here for. A row of
+         * things they would have to subscribe to elsewhere belongs below that, not above it.
+         */
+        streamingShelves: List<ProviderShelfUi> = emptyList(),
+        /**
+         * Real synopses for banner titles, keyed by channel id.
+         *
+         * Absent entries keep the generic line, which is what every title had before: the plot is
+         * not on a catalogue row, so it arrives a moment after the home does.
+         */
+        synopses: Map<String, String> = emptyMap(),
     ): HomeSection {
-        val distinct = catalogItems.distinctBy(ChannelUi::id)
+        val continueById = continueWatching.associateBy { it.channel.id }
+        val distinct = (catalogItems + continueWatching.map { it.channel }).distinctBy(ChannelUi::id)
         val currentYear = Calendar.getInstance().get(Calendar.YEAR)
-        val heroChannel =
-            distinct.firstOrNull { it.year == currentYear }
-                ?: distinct.firstOrNull { (it.rating ?: 0.0) >= 7.0 }
-                ?: distinct.first()
-        val hero = heroChannel.toHomeItem(HomeCardFormat.LANDSCAPE, "DESTAQUE")
-        val remaining = distinct.filterNot { it.id == heroChannel.id }.toMutableList()
+        // What the calendar suggests today: at Christmas the banner should open on Christmas films,
+        // which is the whole point of a home screen that changes with the date. The terms are the
+        // shared domain's, so the phone and the desktop celebrate the same days.
+        val today = LocalDate.now()
+        val seasonalTerms =
+            SeasonalCollections.collectionsFor(today).flatMap(SeasonalCollection::searchTerms)
+        val seasonalPicks =
+            if (seasonalTerms.isEmpty()) {
+                emptyList()
+            } else {
+                distinct.filter { channel ->
+                    val name = channel.name.lowercase(Locale.ROOT)
+                    seasonalTerms.any { term -> name.contains(term.lowercase(Locale.ROOT)) }
+                }
+            }
+
+        // Seasonal first, then this year's releases, then whatever is well rated. Ordered by the
+        // day so the rotation is stable within a day and different tomorrow — the same trick the
+        // daily rails already use.
+        val heroCandidates =
+            (
+                seasonalPicks +
+                    distinct.filter { it.year == currentYear } +
+                    distinct.filter { (it.rating ?: 0.0) >= 7.0 } +
+                    distinct
+            ).asSequence()
+                .filter { it.id !in continueById }
+                .distinctBy(ChannelUi::id)
+                .toList()
+                .ifEmpty { distinct.take(1) }
+
+        // The banner opens on what the old single-hero rule chose, and rotates through the rest.
+        //
+        // Keeping the first slot deterministic matters: a seasonal pick where the calendar has one,
+        // otherwise this year's releases. Shuffling the whole list by a daily hash would let an
+        // obscure back-catalogue title lead the home screen on a day with new arrivals.
+        val leadHero =
+            seasonalPicks.firstOrNull { it.id !in continueById }
+                ?: heroCandidates.firstOrNull { it.year == currentYear }
+                ?: heroCandidates.firstOrNull { (it.rating ?: 0.0) >= 7.0 }
+                ?: heroCandidates.firstOrNull()
+        val rotationSource =
+            (
+                listOfNotNull(leadHero) +
+                    heroCandidates
+                        .filterNot { it.id == leadHero?.id }
+                        // The rest rotate in a daily order, so the banner is different tomorrow
+                        // without the lead title moving around.
+                        .sortedBy { dailyEditorialRank(it.id, localEditorialDay()) }
+            ).take(HERO_ROTATION_SIZE)
+
+        val heroChannel = rotationSource.firstOrNull() ?: distinct.first()
+        val heroRotation =
+            rotationSource.ifEmpty { listOf(heroChannel) }.map { channel ->
+                val item = channel.toHomeItem(HomeCardFormat.LANDSCAPE, "DESTAQUE")
+                item.copy(
+                    progress = continueById[channel.id]?.progress,
+                    // The title's own plot where it has arrived, trimmed to a couple of lines: a
+                    // banner is a reason to press play, and the stock sentence it used to carry
+                    // told the viewer to open the title to find out what it was about.
+                    synopsis = synopses[channel.id]?.toBannerSynopsis() ?: item.synopsis,
+                )
+            }
+        val hero = heroRotation.first()
+        val continueRailItems =
+            continueWatching
+                .filterNot { it.channel.id == heroChannel.id }
+                .distinctBy { it.channel.id }
+        val continuedIds = continueWatching.mapTo(mutableSetOf()) { it.channel.id }
+        val remaining =
+            distinct.filterNot { it.id == heroChannel.id || it.id in continuedIds }.toMutableList()
         val currentReleases = remaining.filter { it.year == currentYear }.take(12)
         remaining.removeAll(currentReleases.toSet())
         val previousReleases = remaining.filter { it.year == currentYear - 1 }.take(12)
         remaining.removeAll(previousReleases.toSet())
         val rails = buildList {
+            continueRailItems.takeIf(List<ContinueWatchingUi>::isNotEmpty)?.let { items ->
+                add(
+                    HomeRail(
+                        id = "real:rail:continue-watching",
+                        title = "Continue assistindo",
+                        kind = HomeRailKind.CONTINUE_WATCHING,
+                        cardFormat = HomeCardFormat.LANDSCAPE,
+                        items =
+                            items.map { entry ->
+                                entry.channel
+                                    .toHomeItem(HomeCardFormat.LANDSCAPE, "CONTINUAR")
+                                    .copy(progress = entry.progress)
+                            },
+                        isDemonstration = false,
+                    ),
+                )
+            }
             releaseRail(currentYear, currentReleases)?.let(::add)
             releaseRail(currentYear - 1, previousReleases)?.let(::add)
             val newlyAdded = remaining.filter { it.categoryName == "Adicionado recentemente" }
@@ -102,12 +209,58 @@ object RealHomeCatalog {
                 )
             }
         }
+        val railsWithStreaming =
+            rails +
+                streamingShelves
+                    .filter { shelf -> shelf.titles.isNotEmpty() }
+                    // Rail ids must be unique inside a section for the same reason item ids must be
+                    // unique inside a rail: HomeSection rejects a repeat rather than tolerating it.
+                    .distinctBy(ProviderShelfUi::providerId)
+                    .map { shelf ->
+                        HomeRail(
+                            id = "real:rail:streaming:" + shelf.providerId,
+                            // The service name as text. Its logo is that company's mark and is
+                            // never fetched; the posters are the films' own artwork, which TMDb
+                            // serves for exactly this purpose.
+                            title = shelf.providerName,
+                            kind = HomeRailKind.STREAMING_SERVICE,
+                            cardFormat = HomeCardFormat.POSTER,
+                            items =
+                                // Deduplicated by external id: TMDb returns the same title twice
+                                // on a service that lists it under two entries, and HomeRail
+                                // rejects duplicate ids — which crashed the whole home screen
+                                // rather than dropping one card.
+                                shelf.titles.distinctBy(SubscriptionTitleUi::externalId).map { title ->
+                                    HomeItem(
+                                        id = "streaming:" + shelf.providerId + ":" + title.externalId,
+                                        title = title.title,
+                                        subtitle = shelf.providerName,
+                                        synopsis =
+                                            title.overview?.takeIf(String::isNotBlank)
+                                                ?: "Abra para ver onde este título pode ser assistido.",
+                                        metadata = title.year?.toString().orEmpty().ifBlank { shelf.providerName },
+                                        badge = shelf.providerName,
+                                        kind = HomeItemKind.CATALOG,
+                                        cardFormat = HomeCardFormat.POSTER,
+                                        palette = HomeArtworkPalette.AURORA,
+                                        remoteArtworkUrl = title.posterUrl,
+                                        isDemonstration = false,
+                                    )
+                                },
+                            isDemonstration = false,
+                        )
+                    }
+
         return HomeSection(
             id = "real:living-home:${sources.firstOrNull()?.id.orEmpty()}",
             hero = hero,
-            rails = rails,
+            rails = railsWithStreaming,
+            heroRotation = heroRotation,
         )
     }
+
+    /** Enough for a browsing session without the banner becoming a slideshow nobody can act on. */
+    private const val HERO_ROTATION_SIZE = 10
 
     private fun releaseRail(year: Int, items: List<ChannelUi>): HomeRail? =
         items.takeIf(List<ChannelUi>::isNotEmpty)?.let { releases ->
@@ -151,3 +304,24 @@ object RealHomeCatalog {
         )
 
 }
+
+/**
+ * A plot cut down to what fits under a banner title.
+ *
+ * Cut at a sentence end where there is one within reach, so the text reads as finished rather than
+ * severed; an ellipsis otherwise, which is honest about there being more.
+ */
+private fun String.toBannerSynopsis(): String {
+    val clean = trim().replace(Regex("""\s+"""), " ")
+    if (clean.length <= BANNER_SYNOPSIS_LIMIT) return clean
+    val cut = clean.take(BANNER_SYNOPSIS_LIMIT)
+    val sentenceEnd = cut.lastIndexOfAny(charArrayOf('.', '!', '?'))
+    return if (sentenceEnd >= BANNER_SYNOPSIS_LIMIT / 2) {
+        cut.take(sentenceEnd + 1)
+    } else {
+        cut.substringBeforeLast(' ', cut).trimEnd(',', ';', ' ') + "…"
+    }
+}
+
+/** Two lines at the banner's text size, which is as much as the artwork can carry. */
+private const val BANNER_SYNOPSIS_LIMIT = 180

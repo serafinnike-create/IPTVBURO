@@ -19,6 +19,40 @@ class GitHubReleaseUpdaterTest {
         assertFalse(isNewerVersion("invalid", "0.2.0-alpha.2"))
     }
 
+    /**
+     * The version the app actually ships as must parse.
+     *
+     * DESKTOP_VERSION has been written as two numbers — "1.1", then "2.0" — while the parser
+     * requires three. An unparseable *current* version made compareVersions return 1 for every
+     * candidate, so the updater would have offered the running build to itself as an update, over
+     * and over. Nothing in the suite caught it because every existing case used three numbers on
+     * both sides.
+     */
+    @Test
+    fun `the shipped version string is comparable`() {
+        assertEquals("2.0.0-alpha.1", DESKTOP_VERSION)
+        assertEquals(
+            "https://api.github.com/repos/serafinnike-create/IPTVBURO/releases?per_page=20",
+            DESKTOP_RELEASES_URL,
+        )
+        assertFalse(
+            isNewerVersion(DESKTOP_VERSION, DESKTOP_VERSION),
+            "the running build must never be newer than itself — DESKTOP_VERSION is '$DESKTOP_VERSION'",
+        )
+        assertTrue(isNewerVersion("99.0.0", DESKTOP_VERSION), "a genuinely newer release must still be offered")
+        assertFalse(isNewerVersion("0.0.1", DESKTOP_VERSION), "an older release must not be offered")
+    }
+
+    /** Two-number versions are what this project writes, so they have to order correctly. */
+    @Test
+    fun `two-number versions compare like their three-number form`() {
+        assertTrue(isNewerVersion("2.0", "1.1"))
+        assertFalse(isNewerVersion("1.1", "2.0"))
+        assertFalse(isNewerVersion("2.0", "2.0"))
+        assertTrue(isNewerVersion("2.0.1", "2.0"))
+        assertFalse(isNewerVersion("2.0", "2.0.1"))
+    }
+
     @Test
     fun `release check accepts only a newer installer with github digest`() = runBlocking {
         MockWebServer().use { server ->
@@ -31,7 +65,7 @@ class GitHubReleaseUpdaterTest {
                       "name": "Preview 0.2 alpha 5",
                       "assets": [{
                         "name": "IPTVBURO-0.2.6.msi",
-                        "browser_download_url": "https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.5/IPTVBURO-0.2.6.msi",
+                        "browser_download_url": "https://github.com/serafinnike-create/IPTVBURO/releases/download/v0.2.0-alpha.5/IPTVBURO-0.2.6.msi",
                         "size": 1234,
                         "digest": "sha256:${"0".repeat(64)}"
                       }]
@@ -47,6 +81,9 @@ class GitHubReleaseUpdaterTest {
             val result = updater.check()
             assertIs<UpdateCheckResult.Available>(result)
             assertTrue(result.release.version == "0.2.0-alpha.5")
+            val request = server.takeRequest()
+            assertEquals("no-cache", request.getHeader("Cache-Control"))
+            assertEquals("no-cache", request.getHeader("Pragma"))
         }
     }
 
@@ -66,13 +103,13 @@ class GitHubReleaseUpdaterTest {
                       "assets": [
                         {
                           "name": "IPTVBURO-0.2.6.msi",
-                          "browser_download_url": "https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.9/IPTVBURO-0.2.6.msi",
+                          "browser_download_url": "https://github.com/serafinnike-create/IPTVBURO/releases/download/v0.2.0-alpha.9/IPTVBURO-0.2.6.msi",
                           "size": 10,
                           "digest": "sha256:${"a".repeat(64)}"
                         },
                         {
                           "name": "IPTV-BURO-v0.2.0-alpha.9-windows-x64.msi",
-                          "browser_download_url": "https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.2.0-alpha.9/IPTV-BURO-v0.2.0-alpha.9-windows-x64.msi",
+                          "browser_download_url": "https://github.com/serafinnike-create/IPTVBURO/releases/download/v0.2.0-alpha.9/IPTV-BURO-v0.2.0-alpha.9-windows-x64.msi",
                           "size": 20,
                           "digest": "sha256:${"b".repeat(64)}"
                         }
@@ -94,6 +131,36 @@ class GitHubReleaseUpdaterTest {
                 "IPTV-BURO-v0.2.0-alpha.9-windows-x64.msi",
                 available.release.assetName,
             )
+        }
+    }
+
+    @Test
+    fun `an installer from another github repository is refused`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """
+                    [{
+                      "draft": false,
+                      "tag_name": "v99.0.0",
+                      "assets": [{
+                        "name": "IPTV-BURO-v99.0.0-windows-x64.msi",
+                        "browser_download_url": "https://github.com/example/other/releases/download/v99.0.0/IPTV-BURO-v99.0.0-windows-x64.msi",
+                        "size": 1234,
+                        "digest": "sha256:${"c".repeat(64)}"
+                      }]
+                    }]
+                    """.trimIndent(),
+                ),
+            )
+
+            val result =
+                GitHubReleaseUpdater(
+                    releasesUrl = server.url("/releases").toString(),
+                    currentVersion = "2.0.0-alpha.1",
+                ).check()
+
+            assertIs<UpdateCheckResult.Failed>(result)
         }
     }
 }

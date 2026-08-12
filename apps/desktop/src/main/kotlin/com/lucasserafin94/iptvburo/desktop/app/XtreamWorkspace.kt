@@ -33,12 +33,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import com.lucasserafin94.iptvburo.desktop.playback.MULTIVIEW_MAX_TILES
+import com.lucasserafin94.iptvburo.desktop.ui.rememberRestoredGridState
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.draw.alpha
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -59,6 +61,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -90,6 +93,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.lucasserafin94.iptvburo.desktop.CreditDestination
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.DownloadState
 import com.lucasserafin94.iptvburo.desktop.MovieDetailsStatus
@@ -100,9 +104,11 @@ import com.lucasserafin94.iptvburo.desktop.XtreamStatus
 import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.data.episodeContentKey
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
+import com.lucasserafin94.iptvburo.desktop.platform.DesktopPlatformCapabilities
 import com.lucasserafin94.iptvburo.desktop.ui.CategoryBadge
 import com.lucasserafin94.iptvburo.desktop.ui.categoryLabel
 import com.lucasserafin94.iptvburo.desktop.CatalogLayout
+import com.lucasserafin94.iptvburo.desktop.PersonCredit
 import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableVertically
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollable
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableGrid
@@ -111,6 +117,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
+import com.lucasserafin94.iptvburo.desktop.ui.BuroSegmentedControl
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
@@ -132,6 +139,7 @@ fun XtreamWorkspace(
     onOpenExternal: (PendingXtreamExternal) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val capabilities = DesktopPlatformCapabilities.current
     var detailsOpen by remember { mutableStateOf(false) }
     var personOpen by remember { mutableStateOf(false) }
 
@@ -171,7 +179,27 @@ fun XtreamWorkspace(
         val person = appState.selectedPerson
         if (person != null) {
             PersonFilmographyPage(
-                onOpenCredit = appState::openTitleFromCredit,
+                // Closed here too, for the same reason as on the Home screen: `personOpen` is this
+                // screen's own flag and decides whether the filmography is drawn, while
+                // `selectedPerson` lives in the app state. Clearing only the second left this branch
+                // taken with nothing to show, and the press dropped the user back to the catalogue.
+                // Closed here too, for the same reason as on the Home screen: `personOpen` is this
+                // screen's own flag and decides whether the filmography is drawn, while
+                // `selectedPerson` lives in the app state. Clearing only the second left this branch
+                // taken with nothing to show, and the press dropped the user back to the catalogue.
+                onOpenCredit = { credit ->
+                    // The same three flags as on the Home screen, moved together for the same
+                    // reason: selecting a title is not showing it, and clearing the shared state
+                    // alone leaves this branch drawing nothing.
+                    when (appState.openCredit(credit)) {
+                        CreditDestination.PLAYLIST_ITEM -> {
+                            personOpen = false
+                            detailsOpen = true
+                        }
+                        CreditDestination.SUBSCRIPTIONS -> personOpen = false
+                        CreditDestination.NOWHERE -> Unit
+                    }
+                },
                 person = person,
                 onBack = {
                     personOpen = false
@@ -237,6 +265,9 @@ fun XtreamWorkspace(
             onMinimumRatingSelected = { rating ->
                 scope.launch { appState.selectXtreamMinimumRating(rating) }
             },
+            multiviewCount = if (capabilities.multiviewSupported) appState.multiviewChannelIds.size else 0,
+            onOpenMultiview = appState::openMultiview,
+            onClearMultiview = appState::clearMultiview,
         )
         // Hidden in Favourites: the rail filters the provider's catalogue, and a favourites list is
         // the user's own selection across all of it. Picking a category there could only ever
@@ -313,6 +344,35 @@ fun XtreamWorkspace(
 // Toolbar
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * The toolbar, composed with only what a multiview test needs.
+ *
+ * Exists because reading the wiring proved nothing: every link looked correct while the button was
+ * demonstrably not working for the user. A test that composes the real control and clicks it tells a
+ * broken chain apart from a button nobody can find, which four rounds of reasoning did not.
+ */
+@Composable
+internal fun XtreamToolbarForTesting(
+    selectedType: XtreamContentType,
+    multiviewCount: Int,
+    onOpenMultiview: () -> Unit,
+) {
+    XtreamToolbar(
+        selectedType = selectedType,
+        query = "",
+        status = XtreamStatus.Disconnected,
+        onQueryChange = {},
+        onTypeSelected = {},
+        onDisconnect = {},
+        selectedYear = null,
+        onYearSelected = {},
+        minimumRating = null,
+        onMinimumRatingSelected = {},
+        multiviewCount = multiviewCount,
+        onOpenMultiview = onOpenMultiview,
+    )
+}
+
 @Composable
 private fun XtreamToolbar(
     selectedType: XtreamContentType,
@@ -325,6 +385,15 @@ private fun XtreamToolbar(
     onYearSelected: (Int?) -> Unit,
     minimumRating: Double?,
     onMinimumRatingSelected: (Double?) -> Unit,
+    /**
+     * How many channels are queued for the multiview grid, and how to open it.
+     *
+     * Live only: four films at once is not something anyone wants, while four matches at once is
+     * exactly what a second screen normally gets used for.
+     */
+    multiviewCount: Int = 0,
+    onOpenMultiview: () -> Unit = {},
+    onClearMultiview: () -> Unit = {},
 ) {
     val text = strings
     Column(
@@ -337,22 +406,16 @@ private fun XtreamToolbar(
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // Segmented control rather than three filled buttons: only one type can be active, and
             // three competing gold buttons made every state read as "selected".
-            Row(
-                modifier =
-                    Modifier
-                        .clip(BuroRadius.Pill)
-                        .background(BuroColors.SurfaceRaised)
-                        .padding(3.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                XtreamContentType.entries.forEach { type ->
-                    ContentTypeButton(
-                        label = type.label(text),
-                        selected = type == selectedType,
-                        onClick = { onTypeSelected(type) },
-                    )
-                }
-            }
+            //
+            // The shared component, so the same choice looks the same on every screen that offers
+            // it. This was the original, copied out to the design system when continue watching and
+            // downloads needed it too.
+            BuroSegmentedControl(
+                options = XtreamContentType.entries,
+                selected = selectedType,
+                label = { type -> type.label(text) },
+                onSelect = onTypeSelected,
+            )
             Spacer(Modifier.width(BuroSpacing.Md))
             OutlinedTextField(
                 value = query,
@@ -373,7 +436,43 @@ private fun XtreamToolbar(
             Spacer(Modifier.weight(1f))
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            // Scrollable, because a Row does not shrink children that carry no weight: once the
+            // filters, the pickers and this chip together exceed the toolbar's width, whatever sits
+            // last is simply laid out past the edge of the window and cannot be seen or clicked.
+            //
+            // That is what hid multiview. Every test passed — in a test there is nothing competing
+            // for the space — while on a real screen the button was measured off the edge. Four
+            // rounds of reasoning about the wiring found four other bugs and never this one.
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
+            // Multiview first, before the filters.
+            //
+            // Last in the row meant first to be pushed off. It is also the only control here that
+            // opens a different mode rather than narrowing a list, so it belongs at the start.
+            if (selectedType == XtreamContentType.LIVE) {
+                FilterChip(
+                    label =
+                        if (multiviewCount > 0) {
+                            "▦  ${text.settingsText.multiviewOpen} ($multiviewCount)"
+                        } else {
+                            "▦  ${text.settingsText.multiviewHint}"
+                        },
+                    selected = multiviewCount > 0,
+                    onClick = onOpenMultiview,
+                )
+                if (multiviewCount > 0) {
+                    Spacer(Modifier.width(BuroSpacing.Xs))
+                    FilterChip(
+                        label = text.settingsText.multiviewClear,
+                        selected = false,
+                        onClick = onClearMultiview,
+                    )
+                }
+                Spacer(Modifier.width(BuroSpacing.Md))
+            }
+
             if (selectedType != XtreamContentType.LIVE) {
                 val currentYear = Year.now().value
                 Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
@@ -406,7 +505,9 @@ private fun XtreamToolbar(
                 }
                 Spacer(Modifier.width(BuroSpacing.Md))
             }
-            Spacer(Modifier.weight(1f))
+            // Multiview, live only and only once something is queued. Shown as a count rather than
+            // a plain button so the toolbar says how many channels are waiting — with a cap of
+            // four, "3 canais" is the whole state.
         }
     }
 }
@@ -665,7 +766,18 @@ private fun XtreamCatalogGrid(
     val page = appState.xtreamPage
     val live = appState.xtreamContentType == XtreamContentType.LIVE
     val gutter = if (wide) BuroSpacing.GutterWide else BuroSpacing.GutterCompact
-    val gridState = rememberLazyGridState()
+    // Resumes where this list was left.
+    //
+    // Opening a title removes this grid from the composition, and a plain rememberLazyGridState goes
+    // with it — so pressing back landed at the top, after however far the user had scrolled. This is
+    // the app's most repeated action, so that cost was paid constantly.
+    //
+    // Keyed on content type, category and search so that films, series and live each keep their own
+    // place: one shared key would restore the film offset onto the series grid, which looks
+    // deliberate and is worse than starting at the top.
+    val gridState = rememberRestoredGridState(
+        key = "catalog:${appState.xtreamContentType}:${appState.selectedCategoryId.orEmpty()}:${appState.searchQuery}",
+    )
     val gridFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     // Focus goes to the grid when the page opens, so the arrow keys work without a click first.
@@ -794,6 +906,29 @@ private fun XtreamCatalogGrid(
                         selected = item.providerId == appState.selectedXtreamItem?.providerId,
                         onClick = { onItemSelected(item.providerId) },
                         layout = appState.catalogLayout,
+                        // Adding to multiview, from the grid.
+                        //
+                        // It used to live only inside a channel's detail page, which meant the
+                        // feature could not be found: the toolbar chip that opens the grid appears
+                        // only once something is queued, so a user had to open a channel, notice a
+                        // button they were not looking for, go back, and repeat. Nobody does that.
+                        onToggleMultiview =
+                            if (DesktopPlatformCapabilities.current.multiviewSupported &&
+                                item.contentType == XtreamContentType.LIVE
+                            ) {
+                                { appState.toggleMultiviewChannel(item.providerId) }
+                            } else {
+                                null
+                            },
+                        inMultiview = item.providerId in appState.multiviewChannelIds,
+                        // What this subscription actually sustains, not the app's own cap.
+                        //
+                        // A provider that allows two simultaneous connections simply stops sending
+                        // on the older streams when a third starts — no error, just tiles going
+                        // black after about five seconds. Offering a fourth slot the account cannot
+                        // use produces a broken-looking grid instead of a clear limit.
+                        multiviewFull = appState.multiviewChannelIds.size >= appState.multiviewCapacity,
+                        multiviewCapacity = appState.multiviewCapacity,
                     )
                 }
             }
@@ -862,6 +997,12 @@ private fun XtreamCatalogCard(
     selected: Boolean,
     onClick: () -> Unit,
     layout: CatalogLayout = CatalogLayout.POSTER,
+    /** Null when this card cannot be added to multiview — anything that is not a live channel. */
+    onToggleMultiview: (() -> Unit)? = null,
+    inMultiview: Boolean = false,
+    multiviewFull: Boolean = false,
+    /** How many tiles the subscription allows, so the message can name the real number. */
+    multiviewCapacity: Int = MULTIVIEW_MAX_TILES,
 ) {
     val live = item.contentType == XtreamContentType.LIVE
     val title = item.name.editorialTitle()
@@ -983,6 +1124,57 @@ private fun XtreamCatalogCard(
                             .alpha(if (state.active) 1f else 0f)
                             .background(BuroScrim.cardFooter()),
                 )
+
+                // Add to multiview, on the card itself.
+                //
+                // Top left, opposite the rating. Always visible once a channel is queued so the set
+                // can be seen at a glance across the grid; otherwise only on hover, because a
+                // permanent icon on every tile is clutter for the majority who never use this.
+                if (onToggleMultiview != null && (state.active || inMultiview)) {
+                    BuroInteractiveRow(
+                        onClick = onToggleMultiview,
+                        selected = inMultiview,
+                        enabled = inMultiview || !multiviewFull,
+                        shape = BuroRadius.Pill,
+                        contentDescription =
+                            if (inMultiview) {
+                                text.settingsText.multiviewRemove
+                            } else if (multiviewFull) {
+                                text.settingsText.multiviewFull.format(multiviewCapacity)
+                            } else {
+                                text.settingsText.multiviewAdd
+                            },
+                        modifier = Modifier.align(Alignment.TopStart).padding(BuroSpacing.Xs),
+                    ) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .clip(BuroRadius.Pill)
+                                    .background(
+                                        if (inMultiview) {
+                                            BuroColors.Primary
+                                        } else {
+                                            BuroColors.Canvas.copy(alpha = 0.78f)
+                                        },
+                                    )
+                                    .padding(horizontal = BuroSpacing.Xs, vertical = 4.dp),
+                        ) {
+                            Text(
+                                text = "▦",
+                                // Dimmed rather than hidden when four are already queued: a control
+                                // that disappears looks broken, while one that is plainly inactive
+                                // says the limit has been reached.
+                                color =
+                                    when {
+                                        inMultiview -> BuroColors.OnPrimary
+                                        multiviewFull -> BuroColors.TextSubtle
+                                        else -> BuroColors.Text
+                                    },
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                    }
+                }
             }
             Spacer(Modifier.height(BuroSpacing.Xs))
             Text(
@@ -1019,6 +1211,7 @@ internal fun XtreamInternalDetailsPage(
     onRequestCastPhoto: suspend (String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
+    val capabilities = DesktopPlatformCapabilities.current
     // Which trailer is open, if any. Held here so the panel closes when the page does.
     var openTrailerId by remember { mutableStateOf<String?>(null) }
     val item = appState.selectedXtreamItem ?: return
@@ -1027,7 +1220,7 @@ internal fun XtreamInternalDetailsPage(
     // Only VOD is downloadable. A live stream has no end, so a download would grow until the
     // disk fills.
     val downloadTarget =
-        if (item.contentType == XtreamContentType.MOVIE) {
+        if (capabilities.offlineSupported && item.contentType == XtreamContentType.MOVIE) {
             XtreamPlaybackTarget.CatalogItem(
                 providerId = item.providerId,
                 contentType = item.contentType,
@@ -1123,7 +1316,9 @@ internal fun XtreamInternalDetailsPage(
                     downloadTarget?.let { target -> { appState.cancelDownload(target.contentKey) } },
                 onRemoveDownload =
                     downloadTarget?.let { target -> { appState.deleteDownload(target.contentKey) } },
-                episodeDownloadFor = { target -> appState.downloadState(target.contentKey) },
+                episodeDownloadFor = { target ->
+                    if (capabilities.offlineSupported) appState.downloadState(target.contentKey) else null
+                },
                 onDownloadEpisode = { target, displayName ->
                     appState.enqueueDownload(
                         target = target,
@@ -1135,6 +1330,18 @@ internal fun XtreamInternalDetailsPage(
                 },
                 onCancelEpisodeDownload = { target -> appState.cancelDownload(target.contentKey) },
                 onRemoveEpisodeDownload = { target -> appState.deleteDownload(target.contentKey) },
+                onToggleMultiview =
+                    if (capabilities.multiviewSupported && item.contentType == XtreamContentType.LIVE) {
+                        { appState.toggleMultiviewChannel(item.providerId) }
+                    } else {
+                        null
+                    },
+                inMultiview = item.providerId in appState.multiviewChannelIds,
+                // The subscription's limit, not a literal four. A hardcoded cap here offered a
+                // fourth slot to an account that can sustain two, and the extra tiles simply went
+                // black — the provider stops sending rather than refusing.
+                multiviewFull = appState.multiviewChannelIds.size >= appState.multiviewCapacity,
+                multiviewCapacity = appState.multiviewCapacity,
             )
         }
 
@@ -1178,6 +1385,15 @@ internal fun XtreamItemDetail(
     onDownloadEpisode: (XtreamPlaybackTarget.Episode, String) -> Unit = { _, _ -> },
     onCancelEpisodeDownload: (XtreamPlaybackTarget.Episode) -> Unit = {},
     onRemoveEpisodeDownload: (XtreamPlaybackTarget.Episode) -> Unit = {},
+    /**
+     * Adds or removes this channel from the multiview grid. Null for anything but a live channel.
+     */
+    onToggleMultiview: (() -> Unit)? = null,
+    inMultiview: Boolean = false,
+    /** True once four channels are queued, which is as many as the grid holds. */
+    multiviewFull: Boolean = false,
+    /** How many tiles the subscription allows, so the message can name the real number. */
+    multiviewCapacity: Int = MULTIVIEW_MAX_TILES,
 ) {
     val text = strings
     Box(
@@ -1399,6 +1615,33 @@ internal fun XtreamItemDetail(
                             onRemove = onRemoveDownload ?: {},
                         )
                     }
+                    // Live only. Queueing four films to watch at once is not a thing anyone wants;
+                    // four matches at once is what people buy a second screen for, and it is the
+                    // one case where running several decoders earns what it costs.
+                    if (item.contentType == XtreamContentType.LIVE && onToggleMultiview != null) {
+                        OutlinedButton(
+                            onClick = onToggleMultiview,
+                            enabled = inMultiview || !multiviewFull,
+                            shape = BuroRadius.Small,
+                            colors =
+                                ButtonDefaults.outlinedButtonColors(
+                                    contentColor =
+                                        if (inMultiview) BuroColors.Primary else BuroColors.Text,
+                                ),
+                            contentPadding = PaddingValues(horizontal = BuroSpacing.Lg),
+                            modifier = Modifier.height(46.dp),
+                        ) {
+                            Text(
+                                text =
+                                    when {
+                                        inMultiview -> "▦  ${text.settingsText.multiviewRemove}"
+                                        multiviewFull -> text.settingsText.multiviewFull.format(multiviewCapacity)
+                                        else -> "▦  ${text.settingsText.multiviewAdd}"
+                                    },
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
                 }
                 Spacer(Modifier.height(BuroSpacing.Lg))
                 if (item.contentType == XtreamContentType.LIVE) {
@@ -1437,7 +1680,28 @@ internal fun XtreamItemDetail(
 }
 
 @Composable
+/**
+ * A programme start time as the viewer's own clock shows it.
+ *
+ * The provider sends epoch seconds in UTC; this renders them in the machine's zone, which is the
+ * only reading that answers "when is that on". A missing or unparseable time gives an em dash
+ * rather than a wrong hour — the schedule is still useful without one, and a confidently wrong time
+ * is worse than an obviously absent one.
+ */
+private fun Long?.asClockTime(): String =
+    this
+        ?.let { seconds ->
+            runCatching {
+                java.time.Instant.ofEpochSecond(seconds)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+            }.getOrNull()
+        }
+        ?: "—"
+
+@Composable
 private fun LiveEpgContent(status: LiveEpgStatus) {
+    val text = strings
     when (status) {
         LiveEpgStatus.Idle,
         LiveEpgStatus.Loading,
@@ -1463,6 +1727,49 @@ private fun LiveEpgContent(status: LiveEpgStatus) {
                     Spacer(Modifier.height(12.dp))
                     Text("A SEGUIR", color = BuroColors.TextSubtle, fontWeight = FontWeight.Bold)
                     Text(program.title, color = BuroColors.Text, style = MaterialTheme.typography.bodyLarge)
+                }
+
+                // The rest of the day, behind a press.
+                //
+                // The provider sends several hours of schedule and the screen showed two entries of
+                // it; the remainder was parsed and discarded. Collapsed by default because most
+                // visits are to answer "what is on now", and the full grid would push the buttons
+                // below the fold for a question nobody asked.
+                val later = status.schedule.drop(2)
+                if (later.isNotEmpty()) {
+                    var scheduleOpen by remember(status) { mutableStateOf(false) }
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(onClick = { scheduleOpen = !scheduleOpen }) {
+                        Text(
+                            text =
+                                if (scheduleOpen) {
+                                    text.settingsText.epgHideSchedule
+                                } else {
+                                    text.settingsText.epgShowSchedule.format(later.size)
+                                },
+                            maxLines = 1,
+                        )
+                    }
+                    if (scheduleOpen) {
+                        Spacer(Modifier.height(8.dp))
+                        later.forEach { program ->
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                                Text(
+                                    text = program.startEpochSeconds.asClockTime(),
+                                    color = BuroColors.Primary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.width(56.dp),
+                                )
+                                Text(
+                                    text = program.title,
+                                    color = BuroColors.TextMuted,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1638,12 +1945,18 @@ internal fun PersonFilmographyPage(
     onBack: () -> Unit,
     onOpenItem: (XtreamCatalogItem) -> Unit,
     // Returns false when this playlist does not carry the title, so the page can say so.
-    onOpenCredit: suspend (String) -> Boolean = { false },
+    onOpenCredit: suspend (PersonCredit) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
-    // The title the user asked for and this list does not have. Shown rather than swallowed: a
-    // click that silently does nothing reads as a broken button.
-    var missingCredit by remember { mutableStateOf<String?>(null) }
+
+    /**
+     * The credit currently being opened, or null when idle.
+     *
+     * Searching the playlist for a title sweeps every row of a catalogue that runs to tens of
+     * thousands of items. That takes long enough to look like a freeze, and the previous version
+     * gave no sign at all — the user pressed a poster and the app appeared to hang.
+     */
+    var openingCredit by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().background(BuroColors.Canvas)) {
         Row(
@@ -1728,13 +2041,22 @@ internal fun PersonFilmographyPage(
                                 Modifier
                                     .width(120.dp)
                                     .clip(BuroRadius.Small)
-                                    .clickable {
-                                        // A credit names a film the playlist may not carry at all,
-                                        // so the click either lands on it or says plainly that this
-                                        // list does not have it.
+                                    .clickable(enabled = openingCredit == null) {
+                                        // A credit names a film the playlist may not carry, which is
+                                        // the ordinary case rather than a failure: the click opens
+                                        // it here if it is here, and asks Assinaturas where it can
+                                        // be watched if it is not.
+                                        //
+                                        // The search sweeps a 41,000-item catalogue, so the card
+                                        // says it is working. Without that the app looked frozen —
+                                        // and the previous handler then set a value nothing read,
+                                        // so nothing happened at all.
                                         scope.launch {
-                                            if (!onOpenCredit(credit.title)) {
-                                                missingCredit = credit.title
+                                            openingCredit = credit.title
+                                            try {
+                                                onOpenCredit(credit)
+                                            } finally {
+                                                openingCredit = null
                                             }
                                         }
                                     },
@@ -1753,6 +2075,14 @@ internal fun PersonFilmographyPage(
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                     XtreamMonogram(credit.title, 34)
                                 }
+                            }
+                            // The card that was pressed says so while the catalogue is searched.
+                            if (openingCredit == credit.title) {
+                                LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                                    color = BuroColors.Primary,
+                                    trackColor = BuroColors.SurfaceRaised,
+                                )
                             }
                             Spacer(Modifier.height(4.dp))
                             Text(
@@ -2024,21 +2354,50 @@ private fun SeriesDetailContent(
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Spacer(Modifier.height(BuroSpacing.Sm))
-                visible
-                    .sortedBy { it.episodeNumber ?: Int.MAX_VALUE }
-                    .forEach { episode ->
-                        EpisodeRow(
-                            episode = episode,
-                            decision = resumeDecisionForEpisode(episode),
-                            downloadState = downloadStateForEpisode(episode),
-                            onOpen = onOpenEpisode,
-                            onDownload = { onDownloadEpisode(episode) },
-                            onCancelDownload = { onCancelEpisodeDownload(episode) },
-                            onRemoveDownload = { onRemoveEpisodeDownload(episode) },
-                            text = text,
+
+                // Drawn in pages, not all at once.
+                //
+                // These rows go straight into the parent's scrolling column rather than a
+                // LazyColumn — see the note above for why — which means every episode of the open
+                // season is composed and measured whether or not it is on screen. That is fine for
+                // a season of twenty and not for One Piece, whose 1,171 episodes across 23 seasons
+                // left a season of several hundred rows building on the UI thread: the page simply
+                // never appeared.
+                //
+                // Reset per season and per series, so switching either starts from the top again.
+                var shown by remember(details.providerId, openSeason) {
+                    mutableStateOf(EPISODE_PAGE_SIZE)
+                }
+                val ordered = remember(visible) { visible.sortedBy { it.episodeNumber ?: Int.MAX_VALUE } }
+                ordered.take(shown).forEach { episode ->
+                    EpisodeRow(
+                        episode = episode,
+                        decision = resumeDecisionForEpisode(episode),
+                        downloadState = downloadStateForEpisode(episode),
+                        onOpen = onOpenEpisode,
+                        onDownload = { onDownloadEpisode(episode) },
+                        onCancelDownload = { onCancelEpisodeDownload(episode) },
+                        onRemoveDownload = { onRemoveEpisodeDownload(episode) },
+                        text = text,
+                    )
+                    Spacer(Modifier.height(BuroSpacing.Xs))
+                }
+                if (shown < ordered.size) {
+                    val remaining = ordered.size - shown
+                    OutlinedButton(
+                        onClick = { shown += EPISODE_PAGE_SIZE },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = BuroRadius.Small,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+                    ) {
+                        Text(
+                            // The count, so the button says how much is left rather than just
+                            // "more" — with 1,171 episodes that difference matters.
+                            text = "Mostrar mais $remaining",
+                            fontWeight = FontWeight.SemiBold,
                         )
-                        Spacer(Modifier.height(BuroSpacing.Xs))
                     }
+                }
             }
         }
     }
@@ -2271,6 +2630,16 @@ private fun formatPlaybackTime(positionMs: Long): String {
 private const val SEARCH_DEBOUNCE_MILLIS = 280L
 
 /**
+ * Episodes drawn before the "show more" button appears.
+ *
+ * Chosen to cover an ordinary season in one go — most run to twenty-something — so the paging is
+ * invisible for almost every series and only shows up where it is needed. The rows are composed
+ * eagerly inside a scrolling column, so this is the number that decides whether the page appears
+ * at all on something like One Piece.
+ */
+private const val EPISODE_PAGE_SIZE = 40
+
+/**
  * Download control.
  *
  * One button that reflects the four states rather than a separate control per state, so the action
@@ -2489,8 +2858,11 @@ private fun RatingPicker(
             ) {
                 Text(
                     text =
-                        if (active) {
-                            "★ ${selected!!.toInt()}+  ▾"
+                        // On `selected` rather than on `active`, so the compiler proves the value
+                        // is there instead of a `!!` asserting it. The two conditions are the same
+                        // today; a `!!` is a crash waiting for the day they are not.
+                        if (selected != null) {
+                            "★ ${selected.toInt()}+  ▾"
                         } else {
                             "$label  ▾"
                         },

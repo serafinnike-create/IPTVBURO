@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns="http://tizen.org/ns/packages" api-version="10.0" package="org.example.iptvburo" version="1.0.0">
+    <profile name="tizen" />
+    <service-application appid="org.example.iptvburo" exec="iptvburo" type="capp" multiple="false" taskmanage="false" nodisplay="true">
+        <icon>iptvburo.png</icon>
+        <label>iptvburo</label>
+	</service-application>
+</manifest>

@@ -9,8 +9,25 @@ import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
 import com.lucasserafin94.iptvburo.domain.model.SavePlaybackCheckpointUseCase
 
 class DesktopPlaybackProgressCoordinator(
-    repository: DesktopPlaybackProgressStore = DesktopPlaybackProgressStore(),
+    private val repository: DesktopPlaybackProgressStore = DesktopPlaybackProgressStore(),
 ) {
+    /**
+     * Everything watched, most recent first — finished titles included.
+     *
+     * Distinct from continue-watching, which drops what was seen to the end. The history answers a
+     * different question, and a film watched fully is its clearest answer.
+     */
+    fun history(
+        profileId: String,
+        limit: Int,
+    ) = repository.history(profileId, limit)
+
+    /** Forgets one title's progress. The file itself is untouched. */
+    fun forget(identity: PlaybackProgressIdentity) = repository.remove(identity)
+
+    /** Forgets everything this profile has watched. */
+    fun clearHistory(profileId: String) = repository.clearHistory(profileId)
+
     private val getResumeDecision = GetResumeDecisionUseCase(repository)
     private val saveCheckpoint = SavePlaybackCheckpointUseCase(repository)
     private val markCompleted = MarkPlaybackCompletedUseCase(repository)

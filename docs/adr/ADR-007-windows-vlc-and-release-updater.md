@@ -20,7 +20,8 @@ para o usuário instalar uma nova versão Windows publicada no GitHub.
    não entra na linha de comando, em logs ou no armazenamento persistente.
 5. A interface expõe apenas ações verificadas: play/pause, seek, volume,
    velocidade, tela cheia, retry e continuidade por perfil.
-6. O atualizador consulta `lucasserafin94/IPTVBURO` pelo GitHub Releases API,
+6. O atualizador consulta `serafinnike-create/IPTVBURO` pelo GitHub Releases API
+   sem reutilizar cache quando o usuário aciona o botão,
    escolhe somente uma versão semanticamente mais nova, exige um MSI com origem
    HTTPS do GitHub e digest `sha256:`, verifica o download e então chama
    `msiexec`.
@@ -31,6 +32,8 @@ para o usuário instalar uma nova versão Windows publicada no GitHub.
 - O instalador cresce porque carrega o runtime do VLC, mas não depende de uma
   instalação prévia no computador.
 - O botão de atualização não instala assets sem digest nem versões antigas.
+- O asset precisa pertencer ao mesmo repositório consultado; um MSI hospedado em
+  outro repositório GitHub é recusado.
 - O VLC continua sendo um componente externo oficial, com seus próprios avisos
   e licença; o aplicativo não incorpora bindings GPL ao código Kotlin.
 - Brilho global, HDR forçado e download offline continuam ocultos até existirem

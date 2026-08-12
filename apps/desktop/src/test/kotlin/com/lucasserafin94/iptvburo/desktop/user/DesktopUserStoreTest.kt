@@ -4,6 +4,7 @@ import java.util.UUID
 import java.util.prefs.Preferences
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DesktopUserStoreTest {
@@ -22,6 +23,192 @@ class DesktopUserStoreTest {
             assertEquals(setOf("MOVIE:10"), store.favoritesForProfile(adult.id))
             assertEquals(setOf("SERIES:20"), store.favoritesForProfile(kids.id))
             assertTrue(store.favoritesForProfile(null).isEmpty())
+        } finally {
+            node.removeNode()
+        }
+    }
+
+    /**
+     * A profile with no key of its own uses the shared one.
+     *
+     * This is the default and the common case: a household has one TMDb key and no reason for two,
+     * so an empty field must mean "use the other one" rather than "use nothing" — otherwise adding
+     * a profile would silently switch its posters and synopses off.
+     */
+    @Test
+    fun `a profile with no key of its own inherits the shared one`() {
+        withStore { store ->
+            store.setMetadataApiKey("shared-key")
+
+            assertEquals("shared-key", store.effectiveMetadataApiKey("anyone"))
+            assertNull(store.profileMetadataApiKey("anyone"), "the profile has no key of its own")
+        }
+    }
+
+    /** A profile that sets its own key uses it, so its requests spend its own quota. */
+    @Test
+    fun `a profile key overrides the shared one`() {
+        withStore { store ->
+            store.setMetadataApiKey("shared-key")
+            store.setProfileMetadataApiKey("lucas", "lucas-key")
+
+            assertEquals("lucas-key", store.effectiveMetadataApiKey("lucas"))
+            assertEquals("shared-key", store.effectiveMetadataApiKey("someone-else"))
+        }
+    }
+
+    /** Clearing a profile key falls back rather than leaving that profile with none. */
+    @Test
+    fun `clearing a profile key restores the shared one`() {
+        withStore { store ->
+            store.setMetadataApiKey("shared-key")
+            store.setProfileMetadataApiKey("lucas", "lucas-key")
+
+            store.setProfileMetadataApiKey("lucas", "")
+
+            assertEquals("shared-key", store.effectiveMetadataApiKey("lucas"))
+        }
+    }
+
+    /** Keys are per profile, so one person's does not leak into another's requests. */
+    @Test
+    fun `profile keys are isolated from each other`() {
+        withStore { store ->
+            store.setProfileMetadataApiKey("lucas", "lucas-key")
+            store.setProfileMetadataApiKey("ana", "ana-key")
+
+            assertEquals("lucas-key", store.effectiveMetadataApiKey("lucas"))
+            assertEquals("ana-key", store.effectiveMetadataApiKey("ana"))
+        }
+    }
+
+    /** Whitespace is not a key: pasting spaces must inherit, not configure an unusable one. */
+    @Test
+    fun `a blank profile key is treated as absent`() {
+        withStore { store ->
+            store.setMetadataApiKey("shared-key")
+            store.setProfileMetadataApiKey("lucas", "   ")
+
+            assertEquals("shared-key", store.effectiveMetadataApiKey("lucas"))
+        }
+    }
+
+    /** With nothing configured at all the caller decides — here, the bundled key. */
+    @Test
+    fun `no key anywhere resolves to nothing`() {
+        withStore { store ->
+            assertNull(store.effectiveMetadataApiKey("lucas"))
+            assertNull(store.effectiveMetadataApiKey(null))
+        }
+    }
+
+    /**
+     * A machine that has never been resized has no geometry, and the caller opens maximised.
+     *
+     * Null rather than a default size: a catalogue of posters is a poor fit for a small window, so
+     * the first launch fills the screen — and only a deliberate resize changes that.
+     */
+    @Test
+    fun `a fresh install remembers no window geometry`() {
+        withStore { store ->
+            assertNull(store.windowGeometry())
+        }
+    }
+
+    @Test
+    fun `a resized window is remembered exactly`() {
+        withStore { store ->
+            store.setWindowGeometry(
+                StoredWindowGeometry(maximised = false, width = 1200f, height = 800f, x = 40f, y = 25f),
+            )
+
+            val restored = store.windowGeometry()
+
+            assertEquals(false, restored?.maximised)
+            assertEquals(1200f, restored?.width)
+            assertEquals(800f, restored?.height)
+            assertEquals(40f, restored?.x)
+            assertEquals(25f, restored?.y)
+        }
+    }
+
+    /** Maximised is a state of its own: reopening must maximise, not restore the pre-maximise size. */
+    @Test
+    fun `a maximised window is remembered as maximised`() {
+        withStore { store ->
+            store.setWindowGeometry(
+                StoredWindowGeometry(maximised = true, width = 1380f, height = 860f, x = 0f, y = 0f),
+            )
+
+            assertEquals(true, store.windowGeometry()?.maximised)
+        }
+    }
+
+    /**
+     * A half-written or corrupted value reads as absent rather than placing a window nowhere.
+     *
+     * Written straight into the preferences node, because that is the only way this state arises:
+     * a build that stored a different shape, or a truncated write.
+     */
+    @Test
+    fun `a malformed geometry is ignored`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            val store = DesktopUserStore(node)
+            listOf("", "1|2|3", "not|a|geometry|at|all", "1|2|3|4|5|6") .forEach { corrupt ->
+                node.put("window-geometry", corrupt)
+                assertNull(store.windowGeometry(), "'$corrupt' must not produce a geometry")
+            }
+        } finally {
+            node.removeNode()
+        }
+    }
+
+    /**
+     * The loading screen's backdrop comes from the previous session.
+     *
+     * It has to: the wall is meant to fill the wait, and anything derived from the current session
+     * only exists once that wait is over. A fresh install has none, and the wall draws nothing.
+     */
+    @Test
+    fun `backdrop posters survive to the next launch`() {
+        withStore { store ->
+            assertTrue(store.backdropPosters().isEmpty(), "a fresh install has no backdrop")
+
+            store.setBackdropPosters(listOf("https://images.invalid/a.jpg", "https://images.invalid/b.jpg"))
+
+            assertEquals(
+                listOf("https://images.invalid/a.jpg", "https://images.invalid/b.jpg"),
+                store.backdropPosters(),
+            )
+        }
+    }
+
+    /** Capped, so a long catalogue cannot push the value past what a preference will hold. */
+    @Test
+    fun `backdrop posters are capped`() {
+        withStore { store ->
+            store.setBackdropPosters((1..200).map { index -> "https://images.invalid/$index.jpg" })
+
+            assertEquals(18, store.backdropPosters().size)
+        }
+    }
+
+    /** Clearing them means the wall draws nothing, rather than drawing empty tiles. */
+    @Test
+    fun `an empty backdrop list clears the stored one`() {
+        withStore { store ->
+            store.setBackdropPosters(listOf("https://images.invalid/a.jpg"))
+            store.setBackdropPosters(emptyList())
+
+            assertTrue(store.backdropPosters().isEmpty())
+        }
+    }
+
+    private fun withStore(block: (DesktopUserStore) -> Unit) {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            block(DesktopUserStore(node))
         } finally {
             node.removeNode()
         }
@@ -204,6 +391,79 @@ class DesktopUserStoreTest {
             val stored = DesktopUserStore(node).streamingPreference("old")
             assertEquals(StoredStreamingPreference(), stored)
             assertEquals(StoredStreamingPreference(), store.streamingPreference(null))
+        } finally {
+            node.removeNode()
+        }
+    }
+
+    @Test
+    fun `the parental lock survives a restart`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            val store = DesktopUserStore(node)
+            store.saveProfiles(listOf(DesktopProfile("mine", "Lucas", false)))
+
+            store.setParentalLock(
+                "mine",
+                StoredParentalLock(
+                    salt = "s1",
+                    hash = "h1",
+                    lockAdultCategories = true,
+                    lockedCategoryIds = setOf("42", "cat|with,separators"),
+                ),
+            )
+
+            val reloaded = DesktopUserStore(node).parentalLock("mine")
+            assertTrue(reloaded.hasPin)
+            assertEquals("s1", reloaded.salt)
+            assertTrue(reloaded.lockAdultCategories)
+            // The id containing this format's own separators must come back whole.
+            assertEquals(setOf("42", "cat|with,separators"), reloaded.lockedCategoryIds)
+        } finally {
+            node.removeNode()
+        }
+    }
+
+    @Test
+    fun `a profile with no lock configured has none`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            val store = DesktopUserStore(node)
+            store.saveProfiles(listOf(DesktopProfile("mine", "Lucas", false)))
+
+            val lock = store.parentalLock("mine")
+            assertTrue(!lock.hasPin, "a profile that never set a PIN must not appear to have one")
+            assertTrue(lock.lockedCategoryIds.isEmpty())
+        } finally {
+            node.removeNode()
+        }
+    }
+
+    /** Turning adult locking off must persist: defaulting it back on would override the user. */
+    @Test
+    fun `switching adult locking off is remembered`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            val store = DesktopUserStore(node)
+            store.saveProfiles(listOf(DesktopProfile("mine", "Lucas", false)))
+            store.setParentalLock("mine", StoredParentalLock(salt = "s", hash = "h", lockAdultCategories = false))
+
+            assertTrue(!DesktopUserStore(node).parentalLock("mine").lockAdultCategories)
+        } finally {
+            node.removeNode()
+        }
+    }
+
+    @Test
+    fun `each profile keeps its own lock`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            val store = DesktopUserStore(node)
+            store.saveProfiles(listOf(DesktopProfile("a", "A", false), DesktopProfile("b", "B", false)))
+            store.setParentalLock("a", StoredParentalLock(salt = "s", hash = "h", lockedCategoryIds = setOf("1")))
+
+            assertTrue(store.parentalLock("a").hasPin)
+            assertTrue(!store.parentalLock("b").hasPin, "the lock leaked to another profile")
         } finally {
             node.removeNode()
         }
