@@ -85,17 +85,27 @@ internal fun CastPersonChip(
 }
 
 internal fun String.toCastNames(): List<String> =
-    split(Regex("[,;]|\\s/\\s"))
+    split(CAST_SEPARATOR)
         .map(String::trim)
         .filter { it.length in 2..100 }
         .distinctBy(String::lowercase)
         .take(24)
 
 private fun String.personInitials(): String =
-    split(Regex("\\s+"))
+    split(WHITESPACE_RUN)
         .filter(String::isNotBlank)
         .take(2)
         .mapNotNull(String::firstOrNull)
         .joinToString("")
         .uppercase()
         .ifBlank { "?" }
+
+/*
+ * Compiled once each, not per name.
+ *
+ * Both were inline literals inside functions that run for every actor in a cast strip, on every
+ * recomposition — so scrolling a details page rebuilt the same two state machines dozens of times
+ * a frame. The patterns are constant; only the strings change.
+ */
+private val CAST_SEPARATOR = Regex("[,;]|\\s/\\s")
+private val WHITESPACE_RUN = Regex("\\s+")

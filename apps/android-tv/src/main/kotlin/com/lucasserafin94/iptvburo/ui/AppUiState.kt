@@ -452,6 +452,8 @@ data class AppUiState(
     val isInitializing: Boolean = true,
     /** Which start-up step is running, for the boot screen. */
     val bootStage: BootStageUi = BootStageUi.PROFILES,
+    /** Real catalogue covers already available while the rest of the home is still loading. */
+    val bootBackdropUrls: List<String> = emptyList(),
     val hasAcceptedLegalNotice: Boolean = false,
     val license: LicenseUiState = LicenseUiState.NotChecked,
     val isProfilesLoading: Boolean = true,

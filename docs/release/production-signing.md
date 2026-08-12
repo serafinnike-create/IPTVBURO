@@ -28,6 +28,32 @@ jarsigner -verify -verbose -certs apps/android-tv/build/outputs/bundle/release/a
 Registre SHA-256, versionCode, certificado e faixa do Play Console no relatório da release. Guarde
 backup cifrado e offline da chave quando ela não for administrada pelo Play App Signing.
 
+### Android App Links (títulos compartilhados)
+
+`site/.well-known/assetlinks.json` é publicado com o placeholder
+`REPLACE_WITH_RELEASE_SHA256_FINGERPRINT` e **precisa** receber a impressão digital real antes de o
+site ir ao ar. Enquanto o valor for o placeholder, o link compartilhado abre no navegador — a página
+`/t/` funciona, mas o app instalado não é aberto direto no título.
+
+Use a impressão digital do certificado que efetivamente assina o APK entregue ao usuário:
+
+- com Play App Signing, copie o SHA-256 em **Play Console → Configuração → Integridade do app →
+  Chave de assinatura do app** (não a chave de upload — é o erro mais comum aqui);
+- com assinatura própria:
+
+```powershell
+keytool -list -v -keystore $env:IPTVBURO_ANDROID_KEYSTORE -alias $env:IPTVBURO_ANDROID_KEY_ALIAS
+```
+
+Depois de publicar, confirme que a verificação passou:
+
+```powershell
+adb shell pm get-app-links com.lucasserafin94.iptvburo
+```
+
+O domínio `iptvburo.pages.dev` deve aparecer como `verified`. O arquivo precisa ser servido por
+HTTPS, com `Content-Type: application/json`, sem redirecionamento.
+
 ## Windows
 
 O certificado precisa estar em `Cert:\CurrentUser\My`, com chave privada e EKU Code Signing.

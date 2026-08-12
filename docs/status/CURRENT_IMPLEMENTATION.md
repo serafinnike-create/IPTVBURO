@@ -14,6 +14,81 @@ A milestone `0.2` amplia o vertical funcional publicado como prévia. Esta seç�
 registra arquitetura, escopo, gates, hashes e as limitações que ainda impedem
 classificar o produto como uma versão estável.
 
+### Validação em aparelho, rede e partida — 12 de agosto de 2026
+
+Verificado no Xiaomi 25028RN03Y com build debug instalada. Três defeitos só apareceram no aparelho;
+nenhum deles falhava em teste antes destas mudanças.
+
+- **Compartilhar não aparecia.** O botão existia e estava ligado, mas ficava entre Favoritar e
+  Baixar: cinco botões não cabem numa linha de telefone, a `FlowRow` quebrava e ele caía na segunda
+  linha, fora do olhar. Movido para o fim da fila, ao lado de Trailer — e deliberadamente **fora**
+  do bloco do trailer, senão sumiria em todo título sem `youtubeTrailerId`, que é a maioria numa
+  lista Xtream;
+- **link não abria título acentuado.** `searchFragment` lia a palavra do slug, que é sem acento
+  (`O Sítio` → `sitio`), enquanto o SQL procura no `name` cru do provedor, que mantém `Sítio`. O
+  `NOCASE` do SQLite dobra caixa mas não acento, então `%sitio%` não casava com nada e a linha nunca
+  virava candidata. Passou a ler a maior sequência de letras sem acento do título compartilhado
+  (`tio`), que é substring literal do nome escrito de qualquer jeito. Em catálogo português isso
+  afetava a maior parte dos títulos;
+- **link abria o app vazio.** Sem `launchMode`, o Android respondia cada VIEW empilhando uma
+  *nova* `MainActivity` — a task chegou a três — e activity nova constrói `MainViewModel` novo, sem
+  perfil e sem catálogo, então a resolução abortava e o app ficava na Home. `onNewIntent` nunca era
+  chamado. Corrigido com `singleTask`, e coberto por `SharedLinkManifestTest`;
+- **cleartext deixou de ser irrestrito.** `usesCleartextTraffic="true"` valia para *todo* host,
+  incluindo servidor de licença e TMDb — caminho de downgrade em rede hostil. Um
+  `network_security_config` mantém HTTP para as fontes do usuário (playlists e streams de provedor
+  frequentemente são HTTP, e recusá-los recusaria o que o usuário tem) e nega cleartext para os
+  domínios do próprio app;
+- **composição da home saiu da main thread.** `viewModelScope.launch` despacha para Main; as seis
+  consultas já estavam em IO, mas o dedup por regex, a ordenação e o mapeamento — cada um O(n) sobre
+  tudo que elas retornam — rodavam na UI. Também havia `Regex(...)` compilado dentro de funções
+  chamadas por item: `dailyCatalogTitleKey` compilava três por chamada, e era o seletor de um
+  `distinctBy` sobre o catálogo inteiro. Todos içados para constantes;
+- **medição honesta**: `TotalTime` ficou em ~3,0 s e o pior frame pulado seguiu em ~118 em três
+  execuções aquecidas. Uma leitura intermediária de 47 frames era ruído e não se sustentou. O custo
+  dominante medido é `classloader create took 1152ms`, antes de qualquer código do app — perfil de
+  APK debug sem Baseline Profile. **Não há Baseline Profile no projeto**; adicioná-lo exige nova
+  dependência, plugin de benchmark e módulo de geração, e não foi feito sem decisão do dono;
+- memória caiu de 211 MB para ~177 MB PSS entre a primeira e a última medição, mas com o app em
+  estados diferentes — não trato como ganho comprovado;
+- não houve regressão: 1.313 testes, 0 falhas, `lint` e `assembleDebug` aprovados, e o app inicia
+  com `Status: ok`, sem crash e sem ANR. A validação final por captura de tela foi interrompida por
+  travamento da `SystemUI` do aparelho, não do aplicativo.
+
+### Compartilhar título e abertura por link — 12 de agosto de 2026
+
+- as fichas de filme e de série ganharam **Compartilhar**, ao lado de Favoritar. O botão abre a
+  folha de compartilhamento do sistema com título, ano, sinopse e um link `https`;
+- o link **não carrega o id da linha do catálogo**. Esse id é gerado na importação da playlist e
+  nomeia uma linha do banco de quem enviou — no aparelho de quem recebe ele não existe ou aponta
+  para outro filme. O que viaja é o `ContentIdentity` (título normalizado, tipo e ano), e o app de
+  destino recalcula essa identidade sobre o catálogo **dele**. Duas pessoas com provedores
+  diferentes compartilham o mesmo filme e cada uma abre a própria cópia;
+- **nada da fonte do remetente é transmitido**: sem URL de stream, sem endereço de portal, sem
+  credencial. A capa só é incluída se estiver em host público de metadados (`image.tmdb.org` e
+  afins); pôster hospedado no servidor do assinante é descartado, porque esse endereço costuma
+  carregar usuário e senha no caminho. A regra é aplicada na montagem **e** na leitura do link, de
+  modo que um link editado à mão não faz o app buscar host arbitrário. A sinopse é limitada a 400
+  caracteres para o campo não virar canal de dados;
+- quem recebe **com** o app e **com** o filme na lista vai direto para a ficha; quem tem o app mas
+  não tem o título vê um aviso de que ele não está na lista, e o link fica pendente — importar a
+  lista depois ainda resolve. Quem não tem o app cai na página `/t/`, que mostra capa e sinopse e
+  oferece a instalação;
+- um link tocado com o app fechado é retido até o catálogo terminar de carregar, senão a resposta
+  "não está na sua lista" sairia antes de existir qualquer linha para procurar;
+- ano diferente nunca casa: `Duna (1984)` e `Duna (2021)` são identidades distintas, e abrir o filme
+  errado é pior do que não abrir nada. Linha sem ano declarado ainda casa, porque a maioria das
+  listas Xtream não informa o campo;
+- `site/t/` e `site/.well-known/assetlinks.json` foram adicionados, com CSP própria para `/t/*`
+  liberando imagem apenas de `image.tmdb.org`;
+- **pendência de release**: `assetlinks.json` está com o placeholder
+  `REPLACE_WITH_RELEASE_SHA256_FINGERPRINT`. Enquanto não receber a impressão digital real do
+  certificado de assinatura, o link abre no navegador em vez de abrir o app instalado. O
+  procedimento está em `docs/release/production-signing.md`;
+- gate local: 618 testes em `:packages:domain-model` e `:apps:android-tv`, 0 falhas e 0 ignorados;
+  `lintDebug` e `assembleDebug` passaram; o manifesto mesclado foi conferido e traz os dois
+  `intent-filter`. Não houve verificação em aparelho físico nesta etapa.
+
 ### Build Windows limpa e atualização — 12 de agosto de 2026
 
 - a versão do binário e a versão comparada pelo atualizador passaram a ser a
@@ -48,7 +123,7 @@ classificar o produto como uma versão estável.
 ### Pagamentos, ativação e assinatura — endurecimento de 10 de agosto de 2026
 
 - o botão comercial Android agora usa Google Play Billing 9.1.0 e seleciona somente o produto
-  `iptvburo_730_days`, opção de compra consumível `buy_730_days`; não abre Stripe no
+  `iptvburo_730_days`, opção de compra consumível `buy-730-days`; não abre Stripe no
   navegador;
 - o app envia o token opaco ao Worker com prova P-256 vinculando instalação, nonce, hash do token e
   conta ofuscada. O app não concede nem reconhece a compra localmente;

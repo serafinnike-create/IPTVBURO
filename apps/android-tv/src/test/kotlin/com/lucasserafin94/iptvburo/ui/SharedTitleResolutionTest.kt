@@ -106,33 +106,60 @@ class SharedTitleResolutionTest {
     // ---------------------------------------------------------------------------------------
 
     /**
-     * The fragment has to appear in the *undecorated* local name. Picking the longest word is what
+     * The fragment has to appear in the *undecorated* local name. Picking the longest run is what
      * makes that likely: a leading article matches thousands of unrelated rows and would return a
      * candidate page that does not contain the film at all.
      */
     @Test
     fun `the search fragment is the most distinctive word`() {
-        assertEquals(
-            "compadecida",
-            ContentIdentity.of(ContentKind.MOVIE, "O Auto da Compadecida", 2000).searchFragment(),
-        )
+        assertEquals("Compadecida", sharedTitleSearchFragment("O Auto da Compadecida"))
     }
 
     @Test
     fun `the search fragment survives a single-word title`() {
-        assertEquals("duna", ContentIdentity.of(ContentKind.MOVIE, "Duna", 2021).searchFragment())
+        assertEquals("Duna", sharedTitleSearchFragment("Duna"))
+    }
+
+    /**
+     * The bug this exists for, found on a real device.
+     *
+     * The fragment used to be read from the identity slug, which is unaccented — `O Sítio` became
+     * `sitio`. The query runs against the provider's raw name, which still reads `Sítio`, and
+     * SQLite's NOCASE folds case but not accents, so `%sitio%` matched nothing. Every accented
+     * title failed to resolve, which in a Portuguese catalogue is most of them.
+     */
+    @Test
+    fun `an accented title yields a fragment that really occurs in the provider name`() {
+        val fragment = sharedTitleSearchFragment("O Sítio")
+
+        assertTrue(
+            "fragment '$fragment' does not occur in the row the SQL must find",
+            "O Sítio [L]".contains(fragment, ignoreCase = true),
+        )
     }
 
     @Test
-    fun `the search fragment survives a title with no year`() {
-        assertEquals("duna", ContentIdentity.of(ContentKind.MOVIE, "Duna").searchFragment())
+    fun `every accented title produces a usable fragment`() {
+        listOf(
+            "O Sítio" to "O Sítio [L]",
+            "Coração de Ferro" to "[4K] Coração de Ferro (2019) DUAL",
+            "O Poderoso Chefão" to "O Poderoso Chefão 1080p",
+            "Não Olhe para Cima" to "Não Olhe para Cima DUBLADO",
+        ).forEach { (shared, localRow) ->
+            val fragment = sharedTitleSearchFragment(shared)
+
+            assertTrue("no fragment for '$shared'", fragment.isNotEmpty())
+            assertTrue(
+                "fragment '$fragment' from '$shared' would not be found in '$localRow'",
+                localRow.contains(fragment, ignoreCase = true),
+            )
+        }
     }
 
     /** The fragment must actually occur in a real provider name, or the SQL page comes back empty. */
     @Test
     fun `the search fragment occurs in the decorated local name`() {
-        val fragment =
-            ContentIdentity.of(ContentKind.MOVIE, "Duna: Parte Dois", 2024).searchFragment()
+        val fragment = sharedTitleSearchFragment("Duna: Parte Dois")
 
         assertTrue(
             "fragment '$fragment' would not be found in a real row",
@@ -160,7 +187,8 @@ class SharedTitleResolutionTest {
         val localRow = movie("Duna Parte Dois [L] 1080p", year = 2024)
         assertTrue(localRow.matches(received!!.identity))
         assertTrue(
-            localRow.name.contains(received.identity.searchFragment(), ignoreCase = true),
+            "the SQL page would not contain the row the identity then matches",
+            localRow.name.contains(sharedTitleSearchFragment(received.title), ignoreCase = true),
         )
     }
 }

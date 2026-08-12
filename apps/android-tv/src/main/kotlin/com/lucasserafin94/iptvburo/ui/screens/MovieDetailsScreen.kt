@@ -299,17 +299,6 @@ internal fun MovieDetailsScreen(
                             )
                         }
                     }
-                    onShare?.let { share ->
-                        BuroButton(
-                            onClick = share,
-                            // Available while the full record is still loading: the title and year
-                            // come from the catalogue row, so a share is complete without it.
-                            style = BuroButtonStyle.Secondary,
-                        ) {
-                            Icon(Icons.Default.Share, contentDescription = null)
-                            Text(stringResource(R.string.details_share))
-                        }
-                    }
                     if (offlineSupported) {
                         BuroButton(
                             onClick =
@@ -351,6 +340,24 @@ internal fun MovieDetailsScreen(
                             style = BuroButtonStyle.Secondary,
                         ) {
                             Text(stringResource(R.string.details_trailer))
+                        }
+                    }
+                    // Beside Trailer, and deliberately outside the block above: a film with no
+                    // trailer still has something to share, and nesting this inside that `let`
+                    // would hide sharing on every title the provider gave no trailer id for.
+                    //
+                    // Last in the row rather than beside Favoritar, where it was: five buttons do
+                    // not fit one line on a phone, so the FlowRow wrapped and Compartilhar landed
+                    // on a second line that reads as the button being absent.
+                    onShare?.let { share ->
+                        BuroButton(
+                            onClick = share,
+                            // Enabled while the full record is still loading: the title and year
+                            // come from the catalogue row, so a share is complete without it.
+                            style = BuroButtonStyle.Secondary,
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null)
+                            Text(stringResource(R.string.details_share))
                         }
                     }
                 }

@@ -1895,10 +1895,20 @@ private fun CategoryUi.providerBadge(): ProviderBadge? {
         "disney" in normalized -> ProviderBadge("D+", "Disney+")
         "globoplay" in normalized -> ProviderBadge("G", "Globoplay")
         "discovery" in normalized -> ProviderBadge("D", "Discovery+")
-        Regex("(^|[ |])max([ |]|$)").containsMatchIn(normalized) -> ProviderBadge("M", "Max")
+        MAX_PROVIDER.containsMatchIn(normalized) -> ProviderBadge("M", "Max")
         else -> null
     }
 }
+
+/**
+ * "Max" as a whole word, compiled once.
+ *
+ * Bounded rather than a plain `in` test so a category called "Cinemax" or "Max Series" is not
+ * badged as the streaming service. It was written inline, which compiled the pattern afresh for
+ * every category on every recomposition of the list — the most expensive line on a screen whose
+ * whole job is to scroll smoothly.
+ */
+private val MAX_PROVIDER = Regex("(^|[ |])max([ |]|$)")
 
 @Composable
 private fun ChannelsContent(

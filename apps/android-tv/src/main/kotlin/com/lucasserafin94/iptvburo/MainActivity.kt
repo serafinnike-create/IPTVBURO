@@ -26,6 +26,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -72,6 +75,7 @@ import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 import com.lucasserafin94.iptvburo.ui.theme.IptvBuroTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.delay
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -185,6 +189,23 @@ private fun IptvBuroRoot(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val activity = LocalActivity.current as MainActivity
     val blockedLicense = state.license as? LicenseUiState.Blocked
+    var isShowingPosterReveal by remember { mutableStateOf(false) }
+
+    // Android's mandatory system splash is only allowed to draw a solid background and one icon.
+    // Once Compose owns the window, keep our cinematic screen visible long enough to actually see
+    // the real covers. Without this short reveal a warm Room cache could move from the B icon to
+    // Home in one frame, making the intended loading background impossible to notice.
+    LaunchedEffect(state.bootBackdropUrls) {
+        if (
+            state.bootBackdropUrls.isNotEmpty() &&
+            state.activeProfile != null &&
+            state.sources.isNotEmpty()
+        ) {
+            isShowingPosterReveal = true
+            delay(BOOT_POSTER_REVEAL_MILLIS)
+            isShowingPosterReveal = false
+        }
+    }
 
     // The first ON_RESUME can happen before the asynchronous licence check reaches Blocked. Keying
     // this effect to the resulting device id guarantees that a same-device reinstall is restored
@@ -222,14 +243,15 @@ private fun IptvBuroRoot(
             onSelect = { tag -> AppLocaleController.applySelection(activity, tag) },
         )
 
-        state.isInitializing -> BuroBootScreen(R.string.boot_preparing, state.bootStage)
+        state.isInitializing ->
+            BuroBootScreen(R.string.boot_preparing, state.bootStage, state.bootBackdropUrls)
 
         !state.hasAcceptedLegalNotice -> LegalOnboardingScreen(
             onAccept = viewModel::acceptLegalNotice,
         )
 
         state.license is LicenseUiState.NotChecked || state.license is LicenseUiState.Checking ->
-            BuroBootScreen(R.string.license_checking)
+            BuroBootScreen(R.string.license_checking, backdropPosters = state.bootBackdropUrls)
 
         state.license is LicenseUiState.Blocked -> {
             val license = state.license as LicenseUiState.Blocked
@@ -238,10 +260,12 @@ private fun IptvBuroRoot(
                 onPurchase = onPurchase,
                 onRetry = viewModel::refreshLicense,
                 onRedeem = viewModel::redeemLicense,
+                backdropPosters = state.bootBackdropUrls,
             )
         }
 
-        state.isProfilesLoading -> BuroBootScreen(R.string.boot_preparing, state.bootStage)
+        state.isProfilesLoading ->
+            BuroBootScreen(R.string.boot_preparing, state.bootStage, state.bootBackdropUrls)
 
         // Held until the catalogue has actually produced something to show.
         //
@@ -251,8 +275,8 @@ private fun IptvBuroRoot(
         // precisely the case where the wait is longest and the reassurance most useful.
         state.activeProfile != null &&
             state.sources.isNotEmpty() &&
-            state.bootStage != BootStageUi.READY ->
-            BuroBootScreen(R.string.boot_preparing, state.bootStage)
+            (state.bootStage != BootStageUi.READY || isShowingPosterReveal) ->
+            BuroBootScreen(R.string.boot_preparing, state.bootStage, state.bootBackdropUrls)
 
         state.activeProfile == null -> ProfilePickerScreen(
             profiles = state.profiles,
@@ -427,11 +451,15 @@ private fun IptvBuroRoot(
 }
 
 @Composable
-private fun BuroBootScreen(messageResource: Int, stage: BootStageUi? = null) {
+private fun BuroBootScreen(
+    messageResource: Int,
+    stage: BootStageUi? = null,
+    backdropPosters: List<String> = emptyList(),
+) {
     Box(
         modifier = Modifier.fillMaxSize().background(BuroCanvas),
     ) {
-        BuroCinematicBackdrop()
+        BuroCinematicBackdrop(posterUrls = backdropPosters)
         Column(
             modifier =
                 Modifier
@@ -483,3 +511,5 @@ private fun BootStageUi.labelResource(): Int =
         BootStageUi.ARTWORK -> R.string.boot_stage_artwork
         BootStageUi.READY -> R.string.boot_stage_ready
     }
+
+private const val BOOT_POSTER_REVEAL_MILLIS = 1_600L

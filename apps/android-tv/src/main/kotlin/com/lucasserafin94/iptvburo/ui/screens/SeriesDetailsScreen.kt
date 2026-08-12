@@ -263,12 +263,6 @@ internal fun SeriesDetailsScreen(
                                 }
                             }
                         }
-                        onShare?.let { share ->
-                            BuroButton(onClick = share, style = BuroButtonStyle.Secondary) {
-                                Icon(Icons.Default.Share, contentDescription = null)
-                                Text(stringResource(R.string.details_share))
-                            }
-                        }
                         details.youtubeTrailerId?.let { trailerId ->
                             BuroButton(
                                 onClick = {
@@ -284,6 +278,14 @@ internal fun SeriesDetailsScreen(
                                 style = BuroButtonStyle.Secondary,
                             ) {
                                 Text(stringResource(R.string.details_trailer))
+                            }
+                        }
+                        // Beside Trailer, outside the block above: a series with no trailer still
+                        // has something to share, so nesting this inside that `let` would hide it.
+                        onShare?.let { share ->
+                            BuroButton(onClick = share, style = BuroButtonStyle.Secondary) {
+                                Icon(Icons.Default.Share, contentDescription = null)
+                                Text(stringResource(R.string.details_share))
                             }
                         }
                     }

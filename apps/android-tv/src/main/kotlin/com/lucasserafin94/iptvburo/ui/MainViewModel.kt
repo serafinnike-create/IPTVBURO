@@ -110,6 +110,7 @@ class MainViewModel @Inject constructor(
     private var actionJob: Job? = null
     private var importJob: Job? = null
     private var homeJob: Job? = null
+    private var bootBackdropJob: Job? = null
     private var favoritesJob: Job? = null
     private var licenseJob: Job? = null
     private var subscriptionsJob: Job? = null
@@ -751,12 +752,12 @@ class MainViewModel @Inject constructor(
                 val match =
                     withContext(ioDispatcher) {
                         runCatching {
-                            // The slug's own words are the search term: the local copy is decorated
+                            // A fragment, not the whole title: the local copy is decorated
                             // differently from the sender's ("[4K] Duna DUAL" against "Duna 1080p"),
-                            // so a query on the sender's exact title would miss it. The identity
+                            // so a query on the sender's exact name would miss it. The identity
                             // comparison below is what actually decides.
                             catalogRepository
-                                .findLibraryCandidates(shared.identity.searchFragment())
+                                .findLibraryCandidates(sharedTitleSearchFragment(shared.title))
                                 .firstOrNull { candidate -> candidate.matches(shared.identity) }
                         }.getOrNull()
                     }
@@ -2238,7 +2239,7 @@ class MainViewModel @Inject constructor(
                     hydrateDownloadStates(listOf(movieDownloadKey(details.title)))
                     loadOpenTitleProgress(knownMovieChannels[content.channelId])
                     details.cast
-                        ?.split(Regex("[,;]|\\s/\\s"))
+                        ?.split(CAST_SEPARATOR)
                         ?.map(String::trim)
                         ?.filter { it.length in 2..100 }
                         ?.take(MAX_INDEXED_CAST)
@@ -2561,6 +2562,15 @@ class MainViewModel @Inject constructor(
                             isProfilesLoading = false,
                             profiles = profiles,
                             activeProfile = active,
+                            // A child's loading screen must never inherit covers selected for the
+                            // previous adult profile. A regular profile fills this again from its
+                            // own source as soon as the first movie and series pages are available.
+                            bootBackdropUrls =
+                                if (active?.id == it.activeProfile?.id && active?.isKids != true) {
+                                    it.bootBackdropUrls
+                                } else {
+                                    emptyList()
+                                },
                             tmdbKeyConfigured = metadataConfigured,
                             sharedTmdbKeyConfigured = !sharedKey.isNullOrBlank(),
                             favoriteIds = if (active?.id == it.activeProfile?.id) it.favoriteIds else emptySet(),
@@ -2601,11 +2611,12 @@ class MainViewModel @Inject constructor(
                     // playlist, so the rails belong to the profile and not to the app.
                     if (active != null) {
                         val sources = mutableState.value.sources
-                        loadHomeItems(
+                        val sourceId =
                             sources.firstOrNull { source -> source.id == active.sourceId }?.id
                                 ?: sources.firstOrNull { source -> source.type == SourceType.XTREAM }?.id
-                                ?: sources.firstOrNull()?.id,
-                        )
+                                ?: sources.firstOrNull()?.id
+                        loadBootBackdrop(sourceId = sourceId, profile = active)
+                        loadHomeItems(sourceId)
                     }
                     // The home screen draws the service shelves too, and it is reached on start-up
                     // without ever going through selectSection(HOME) — so loading them only there
@@ -2738,12 +2749,68 @@ class MainViewModel @Inject constructor(
                     mutableState.update {
                         it.copy(sources = sources.map { source -> source.toUi() })
                     }
-                    loadHomeItems(
-                        sources.firstOrNull { it.type == SourceType.XTREAM }?.id
-                            ?: sources.firstOrNull()?.id,
-                    )
+                    val active = mutableState.value.activeProfile
+                    val sourceId =
+                        sources.firstOrNull { source -> source.id == active?.sourceId }?.id
+                            ?: sources.firstOrNull { it.type == SourceType.XTREAM }?.id
+                            ?: sources.firstOrNull()?.id
+                    loadBootBackdrop(sourceId = sourceId, profile = active)
+                    loadHomeItems(sourceId)
                 }
         }
+    }
+
+    /**
+     * Loads just enough real covers for the boot animation, independently of Home construction.
+     *
+     * The profile and source observers can each restart Home while they settle during a cold
+     * launch. A separate job prevents that churn from cancelling the cover query, which is why the
+     * previous implementation kept falling back to the four bundled abstract images.
+     */
+    private fun loadBootBackdrop(sourceId: String?, profile: ProfileUi?) {
+        bootBackdropJob?.cancel()
+        if (sourceId == null || profile == null || profile.isKids) {
+            mutableState.update { it.copy(bootBackdropUrls = emptyList()) }
+            return
+        }
+        bootBackdropJob =
+            viewModelScope.launch {
+                try {
+                    val candidates =
+                        coroutineScope {
+                            val movies =
+                                async {
+                                    catalogRepository.loadChannelsPage(
+                                        sourceId = sourceId,
+                                        contentType = CatalogContentType.MOVIE,
+                                        limit = BOOT_BACKDROP_QUERY_LIMIT,
+                                    ).items
+                                }
+                            val series =
+                                async {
+                                    catalogRepository.loadChannelsPage(
+                                        sourceId = sourceId,
+                                        contentType = CatalogContentType.SERIES,
+                                        limit = BOOT_BACKDROP_QUERY_LIMIT,
+                                    ).items
+                                }
+                            movies.await() + series.await()
+                        }
+                    if (mutableState.value.activeProfile?.id == profile.id) {
+                        mutableState.update { state ->
+                            state.copy(
+                                bootBackdropUrls =
+                                    selectBootBackdropUrls(candidates.map(Channel::logoUri)),
+                            )
+                        }
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    // Decorative artwork is optional. Keep the bundled wall and continue startup.
+                    logger.error(TAG, "Could not prepare loading-screen artwork", error)
+                }
+            }
     }
 
     private fun loadHomeItems(sourceId: String?) {
@@ -2751,7 +2818,7 @@ class MainViewModel @Inject constructor(
         if (sourceId == null) {
             // Nothing to load, so nothing to wait for: release the boot screen or a user with no
             // source configured would sit on a spinner instead of reaching the import screen.
-            mutableState.update { it.copy(homeItems = emptyList()) }
+            mutableState.update { it.copy(homeItems = emptyList(), bootBackdropUrls = emptyList()) }
             markBootReady()
             return
         }
@@ -2785,14 +2852,40 @@ class MainViewModel @Inject constructor(
                                 limit = HOME_ITEM_LIMIT,
                             ).items
                         }
+                    // These two indexed page reads normally finish before the release and recent
+                    // queries. Publish their real covers immediately instead of making the boot
+                    // screen wait for the complete home composition. The URLs already live in the
+                    // app's private Room database; this adds no second playlist or credential
+                    // store. Kids profiles deliberately keep the neutral bundled artwork.
+                    val movies = moviesTask.await()
+                    val series = seriesTask.await()
+                    val activeProfile = mutableState.value.activeProfile
+                    mutableState.update { state ->
+                        state.copy(
+                            bootBackdropUrls =
+                                if (activeProfile != null && !activeProfile.isKids) {
+                                    selectBootBackdropUrls((movies + series).map(Channel::logoUri))
+                                } else {
+                                    emptyList()
+                                },
+                        )
+                    }
                     HomeSources(
                         releasesCurrent = releasesCurrentTask.await(),
                         releasesPrevious = releasesPreviousTask.await(),
                         recent = recentTask.await(),
-                        movies = moviesTask.await(),
-                        series = seriesTask.await(),
+                        movies = movies,
+                        series = series,
                     )
-                }.run {
+                }.let { sources ->
+                // Composed off the main thread, which is where all of this used to run.
+                //
+                // `viewModelScope.launch` dispatches to Main. The six queries above were already on
+                // IO, but everything below — a regex-keyed dedup, a sort and a mapping, each O(n)
+                // over every row those queries returned — ran on the UI thread. On a real catalogue
+                // that showed up during start-up as frames of 1.4 seconds and runs of 120 skipped
+                // frames. None of this work touches Compose state, so none of it belongs on Main.
+                withContext(ioDispatcher) { sources.run {
                 // This year's releases split by kind rather than this year's films followed by last
                 // year's. A rail of the previous year reads as old stock next to one labelled with
                 // the current year; series of the same year is the shelf people actually look for.
@@ -2821,7 +2914,8 @@ class MainViewModel @Inject constructor(
                     .map { (channel, editorialLabel) ->
                         channel.toCatalogUi(editorialLabel)
                     }
-                }
+                } }
+            }
             }.onSuccess { items ->
                 val visible = items.filterKidsContentIfNeeded(mutableState.value.activeProfile)
                 mutableState.update { state ->
@@ -3172,6 +3266,7 @@ class MainViewModel @Inject constructor(
         const val RATE_SAMPLE_MIN_MILLIS = 700L
         const val PAGE_SIZE = 200
         const val HOME_ITEM_LIMIT = 16
+        const val BOOT_BACKDROP_QUERY_LIMIT = 12
         const val HOME_RELEASE_LIMIT = 18
         const val HOME_RECENT_LIMIT = 18
         const val HOME_CONTINUE_LIMIT = 20
@@ -3186,8 +3281,8 @@ class MainViewModel @Inject constructor(
 
     private fun String.compatibilityTitlePrefix(): String =
         replace(HIGH_RISK_VIDEO_TAG, " ")
-            .replace(Regex("\\[[^]]+]"), " ")
-            .replace(Regex("\\s+"), " ")
+            .replace(BRACKETED_TAG, " ")
+            .replace(WHITESPACE_RUN, " ")
             .trim()
 }
 
@@ -3207,28 +3302,66 @@ internal fun dailyEditorialRank(itemId: String, epochDay: Long): Long {
 internal fun dailyCatalogTitleKey(title: String): String =
     title
         .lowercase(Locale.ROOT)
-        .replace(Regex("\\[[^]]{1,12}]"), " ")
-        .replace(Regex("\\b(4k|uhd|fhd|hd|sd|h\\.?265|hevc|multi|dual)\\b"), " ")
-        .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+        .replace(TITLE_KEY_BRACKETED, " ")
+        .replace(TITLE_KEY_DECORATION, " ")
+        .replace(TITLE_KEY_NON_ALPHANUMERIC, " ")
         .trim()
 
-/**
- * A SQL `LIKE` fragment for finding candidate rows for a shared identity.
+/*
+ * Compiled once, not per title.
  *
- * The identity is `kind:slug-words:year`, and its slug has already had the provider's decoration
- * stripped — which is exactly why it cannot be matched against `name` directly: the local row still
- * *has* its decoration. So the longest word of the slug is used as the search term and the identity
- * comparison decides from there.
- *
- * The longest word rather than the first: leading articles ("o", "a", "the") appear in thousands of
- * rows and would return a candidate page that does not contain the film at all. A distinctive word
- * keeps the candidate set small and is far likelier to survive however the provider wrote the name.
+ * These three literals used to sit inside the function above, which meant `Regex(...)` — parsing a
+ * pattern and building a state machine — ran on every call. The function is the key selector for a
+ * `distinctBy` over the whole home composition, so a catalogue of forty thousand items compiled a
+ * hundred and twenty thousand regular expressions during start-up, on the main thread. That is a
+ * large part of what made the boot drop over a hundred frames in a row.
  */
-internal fun ContentIdentity.searchFragment(): String {
-    val slug = key.substringAfter(':').substringBeforeLast(':', missingDelimiterValue = "")
-    val stem = slug.ifEmpty { key.substringAfter(':') }
-    return stem.split('-').maxByOrNull(String::length).orEmpty()
+/** Cast lists, split on the separators providers actually use. Shared with the details screen. */
+private val CAST_SEPARATOR = Regex("[,;]|\\s/\\s")
+
+/** Any bracketed tag, and a run of whitespace: both used when reducing a title to a prefix. */
+private val BRACKETED_TAG = Regex("\\[[^]]+]")
+private val WHITESPACE_RUN = Regex("\\s+")
+
+private val TITLE_KEY_BRACKETED = Regex("\\[[^]]{1,12}]")
+private val TITLE_KEY_DECORATION = Regex("\\b(4k|uhd|fhd|hd|sd|h\\.?265|hevc|multi|dual)\\b")
+private val TITLE_KEY_NON_ALPHANUMERIC = Regex("[^\\p{L}\\p{N}]+")
+
+/** Real, non-empty, non-repeating covers used by the custom startup screen. */
+internal fun selectBootBackdropUrls(candidates: Iterable<String?>): List<String> =
+    candidates
+        .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
+        .distinct()
+        .take(20)
+
+/**
+ * A SQL `LIKE` fragment for finding candidate rows for a shared title.
+ *
+ * Read from the shared *display* title rather than from the identity slug, and the difference is
+ * not cosmetic. The slug is unaccented — `O Sítio [L]` becomes `o-sitio` — while the query runs
+ * against the provider's raw `name`, which still reads `Sítio`. SQLite's `NOCASE` folds case but
+ * not accents, so searching the slug's `sitio` inside `Sítio` matched nothing, and every accented
+ * title silently failed to resolve. That is most of a Portuguese catalogue.
+ *
+ * So the fragment is the longest run of letters and digits **as written**, which is a literal
+ * substring of the name whatever accents it carries: `Sítio` yields `tio`, and `%tio%` finds it.
+ * Short and imprecise on purpose — this only gathers candidates, and [Channel.matches] decides.
+ *
+ * The longest run rather than the first: leading articles ("o", "a", "the") appear in thousands of
+ * rows and would return a candidate page that does not contain the film at all.
+ */
+internal fun sharedTitleSearchFragment(title: String): String {
+    val runs = title.split(NON_SEARCHABLE).filter(String::isNotEmpty)
+    return runs.maxByOrNull(String::length).orEmpty()
 }
+
+/**
+ * Anything that is not a plain unaccented letter or digit.
+ *
+ * Accented characters are separators here rather than content: they are exactly the characters the
+ * query cannot rely on matching, so a fragment is cut around them instead of through them.
+ */
+private val NON_SEARCHABLE = Regex("""[^A-Za-z0-9]""")
 
 /**
  * Whether this catalogue row is the work [identity] names.

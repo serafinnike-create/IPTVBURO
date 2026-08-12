@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Cleartext is for the user's own sources, and for nothing else.
+
+    The app previously set android:usesCleartextTraffic="true" on the whole application, which is
+    the blunt version of this file: it permits plain HTTP to *every* host, including the licence
+    server and TMDb. On a hostile network that is a downgrade waiting to happen — an attacker who
+    can answer DNS gets to read and rewrite a licence check that was meant to be authenticated.
+
+    The reason the permission exists at all is real and does not go away: IPTV providers routinely
+    serve M3U playlists, Xtream APIs and streams over plain HTTP, and a player that refused them
+    would refuse most of what users actually own. So cleartext stays the default, and the hosts the
+    app itself talks to are pinned to HTTPS by exception below.
+
+    That ordering matters. An allowlist of provider hosts is impossible — the user supplies them —
+    while the app's own endpoints are a short, known list. Denying cleartext where we can enumerate
+    it is achievable; the inverse is not.
+-->
+<network-security-config>
+    <!--
+        The user's providers. Unknown hosts, plain HTTP allowed, and no certificate pinning: a
+        provider using a self-signed certificate is common and is the user's own arrangement.
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!--
+        The app's own services. HTTPS only, system trust anchors only.
+
+        Licensing is the one that matters most: it decides whether the app runs at all, and it
+        carries a device identity and a purchase token. TMDb is here because an intercepted
+        metadata request leaks the user's viewing interests and carries their API key.
+    -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">iptvburo.workers.dev</domain>
+        <domain includeSubdomains="true">iptvburo.pages.dev</domain>
+        <domain includeSubdomains="true">themoviedb.org</domain>
+        <domain includeSubdomains="true">tmdb.org</domain>
+        <domain includeSubdomains="true">googleapis.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>
