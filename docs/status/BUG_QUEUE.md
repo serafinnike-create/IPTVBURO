@@ -50,6 +50,118 @@ alpha.3 instalada e olhou a tela. Vale um teste de instalação limpa.
 
 ---
 
+## BUG-012 — Reinstalar o app perdeu a licença paga e voltou ao teste de 7 dias
+
+**Status:** investigado, correção pendente — **prioridade alta, envolve dinheiro**
+**Reportado em:** 2026-08-13
+**Ambiente:** Windows, licença de 30 dias ativada e perdida após reinstalar
+
+### Sintoma
+
+O usuário ativou o app por 30 dias, desinstalou e instalou de novo. A chave de
+ativação mudou e ele voltou ao teste de 7 dias — perdendo o que pagou.
+
+### Causa — o `deviceId` depende de uma chave gerada por instalação
+
+O id é derivado de **dois** valores
+([DeviceFingerprint.kt:305-310](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/license/DeviceFingerprint.kt#L305-L310)):
+
+```kotlin
+deviceId = SHA-256(publicKeyDer + installationId)
+```
+
+- `installationId` vem do **MachineGuid** do Windows e é estável — sobrevive a
+  reinstalar o app, muda só ao formatar. Essa parte está correta.
+- `publicKeyDer` é de um par EC **gerado do zero** toda vez que o arquivo de
+  identidade não existe
+  ([DeviceFingerprint.kt:230-233](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/license/DeviceFingerprint.kt#L230-L233)).
+
+Ou seja: **basta o arquivo sumir para o id mudar, mesmo na mesma máquina.**
+O MachineGuid estável não protege nada, porque a chave nova domina o hash.
+
+O arquivo fica em
+`%LOCALAPPDATA%\lucasserafin94\IPTVBURO\device-identity.dpapi` — fora da pasta
+que o MSI gerencia (`%LOCALAPPDATA%\IPTVBURO`), então o desinstalador **não**
+deveria apagá-lo. Confirmado numa máquina real: o arquivo de 8 de agosto
+sobreviveu a várias reinstalações. Falta descobrir o que o removeu no caso do
+usuário — limpeza manual, um "remover dados do app", ou o DPAPI ter falhado ao
+decifrar (nesse caso `load()` devolve null e um id novo é gerado).
+
+### Correção proposta — o id deve depender só da máquina
+
+Derivar o `deviceId` **apenas** do `installationId`, e deixar o par de chaves
+como prova de posse (que é o papel dele), não como parte da identidade. Assim,
+mesma máquina = mesmo id, sempre, e apagar arquivos não reseta nada — que é
+exatamente a propriedade anti-fraude que o comentário do `MachineAnchor` diz
+querer.
+
+Precisa de migração: quem já tem id no formato antigo não pode perdê-lo.
+
+### Ainda a confirmar
+
+Pedir ao usuário o `iptvburo.log` da execução em que o id mudou, e verificar se
+`device-identity.dpapi` existia naquele momento. Isso separa "arquivo apagado"
+de "DPAPI falhou ao decifrar".
+
+---
+
+## TAREFA-013 — Chave reutilizável pelo dono, bloqueada para os outros
+
+**Status:** pendente — desenhado, não implementado
+**Solicitado em:** 2026-08-13
+
+### O pedido
+
+O usuário quer que a chave dele:
+
+1. apareça no app, para ele guardar;
+2. continue valendo pelo tempo comprado;
+3. **não** possa ativar mais de uma instalação.
+
+### O que já existe e funciona
+
+O servidor **já** faz uso único. `redemption_keys` tem `redeemed_by`, e o resgate
+é atômico: `UPDATE ... WHERE redeemed_by IS NULL`, com teste de concorrência
+provando que duas máquinas simultâneas resultam em `[200, 409]`
+([worker.test.mjs](../../services/license-server/test/worker.test.mjs)). Ou seja,
+**a parte de "não pode ativar em dois PCs" está pronta.**
+
+### O que falta — e é o que causou o prejuízo
+
+```js
+if (key.redeemed_by) return { ok: false, error: 'already_used', status: 409 };
+```
+
+Isso bloqueia **inclusive o próprio dono**. Combinado com o BUG-012, o efeito é:
+o id muda, a chave dele não serve mais nem para ele, e ele precisaria comprar
+outra. É o pior resultado possível para quem pagou.
+
+**Correção:** trocar por "já usada **por outro dispositivo**":
+
+```js
+if (key.redeemed_by && key.redeemed_by !== deviceId) return already_used;
+```
+
+O mesmo dispositivo reativa quantas vezes precisar; outro continua recusado. Sem
+isso, corrigir o BUG-012 sozinho não devolve a licença de quem já perdeu.
+
+### Mostrar a chave no app
+
+Hoje o app não exibe a chave em lugar nenhum — a tela de ativação mostra o
+*código do dispositivo*, que é outra coisa. Falta uma área em Opções com a chave,
+a data de validade e um botão de copiar, com o aviso de que perdê-la significa
+comprar de novo.
+
+### Reinstalação legítima vs. fraude
+
+Vale registrar o limite: com a chave presa ao dispositivo, alguém que troca de PC
+de verdade fica travado. O painel de admin já resolve isso à mão (`/admin/grant`),
+e como há um único administrador, atender esses casos é mais barato e mais seguro
+que inventar um sistema de transferência automática — que seria justamente o
+caminho que um fraudador tentaria abusar.
+
+---
+
 ## TAREFA-011 — Nitidez em 4K e fluidez de 30 a 360 Hz
 
 **Status:** pendente — investigado, não implementado
