@@ -2919,7 +2919,13 @@ class DesktopAppState(
         if (existing?.snapshot?.date == date && existing.snapshot.sourceId == xtreamSummary?.sourceId) return
         // Checked before the status is set to Loading. Returning after it left the Home showing its
         // skeleton for ever, because nothing else ever moves that status off Loading.
-        val sourceId = xtreamSummary?.sourceId
+        //
+        // The summary is asked of the repository when the cached copy is missing. It is null while
+        // the catalogues have not been read yet — which is exactly the state left behind by a
+        // failed load — and returning here made "Tentar novamente" a button that did nothing at
+        // all: it set Idle, returned, and the same error card came straight back. A user with a
+        // provider that failed once could not recover without restarting the app.
+        val sourceId = xtreamSummary?.sourceId ?: xtreamRepository.summary()?.sourceId
         if (sourceId == null) {
             dailyHomeStatus = DailyHomeStatus.Idle
             return
@@ -3081,6 +3087,15 @@ class DesktopAppState(
                 // with nothing in flight and no way back until a restart.
                 if (dailyHomeStatus is DailyHomeStatus.Loading) dailyHomeStatus = DailyHomeStatus.Idle
                 error.rethrowIfCancellation()
+                // Logged, because the card on screen says almost nothing useful.
+                //
+                // A customer hit this on a real install and the log held no trace of it at all —
+                // the success path reports its counts, the failure path reported nothing, so the
+                // one run that needed explaining was the one that left none. The type and the
+                // Xtream reason are recorded; the message is not, because OkHttp puts the full
+                // request URL into its IOException text and that URL carries the credentials.
+                val reason = (error as? XtreamClientException)?.reason?.name ?: "-"
+                println("BURO home FAILED: ${error::class.simpleName} reason=$reason")
                 dailyHomeStatus = DailyHomeStatus.Error(error.toSafeFailureMessage())
             }
     }
@@ -4466,8 +4481,13 @@ class DesktopAppState(
             XtreamFailureReason.HTTP -> "O servidor respondeu com um erro HTTP."
             XtreamFailureReason.RESPONSE_TOO_LARGE ->
                 "O catálogo excedeu o limite seguro desta prévia."
+            // Names the log, because this is the one reason a user can do nothing about on their
+            // own. A customer met this card over a catalogue that had plainly loaded, and the only
+            // way to tell a genuinely odd provider from a fault in this app was a file nothing on
+            // screen mentioned.
             XtreamFailureReason.INVALID_RESPONSE ->
-                "O servidor não retornou um catálogo Xtream compatível."
+                "O servidor não retornou um catálogo Xtream compatível. " +
+                    "Detalhes em ${DiagnosticLog.location()}"
         }
 
     /**
