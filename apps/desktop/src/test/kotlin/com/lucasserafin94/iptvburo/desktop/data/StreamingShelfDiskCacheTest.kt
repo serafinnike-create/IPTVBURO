@@ -63,6 +63,24 @@ class StreamingShelfDiskCacheTest {
     }
 
     /**
+     * The "coming to streaming" rail belongs to no service, so it has no provider id.
+     *
+     * A null is written as the same sentinel the year field uses, and must come back as null rather
+     * than as Int.MIN_VALUE — a number the app would then try to refresh the shelf by.
+     */
+    @Test
+    fun `a shelf with no provider id round trips as null`() {
+        val cache = StreamingShelfDiskCache(directory = directory)
+        val written = listOf(shelf("coming-soon").copy(tmdbProviderId = null))
+
+        cache.write(TmdbDiscoverKind.UPCOMING, "BR", written)
+        val read = cache.read(TmdbDiscoverKind.UPCOMING, "BR")
+
+        assertEquals(written, read)
+        assertNull(read?.single()?.tmdbProviderId)
+    }
+
+    /**
      * Accented titles are the ordinary case here, not an edge one.
      *
      * The catalogue this ships for is Brazilian, and a format that mangled them would corrupt most

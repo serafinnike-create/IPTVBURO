@@ -21,9 +21,15 @@ atualização**. O caminho foi verificado antes de publicar, não presumido:
 
 Corrigidos e publicados: BUG-001, BUG-002, BUG-004, BUG-006, BUG-007, BUG-008.
 
-**Falta confirmar em uso real na alpha.3:** capa, sinopse e trailer na tela de
-Assinaturas (itens 2 e 3 do BUG-006) — a causa provável foi corrigida junto com
-as fotos do elenco, mas não houve confirmação em execução.
+**Auditado depois de publicar:** capa, sinopse e trailer na tela de Assinaturas
+(itens 2 e 3 do BUG-006). O caminho está inteiro e correto do cliente até o
+composable, e a API devolve os dados — não havia um segundo defeito ali. A única
+forma de a tela ficar vazia era o cliente TMDb obsoleto do item 4, já corrigido.
+Detalhes no BUG-006.
+
+**O que ainda não foi confirmado por uso real:** todas as correções acima foram
+verificadas por teste automatizado e contra a API do TMDb, mas ninguém abriu a
+alpha.3 instalada e olhou a tela. Vale um teste de instalação limpa.
 
 ---
 
@@ -164,11 +170,25 @@ não limpava esse cache — então `key in castPhotos` recusava tentar de novo e
 elenco de qualquer filme aberto antes de configurar a chave ficava sem foto para
 sempre. O cache agora é descartado junto com o cliente que o produziu.
 
-**Itens 2 e 3 — capa, sinopse e trailer.** `pageFor()` já usava o id correto e
-devolve `overview`, `posterUrl` e `youtubeTrailerId`; a tela também já o chama
-([DesktopAppState.kt:1783](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/DesktopAppState.kt#L1783)).
-A causa mais provável é o mesmo cliente TMDb obsoleto do item 4, resolvido pela
-mesma correção. **Não confirmado em execução** — vale reconferir na alpha.3.
+**Itens 2 e 3 — capa, sinopse e trailer.** Auditado depois, em vez de deixado
+como suposição. O caminho inteiro está correto e ligado:
+
+- `pageFor()` usa o id e o endpoint certo por tipo
+  ([TmdbClient.kt:533](../../packages/metadata-client/src/main/kotlin/com/lucasserafin94/iptvburo/metadata/TmdbClient.kt#L533));
+- a tela chama `pageFor` e guarda o resultado
+  ([DesktopAppState.kt:1796](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/DesktopAppState.kt#L1796));
+- o valor é passado para o composable
+  ([DesktopApp.kt:410](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/DesktopApp.kt#L410));
+- e o composable desenha capa, sinopse, elenco e trailer
+  ([SubscriptionsWorkspace.kt:551-585](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/SubscriptionsWorkspace.kt#L551-L585)).
+
+A API também devolve tudo: para *Duna: Parte Dois*, sinopse em pt-BR, capa, 98
+pessoas no elenco e 3 vídeos. Conferido que a sinopse em pt-BR não vem vazia nos
+títulos recentes testados, então não há necessidade de fallback de idioma.
+
+Ou seja, não havia um segundo defeito aqui: a única forma de a tela ficar vazia
+era o cliente TMDb obsoleto do item 4 — mesma causa, mesma correção. Continua
+valendo confirmar em uso, mas a auditoria de código e de API não achou nada mais.
 
 ### Ainda em aberto
 
