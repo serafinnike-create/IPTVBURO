@@ -216,7 +216,7 @@ projeto para que `site/functions/` seja reconhecido como Pages Functions. Ver
 
 ## TAREFA-003 — Republicar o release do GitHub após as correções
 
-**Status:** autorizado pelo usuário em 2026-08-12; em execução
+**Status:** ✅ CONCLUÍDO em 2026-08-12
 **Solicitado em:** 2026-08-12
 
 **Decisão do usuário:** apagar o `v2.0.0-alpha.1` de vez (não rebaixar), depois
@@ -251,10 +251,30 @@ Três motivos, todos a resolver antes de executar:
 - [ ] Usuário confirma **excluir** vs **substituir** o release anterior
 - [ ] Número da nova versão definido pelo usuário
 
-### Decisão pendente do usuário
+### O que foi feito
 
-Excluir o `v2.0.0-alpha.1` do GitHub, ou publicar uma nova versão ao lado e
-rebaixar a antiga? A segunda opção é reversível; a primeira não.
+Publicado o `v2.0.0-alpha.2` e **apagado** o `v2.0.0-alpha.1`, incluindo a tag,
+conforme a decisão do usuário.
+
+Ordem seguida de propósito: a nova versão foi publicada e verificada **antes** de
+apagar a antiga, para nunca existir um intervalo sem download disponível.
+
+Verificações antes de apagar:
+
+- os dois assets subiram com `state=uploaded`;
+- a URL de download responde `200`;
+- os 8 primeiros bytes do arquivo publicado são idênticos aos do arquivo local e
+  correspondem à assinatura de MSI (`d0cf11e0a1b11ae1`) — ou seja, o upload não
+  corrompeu nada;
+- o `SHA256SUMS.txt` publicado bate com o hash do build local
+  (`fcab66edf0e0d63037caa67782a2757dea93c332571751d10671d73dbdf0329f`).
+
+Depois de apagar: `alpha.1` responde `404`, `alpha.2` responde `200`, e a única
+tag remota é `v2.0.0-alpha.2`.
+
+**Somente Windows.** A `alpha.1` trazia também um APK de Android; a `alpha.2`
+não, porque o trabalho de Android desta sessão não foi commitado nem testado.
+Quem quiser o APK precisa da build de Android, que continua pendente.
 
 ---
 
