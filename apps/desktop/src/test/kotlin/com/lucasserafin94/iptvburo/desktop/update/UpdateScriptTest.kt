@@ -215,7 +215,9 @@ class UpdateScriptTest {
                 )
 
             assertTrue(!body.contains("del /q"), "injected text must not reach the script")
-            assertContains(body, "no installed product registered")
+            // A refused code is treated exactly like no code at all: nothing is uninstalled.
+            assertTrue(!body.contains("msiexec.exe /x"), "a refused code must not reach a removal")
+            assertContains(body, "No installed product is registered")
         }
     }
 
@@ -229,6 +231,10 @@ class UpdateScriptTest {
 
             assertTrue(!body.contains("msiexec.exe /x"), "nothing to remove")
             assertContains(body, "msiexec.exe /i")
+            // A failed install with nothing registered must still reach :failed rather than
+            // falling through to :done, which relaunches and deletes the script as though the
+            // update had applied.
+            assertContains(body, "goto :failed")
         }
     }
 

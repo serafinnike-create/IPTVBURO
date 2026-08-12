@@ -283,7 +283,15 @@ internal fun writeUpdateScript(
     val code = installedProductCode?.takeIf(PRODUCT_CODE::matches)
     val retryAfterRemoval =
         if (code == null) {
-            "rem no installed product registered; nothing to remove"
+            // Nothing to remove, but the install still failed — so this must not fall through to
+            // :done, which would relaunch and delete the script as though the update had worked.
+            // A second, visible attempt gives Windows a chance to say what is wrong.
+            """
+            rem No installed product is registered, so there is nothing to remove.
+            rem The install still failed, so retry it visibly rather than pretending it worked.
+            msiexec.exe /i "${installer.toAbsolutePath()}" /norestart
+            if errorlevel 1 goto :failed
+            """.trimIndent()
         } else {
             // Removal is the last resort, and the reinstall after it is retried before giving up.
             //
