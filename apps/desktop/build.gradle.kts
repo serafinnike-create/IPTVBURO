@@ -396,10 +396,14 @@ tasks.matching {
 }
 
 // The signed release script sets this marker only for the short packaging step between signing the
-// generated launcher and signing the final MSI. Direct MSI tasks fail closed, while
-// createDistributable remains available for ordinary local smoke tests.
+// generated launcher and signing the final MSI. Preview automation may explicitly opt into an
+// unsigned MSI; final releases remain outside the preview workflow and still require signing.
 val windowsSignedPipeline =
     providers.environmentVariable("IPTVBURO_WINDOWS_SIGNING_PIPELINE")
+        .map { it.equals("true", ignoreCase = true) }
+        .getOrElse(false)
+val windowsUnsignedPreview =
+    providers.environmentVariable("IPTVBURO_ALLOW_UNSIGNED_WINDOWS_PREVIEW")
         .map { it.equals("true", ignoreCase = true) }
         .getOrElse(false)
 val windowsSignTool = providers.environmentVariable("IPTVBURO_SIGNTOOL").orNull
@@ -408,7 +412,7 @@ val windowsCertificateThumbprint =
 val windowsTimestampUrl = providers.environmentVariable("IPTVBURO_TIMESTAMP_URL").orNull
 val verifyWindowsReleaseSigning by tasks.registering {
     group = "verification"
-    description = "Blocks direct or cached MSI tasks outside the protected signing pipeline."
+    description = "Requires the protected signing pipeline or an explicit unsigned-preview opt-in."
     doLast {
         val requiredVariables =
             listOf(
@@ -416,12 +420,14 @@ val verifyWindowsReleaseSigning by tasks.registering {
                 "IPTVBURO_WINDOWS_CERT_THUMBPRINT",
                 "IPTVBURO_TIMESTAMP_URL",
             )
-        require(
+        val signedPipelineReady =
             System.getenv("IPTVBURO_WINDOWS_SIGNING_PIPELINE").equals("true", ignoreCase = true) &&
-                requiredVariables.all { !System.getenv(it).isNullOrBlank() },
-        ) {
-            "Unsigned Windows installers are blocked. Use scripts/sign-windows-release.ps1 " +
-                "with the protected code-signing certificate."
+                requiredVariables.all { !System.getenv(it).isNullOrBlank() }
+        val unsignedPreviewAllowed =
+            System.getenv("IPTVBURO_ALLOW_UNSIGNED_WINDOWS_PREVIEW").equals("true", ignoreCase = true)
+        require(signedPipelineReady || unsignedPreviewAllowed) {
+            "Windows MSI packaging requires scripts/sign-windows-release.ps1 or the explicit " +
+                "IPTVBURO_ALLOW_UNSIGNED_WINDOWS_PREVIEW=true preview opt-in."
         }
     }
 }
@@ -429,14 +435,17 @@ tasks.matching { it.name in setOf("packageMsi", "packageReleaseMsi") }.configure
     dependsOn(verifyWindowsReleaseSigning)
     notCompatibleWithConfigurationCache("Authenticode signing uses the protected Windows certificate store.")
     doFirst {
+        if (windowsUnsignedPreview) {
+            logger.warn("Building an unsigned Windows preview. Windows may display an unknown-publisher warning.")
+            return@doFirst
+        }
         require(
             windowsSignedPipeline &&
                 !windowsSignTool.isNullOrBlank() &&
                 !windowsCertificateThumbprint.isNullOrBlank() &&
                 !windowsTimestampUrl.isNullOrBlank(),
         ) {
-            "Unsigned Windows installers are blocked. Use scripts/sign-windows-release.ps1 " +
-                "with the protected code-signing certificate."
+            "Windows release signing is not configured. Use scripts/sign-windows-release.ps1."
         }
         val launcher =
             layout.buildDirectory.file("compose/binaries/main/app/IPTVBURO/IPTVBURO.exe")

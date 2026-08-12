@@ -64,8 +64,10 @@ O workflow `preview-release.yml` exige estes GitHub Actions Secrets:
 
 O runner grava o PFX somente na pasta temporária, importa-o em
 `Cert:\CurrentUser\My`, executa o pipeline protegido, valida o MSI e remove o
-arquivo e o certificado no bloco `finally`. Se qualquer segredo estiver ausente,
-o job falha antes da build e nenhuma release é criada.
+arquivo e o certificado no bloco `finally`. Se os três segredos estiverem ausentes,
+o workflow de *preview* publica um MSI com o sufixo `-unsigned` e um aviso explícito na
+release. Se apenas parte dos segredos estiver configurada, o job falha. Releases finais
+continuam bloqueadas até existir assinatura Authenticode válida.
 
 Antes do upload, `scripts/verify-clean-desktop-package.ps1` também inventaria a
 imagem do aplicativo, recusa arquivos com formato de playlist, banco ou keystore,

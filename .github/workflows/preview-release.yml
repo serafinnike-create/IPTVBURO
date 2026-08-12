@@ -81,46 +81,59 @@ jobs:
           .\gradlew.bat :apps:desktop:clean :apps:desktop:test --stacktrace
           if ($LASTEXITCODE -ne 0) { throw 'Desktop tests failed.' }
 
-      - name: Build signed Windows preview
+      - name: Build Windows preview
         shell: pwsh
         env:
           WINDOWS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
           WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
           WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_BASE64) -or
-              [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD) -or
-              [string]::IsNullOrWhiteSpace($env:WINDOWS_TIMESTAMP_URL)) {
-            throw 'The protected Windows signing secrets are not configured.'
-          }
-
-          $pfx = Join-Path $env:RUNNER_TEMP 'iptvburo-signing.pfx'
-          [IO.File]::WriteAllBytes(
-            $pfx,
-            [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERTIFICATE_BASE64)
+          $signingValues = @(
+            $env:WINDOWS_SIGNING_CERTIFICATE_BASE64,
+            $env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD,
+            $env:WINDOWS_TIMESTAMP_URL
           )
-          $password = ConvertTo-SecureString `
-            $env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD `
-            -AsPlainText `
-            -Force
-          $certificate = Import-PfxCertificate `
-            -FilePath $pfx `
-            -CertStoreLocation Cert:\CurrentUser\My `
-            -Password $password
-          try {
-            $env:IPTVBURO_WINDOWS_CERT_THUMBPRINT = $certificate.Thumbprint
-            $env:IPTVBURO_TIMESTAMP_URL = $env:WINDOWS_TIMESTAMP_URL
-            .\scripts\sign-windows-release.ps1
-            if ($LASTEXITCODE -ne 0) { throw 'The signed Windows build failed.' }
-            .\scripts\verify-clean-desktop-package.ps1
-            if ($LASTEXITCODE -ne 0) { throw 'The desktop privacy audit failed.' }
+          $configuredSigningValues = @($signingValues | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+          if ($configuredSigningValues.Count -ne 0 -and $configuredSigningValues.Count -ne $signingValues.Count) {
+            throw 'Windows signing secrets are only partially configured.'
           }
-          finally {
-            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
-            if ($null -ne $certificate) {
-              Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -Force -ErrorAction SilentlyContinue
+          $signedBuild = $configuredSigningValues.Count -eq $signingValues.Count
+
+          if ($signedBuild) {
+            $pfx = Join-Path $env:RUNNER_TEMP 'iptvburo-signing.pfx'
+            [IO.File]::WriteAllBytes(
+              $pfx,
+              [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERTIFICATE_BASE64)
+            )
+            $password = ConvertTo-SecureString `
+              $env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD `
+              -AsPlainText `
+              -Force
+            $certificate = Import-PfxCertificate `
+              -FilePath $pfx `
+              -CertStoreLocation Cert:\CurrentUser\My `
+              -Password $password
+            try {
+              $env:IPTVBURO_WINDOWS_CERT_THUMBPRINT = $certificate.Thumbprint
+              $env:IPTVBURO_TIMESTAMP_URL = $env:WINDOWS_TIMESTAMP_URL
+              .\scripts\sign-windows-release.ps1
+              if ($LASTEXITCODE -ne 0) { throw 'The signed Windows build failed.' }
+            }
+            finally {
+              Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+              if ($null -ne $certificate) {
+                Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -Force -ErrorAction SilentlyContinue
+              }
             }
           }
+          else {
+            $env:IPTVBURO_ALLOW_UNSIGNED_WINDOWS_PREVIEW = 'true'
+            .\gradlew.bat :apps:desktop:packageMsi --rerun-tasks --no-daemon --stacktrace
+            if ($LASTEXITCODE -ne 0) { throw 'The unsigned Windows preview build failed.' }
+          }
+
+          .\scripts\verify-clean-desktop-package.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'The desktop privacy audit failed.' }
 
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           $packages = @(
@@ -132,12 +145,16 @@ jobs:
             throw "Expected exactly one MSI package; found $($packages.Count)."
           }
           $signature = Get-AuthenticodeSignature -LiteralPath $packages[0].FullName
-          if ($signature.Status -ne 'Valid') {
-            throw "The MSI signature is not valid: $($signature.Status)"
+          if ($signedBuild -and $signature.Status -ne 'Valid') {
+            throw "The signed MSI signature is not valid: $($signature.Status)"
           }
+          if (-not $signedBuild -and $signature.Status -ne 'NotSigned') {
+            throw "The unsigned preview has an unexpected signature status: $($signature.Status)"
+          }
+          $suffix = if ($signedBuild) { '' } else { '-unsigned' }
           Copy-Item `
             -LiteralPath $packages[0].FullName `
-            -Destination "artifacts\IPTV-BURO-$env:RELEASE_TAG-windows-x64.msi"
+            -Destination "artifacts\IPTV-BURO-$env:RELEASE_TAG-windows-x64$suffix.msi"
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
@@ -191,20 +208,26 @@ jobs:
 
       - name: Publish complete preview release
         shell: bash
-        env:
-          APK_PATH: artifacts/IPTV-BURO-${{ inputs.tag || github.ref_name }}-android-debug.apk
-          MSI_PATH: artifacts/IPTV-BURO-${{ inputs.tag || github.ref_name }}-windows-x64.msi
-          SUM_PATH: artifacts/SHA256SUMS.txt
         run: |
+          APK_PATH="artifacts/IPTV-BURO-${RELEASE_TAG}-android-debug.apk"
+          mapfile -t msi_files < <(find artifacts -maxdepth 1 -type f -name '*.msi')
+          MSI_PATH="${msi_files[0]}"
+          SUM_PATH="artifacts/SHA256SUMS.txt"
+          if [[ "$MSI_PATH" == *-unsigned.msi ]]; then
+            RELEASE_NOTES="Windows preview for testing. The MSI is not yet code-signed, so Windows may display an Unknown publisher or SmartScreen warning. The package passed the clean-data privacy audit."
+          else
+            RELEASE_NOTES="Signed Windows preview and Android debug package."
+          fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" \
               "$APK_PATH" "$MSI_PATH" "$SUM_PATH" \
               --clobber
+            gh release edit "$RELEASE_TAG" --notes "$RELEASE_NOTES"
           else
             gh release create "$RELEASE_TAG" \
               "$APK_PATH" "$MSI_PATH" "$SUM_PATH" \
               --title "IPTV BURO $RELEASE_TAG" \
-              --generate-notes \
+              --notes "$RELEASE_NOTES" \
               --prerelease \
               --verify-tag
           fi
