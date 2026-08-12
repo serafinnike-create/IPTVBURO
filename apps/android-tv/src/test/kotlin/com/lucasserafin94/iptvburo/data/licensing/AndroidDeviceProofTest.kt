@@ -24,34 +24,43 @@ class AndroidDeviceProofTest {
     }
 
     /**
-     * The derivation is fixed, so a device keeps its name across app versions.
+     * The derivation is fixed, and has to match the Worker's byte for byte.
      *
-     * The expected value changed once, deliberately: the id used to be derived from the Keystore
-     * public key as well as the installation id, and the key pair does not survive an uninstall.
-     * That made a paid licence unrecoverable on reinstall — the user was dropped back onto the
-     * trial. Changing it was a one-off migration, and this test is what stops it drifting again.
+     * Registration recomputes this server-side and answers `bad_identity` when the two disagree, so
+     * a change here that is not mirrored in `services/license-server/src/index.js` stops every new
+     * device from registering. This value was briefly changed — the public key was dropped in an
+     * attempt to make the id survive a reinstall — and no unit test noticed, because both sides of
+     * *this* test moved together. Only a real phone failing to register revealed it.
      */
     @Test
     fun `device id derivation remains stable`() {
         assertEquals(
-            "WQW8-D5NZ-GMFM",
-            deriveDeviceId(installationId = "550e8400-e29b-41d4-a716-446655440000"),
+            "ENH7-2JFH-F4B5",
+            deriveDeviceId(
+                publicKey = "public-key".toByteArray(StandardCharsets.UTF_8),
+                installationId = "550e8400-e29b-41d4-a716-446655440000",
+            ),
         )
     }
 
     /**
-     * The same installation id yields the same device id however often it is asked for.
+     * Both inputs matter, which is what makes the value above worth pinning.
      *
-     * The whole reinstall fix rests on this: the app recomputes the id from scratch after being
-     * reinstalled, and the server has to recognise the result as the device it already knows.
+     * A derivation that ignored either field would still be stable and would still pass the test
+     * above; it would simply disagree with the server.
      */
     @Test
-    fun `the same installation id always yields the same device id`() {
-        val first = deriveDeviceId(installationId = "installation-under-test")
-        val second = deriveDeviceId(installationId = "installation-under-test")
+    fun `both the key and the installation id change the device id`() {
+        val key = "public-key".toByteArray(StandardCharsets.UTF_8)
+        val other = "another-key".toByteArray(StandardCharsets.UTF_8)
+        val installation = "installation-under-test"
 
-        assertEquals(first, second)
-        assertNotEquals(first, deriveDeviceId(installationId = "a-different-installation"))
+        assertEquals(
+            deriveDeviceId(key, installation),
+            deriveDeviceId(key, installation),
+        )
+        assertNotEquals(deriveDeviceId(key, installation), deriveDeviceId(other, installation))
+        assertNotEquals(deriveDeviceId(key, installation), deriveDeviceId(key, "different"))
     }
 
     @Test

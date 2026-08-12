@@ -37,7 +37,17 @@ data class CastTarget(
  * These are plain sockets, called from a coroutine on the IO dispatcher. There is no coroutine
  * machinery inside them so that where the waiting happens stays visible at the call site.
  */
-class CastSender(private val context: Context) {
+/**
+ * The socket work behind casting, as an interface so the flow above it can be tested without a
+ * device — [CastController] needs no Android runtime, and neither do its tests.
+ */
+interface CastTransport {
+    fun discover(timeoutMillis: Int = 1_200): List<CastTarget>
+
+    fun send(target: CastTarget, message: CastMessage): Boolean
+}
+
+class CastSender(private val context: Context) : CastTransport {
     /**
      * Screens that answered within [timeoutMillis], newest answer last.
      *
@@ -45,7 +55,7 @@ class CastSender(private val context: Context) {
      * separate wifi from ethernet — so the caller offers a manual address instead of treating it as
      * a failure.
      */
-    fun discover(timeoutMillis: Int = DISCOVERY_TIMEOUT_MILLIS): List<CastTarget> {
+    override fun discover(timeoutMillis: Int): List<CastTarget> {
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         val lock = wifi?.createMulticastLock(MULTICAST_LOCK_TAG)?.apply { setReferenceCounted(true) }
 
@@ -104,7 +114,7 @@ class CastSender(private val context: Context) {
      * the phone cannot tell a mistyped code from a screen that stopped listening. The UI says so
      * rather than claiming success.
      */
-    fun send(target: CastTarget, message: CastMessage): Boolean =
+    override fun send(target: CastTarget, message: CastMessage): Boolean =
         runCatching {
             Socket().use { socket ->
                 socket.connect(InetSocketAddress(target.address, target.port), CONNECT_TIMEOUT_MILLIS)

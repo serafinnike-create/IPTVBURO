@@ -83,6 +83,7 @@ import com.lucasserafin94.iptvburo.domain.model.ParentalPin
 import com.lucasserafin94.iptvburo.domain.model.PlaybackContentType
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressIdentity
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgress
+import com.lucasserafin94.iptvburo.desktop.platform.CastReceiver
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
 import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
@@ -2952,6 +2953,52 @@ class DesktopAppState(
     /** What happened to the last incoming link, for the message shown to the recipient. */
     var shareLinkOutcome by mutableStateOf<ShareLinkOutcome?>(null)
         private set
+
+    // -----------------------------------------------------------------------------------------
+    // Receiving a title from a phone on the same network
+    // -----------------------------------------------------------------------------------------
+
+    private val castReceiver by lazy { CastReceiver(displayName = machineDisplayName()) }
+
+    /** The code to show on screen while receiving is on, or null when it is off. */
+    var castPairingCode by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * Starts or stops listening for a phone.
+     *
+     * Off by default and never started implicitly. Everything else this app does reaches outwards;
+     * this listens, and a feature that opens a socket should be one the user asked for rather than
+     * one they discover they have been running.
+     */
+    fun toggleCastReceiver() {
+        if (castPairingCode != null) {
+            castReceiver.stop()
+            castPairingCode = null
+            return
+        }
+        castPairingCode =
+            castReceiver.start { message ->
+                // Resolved through the same path a shared link takes: both name a title rather than
+                // a stream, and both have to find it in *this* machine's catalogue.
+                submitShareLink(
+                    TitleShareLink(
+                        identity = message.identity,
+                        title = message.title,
+                        year = null,
+                        artworkUrl = null,
+                        description = null,
+                    ),
+                )
+            }
+    }
+
+    /** How this machine introduces itself to a phone looking for screens. */
+    private fun machineDisplayName(): String =
+        (System.getenv("COMPUTERNAME") ?: System.getProperty("user.name"))
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
+            ?: "IPTV BURO"
 
     fun submitShareLink(link: TitleShareLink) {
         pendingShareLink = link

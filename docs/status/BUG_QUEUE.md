@@ -350,8 +350,12 @@ caminho que um fraudador tentaria abusar.
 
 ## TAREFA-015 — Enviar para a TV / notebook (celular como controle)
 
-**Status:** ⚙️ PARCIAL em 2026-08-13 — protocolo e receptor do Windows prontos;
-falta a interface (botão no celular, lista de aparelhos, tela de pareamento)
+**Status:** ✅ IMPLEMENTADO em 2026-08-13 — protocolo, receptor do Windows,
+descoberta e envio no celular, telas de escolha e pareamento.
+
+**Falta testar entre dois aparelhos reais na mesma rede.** Tudo abaixo tem teste
+automatizado, incluindo os sockets de verdade no lado do Windows, mas ninguém
+ainda enviou um filme do celular para o computador.
 **Solicitado em:** 2026-08-13
 
 ### O pedido

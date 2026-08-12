@@ -90,7 +90,7 @@ object AndroidDeviceIdentityProvider {
         val privateKey = requireNotNull(keyStore.getKey(KEY_ALIAS, null) as? PrivateKey)
         return AndroidDeviceInstallationIdentity(
             installationId = installationId,
-            deviceId = deriveDeviceId(installationId),
+            deviceId = deriveDeviceId(publicKey, installationId),
             publicKeyDerBase64 = Base64.encodeToString(publicKey, Base64.NO_WRAP),
             privateKey = privateKey,
         )
@@ -163,20 +163,23 @@ internal fun canonicalGooglePlayPurchaseProof(
 ): String = "iptvburo-google-play-purchase-v1\n$deviceId\n$nonce\n$purchaseTokenHash\n$accountId"
 
 /**
- * The device id, derived from the installation id alone.
+ * The device id, derived from the pinned public key and the installation id.
  *
- * The Keystore public key used to be mixed in here, which quietly made the id unrecoverable: the
- * key pair is destroyed when the app is uninstalled, so even a perfectly stable installation id
- * produced a different device id on reinstall, and the user's paid licence went with it.
+ * **Must match `deriveDeviceId` in the Worker exactly.** Registration recomputes this server-side
+ * and refuses `bad_identity` when the two disagree, so a change here that is not mirrored there
+ * stops every new device from registering at all. That is not hypothetical: dropping the public key
+ * from this derivation — an attempt to make the id survive a reinstall — did precisely that, and it
+ * was only caught by watching a real phone fail to register.
  *
- * Dropping the key from the derivation costs nothing in security. The key's job is to *prove*
- * possession of this identity — it still signs every request through [AndroidDeviceInstallationIdentity.proof]
- * — and a name does not need to be unguessable to be safe when every use of it is authenticated.
+ * The id is *not* meant to survive an uninstall. The Keystore key is destroyed with the app, so a
+ * reinstalled device legitimately gets a new id; what reunites it with its history is the
+ * `machine_anchor`, which is the installation id and is stable across reinstalls. Keeping identity
+ * and recovery in separate fields is the server's design, and it is the right one.
  */
-internal fun deriveDeviceId(installationId: String): String {
+internal fun deriveDeviceId(publicKey: ByteArray, installationId: String): String {
     val digest =
         MessageDigest.getInstance("SHA-256").digest(
-            installationId.toByteArray(StandardCharsets.UTF_8),
+            publicKey + installationId.toByteArray(StandardCharsets.UTF_8),
         )
     var bitBuffer = 0
     var bitCount = 0

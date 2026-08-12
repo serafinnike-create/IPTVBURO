@@ -297,6 +297,47 @@ fun SettingsDialog(
                     }
 
                     item(key = "subtitles") {
+                        // Receiving a title from a phone on the same network.
+                        //
+                        // Off until switched on, and the code is only on screen while it is
+                        // listening. This is the one feature that opens a socket, so it is
+                        // something the user turns on rather than something they discover has been
+                        // running — and the code is what keeps a shared network safe.
+                        SettingsSection(
+                            label = "Receber do celular",
+                            hint =
+                                "Deixe ligado para enviar filmes do celular para este computador. " +
+                                    "Digite o código abaixo no celular, uma vez.",
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
+                                SettingsPill(
+                                    label =
+                                        if (appState.castPairingCode != null) {
+                                            "Ligado — desligar"
+                                        } else {
+                                            "Desligado — ligar"
+                                        },
+                                    selected = appState.castPairingCode != null,
+                                    onClick = appState::toggleCastReceiver,
+                                )
+                                appState.castPairingCode?.let { code ->
+                                    Text(
+                                        text = "Código: $code",
+                                        color = BuroColors.Primary,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Text(
+                                        text =
+                                            "O código muda toda vez que você liga. " +
+                                                "Só quem digitar este número pode enviar para cá.",
+                                        color = BuroColors.TextSubtle,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                            }
+                        }
+
                         SettingsSection(text.settingsText.subtitlesLabel, text.settingsText.subtitlesHint) {
                             Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {

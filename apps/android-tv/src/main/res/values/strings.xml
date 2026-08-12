@@ -246,4 +246,16 @@
     <string name="settings_choose_profile">Choose a profile</string>
     <string name="live_schedule_title">Schedule</string>
     <string name="live_schedule_empty">Your provider sent no guide for this channel. Many playlists carry none — nothing is wrong with the app or your connection.</string>
+    <string name="cast_title">Send to a screen</string>
+    <string name="cast_searching">Looking for screens on this network…</string>
+    <string name="cast_none_found">No screen found. Open IPTV BURO on the computer or TV, turn on “Receive”, and make sure both are on the same network.</string>
+    <string name="cast_search_again">Search again</string>
+    <string name="cast_code_prompt">Send to %1$s</string>
+    <string name="cast_code_hint">Type the four digits shown on that screen.</string>
+    <string name="cast_code_invalid">The code is four digits.</string>
+    <string name="cast_send">Send</string>
+    <string name="cast_sending">Sending to %1$s…</string>
+    <string name="cast_sent">Sent to %1$s. If nothing starts, check the code on that screen.</string>
+    <string name="cast_failed">Could not reach %1$s.</string>
+    <string name="cast_choose_another">Choose another screen</string>
 </resources>

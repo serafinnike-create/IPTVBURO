@@ -1,6 +1,7 @@
 package com.lucasserafin94.iptvburo.ui
 
 import com.lucasserafin94.iptvburo.data.licensing.KeyState
+import com.lucasserafin94.iptvburo.data.licensing.toKeyState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -12,8 +13,11 @@ import org.junit.Test
  * no "cannot be activated". The Worker has a `/v1/key-info` route that answers exactly this and the
  * app was not calling it.
  *
- * The state carried here is advisory. Nothing is granted from it; redeeming remains the only thing
- * that changes a licence, and the server decides that with a signed proof.
+ * The state is advisory. Nothing is granted from it; redeeming remains the only thing that changes
+ * a licence, and the server decides that from a signed proof.
+ *
+ * This exercises the mapping the client actually uses rather than a copy of it — a duplicated
+ * `when` in the test would keep passing while the real one drifted.
  */
 class KeyInspectionTest {
     /**
@@ -40,8 +44,7 @@ class KeyInspectionTest {
      * Anything unrecognised means "say nothing".
      *
      * A screen that cannot understand the answer must not invent one: the user can still press Use
-     * key and get a real, server-decided verdict. Guessing here would put a wrong word next to a
-     * key that is fine.
+     * key and get a real verdict. Guessing would put a wrong word next to a key that is fine.
      */
     @Test
     fun `an unreadable answer produces no verdict at all`() {
@@ -50,20 +53,3 @@ class KeyInspectionTest {
         assertNull("YOURS".toKeyState())
     }
 }
-
-/**
- * Mirrors the mapping in `AndroidLicenseClient.keyState`.
- *
- * Duplicated rather than exercised through the client because that one needs a Context, an Android
- * Keystore and a network. The value under test is the vocabulary agreed with the Worker, and that
- * is a pure string mapping.
- */
-private fun String.toKeyState(): KeyState? =
-    when (this) {
-        "available" -> KeyState.AVAILABLE
-        "yours" -> KeyState.YOURS
-        "in_use" -> KeyState.IN_USE
-        "expired" -> KeyState.EXPIRED
-        "unknown" -> KeyState.UNKNOWN
-        else -> null
-    }

@@ -251,4 +251,16 @@
     <string name="settings_choose_profile">Selecionar perfil</string>
     <string name="live_schedule_title">Programação</string>
     <string name="live_schedule_empty">Seu provedor não enviou guia para este canal. Muitas listas não trazem nenhum — não há nada errado com o aplicativo nem com a sua conexão.</string>
+    <string name="cast_title">Enviar para uma tela</string>
+    <string name="cast_searching">Procurando telas nesta rede…</string>
+    <string name="cast_none_found">Nenhuma tela encontrada. Abra o IPTV BURO no computador ou na TV, ligue “Receber”, e confirme que os dois estão na mesma rede.</string>
+    <string name="cast_search_again">Procurar de novo</string>
+    <string name="cast_code_prompt">Enviar para %1$s</string>
+    <string name="cast_code_hint">Digite os quatro números que aparecem naquela tela.</string>
+    <string name="cast_code_invalid">O código tem quatro números.</string>
+    <string name="cast_send">Enviar</string>
+    <string name="cast_sending">Enviando para %1$s…</string>
+    <string name="cast_sent">Enviado para %1$s. Se não começar, confira o código naquela tela.</string>
+    <string name="cast_failed">Não foi possível alcançar %1$s.</string>
+    <string name="cast_choose_another">Escolher outra tela</string>
 </resources>

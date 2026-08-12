@@ -251,4 +251,16 @@
     <string name="settings_choose_profile">Scegli un profilo</string>
     <string name="live_schedule_title">Programmazione</string>
     <string name="live_schedule_empty">Il tuo fornitore non ha inviato la guida per questo canale. Molte liste non ne hanno: non c è nulla di sbagliato nell app né nella tua connessione.</string>
+    <string name="cast_title">Invia a uno schermo</string>
+    <string name="cast_searching">Ricerca di schermi in questa rete…</string>
+    <string name="cast_none_found">Nessuno schermo trovato. Apri IPTV BURO sul computer o sulla TV, attiva “Ricevi” e verifica che siano sulla stessa rete.</string>
+    <string name="cast_search_again">Cerca di nuovo</string>
+    <string name="cast_code_prompt">Invia a %1$s</string>
+    <string name="cast_code_hint">Digita le quattro cifre mostrate su quello schermo.</string>
+    <string name="cast_code_invalid">Il codice ha quattro cifre.</string>
+    <string name="cast_send">Invia</string>
+    <string name="cast_sending">Invio a %1$s…</string>
+    <string name="cast_sent">Inviato a %1$s. Se non parte, controlla il codice su quello schermo.</string>
+    <string name="cast_failed">Impossibile raggiungere %1$s.</string>
+    <string name="cast_choose_another">Scegli un altro schermo</string>
 </resources>
