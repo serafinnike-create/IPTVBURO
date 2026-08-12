@@ -183,6 +183,37 @@ um teste que exercita `resetAll` já removeu esse nó, e remover duas vezes lan�
 
 ---
 
+## TAREFA-005 — Publicar o site para a prévia do link compartilhado funcionar
+
+**Status:** pendente — depende de deploy manual do Cloudflare Pages
+**Registrado em:** 2026-08-12
+
+### O que falta
+
+O código do compartilhamento está no repositório e funciona no aplicativo, mas a
+**prévia no WhatsApp ainda não**. Verificado contra o site publicado:
+
+```bash
+curl -s "https://iptvburo.pages.dev/t/?id=movie:duna:2024&t=Duna&y=2024" \
+  | grep -oE '<meta property="og:[^>]*>'
+```
+
+Retorna as tags da **página inicial** (`og:url` = `https://iptvburo.pages.dev/`,
+título genérico), não as do título compartilhado. Ou seja: `site/functions/` não
+foi publicado no projeto Pages ainda.
+
+Consequência prática: um link compartilhado hoje chega no WhatsApp com a capa e o
+texto genéricos do site, em vez da capa e da sinopse do filme. O link continua
+funcionando — abre a página, e abre o aplicativo se estiver instalado.
+
+### Como resolver
+
+Publicar `site/` no Cloudflare Pages, garantindo que `site/` seja a raiz do
+projeto para que `site/functions/` seja reconhecido como Pages Functions. Ver
+`site/functions/README.md`, que documenta isso e traz o comando de verificação.
+
+---
+
 ## TAREFA-003 — Republicar o release do GitHub após as correções
 
 **Status:** autorizado pelo usuário em 2026-08-12; em execução
