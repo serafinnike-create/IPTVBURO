@@ -32,6 +32,10 @@ const GOOGLE_PLAY_MIGRATION = readFileSync(
   new URL('../migrations/0004_google_play_purchase_ledger.sql', import.meta.url),
   'utf8',
 );
+const DEVICE_PROFILE_MIGRATION = readFileSync(
+  new URL('../migrations/0006_device_admin_profile.sql', import.meta.url),
+  'utf8',
+);
 const WEBHOOK_SECRET = 'local-fixture-webhook-signing-secret';
 const signingKeys = await generateKeyPair();
 const googleServicePair = await crypto.subtle.generateKey(
@@ -357,6 +361,7 @@ test('the fresh schema and the P0 migration both apply cleanly', () => {
   legacy.database.exec(DISPUTE_MIGRATION);
   legacy.database.exec(DISPUTE_MIGRATION);
   legacy.database.exec(GOOGLE_PLAY_MIGRATION);
+  legacy.database.exec(DEVICE_PROFILE_MIGRATION);
   assert.ok(
     legacy.database
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'stripe_events'")
@@ -385,6 +390,11 @@ test('the fresh schema and the P0 migration both apply cleanly', () => {
   assert.ok(
     legacy.database
       .prepare("SELECT name FROM pragma_table_info('devices') WHERE name = 'google_purchase_token_hash'")
+      .get(),
+  );
+  assert.ok(
+    legacy.database
+      .prepare("SELECT name FROM pragma_table_info('devices') WHERE name = 'model'")
       .get(),
   );
   legacy.close();
@@ -1852,6 +1862,52 @@ test('the admin page asks search engines to stay away', async () => {
   }
 });
 
+test('an authenticated device refreshes support-safe model information on validation', async () => {
+  const env = environment();
+  try {
+    await registerDevice(env, deviceIdentityA);
+    const body = {
+      ...await deviceProofBody(deviceIdentityA, 'validate'),
+      deviceProfile: {
+        deviceType: 'ANDROID_TV',
+        platform: 'ANDROID',
+        manufacturer: 'Samsung\nElectronics',
+        model: 'QN90D',
+        osVersion: 'Android 14 (API 34)',
+        appVersion: '0.2.0-alpha.9',
+        serialNumber: 'must-not-be-stored',
+      },
+    };
+    const response = await worker.fetch(postJson('/v1/validate', body), env);
+    assert.equal(response.status, 200);
+
+    const stored = row(
+      env,
+      `SELECT device_type, platform, manufacturer, model, os_version, app_version, last_seen_at
+       FROM devices WHERE device_id = ?`,
+      DEVICE_A,
+    );
+    assert.deepEqual(
+      { ...stored, last_seen_at: Boolean(stored.last_seen_at) },
+      {
+        device_type: 'ANDROID_TV',
+        platform: 'ANDROID',
+        manufacturer: 'Samsung Electronics',
+        model: 'QN90D',
+        os_version: 'Android 14 (API 34)',
+        app_version: '0.2.0-alpha.9',
+        last_seen_at: true,
+      },
+    );
+    assert.equal(
+      env.DB.database.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('devices') WHERE name = 'serialNumber'").get().n,
+      0,
+    );
+  } finally {
+    env.DB.close();
+  }
+});
+
 /** The panel grants licences, so a browser must refuse plain http to it after the first visit. */
 test('html responses carry HSTS', async () => {
   const env = environment();
@@ -1873,7 +1929,10 @@ test('html responses carry HSTS', async () => {
 test('every admin data route refuses an unauthenticated caller', async () => {
   const env = environment();
   try {
-    const paths = ['/admin/summary', '/admin/search', '/admin/list', '/admin/keys'];
+    const paths = [
+      '/admin/summary', '/admin/search', '/admin/list', '/admin/device',
+      '/admin/archive', '/admin/restore', '/admin/keys',
+    ];
     for (const path of paths) {
       const response = await worker.fetch(new Request(`https://local.test${path}`), env);
       assert.equal(response.status, 401, `${path} should refuse an anonymous caller`);
@@ -1948,6 +2007,109 @@ test('a second device is still refused a key that another device owns', async ()
     assert.equal(intruder.status, 409);
     assert.equal(row(env, "SELECT redeemed_by FROM redemption_keys WHERE key_code = 'MINE-ONLY'").redeemed_by, DEVICE_A);
     assert.equal(row(env, `SELECT status FROM devices WHERE device_id = '${DEVICE_B}'`).status, 'TRIAL');
+  } finally {
+    env.DB.close();
+  }
+});
+
+/**
+ * The activation screen can describe a key before spending it.
+ *
+ * It used to say nothing: a customer pasted a code and learned only whether it worked. The three
+ * states below are what they actually need — how many days it grants, and whether it is free,
+ * already theirs, or held by another machine.
+ */
+test('key info reports days and availability without redeeming', async () => {
+  const env = environment();
+  try {
+    await registerDevice(env, deviceIdentityA);
+    env.DB.prepare(
+      `INSERT INTO redemption_keys (key_code, grant_days, created_at)
+       VALUES ('LOOK-ONLY', 30, '2026-08-08T12:00:00Z')`,
+    ).run();
+
+    const response = await worker.fetch(
+      postJson('/v1/key-info', { ...(await deviceProofBody(deviceIdentityA, 'validate')), key: 'LOOK-ONLY' }),
+      env,
+    );
+
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.state, 'available');
+    assert.equal(body.grantDays, 30);
+    // Looking must not spend it.
+    assert.equal(row(env, "SELECT redeemed_by FROM redemption_keys WHERE key_code = 'LOOK-ONLY'").redeemed_by, null);
+  } finally {
+    env.DB.close();
+  }
+});
+
+/** The customer's own key reads as theirs, not as unavailable. */
+test('key info tells the owner the key is theirs', async () => {
+  const env = environment();
+  try {
+    await registerDevice(env, deviceIdentityA);
+    env.DB.prepare(
+      `INSERT INTO redemption_keys (key_code, grant_days, redeemed_by, created_at)
+       VALUES ('IS-MINE', 30, '${DEVICE_A}', '2026-08-08T12:00:00Z')`,
+    ).run();
+
+    const response = await worker.fetch(
+      postJson('/v1/key-info', { ...(await deviceProofBody(deviceIdentityA, 'validate')), key: 'IS-MINE' }),
+      env,
+    );
+
+    assert.equal((await response.json()).state, 'yours');
+  } finally {
+    env.DB.close();
+  }
+});
+
+/**
+ * Another device's key reads as in use, and never says whose.
+ *
+ * The owning device id is somebody else's business: returning it would turn a mistyped code into a
+ * disclosure about another customer.
+ */
+test('key info never reveals which device holds a key', async () => {
+  const env = environment();
+  try {
+    await registerDevice(env, deviceIdentityA);
+    await registerDevice(env, deviceIdentityB);
+    env.DB.prepare(
+      `INSERT INTO redemption_keys (key_code, grant_days, redeemed_by, created_at)
+       VALUES ('SOMEONE-ELSE', 30, '${DEVICE_B}', '2026-08-08T12:00:00Z')`,
+    ).run();
+
+    const response = await worker.fetch(
+      postJson('/v1/key-info', { ...(await deviceProofBody(deviceIdentityA, 'validate')), key: 'SOMEONE-ELSE' }),
+      env,
+    );
+
+    const raw = await response.text();
+    assert.equal(JSON.parse(raw).state, 'in_use');
+    assert.equal(raw.includes(DEVICE_B), false, 'the owning device must never be disclosed');
+  } finally {
+    env.DB.close();
+  }
+});
+
+/** Without a signed proof this would be an oracle for guessing keys. */
+test('key info refuses a caller with no device proof', async () => {
+  const env = environment();
+  try {
+    await registerDevice(env, deviceIdentityA);
+    env.DB.prepare(
+      `INSERT INTO redemption_keys (key_code, grant_days, created_at)
+       VALUES ('GUESS-ME', 30, '2026-08-08T12:00:00Z')`,
+    ).run();
+
+    const response = await worker.fetch(
+      postJson('/v1/key-info', { deviceId: DEVICE_A, key: 'GUESS-ME' }),
+      env,
+    );
+
+    assert.equal(response.status, 400);
   } finally {
     env.DB.close();
   }

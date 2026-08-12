@@ -65,6 +65,21 @@ CREATE TABLE IF NOT EXISTS devices (
     -- cannot be matched by machine, which is exactly the old behaviour.
     machine_anchor TEXT,
 
+    -- Coarse support information reported by an authenticated client. Never hostname, serial,
+    -- MAC, Android ID or account data. Old clients leave these null and continue to work.
+    device_type  TEXT,
+    platform     TEXT,
+    manufacturer TEXT,
+    model        TEXT,
+    os_version   TEXT,
+    app_version  TEXT,
+    last_seen_at TEXT,
+
+    -- Admin "delete" is reversible archival. The row and its entitlement history must survive,
+    -- both for audit and so deleting it cannot manufacture a new seven-day trial.
+    archived_at   TEXT,
+    archived_note TEXT,
+
     updated_at    TEXT NOT NULL
 );
 
@@ -78,6 +93,8 @@ CREATE INDEX IF NOT EXISTS devices_by_mac ON devices (mac_address);
 -- A refund arrives naming a Stripe session, and has to find the device it paid for.
 CREATE INDEX IF NOT EXISTS devices_by_session ON devices (stripe_session_id);
 CREATE INDEX IF NOT EXISTS devices_by_google_purchase ON devices (google_purchase_token_hash);
+CREATE INDEX IF NOT EXISTS devices_by_last_seen ON devices (last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS devices_by_archive ON devices (archived_at, updated_at DESC);
 
 -- A client-generated nonce is accepted once. Without this ledger a captured, otherwise valid proof
 -- could be replayed without possessing the private key. Payloads and proofs are intentionally not

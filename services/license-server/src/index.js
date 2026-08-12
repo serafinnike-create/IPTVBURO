@@ -24,14 +24,17 @@ import {
 } from './pages.js';
 import { adminPage } from './admin-page.js';
 import {
+  archiveDevice,
   cancelKey,
   createKeys,
+  deviceDetails,
   devicesByStatus,
   grantDevice,
   isAdmin,
   listKeys,
   paidDevices,
   revokeDevice,
+  restoreDevice,
   searchDevices,
   summary,
 } from './admin.js';
@@ -111,6 +114,8 @@ export default {
           return withCors(await handleValidate(request, env));
         case '/v1/redeem':
           return withCors(await handleRedeem(request, env));
+        case '/v1/key-info':
+          return withCors(await handleKeyInfo(request, env));
         case '/v1/google-play/purchase':
           return withCors(await handleGooglePlayPurchase(request, env));
         case '/v1/signing-key-check':
@@ -159,8 +164,11 @@ export default {
         case '/admin/summary':
         case '/admin/search':
         case '/admin/list':
+        case '/admin/device':
         case '/admin/grant':
         case '/admin/revoke':
+        case '/admin/archive':
+        case '/admin/restore':
         case '/admin/keys':
         case '/admin/keys/cancel':
           return await handleAdmin(request, env, url);
@@ -202,6 +210,13 @@ async function handleAdmin(request, env, url) {
     case '/admin/search':
       return json({ devices: await searchDevices(url.searchParams.get('q'), env) });
 
+    case '/admin/device': {
+      const deviceId = validDeviceId(url.searchParams.get('device'));
+      if (!deviceId) return json({ error: 'bad_device' }, 400);
+      const details = await deviceDetails(deviceId, env);
+      return details ? json(details) : json({ error: 'not_found' }, 404);
+    }
+
     case '/admin/list': {
       // What the summary counts link to. `paid` is not a status but a question about the ledger,
       // so it is named separately rather than being squeezed into the status filter.
@@ -228,6 +243,22 @@ async function handleAdmin(request, env, url) {
       if (!deviceId) return json({ error: 'bad_device' }, 400);
       await revokeDevice(deviceId, String(body.note ?? '').slice(0, 200), env);
       return json({ ok: true });
+    }
+
+    case '/admin/archive': {
+      const body = await readJson(request);
+      const deviceId = validDeviceId(body.device);
+      if (!deviceId) return json({ error: 'bad_device' }, 400);
+      const archived = await archiveDevice(deviceId, String(body.note ?? '').slice(0, 200), env);
+      return archived ? json({ ok: true }) : json({ error: 'not_found' }, 404);
+    }
+
+    case '/admin/restore': {
+      const body = await readJson(request);
+      const deviceId = validDeviceId(body.device);
+      if (!deviceId) return json({ error: 'bad_device' }, 400);
+      const restored = await restoreDevice(deviceId, env);
+      return restored ? json({ ok: true }) : json({ error: 'not_found' }, 404);
     }
 
     case '/admin/keys/cancel': {
@@ -674,6 +705,7 @@ async function handleRegister(request, env) {
   if (!timingSafeEqual(registered.public_key, proof.publicKey)) {
     return json({ error: 'invalid_proof' }, 401);
   }
+  await observeDevice(env, proof.deviceId, body.deviceProfile, now);
   return await respondWithLicense(env, proof.deviceId, proof.nonce, now);
 }
 
@@ -689,6 +721,7 @@ async function handleValidate(request, env) {
   const authorization = await authorizeExistingDevice(body, 'validate', env, now);
   if (!authorization.ok) return json({ error: authorization.error }, authorization.status);
 
+  await observeDevice(env, authorization.deviceId, body.deviceProfile, now);
   await expireIfDue(env, authorization.device, now);
   await recordEvent(env, authorization.deviceId, 'validated', null, now);
   return await respondWithLicense(env, authorization.deviceId, authorization.nonce, now);
@@ -708,11 +741,64 @@ async function handleRedeem(request, env) {
   const now = new Date();
   const authorization = await authorizeExistingDevice(body, 'redeem', env, now);
   if (!authorization.ok) return json({ error: authorization.error }, authorization.status);
+  await observeDevice(env, authorization.deviceId, body.deviceProfile, now);
 
   const outcome = await redeemKey(authorization.deviceId, keyCode, env, now);
   if (!outcome.ok) return json({ error: outcome.error }, outcome.status);
 
   return await respondWithLicense(env, authorization.deviceId, authorization.nonce, now);
+}
+
+/**
+ * Describes a key without spending it, so the app can say what it is before redeeming.
+ *
+ * The activation screen used to say nothing at all: a customer pasted a code and learned only
+ * whether it worked. Now it can show how many days the key grants, whether it is free, already
+ * theirs, or spent by another machine.
+ *
+ * ## Why this needs the same proof as redeeming
+ *
+ * An endpoint that describes any key on request is an oracle for guessing them. Requiring the same
+ * signed device proof means only a registered installation can ask, and the same rate limiter that
+ * protects redemption applies — so this adds no way to enumerate keys that redeeming did not
+ * already offer, at a far higher cost per guess.
+ *
+ * ## What it deliberately does not say
+ *
+ * Never which device owns a key. "In use" is what the customer needs to know; the id of the machine
+ * holding it is somebody else's business, and returning it would turn a mistyped code into a
+ * disclosure about another customer.
+ */
+async function handleKeyInfo(request, env) {
+  const body = await readJson(request);
+  const keyCode = String(body.key ?? '').trim().toUpperCase();
+  if (!keyCode) return json({ error: 'bad_request' }, 400);
+
+  const now = new Date();
+  const authorization = await authorizeExistingDevice(body, 'validate', env, now);
+  if (!authorization.ok) return json({ error: authorization.error }, authorization.status);
+
+  const key = await env.DB.prepare(
+    'SELECT grant_days, redeemed_by, valid_until FROM redemption_keys WHERE key_code = ?',
+  )
+    .bind(keyCode)
+    .first();
+
+  if (!key) return json({ state: 'unknown' }, 404);
+
+  const expired = key.valid_until && new Date(key.valid_until) < now;
+  const state = (() => {
+    if (expired) return 'expired';
+    if (!key.redeemed_by) return 'available';
+    // The distinction that matters to the person typing: their own key still works.
+    return key.redeemed_by === authorization.deviceId ? 'yours' : 'in_use';
+  })();
+
+  return json({
+    state,
+    grantDays: Number(key.grant_days) || null,
+    validUntil: key.valid_until ?? null,
+  });
 }
 
 /**
@@ -1377,6 +1463,64 @@ async function verifyRegistrationProof(body) {
   // The installation id travels on, because it is now anchored to the machine rather than drawn at
   // random: it is what lets a returning machine be recognised after its stored files were deleted.
   return { ok: true, deviceId, nonce, publicKey, installationId };
+}
+
+/**
+ * Records coarse, self-reported support information after the device proof has succeeded.
+ *
+ * This data never decides whether a licence is valid. A modified client could call itself a
+ * television or change its model, so the admin panel labels it as reported information and the
+ * entitlement continues to depend only on the pinned key and signed server state. Hostnames,
+ * serials, MAC addresses, Android IDs and OS account names are neither accepted nor stored.
+ */
+async function observeDevice(env, deviceId, reported, now) {
+  const profile = normaliseDeviceProfile(reported);
+  await env.DB.prepare(
+    `UPDATE devices SET
+       device_type = COALESCE(?, device_type),
+       platform = COALESCE(?, platform),
+       manufacturer = COALESCE(?, manufacturer),
+       model = COALESCE(?, model),
+       os_version = COALESCE(?, os_version),
+       app_version = COALESCE(?, app_version),
+       last_seen_at = ?
+     WHERE device_id = ?`,
+  )
+    .bind(
+      profile?.deviceType ?? null,
+      profile?.platform ?? null,
+      profile?.manufacturer ?? null,
+      profile?.model ?? null,
+      profile?.osVersion ?? null,
+      profile?.appVersion ?? null,
+      iso(now),
+      deviceId,
+    )
+    .run();
+}
+
+function normaliseDeviceProfile(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const deviceType = boundedLabel(value.deviceType, 32)?.toUpperCase();
+  const platform = boundedLabel(value.platform, 24)?.toUpperCase();
+  const allowedTypes = new Set(['WINDOWS_PC', 'ANDROID_PHONE', 'ANDROID_TABLET', 'ANDROID_TV', 'TV']);
+  const allowedPlatforms = new Set(['WINDOWS', 'ANDROID', 'TIZEN', 'WEBOS']);
+
+  return {
+    deviceType: allowedTypes.has(deviceType) ? deviceType : null,
+    platform: allowedPlatforms.has(platform) ? platform : null,
+    manufacturer: boundedLabel(value.manufacturer, 80),
+    model: boundedLabel(value.model, 120),
+    osVersion: boundedLabel(value.osVersion, 120),
+    appVersion: boundedLabel(value.appVersion, 80),
+  };
+}
+
+/** Printable single-line text only. Control characters cannot become admin markup or log noise. */
+function boundedLabel(value, maximum) {
+  if (typeof value !== 'string') return null;
+  const clean = value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+  return clean ? clean.slice(0, maximum) : null;
 }
 
 /** Authenticates validate/redeem exclusively with the key already pinned to the device row. */
@@ -2529,7 +2673,9 @@ async function enforceRouteRateLimit(request, env, url) {
 
 function rateLimitBindingFor(pathname) {
   if (pathname === '/v1/register') return 'REGISTRATION_RATE_LIMITER';
-  if (pathname === '/v1/validate' || pathname === '/v1/redeem') {
+  if (pathname === '/v1/validate' || pathname === '/v1/redeem' || pathname === '/v1/key-info') {
+    // Same limiter as redeeming, deliberately: describing a key is a cheaper guess than spending
+    // one, so it must not be a cheaper way to enumerate them.
     return 'LICENSE_API_RATE_LIMITER';
   }
   if (pathname === '/v1/google-play/purchase') return 'CHECKOUT_RATE_LIMITER';
@@ -2614,6 +2760,7 @@ const PUBLIC_CORS_PATHS = new Set([
   '/v1/register',
   '/v1/validate',
   '/v1/redeem',
+  '/v1/key-info',
   '/v1/price',
 ]);
 

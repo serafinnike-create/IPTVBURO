@@ -85,6 +85,26 @@ test('the token is kept in session storage, not a cookie', () => {
   assert.ok(!page.includes('document.cookie'), 'the token must not live in a cookie');
 });
 
+test('the admin panel identifies hardware and separates support actions', () => {
+  const page = adminPage();
+
+  for (const field of ['manufacturer', 'model', 'os_version', 'app_version', 'last_seen_at', 'source']) {
+    assert.ok(page.includes(field), `the device card should render ${field}`);
+  }
+  assert.ok(page.includes('Detalhes e histórico'));
+  assert.ok(page.includes('Bloquear'));
+  assert.ok(page.includes('Apagar da lista'));
+  assert.ok(page.includes('Restaurar na lista'));
+});
+
+test('deleting a device is presented as audited archival rather than physical deletion', () => {
+  const page = adminPage();
+
+  assert.ok(page.includes("api('/admin/archive'"));
+  assert.ok(page.includes('histórico será preservado'));
+  assert.ok(page.includes('impedir novo teste gratuito'));
+});
+
 test('a manual grant extends a future expiry instead of shortening it', async () => {
   const writes = [];
   const futureExpiry = '2099-01-01T00:00:00.000Z';

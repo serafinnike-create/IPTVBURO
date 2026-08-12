@@ -50,6 +50,62 @@ alpha.3 instalada e olhou a tela. Vale um teste de instalação limpa.
 
 ---
 
+## BUG-016 — A migration 0005 não aplica num banco antigo
+
+**Status:** diagnosticado, **não corrigido** — é trabalho paralelo, não toquei
+**Encontrado em:** 2026-08-13, ao rodar a suíte do worker
+
+### Sintoma
+
+O teste `the fresh schema and the P0 migration both apply cleanly` falha com
+`no such column: updated_at`. Foi confirmado que **a falha existe sem as minhas
+alterações** (verificado com `git stash`), então é do trabalho em andamento.
+
+### Causa exata
+
+Aplicando as migrations uma a uma sobre a tabela `devices` legada que o teste
+monta (só `device_id` e `stripe_session_id`):
+
+```text
+ok    0001_stripe_payment_ledger
+ok    0002_device_possession
+ok    0003_stripe_dispute_lifecycle
+ok    0004_google_play_purchase_ledger
+FALHA 0005_machine_anchor -> no such column: first_seen_at
+ok    0006_device_admin_profile
+```
+
+A `0005` termina com:
+
+```sql
+CREATE INDEX IF NOT EXISTS devices_machine_anchor
+    ON devices (machine_anchor, first_seen_at);
+```
+
+`machine_anchor` ela mesma adiciona, mas **`first_seen_at` não é adicionado por
+migration nenhuma** — só existe em quem nasceu do `schema.sql` moderno. Confirmado:
+nenhum `ADD COLUMN first_seen_at` em todo o diretório de migrations.
+
+Ou seja: um banco criado do zero funciona; um banco **antigo, real, em produção**
+quebra ao migrar. É exatamente o caso que a migration existe para atender.
+
+### Correção sugerida
+
+Adicionar `ALTER TABLE devices ADD COLUMN first_seen_at TEXT;` antes do índice na
+`0005` — guardado para não falhar quando a coluna já existir, que é como as outras
+migrations deste diretório tratam o mesmo problema.
+
+Vale conferir também se `updated_at` (que o `schema.sql` usa no índice
+`devices_by_archive`) tem o mesmo buraco.
+
+### Por que não corrigi
+
+O arquivo é de outra frente de trabalho em andamento, e mexer numa migration que
+outra pessoa está escrevendo é a forma mais rápida de criar um conflito difícil de
+enxergar. Se quiser, corrijo — é uma linha.
+
+---
+
 ## BUG-012 — Reinstalar o app perdeu a licença paga e voltou ao teste de 7 dias
 
 **Status:** investigado, correção pendente — **prioridade alta, envolve dinheiro**

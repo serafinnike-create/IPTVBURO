@@ -27,7 +27,7 @@ export function adminPage() {
     margin: 0; padding: 24px; background: var(--canvas); color: var(--text);
     font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
-  .wrap { max-width: 1000px; margin: 0 auto; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
   h1 { font-size: 20px; margin: 0 0 4px; }
   h1 span { color: var(--gold); }
   .sub { color: var(--subtle); font-size: 13px; margin: 0 0 24px; }
@@ -47,7 +47,7 @@ export function adminPage() {
   .row.between { justify-content: space-between; }
   .field { display: grid; gap: 5px; min-width: 160px; }
   .field > span { color: var(--muted); font-size: 13px; }
-  .stats { display: flex; gap: 12px; }
+  .stats { display: grid; grid-template-columns: repeat(6, minmax(110px, 1fr)); gap: 8px; }
   /* Buttons, not captions: each figure opens the list behind it. Styled flat so the panel still
      reads as a summary rather than as a row of controls. */
   .stat {
@@ -57,6 +57,25 @@ export function adminPage() {
   .stat:hover { background: var(--raised); border-color: #45424a; }
   .stat b { display: block; font-size: 28px; color: var(--gold); font-weight: 700; }
   .stat span { font-size: 12px; color: var(--subtle); }
+  .toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) 190px auto; gap: 10px; align-items: end; }
+  .device-list { display: grid; gap: 12px; }
+  .device-card { background: var(--raised); border: 1px solid #35323a; border-radius: 12px; padding: 15px; }
+  .device-card.archived { opacity: .78; border-style: dashed; }
+  .device-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .device-title { display: grid; gap: 3px; }
+  .device-title strong { font-size: 17px; }
+  .device-title .model { color: var(--muted); }
+  .facts { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 10px; margin: 14px 0; }
+  .fact { min-width: 0; }
+  .fact small { display: block; color: var(--subtle); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .fact span { display: block; overflow-wrap: anywhere; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  button.danger { background: #4a2327; color: #ffd9d9; border: 1px solid #7a343b; }
+  .details { margin-top: 12px; border-top: 1px solid #3a3740; padding-top: 12px; }
+  .timeline { display: grid; gap: 7px; margin: 8px 0 0; padding: 0; list-style: none; }
+  .timeline li { display: grid; grid-template-columns: 150px 120px 1fr; gap: 10px; color: var(--muted); }
+  .result-head { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 10px; }
+  .result-head .sub { margin: 0; }
   /* Time running out. Amber for days, red for gone — the two states worth noticing in a list. */
   .soon { color: var(--gold); font-weight: 600; }
   .over { color: var(--bad); }
@@ -76,7 +95,11 @@ export function adminPage() {
   @media (max-width: 640px) {
     body { padding: 12px; }
     .panel { padding: 16px; }
-    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .toolbar { grid-template-columns: 1fr; }
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .device-head { flex-direction: column; }
+    .timeline li { grid-template-columns: 1fr; gap: 1px; border-bottom: 1px solid #302e34; padding-bottom: 7px; }
     .row > .field { width: 100%; flex: 1 1 100% !important; }
     .row > button { min-height: 44px; }
   }
@@ -110,19 +133,32 @@ export function adminPage() {
     </div>
 
     <div class="panel">
-      <h2>Procurar dispositivo</h2>
-      <form class="row" onsubmit="event.preventDefault(); search()">
-        <label class="field" style="flex:1">
-          <span>Código, MAC ou nota</span>
-          <input id="query" autocomplete="off">
+      <h2>Dispositivos</h2>
+      <form class="toolbar" onsubmit="event.preventDefault(); search()">
+        <label class="field">
+          <span>Código, modelo, fabricante, plataforma ou nota</span>
+          <input id="query" autocomplete="off" placeholder="Ex.: Samsung, Windows, código...">
+        </label>
+        <label class="field">
+          <span>Mostrar</span>
+          <select id="deviceFilter" onchange="listByStatus(this.value)">
+            <option value="ALL">Todos</option>
+            <option value="ACTIVE">Ativos</option>
+            <option value="TRIAL">Em teste</option>
+            <option value="paid">Pagaram</option>
+            <option value="REVOKED">Bloqueados</option>
+            <option value="EXPIRED">Expirados</option>
+            <option value="ARCHIVED">Apagados da lista</option>
+          </select>
         </label>
         <button type="submit">Procurar</button>
       </form>
-      <div id="results" role="status" aria-live="polite" style="margin-top:14px"></div>
+      <div class="result-head"><p class="sub" id="resultCount">A carregar…</p><button type="button" class="ghost" onclick="refreshDevices()">Atualizar</button></div>
+      <div id="results" role="status" aria-live="polite"></div>
     </div>
 
     <div class="panel">
-      <h2>Libertar dispositivo à mão</h2>
+      <h2>Liberar dispositivo</h2>
       <p class="sub">Para quem pagou por fora, ou para dar mais tempo a alguém.</p>
       <div class="row">
         <label class="field"><span>Dispositivo</span><input id="grantDevice" placeholder="XXXX-XXXX-XXXX" style="width:190px"></label>
@@ -199,7 +235,11 @@ export function adminPage() {
     document.getElementById('stats').innerHTML =
       stat(response.active, 'ativos', 'ACTIVE')
       + stat(response.trial, 'em teste', 'TRIAL')
-      + stat(response.paid, 'pagaram', 'paid');
+      + stat(response.paid, 'pagaram', 'paid')
+      + stat(response.revoked, 'bloqueados', 'REVOKED')
+      + stat(response.expired, 'expirados', 'EXPIRED')
+      + stat(response.archived, 'apagados', 'ARCHIVED');
+    await listByStatus('ALL');
   }
 
   /**
@@ -231,19 +271,86 @@ export function adminPage() {
     } catch { return null; }
   }
 
+  let currentDevicePath = '/admin/list?status=ALL';
+
   async function search() {
     const query = document.getElementById('query').value.trim();
-    if (!query) return;
+    if (!query) return listByStatus(document.getElementById('deviceFilter').value);
     await showDevices('/admin/search?q=' + encodeURIComponent(query));
   }
 
   /** The summary figures link here, so a count is something you can open. */
   async function listByStatus(status) {
     document.getElementById('query').value = '';
+    document.getElementById('deviceFilter').value = status;
     await showDevices('/admin/list?status=' + encodeURIComponent(status));
   }
 
+  async function refreshDevices() {
+    await showDevices(currentDevicePath);
+    const summary = await api('/admin/summary');
+    if (summary) {
+      document.getElementById('stats').innerHTML =
+        stat(summary.active, 'ativos', 'ACTIVE') + stat(summary.trial, 'em teste', 'TRIAL')
+        + stat(summary.paid, 'pagaram', 'paid') + stat(summary.revoked, 'bloqueados', 'REVOKED')
+        + stat(summary.expired, 'expirados', 'EXPIRED') + stat(summary.archived, 'apagados', 'ARCHIVED');
+    }
+  }
+
   async function showDevices(path) {
+    currentDevicePath = path;
+    const target = document.getElementById('results');
+    const count = document.getElementById('resultCount');
+    target.setAttribute('aria-busy', 'true');
+    const data = await api(path);
+    target.removeAttribute('aria-busy');
+    if (!data) {
+      count.textContent = 'Falha ao carregar.';
+      target.innerHTML = '<p class="sub">Tente atualizar.</p>';
+      return;
+    }
+    count.textContent = data.devices.length + (data.devices.length === 1 ? ' dispositivo' : ' dispositivos');
+    if (!data.devices.length) { target.innerHTML = '<p class="sub">Nada encontrado.</p>'; return; }
+    target.innerHTML = '<div class="device-list">' + data.devices.map(deviceCard).join('') + '</div>';
+  }
+
+  function deviceCard(device) {
+    const id = esc(device.device_id);
+    const archived = Boolean(device.archived_at);
+    const hardware = [device.manufacturer, device.model].filter(Boolean).join(' ') || 'Modelo ainda não informado';
+    const actionButtons = archived
+      ? '<button class="ghost" onclick="restoreDevice(\'' + id + '\')">Restaurar na lista</button>'
+      : '<button class="ghost" onclick="showDetails(\'' + id + '\')">Detalhes e histórico</button>'
+        + ' <button onclick="fillGrant(\'' + id + '\')">Liberar</button>'
+        + (device.status === 'REVOKED' ? '' : ' <button class="danger" onclick="revoke(\'' + id + '\')">Bloquear</button>')
+        + ' <button class="ghost" onclick="archiveDevice(\'' + id + '\')">Apagar da lista</button>';
+
+    return '<article class="device-card' + (archived ? ' archived' : '') + '">'
+      + '<div class="device-head"><div class="device-title"><strong>' + esc(hardware) + '</strong>'
+      + '<code>' + id + '</code></div><div>' + tag(device.status)
+      + (archived ? ' <span class="tag dead">ARQUIVADO</span>' : '') + '</div></div>'
+      + '<div class="facts">'
+      + fact('Tipo', deviceType(device.device_type))
+      + fact('Sistema', esc(device.os_version || platformLabel(device.platform)))
+      + fact('Versão do app', esc(device.app_version || 'Ainda não informado'))
+      + fact('Último contato', dateTime(device.last_seen_at || device.updated_at))
+      + fact('Origem', sourceLabel(device.source))
+      + fact('Tempo restante', remaining(device))
+      + fact('Válido até', date(device.expires_at || device.trial_ends_at))
+      + fact('Primeiro acesso', date(device.first_seen_at))
+      + '</div>'
+      + '<p class="sub" style="margin:0 0 12px">Nota: ' + esc(device.note || '—') + '</p>'
+      + '<div class="actions">' + actionButtons + '</div>'
+      + '<div class="details hidden" id="details-' + id.replace(/-/g, '') + '"></div>'
+      + '</article>';
+  }
+
+  function fact(label, value) {
+    return '<div class="fact"><small>' + esc(label) + '</small><span>' + (value || '—') + '</span></div>';
+  }
+
+  /* Kept only as a simple table renderer for old snapshots; the live panel uses the cards above. */
+  async function showDevicesLegacy(path) {
     const target = document.getElementById('results');
     target.setAttribute('aria-busy', 'true');
     const data = await api(path);
@@ -283,12 +390,42 @@ export function adminPage() {
     const result = await api('/admin/grant', { device: device, days: days, note: note });
     document.getElementById('grantResult').textContent =
       result ? 'Liberado por ' + days + ' dias.' : 'Falhou — confira o código do dispositivo.';
+    if (result) await refreshDevices();
   }
 
   async function revoke(device) {
-    if (!confirm('Revogar ' + device + '?')) return;
-    await api('/admin/revoke', { device: device, note: 'revogado no painel' });
-    search();
+    if (!confirm('Bloquear ' + device + '?\n\nO aplicativo perderá o acesso na próxima validação.')) return;
+    const result = await api('/admin/revoke', { device: device, note: 'bloqueado no painel' });
+    if (!result) alert('Não foi possível bloquear o dispositivo.');
+    await refreshDevices();
+  }
+
+  async function archiveDevice(device) {
+    if (!confirm('Apagar ' + device + ' da lista?\n\nEle será bloqueado e ocultado, mas o histórico será preservado para impedir novo teste gratuito.')) return;
+    const result = await api('/admin/archive', { device: device, note: 'apagado da lista pelo administrador' });
+    if (!result) alert('Não foi possível apagar da lista.');
+    await refreshDevices();
+  }
+
+  async function restoreDevice(device) {
+    const result = await api('/admin/restore', { device: device });
+    if (!result) alert('Não foi possível restaurar o dispositivo.');
+    await refreshDevices();
+  }
+
+  async function showDetails(device) {
+    const target = document.getElementById('details-' + device.replace(/-/g, ''));
+    if (!target.classList.contains('hidden')) { target.classList.add('hidden'); return; }
+    target.classList.remove('hidden');
+    target.textContent = 'A carregar histórico…';
+    const result = await api('/admin/device?device=' + encodeURIComponent(device));
+    if (!result) { target.textContent = 'Não foi possível carregar o histórico.'; return; }
+    if (!result.events.length) { target.innerHTML = '<p class="sub">Sem eventos registrados.</p>'; return; }
+    target.innerHTML = '<strong>Histórico</strong><ul class="timeline">'
+      + result.events.map(function (entry) {
+          return '<li><span>' + dateTime(entry.created_at) + '</span><b>' + esc(eventLabel(entry.kind))
+            + '</b><span>' + esc(entry.detail || '—') + '</span></li>';
+        }).join('') + '</ul>';
   }
 
   async function makeKeys() {
@@ -388,9 +525,47 @@ export function adminPage() {
     return days <= 3 ? '<span class="soon">' + label + '</span>' : label;
   }
 
+  function deviceType(value) {
+    return esc({
+      WINDOWS_PC: 'Computador Windows',
+      ANDROID_PHONE: 'Celular Android',
+      ANDROID_TABLET: 'Tablet Android',
+      ANDROID_TV: 'Android TV',
+      TV: 'Smart TV',
+    }[value] || 'Ainda não informado');
+  }
+
+  function platformLabel(value) {
+    return { WINDOWS: 'Windows', ANDROID: 'Android', TIZEN: 'Samsung Tizen', WEBOS: 'LG webOS' }[value]
+      || 'Ainda não informado';
+  }
+
+  function sourceLabel(value) {
+    return esc({
+      STRIPE: 'Pagamento Stripe',
+      GOOGLE_PLAY: 'Google Play',
+      ACTIVATION_KEY: 'Código de ativação',
+      MANUAL: 'Liberação manual',
+      TRIAL: 'Teste gratuito',
+    }[value] || 'Não identificada');
+  }
+
+  function eventLabel(value) {
+    return {
+      registered: 'Registrado', validated: 'Validado', purchased: 'Pagamento',
+      google_play_purchased: 'Google Play', redeemed: 'Código usado', granted: 'Liberado',
+      revoked: 'Bloqueado', refunded: 'Reembolsado', archived: 'Apagado da lista',
+      restored: 'Restaurado', identity_adopted: 'Identidade atualizada',
+    }[value] || value;
+  }
+
   function tag(status) {
     const cls = status === 'ACTIVE' ? 'active' : status === 'TRIAL' ? 'trial' : 'dead';
-    return '<span class="tag ' + cls + '">' + esc(status) + '</span>';
+    const label = {
+      ACTIVE: 'ATIVO', TRIAL: 'EM TESTE', REVOKED: 'BLOQUEADO',
+      EXPIRED: 'EXPIRADO', REFUNDED: 'REEMBOLSADO',
+    }[status] || status;
+    return '<span class="tag ' + cls + '">' + esc(label) + '</span>';
   }
 
   function date(value) {
@@ -399,6 +574,15 @@ export function adminPage() {
     if (Number.isNaN(parsed.getTime())) return esc(value);
     return '<time datetime="' + esc(value) + '">'
       + new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium', timeZone: 'UTC' }).format(parsed)
+      + '</time>';
+  }
+
+  function dateTime(value) {
+    if (!value) return '—';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return esc(value);
+    return '<time datetime="' + esc(value) + '">'
+      + new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(parsed)
       + '</time>';
   }
 

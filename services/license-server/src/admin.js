@@ -19,6 +19,26 @@
  * device active?" has an answer, and that is exactly when the question gets asked.
  */
 
+// Only support-safe columns leave D1. SELECT * previously returned the pinned public key, machine
+// anchor and purchase-token hash to the browser even though the page did not render them. An admin
+// token authorises support work; it is not a reason to widen the consequence of a browser leak.
+const ADMIN_DEVICE_COLUMNS = `
+  devices.device_id, devices.status, devices.first_seen_at, devices.trial_ends_at,
+  devices.purchased_at, devices.expires_at, devices.note, devices.updated_at,
+  devices.device_type, devices.platform, devices.manufacturer, devices.model,
+  devices.os_version, devices.app_version, devices.last_seen_at,
+  devices.archived_at, devices.archived_note,
+  CASE
+    WHEN devices.google_purchase_token_hash IS NOT NULL THEN 'GOOGLE_PLAY'
+    WHEN devices.stripe_session_id IS NOT NULL THEN 'STRIPE'
+    WHEN EXISTS (
+      SELECT 1 FROM redemption_keys
+      WHERE redemption_keys.redeemed_by = devices.device_id
+    ) THEN 'ACTIVATION_KEY'
+    WHEN devices.purchased_at IS NOT NULL THEN 'MANUAL'
+    ELSE 'TRIAL'
+  END AS source`;
+
 /**
  * Checks the admin token without leaking how much of a guess was right.
  *
@@ -49,10 +69,28 @@ export function isAdmin(request, env) {
  */
 export async function devicesByStatus(status, env) {
   const wanted = String(status ?? '').toUpperCase();
+  if (wanted === 'ARCHIVED') {
+    const { results } = await env.DB.prepare(
+      `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
+       WHERE archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT 100`,
+    ).all();
+    return results ?? [];
+  }
+
+  if (wanted === 'ALL') {
+    const { results } = await env.DB.prepare(
+      `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
+       WHERE archived_at IS NULL ORDER BY COALESCE(last_seen_at, updated_at) DESC LIMIT 100`,
+    ).all();
+    return results ?? [];
+  }
+
   if (!['TRIAL', 'ACTIVE', 'EXPIRED', 'REVOKED', 'REFUNDED'].includes(wanted)) return [];
 
   const { results } = await env.DB.prepare(
-    'SELECT * FROM devices WHERE status = ? ORDER BY updated_at DESC LIMIT 100',
+    `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
+     WHERE status = ? AND archived_at IS NULL
+     ORDER BY COALESCE(last_seen_at, updated_at) DESC LIMIT 100`,
   )
     .bind(wanted)
     .all();
@@ -62,25 +100,31 @@ export async function devicesByStatus(status, env) {
 /** Everyone who has paid, for the third summary figure. */
 export async function paidDevices(env) {
   const { results } = await env.DB.prepare(
-    `SELECT * FROM devices
-     WHERE stripe_session_id IS NOT NULL OR google_purchase_token_hash IS NOT NULL
+    `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
+     WHERE archived_at IS NULL
+       AND (stripe_session_id IS NOT NULL OR google_purchase_token_hash IS NOT NULL)
      ORDER BY purchased_at DESC LIMIT 100`,
   ).all();
   return results ?? [];
 }
 
-/** Finds devices by identifier, MAC or note. Support searches by whatever the customer read out. */
+/** Finds devices by code, model, manufacturer, platform, legacy MAC or note. */
 export async function searchDevices(query, env) {
   const term = `%${String(query ?? '').trim().toUpperCase()}%`;
   const { results } = await env.DB.prepare(
-    `SELECT * FROM devices
+    `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
      WHERE UPPER(device_id) LIKE ?
         OR UPPER(COALESCE(mac_address, '')) LIKE ?
         OR UPPER(COALESCE(note, '')) LIKE ?
-     ORDER BY updated_at DESC
+        OR UPPER(COALESCE(manufacturer, '')) LIKE ?
+        OR UPPER(COALESCE(model, '')) LIKE ?
+        OR UPPER(COALESCE(platform, '')) LIKE ?
+        OR UPPER(COALESCE(device_type, '')) LIKE ?
+        OR UPPER(COALESCE(app_version, '')) LIKE ?
+     ORDER BY archived_at IS NOT NULL, COALESCE(last_seen_at, updated_at) DESC
      LIMIT 50`,
   )
-    .bind(term, term, term)
+    .bind(term, term, term, term, term, term, term, term)
     .all();
   return results ?? [];
 }
@@ -121,6 +165,8 @@ export async function grantDevice(deviceId, days, note, env) {
        expires_at = excluded.expires_at,
        stripe_session_id = NULL,
        google_purchase_token_hash = NULL,
+       archived_at = NULL,
+       archived_note = NULL,
        note = excluded.note,
        updated_at = excluded.updated_at`,
   )
@@ -161,6 +207,64 @@ export async function revokeDevice(deviceId, note, env) {
   )
     .bind(deviceId, 'revoked', String(note ?? '').slice(0, 200), now)
     .run();
+}
+
+/**
+ * Removes a device from ordinary lists without deleting its identity, payment or trial history.
+ *
+ * Physical deletion would let the same installation return as new and receive another trial. An
+ * archive is therefore also a revocation, and can be restored later without reconstructing data.
+ */
+export async function archiveDevice(deviceId, note, env) {
+  const now = new Date().toISOString();
+  const reason = String(note ?? '').trim().slice(0, 200) || 'removed from admin list';
+  const result = await env.DB.prepare(
+    `UPDATE devices SET
+       status = 'REVOKED', archived_at = ?, archived_note = ?, note = ?, updated_at = ?
+     WHERE device_id = ? AND archived_at IS NULL`,
+  )
+    .bind(now, reason, reason, now, deviceId)
+    .run();
+  if (Number(result?.meta?.changes ?? 0) === 0) return false;
+  await env.DB.batch([
+    // Financial dispute recovery treats a later administrative revocation as authoritative. An
+    // archive must carry the same marker or a won dispute could silently reactivate a device the
+    // administrator explicitly removed.
+    env.DB.prepare(
+      'INSERT INTO events (device_id, kind, detail, created_at) VALUES (?, ?, ?, ?)',
+    ).bind(deviceId, 'revoked', `archived: ${reason}`.slice(0, 200), now),
+    env.DB.prepare(
+      'INSERT INTO events (device_id, kind, detail, created_at) VALUES (?, ?, ?, ?)',
+    ).bind(deviceId, 'archived', reason, now),
+  ]);
+  return true;
+}
+
+/** Restores visibility only. A restored device remains blocked until explicitly granted. */
+export async function restoreDevice(deviceId, env) {
+  const now = new Date().toISOString();
+  const result = await env.DB.prepare(
+    `UPDATE devices SET archived_at = NULL, archived_note = NULL, updated_at = ?
+     WHERE device_id = ? AND archived_at IS NOT NULL`,
+  ).bind(now, deviceId).run();
+  if (Number(result?.meta?.changes ?? 0) === 0) return false;
+  await env.DB.prepare(
+    'INSERT INTO events (device_id, kind, detail, created_at) VALUES (?, ?, ?, ?)',
+  ).bind(deviceId, 'restored', 'restored to admin list; entitlement remains revoked', now).run();
+  return true;
+}
+
+/** One support-safe device record and its append-only event history. */
+export async function deviceDetails(deviceId, env) {
+  const device = await env.DB.prepare(
+    `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices WHERE device_id = ?`,
+  ).bind(deviceId).first();
+  if (!device) return null;
+  const { results } = await env.DB.prepare(
+    `SELECT kind, detail, created_at FROM events
+     WHERE device_id = ? ORDER BY created_at DESC, id DESC LIMIT 50`,
+  ).bind(deviceId).all();
+  return { device, events: results ?? [] };
 }
 
 /**
@@ -242,13 +346,34 @@ export async function deviceHistory(deviceId, env) {
 
 /** How the business is doing, in the three numbers worth seeing on arrival. */
 export async function summary(env) {
-  const active = await env.DB.prepare("SELECT COUNT(*) AS n FROM devices WHERE status = 'ACTIVE'").first();
-  const trial = await env.DB.prepare("SELECT COUNT(*) AS n FROM devices WHERE status = 'TRIAL'").first();
+  const active = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM devices WHERE status = 'ACTIVE' AND archived_at IS NULL",
+  ).first();
+  const trial = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM devices WHERE status = 'TRIAL' AND archived_at IS NULL",
+  ).first();
   const paid = await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM devices
-     WHERE stripe_session_id IS NOT NULL OR google_purchase_token_hash IS NOT NULL`,
+     WHERE archived_at IS NULL
+       AND (stripe_session_id IS NOT NULL OR google_purchase_token_hash IS NOT NULL)`,
   ).first();
-  return { active: active?.n ?? 0, trial: trial?.n ?? 0, paid: paid?.n ?? 0 };
+  const revoked = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM devices WHERE status = 'REVOKED' AND archived_at IS NULL",
+  ).first();
+  const expired = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM devices WHERE status = 'EXPIRED' AND archived_at IS NULL",
+  ).first();
+  const archived = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM devices WHERE archived_at IS NOT NULL',
+  ).first();
+  return {
+    active: active?.n ?? 0,
+    trial: trial?.n ?? 0,
+    paid: paid?.n ?? 0,
+    revoked: revoked?.n ?? 0,
+    expired: expired?.n ?? 0,
+    archived: archived?.n ?? 0,
+  };
 }
 
 /**
