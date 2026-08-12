@@ -18,7 +18,10 @@ import java.awt.GraphicsEnvironment
 import com.lucasserafin94.iptvburo.desktop.app.DesktopApp
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.SessionXtreamRepository
+import com.lucasserafin94.iptvburo.desktop.platform.ProtocolRegistration
+import com.lucasserafin94.iptvburo.desktop.platform.SingleInstance
 import com.lucasserafin94.iptvburo.desktop.platform.WindowChrome
+import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
 import com.lucasserafin94.iptvburo.desktop.playback.VlcPluginCache
 import com.lucasserafin94.iptvburo.desktop.security.RememberedXtreamStore
 import coil3.ImageLoader
@@ -74,7 +77,18 @@ private val MIN_HEIGHT = 560.dp
  */
 private val WINDOW_MARGIN = 24.dp
 
-fun main() {
+fun main(args: Array<String>) {
+    // A share link, when the app was started by clicking one. Windows launches the registered
+    // handler with the URI as its first argument; anything else on the command line is ignored.
+    val startupShareLink = args.firstOrNull()?.let(TitleShareLink::parse)
+
+    // A second instance hands its link to the running one and exits.
+    //
+    // Without this, clicking a share link while the app is open starts a whole second copy — two
+    // windows, two catalogues in memory, and the running window not moving to the title the user
+    // just clicked. The lock is taken before anything expensive starts.
+    if (!SingleInstance.claim(startupShareLink)) return
+
     // First, so nothing printed during startup is lost.
     //
     // The installed app has no console: every diagnostic the code prints went to a stream nobody
@@ -96,6 +110,18 @@ fun main() {
             name = "iptvburo-vlc-cache"
             isDaemon = true
             // Below the UI: this is a startup optimisation and must never compete with drawing.
+            priority = Thread.MIN_PRIORITY
+        }.start()
+
+    // Claims `iptvburo://` for this install, so a shared link opens the app rather than nothing.
+    //
+    // Refreshed on every launch rather than done once: the key stores an absolute path to the
+    // launcher, and an upgrade that lands somewhere else would leave it pointing at a file that is
+    // no longer there. Cheap, idempotent, and a failure only costs the deep link.
+    Thread { ProtocolRegistration.ensureRegistered() }
+        .apply {
+            name = "iptvburo-protocol-registration"
+            isDaemon = true
             priority = Thread.MIN_PRIORITY
         }.start()
 
@@ -200,6 +226,9 @@ fun main() {
                 appState.dispose()
                 xtreamRepository.clear()
                 localRepository.clear()
+                // Removes the port file, so the next launch does not spend its connect timeout
+                // trying to hand a link to a process that has gone.
+                SingleInstance.release()
                 exitApplication()
             },
             state = windowState,
@@ -210,6 +239,30 @@ fun main() {
         ) {
             LaunchedEffect(appState) {
                 appState.restoreRememberedXtream()
+            }
+
+            // Share links, from this launch and from any later click while the app stays open.
+            //
+            // Polled rather than pushed: the link arrives on the single-instance listener thread,
+            // and Compose state must be touched from the composition. A second-long tick is far
+            // below what anyone notices between clicking a link and a window responding, and it
+            // costs one nullable read.
+            //
+            // `submitShareLink` holds the link when the catalogue is not ready yet, so a link that
+            // arrives during startup is resolved once there is something to resolve it against —
+            // which is the common case, not the exception.
+            LaunchedEffect(appState) {
+                startupShareLink?.let(appState::submitShareLink)
+                while (true) {
+                    SingleInstance.takeHandedOverLink()?.let { link ->
+                        window.toFront()
+                        window.requestFocus()
+                        appState.submitShareLink(link)
+                    }
+                    // Retries a link that arrived before the catalogue existed.
+                    appState.resolvePendingShareLink()
+                    kotlinx.coroutines.delay(1_000)
+                }
             }
             // The title bar is drawn by Windows, not by Compose, so it stayed light against the
             // near-black app. Keyed on placement because the native frame is rebuilt when the
@@ -256,6 +309,7 @@ fun main() {
                     appState.dispose()
                     xtreamRepository.clear()
                     localRepository.clear()
+                    SingleInstance.release()
                     exitApplication()
                 },
             )

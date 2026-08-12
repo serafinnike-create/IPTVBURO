@@ -489,6 +489,101 @@ class XtreamClientTest {
         assertEquals(1, server.requestCount)
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Categories
+    //
+    // These moved from the buffered request path to the streaming one, because buffering the whole
+    // response held it as bytes, as a String and as a JSON tree at the same time under a 512 MiB
+    // ceiling — a very large allocation on a big provider, during startup. The behaviour below is
+    // what the buffered version did and must not change.
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    fun `categories are read from a JSON array`() {
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                [
+                  {"category_id": "1", "category_name": "Filmes | Ação"},
+                  {"category_id": "2", "category_name": "Filmes | Drama"}
+                ]
+                """.trimIndent(),
+            ),
+        )
+
+        val categories = client.categories(credentials(), XtreamContentType.MOVIE)
+
+        assertEquals(2, categories.items.size)
+        assertEquals("1", categories.items.first().providerId)
+        assertEquals("Filmes | Ação", categories.items.first().name)
+        assertEquals(XtreamContentType.MOVIE, categories.items.first().contentType)
+    }
+
+    /** Panels disagree on whether an id is quoted; the numeric form must not throw. */
+    @Test
+    fun `a numeric category id is accepted`() {
+        server.enqueue(
+            MockResponse().setBody("""[{"category_id": 7, "category_name": "Infantil"}]"""),
+        )
+
+        val categories = client.categories(credentials(), XtreamContentType.SERIES)
+
+        assertEquals("7", categories.items.single().providerId)
+    }
+
+    /** Some panels answer with an object keyed by index rather than an array. */
+    @Test
+    fun `categories are read from an index-keyed object`() {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"0": {"category_id": "1", "category_name": "Ao vivo"}}""",
+            ),
+        )
+
+        assertEquals("Ao vivo", client.categories(credentials(), XtreamContentType.LIVE).items.single().name)
+    }
+
+    @Test
+    fun `entries without an id or a name are skipped rather than failing the request`() {
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                [
+                  {"category_id": "1", "category_name": "Válida"},
+                  {"category_id": "", "category_name": "Sem id"},
+                  {"category_id": "3"},
+                  "não é um objeto"
+                ]
+                """.trimIndent(),
+            ),
+        )
+
+        val categories = client.categories(credentials(), XtreamContentType.MOVIE)
+
+        assertEquals(1, categories.items.size)
+        assertEquals(3, categories.skippedItemCount)
+    }
+
+    /** `false` is how several panels say "none", and an empty list is an ordinary answer. */
+    @Test
+    fun `a false body is an empty category list rather than an error`() {
+        server.enqueue(MockResponse().setBody("false"))
+
+        assertTrue(client.categories(credentials(), XtreamContentType.MOVIE).items.isEmpty())
+    }
+
+    @Test
+    fun `HTML instead of JSON is reported as an invalid response`() {
+        server.enqueue(MockResponse().setBody("<html><body>login</body></html>"))
+
+        val error =
+            assertThrows(XtreamClientException::class.java) {
+                client.categories(credentials(), XtreamContentType.MOVIE)
+            }
+
+        assertEquals(XtreamFailureReason.INVALID_RESPONSE, error.reason)
+    }
+
     private fun credentials(): XtreamCredentials =
         XtreamCredentials(
             serverUrl = server.url("/").toString(),

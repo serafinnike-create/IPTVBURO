@@ -107,9 +107,46 @@ data class DesktopUserSnapshot(
     val favoriteKeys: Set<String>,
 )
 
+/** Where this app's user preferences live under the user root. */
+private const val USER_NODE_PATH = "com/lucasserafin94/iptvburo/user-v1"
+
 class DesktopUserStore(
-    private val preferences: Preferences = Preferences.userRoot().node("com/lucasserafin94/iptvburo/user-v1"),
+    initialPreferences: Preferences = Preferences.userRoot().node(USER_NODE_PATH),
 ) {
+    /**
+     * The preferences node, re-acquired after a reset.
+     *
+     * Not a `val`, and that is the whole point. `resetAll` removes this node, and
+     * [Preferences.removeNode] invalidates the *object* permanently: every later call on it throws
+     * `IllegalStateException("Node has been removed.")`. Holding one instance for the lifetime of
+     * the store meant that after a reset, every read and write in the process threw — profiles,
+     * language, favourites, window geometry. Adding a list straight after a reset therefore died at
+     * the end of the splash, in a raw AWT error dialog, which is exactly what was reported.
+     *
+     * A removed node is replaced here rather than reused, so the store survives its own reset.
+     */
+    private var preferencesNode: Preferences = initialPreferences
+
+    /**
+     * Where the node is re-created from after a reset.
+     *
+     * Captured from whatever was injected, so a test using a temporary node re-creates *that* node
+     * rather than reaching into the real user preferences of the machine running the suite.
+     */
+    private val nodePath: String = initialPreferences.absolutePath()
+
+    private val preferences: Preferences
+        get() {
+            val current = preferencesNode
+            // `nodeExists("")` asks the node about itself, and is documented to throw exactly when
+            // the node has been removed — which is the condition being recovered from.
+            val stillValid = runCatching { current.nodeExists("") }.getOrDefault(false)
+            if (stillValid) return current
+            val replacement = Preferences.userRoot().node(nodePath.removePrefix("/"))
+            preferencesNode = replacement
+            return replacement
+        }
+
     fun load(): DesktopUserSnapshot {
         // No profile is invented for a new installation.
         //
@@ -495,8 +532,14 @@ class DesktopUserStore(
      * them from a settings reset would be a surprise.
      */
     fun resetAll() {
-        preferences.removeNode()
-        preferences.flush()
+        val removed = preferences
+        removed.removeNode()
+        // Legal on a removed node — `flush` is one of the few methods the contract still allows —
+        // and it is what commits the removal to disk.
+        removed.flush()
+        // The next read re-acquires. Without this the store would keep handing out an object that
+        // throws on every call for the rest of the process.
+        preferencesNode = Preferences.userRoot().node(nodePath.removePrefix("/"))
     }
 
     fun favoritesForProfile(profileId: String?): Set<String> =

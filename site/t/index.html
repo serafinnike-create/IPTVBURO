@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090A0D">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="Um título compartilhado no IPTV BURO.">
+  <title>IPTV BURO — título compartilhado</title>
+  <link rel="icon" href="../buro-mark.png">
+  <link rel="stylesheet" href="../styles.css">
+  <script src="shared-title.js" defer></script>
+</head>
+<body class="shared-title-page">
+  <main class="shared-title" id="conteudo">
+    <a class="wordmark" href="/" aria-label="IPTV BURO — início">
+      <img src="../buro-mark.png" alt="" width="36" height="36">
+      <span>IPTV <b>BURO</b></span>
+    </a>
+
+    <!--
+      Filled in from the query string by shared-title.js.
+
+      The markup ships with the neutral wording rather than a spinner: if scripting is unavailable
+      the page still reads as a shared title and still offers the app, which is the whole job of
+      this page for a visitor who does not have it installed.
+    -->
+    <figure class="shared-title__art" data-art hidden>
+      <img alt="" data-poster width="220" height="330" loading="lazy" decoding="async">
+    </figure>
+
+    <h1 data-title>Um título compartilhado</h1>
+    <p class="shared-title__year" data-year hidden></p>
+    <p class="shared-title__plot" data-plot></p>
+
+    <p class="shared-title__actions">
+      <!--
+        Shown only once the script has a link to offer. A button that opens nothing is worse than
+        no button, and without the query string there is nothing to open.
+      -->
+      <a class="button button-primary" data-open hidden>Abrir no IPTV BURO</a>
+      <a class="button button-secondary" href="/#download">Instalar o aplicativo</a>
+    </p>
+
+    <p class="shared-title__note">
+      O IPTV BURO reproduz apenas fontes que você mesmo configurou. Este link identifica um título;
+      ele não contém e não dá acesso a nenhuma lista, credencial ou vídeo.
+    </p>
+  </main>
+</body>
+</html>

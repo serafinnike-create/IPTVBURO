@@ -667,7 +667,14 @@ private fun openInBrowser(url: String) {
     }
 }
 
-private fun copyToClipboard(value: String) {
+/**
+ * Puts [value] on the system clipboard, ignoring a clipboard the OS refuses to hand over.
+ *
+ * Internal rather than private: the share dialog copies the same way, and two implementations of
+ * "put this text on the clipboard" would be two places to fix when one of them swallows the wrong
+ * exception.
+ */
+internal fun copyToClipboard(value: String) {
     runCatching {
         java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(
             java.awt.datatransfer.StringSelection(value),

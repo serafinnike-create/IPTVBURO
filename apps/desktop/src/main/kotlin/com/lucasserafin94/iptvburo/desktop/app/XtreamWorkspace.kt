@@ -129,6 +129,7 @@ import com.lucasserafin94.iptvburo.xtream.XtreamCategory
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.xtream.XtreamEpisode
 import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
+import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Year
@@ -1214,6 +1215,8 @@ internal fun XtreamInternalDetailsPage(
     val capabilities = DesktopPlatformCapabilities.current
     // Which trailer is open, if any. Held here so the panel closes when the page does.
     var openTrailerId by remember { mutableStateOf<String?>(null) }
+    // The share sheet, held alongside the trailer for the same reason: leaving the page closes it.
+    var shareLink by remember { mutableStateOf<TitleShareLink?>(null) }
     val item = appState.selectedXtreamItem ?: return
     val movie = appState.movieDetailsStatus as? MovieDetailsStatus.Loaded
     val series = appState.seriesDetailsStatus as? SeriesDetailsStatus.Loaded
@@ -1298,6 +1301,21 @@ internal fun XtreamInternalDetailsPage(
                 onOpenPerson = onOpenPerson,
                 isFavorite = appState.isFavorite(item),
                 onToggleFavorite = { appState.toggleFavorite(item) },
+                onShare = {
+                    // Built here rather than in the dialog, because this is where the loaded
+                    // details are. The poster deliberately comes from the *details* rather than
+                    // `item.artworkUrl`: the latter is the provider's own image host, which
+                    // TitleShareLink refuses to carry — see its allowlist. When TMDb has not
+                    // resolved a poster the share simply goes without one.
+                    shareLink =
+                        TitleShareLink.of(
+                            identity = item.contentIdentity(),
+                            title = item.name.editorialTitle(),
+                            year = item.year,
+                            artworkUrl = movie?.details?.artworkUrl ?: series?.details?.artworkUrl,
+                            description = movie?.details?.plot ?: series?.details?.plot,
+                        )
+                },
                 resumeDecisionFor = appState::resumeDecision,
                 compact = false,
                 modifier = Modifier.weight(1f).widthIn(max = 1_040.dp).align(Alignment.CenterHorizontally),
@@ -1356,6 +1374,14 @@ internal fun XtreamInternalDetailsPage(
                 onFallback = { appState.openPublicTrailer(trailerId) },
             )
         }
+
+        shareLink?.let { link ->
+            ShareTitleDialog(
+                link = link,
+                onDismiss = { shareLink = null },
+                onOpenUrl = { url -> appState.openPublicUrl(url) },
+            )
+        }
     }
 }
 
@@ -1374,6 +1400,11 @@ internal fun XtreamItemDetail(
     onRequestCastPhoto: suspend (String) -> Unit = {},
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
+    /**
+     * Opens the share sheet. Null where sharing makes no sense — a live channel is a schedule
+     * rather than a title, and the recipient's own list would have nothing to resolve it to.
+     */
+    onShare: (() -> Unit)? = null,
     resumeDecisionFor: (XtreamPlaybackTarget) -> ResumeDecision,
     compact: Boolean,
     modifier: Modifier,
@@ -1503,6 +1534,7 @@ internal fun XtreamItemDetail(
                     seriesTitle = item.name,
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
+                    onShare = onShare,
                     onLoadSeries = onLoadSeries,
                     onOpenTrailer = onOpenTrailer,
                     resumeDecisionForEpisode = { episode ->
@@ -1604,6 +1636,21 @@ internal fun XtreamItemDetail(
                                 if (isFavorite) "♥  Nos favoritos" else "♡  Favoritos",
                                 fontWeight = FontWeight.SemiBold,
                             )
+                        }
+                        // Beside Favourites: both are things you do *about* a film rather than
+                        // with it, and they belong together after the play actions.
+                        onShare?.let { share ->
+                            OutlinedButton(
+                                onClick = share,
+                                modifier = Modifier.height(48.dp),
+                                shape = BuroRadius.Small,
+                                colors =
+                                    ButtonDefaults.outlinedButtonColors(
+                                        contentColor = BuroColors.Text,
+                                    ),
+                            ) {
+                                Text("↗  ${text.shareStrings.share}", fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                     if (downloadState != null && onDownload != null) {
@@ -2166,6 +2213,8 @@ private fun SeriesDetailContent(
     seriesTitle: String,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
+    /** Null when the page has no share target; see the parameter of the same name on the detail. */
+    onShare: (() -> Unit)?,
     onLoadSeries: () -> Unit,
     onOpenTrailer: (String) -> Unit,
     resumeDecisionForEpisode: (XtreamEpisode) -> ResumeDecision,
@@ -2283,6 +2332,16 @@ private fun SeriesDetailContent(
                         if (isFavorite) "♥  Nos favoritos" else "♡  Favoritos",
                         fontWeight = FontWeight.SemiBold,
                     )
+                }
+                onShare?.let { share ->
+                    OutlinedButton(
+                        onClick = share,
+                        modifier = Modifier.height(48.dp),
+                        shape = BuroRadius.Small,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+                    ) {
+                        Text("↗  ${text.shareStrings.share}", fontWeight = FontWeight.SemiBold)
+                    }
                 }
                 details.youtubeTrailerId?.let { trailerId ->
                     OutlinedButton(

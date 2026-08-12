@@ -1,0 +1,270 @@
+# Fila de bugs — Windows/Desktop
+
+Bugs reproduzidos em teste real, aguardando correção. Cada item registra o
+sintoma observado, a causa investigada no código e o que ainda falta confirmar.
+
+---
+
+## BUG-001 — "Catálogo Xtream compatível" aparece com o catálogo já carregado; app às vezes trava
+
+**Status:** ✅ CORRIGIDO em 2026-08-12
+**Reportado em:** 2026-08-12
+**Ambiente:** instalação limpa a partir do release do GitHub, `IPTV BURO v2.0.0-alpha.1`, Windows
+
+### Sintoma
+
+Após instalar do zero e adicionar a lista, a tela **Início** mostra o card de erro
+`O servidor não retornou um catálogo Xtream compatível.` — enquanto o cabeçalho
+da mesma tela informa `1 fontes · 2258 itens`. Ou seja, a fonte conectou e um
+catálogo carregou, mas a Home reporta incompatibilidade. Em algumas execuções a
+janela também congela por vários segundos.
+
+### Causa provável
+
+Duas falhas distintas se somam:
+
+**1. A mensagem de erro é enganosa para qualquer falha não-Xtream.**
+
+`DesktopAppState.toSafeXtreamMessage()`
+([DesktopAppState.kt:4333](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/DesktopAppState.kt#L4333))
+faz `when ((this as? XtreamClientException)?.reason)`. Qualquer throwable que
+**não** seja `XtreamClientException` cai no ramo `null ->`, e um
+`XtreamClientException` sem `reason` conhecido cai em `INVALID_RESPONSE`.
+A Home usa essa função em
+[DesktopAppState.kt:2985](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/DesktopAppState.kt#L2985),
+então uma falha de memória, de parsing ou de metadados durante a montagem da
+tela inicial é apresentada ao usuário como "catálogo Xtream incompatível" —
+diagnóstico errado, que foi exatamente o que confundiu este teste.
+
+**2. `categories()` bufferiza a resposta inteira em memória.**
+
+`XtreamClient.categories()`
+([XtreamClient.kt:90](../../packages/xtream-client/src/main/kotlin/com/lucasserafin94/iptvburo/xtream/XtreamClient.kt#L90))
+usa o caminho `request()`
+([XtreamClient.kt:304](../../packages/xtream-client/src/main/kotlin/com/lucasserafin94/iptvburo/xtream/XtreamClient.kt#L304)),
+que lê **todo** o corpo para um `ByteArray`, decodifica para `String` e ainda
+monta uma `JsonElement` — três cópias do mesmo conteúdo — com teto de
+`DEFAULT_MAXIMUM_RESPONSE_BYTES = 512 MiB`
+([XtreamClient.kt:704](../../packages/xtream-client/src/main/kotlin/com/lucasserafin94/iptvburo/xtream/XtreamClient.kt#L704)).
+O catálogo em si já usa o parser streaming (`streamCatalog`), mas `categories`
+não. Em um provedor grande isso é uma alocação enorme no dispatcher de IO, o que
+explica o congelamento; se estourar o heap, o `OutOfMemoryError` resultante volta
+pela função do item 1 e vira a mensagem de catálogo incompatível.
+
+A Home ainda dispara `loadCatalog(MOVIE)` e `loadCatalog(SERIES)` de dentro do
+build da tela
+([DesktopAppState.kt:2849-2856](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/DesktopAppState.kt#L2849-L2856)),
+o que concentra o custo todo no primeiro acesso — consistente com o cabeçalho
+mostrando apenas os itens de LIVE (2258) enquanto filmes/séries ainda falhavam.
+
+### Correção proposta
+
+1. Separar o mapeamento de erro: só usar a mensagem Xtream quando o erro **for**
+   `XtreamClientException`; para o resto, mensagem genérica de falha ao montar a
+   Home, e nunca atribuir a causa ao servidor do usuário.
+2. Migrar `categories()` para o caminho streaming, como `streamCatalog()` já faz.
+3. Reduzir o teto de 512 MiB para um valor defensável para uma resposta de
+   categorias.
+
+### Correção aplicada
+
+**1. Mensagem de erro separada por origem.**
+`toSafeXtreamMessage()` agora é extensão de `XtreamClientException` — só roda
+quando o erro **veio mesmo** do provedor. Todo o resto passa por
+`toSafeFailureMessage()`, que atribui a falha ao aplicativo e nomeia o tipo da
+exceção (sem a mensagem, que pode conter URL com credencial). Os 7 pontos de
+chamada foram migrados.
+
+**2. `categories()` agora é streaming.**
+Novo `XtreamCategoryStreamParser`, espelhando o `XtreamCatalogStreamParser` que
+já existia. Elimina as três cópias simultâneas da resposta (bytes → String →
+árvore JSON) sob o teto de 512 MiB. Limite próprio de 50.000 categorias.
+
+### Testes
+
+6 testes novos em `XtreamClientTest` cobrindo o parser de categorias: array,
+objeto indexado, id numérico, entradas inválidas puladas, corpo `false` como
+lista vazia, e HTML respondido como `INVALID_RESPONSE`. Antes disso a única
+cobertura de `categories()` era o teste de servidor privado, que não roda sem
+variáveis de ambiente.
+
+### Ainda não confirmado
+
+O log de diagnóstico (`DiagnosticLog`) da execução que travou não foi coletado,
+então não está provado que era exatamente OOM em `categories()`. As duas causas
+corrigidas são reais e verificadas por leitura de código; se o congelamento
+voltar, o log da execução com erro é o próximo passo.
+
+---
+
+## BUG-002 — `Node has been removed.` após "Redefinir"; o app quebra ao adicionar a lista em seguida
+
+**Status:** ✅ CORRIGIDO em 2026-08-12
+**Reportado em:** 2026-08-12
+**Ambiente:** Windows, instalação limpa
+**Reprodução:** Opções → Redefinir → adicionar lista com chave → erro no splash a 100%
+
+### Sintoma
+
+Caixa de diálogo nativa (Swing, fora do tema do app) com o texto
+`Node has been removed.` sobre a tela de splash em `100%`, na etapa
+"Organizando a sua lista…". O app não conclui a abertura.
+
+### Causa — confirmada
+
+`DesktopUserStore` guarda **uma única** instância de `Preferences`, resolvida na
+construção
+([DesktopUserStore.kt:111](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/user/DesktopUserStore.kt#L111)):
+
+```kotlin
+private val preferences: Preferences = Preferences.userRoot().node("com/lucasserafin94/iptvburo/user-v1")
+```
+
+`resetAll()` chama `removeNode()` nessa mesma instância
+([DesktopUserStore.kt:497-500](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/user/DesktopUserStore.kt#L497-L500)):
+
+```kotlin
+fun resetAll() {
+    preferences.removeNode()
+    preferences.flush()
+}
+```
+
+Pelo contrato de `java.util.prefs.Preferences`, `removeNode()` **invalida o
+objeto permanentemente**: qualquer método chamado nele depois — exceto `name()`,
+`absolutePath()`, `isUserNode()` e `flush()` — lança
+`IllegalStateException("Node has been removed.")`. O store nunca readquire o nó.
+
+Portanto, depois de um "Redefinir", **toda** leitura e escrita de preferência no
+processo passa a lançar: perfis, idioma, favoritos, geometria da janela, chave
+TMDb. Adicionar a lista logo em seguida grava o estado recém-importado, que é
+exatamente onde o erro aparece — no fim do splash. A exceção sobe sem tratamento
+até o handler padrão do AWT, o que explica a caixa nativa em inglês em vez de um
+erro dentro do tema do app.
+
+Observação: `flush()` na linha 499 é legal (é uma das exceções do contrato), então
+o próprio `resetAll()` não falha — o dano só se manifesta na chamada seguinte.
+
+### Correção proposta
+
+1. Tornar o nó re-adquirível em vez de fixo — por exemplo trocar o `val` por um
+   acessor que resolve `Preferences.userRoot().node(...)` sob demanda, e fazer
+   `resetAll()` descartar a referência após remover.
+2. Alternativa mais conservadora, sem mexer no ciclo de vida: em `resetAll()`,
+   apagar as chaves (`clear()` mais remoção dos nós filhos) em vez de remover o
+   próprio nó. Mantém o objeto válido.
+3. Adicionar teste de regressão: `resetAll()` seguido de `load()` e de uma
+   escrita deve funcionar. Um teste com `Preferences` em nó temporário cobre isso
+   sem tocar no registro real do usuário.
+4. Independentemente da correção, o app não deveria mostrar exceção crua em
+   caixa nativa. Vale um handler que registre no `DiagnosticLog` e apresente
+   mensagem no idioma e no tema do app.
+
+### Correção aplicada
+
+`DesktopUserStore` deixou de guardar o nó como `val`. Agora há um acessor que
+verifica a validade (`nodeExists("")` lança exatamente quando o nó foi removido)
+e readquire o nó quando necessário; `resetAll()` também substitui a referência
+logo após remover. O parâmetro do construtor continua existindo para os testes,
+e o caminho de re-aquisição usa `absolutePath()` do nó injetado — então um teste
+com nó temporário recria **aquele** nó, não as preferências reais da máquina.
+
+### Testes
+
+Dois testes de regressão em `DesktopUserStoreTest`: `resetAll` seguido de leitura
+e escrita, e `resetAll` chamado duas vezes.
+
+**Comprovados contra o código antigo:** revertendo a correção, os dois falham com
+`IllegalStateException: Node has been removed.` — o mesmo erro do relato. Com a
+correção, os 30 testes do arquivo passam.
+
+O `finally` do helper `withStore` passou a usar `runCatching` ao remover o nó:
+um teste que exercita `resetAll` já removeu esse nó, e remover duas vezes lança.
+
+---
+
+## TAREFA-003 — Republicar o release do GitHub após as correções
+
+**Status:** aguardando autorização explícita do usuário
+**Solicitado em:** 2026-08-12
+
+### Pedido
+
+Depois de corrigir BUG-001 e BUG-002, verificar que tudo funciona, **apagar a
+versão publicada hoje no GitHub** e publicar uma nova que funcione.
+
+### Por que não foi feito junto
+
+Três motivos, todos a resolver antes de executar:
+
+1. **`CLAUDE.md` proíbe** criar release ou tag sem instrução explícita. Este
+   registro é a instrução — mas ela precisa ser confirmada no momento da
+   execução, já que aqui ela chegou como parte de outra tarefa.
+2. **Apagar um release publicado é destrutivo e externo.** Quem já baixou o
+   `v2.0.0-alpha.1` mantém o binário; quem tiver o link passa a receber 404. Se a
+   intenção for substituir o instalador mantendo o histórico, o caminho melhor é
+   publicar `v2.0.0-alpha.2` e marcar o anterior como *pre-release*/*deprecated*
+   em vez de excluir.
+3. **Os bugs ainda não foram corrigidos.** BUG-001 e BUG-002 estão diagnosticados,
+   não resolvidos. Publicar agora republicaria as mesmas falhas.
+
+### Pré-condições para executar
+
+- [ ] BUG-001 corrigido e verificado em instalação limpa
+- [ ] BUG-002 corrigido, com teste de regressão de `resetAll()`
+- [ ] Suíte de testes e `packageMsi` executados com sucesso
+- [ ] Teste manual: instalar do zero, adicionar lista, redefinir, adicionar de novo
+- [ ] Usuário confirma **excluir** vs **substituir** o release anterior
+- [ ] Número da nova versão definido pelo usuário
+
+### Decisão pendente do usuário
+
+Excluir o `v2.0.0-alpha.1` do GitHub, ou publicar uma nova versão ao lado e
+rebaixar a antiga? A segunda opção é reversível; a primeira não.
+
+---
+
+## BUG-004 — `ChildProcessJobTest` falhando (4 testes)
+
+**Status:** ✅ RESOLVIDO em 2026-08-12 — o fixture foi corrigido durante a sessão
+**Observado em:** 2026-08-12, ao rodar a suíte do desktop
+
+### Sintoma
+
+`apps/desktop/src/test/kotlin/.../playback/ChildProcessJobTest.kt` falha em 4 de
+4 testes:
+
+```text
+the job assignment must follow registration, not replace it: both defences apply
+the fixture must stay alive; a child that exits immediately proves nothing   (x3)
+```
+
+O restante da suíte passa: **601 testes no desktop, 4 falhas — todas aqui** — e
+**401 testes em `domain-model`, 0 falhas**.
+
+### Contexto
+
+O arquivo está **não rastreado** no git (`??`), ou seja, é trabalho em andamento
+sobre o job object dos processos filhos do VLC, não algo que veio do
+`codex/windows-clean-release`. Não tem nenhuma referência ao trabalho de
+compartilhamento (verificado: 0 ocorrências de `TitleShareLink`,
+`SingleInstance`, `ProtocolRegistration`, `ShareStrings`).
+
+As mensagens sugerem que as falhas são do próprio fixture — o processo filho de
+teste termina cedo demais para o teste observar o que pretende observar — e não
+necessariamente um defeito no código de produção. Precisa ser confirmado por quem
+está escrevendo esse teste.
+
+### Resolução
+
+Era o **fixture**, não o `ChildProcessJob`. O teste iniciava o processo filho com
+`java -`, e o JVM responde `Unrecognized option: -` e sai imediatamente — então a
+própria asserção de vitalidade do fixture falhava (`the fixture must stay alive`).
+Foi trocado pelo *single-file source launcher*, com um `Sleeper.java` temporário
+que bloqueia em `Thread.sleep(Long.MAX_VALUE)`.
+
+Vale registrar que a asserção de vitalidade fez o trabalho dela: em vez de os
+testes passarem contra um processo morto — que é como uma versão anterior deste
+mesmo fixture se enganou — eles falharam alto.
+
+Os 4 testes passam. Suíte completa: **1145 testes, 0 falhas**.

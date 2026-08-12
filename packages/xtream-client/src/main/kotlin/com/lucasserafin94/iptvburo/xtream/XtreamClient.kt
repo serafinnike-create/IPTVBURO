@@ -87,21 +87,19 @@ class XtreamClient(
                 XtreamContentType.MOVIE -> "get_vod_categories"
                 XtreamContentType.SERIES -> "get_series_categories"
             }
-        val array = request(credentials, action).asArray(action)
-        var skipped = 0
-        val items =
-            array.mapNotNull { element ->
-                val objectValue = element as? JsonObject
-                val id = objectValue?.stringOrNull("category_id")
-                val name = objectValue?.stringOrNull("category_name")
-                if (id.isNullOrBlank() || name.isNullOrBlank()) {
-                    skipped += 1
-                    null
-                } else {
-                    XtreamCategory(id, name, contentType)
-                }
+        // Streamed, like the catalogue. The buffered path this used to take held the whole
+        // response as bytes, then as a String, then as a JsonElement tree — under a 512 MiB
+        // ceiling — which on a large provider is a very large allocation on the IO dispatcher
+        // during startup, and was reported as a freeze followed by an "incompatible catalogue".
+        val items = mutableListOf<XtreamCategory>()
+        val summary =
+            requestCatalogStream(credentials, action) { input ->
+                XtreamCategoryStreamParser(
+                    contentType = contentType,
+                    maximumItems = MAXIMUM_CATEGORY_ITEMS,
+                ).parse(input, items::add)
             }
-        return XtreamCollection(items, skipped)
+        return XtreamCollection(items, summary.skippedItemCount)
     }
 
     fun catalog(
@@ -703,6 +701,14 @@ class XtreamClient(
         const val DEFAULT_USER_AGENT = "IPTV BURO/0.2"
         const val DEFAULT_MAXIMUM_RESPONSE_BYTES = 512 * 1024 * 1024
         const val DEFAULT_MAXIMUM_CATALOG_ITEMS = 1_000_000
+
+        /**
+         * Bound on the category list, which is a different order of magnitude from the catalogue.
+         *
+         * A provider with tens of thousands of films still groups them into hundreds of categories,
+         * so this is generous while keeping the list to something the sidebar can hold.
+         */
+        const val MAXIMUM_CATEGORY_ITEMS = 50_000
         const val DEFAULT_MAXIMUM_TRANSIENT_RETRIES = 1
         const val MAXIMUM_TRANSIENT_RETRIES = 2
         const val DEFAULT_RETRY_DELAY_MILLIS = 250L

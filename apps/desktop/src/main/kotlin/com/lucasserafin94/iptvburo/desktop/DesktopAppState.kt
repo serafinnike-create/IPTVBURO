@@ -84,6 +84,7 @@ import com.lucasserafin94.iptvburo.domain.model.PlaybackContentType
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressIdentity
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgress
 import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
+import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
 import com.lucasserafin94.iptvburo.domain.model.BestOfferPolicy
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
@@ -2278,7 +2279,7 @@ class DesktopAppState(
                 throw error
             } catch (error: Throwable) {
                 if (policyGeneration == parentalPolicyGeneration) {
-                    xtreamStatus = XtreamStatus.Error(error.toSafeXtreamMessage())
+                    xtreamStatus = XtreamStatus.Error(error.toSafeFailureMessage())
                 }
             }
         }
@@ -2805,6 +2806,70 @@ class DesktopAppState(
         liveEpgStatus = LiveEpgStatus.Idle
     }
 
+    // -----------------------------------------------------------------------------------------
+    // Shared links
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * A share link waiting for a catalogue to resolve it against.
+     *
+     * A link almost always arrives before the catalogue is ready: Windows starts the process with
+     * the URI on the command line, so it is in hand while the app is still authenticating. Holding
+     * it here lets the resolution be retried once the catalogue lands, instead of being dropped
+     * because it was early.
+     */
+    var pendingShareLink by mutableStateOf<TitleShareLink?>(null)
+        private set
+
+    /** What happened to the last incoming link, for the message shown to the recipient. */
+    var shareLinkOutcome by mutableStateOf<ShareLinkOutcome?>(null)
+        private set
+
+    fun submitShareLink(link: TitleShareLink) {
+        pendingShareLink = link
+        resolvePendingShareLink()
+    }
+
+    fun clearShareLinkOutcome() {
+        shareLinkOutcome = null
+    }
+
+    /**
+     * Opens the shared title if this user's own catalogue has it.
+     *
+     * The link names a title, not a stream — see [TitleShareLink] — so "resolving" it means looking
+     * up the sender's content identity in the recipient's list. A film the recipient's provider
+     * does not carry is a perfectly ordinary outcome and is reported as such: there is nothing to
+     * play, and nothing about the sender's source can help.
+     *
+     * Called both when a link arrives and after the catalogue loads, so it must be safe to run
+     * repeatedly and with nothing pending.
+     */
+    fun resolvePendingShareLink() {
+        val link = pendingShareLink ?: return
+        // Nothing to search yet. The link stays pending for the caller that runs after loading.
+        if (xtreamSummary == null) return
+
+        // Both kinds are searched rather than just the one the key names. The identity's kind comes
+        // from how the *sender's* provider classified the title, and providers disagree — a
+        // mini-series filed under films by one list is a series in another.
+        val resolved =
+            listOf(XtreamContentType.MOVIE, XtreamContentType.SERIES, XtreamContentType.LIVE)
+                .firstNotNullOfOrNull { contentType ->
+                    xtreamRepository.itemByContentKey(contentType, link.identity.key)
+                }
+
+        pendingShareLink = null
+        if (resolved == null) {
+            shareLinkOutcome = ShareLinkOutcome.NotInYourList(link.title)
+            return
+        }
+        destination = DesktopDestination.CATALOG
+        favoritesOnly = false
+        selectDailyItem(resolved)
+        shareLinkOutcome = ShareLinkOutcome.Opened(resolved.name)
+    }
+
     suspend fun loadDailyHome(
         date: LocalDate = LocalDate.now(),
         /**
@@ -2982,7 +3047,7 @@ class DesktopAppState(
                 // with nothing in flight and no way back until a restart.
                 if (dailyHomeStatus is DailyHomeStatus.Loading) dailyHomeStatus = DailyHomeStatus.Idle
                 error.rethrowIfCancellation()
-                dailyHomeStatus = DailyHomeStatus.Error(error.toSafeXtreamMessage())
+                dailyHomeStatus = DailyHomeStatus.Error(error.toSafeFailureMessage())
             }
     }
 
@@ -3173,7 +3238,7 @@ class DesktopAppState(
                 if (sourceSummaries.none { source -> source.id == selectedSourceId }) {
                     selectedSourceId = catalogs.firstOrNull()?.source?.id
                 }
-                xtreamStatus = XtreamStatus.Error(error.toSafeXtreamMessage())
+                xtreamStatus = XtreamStatus.Error(error.toSafeFailureMessage())
             }
         } finally {
             Arrays.fill(rememberedServer, ZERO_CHAR)
@@ -3352,7 +3417,7 @@ class DesktopAppState(
             }
         }.onFailure { error ->
             error.rethrowIfCancellation()
-            xtreamStatus = XtreamStatus.Error(error.toSafeXtreamMessage())
+            xtreamStatus = XtreamStatus.Error(error.toSafeFailureMessage())
         }
     }
 
@@ -3396,7 +3461,7 @@ class DesktopAppState(
             xtreamStatus = XtreamStatus.Connected
         }.onFailure { error ->
             error.rethrowIfCancellation()
-            xtreamStatus = XtreamStatus.Error(error.toSafeXtreamMessage())
+            xtreamStatus = XtreamStatus.Error(error.toSafeFailureMessage())
         }
     }
 
@@ -3551,7 +3616,7 @@ class DesktopAppState(
             // every retry, so the page kept its spinner with nothing in flight.
             if (movieDetailsStatus is MovieDetailsStatus.Loading) movieDetailsStatus = MovieDetailsStatus.Idle
             error.rethrowIfCancellation()
-            movieDetailsStatus = MovieDetailsStatus.Error(error.toSafeXtreamMessage())
+            movieDetailsStatus = MovieDetailsStatus.Error(error.toSafeFailureMessage())
         }
     }
 
@@ -3574,7 +3639,7 @@ class DesktopAppState(
             // Loading, or the guard refuses every retry and the page keeps a spinner for ever.
             if (seriesDetailsStatus is SeriesDetailsStatus.Loading) seriesDetailsStatus = SeriesDetailsStatus.Idle
             error.rethrowIfCancellation()
-            seriesDetailsStatus = SeriesDetailsStatus.Error(error.toSafeXtreamMessage())
+            seriesDetailsStatus = SeriesDetailsStatus.Error(error.toSafeFailureMessage())
         }
     }
 
@@ -3836,6 +3901,21 @@ class DesktopAppState(
         return runCatching {
             openUriExternally(URI("https://www.youtube.com/watch?v=$youtubeTrailerId"))
         }.getOrDefault(ExternalOpenResult.Failed)
+    }
+
+    /**
+     * Hands a share destination to the browser or mail client.
+     *
+     * The scheme is checked rather than trusted. Every caller today builds its own URL from a
+     * constant prefix, but this is the one function that turns a string into something the OS
+     * launches, and `file:` or a custom scheme reaching it would be a way to start an arbitrary
+     * program. https and mailto are the only two the share sheet needs.
+     */
+    fun openPublicUrl(url: String): ExternalOpenResult {
+        val scheme = url.substringBefore(':', "").lowercase(Locale.ROOT)
+        if (scheme != "https" && scheme != "mailto") return ExternalOpenResult.Refused
+        return runCatching { openUriExternally(URI(url)) }
+            .getOrDefault(ExternalOpenResult.Failed)
     }
 
     /**
@@ -4330,8 +4410,22 @@ class DesktopAppState(
         if (this is CancellationException) throw this
     }
 
-    private fun Throwable.toSafeXtreamMessage(): String =
-        when ((this as? XtreamClientException)?.reason) {
+    /**
+     * A message for a failure that really did come from the provider.
+     *
+     * Only ever called on an [XtreamClientException]; anything else goes through
+     * [toSafeFailureMessage]. That split matters more than it looks. This `when` used to run on any
+     * throwable, with a `null` branch catching everything that was not an Xtream failure — so an
+     * OutOfMemoryError, a parsing bug or a failure anywhere else in building the Home was reported
+     * to the user as "the server did not return a compatible Xtream catalogue".
+     *
+     * That is not a small wording problem. It blames the customer's provider for a fault in this
+     * app, it is the message they read while their catalogue is plainly loaded and working, and it
+     * sends anyone diagnosing the fault — including the person who wrote this — to the wrong place
+     * entirely.
+     */
+    private fun XtreamClientException.toSafeXtreamMessage(): String =
+        when (reason) {
             XtreamFailureReason.INVALID_SERVER -> "O endereço do servidor não é válido."
             XtreamFailureReason.AUTHENTICATION -> "O servidor recusou o usuário ou a senha."
             XtreamFailureReason.NETWORK -> "Não foi possível alcançar o servidor."
@@ -4340,7 +4434,25 @@ class DesktopAppState(
                 "O catálogo excedeu o limite seguro desta prévia."
             XtreamFailureReason.INVALID_RESPONSE ->
                 "O servidor não retornou um catálogo Xtream compatível."
-            null -> "A operação Xtream não pôde ser concluída."
+        }
+
+    /**
+     * A message for any failure, attributing it to the provider only when it came from there.
+     *
+     * Everything else is reported as a fault in the app, because that is what it is. The exception
+     * type is included so a screenshot is worth something diagnostically, while the *message* is
+     * deliberately left out: it can carry a URL, and a URL here carries the subscriber's
+     * credentials.
+     */
+    private fun Throwable.toSafeFailureMessage(): String =
+        when (this) {
+            is XtreamClientException -> toSafeXtreamMessage()
+            is OutOfMemoryError ->
+                "Não houve memória suficiente para montar esta tela. " +
+                    "Isso é uma limitação do aplicativo, não da sua lista."
+            else ->
+                "Não foi possível montar esta tela (${this::class.simpleName}). " +
+                    "Isso é uma falha do aplicativo, não da sua lista."
         }
 
     private companion object {
@@ -4465,6 +4577,19 @@ enum class CatalogLayout(val id: String) {
 }
 
 enum class DesktopDestination { HOME, CATALOG, FAVORITES, DOWNLOADS, CONTINUE, MUSIC, SUBSCRIPTIONS, HISTORY }
+
+/**
+ * What became of a shared link that this app was asked to open.
+ *
+ * [NotInYourList] is a normal result, not an error. A share carries a title, and whether that title
+ * exists is a fact about the recipient's own provider — so the message says the list does not have
+ * it rather than suggesting something went wrong.
+ */
+sealed interface ShareLinkOutcome {
+    data class Opened(val title: String) : ShareLinkOutcome
+
+    data class NotInYourList(val title: String) : ShareLinkOutcome
+}
 
 /**
  * How far back the history goes.

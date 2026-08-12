@@ -210,7 +210,56 @@ class DesktopUserStoreTest {
         try {
             block(DesktopUserStore(node))
         } finally {
-            node.removeNode()
+            // `runCatching`: a test that exercises `resetAll` has already removed this node, and
+            // removing it twice throws. Cleanup must not turn a passing test into a failing one.
+            runCatching { node.removeNode() }
+        }
+    }
+
+    /**
+     * Reset, then carry on using the store.
+     *
+     * `Preferences.removeNode()` invalidates the object it is called on permanently: every later
+     * call throws `IllegalStateException("Node has been removed.")`. The store used to hold one
+     * instance for its whole life, so after a reset *every* read and write in the process threw —
+     * and adding a list straight after a reset died at the end of the splash with a raw AWT error
+     * dialog reading "Node has been removed."
+     *
+     * This is the exact sequence a user performs when they reset and set the app up again, which is
+     * also the first thing anyone tries when something else has gone wrong.
+     */
+    @Test
+    fun `the store still works after resetAll`() {
+        withStore { store ->
+            store.saveProfiles(listOf(DesktopProfile("adult", "Adulto", false)))
+            store.setFavorites("adult", setOf("movie:duna:2024"))
+
+            store.resetAll()
+
+            // Reading must not throw, and must report the cleared state.
+            assertTrue(store.load().profiles.isEmpty())
+
+            // Writing must not throw either: this is what the app does immediately afterwards when
+            // the user adds their list again.
+            val rebuilt = DesktopProfile("novo", "Novo", false)
+            store.saveProfiles(listOf(rebuilt))
+            store.setFavorites(rebuilt.id, setOf("movie:outro:2020"))
+
+            assertEquals(listOf(rebuilt), store.load().profiles)
+            assertEquals(setOf("movie:outro:2020"), store.favoritesForProfile(rebuilt.id))
+        }
+    }
+
+    /** Two resets in a row must be as safe as one; the second re-removes a freshly created node. */
+    @Test
+    fun `resetAll is safe to call twice`() {
+        withStore { store ->
+            store.saveProfiles(listOf(DesktopProfile("adult", "Adulto", false)))
+
+            store.resetAll()
+            store.resetAll()
+
+            assertTrue(store.load().profiles.isEmpty())
         }
     }
 

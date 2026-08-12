@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.sp
 import java.awt.Frame
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.DesktopDestination
+import com.lucasserafin94.iptvburo.desktop.ShareLinkOutcome
 import com.lucasserafin94.iptvburo.desktop.OnboardingStep
 import com.lucasserafin94.iptvburo.desktop.security.XtreamLoginInput
 import com.lucasserafin94.iptvburo.desktop.DownloadEntry
@@ -911,6 +912,24 @@ fun DesktopApp(
                         },
                     )
                 }
+
+            // A shared link that this list cannot satisfy.
+            //
+            // Only the miss is reported. When the title *is* found the app has already navigated to
+            // it, and a dialog confirming what is plainly on screen would be one click of noise
+            // between the user and the film they were sent.
+            (appState.shareLinkOutcome as? ShareLinkOutcome.NotInYourList)?.let { outcome ->
+                AlertDialog(
+                    onDismissRequest = { appState.clearShareLinkOutcome() },
+                    confirmButton = {
+                        TextButton(onClick = { appState.clearShareLinkOutcome() }) {
+                            Text(strings.understood)
+                        }
+                    },
+                    title = { Text(strings.shareStrings.shareNotFoundTitle) },
+                    text = { Text("${outcome.title}\n\n${strings.shareStrings.shareNotFoundBody}") },
+                )
+            }
         }
         }
     }

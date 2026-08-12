@@ -229,6 +229,14 @@ data class DesktopStrings(
     val movies: String,
     val series: String,
     val favorites: String,
+    /**
+     * Sharing a title. Grouped rather than flat, and not only for tidiness: this class is a
+     * constructor with one parameter per string, and the JVM caps a method signature at 255 slots.
+     * Adding ten more fields at the top level pushed it past that limit and every test in the
+     * module failed to load with `ClassFormatError: Too many arguments in method signature` —
+     * before running a single assertion. Nested groups are how the file stays under the ceiling.
+     */
+    val shareStrings: ShareStrings,
     val search: String,
     val sources: String,
     val profile: String,
@@ -514,6 +522,23 @@ data class DesktopStrings(
                 movies = "Películas",
                 series = "Series",
                 favorites = "Favoritos",
+                shareStrings =
+                    ShareStrings(
+                    share = "Compartir",
+                    shareTitle = "Compartir título",
+                    shareSubtitle = "Envía una recomendación, no tu lista.",
+                    shareDestination = "Enviar por",
+                    shareByEmail = "Correo",
+                    shareCopyLink = "Copiar enlace",
+                    shareCopied = "¡Copiado!",
+                    shareNoCredentials =
+                        "El enlace no contiene tu servidor, usuario ni contraseña. " +
+                            "Quien lo reciba lo abre con su propia lista.",
+                    shareNotFoundTitle = "No está en tu lista",
+                    shareNotFoundBody =
+                        "Tu proveedor no ofrece este título. Un enlace compartido es una " +
+                            "recomendación: cada persona lo abre con su propia lista.",
+                    ),
                 search = "Búsqueda",
                 sources = "FUENTES",
                 profile = "Perfil",
@@ -954,6 +979,23 @@ data class DesktopStrings(
                 movies = "Filmes",
                 series = "Séries",
                 favorites = "Favoritos",
+                shareStrings =
+                    ShareStrings(
+                    share = "Compartilhar",
+                    shareTitle = "Compartilhar título",
+                    shareSubtitle = "Envie uma recomendação, não a sua lista.",
+                    shareDestination = "Enviar por",
+                    shareByEmail = "E-mail",
+                    shareCopyLink = "Copiar link",
+                    shareCopied = "Copiado!",
+                    shareNoCredentials =
+                        "O link não contém seu servidor, usuário ou senha. " +
+                            "Quem receber abre com a lista dele.",
+                    shareNotFoundTitle = "Não está na sua lista",
+                    shareNotFoundBody =
+                        "Seu provedor não oferece este título. Um link compartilhado é uma " +
+                            "recomendação: cada pessoa abre com a própria lista.",
+                    ),
                 search = "Pesquisa",
                 sources = "FONTES",
                 profile = "Perfil",
@@ -1394,6 +1436,23 @@ data class DesktopStrings(
                 movies = "Movies",
                 series = "Series",
                 favorites = "Favorites",
+                shareStrings =
+                    ShareStrings(
+                    share = "Share",
+                    shareTitle = "Share title",
+                    shareSubtitle = "Send a recommendation, not your list.",
+                    shareDestination = "Send via",
+                    shareByEmail = "Email",
+                    shareCopyLink = "Copy link",
+                    shareCopied = "Copied!",
+                    shareNoCredentials =
+                        "The link carries no server, username or password. " +
+                            "Whoever receives it opens it with their own list.",
+                    shareNotFoundTitle = "Not in your list",
+                    shareNotFoundBody =
+                        "Your provider does not carry this title. A shared link is a " +
+                            "recommendation: everyone opens it with their own list.",
+                    ),
                 search = "Search",
                 sources = "SOURCES",
                 profile = "Profile",
@@ -1832,6 +1891,23 @@ data class DesktopStrings(
                 movies = "Filme",
                 series = "Serien",
                 favorites = "Favoriten",
+                shareStrings =
+                    ShareStrings(
+                    share = "Teilen",
+                    shareTitle = "Titel teilen",
+                    shareSubtitle = "Sende eine Empfehlung, nicht deine Liste.",
+                    shareDestination = "Senden über",
+                    shareByEmail = "E-Mail",
+                    shareCopyLink = "Link kopieren",
+                    shareCopied = "Kopiert!",
+                    shareNoCredentials =
+                        "Der Link enthält weder Server noch Benutzername oder Passwort. " +
+                            "Wer ihn erhält, öffnet ihn mit der eigenen Liste.",
+                    shareNotFoundTitle = "Nicht in deiner Liste",
+                    shareNotFoundBody =
+                        "Dein Anbieter führt diesen Titel nicht. Ein geteilter Link ist eine " +
+                            "Empfehlung: Jede Person öffnet ihn mit der eigenen Liste.",
+                    ),
                 search = "Suche",
                 sources = "QUELLEN",
                 profile = "Profil",
@@ -2276,6 +2352,23 @@ data class DesktopStrings(
                 movies = "Film",
                 series = "Serie",
                 favorites = "Preferiti",
+                shareStrings =
+                    ShareStrings(
+                    share = "Condividi",
+                    shareTitle = "Condividi titolo",
+                    shareSubtitle = "Invia un consiglio, non la tua lista.",
+                    shareDestination = "Invia tramite",
+                    shareByEmail = "E-mail",
+                    shareCopyLink = "Copia link",
+                    shareCopied = "Copiato!",
+                    shareNoCredentials =
+                        "Il link non contiene server, nome utente o password. " +
+                            "Chi lo riceve lo apre con la propria lista.",
+                    shareNotFoundTitle = "Non è nella tua lista",
+                    shareNotFoundBody =
+                        "Il tuo provider non offre questo titolo. Un link condiviso è un " +
+                            "consiglio: ognuno lo apre con la propria lista.",
+                    ),
                 search = "Cerca",
                 sources = "FONTI",
                 profile = "Profilo",
@@ -2732,6 +2825,33 @@ val strings: DesktopStrings
  *
  * Anything added here from now on costs the outer class nothing.
  */
+/**
+ * Wording for sharing a title, and for receiving one.
+ *
+ * What a share carries is a *recommendation* — a normalised title, a year and a public poster —
+ * which the recipient's own app resolves against their own playlist. Nothing about the sender's
+ * provider travels. See `TitleShareLink` in the domain, which enforces that; these strings say it
+ * to the user.
+ */
+data class ShareStrings(
+    /** The button on the title page, beside Favourites. */
+    val share: String,
+    val shareTitle: String,
+    val shareSubtitle: String,
+    val shareDestination: String,
+    val shareByEmail: String,
+    val shareCopyLink: String,
+    val shareCopied: String,
+    /** Stated in the product, so the sender knows their subscription is not in the message. */
+    val shareNoCredentials: String,
+    /**
+     * A received link whose title this user's own provider does not carry. Not an error: the share
+     * names a title, and whether it exists is a fact about the recipient's list.
+     */
+    val shareNotFoundTitle: String,
+    val shareNotFoundBody: String,
+)
+
 data class TmdbGuideStrings(
     val tmdbGuideTitle: String,
     val tmdbGuideSubtitle: String,
