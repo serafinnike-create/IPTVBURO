@@ -10,6 +10,12 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
+/** Value produced by a group of synchronous TMDb calls and how many of those calls failed. */
+internal data class TmdbRequestDiagnostics<T>(
+    val value: T,
+    val failureCount: Int,
+)
+
 /**
  * People and artwork from The Movie Database.
  *
@@ -32,6 +38,30 @@ class TmdbClient(
     private val imageBaseUrl: String = DEFAULT_IMAGE_BASE_URL,
     private val language: String = "pt-BR",
 ) {
+    /**
+     * Failures observed by the current blocking catalogue operation.
+     *
+     * A ThreadLocal keeps simultaneous details and shelf requests independent. The public metadata
+     * helpers still return null/empty as before; a catalogue build can additionally ask whether an
+     * empty result was caused by the network, HTTP status or malformed JSON.
+     */
+    private val requestFailures = ThreadLocal.withInitial { 0 }
+
+    internal fun <T> withRequestDiagnostics(block: () -> T): TmdbRequestDiagnostics<T> {
+        val previous = requestFailures.get()
+        requestFailures.set(0)
+        return try {
+            val value = block()
+            TmdbRequestDiagnostics(value = value, failureCount = requestFailures.get())
+        } finally {
+            requestFailures.set(previous)
+        }
+    }
+
+    private fun recordRequestFailure() {
+        requestFailures.set(requestFailures.get() + 1)
+    }
+
     /** Whether metadata lookups can run at all. */
     val isConfigured: Boolean
         get() = !apiKey.isNullOrBlank()
@@ -599,20 +629,32 @@ class TmdbClient(
      * page showing what the provider gave, never an error the user has to dismiss.
      */
     private fun get(url: HttpUrl): JsonObject? =
-        runCatching {
+        try {
             val request =
                 Request.Builder()
                     .url(url)
                     .header("Accept", "application/json")
                     .build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
+                if (!response.isSuccessful) {
+                    recordRequestFailure()
+                    return@use null
+                }
                 // Checked rather than cast. `asJsonObject` throws ClassCastException on a JSON
-                // array, and that escaped the runCatching below as a crash rather than the null
-                // every caller here is written to handle. TMDb answers some errors with an array.
-                JsonParser.parseString(response.body.string()).takeIf { it.isJsonObject }?.asJsonObject
+                // array; every caller here is written to handle null instead. TMDb answers some
+                // errors with an array, so malformed/unexpected bodies are also recorded as a
+                // failed request for the catalogue-level retry state.
+                val parsed =
+                    runCatching {
+                        JsonParser.parseString(response.body.string()).takeIf { it.isJsonObject }?.asJsonObject
+                    }.getOrNull()
+                if (parsed == null) recordRequestFailure()
+                parsed
             }
-        }.getOrNull()
+        } catch (_: Exception) {
+            recordRequestFailure()
+            null
+        }
 
     /** The API key is a secret; it must never reach a log or a crash report. */
     override fun toString(): String = "TmdbClient(configured=$isConfigured)"

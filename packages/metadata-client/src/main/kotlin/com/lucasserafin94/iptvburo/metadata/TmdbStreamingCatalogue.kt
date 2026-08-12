@@ -6,6 +6,12 @@ import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitleKind
 import com.lucasserafin94.iptvburo.domain.model.StreamingProvider
 
+/** Result of building the service shelves, preserving the difference between empty and failed. */
+sealed interface TmdbShelfLoadResult {
+    data class Loaded(val shelves: List<TmdbServiceShelf>) : TmdbShelfLoadResult
+    data object Unavailable : TmdbShelfLoadResult
+}
+
 /**
  * The real storefront: what every streaming service in a region currently carries.
  *
@@ -31,12 +37,31 @@ class TmdbStreamingCatalogue(
     /**
      * One shelf per service, each holding what that service currently carries.
      *
-     * Services with nothing to show are dropped rather than rendered as an empty heading. An empty
-     * result overall means the region has nothing, the key is unset, or TMDb could not be reached —
-     * all three look the same to the caller, and all three mean "show nothing" rather than an error
-     * the user must dismiss.
+     * Services with nothing to show are dropped rather than rendered as an empty heading. This
+     * compatibility helper keeps returning an empty list for both a genuinely empty catalogue and
+     * a failed request. UI callers that need to offer a retry use [loadShelves] instead.
      */
-    fun shelves(kind: TmdbDiscoverKind = TmdbDiscoverKind.MOVIES): List<TmdbServiceShelf> {
+    fun shelves(kind: TmdbDiscoverKind = TmdbDiscoverKind.MOVIES): List<TmdbServiceShelf> =
+        when (val result = loadShelves(kind)) {
+            is TmdbShelfLoadResult.Loaded -> result.shelves
+            TmdbShelfLoadResult.Unavailable -> emptyList()
+        }
+
+    /**
+     * Builds shelves while preserving whether an empty answer was genuine or caused by failed calls.
+     * Partial results remain useful and are shown; only an empty result with at least one failed
+     * request becomes [TmdbShelfLoadResult.Unavailable].
+     */
+    fun loadShelves(kind: TmdbDiscoverKind = TmdbDiscoverKind.MOVIES): TmdbShelfLoadResult {
+        val diagnosed = client.withRequestDiagnostics { buildShelves(kind) }
+        return if (diagnosed.value.isEmpty() && diagnosed.failureCount > 0) {
+            TmdbShelfLoadResult.Unavailable
+        } else {
+            TmdbShelfLoadResult.Loaded(diagnosed.value)
+        }
+    }
+
+    private fun buildShelves(kind: TmdbDiscoverKind): List<TmdbServiceShelf> {
         // "Coming soon" cannot be grouped by service, because the answer is the set of films no
         // service carries yet. Handled separately rather than forced into the per-provider shape.
         if (kind == TmdbDiscoverKind.UPCOMING) return comingToStreamingShelf()

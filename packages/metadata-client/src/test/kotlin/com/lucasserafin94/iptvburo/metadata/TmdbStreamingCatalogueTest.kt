@@ -11,6 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class TmdbStreamingCatalogueTest {
@@ -120,7 +121,8 @@ class TmdbStreamingCatalogueTest {
     fun `no services means no shelves rather than an error`() {
         server.enqueue(json("""{"results":[]}"""))
 
-        assertTrue(catalogue().shelves().isEmpty())
+        val result = assertIs<TmdbShelfLoadResult.Loaded>(catalogue().loadShelves())
+        assertTrue(result.shelves.isEmpty())
     }
 
     @Test
@@ -128,6 +130,20 @@ class TmdbStreamingCatalogueTest {
         server.enqueue(MockResponse().setResponseCode(500))
 
         assertTrue(catalogue().shelves().isEmpty())
+    }
+
+    @Test
+    fun `an unreachable catalogue is distinguishable from a genuinely empty one`() {
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        assertIs<TmdbShelfLoadResult.Unavailable>(catalogue().loadShelves())
+    }
+
+    @Test
+    fun `malformed catalogue data is reported as unavailable`() {
+        server.enqueue(json("[]"))
+
+        assertIs<TmdbShelfLoadResult.Unavailable>(catalogue().loadShelves())
     }
 
     @Test

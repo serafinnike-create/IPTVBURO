@@ -319,7 +319,7 @@ precisar reinstalar nada.
 
 ## TAREFA-011 — Nitidez em 4K e fluidez de 30 a 360 Hz
 
-**Status:** pendente — investigado, não implementado
+**Status:** ✅ IMPLEMENTADO em 2026-08-13
 **Solicitado em:** 2026-08-12
 
 ### Pedido
@@ -365,9 +365,11 @@ filtragem existe hoje — está tudo no padrão.
    melhora nitidez **e** reduz memória.
 3. **Revisar a filtragem de escala.** Verificar se vale `FilterQuality.High` nos
    pôsteres; é mais caro por quadro, então precisa ser medido antes de adotar.
-4. **Conferir o DPI awareness do instalador.** Sem declaração de
-   *per-monitor DPI aware*, o Windows pode aplicar escala por bitmap — o que borra
-   tudo, inclusive texto, e nenhuma correção de imagem resolve.
+4. ~~**Conferir o DPI awareness do instalador.**~~ **Verificado: não era
+   necessário.** Medido em vez de presumido — um programa mínimo em Java reporta
+   `scaleX=1.25` nesta máquina, ou seja, a JVM já lê a escala real do Windows e é
+   per-monitor DPI aware por padrão desde o JDK 9. A preocupação registrada aqui
+   era exagerada.
 5. **Testar o vídeo separadamente.** O player é o VLC, fora do Compose: a
    nitidez dele depende do stream e do decodificador, não destas mudanças.
 

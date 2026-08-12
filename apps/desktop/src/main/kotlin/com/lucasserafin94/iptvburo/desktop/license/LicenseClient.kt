@@ -273,6 +273,10 @@ class LicenseClient(
                 addProperty("deviceId", identity.deviceId)
                 addProperty("nonce", nonce)
                 addProperty("proof", identity.proof(action, nonce))
+                // Reported support information only; it never participates in licence decisions.
+                // Sent on validation as well as registration so existing installs fill the admin
+                // panel the next time they open the app.
+                add("deviceProfile", WindowsDeviceProfile.report())
                 if (includeRegistration) {
                     addProperty("installationId", identity.installationId)
                     addProperty("publicKey", identity.publicKeyDerBase64)

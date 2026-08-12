@@ -1268,6 +1268,10 @@ internal fun XtreamInternalDetailsPage(
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize().scale(backdropScale),
                 contentScale = ContentScale.Crop,
+                // TMDb publishes a separate ladder for backdrops, and this is the image that
+                // suffered most from a fixed width: w1280 stretched across a 4K panel is a 3x
+                // upscale, and the Ken Burns transform above magnifies the softness further.
+                isBackdrop = true,
             ) { Box(Modifier.fillMaxSize().background(BuroColors.Canvas)) }
         }
         Box(
