@@ -44,13 +44,20 @@ nenhum deles falhava em teste antes destas mudanças.
   tudo que elas retornam — rodavam na UI. Também havia `Regex(...)` compilado dentro de funções
   chamadas por item: `dailyCatalogTitleKey` compilava três por chamada, e era o seletor de um
   `distinctBy` sobre o catálogo inteiro. Todos içados para constantes;
-- **medição honesta**: `TotalTime` ficou em ~3,0 s e o pior frame pulado seguiu em ~118 em três
-  execuções aquecidas. Uma leitura intermediária de 47 frames era ruído e não se sustentou. O custo
-  dominante medido é `classloader create took 1152ms`, antes de qualquer código do app — perfil de
-  APK debug sem Baseline Profile. **Não há Baseline Profile no projeto**; adicioná-lo exige nova
-  dependência, plugin de benchmark e módulo de geração, e não foi feito sem decisão do dono;
-- memória caiu de 211 MB para ~177 MB PSS entre a primeira e a última medição, mas com o app em
-  estados diferentes — não trato como ganho comprovado;
+- **as medições de partida em debug estavam erradas, e a conclusão delas também.** Foram medidos
+  ~3,0 s de `TotalTime`, `classloader create took 1152ms` e sequências de 120 frames pulados, tudo
+  em APK **debug**. Refeita a medição no `nonMinifiedRelease`, a partida é de **~380 ms**, o log não
+  reporta **nenhum** frame pulado e a linha do classloader não aparece. Debug não passa por R8,
+  carrega classes de instrumentação e não recebe perfil — não serve para medir partida, e o jank
+  relatado antes era artefato do build, não defeito do app;
+- **Baseline Profile adicionado** em `:apps:android-tv-baselineprofile` (plugin `androidx.
+  baselineprofile` 1.5.0-rc01, exigido pelo AGP 9; a linha estável 1.4.1 recusa o módulo). Gerado
+  contra o aparelho real, 15.471 regras. Comparação do mesmo APK com e sem o perfil aplicado, três
+  execuções cada: mediana 401 ms → 379 ms, e **primeira** partida 548 ms → 379 ms (−31 %), que é
+  onde o perfil age — nada está compilado logo após instalar. Procedimento de regeração e de
+  medição em `apps/android-tv-baselineprofile/README.md`;
+- memória: 211 MB PSS em debug contra ~177 MB numa medição posterior, mas com o app em estados
+  diferentes — **não** trato como ganho comprovado;
 - não houve regressão: 1.313 testes, 0 falhas, `lint` e `assembleDebug` aprovados, e o app inicia
   com `Status: ok`, sem crash e sem ANR. A validação final por captura de tela foi interrompida por
   travamento da `SystemUI` do aparelho, não do aplicativo.

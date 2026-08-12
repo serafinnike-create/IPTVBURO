@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.baselineprofile)
 }
 
 val androidPlatformCapabilities =
@@ -198,6 +199,16 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
+    // Installs the baseline profile on first run.
+    //
+    // Play applies the profile at install time for store installs, but a sideloaded APK — every
+    // debug build, and every APK shared directly — has nobody to do that. Without this dependency
+    // the generated profile ships in the APK and is never used.
+    implementation(libs.androidx.profileinstaller)
+
+    // Where the profile comes from. Declaring it here is what lets the plugin wire up
+    // `generateBaselineProfile` and fold the result into the release build.
+    baselineProfile(project(":apps:android-tv-baselineprofile"))
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.tv.material)

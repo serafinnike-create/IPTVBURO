@@ -23,6 +23,9 @@ rootProject.name = "IPTVBURO"
 include(
     ":apps:desktop",
     ":apps:android-tv",
+    // Generates the start-up baseline profile for :apps:android-tv. Never shipped; run on demand
+    // against a connected device, see the module's build file.
+    ":apps:android-tv-baselineprofile",
     ":packages:domain-model",
     ":packages:playlist-parser",
     ":packages:test-fixtures",
