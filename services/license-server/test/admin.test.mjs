@@ -7,6 +7,7 @@
 
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
+import { Script } from 'node:vm';
 import { grantDevice, isAdmin } from '../src/admin.js';
 import { adminPage } from '../src/admin-page.js';
 
@@ -64,6 +65,21 @@ test('the admin page carries no token of its own', () => {
   // that would be useful to somebody who has not signed in.
   assert.ok(!page.includes(env.ADMIN_TOKEN));
   assert.ok(page.includes('Token de acesso'), 'it should ask for one');
+});
+
+test('the generated inline admin script is valid JavaScript', () => {
+  const html = adminPage();
+  const script = html.split('<script>')[1]?.split('</script>')[0];
+  assert.ok(script, 'the page must contain its controller script');
+  assert.doesNotThrow(() => new Script(script, { filename: 'admin-inline.js' }));
+});
+
+test('a stored admin session can verify after refresh', () => {
+  const page = adminPage();
+  assert.ok(
+    page.indexOf('let lastStatus = 0') < page.indexOf('if (token) { verify(); }'),
+    'request state must exist before automatic verification starts',
+  );
 });
 
 test('the admin page escapes values from the database', () => {

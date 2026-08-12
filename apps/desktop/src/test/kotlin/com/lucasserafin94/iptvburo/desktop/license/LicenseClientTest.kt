@@ -65,6 +65,13 @@ class LicenseClientTest {
             val registration = captured[1].second
             assertFalse(validation.has("macAddress"))
             assertFalse(registration.has("macAddress"))
+            val profile = validation.getAsJsonObject("deviceProfile")
+            assertEquals("WINDOWS_PC", profile.get("deviceType").asString)
+            assertEquals("WINDOWS", profile.get("platform").asString)
+            assertTrue(profile.get("appVersion").asString.isNotBlank())
+            assertFalse(profile.has("hostname"))
+            assertFalse(profile.has("serialNumber"))
+            assertFalse(profile.has("machineGuid"))
             assertFalse(validation.has("installationId"))
             assertFalse(validation.has("publicKey"))
             assertEquals(identity.installationId, registration.get("installationId").asString)

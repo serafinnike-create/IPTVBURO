@@ -199,6 +199,10 @@ export function adminPage() {
   // Session storage rather than a cookie: per-tab, gone when the tab closes, and never sent
   // automatically to the customer-facing pages on this same origin.
   let token = sessionStorage.getItem('buro-admin') || '';
+  // Declared before the automatic verification: api() writes it synchronously before verify()
+  // reaches its first await, so declaring it later makes a returning signed-in tab hit the
+  // temporal dead zone and show the login screen after every refresh.
+  let lastStatus = 0;
 
   if (token) { verify(); }
 
@@ -252,10 +256,6 @@ export function adminPage() {
     return '<button type="button" class="stat" onclick="listByStatus(\\'' + status + '\\')">'
       + '<b>' + value + '</b><span>' + label + '</span></button>';
   }
-
-  // What the last call answered, so a failure can say which kind it was. Zero means the request
-  // never arrived anywhere.
-  let lastStatus = 0;
 
   async function api(path, body) {
     lastStatus = 0;
@@ -319,11 +319,11 @@ export function adminPage() {
     const archived = Boolean(device.archived_at);
     const hardware = [device.manufacturer, device.model].filter(Boolean).join(' ') || 'Modelo ainda não informado';
     const actionButtons = archived
-      ? '<button class="ghost" onclick="restoreDevice(\'' + id + '\')">Restaurar na lista</button>'
-      : '<button class="ghost" onclick="showDetails(\'' + id + '\')">Detalhes e histórico</button>'
-        + ' <button onclick="fillGrant(\'' + id + '\')">Liberar</button>'
-        + (device.status === 'REVOKED' ? '' : ' <button class="danger" onclick="revoke(\'' + id + '\')">Bloquear</button>')
-        + ' <button class="ghost" onclick="archiveDevice(\'' + id + '\')">Apagar da lista</button>';
+      ? '<button class="ghost" onclick="restoreDevice(\\'' + id + '\\')">Restaurar na lista</button>'
+      : '<button class="ghost" onclick="showDetails(\\'' + id + '\\')">Detalhes e histórico</button>'
+        + ' <button onclick="fillGrant(\\'' + id + '\\')">Liberar</button>'
+        + (device.status === 'REVOKED' ? '' : ' <button class="danger" onclick="revoke(\\'' + id + '\\')">Bloquear</button>')
+        + ' <button class="ghost" onclick="archiveDevice(\\'' + id + '\\')">Apagar da lista</button>';
 
     return '<article class="device-card' + (archived ? ' archived' : '') + '">'
       + '<div class="device-head"><div class="device-title"><strong>' + esc(hardware) + '</strong>'
@@ -394,14 +394,14 @@ export function adminPage() {
   }
 
   async function revoke(device) {
-    if (!confirm('Bloquear ' + device + '?\n\nO aplicativo perderá o acesso na próxima validação.')) return;
+    if (!confirm('Bloquear ' + device + '?\\n\\nO aplicativo perderá o acesso na próxima validação.')) return;
     const result = await api('/admin/revoke', { device: device, note: 'bloqueado no painel' });
     if (!result) alert('Não foi possível bloquear o dispositivo.');
     await refreshDevices();
   }
 
   async function archiveDevice(device) {
-    if (!confirm('Apagar ' + device + ' da lista?\n\nEle será bloqueado e ocultado, mas o histórico será preservado para impedir novo teste gratuito.')) return;
+    if (!confirm('Apagar ' + device + ' da lista?\\n\\nEle será bloqueado e ocultado, mas o histórico será preservado para impedir novo teste gratuito.')) return;
     const result = await api('/admin/archive', { device: device, note: 'apagado da lista pelo administrador' });
     if (!result) alert('Não foi possível apagar da lista.');
     await refreshDevices();
