@@ -1,7 +1,31 @@
 # Fila de bugs — Windows/Desktop
 
-Bugs reproduzidos em teste real, aguardando correção. Cada item registra o
-sintoma observado, a causa investigada no código e o que ainda falta confirmar.
+Bugs reproduzidos em teste real. Cada item registra o sintoma observado, a causa
+investigada no código e o que ainda falta confirmar.
+
+## Estado atual
+
+**Publicado:** `v2.0.0-alpha.3` — Windows (MSI) e Android (APK de depuração).
+
+Quem tem a `alpha.2` instalada recebe esta versão por **Opções → Buscar
+atualização**. O caminho foi verificado antes de publicar, não presumido:
+
+- `isNewerVersion("2.0.0-alpha.3", "2.0.0-alpha.2")` é verdadeiro, e a versão
+  atual não se oferece a si mesma — coberto por teste de regressão;
+- o `DESKTOP_RELEASE_VERSION` gerado no build é `2.0.0-alpha.3`;
+- o nome do MSI casa com o filtro de instalador e o APK **não** casa, então o
+  atualizador não pode baixar o pacote errado;
+- a URL de download satisfaz as cinco checagens de confiança (https, host
+  `github.com`, sem userinfo, porta padrão, caminho do repositório);
+- 286 MB contra um teto de 1 GB.
+
+Corrigidos e publicados: BUG-001, BUG-002, BUG-004, BUG-006, BUG-007, BUG-008.
+
+**Falta confirmar em uso real na alpha.3:** capa, sinopse e trailer na tela de
+Assinaturas (itens 2 e 3 do BUG-006) — a causa provável foi corrigida junto com
+as fotos do elenco, mas não houve confirmação em execução.
+
+---
 
 ---
 
