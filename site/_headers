@@ -4,6 +4,9 @@
   Referrer-Policy: strict-origin-when-cross-origin
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
 
 # The shared-title page, and only it, may show a poster from the public metadata host. Scoped here
 # rather than widened site-wide: this is the one page that renders an image named by a query string,
@@ -15,3 +18,15 @@
   Referrer-Policy: strict-origin-when-cross-origin
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Cross-Origin-Opener-Policy: same-origin
+  # Not same-origin here: the poster is fetched from image.tmdb.org, and same-origin would block the
+  # very image this page exists to show. cross-origin is what a page embedding third-party art needs.
+  Cross-Origin-Resource-Policy: cross-origin
+
+# The Android App Links manifest must be served as JSON or Android ignores it, and the check runs
+# from Google's servers rather than the user's browser — so it needs to be readable cross-origin.
+/.well-known/assetlinks.json
+  Content-Type: application/json
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
