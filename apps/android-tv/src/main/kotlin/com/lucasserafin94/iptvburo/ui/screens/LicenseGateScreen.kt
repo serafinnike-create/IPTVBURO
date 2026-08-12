@@ -18,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,7 +38,9 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.domain.model.LicenseBlockReason
+import com.lucasserafin94.iptvburo.data.licensing.KeyState
 import com.lucasserafin94.iptvburo.data.licensing.RedeemFailure
+import kotlinx.coroutines.delay
 import com.lucasserafin94.iptvburo.ui.LicenseUiState
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
@@ -56,6 +59,8 @@ fun LicenseGateScreen(
     onRetry: () -> Unit,
     onRedeem: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Asks what the typed key is without spending it. Defaults to doing nothing, for previews. */
+    onInspectKey: (String) -> Unit = {},
     backdropPosters: List<String> = emptyList(),
 ) {
     var key by remember { mutableStateOf("") }
@@ -178,6 +183,39 @@ fun LicenseGateScreen(
                     singleLine = true,
                     colors = BuroFieldColors,
                 )
+
+                // Asked once the typing settles, not on every keystroke: a key is checked in a
+                // single request and a half-typed one is not a question worth asking.
+                LaunchedEffect(key) {
+                    delay(KEY_INSPECTION_DELAY_MILLIS)
+                    onInspectKey(key)
+                }
+
+                // What the server says the key is, before anything is spent. The reassuring case is
+                // "yours": after a reinstall the buyer's own key looks used, and saying so plainly
+                // is the difference between reactivating and believing it must be bought again.
+                state.typedKeyState?.let { keyState ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text =
+                            stringResource(
+                                when (keyState) {
+                                    KeyState.AVAILABLE -> R.string.license_gate_key_state_available
+                                    KeyState.YOURS -> R.string.license_gate_key_state_yours
+                                    KeyState.IN_USE -> R.string.license_gate_key_state_in_use
+                                    KeyState.EXPIRED -> R.string.license_gate_key_state_expired
+                                    KeyState.UNKNOWN -> R.string.license_gate_key_state_unknown
+                                },
+                            ),
+                        color =
+                            when (keyState) {
+                                KeyState.AVAILABLE, KeyState.YOURS -> BuroGold
+                                else -> BuroDanger
+                            },
+                        fontSize = 13.sp,
+                    )
+                }
+
                 Spacer(Modifier.height(10.dp))
                 FocusSurface(
                     onClick = { onRedeem(key) },
@@ -251,3 +289,11 @@ private fun copyFor(reason: LicenseBlockReason): GateCopy =
         LicenseBlockReason.NOT_ACTIVATED ->
             GateCopy(R.string.license_gate_not_activated_title, R.string.license_gate_not_activated_body)
     }
+
+/**
+ * How long the key field settles before the server is asked about it.
+ *
+ * Long enough that typing a full key produces one request rather than one per character; short
+ * enough that the answer arrives while the user is still looking at the field.
+ */
+private const val KEY_INSPECTION_DELAY_MILLIS = 600L

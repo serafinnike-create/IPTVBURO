@@ -52,7 +52,7 @@ data class CastMessage(
             positionMillis.toString(),
             // Last, because it is the only field that may contain anything: a title with a
             // separator in it would otherwise shift every field after it.
-            title.replace('', ' '),
+            title.replace('\u001F', ' '),
         ).joinToString(SEPARATOR.toString())
 
     companion object {
@@ -60,7 +60,7 @@ data class CastMessage(
         const val PROTOCOL_VERSION = "buro-cast-1"
 
         /** Unit separator: it cannot appear in a title that came from a catalogue. */
-        private const val SEPARATOR = ''
+        private const val SEPARATOR = '\u001F'
 
         /** Four digits, shown by the receiver and typed once into the sender. */
         const val PAIRING_CODE_LENGTH = 4

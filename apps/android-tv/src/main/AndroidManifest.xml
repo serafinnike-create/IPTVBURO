@@ -3,6 +3,20 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+        Sending a title to a screen on the same network.
+
+        ACCESS_NETWORK_STATE tells the app whether it is on wifi at all, so it can say "connect to
+        the same network" instead of showing an empty device list and no reason for it.
+
+        CHANGE_WIFI_MULTICAST_STATE is what makes discovery work: Android drops multicast and
+        broadcast packets by default to save power, so without holding a multicast lock the replies
+        from a receiver never reach this app. Neither permission grants access to any content, and
+        neither prompts the user — both are install-time.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
     <uses-feature
         android:name="android.software.leanback"
         android:required="false" />

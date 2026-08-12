@@ -117,6 +117,7 @@ class MainViewModel @Inject constructor(
     private var subscriptionsJob: Job? = null
     private var subscriptionSelectionJob: Job? = null
     private var sharedLinkJob: Job? = null
+    private var keyInspectionJob: Job? = null
 
     /**
      * A shared title waiting for a catalogue to look it up in.
@@ -340,6 +341,37 @@ class MainViewModel @Inject constructor(
 
     fun refreshLicense() {
         checkLicense()
+    }
+
+    /**
+     * Looks up what the typed key is, without spending it.
+     *
+     * Called as the field settles rather than on every keystroke: the request is cheap but it is
+     * still a network call, and a half-typed key is not a question worth asking. Nothing is granted
+     * from the answer — [redeemLicense] remains the only thing that changes a licence.
+     */
+    fun inspectKey(key: String) {
+        val blocked = mutableState.value.license as? LicenseUiState.Blocked ?: return
+        val clean = key.trim()
+        if (clean.length < MIN_INSPECTABLE_KEY) {
+            // Too short to mean anything yet: clear a previous answer rather than leaving a stale
+            // verdict next to a key the user has since edited.
+            if (blocked.typedKeyState != null) {
+                mutableState.update { it.copy(license = blocked.copy(typedKeyState = null)) }
+            }
+            return
+        }
+
+        keyInspectionJob?.cancel()
+        keyInspectionJob =
+            viewModelScope.launch {
+                val state = withContext(ioDispatcher) { licenseService.keyState(clean) }
+                mutableState.update { current ->
+                    // Ignore an answer that arrived after the user changed the key or got in.
+                    val stillBlocked = current.license as? LicenseUiState.Blocked ?: return@update current
+                    current.copy(license = stillBlocked.copy(typedKeyState = state))
+                }
+            }
     }
 
     fun redeemLicense(key: String) {
@@ -3247,6 +3279,15 @@ class MainViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "MainViewModel"
+
+        /**
+         * How much of a key has to be typed before it is worth asking the server about.
+         *
+         * Keys are far longer than this; the point is only to skip the first few keystrokes, where
+         * every answer would be "unknown" and would flash a scary verdict at someone who is simply
+         * still typing.
+         */
+        const val MIN_INSPECTABLE_KEY = 6
 
         /**
          * How many home titles get a real synopsis fetched.

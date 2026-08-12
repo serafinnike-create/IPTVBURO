@@ -30,6 +30,11 @@
     <string name="license_gate_key_expired">Esta clave ha caducado y ya no se puede activar.</string>
     <string name="license_gate_key_offline">No se pudo contactar con el servidor. Revisa tu conexión e inténtalo de nuevo.</string>
     <string name="license_gate_key_not_registered">Este dispositivo aún no está registrado. Toca “Comprobar de nuevo” para conectar y luego usa tu clave.</string>
+    <string name="license_gate_key_state_available">Clave encontrada y disponible. Toca “Usar clave” para activar.</string>
+    <string name="license_gate_key_state_yours">Esta clave ya es tuya. Toca “Usar clave” para reactivar este dispositivo.</string>
+    <string name="license_gate_key_state_in_use">Esta clave está en uso en otro dispositivo y no se puede transferir.</string>
+    <string name="license_gate_key_state_expired">Esta clave ha caducado.</string>
+    <string name="license_gate_key_state_unknown">No hay ninguna clave con este código.</string>
     <string name="license_gate_privacy">Este código proviene de una clave del Android Keystore, no de la MAC del móvil.</string>
     <string name="license_status_active">Activo</string>
     <plurals name="license_status_trial_days"><item quantity="one">Prueba · queda %1$d día</item><item quantity="other">Prueba · quedan %1$d días</item></plurals>

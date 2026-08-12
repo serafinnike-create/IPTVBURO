@@ -30,6 +30,11 @@
     <string name="license_gate_key_expired">Dieser Schlüssel ist abgelaufen und kann nicht mehr aktiviert werden.</string>
     <string name="license_gate_key_offline">Der Server war nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
     <string name="license_gate_key_not_registered">Dieses Gerät ist noch nicht registriert. Tippe auf „Erneut prüfen“, um zu verbinden, und nutze dann deinen Schlüssel.</string>
+    <string name="license_gate_key_state_available">Schlüssel gefunden und verfügbar. Tippe auf „Schlüssel verwenden“.</string>
+    <string name="license_gate_key_state_yours">Dieser Schlüssel gehört bereits dir. Tippe auf „Schlüssel verwenden“, um dieses Gerät erneut zu aktivieren.</string>
+    <string name="license_gate_key_state_in_use">Dieser Schlüssel wird auf einem anderen Gerät verwendet und kann nicht übertragen werden.</string>
+    <string name="license_gate_key_state_expired">Dieser Schlüssel ist abgelaufen.</string>
+    <string name="license_gate_key_state_unknown">Kein Schlüssel mit diesem Code.</string>
     <string name="license_gate_privacy">Dieser Code stammt aus einem Android-Keystore-Schlüssel, nicht aus der MAC-Adresse des Telefons.</string>
     <string name="license_status_active">Aktiv</string>
     <plurals name="license_status_trial_days"><item quantity="one">Test · noch %1$d Tag</item><item quantity="other">Test · noch %1$d Tage</item></plurals>

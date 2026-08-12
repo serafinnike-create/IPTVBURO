@@ -133,6 +133,45 @@ class AndroidLicenseClient @Inject constructor(
     }
 
     /**
+     * Asks what a key is without spending it.
+     *
+     * Its own request rather than going through [ask], because that one expects a signed licence
+     * and this endpoint answers with a plain state. Nothing here can grant access — the answer is
+     * advisory, only [redeem] changes anything — so an unsigned reply is safe to read.
+     *
+     * Null on any failure at all. A screen that cannot reach the server should say nothing about
+     * the key rather than guess, and the user can still press Use key and get a real answer.
+     */
+    override fun keyState(key: String): KeyState? {
+        val clean = key.trim().uppercase().takeIf { it.length in 4..128 } ?: return null
+        val identity = runCatching { AndroidDeviceIdentityProvider.getOrCreate(context) }.getOrNull()
+            ?: return null
+        val nonce = freshNonce()
+        val body =
+            JsonObject().apply {
+                addProperty("deviceId", identity.deviceId)
+                addProperty("nonce", nonce)
+                addProperty("proof", identity.proof(AndroidDeviceProofAction.VALIDATE, nonce))
+                addProperty("key", clean)
+            }
+
+        return runCatching {
+            http.newCall(
+                Request.Builder()
+                    .url(AndroidLicenseEndpoints.KEY_INFO)
+                    .post(body.toString().toRequestBody(JSON))
+                    .build(),
+            ).execute().use { response ->
+                val json =
+                    runCatching { JsonParser.parseString(response.body.string()).asJsonObject }
+                        .getOrNull()
+                // 404 carries `state: unknown`, which is an answer rather than a failure.
+                json?.get("state")?.asString?.toKeyState()
+            }
+        }.getOrNull()
+    }
+
+    /**
      * Sends an opaque Play token to the Worker; only Google's server response may grant access.
      * The P-256 proof binds the token digest and stable obfuscated account id to this installation,
      * so changing either field after signing is rejected before the purchase is queried.
@@ -326,6 +365,14 @@ interface AndroidLicenseService {
      * key already in use from having no signal — three problems with three different remedies.
      */
     fun redeem(key: String, now: Instant = Instant.now()): RedeemOutcome
+
+    /**
+     * What [key] is, without redeeming it. Null when the server could not be asked.
+     *
+     * Deliberately separate from [redeem]: this one never changes anything, so the screen is free
+     * to call it while the user is still typing.
+     */
+    fun keyState(key: String): KeyState? = null
     fun submitGooglePlayPurchase(
         purchaseToken: String,
         accountId: String,
@@ -379,6 +426,31 @@ enum class RedeemFailure {
     UNREACHABLE,
 }
 
+/**
+ * What a key is, asked before spending it.
+ *
+ * The point is to answer the question the user has while typing — "is this key any good?" — rather
+ * than making them press Use key to find out. [YOURS] is the one that matters most: after a
+ * reinstall the buyer's own key looks used, and telling them it is *theirs* is the difference
+ * between reactivating and believing they have to buy it again.
+ */
+enum class KeyState {
+    /** Free: nobody has redeemed it. */
+    AVAILABLE,
+
+    /** Already redeemed by this device. Using it again reactivates. */
+    YOURS,
+
+    /** Redeemed by another device. The server never says which. */
+    IN_USE,
+
+    /** Past its validity date. */
+    EXPIRED,
+
+    /** No key by that name. */
+    UNKNOWN,
+}
+
 /** The outcome of redeeming a key: the new licence, or why there is not one. */
 sealed interface RedeemOutcome {
     data class Activated(val status: AndroidLicenseStatus) : RedeemOutcome
@@ -393,6 +465,23 @@ sealed interface RedeemOutcome {
  * respectively. Anything else is deliberately collapsed into REFUSED rather than guessed at: a
  * wrong explanation is worse than a vague one, because the user acts on it.
  */
+/**
+ * Translates the Worker's `key-info` state into [KeyState].
+ *
+ * Null for anything unrecognised, which the screen renders as saying nothing: the user can still
+ * press Use key and get a real, server-decided answer, whereas a guess would put a wrong word next
+ * to a key that is perfectly fine.
+ */
+internal fun String.toKeyState(): KeyState? =
+    when (this) {
+        "available" -> KeyState.AVAILABLE
+        "yours" -> KeyState.YOURS
+        "in_use" -> KeyState.IN_USE
+        "expired" -> KeyState.EXPIRED
+        "unknown" -> KeyState.UNKNOWN
+        else -> null
+    }
+
 internal fun String.toRedeemFailure(): RedeemFailure =
     when (this) {
         "unknown_key" -> RedeemFailure.UNKNOWN_KEY
@@ -607,6 +696,15 @@ object AndroidLicenseEndpoints {
     const val VALIDATE = "https://$DOMAIN/v1/validate"
     const val REGISTER = "https://$DOMAIN/v1/register"
     const val REDEEM = "https://$DOMAIN/v1/redeem"
+
+    /**
+     * Asks what a key is, without spending it.
+     *
+     * Lets the screen answer "is this key any good?" before the user commits, which is the
+     * question they are actually asking while typing. The Worker never says *which* device holds a
+     * key — only whether it is free, already this device's, in use elsewhere, or expired.
+     */
+    const val KEY_INFO = "https://$DOMAIN/v1/key-info"
     const val GOOGLE_PLAY_PURCHASE = "https://$DOMAIN/v1/google-play/purchase"
     const val SERVER_PUBLIC_KEY =
         "MCowBQYDK2VwAyEAXm01dKxc4kXNYaSYnVL0isza1EnYn+nYjyfNhnWoILw="

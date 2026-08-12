@@ -50,6 +50,117 @@ alpha.3 instalada e olhou a tela. Vale um teste de instalação limpa.
 
 ---
 
+## BUG-017 — "Não foi possível alcançar o servidor" ao conectar a lista
+
+**Status:** aguardando informação — **não reproduzido**
+**Reportado em:** 2026-08-13
+**Ambiente:** `v2.0.0-alpha.3` instalado do GitHub
+
+### Sintoma
+
+Na tela de conexão da lista: *"Não foi possível carregar a lista — Não foi
+possível alcançar o servidor."*
+
+### O que essa mensagem significa exatamente
+
+É `XtreamFailureReason.NETWORK`, e agora que o mapeamento de erros foi separado
+(ver AUDITORIA-010) ela é **confiável**: só aparece quando a requisição ao
+provedor realmente não completou. Não é mais o balde onde caíam falhas do app.
+
+Ou seja, uma destas: o endereço está incorreto, o provedor está fora do ar, ou
+algo na rede local (firewall, antivírus, DNS) bloqueou a chamada.
+
+### O que falta para diagnosticar
+
+Não dá para afirmar mais sem dados. O que resolveria:
+
+1. o `~/.iptvburo/logs/iptvburo.log` da execução que falhou — agora ele registra
+   o tipo da exceção e a razão Xtream;
+2. se o mesmo endereço/usuário/senha funciona noutro aplicativo ou no navegador;
+3. se o servidor usa `http` numa porta alta (comum em painéis Xtream) e se há
+   antivírus com inspeção de rede ativa.
+
+**Não peça ao usuário para colar a URL com usuário e senha em lugar público** —
+essa combinação é a credencial da assinatura dele.
+
+---
+
+## BUG-018 — "Redefinir" não apaga a lista nem as credenciais
+
+**Status:** ✅ CORRIGIDO em 2026-08-13
+**Reportado em:** 2026-08-13
+
+### Sintoma
+
+A opção de redefinir no perfil não zera tudo: nome e lista continuam lá. O
+esperado é voltar ao estado de instalação nova.
+
+### Causa
+
+`resetEverything()`
+([DesktopAppState.kt:707-715](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/DesktopAppState.kt#L707-L715))
+limpa perfis, favoritos, downloads e idioma — mas delega a limpeza da fonte a
+`forgetSelectedSource()`, que **sai cedo quando nenhuma fonte está selecionada**:
+
+```kotlin
+fun forgetSelectedSource() {
+    if (isXtreamSelected) { disconnectXtream(); return }
+    val sourceId = selectedCatalog?.source?.id ?: return   // <- sai aqui
+    ...
+}
+```
+
+Só `disconnectXtream()` chama `rememberedXtreamStore.clear()`. Se o app for
+redefinido sem uma fonte Xtream ativa no momento, o blob de credenciais nunca é
+apagado, e o cache de catálogo em disco não é tocado por caminho nenhum.
+
+Confirmado numa máquina real, depois de um redefinir:
+
+```text
+~/AppData/Local/lucasserafin94/IPTVBURO/remembered-source.dpapi   (sobreviveu)
+~/.iptvburo/catalog-cache/live.burocat                            (sobreviveu)
+```
+
+Isso também explica o BUG-002 de outro ângulo: o app volta com catálogo em disco
+e sem sessão coerente, que é exatamente o estado que produz mensagens erradas.
+
+### Correção proposta
+
+`resetEverything()` deve limpar incondicionalmente, sem depender do que está
+selecionado:
+
+1. `rememberedXtreamStore.clear()` sempre, não só via `disconnectXtream`;
+2. apagar `~/.iptvburo/catalog-cache/` e `~/.iptvburo/shelf-cache/`;
+3. limpar o repositório em memória (`xtreamRepository.clearIncludingDiskCache()`,
+   que já existe).
+
+**Não apagar** `device-identity.dpapi`: é a identidade da licença. Apagá-la faria
+o cliente perder o que pagou — exatamente o BUG-012. Vale um comentário no código
+dizendo isso, porque "redefinir tudo" convida alguém a incluir esse arquivo.
+
+### Correção aplicada
+
+`resetEverything()` agora limpa incondicionalmente, sem depender do que está
+selecionado: `rememberedXtreamStore.clear()`, `clearIncludingDiskCache()`, a
+chave de ativação exibida e o modo de áudio.
+
+**`device-identity.dpapi` continua intocado, de propósito**, com um comentário no
+código explicando por quê: é a identidade da licença, e apagá-la daria um código
+novo à máquina — exatamente o BUG-012, que custou trinta dias a um cliente.
+"Redefinir tudo" convida alguém a incluir esse arquivo; o comentário existe para
+recusar o convite.
+
+### Cobertura
+
+`RememberedXtreamStoreTest` já provava que `clear()` apaga o blob — o defeito
+nunca esteve no store, e sim em `resetEverything` jamais chamá-lo. Um teste de
+`resetEverything` completo exigiria montar um `DesktopAppState` inteiro; a
+verificação mais barata e honesta é a manual: redefinir e conferir que
+`remembered-source.dpapi` e `catalog-cache/` sumiram e `device-identity.dpapi`
+ficou.
+
+---
+
 ## BUG-016 — A migration 0005 não aplica num banco antigo
 
 **Status:** diagnosticado, **não corrigido** — é trabalho paralelo, não toquei

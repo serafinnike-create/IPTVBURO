@@ -30,6 +30,11 @@
     <string name="license_gate_key_expired">This key has expired and can no longer be activated.</string>
     <string name="license_gate_key_offline">Could not reach the server. Check your connection and try again.</string>
     <string name="license_gate_key_not_registered">This device is not registered yet. Tap “Check again” to connect, then use your key.</string>
+    <string name="license_gate_key_state_available">Key found and available. Tap “Use key” to activate.</string>
+    <string name="license_gate_key_state_yours">This key is already yours. Tap “Use key” to reactivate this device.</string>
+    <string name="license_gate_key_state_in_use">This key is in use on another device and cannot be moved.</string>
+    <string name="license_gate_key_state_expired">This key has expired.</string>
+    <string name="license_gate_key_state_unknown">No key with this code.</string>
     <string name="license_gate_privacy">This code comes from an Android Keystore key, not from the phone MAC address.</string>
     <string name="license_status_active">Active</string>
     <plurals name="license_status_trial_days"><item quantity="one">Trial · %1$d day left</item><item quantity="other">Trial · %1$d days left</item></plurals>

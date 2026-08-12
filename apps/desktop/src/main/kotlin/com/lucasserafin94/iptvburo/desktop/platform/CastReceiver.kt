@@ -136,7 +136,7 @@ class CastReceiver(
                 runCatching {
                     val text = String(packet.data, 0, packet.length, Charsets.UTF_8).trim()
                     if (text != DISCOVERY_PROBE) return@runCatching
-                    val reply = "$DISCOVERY_REPLY$tcpPort$displayName".toByteArray(Charsets.UTF_8)
+                    val reply = "$DISCOVERY_REPLY\u001F$tcpPort\u001F$displayName".toByteArray(Charsets.UTF_8)
                     socket.send(DatagramPacket(reply, reply.size, packet.address, packet.port))
                 }
             }
@@ -184,7 +184,7 @@ class CastReceiver(
                         val packet = DatagramPacket(buffer, buffer.size)
                         if (!runCatching { socket.receive(packet) }.isSuccess) break
                         val parts =
-                            String(packet.data, 0, packet.length, Charsets.UTF_8).split('')
+                            String(packet.data, 0, packet.length, Charsets.UTF_8).split('\u001F')
                         if (parts.size != 3 || parts[0] != DISCOVERY_REPLY) continue
                         val port = parts[1].toIntOrNull()?.takeIf { it in 1..65_535 } ?: continue
                         val name = parts[2].take(60).ifBlank { packet.address.hostAddress }

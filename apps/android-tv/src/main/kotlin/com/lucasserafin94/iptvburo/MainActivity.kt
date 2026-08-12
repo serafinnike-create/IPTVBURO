@@ -260,6 +260,7 @@ private fun IptvBuroRoot(
                 onPurchase = onPurchase,
                 onRetry = viewModel::refreshLicense,
                 onRedeem = viewModel::redeemLicense,
+                onInspectKey = viewModel::inspectKey,
                 backdropPosters = state.bootBackdropUrls,
             )
         }

@@ -712,6 +712,25 @@ class DesktopAppState(
         activeProfileId = null
         unlockedCategories.clear()
         forgetSelectedSource()
+
+        // Cleared unconditionally, because forgetSelectedSource does not.
+        //
+        // That function returns early when no source is selected, and only its Xtream branch clears
+        // the remembered credentials — so resetting while nothing was connected left the DPAPI blob
+        // and the on-disk catalogue behind. Verified on a real machine after a reset:
+        // remembered-source.dpapi and catalog-cache/live.burocat were both still there, which is
+        // how the app came back holding a catalogue with no session to go with it.
+        rememberedXtreamStore.clear()
+        xtreamRepository.clearIncludingDiskCache()
+        activationKey = null
+        audioOutput = AudioOutputMode.SYSTEM
+
+        // Deliberately *not* deleted: device-identity.dpapi.
+        //
+        // It is the licence identity, not a setting. Removing it gives the machine a new device
+        // code, which strands a paid entitlement and drops the customer back to the trial — the
+        // fault that cost somebody thirty days. "Reset everything" reads like an invitation to
+        // include it; this comment is here to refuse that invitation.
     }
 
     /**
