@@ -87,6 +87,10 @@ fun LicenseGate(
     status: LicenseStatus,
     client: LicenseClient,
     onRechecked: (LicenseStatus) -> Unit,
+    /** Called with a key that was accepted, so the app can show it back to its owner later. */
+    onKeyRedeemed: (String) -> Unit = {},
+    /** The key already redeemed by this installation, shown back so it can be kept. */
+    activationKey: String? = null,
     onQuit: () -> Unit,
     languageTag: String,
     /** Posters remembered from the last catalogue load; decorative and never interactive. */
@@ -134,6 +138,7 @@ fun LicenseGate(
     var keyFailed by remember { mutableStateOf(false) }
     var enteringKey by remember { mutableStateOf(false) }
     var copied by remember { mutableStateOf(false) }
+    var keyCopied by remember { mutableStateOf(false) }
 
     // A failed redemption stays on the code view so the error remains beside the field that caused
     // it. The state lives here because the route into that view is fixed outside the scrolling
@@ -158,6 +163,12 @@ fun LicenseGate(
         if (copied) {
             kotlinx.coroutines.delay(1_800)
             copied = false
+        }
+    }
+    LaunchedEffect(keyCopied) {
+        if (keyCopied) {
+            kotlinx.coroutines.delay(1_800)
+            keyCopied = false
         }
     }
 
@@ -229,6 +240,25 @@ fun LicenseGate(
                     copied = true
                 },
             )
+
+            // The key that paid for this installation, once there is one.
+            //
+            // Shown beside the device code because the two answer different questions: the device
+            // code is what support asks for, the key is what the customer owns. Nothing in the app
+            // displayed the key at all, so the only copy was wherever they pasted it after buying —
+            // and losing it means buying another, since it binds to this device.
+            activationKey?.takeIf(String::isNotBlank)?.let { key ->
+                Spacer(Modifier.height(BuroSpacing.Sm))
+                ActivationKeyRow(
+                    key = key,
+                    copied = keyCopied,
+                    text = text,
+                    onCopy = {
+                        copyToClipboard(key)
+                        keyCopied = true
+                    },
+                )
+            }
 
             if (status.clockSuspect) {
                 Spacer(Modifier.height(BuroSpacing.Sm))
@@ -345,6 +375,12 @@ fun LicenseGate(
             keyFailed = true
         } else {
             keyFailed = !result.allowsUse && keyInput.isNotBlank()
+            // Remembered only when the key actually worked.
+            //
+            // Losing the key costs money — it is bound to this device and the alternative to
+            // finding it again is buying another — so the app keeps it and shows it back in
+            // Options. Storing a rejected key would show the customer a code that does nothing.
+            if (result.allowsUse && keyInput.isNotBlank()) onKeyRedeemed(keyInput.trim())
             onRechecked(result)
         }
     }
@@ -387,6 +423,58 @@ private fun DeviceIdentity(
             fontFamily = FontFamily.Monospace,
         )
         Spacer(Modifier.height(BuroSpacing.Xxs))
+        TextButton(onClick = onCopy) {
+            Text(
+                text = if (copied) text.copied else "⧉",
+                color = if (copied) BuroColors.Success else BuroColors.TextMuted,
+                fontSize = 12.sp,
+            )
+        }
+    }
+}
+
+/**
+ * The activation key this installation redeemed.
+ *
+ * Quieter than the device code above it, on purpose: this is a value to keep, not one to read out
+ * to support. It is smaller and not gold, so the screen still has one obvious focus.
+ *
+ * Shown in full rather than masked. Hiding most of it would protect nothing — it is bound to this
+ * device and useless anywhere else — while defeating the reason it is here, which is that the
+ * customer can write it down before they need it.
+ */
+@Composable
+private fun ActivationKeyRow(
+    key: String,
+    copied: Boolean,
+    text: LicenseStrings,
+    onCopy: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(BuroColors.Surface)
+            .border(1.dp, BuroColors.BorderSoft, RoundedCornerShape(14.dp))
+            .padding(BuroSpacing.Sm),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(text.activationKeyLabel, color = BuroColors.TextSubtle, fontSize = 11.sp)
+        Spacer(Modifier.height(BuroSpacing.Xxs))
+        Text(
+            text = key,
+            color = BuroColors.Text,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = FontFamily.Monospace,
+        )
+        Spacer(Modifier.height(BuroSpacing.Xxs))
+        Text(
+            text = text.activationKeyHint,
+            color = BuroColors.TextMuted,
+            fontSize = 10.sp,
+            textAlign = TextAlign.Center,
+        )
         TextButton(onClick = onCopy) {
             Text(
                 text = if (copied) text.copied else "⧉",

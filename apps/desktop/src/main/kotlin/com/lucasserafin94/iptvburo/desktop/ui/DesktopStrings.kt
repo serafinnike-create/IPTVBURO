@@ -38,6 +38,10 @@ data class LicenseStrings(
     val verifyTitle: String,
     val verifyBody: String,
     val deviceLabel: String,
+    /** The key this installation redeemed, shown so its owner can keep a copy. */
+    val activationKeyLabel: String,
+    /** Says plainly that losing the key means buying another. */
+    val activationKeyHint: String,
     val macLabel: String,
     val scanHint: String,
     val openInBrowser: String,
@@ -943,6 +947,8 @@ data class DesktopStrings(
                             "La aplicación pasó demasiado tiempo sin verificar. Conéctate a internet una "
                                 + "vez para continuar.",
                         deviceLabel = "Dispositivo",
+                        activationKeyLabel = "Clave de activación",
+                        activationKeyHint = "Guárdala. Está ligada a este equipo; perderla obliga a comprar otra.",
                         macLabel = "MAC",
                         scanHint = "Apunta la cámara del móvil al código",
                         openInBrowser = "Abrir en el navegador",
@@ -1401,6 +1407,8 @@ data class DesktopStrings(
                             "O aplicativo ficou tempo demais sem verificar. Conecte-se à internet uma "
                                 + "vez para continuar.",
                         deviceLabel = "Dispositivo",
+                        activationKeyLabel = "Chave de ativação",
+                        activationKeyHint = "Guarde esta chave. Ela vale só neste computador; perdê-la obriga a comprar outra.",
                         macLabel = "MAC",
                         scanHint = "Aponte a câmera do celular para o código",
                         openInBrowser = "Abrir no navegador",
@@ -1857,6 +1865,8 @@ data class DesktopStrings(
                         verifyBody =
                             "The app has run offline for long enough. Go online once to carry on.",
                         deviceLabel = "Device",
+                        activationKeyLabel = "Activation key",
+                        activationKeyHint = "Keep this key. It is tied to this computer; losing it means buying another.",
                         macLabel = "MAC",
                         scanHint = "Scan this with your phone",
                         openInBrowser = "Open in browser",
@@ -2319,6 +2329,8 @@ data class DesktopStrings(
                         verifyBody =
                             "Die App lief lange genug offline. Gehen Sie einmal online, um fortzufahren.",
                         deviceLabel = "Gerät",
+                        activationKeyLabel = "Aktivierungsschlüssel",
+                        activationKeyHint = "Bewahre ihn auf. Er gilt nur für diesen Rechner; ohne ihn musst du neu kaufen.",
                         macLabel = "MAC",
                         scanHint = "Code mit dem Handy scannen",
                         openInBrowser = "Im Browser öffnen",
@@ -2776,6 +2788,8 @@ data class DesktopStrings(
                             "L'app ha funzionato offline abbastanza a lungo. Collegati a internet una "
                                 + "volta per continuare.",
                         deviceLabel = "Dispositivo",
+                        activationKeyLabel = "Chiave di attivazione",
+                        activationKeyHint = "Conservala. Vale solo su questo computer; perderla significa comprarne un'altra.",
                         macLabel = "MAC",
                         scanHint = "Inquadra il codice con il telefono",
                         openInBrowser = "Apri nel browser",

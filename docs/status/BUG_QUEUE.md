@@ -181,6 +181,142 @@ caminho que um fraudador tentaria abusar.
 
 ---
 
+## TAREFA-015 — Enviar para a TV / notebook (celular como controle)
+
+**Status:** pesquisado — **é possível**, não implementado
+**Solicitado em:** 2026-08-13
+
+### O pedido
+
+Estando com o app no celular, tocar num botão e mandar o filme para o notebook ou
+para a TV que estiverem com o app aberto na mesma casa. Escolher na lista qual
+aparelho recebe. Procurar no celular, que é rápido, e assistir na tela grande.
+
+### É possível, e o app já tem as duas peças
+
+Não precisa de Chromecast, nem de DLNA, nem de servidor na internet:
+
+1. **O que enviar já existe.** `TitleShareLink` já identifica um título de forma
+   independente de provedor (título normalizado + ano + tipo). É exatamente o que
+   o aparelho receptor precisa para achar o mesmo filme *na lista dele*.
+2. **Como entregar já existe em miniatura.** `SingleInstance`
+   ([SingleInstance.kt](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/platform/SingleInstance.kt))
+   já abre um socket, publica a porta e entrega um link para a instância que está
+   rodando. É o mesmo padrão, só que hoje restrito ao *loopback*.
+
+Falta o meio: **descoberta na rede local** (quais aparelhos estão abertos) e um
+canal entre máquinas diferentes em vez de dentro da mesma.
+
+### Decisão importante: mandar o *título*, não o *vídeo*
+
+Duas arquiteturas possíveis, e a diferença é enorme:
+
+| | enviar o vídeo (espelhar) | enviar o título (recomendado) |
+| --- | --- | --- |
+| o que trafega | o stream inteiro | ~200 bytes |
+| qualidade | limitada pelo wi-fi do celular | a TV baixa direto da fonte |
+| bateria do celular | drena | quase nada |
+| credenciais | o celular teria que repassar | **nunca saem do aparelho** |
+
+A segunda é a que as IPTVs boas usam, e é a única compatível com a regra do
+projeto de não deixar URL autenticada sair do aparelho. O celular manda "abra
+*Duna: Parte Dois (2024)*, no minuto 34"; a TV resolve na própria lista dela e
+começa a tocar. Vantagem extra: se a TV já estiver com a mesma lista, funciona
+sem o celular ficar ligado.
+
+### Como implementar
+
+1. **Descoberta:** anúncio UDP multicast na rede local (`239.255.x.x`), cada app
+   aberto dizendo nome, tipo e porta. Ou mDNS via `jmdns`, se valer a dependência.
+2. **Canal:** o receptor abre um `ServerSocket` — igual ao `SingleInstance`, mas
+   ligado à rede local em vez do loopback.
+3. **Emparelhamento:** o receptor mostra um número de 4 dígitos que o remetente
+   digita uma vez. **Sem isso, qualquer um no mesmo wi-fi manda vídeo para a sua
+   TV** — inclusive num prédio com rede compartilhada.
+4. **Retomada:** mandar junto a posição atual, para continuar de onde parou.
+5. **Interface:** botão de TV na tela do filme, listando só o que respondeu ao
+   anúncio.
+
+### Riscos que precisam de cuidado
+
+- **Isto abre uma porta de rede real**, ao contrário de tudo que o app faz hoje.
+  O emparelhamento e um limite de tamanho na mensagem não são opcionais.
+- Muitas redes domésticas bloqueiam multicast entre wi-fi e cabo; precisa de um
+  caminho manual (digitar o IP) para quando a descoberta falhar.
+- O app de TV **ainda não existe**. Dá para construir e testar tudo entre
+  **celular ↔ Windows** primeiro, e a TV entra depois usando o mesmo protocolo.
+
+### Ordem sugerida
+
+Windows recebendo, celular enviando. É o par que já tem os dois apps prontos, e
+prova o protocolo inteiro antes de existir uma terceira plataforma.
+
+---
+
+## TAREFA-014 — Seletor de áudio 2.0 / 5.1 / 7.1 na tela do filme
+
+**Status:** pesquisado — **é possível**, não implementado
+**Solicitado em:** 2026-08-13
+
+### Resposta curta
+
+**Sim, dá para fazer, e sem depender de nenhuma empresa ou biblioteca nova.** O
+VLC que já vem empacotado no app tem tudo. Verificado rodando o binário que o
+próprio build gera:
+
+```text
+--directx-audio-speaker={Windows default,Mono,Stereo,Quad,5.1,7.1}
+--spatialaudio-headphones          (binaural, para fone)
+ Headphone virtual spatialization effect (headphone)
+   "…feeling that you are standing in a room with a complete 7.1 speaker set
+    when using only a headphone"
+ Audio Spatializer (spatializer)   --spatializer-width, -roomsize, -wet, -dry
+```
+
+Ou seja: o "emular 7.1 num vídeo que não tem 7.1" é um recurso pronto do VLC,
+sob licença livre (LGPL/GPL), já dentro do produto. Não precisa de SDK
+proprietário nem de acordo com fabricante.
+
+### O que é honesto prometer
+
+Vale separar duas coisas, porque a diferença importa para não enganar o usuário:
+
+- **Fone de ouvido:** o efeito é real e convincente. O `headphone`/binaural
+  simula posicionamento espacial de um conjunto 7.1 em dois canais, e é
+  perceptível.
+- **Caixas de som:** um estéreo 2.0 mandado para 6 ou 8 caixas é *upmix* — o som
+  ocupa mais alto-falantes, mas não existe informação nova. Não vira um 7.1 de
+  verdade, e chamar isso de "7.1" na interface seria mentira. O rótulo honesto é
+  algo como "Ampliar para 5.1" ou "Simular surround".
+
+### Como implementar
+
+1. Ler os canais reais da faixa (o VLC informa) e mostrar na tela do filme o que
+   a mídia **tem**: `2.0`, `5.1`, `7.1`.
+2. Oferecer um seletor de saída ao lado, com o que o sistema **pode** entregar,
+   passando `--directx-audio-speaker` ao iniciar o motor.
+3. Um botão separado para fone (`--spatialaudio-headphones`), que é o caso em que
+   a simulação realmente entrega.
+4. Guardar a escolha por perfil, como as legendas já são guardadas.
+
+### O trabalho real não é o áudio
+
+É o ciclo de vida do player. O VLC monta a cadeia de áudio **quando o motor
+inicia**, então trocar de modo exige recriar o player — exatamente como já
+acontece hoje com o estilo de legenda
+([DesktopPlayerOverlay.kt:84](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/playback/DesktopPlayerOverlay.kt#L84)).
+Trocar no meio do filme significa reabrir o stream e voltar à posição salva. É
+factível — a continuidade já existe —, mas é aí que mora o risco, não nas flags.
+
+### Cuidado
+
+Mandar `7.1` para uma placa configurada como estéreo pode **emudecer** o áudio em
+vez de melhorá-lo. A lista oferecida deve refletir o que o Windows declara para o
+dispositivo de saída, e deve haver caminho de volta para "padrão do sistema" sem
+precisar reinstalar nada.
+
+---
+
 ## TAREFA-011 — Nitidez em 4K e fluidez de 30 a 360 Hz
 
 **Status:** pendente — investigado, não implementado

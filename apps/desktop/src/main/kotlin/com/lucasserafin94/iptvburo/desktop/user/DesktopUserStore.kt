@@ -482,6 +482,22 @@ class DesktopUserStore(
      * not be shown back to the user to check what they pasted. It is never sent anywhere except to
      * TMDb itself.
      */
+    /**
+     * The activation key this installation redeemed, so it can be shown back to its owner.
+     *
+     * Kept because losing it costs money: the key is bound to this device and buying another is the
+     * only alternative to asking support. It is stored, deliberately, in the same preferences as
+     * everything else rather than encrypted — it unlocks nothing on its own, since redeeming it
+     * requires a signature from the private key in the DPAPI blob, and a key nobody can read back
+     * is a key the customer has already lost.
+     */
+    fun activationKey(): String? = preferences.get(KEY_ACTIVATION_KEY, null)?.takeIf(String::isNotBlank)
+
+    fun setActivationKey(value: String?) {
+        val clean = value?.trim().orEmpty()
+        if (clean.isBlank()) preferences.remove(KEY_ACTIVATION_KEY) else preferences.put(KEY_ACTIVATION_KEY, clean)
+    }
+
     fun metadataApiKey(): String? = preferences.get(KEY_METADATA_KEY, null)?.takeIf(String::isNotBlank)
 
     fun setMetadataApiKey(value: String?) {
@@ -610,6 +626,7 @@ class DesktopUserStore(
         const val MAX_BACKDROP_POSTERS = 18
         const val KEY_TERMS_ACCEPTED = "terms-accepted"
         const val KEY_METADATA_KEY = "metadata-api-key"
+        const val KEY_ACTIVATION_KEY = "activation-key"
         const val KEY_LEGACY_FAVORITES = "favorites"
         const val KEY_CLOCK_24H = "clock-24h"
         const val KEY_SUBTITLE_SIZE = "subtitle-size"

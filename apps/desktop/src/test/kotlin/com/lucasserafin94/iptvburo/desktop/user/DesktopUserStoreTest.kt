@@ -205,6 +205,28 @@ class DesktopUserStoreTest {
         }
     }
 
+    /**
+     * The activation key survives, because losing it costs money.
+     *
+     * It binds to one device, so a customer who cannot find it has to buy another rather than
+     * reactivate. Nothing in the app used to show it back, which meant the only copy was wherever
+     * they happened to paste it after paying.
+     */
+    @Test
+    fun `the activation key is remembered and can be cleared`() {
+        withStore { store ->
+            assertNull(store.activationKey())
+
+            store.setActivationKey("ABCD-EFGH")
+            assertEquals("ABCD-EFGH", store.activationKey())
+
+            // Blank clears rather than storing an empty string, so the panel hides instead of
+            // showing an empty box where a key should be.
+            store.setActivationKey("   ")
+            assertNull(store.activationKey())
+        }
+    }
+
     private fun withStore(block: (DesktopUserStore) -> Unit) {
         val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
         try {

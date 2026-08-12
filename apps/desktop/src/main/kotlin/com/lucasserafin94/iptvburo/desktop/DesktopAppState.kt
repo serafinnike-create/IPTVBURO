@@ -187,6 +187,22 @@ class DesktopAppState(
     fun onLicenseRechecked(status: LicenseStatus) {
         licenseStatus = status
     }
+
+    /**
+     * The activation key this installation redeemed, shown back to its owner in Options.
+     *
+     * A customer who loses the key has to buy another — it binds to one device and nothing in the
+     * app used to display it, so the only copy was wherever they happened to paste it after the
+     * purchase.
+     */
+    var activationKey by mutableStateOf(userStore.activationKey())
+        private set
+
+    fun rememberActivationKey(key: String) {
+        val clean = key.trim().uppercase(Locale.ROOT).takeIf(String::isNotBlank) ?: return
+        userStore.setActivationKey(clean)
+        activationKey = clean
+    }
     /**
      * Cast metadata, keyed by the user's own TMDb key.
      *

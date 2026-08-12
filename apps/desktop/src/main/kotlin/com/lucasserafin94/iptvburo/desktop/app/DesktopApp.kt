@@ -213,6 +213,8 @@ fun DesktopApp(
                 status = licenseStatus,
                 client = appState.licenseClient,
                 onRechecked = appState::onLicenseRechecked,
+                onKeyRedeemed = appState::rememberActivationKey,
+                activationKey = appState.activationKey,
                 onQuit = onExitForUpdate,
                 languageTag = appState.language.tag,
                 backdropPosters = appState.backdropPosters,
@@ -747,6 +749,8 @@ fun DesktopApp(
                                 // should land back in the app, not on the screen that asked them to.
                                 if (rechecked.allowsUse) showLicenseDetails = false
                             },
+                            onKeyRedeemed = appState::rememberActivationKey,
+                            activationKey = appState.activationKey,
                             onQuit = { showLicenseDetails = false },
                             languageTag = appState.language.tag,
                             backdropPosters = appState.backdropPosters,
