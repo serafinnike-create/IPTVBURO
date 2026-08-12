@@ -242,6 +242,16 @@ class DesktopAppState(
     private fun rebuildMetadataClients() {
         val key = effectiveMetadataKey()
         metadataClient = TmdbClient(key)
+        // Dropped with the client that produced them.
+        //
+        // A miss is cached as null so an unknown person is not looked up on every recomposition —
+        // but every name attempted before a key was set, or while a wrong one was in place, is a
+        // miss. Keeping those entries meant `key in castPhotos` refused to try again, so the cast
+        // of any film opened before the key was configured stayed faceless for the whole session.
+        // That is precisely the "photos do elenco não aparecem" report, and it survives fixing the
+        // key, which is what makes it look like the feature is simply broken.
+        castPhotos = emptyMap()
+        castLookupsInFlight.clear()
         streamingCatalogue = buildStreamingCatalogue(key, streamingRegion)
         shelfCache.clear()
         // The disk cache is deliberately left alone. A key identifies who is asking, not what TMDb
@@ -1603,6 +1613,15 @@ class DesktopAppState(
         private set
 
     /**
+     * Which kind is being fetched, or null when nothing is.
+     *
+     * Paired with [streamingLoading] so a load in flight only blocks a *duplicate* of itself.
+     * Guarding on the boolean alone meant that clicking Séries while Filmes was still loading threw
+     * the click away, and nothing ever retried it — the tab simply stayed empty.
+     */
+    private var loadingKind: TmdbDiscoverKind? = null
+
+    /**
      * Loads the shelves for the current region.
      *
      * Runs on [downloadScope] rather than a composable's own scope: leaving the screen mid-load
@@ -1618,11 +1637,18 @@ class DesktopAppState(
             println("[streaming] no catalogue: metadata key missing or blank")
             return
         }
-        if (streamingLoading) {
-            println("[streaming] already loading, skipping")
+        val kind = streamingKind
+        // A load already in flight for *this* kind is the only one worth skipping.
+        //
+        // This used to drop the request whenever anything was loading, which is exactly what
+        // happens when someone opens Assinaturas and clicks Séries while Filmes is still fetching:
+        // the click was swallowed, nothing retried it, and the tab stayed empty for the rest of the
+        // session. The in-flight kind is tracked rather than a bare boolean so switching tabs
+        // during a load still fetches the one the user asked for.
+        if (streamingLoading && loadingKind == kind) {
+            println("[streaming] $kind already loading, skipping")
             return
         }
-        val kind = streamingKind
         if (!force && shelfCache[kind]?.isNotEmpty() == true) {
             println("[streaming] $kind already cached, skipping")
             return
@@ -1646,6 +1672,7 @@ class DesktopAppState(
         println("[streaming] loading $kind shelves for region $streamingRegion")
 
         streamingLoading = true
+        loadingKind = kind
         // Captured here, on the UI thread, for the same reason the kind is: both can change while
         // the request is in flight, and the cache is keyed on them.
         val requestedRegion = streamingRegion
@@ -1675,8 +1702,12 @@ class DesktopAppState(
             // set for ever — and the guard at the top of this function then refused every later
             // load, leaving the streaming section permanently empty for that session.
             streamingLoading = false
+            if (loadingKind == kind) loadingKind = null
             // Only if the user has not switched filters while this was in flight — otherwise a slow
             // request would overwrite the shelves they are now looking at.
+            //
+            // The switched-to kind is fetched by its own call from selectStreamingKind, which the
+            // guard at the top of this function no longer refuses.
             if (streamingKind != kind) return@launch
             // Assigned directly, not through withContext(Dispatchers.Main). Compose Desktop has no
             // Main dispatcher unless kotlinx-coroutines-swing is on the classpath, so that call
@@ -1755,6 +1786,9 @@ class DesktopAppState(
         streamingPage = null
         destination = DesktopDestination.SUBSCRIPTIONS
         streamingLoading = true
+        // Not a shelf load, so it claims no kind. Leaving loadingKind null means opening a title
+        // cannot make the shelf loader think that kind is already in flight and refuse it.
+        loadingKind = null
 
         streamingScope.launch {
             // The page and the availability are independent: a synopsis is worth showing even when

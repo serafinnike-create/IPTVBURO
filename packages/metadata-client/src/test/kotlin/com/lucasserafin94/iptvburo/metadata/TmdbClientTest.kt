@@ -215,11 +215,9 @@ class TmdbClientTest {
     // Watch providers (GDD 9)
     // -------------------------------------------------------------------------------------------
 
-    private fun enqueueSearchHit(id: Int = 42) = server.enqueue(json("""{"results":[{"id":$id}]}"""))
 
     @Test
     fun `reads the services carrying a title in one region`() {
-        enqueueSearchHit()
         server.enqueue(
             json(
                 """
@@ -233,7 +231,7 @@ class TmdbClientTest {
             ),
         )
 
-        val providers = client().watchProviders("Duna", 2021, "BR")
+        val providers = client().watchProviders(42, "BR")
 
         assertNotNull(providers)
         assertEquals("BR", providers.region)
@@ -250,7 +248,6 @@ class TmdbClientTest {
      */
     @Test
     fun `rental entries carry no price because the API returns none`() {
-        enqueueSearchHit()
         server.enqueue(
             json(
                 """
@@ -259,7 +256,7 @@ class TmdbClientTest {
             ),
         )
 
-        val rental = client().watchProviders("Duna", 2021, "BR")?.rent?.single()
+        val rental = client().watchProviders(42, "BR")?.rent?.single()
 
         assertNotNull(rental)
         assertEquals("Store A", rental.name)
@@ -269,28 +266,25 @@ class TmdbClientTest {
 
     @Test
     fun `a region with no listing is unknown rather than unavailable`() {
-        enqueueSearchHit()
         server.enqueue(json("""{"results":{"US":{"flatrate":[{"provider_id":9,"provider_name":"Service B"}]}}}"""))
 
         // Null means "we cannot say", which the caller must not render as "not available anywhere".
-        assertNull(client().watchProviders("Duna", 2021, "BR"))
+        assertNull(client().watchProviders(42, "BR"))
     }
 
     @Test
     fun `a region whose buckets are all empty is treated as unknown`() {
-        enqueueSearchHit()
         server.enqueue(json("""{"results":{"BR":{"link":"https://example.invalid/watch"}}}"""))
 
-        assertNull(client().watchProviders("Duna", 2021, "BR"))
+        assertNull(client().watchProviders(42, "BR"))
     }
 
     @Test
     fun `missing buckets do not fail the parse`() {
         // TMDb omits a bucket entirely rather than sending an empty array.
-        enqueueSearchHit()
         server.enqueue(json("""{"results":{"BR":{"ads":[{"provider_id":7,"provider_name":"Free Service"}]}}}"""))
 
-        val providers = client().watchProviders("Duna", 2021, "BR")
+        val providers = client().watchProviders(42, "BR")
 
         assertNotNull(providers)
         assertEquals(listOf("Free Service"), providers.withAds.map(TmdbWatchProvider::name))
@@ -304,7 +298,6 @@ class TmdbClientTest {
      */
     @Test
     fun `free and ad-funded are kept apart`() {
-        enqueueSearchHit()
         server.enqueue(
             json(
                 """
@@ -315,7 +308,7 @@ class TmdbClientTest {
             ),
         )
 
-        val providers = client().watchProviders("Duna", 2021, "BR")
+        val providers = client().watchProviders(42, "BR")
 
         assertEquals(listOf("Free One"), providers?.free?.map(TmdbWatchProvider::name))
         assertEquals(listOf("Ads One"), providers?.withAds?.map(TmdbWatchProvider::name))
@@ -323,39 +316,67 @@ class TmdbClientTest {
 
     @Test
     fun `the region is matched regardless of the casing asked for`() {
-        enqueueSearchHit()
         server.enqueue(json("""{"results":{"BR":{"flatrate":[{"provider_id":8,"provider_name":"Service A"}]}}}"""))
 
-        assertNotNull(client().watchProviders("Duna", 2021, "br"))
+        assertNotNull(client().watchProviders(42, "br"))
     }
 
+    /**
+     * A series is asked of the series endpoint.
+     *
+     * This is the bug that made the subscriptions screen report titles as unavailable: the path was
+     * hardcoded to `movie/`, so a series was looked up among films, found nothing, and the empty
+     * result was rendered as "not available here".
+     */
     @Test
-    fun `an unknown title asks nothing further`() {
-        server.enqueue(json("""{"results":[]}"""))
+    fun `a series is asked of the tv endpoint`() {
+        server.enqueue(
+            json("""{"id":7,"results":{"BR":{"flatrate":[{"provider_id":8,"provider_name":"Service A"}]}}}"""),
+        )
 
-        assertNull(client().watchProviders("Nada", null, "BR"))
-        // Only the search was attempted; no providers call followed.
+        val providers = client().watchProviders(7, "BR", isSeries = true)
+
+        assertEquals(listOf("Service A"), providers?.subscription?.map(TmdbWatchProvider::name))
+        assertTrue(server.takeRequest().path!!.startsWith("/3/tv/7/watch/providers"))
+    }
+
+    /** And a film still goes to the film endpoint. */
+    @Test
+    fun `a film is asked of the movie endpoint`() {
+        server.enqueue(json("""{"id":42,"results":{"BR":{}}}"""))
+
+        client().watchProviders(42, "BR")
+
+        assertTrue(server.takeRequest().path!!.startsWith("/3/movie/42/watch/providers"))
+    }
+
+    /** One request, not two: the id is already known, so nothing is searched for. */
+    @Test
+    fun `the id is used directly rather than searched for`() {
+        server.enqueue(json("""{"id":42,"results":{"BR":{}}}"""))
+
+        client().watchProviders(42, "BR")
+
         assertEquals(1, server.requestCount)
     }
 
     @Test
     fun `no key means no request at all`() {
-        assertNull(client(apiKey = null).watchProviders("Duna", 2021, "BR"))
+        assertNull(client(apiKey = null).watchProviders(42, "BR"))
         assertEquals(0, server.requestCount)
     }
 
     @Test
     fun `a blank region is refused before any request`() {
-        assertNull(client().watchProviders("Duna", 2021, "  "))
+        assertNull(client().watchProviders(42, "  "))
         assertEquals(0, server.requestCount)
     }
 
     @Test
     fun `a rate limited response is silent rather than fatal`() {
-        enqueueSearchHit()
         server.enqueue(MockResponse().setResponseCode(429))
 
-        assertNull(client().watchProviders("Duna", 2021, "BR"))
+        assertNull(client().watchProviders(42, "BR"))
     }
 
     @Test

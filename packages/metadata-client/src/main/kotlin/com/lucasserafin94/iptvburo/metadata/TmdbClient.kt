@@ -215,21 +215,29 @@ class TmdbClient(
      * Returns null when nothing is known — an unconfigured key, a title TMDb cannot find, or a
      * region with no listings. Callers treat that as "we cannot say", never as "not available".
      */
+    /**
+     * Where [tmdbId] can be watched, taking the id rather than searching for it.
+     *
+     * This used to take a title and a year and run a `search/movie` to recover an id the caller
+     * already held, which failed in two ways at once. A translated or differently punctuated title
+     * matched the wrong film or nothing; and because the path was hardcoded to `movie/`, a *series*
+     * was looked up among films and could never be found at all. Either way the offer list came
+     * back empty and the screen reported the title as unavailable — the "only on TV Guru" that
+     * users reported.
+     */
     fun watchProviders(
-        title: String,
-        year: Int?,
+        tmdbId: Int,
         region: String,
+        isSeries: Boolean = false,
     ): TmdbWatchProviders? {
         val key = apiKey?.takeIf(String::isNotBlank) ?: return null
-        if (title.isBlank() || region.isBlank()) return null
-
-        val movieId = findMovieId(title, year, key) ?: return null
+        if (region.isBlank()) return null
 
         // One call carries every region; the response is sliced locally rather than asking per
         // region, which is both fewer requests and what TMDb's own docs describe.
         val url =
             baseUrl.newBuilder()
-                .addPathSegments("movie/$movieId/watch/providers")
+                .addPathSegments(if (isSeries) "tv/$tmdbId/watch/providers" else "movie/$tmdbId/watch/providers")
                 .addQueryParameter("api_key", key)
                 .build()
 
@@ -290,6 +298,80 @@ class TmdbClient(
      * TMDb for exactly this purpose, and the app already shows the same images for cast and
      * catalogue. Empty rather than null when nothing is found — an empty shelf is simply dropped.
      */
+    /**
+     * Films already in cinemas that no streaming service carries yet.
+     *
+     * This is what "Em breve" is actually asking: which titles are on their way *into* the
+     * catalogues of Netflix, Prime and the rest. It deliberately does not filter by provider,
+     * because the answer is the set of films that belong to *no* provider — a film that has not
+     * reached streaming is on nobody's shelf, which is precisely why the old query returned
+     * nothing. Measured before changing it: Netflix 1 result, Prime 0, Disney 0, Apple 0, even
+     * with the window widened to a year.
+     *
+     * Recent theatrical releases only. Something released years ago and still absent from every
+     * service is not "coming soon", it is a film nobody licensed.
+     *
+     * The result still has to be filtered by the caller against each title's watch providers —
+     * TMDb cannot express "has no provider" as a discover parameter, so availability is checked
+     * per title afterwards.
+     */
+    fun recentTheatricalReleases(
+        region: String,
+        limit: Int = 20,
+        monthsBack: Long = 6,
+    ): List<TmdbDiscoveredTitle> {
+        val key = apiKey?.takeIf(String::isNotBlank) ?: return emptyList()
+        if (region.isBlank()) return emptyList()
+        val today = java.time.LocalDate.now()
+
+        val url =
+            baseUrl.newBuilder()
+                .addPathSegments("discover/movie")
+                .addQueryParameter("api_key", key)
+                .addQueryParameter("language", language)
+                .addQueryParameter("region", region.trim().uppercase())
+                .addQueryParameter("include_adult", "false")
+                // Popularity, not date: this is a shelf of films people are waiting for, and the
+                // most anticipated release is more useful at the front than the most recent.
+                .addQueryParameter("sort_by", "popularity.desc")
+                .addQueryParameter("primary_release_date.gte", today.minusMonths(monthsBack).toString())
+                .addQueryParameter("primary_release_date.lte", today.toString())
+                // Theatrical only. Without this the list fills with direct-to-video titles that
+                // were never going to appear on a service anyway.
+                .addQueryParameter("with_release_type", "3")
+                // Enough votes to be a real film rather than a catalogue artefact.
+                .addQueryParameter("vote_count.gte", "20")
+                .build()
+
+        return get(url).parseDiscoveredTitles(isSeries = false).take(limit)
+    }
+
+    /**
+     * Where [tmdbId] can currently be watched on a subscription in [region].
+     *
+     * Only `flatrate` counts. A film available to rent or buy has not "arrived on streaming" in the
+     * sense anyone means when they ask where to watch something they already pay for.
+     */
+    fun subscriptionProviderNames(
+        tmdbId: Int,
+        region: String,
+    ): List<String> {
+        val key = apiKey?.takeIf(String::isNotBlank) ?: return emptyList()
+        val url =
+            baseUrl.newBuilder()
+                .addPathSegments("movie/$tmdbId/watch/providers")
+                .addQueryParameter("api_key", key)
+                .build()
+
+        return get(url)
+            ?.getAsJsonObject("results")
+            ?.getAsJsonObject(region.trim().uppercase())
+            ?.getAsJsonArray("flatrate")
+            ?.mapNotNull { element -> element.takeIf { it.isJsonObject }?.asJsonObject }
+            ?.mapNotNull { entry -> entry.string("provider_name") }
+            .orEmpty()
+    }
+
     fun titlesOnProvider(
         providerId: Int,
         region: String,
@@ -351,7 +433,18 @@ class TmdbClient(
                     }
                 }.build()
 
-        return get(url)
+        return get(url).parseDiscoveredTitles(isSeries).take(limit)
+    }
+
+    /**
+     * Reads a `discover` response into titles.
+     *
+     * Shared by every discover query rather than repeated per call site: films and series name the
+     * same fields differently (`title`/`name`, `release_date`/`first_air_date`), and that mapping
+     * is exactly the kind of thing that drifts when it is written out twice.
+     */
+    private fun com.google.gson.JsonObject?.parseDiscoveredTitles(isSeries: Boolean): List<TmdbDiscoveredTitle> =
+        this
             ?.getAsJsonArray("results")
             ?.mapNotNull { element -> element.takeIf { it.isJsonObject }?.asJsonObject }
             ?.mapNotNull { result ->
@@ -373,9 +466,7 @@ class TmdbClient(
                     isSeries = isSeries,
                     releaseDate = result.string(if (isSeries) "first_air_date" else "release_date"),
                 )
-            }?.take(limit)
-            .orEmpty()
-    }
+            }.orEmpty()
 
     /**
      * Which services can be browsed in [region], as TMDb's own ids and names.
@@ -384,13 +475,29 @@ class TmdbClient(
      * one country. Ordered by TMDb's `display_priority`, which is their view of what a user in that
      * region expects to see first.
      */
-    fun watchProviderDirectory(region: String): List<TmdbWatchProvider> {
+    /**
+     * The services worth showing in [region], for the kind of thing being listed.
+     *
+     * [forSeries] picks the matching TMDb directory, and it is not a detail. This always asked for
+     * the *film* directory, whose top slots in Brazil include Google Play Movies and the Apple TV
+     * Store — transactional film shops that carry no series at all. Building the Séries shelves
+     * from that list spent several of the twelve slots on services that return nothing, and every
+     * empty service is dropped, so the screen came up blank.
+     *
+     * Measured against TMDb rather than assumed: of the first eight entries in the film directory,
+     * providers 3 and 2 return 0 series and two more return fewer than five, while the series
+     * directory puts JustWatch TV and Plex in those positions instead.
+     */
+    fun watchProviderDirectory(
+        region: String,
+        forSeries: Boolean = false,
+    ): List<TmdbWatchProvider> {
         val key = apiKey?.takeIf(String::isNotBlank) ?: return emptyList()
         if (region.isBlank()) return emptyList()
 
         val url =
             baseUrl.newBuilder()
-                .addPathSegments("watch/providers/movie")
+                .addPathSegments(if (forSeries) "watch/providers/tv" else "watch/providers/movie")
                 .addQueryParameter("api_key", key)
                 .addQueryParameter("language", language)
                 .addQueryParameter("watch_region", region.trim().uppercase())
@@ -481,28 +588,9 @@ class TmdbClient(
         )
     }
 
-    private fun findMovieId(
-        title: String,
-        year: Int?,
-        key: String,
-    ): Int? {
-        val searchUrl =
-            baseUrl.newBuilder()
-                .addPathSegments("search/movie")
-                .addQueryParameter("api_key", key)
-                .addQueryParameter("query", title.trim())
-                .addQueryParameter("language", language)
-                .addQueryParameter("include_adult", "false")
-                .apply { year?.let { addQueryParameter("year", it.toString()) } }
-                .build()
-
-        return get(searchUrl)
-            ?.getAsJsonArray("results")
-            ?.firstOrNull()
-            ?.takeIf { it.isJsonObject }
-            ?.asJsonObject
-            ?.int("id")
-    }
+    // findMovieId is gone. It existed only to recover an id that watchProviders' caller already
+    // held, and searching by title was what made a translated name resolve to the wrong film and a
+    // series resolve to nothing.
 
     /**
      * Runs the request, returning null on any failure.
@@ -519,7 +607,10 @@ class TmdbClient(
                     .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return null
-                JsonParser.parseString(response.body.string()).asJsonObject
+                // Checked rather than cast. `asJsonObject` throws ClassCastException on a JSON
+                // array, and that escaped the runCatching below as a crash rather than the null
+                // every caller here is written to handle. TMDb answers some errors with an array.
+                JsonParser.parseString(response.body.string()).takeIf { it.isJsonObject }?.asJsonObject
             }
         }.getOrNull()
 

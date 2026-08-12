@@ -5,9 +5,73 @@ sintoma observado, a causa investigada no código e o que ainda falta confirmar.
 
 ---
 
+## BUG-008 — Assinaturas: "Séries" e "Esta semana" vazias; "Em breve" vazia; lista parece congelada
+
+**Status:** ✅ CORRIGIDO em 2026-08-12
+**Reportado em:** 2026-08-12
+**Ambiente:** `v2.0.0-alpha.2`
+
+### Sintomas relatados
+
+1. clicar em **Séries** não mostra nada;
+2. **Esta semana** não mostra nada;
+3. **Em breve** não mostra nada;
+4. a lista de Filmes parece a mesma há dois ou três dias.
+
+### Causa 1 (a principal) — um clique perdido deixa a aba vazia para sempre
+
+`loadStreamingShelves` recusava qualquer carregamento enquanto outro estivesse em
+curso, com um booleano único. Abrir Assinaturas dispara o carregamento de Filmes;
+clicar em **Séries** durante esses segundos caía em `if (streamingLoading) return`
+— e **nada reagendava o pedido**. A aba ficava vazia pelo resto da sessão.
+
+Agora o carregamento em curso é registrado com o *tipo* (`loadingKind`), e só
+recusa um pedido duplicado do mesmo tipo. É a mesma classe de falha que o próprio
+arquivo já documenta em `DesktopAppState.kt:1680` — a flag que ficava presa.
+
+### Causa 2 — diretório de provedores errado para séries
+
+`watchProviderDirectory` pedia sempre `watch/providers/movie`. Nas primeiras
+posições no Brasil isso traz Google Play Movies e Apple TV Store, lojas de filme
+que não carregam série; como serviço sem títulos é descartado, gastavam-se slots
+à toa. Passou a pedir `watch/providers/tv` para as abas de série.
+
+Medido, não presumido: dos 12 primeiros, o diretório de filmes rende **9** com
+séries e o de TV rende **10**. É uma melhora modesta — sozinha **não** explicaria
+uma aba totalmente vazia, e por isso a causa 1 é a principal.
+
+### Causa 3 — "Em breve" perguntava algo impossível
+
+A aba pedia, *por provedor*, filmes com data futura. Um filme que ainda não
+estreou não está em serviço nenhum, então a resposta era vazia por construção.
+Medido por provedor, com janela de um ano: Netflix 1, Prime 0, Disney 0, Apple 0.
+
+Redefinida para a pergunta que o usuário faz — "o que ainda vai entrar no
+catálogo": lançamentos de cinema dos últimos 6 meses que **nenhum** serviço
+carrega por assinatura, num trilho único (nenhum serviço é dono deles). A
+verificação é por título, porque a API não sabe expressar "não está em ninguém".
+
+Confirmado: 305 filmes elegíveis hoje, e *Homem-Aranha: Um Novo Dia* retorna
+`flatrate: nenhum` — exatamente o que a aba deve listar.
+
+### Sintoma 4 — a lista parecer congelada
+
+Explicado, sem alteração de código. As prateleiras vêm de `sort_by=popularity` /
+`first_air_date.desc` na TMDb e há cache em disco por região e tipo, relido no
+mesmo dia. É esperado que mude devagar: o catálogo da Netflix não muda todo dia.
+Se ficar preso por muitos dias, aí é bug — vale reportar de novo com a data.
+
+### Efeito colateral corrigido no caminho
+
+`TmdbClient.get()` fazia `.asJsonObject` sem checar. A TMDb responde alguns erros
+com um *array*, e isso lançava `ClassCastException` — escapando do `runCatching` e
+virando crash em vez do `null` que todo chamador espera. Agora é verificado.
+
+---
+
 ## BUG-006 — Assinaturas: "disponível somente no app", sem capa, sinopse, trailer nem foto do elenco
 
-**Status:** causa principal identificada por leitura de código; correção pendente
+**Status:** ✅ CORRIGIDO em 2026-08-12
 **Reportado em:** 2026-08-12
 **Ambiente:** `v2.0.0-alpha.2` instalado do GitHub, chave TMDb adicionada pelo usuário
 
@@ -53,33 +117,46 @@ Vale notar que o próprio código já avisa disso: o comentário em
 `TmdbStreamingCatalogue.kt:60-62` diz que "null não é o mesmo que indisponível, e
 quem chama não deve renderizar assim". A tela está fazendo justamente isso.
 
-### Correção proposta — item 1
+### Correção aplicada
 
-1. `detailsFor()` deve receber o id do TMDb, como `pageFor()` já faz.
-2. `watchProviders()` precisa aceitar `isSeries` e usar `tv/{id}/watch/providers`
-   quando for série, espelhando `titleDetails()`.
-3. A interface precisa distinguir **"o TMDb não sabe"** de **"não há oferta nesta
-   região"**. São coisas diferentes e hoje as duas viram a mesma frase.
+**Item 1 — ofertas.** `watchProviders()` passou a receber o **id do TMDb** e um
+`isSeries`, usando `tv/{id}/watch/providers` para série. `detailsFor()` para de
+jogar fora o id que já tem. `findMovieId()` foi removido: existia só para
+recuperar um id que o chamador já possuía.
 
-### Ainda não investigado
+Verificado contra a API real, não só contra mocks:
 
-- **Itens 2 e 3** (capa, sinopse, trailer na tela de Assinaturas): `pageFor()`
-  usa o id correto e devolve `overview`, `posterUrl` e `youtubeTrailerId`, então
-  a suspeita é que a tela não esteja chamando `pageFor` ou não esteja lendo o
-  resultado. Precisa ser confirmado lendo o composable de Assinaturas.
-- **Item 4** (fotos do elenco): `ensureCastPhoto` sai cedo quando
-  `!metadataClient.isConfigured`
-  ([DesktopAppState.kt:286](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/DesktopAppState.kt#L286)).
-  `rebuildMetadataClients()` troca o cliente ao salvar a chave, então é preciso
-  verificar se a tela de detalhe já aberta continua com o cliente antigo, e se as
-  fotos voltam ao reabrir o filme depois de configurar a chave. Confirmar antes
-  de mexer.
+| endpoint | resposta para Game of Thrones (id 1399) |
+| --- | --- |
+| `tv/1399/watch/providers` (correto) | `HBO Max` |
+| `movie/1399/watch/providers` (o que o código fazia) | **404 — not found** |
+
+Esse 404 é exatamente o que virava "disponível somente no TV Guru".
+
+**Item 4 — fotos do elenco.** `ensureCastPhoto` guarda `null` quando a busca
+falha, para não repetir a consulta a cada recomposição. Só que toda tentativa
+feita **antes** da chave existir também é uma falha, e `rebuildMetadataClients()`
+não limpava esse cache — então `key in castPhotos` recusava tentar de novo e o
+elenco de qualquer filme aberto antes de configurar a chave ficava sem foto para
+sempre. O cache agora é descartado junto com o cliente que o produziu.
+
+**Itens 2 e 3 — capa, sinopse e trailer.** `pageFor()` já usava o id correto e
+devolve `overview`, `posterUrl` e `youtubeTrailerId`; a tela também já o chama
+([DesktopAppState.kt:1783](../../apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/DesktopAppState.kt#L1783)).
+A causa mais provável é o mesmo cliente TMDb obsoleto do item 4, resolvido pela
+mesma correção. **Não confirmado em execução** — vale reconferir na alpha.3.
+
+### Ainda em aberto
+
+A interface continua sem distinguir **"o TMDb não sabe"** de **"não há oferta
+nesta região"**. As duas ainda viram a mesma frase. Com as ofertas voltando
+corretamente o caso fica muito mais raro, mas a distinção continua valendo.
 
 ---
 
 ## BUG-007 — Espaço e clique não pausam o vídeo
 
-**Status:** causa provável identificada; precisa de confirmação em máquina real
+**Status:** ✅ CORRIGIDO em 2026-08-12
 **Reportado em:** 2026-08-12 (segundo testador, outro computador)
 **Ambiente:** `v2.0.0-alpha.2` instalado do GitHub, Windows
 
@@ -115,21 +192,21 @@ Há ainda uma segunda condição: o espaço só age se `state.ready` for verdade
 então nos primeiros segundos a tecla é ignorada de propósito. Se o testador
 apertou logo no início, esse é um segundo motivo somado ao primeiro.
 
-### Correção proposta
+### Correção aplicada
 
-1. Devolver o foco ao Compose sempre que a superfície de vídeo o tomar, ou
-   instalar um `KeyEventDispatcher` no nível da janela AWT — que recebe a tecla
-   independentemente de quem tem o foco dentro dela.
-2. Adicionar clique para pausar sobre a área do vídeo (comportamento padrão de
-   qualquer player), tomando cuidado para não conflitar com o duplo clique de
-   tela cheia.
-3. Verificar se vale tratar o espaço mesmo antes de `ready`, enfileirando a ação.
+**Espaço.** O `KeyEventDispatcher` global já existia neste arquivo e já resolvia
+exatamente este problema — só tratava `Escape` e `F11`. `VK_SPACE` foi somado a
+ele. O dispatcher vê a tecla antes de qualquer componente, então funciona
+independentemente de quem detém o foco. Retornar `true` consome o evento, então
+os outros dois handlers (Compose e canvas) não disparam junto: **não há duplo
+toggle** — verificado contra o contrato do AWT, não presumido.
 
-### Como confirmar
+**Clique.** `createComponent` já aceitava um parâmetro `onClick` — adicionado
+para o multiview — e o player normal simplesmente nunca passava um. Agora passa
+`togglePlayback`, guardado por `state.ready` como os demais caminhos.
 
-Reproduzir um vídeo, esperar passar da abertura, clicar uma vez sobre a imagem e
-então apertar espaço. Se o espaço funcionar **antes** de clicar no vídeo e parar
-de funcionar **depois**, a causa de foco está confirmada.
+Também alinhei o handler do canvas, que chamava `togglePlayback()` sem checar
+`ready`, ao contrário dos outros dois.
 
 ---
 

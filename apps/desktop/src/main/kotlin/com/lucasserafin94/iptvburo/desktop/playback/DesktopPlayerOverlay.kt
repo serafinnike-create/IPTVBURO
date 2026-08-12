@@ -149,7 +149,7 @@ fun DesktopPlayerOverlay(
     // This sees every key in the process before any component does, so Escape always works no
     // matter what has focus - the difference between a player you can leave and one that forces
     // the user to kill the app.
-    DisposableEffect(isFullScreen) {
+    DisposableEffect(isFullScreen, state.ready) {
         val dispatcher =
             java.awt.KeyEventDispatcher { event ->
                 if (event.id != java.awt.event.KeyEvent.KEY_PRESSED) return@KeyEventDispatcher false
@@ -162,6 +162,17 @@ fun DesktopPlayerOverlay(
                     java.awt.event.KeyEvent.VK_F11 -> {
                         onToggleFullScreen()
                         true
+                    }
+                    // Space belongs here for the same reason Escape does, and it was left out.
+                    //
+                    // The Compose handler further down is correct and unreachable in the ordinary
+                    // case: pressing space is something you do *after* clicking the picture, and
+                    // clicking the picture hands focus to the embedded video surface. Two testers
+                    // reported the key doing nothing, which is exactly what a focused native
+                    // surface swallowing it looks like.
+                    java.awt.event.KeyEvent.VK_SPACE -> {
+                        if (state.ready) controller.togglePlayback()
+                        state.ready
                     }
                     else -> false
                 }
@@ -258,6 +269,14 @@ fun DesktopPlayerOverlay(
                         .createComponent(
                             request = request,
                             onPointerActivity = { wakeCounter++ },
+                            // Click the picture to pause, the way every other player behaves.
+                            //
+                            // createComponent has taken an onClick since multiview needed it, and
+                            // the single player simply never passed one — so clicking the video
+                            // woke the controls and did nothing else. Guarded on `ready` for the
+                            // same reason the keys are: toggling before the engine reports a state
+                            // is a command sent into nothing.
+                            onClick = { if (state.ready) controller.togglePlayback() },
                             // The same three keys the Compose handler owns, wired to the canvas so
                             // they keep working once it holds the focus - which is exactly when the
                             // user needs Escape and has no visible control to reach for.
@@ -273,8 +292,11 @@ fun DesktopPlayerOverlay(
                                         true
                                     }
                                     java.awt.event.KeyEvent.VK_SPACE -> {
-                                        controller.togglePlayback()
-                                        true
+                                        // Guarded like the other two paths. This one toggled
+                                        // unconditionally, so a space during start-up sent a
+                                        // pause the engine was not yet in a state to answer.
+                                        if (state.ready) controller.togglePlayback()
+                                        state.ready
                                     }
                                     // Everything else still counts as activity, so any key brings
                                     // the controls back even when it does nothing else.

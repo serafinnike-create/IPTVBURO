@@ -20,6 +20,24 @@ class GitHubReleaseUpdaterTest {
     }
 
     /**
+     * The upgrade the people testing this build will actually perform.
+     *
+     * Someone running 2.0.0-alpha.2 must be offered 2.0.0-alpha.3 by "Buscar atualização", and must
+     * not be offered the build they are already on. Written with the real numbers rather than the
+     * 0.2.x placeholders above, because that is the claim being made to those users.
+     */
+    @Test
+    fun `an alpha 2 install is offered alpha 3 and not itself`() {
+        assertTrue(isNewerVersion("2.0.0-alpha.3", "2.0.0-alpha.2"))
+        assertFalse(isNewerVersion("2.0.0-alpha.2", "2.0.0-alpha.2"))
+        assertFalse(isNewerVersion("2.0.0-alpha.1", "2.0.0-alpha.2"))
+        // "2.0" is the *final* 2.0.0, and a final release outranks any preview of the same number,
+        // so an alpha must not be offered to someone already on it. Asserted rather than assumed:
+        // the first version of this test had it backwards.
+        assertFalse(isNewerVersion("2.0.0-alpha.3", "2.0"))
+    }
+
+    /**
      * The version the app actually ships as must parse.
      *
      * DESKTOP_VERSION has been written as two numbers — "1.1", then "2.0" — while the parser
@@ -30,7 +48,13 @@ class GitHubReleaseUpdaterTest {
      */
     @Test
     fun `the shipped version string is comparable`() {
-        assertEquals("2.0.0-alpha.1", DESKTOP_VERSION)
+        // The shape, not the value. Pinning the literal made this fail on every legitimate version
+        // bump while detecting nothing: the bug it exists for is a version the parser cannot read,
+        // and "2.0" is unparseable whatever release it belongs to.
+        assertTrue(
+            Regex("""^\d+\.\d+\.\d+(-.+)?$""").matches(DESKTOP_VERSION),
+            "DESKTOP_VERSION must carry three numbers or the comparator misreads it: '$DESKTOP_VERSION'",
+        )
         assertEquals(
             "https://api.github.com/repos/serafinnike-create/IPTVBURO/releases?per_page=20",
             DESKTOP_RELEASES_URL,

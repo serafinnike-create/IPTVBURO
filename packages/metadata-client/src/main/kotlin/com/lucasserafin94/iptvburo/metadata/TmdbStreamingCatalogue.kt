@@ -37,7 +37,15 @@ class TmdbStreamingCatalogue(
      * the user must dismiss.
      */
     fun shelves(kind: TmdbDiscoverKind = TmdbDiscoverKind.MOVIES): List<TmdbServiceShelf> {
-        val services = client.watchProviderDirectory(region).take(maxServices)
+        // "Coming soon" cannot be grouped by service, because the answer is the set of films no
+        // service carries yet. Handled separately rather than forced into the per-provider shape.
+        if (kind == TmdbDiscoverKind.UPCOMING) return comingToStreamingShelf()
+
+        // The series directory for the series shelves. Asking the film directory for them wasted
+        // several of the twelve slots on shops that carry no series, and a service with nothing is
+        // dropped below — which is why Séries and Esta semana came up empty.
+        val forSeries = kind == TmdbDiscoverKind.SERIES || kind == TmdbDiscoverKind.THIS_WEEK
+        val services = client.watchProviderDirectory(region, forSeries).take(maxServices)
         if (services.isEmpty()) return emptyList()
 
         return services.mapNotNull { service ->
@@ -52,6 +60,42 @@ class TmdbStreamingCatalogue(
                 )
             }
         }
+    }
+
+    /**
+     * Films in cinemas now that have not reached any subscription service yet.
+     *
+     * One shelf, not one per service, because that is the shape of the question: these titles are
+     * on their way *into* the catalogues, so by definition none of them belongs to a service today.
+     * The previous implementation asked each provider for films dated in the future and was
+     * answered with nothing — Netflix 1, Prime 0, Disney 0, Apple 0 — which is why the tab was
+     * empty rather than merely short.
+     *
+     * Availability is checked per title because TMDb's discover endpoint cannot express "carried by
+     * nobody". That costs one request per candidate, so the candidate list is deliberately short
+     * and the shelf stops as soon as it is full.
+     */
+    private fun comingToStreamingShelf(): List<TmdbServiceShelf> {
+        val candidates = client.recentTheatricalReleases(region, limit = UPCOMING_CANDIDATES)
+        if (candidates.isEmpty()) return emptyList()
+
+        val notYetStreaming =
+            candidates
+                .asSequence()
+                .filter { candidate -> client.subscriptionProviderNames(candidate.id, region).isEmpty() }
+                .take(titlesPerService)
+                .toList()
+
+        if (notYetStreaming.isEmpty()) return emptyList()
+        return listOf(
+            TmdbServiceShelf(
+                // No real service owns this shelf, so it carries the catalogue's own identity
+                // rather than borrowing a company's name for titles it does not have.
+                provider = StreamingProvider.of(COMING_SOON_SLUG, COMING_SOON_SLUG),
+                tmdbProviderId = null,
+                titles = notYetStreaming.map { discovered -> discovered.toExternalTitle() },
+            ),
+        )
     }
 
     /**
@@ -75,7 +119,16 @@ class TmdbStreamingCatalogue(
     }
 
     fun detailsFor(title: ExternalTitle): ExternalTitleDetails? {
-        val listing = client.watchProviders(title.title, title.year, region) ?: return null
+        // The id, not the title text. This threw away an exact identifier and searched for the name
+        // instead, which found the wrong film for a translated title and nothing at all for a
+        // series — pageFor() beside it has always used the id correctly.
+        val tmdbId = title.id.value.toIntOrNull() ?: return null
+        val listing =
+            client.watchProviders(
+                tmdbId = tmdbId,
+                region = region,
+                isSeries = title.kind == ExternalTitleKind.SERIES,
+            ) ?: return null
         return ExternalTitleDetails(
             title = title,
             offers = TmdbStreamingDiscovery.offersFrom(listing, title.title),
@@ -99,6 +152,18 @@ class TmdbStreamingCatalogue(
 
         const val DEFAULT_TITLES_PER_SERVICE: Int = 20
 
+        /**
+         * How many recent releases to test for availability when building "coming soon".
+         *
+         * Each candidate costs one watch-providers request, so this bounds the work rather than
+         * walking every film in cinemas. Comfortably more than a shelf holds, because many recent
+         * releases have already reached a service and are filtered out.
+         */
+        const val UPCOMING_CANDIDATES: Int = 40
+
+        /** Identifies the shelf that belongs to no service. Not a company name. */
+        const val COMING_SOON_SLUG: String = "coming-soon"
+
         /** Regions the app has translations for, offered in the settings picker. */
         val SUPPORTED_REGIONS: List<String> = listOf("BR", "PT", "US", "DE", "IT")
     }
@@ -107,8 +172,13 @@ class TmdbStreamingCatalogue(
 /** One service's shelf of covers. */
 data class TmdbServiceShelf(
     val provider: StreamingProvider,
-    /** TMDb's own numeric id, kept so the shelf can be refreshed without another directory lookup. */
-    val tmdbProviderId: Int,
+    /**
+     * TMDb's own numeric id, kept so the shelf can be refreshed without another directory lookup.
+     *
+     * Null for a shelf that is not a real service — "coming to streaming" is a set of films no
+     * provider carries yet, so there is no id to refresh it by.
+     */
+    val tmdbProviderId: Int?,
     val titles: List<ExternalTitle>,
 )
 

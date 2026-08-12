@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.lucasserafin94.iptvburo.metadata.TmdbStreamingCatalogue
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
@@ -87,8 +88,19 @@ fun ProviderShelfRow(
             horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
         ) {
             // The provider's name as text, and only as text. No logo, no brand colour.
+            //
+            // The "coming to streaming" rail is not a service, so it carries a slug rather than a
+            // company name and must not print it raw.
             Text(
-                text = shelf.provider.displayName,
+                text =
+                    if (shelf.provider.id == TmdbStreamingCatalogue.COMING_SOON_SLUG) {
+                        // The tab's own label, reused rather than adding a 238th string: this class
+                        // is one constructor and the JVM caps a signature at 255 slots, which has
+                        // already been hit once in this file's history.
+                        text.subscriptionsFilterUpcoming
+                    } else {
+                        shelf.provider.displayName
+                    },
                 color = BuroColors.Text,
                 style = MaterialTheme.typography.titleLarge,
                 maxLines = 1,

@@ -143,8 +143,9 @@ class TmdbStreamingCatalogueTest {
         val built = catalogue()
         val title = built.shelves().single().titles.single()
 
-        // detailsFor searches for the title, then reads its providers.
-        server.enqueue(json("""{"results":[{"id":42}]}"""))
+        // detailsFor reads the providers directly, using the id the shelf already carries. It used
+        // to search by title first — one request more, and the wrong film whenever the name did not
+        // match exactly.
         server.enqueue(json("""{"results":{"BR":{"flatrate":[{"provider_id":8,"provider_name":"Netflix"}]}}}"""))
 
         val details = built.detailsFor(title)
@@ -165,7 +166,9 @@ class TmdbStreamingCatalogueTest {
         val built = catalogue()
         val title = built.shelves().single().titles.single()
 
-        server.enqueue(json("""{"results":[]}"""))
+        // TMDb knows the title but lists it in no region — the shape of "we cannot say" now that
+        // the lookup is by id and there is no search step to come back empty.
+        server.enqueue(json("""{"id":42,"results":{}}"""))
 
         assertNull(built.detailsFor(title))
     }

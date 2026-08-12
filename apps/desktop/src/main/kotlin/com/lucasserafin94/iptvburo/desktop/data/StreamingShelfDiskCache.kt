@@ -73,7 +73,7 @@ internal class StreamingShelfDiskCache(
                 (0 until shelfCount).map {
                     val providerId = input.readUTF()
                     val providerName = input.readUTF()
-                    val tmdbProviderId = input.readInt()
+                    val tmdbProviderId = input.readInt().takeIf { id -> id != NO_VALUE }
 
                     val titleCount = input.readInt()
                     if (titleCount !in 0..MAX_TITLES_PER_SHELF) return null
@@ -135,7 +135,9 @@ internal class StreamingShelfDiskCache(
                 shelves.forEach { shelf ->
                     output.writeUTF(shelf.provider.id)
                     output.writeUTF(shelf.provider.displayName)
-                    output.writeInt(shelf.tmdbProviderId)
+                    // NO_VALUE for the "coming to streaming" shelf, which belongs to no service and
+                    // therefore has no provider id — the same sentinel the fields below already use.
+                    output.writeInt(shelf.tmdbProviderId ?: NO_VALUE)
 
                     output.writeInt(shelf.titles.size)
                     shelf.titles.forEach { title ->
@@ -175,9 +177,16 @@ internal class StreamingShelfDiskCache(
          * An older cache is then simply not read, rather than being read as though its fields meant
          * what the current ones mean — which would fill the section with nonsense.
          */
-        private const val FORMAT_VERSION = 1
+        // 2: the provider id became nullable, so NO_VALUE now has a meaning in that field too. A
+        // version 1 file would be read with its provider id taken literally, which is the exact
+        // misreading the comment above describes.
+        private const val FORMAT_VERSION = 2
 
-        /** Written for "no year". TMDb never reports one, so it cannot collide. */
+        /**
+         * Written for "no year", and for a shelf with no provider id.
+         *
+         * TMDb reports neither as Int.MIN_VALUE, so the sentinel cannot collide with real data.
+         */
         private const val NO_VALUE = Int.MIN_VALUE
 
         private const val FILE_SUFFIX = ".buroshelf"
