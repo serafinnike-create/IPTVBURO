@@ -61,14 +61,16 @@ android {
         applicationId = "com.lucasserafin94.iptvburo"
         minSdk = 23
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.2.0-alpha.6"
+        versionCode = 9
+        versionName = "0.2.0-alpha.9"
 
         buildConfigField("boolean", "OFFLINE_SUPPORTED", androidOfflineSupported.toString())
-        buildConfigField("String", "BUNDLED_TMDB_KEY", "\"$bundledTmdbKey\"")
+        // Production builds must never embed a developer-owned TMDB credential. Users can provide
+        // their own key through the encrypted in-app settings flow. Debug builds override this
+        // with the optional local key below for development convenience only.
+        buildConfigField("String", "BUNDLED_TMDB_KEY", "\"\"")
         buildConfigField("String", "GOOGLE_PLAY_PRODUCT_ID", "\"iptvburo_730_days\"")
-        buildConfigField("String", "GOOGLE_PLAY_PURCHASE_OPTION_ID", "\"rent_730_days\"")
-        buildConfigField("String", "GOOGLE_PLAY_RENTAL_PERIOD", "\"P730D\"")
+        buildConfigField("String", "GOOGLE_PLAY_PURCHASE_OPTION_ID", "\"buy-730-days\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -93,6 +95,16 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            buildConfigField("String", "BUNDLED_TMDB_KEY", "\"$bundledTmdbKey\"")
+        }
+        create("storePreview") {
+            // Isolated package used only to capture store-listing screenshots. It must never read
+            // an installed IPTV BURO profile and must not carry the developer-owned TMDB key.
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".storepreview"
+            versionNameSuffix = "-store-preview"
+            buildConfigField("String", "BUNDLED_TMDB_KEY", "\"\"")
+            matchingFallbacks += listOf("debug")
         }
         release {
             if (releaseSigningComplete) signingConfig = signingConfigs.getByName("release")

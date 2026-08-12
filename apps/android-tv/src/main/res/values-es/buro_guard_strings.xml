@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="parental_title">Bloqueo de canales</string>
+    <string name="parental_hint">Un PIN de cuatro dígitos mantiene cerradas las categorías elegidas. Protege de un niño en la sala, no de un adulto decidido.</string>
+    <string name="parental_current_pin">PIN actual</string>
+    <string name="parental_new_pin">PIN nuevo</string>
+    <string name="parental_set_pin">Definir el PIN</string>
+    <string name="parental_change_pin">Cambiar el PIN</string>
+    <string name="parental_remove_pin">Quitar el PIN</string>
+    <string name="parental_pin_format">El PIN debe tener exactamente cuatro dígitos.</string>
+    <string name="parental_wrong_pin">PIN incorrecto.</string>
+    <string name="parental_lock_adult">Bloquear las categorías que la fuente marca como para adultos</string>
+    <string name="parental_locked">Categoría bloqueada</string>
+    <string name="parental_unlock">escribe el PIN para abrirla</string>
+    <string name="parental_unlock_confirm">Abrir</string>
+
+    <string name="subtitles_title">Subtítulos</string>
+    <string name="subtitles_hint">Se aplica al próximo título que abras.</string>
+    <string name="subtitles_size">Tamaño</string>
+    <string name="subtitles_size_small">Pequeño</string>
+    <string name="subtitles_size_medium">Mediano</string>
+    <string name="subtitles_size_large">Grande</string>
+    <string name="subtitles_size_huge">Muy grande</string>
+    <string name="subtitles_colour">Color</string>
+    <string name="subtitles_colour_white">Blanco</string>
+    <string name="subtitles_colour_yellow">Amarillo</string>
+    <string name="subtitles_colour_grey">Gris</string>
+    <string name="subtitles_colour_green">Verde</string>
+    <string name="subtitles_colour_cyan">Cian</string>
+    <string name="subtitles_background">Recuadro oscuro detrás del texto</string>
+
+    <string name="categories_title">Categorías</string>
+    <string name="categories_hint">oculta las que nunca ves y bloquea las que quieres cerradas</string>
+    <string name="category_hide">Ocultar</string>
+    <string name="category_lock">Bloquear</string>
+    <string name="categories_channel_count">%1$d elementos</string>
+</resources>

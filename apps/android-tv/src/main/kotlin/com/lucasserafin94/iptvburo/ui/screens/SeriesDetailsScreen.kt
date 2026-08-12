@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -93,6 +94,8 @@ internal fun SeriesDetailsScreen(
     isFavorite: Boolean = false,
     /** Null only where there is no series to favourite, which keeps the button honest. */
     onToggleFavorite: (() -> Unit)? = null,
+    /** Sends this series to the system share sheet. Null hides the button entirely. */
+    onShare: (() -> Unit)? = null,
     /** How far into each episode the viewer is, keyed by episode id. */
     episodeProgress: Map<String, Float> = emptyMap(),
     /** Actor photos already looked up, keyed by lower-cased name. */
@@ -258,6 +261,12 @@ internal fun SeriesDetailsScreen(
                                         maxLines = 1,
                                     )
                                 }
+                            }
+                        }
+                        onShare?.let { share ->
+                            BuroButton(onClick = share, style = BuroButtonStyle.Secondary) {
+                                Icon(Icons.Default.Share, contentDescription = null)
+                                Text(stringResource(R.string.details_share))
                             }
                         }
                         details.youtubeTrailerId?.let { trailerId ->

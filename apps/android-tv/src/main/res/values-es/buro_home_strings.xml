@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="buro_home_demo_notice">Demostración visual · No se incluye ningún medio, canal ni transmisión</string>
+    <string name="buro_home_demo_rail_label">DEMOSTRACIÓN</string>
+    <string name="buro_home_demo_badge">DEMO VISUAL</string>
+    <string name="buro_home_demo_live_badge">DIRECTO SIMULADO</string>
+    <string name="buro_home_demo_metadata">%1$d · Concepto original · Sin medios</string>
+    <string name="buro_home_demo_live_metadata">%1$d · Programación simulada · Sin transmisión</string>
+    <string name="buro_home_demo_story_synopsis">Una tarjeta visual ficticia creada solo para mostrar la navegación, el foco y la maquetación. No tiene ningún medio reproducible.</string>
+    <string name="buro_home_demo_live_synopsis">Un bloque de programación ficticio usado solo para presentar la maquetación en directo. No representa ni abre ningún canal.</string>
+    <string name="buro_home_demo_editorial_synopsis">Un concepto ficticio original hecho para esta demostración de interfaz, sin ilustraciones ni medios externos.</string>
+
+    <string name="buro_home_hero_title">Órbita Silenciosa</string>
+    <string name="buro_home_hero_subtitle">Un concepto visual original de BURO</string>
+    <string name="buro_home_hero_synopsis">Explora una interfaz cinematográfica hecha con degradados locales y metadatos ficticios. Añade una fuente autorizada cuando quieras usar tu propio contenido.</string>
+    <string name="buro_home_hero_metadata">%1$d · Ficción visual · Sin medios incluidos</string>
+
+    <string name="buro_home_continue_title">Sigue explorando</string>
+    <string name="buro_home_continue_amber_title">Archivo Ámbar</string>
+    <string name="buro_home_continue_amber_subtitle">Capítulo tres · prototipo ficticio</string>
+    <string name="buro_home_continue_prism_title">Ciudad Prisma</string>
+    <string name="buro_home_continue_prism_subtitle">Capítulo cinco · prototipo ficticio</string>
+    <string name="buro_home_continue_signal_title">Señal Verde</string>
+    <string name="buro_home_continue_signal_subtitle">Capítulo dos · prototipo ficticio</string>
+    <string name="buro_home_continue_map_title">Mapa Violeta</string>
+    <string name="buro_home_continue_map_subtitle">Capítulo uno · prototipo ficticio</string>
+
+    <string name="buro_home_live_title">En directo ahora · maquetación simulada</string>
+    <string name="buro_home_live_north_title">Estudio Norte</string>
+    <string name="buro_home_live_north_subtitle">Boletín ficticio · simulado</string>
+    <string name="buro_home_live_solar_title">Sala Solar</string>
+    <string name="buro_home_live_solar_subtitle">Conversación ficticia · simulada</string>
+    <string name="buro_home_live_field_title">Notas de Campo</string>
+    <string name="buro_home_live_field_subtitle">Reportaje ficticio · simulado</string>
+    <string name="buro_home_live_stage_title">Escenario Violeta</string>
+    <string name="buro_home_live_stage_subtitle">Actuación ficticia · simulada</string>
+
+    <string name="buro_home_editorial_title">Conceptos originales de %1$d · demostración</string>
+    <string name="buro_home_editorial_frequency_title">Frecuencia Azul</string>
+    <string name="buro_home_editorial_frequency_subtitle">Ficción visual</string>
+    <string name="buro_home_editorial_sun_title">Sol de Papel</string>
+    <string name="buro_home_editorial_sun_subtitle">Ficción visual</string>
+    <string name="buro_home_editorial_forest_title">Código del Bosque</string>
+    <string name="buro_home_editorial_forest_subtitle">Ficción visual</string>
+    <string name="buro_home_editorial_ember_title">Línea de Brasa</string>
+    <string name="buro_home_editorial_ember_subtitle">Ficción visual</string>
+    <string name="buro_home_editorial_axis_title">Eje Suave</string>
+    <string name="buro_home_editorial_axis_subtitle">Ficción visual</string>
+    <string name="buro_home_editorial_window_title">Ventana Ciruela</string>
+    <string name="buro_home_editorial_window_subtitle">Ficción visual</string>
+
+    <string name="buro_home_sources_title">Tus fuentes importadas</string>
+    <string name="buro_home_source_badge">FUENTE LOCAL</string>
+    <string name="buro_home_source_synopsis">Un atajo seguro al explorador de fuentes locales. El inicio no comienza ninguna reproducción desde esta tarjeta.</string>
+    <string name="buro_home_source_metadata">Fuente local · Ábrela para explorar</string>
+    <plurals name="buro_home_source_channel_count">
+        <item quantity="one">%1$d canal catalogado</item>
+        <item quantity="other">%1$d canales catalogados</item>
+    </plurals>
+
+    <string name="buro_home_import_source">Importar fuente</string>
+    <string name="buro_home_view_story">Ver la historia</string>
+    <string name="buro_home_view_details">Ver los detalles</string>
+    <string name="buro_home_view_sources">Ver las fuentes</string>
+    <string name="buro_home_view_sources_count">Ver las fuentes (%1$d)</string>
+    <string name="buro_home_back">Volver</string>
+    <string name="buro_home_a11y_open_story">Abrir los detalles de demostración de %1$s</string>
+    <string name="buro_home_a11y_open_source">Abrir las fuentes desde %1$s</string>
+
+    <string name="buro_home_loading">Preparando el inicio…</string>
+    <string name="buro_home_empty_title">Todavía no hay nada que mostrar</string>
+    <string name="buro_home_empty_body">Importa una fuente local autorizada o revisa tu lista de fuentes. No se consultará ningún catálogo externo.</string>
+    <string name="buro_home_error_title">El inicio no está disponible</string>
+    <string name="buro_home_error_body">No se pudo preparar el inicio visual. Tus fuentes no se han modificado.</string>
+
+    <string name="buro_story_header">BURO Story</string>
+    <string name="buro_story_header_demo">Detalle de demostración · sin reproducción</string>
+    <string name="buro_story_add_source">Añadir una fuente autorizada</string>
+    <string name="buro_story_no_playback">Esta es una página de detalles ficticia para evaluar la interfaz. No contiene tráiler, URL, transmisión, imagen remota ni acción de reproducción.</string>
+    <string name="buro_story_missing_title">Elemento de demostración no disponible</string>
+    <string name="buro_story_missing_body">Este identificador no pertenece al catálogo visual local. Vuelve atrás o añade tu propia fuente autorizada.</string>
+    <string name="home_rail_continue">Seguir viendo</string>
+    <string name="home_badge_continue">CONTINUAR</string>
+    <string name="home_rail_new_classics">Clásicos recién llegados</string>
+    <string name="home_badge_classic">CLÁSICO</string>
+    <string name="home_rail_recently_added">Añadidos recientemente</string>
+    <string name="home_badge_new">NUEVO EN TU FUENTE</string>
+    <string name="home_rail_top_rated">Mejor valorados</string>
+    <string name="home_badge_top">★ DESTACADO</string>
+    <string name="home_rail_movies">Películas destacadas</string>
+    <string name="home_badge_movie">PELÍCULA</string>
+    <string name="home_rail_series">Series destacadas</string>
+    <string name="home_badge_series">SERIE</string>
+    <string name="home_rail_releases">Estrenos de %1$d</string>
+    <string name="home_badge_hero">DESTACADO</string>
+</resources>

@@ -14,6 +14,7 @@ object AppLocaleController {
         listOf(
             AppLanguage("pt-BR", "Português (Brasil)"),
             AppLanguage("en", "English"),
+            AppLanguage("es", "Español"),
             AppLanguage("de", "Deutsch"),
             AppLanguage("it", "Italiano"),
         )

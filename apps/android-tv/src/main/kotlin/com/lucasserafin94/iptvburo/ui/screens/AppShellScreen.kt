@@ -123,6 +123,7 @@ import com.lucasserafin94.iptvburo.ui.movieDownloadKey
 import com.lucasserafin94.iptvburo.ui.ParentalMessage
 import com.lucasserafin94.iptvburo.ui.PersonCreditUi
 import com.lucasserafin94.iptvburo.ui.ProfileUi
+import com.lucasserafin94.iptvburo.ui.ShareRequestUi
 import com.lucasserafin94.iptvburo.ui.localization.AppLocaleController
 import com.lucasserafin94.iptvburo.ui.SourceImportMethod
 import com.lucasserafin94.iptvburo.ui.SourceUi
@@ -149,6 +150,8 @@ import com.lucasserafin94.iptvburo.ui.navigation.BuroRibbon
 import com.lucasserafin94.iptvburo.ui.capabilities.AndroidPlatformCapabilities
 import com.lucasserafin94.iptvburo.ui.security.SecureActivityWindowEffect
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
+import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
+import com.lucasserafin94.iptvburo.domain.model.ContentKind
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.CachePolicy
@@ -176,6 +179,8 @@ fun AppShellScreen(
     onOpenChannel: (ChannelUi) -> Unit,
     onPlayMovie: () -> Unit,
     onToggleMovieFavorite: () -> Unit,
+    /** Sends the open title to the system share sheet. */
+    onShareTitle: (ShareRequestUi) -> Unit,
     onOpenPerson: (String) -> Unit,
     /** Opens a filmography entry on the "where to watch" page. */
     onOpenPersonCredit: (PersonCreditUi) -> Unit,
@@ -286,6 +291,17 @@ fun AppShellScreen(
                     // to file, and a button that silently does nothing is worse than no button.
                     onToggleFavorite =
                         onToggleMovieFavorite.takeIf { content.channelId.isNotBlank() },
+                    onShare = {
+                        onShareTitle(
+                            ShareRequestUi(
+                                kind = ContentKind.SERIES,
+                                title = seriesTitle,
+                                year = state.seriesDetails?.releaseDate?.let(::yearFromReleaseDate),
+                                artworkUrl = state.seriesDetails?.artworkUrl,
+                                description = state.seriesDetails?.plot,
+                            ),
+                        )
+                    },
                     episodeProgress = state.episodeProgress,
                     castPhotos = state.castPhotos,
                     onRequestCastPhotos = onRequestCastPhotos,
@@ -313,6 +329,20 @@ fun AppShellScreen(
                     onPlay = onPlayMovie,
                     isFavorite = content.channelId in state.favoriteIds,
                     onToggleFavorite = onToggleMovieFavorite,
+                    onShare = {
+                        val movieTitle = state.movieDetails?.title ?: content.fallbackTitle
+                        onShareTitle(
+                            ShareRequestUi(
+                                kind = ContentKind.MOVIE,
+                                title = movieTitle,
+                                year =
+                                    state.movieDetails?.releaseDate?.let(::yearFromReleaseDate)
+                                        ?: ContentIdentity.yearFromTitle(movieTitle),
+                                artworkUrl = state.movieDetails?.artworkUrl,
+                                description = state.movieDetails?.plot,
+                            ),
+                        )
+                    },
                     onDownload = onDownloadMovie,
                     onCancelDownload = { onCancelDownload(movieKey) },
                     onDeleteDownload = { onDeleteDownload(movieKey) },
@@ -2961,8 +2991,12 @@ private fun SettingsContent(
             Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
             FocusSurface(onClick = onChangeProfile, modifier = Modifier.fillMaxWidth().height(if (compact) 62.dp else 72.dp)) {
                 Row(Modifier.fillMaxSize().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Perfil ativo", color = BuroTextSecondary, modifier = Modifier.weight(1f))
-                    Text(activeProfile?.name ?: "Selecionar perfil", color = BuroAccent, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.settings_active_profile), color = BuroTextSecondary, modifier = Modifier.weight(1f))
+                    Text(
+                        text = activeProfile?.name ?: stringResource(R.string.settings_choose_profile),
+                        color = BuroAccent,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
             }
         }
@@ -3709,3 +3743,19 @@ private fun MetadataKeyField(
  * still busy once it plainly is not.
  */
 private const val REFRESH_FEEDBACK_MILLIS = 900L
+
+/**
+ * The year out of a provider's release date.
+ *
+ * Providers write the field as `YYYY-MM-DD`, and the leading four characters are the only part any
+ * of them agree on — some send just the year, some a full date, some a localised string. Reading
+ * the prefix is what the metadata lookup already does, so a share and a TMDb query cannot disagree
+ * about which year a title is from.
+ *
+ * A value that does not start with a plausible year yields null rather than a wrong number: the
+ * year narrows a shared link to the right remake, so a guess is worse than its absence.
+ */
+private fun yearFromReleaseDate(releaseDate: String): Int? =
+    releaseDate.trim().take(4).toIntOrNull()?.takeIf { it in PLAUSIBLE_RELEASE_YEARS }
+
+private val PLAUSIBLE_RELEASE_YEARS = 1_888..2_100

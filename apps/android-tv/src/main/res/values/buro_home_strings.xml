@@ -79,4 +79,18 @@
     <string name="buro_story_no_playback">This is a fictional detail page for interface evaluation. It contains no trailer, URL, stream, remote image, or playback action.</string>
     <string name="buro_story_missing_title">Demonstration item unavailable</string>
     <string name="buro_story_missing_body">This identifier does not belong to the local visual catalog. Go back or add your own authorized source.</string>
+    <string name="home_rail_continue">Continue watching</string>
+    <string name="home_badge_continue">CONTINUE</string>
+    <string name="home_rail_new_classics">Classics that just arrived</string>
+    <string name="home_badge_classic">CLASSIC</string>
+    <string name="home_rail_recently_added">Recently added</string>
+    <string name="home_badge_new">NEW IN YOUR SOURCE</string>
+    <string name="home_rail_top_rated">Best rated</string>
+    <string name="home_badge_top">★ FEATURED</string>
+    <string name="home_rail_movies">Featured films</string>
+    <string name="home_badge_movie">FILM</string>
+    <string name="home_rail_series">Featured series</string>
+    <string name="home_badge_series">SERIES</string>
+    <string name="home_rail_releases">%1$d releases</string>
+    <string name="home_badge_hero">FEATURED</string>
 </resources>

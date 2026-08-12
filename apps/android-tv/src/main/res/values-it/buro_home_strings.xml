@@ -80,4 +80,18 @@
     <string name="buro_story_no_playback">Questa è una pagina di dettaglio fittizia per valutare l’interfaccia. Non contiene trailer, URL, flussi, immagini remote o azioni di riproduzione.</string>
     <string name="buro_story_missing_title">Elemento dimostrativo non disponibile</string>
     <string name="buro_story_missing_body">Questo identificatore non appartiene al catalogo visivo locale. Torna indietro o aggiungi una fonte autorizzata.</string>
+    <string name="home_rail_continue">Continua a guardare</string>
+    <string name="home_badge_continue">CONTINUA</string>
+    <string name="home_rail_new_classics">Classici appena arrivati</string>
+    <string name="home_badge_classic">CLASSICO</string>
+    <string name="home_rail_recently_added">Aggiunti di recente</string>
+    <string name="home_badge_new">NUOVO NELLA TUA FONTE</string>
+    <string name="home_rail_top_rated">I più votati</string>
+    <string name="home_badge_top">★ IN EVIDENZA</string>
+    <string name="home_rail_movies">Film in evidenza</string>
+    <string name="home_badge_movie">FILM</string>
+    <string name="home_rail_series">Serie in evidenza</string>
+    <string name="home_badge_series">SERIE</string>
+    <string name="home_rail_releases">Uscite %1$d</string>
+    <string name="home_badge_hero">IN EVIDENZA</string>
 </resources>

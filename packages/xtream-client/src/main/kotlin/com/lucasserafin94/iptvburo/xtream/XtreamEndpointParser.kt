@@ -36,7 +36,7 @@ object XtreamEndpointParser {
                 .filterNot(String::isBlank)
                 .toMutableList()
         if (pathSegments.lastOrNull()?.lowercase() in KNOWN_ENDPOINT_FILES) {
-            pathSegments.removeLast()
+            pathSegments.removeAt(pathSegments.lastIndex)
         }
 
         val builder =

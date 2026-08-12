@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="buro_nav_home">Inicio</string>
+    <string name="buro_nav_live">En directo</string>
+    <string name="buro_nav_movies">Películas</string>
+    <string name="buro_nav_series">Series</string>
+    <string name="buro_nav_discover">Descubrir</string>
+    <string name="buro_nav_my_buro">Favoritos</string>
+    <string name="buro_nav_downloads">Descargas</string>
+    <string name="buro_nav_search">Buscar</string>
+    <string name="buro_nav_profile">Perfiles</string>
+    <string name="nav_subscriptions">Suscripciones</string>
+    <string name="subscriptions_browse_by_service">Explorar por servicio</string>
+    <string name="subscriptions_where_to_watch">Dónde verlo</string>
+    <string name="subscriptions_back_to_services">Servicios</string>
+    <string name="subscriptions_filter_movies">Películas</string>
+    <string name="subscriptions_filter_series">Series</string>
+    <string name="subscriptions_filter_this_week">Esta semana</string>
+    <string name="subscriptions_filter_upcoming">Próximamente</string>
+    <string name="subscriptions_upcoming_note">Se conoce la fecha de estreno; el servicio que lo emitirá, no.</string>
+    <string name="subscriptions_available_on">Disponible en</string>
+    <string name="subscriptions_synopsis">Sinopsis</string>
+    <string name="subscriptions_cast">Reparto</string>
+    <string name="subscriptions_no_shelves">Todavía no hay nada para esta región. Revisa la clave de TMDB en Ajustes y la conexión a internet.</string>
+    <string name="subscriptions_availability_unknown">No podemos decir dónde está disponible este título. Eso no es lo mismo que no estar disponible.</string>
+    <string name="subscriptions_in_your_library">Ya está en tu biblioteca</string>
+    <string name="subscriptions_included_in_subscription">Incluido en tu suscripción</string>
+    <string name="subscriptions_free_with_ads">Gratis, con anuncios</string>
+    <string name="subscriptions_rent">Disponible para alquilar</string>
+    <string name="subscriptions_buy">Disponible para comprar</string>
+    <string name="subscriptions_requires_subscription">Requiere una suscripción</string>
+    <string name="subscriptions_unavailable">No disponible aquí</string>
+    <string name="nav_continue_watching">Seguir viendo</string>
+    <string name="nav_history">Historial</string>
+</resources>

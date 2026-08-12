@@ -156,6 +156,14 @@ data class LiveProgram(
 data class LiveEpg(
     val now: LiveProgram? = null,
     val next: LiveProgram? = null,
+    /**
+     * Everything the provider returned, in order, including what is already over.
+     *
+     * The response has always carried the whole schedule — up to eight entries with start and end
+     * times — and only "now" and "next" were kept, so the rest was fetched and thrown away. The
+     * guide needs the list; the two fields above stay because the player's header uses them.
+     */
+    val schedule: List<LiveProgram> = emptyList(),
 )
 
 data class PlaylistImportResult(

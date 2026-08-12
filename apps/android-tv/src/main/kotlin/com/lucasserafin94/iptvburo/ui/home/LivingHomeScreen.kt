@@ -107,14 +107,34 @@ fun LivingHomeScreen(
                 ),
             ),
     ) {
+        val releasesLabel = stringResource(R.string.home_rail_releases)
         val metrics = HomeLayoutMetrics.resolve(maxWidth, maxHeight)
+        // Resolved here, where there are resources, and handed to the catalogue — which is a pure
+        // object and has none. Without this the rails stayed Portuguese in every language.
+        val labels =
+            HomeLabels(
+                continueWatching = stringResource(R.string.home_rail_continue),
+                continueBadge = stringResource(R.string.home_badge_continue),
+                newClassics = stringResource(R.string.home_rail_new_classics),
+                classicBadge = stringResource(R.string.home_badge_classic),
+                recentlyAdded = stringResource(R.string.home_rail_recently_added),
+                newBadge = stringResource(R.string.home_badge_new),
+                topRated = stringResource(R.string.home_rail_top_rated),
+                topBadge = stringResource(R.string.home_badge_top),
+                movies = stringResource(R.string.home_rail_movies),
+                movieBadge = stringResource(R.string.home_badge_movie),
+                series = stringResource(R.string.home_rail_series),
+                seriesBadge = stringResource(R.string.home_badge_series),
+                heroBadge = stringResource(R.string.home_badge_hero),
+                releases = { year -> releasesLabel.format(year) },
+            )
         when (uiState) {
             LivingHomeUiState.Ready -> {
                 val section =
                     if (catalogItems.isEmpty() && continueWatching.isEmpty()) {
                         DemoHomeCatalog.section(sources)
                     } else {
-                        RealHomeCatalog.section(sources, catalogItems, continueWatching, streamingShelves, synopses)
+                        RealHomeCatalog.section(sources, catalogItems, continueWatching, streamingShelves, synopses, labels)
                     }
                 val resolvedInitialFocusedItemId =
                     section.resolveInitialFocusId(initialFocusedItemId)

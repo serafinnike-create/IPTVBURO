@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.lucasserafin94.iptvburo",
+      "sha256_cert_fingerprints": [
+        "FD:C8:AD:9D:B3:49:47:54:E9:1C:A3:7E:8D:A6:45:C6:0F:98:EA:60:2C:D6:63:64:E4:2C:0A:EA:00:B2:33:A0"
+      ]
+    }
+  }
+]

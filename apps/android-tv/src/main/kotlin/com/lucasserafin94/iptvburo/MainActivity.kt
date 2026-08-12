@@ -53,6 +53,7 @@ import com.lucasserafin94.iptvburo.ui.BootStageUi
 import com.lucasserafin94.iptvburo.ui.LicenseUiState
 import com.lucasserafin94.iptvburo.ui.MainViewModel
 import com.lucasserafin94.iptvburo.ui.openStreamingOffer
+import com.lucasserafin94.iptvburo.ui.shareTitle
 import com.lucasserafin94.iptvburo.ui.ParentalMessage
 import com.lucasserafin94.iptvburo.ui.screens.AppShellScreen
 import com.lucasserafin94.iptvburo.ui.screens.CatalogueGuardUi
@@ -137,6 +138,34 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+
+        handleSharedLink(intent)
+    }
+
+    /**
+     * A shared link arriving while the app is already running.
+     *
+     * `launchMode` is the default, but Android still delivers a second link into the existing task
+     * through here rather than through a fresh [onCreate]; without this, tapping a link with BURO
+     * already open would merely bring the previous screen forward.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleSharedLink(intent)
+    }
+
+    /**
+     * Hands a `VIEW` intent's link to the view model, if it is one of ours.
+     *
+     * The data is treated as untrusted text: [com.lucasserafin94.iptvburo.domain.model.TitleShareLink]
+     * refuses anything it does not recognise, and the link names a title rather than a location, so
+     * a hostile link cannot make the app open a stream or reach a host of the sender's choosing.
+     */
+    private fun handleSharedLink(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val link = intent.dataString ?: return
+        viewModel.openSharedLink(link)
     }
 
     override fun onDestroy() {
@@ -175,6 +204,16 @@ private fun IptvBuroRoot(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         uri?.let(viewModel::importPlaylist)
+    }
+
+    // A shared title this list does not carry. Said once, as a toast, rather than as a screen: the
+    // user tapped a link expecting a film, and the useful thing is to tell them plainly and leave
+    // them wherever they already were.
+    LaunchedEffect(state.sharedTitleMissing) {
+        if (state.sharedTitleMissing) {
+            Toast.makeText(activity, R.string.share_title_not_in_library, Toast.LENGTH_LONG).show()
+            viewModel.dismissSharedTitleNotice()
+        }
     }
 
     when {
@@ -247,6 +286,7 @@ private fun IptvBuroRoot(
                         { viewModel.toggleChannelFavorite(playerContent.channel) }
                     },
                 subtitles = state.subtitles,
+                liveSchedule = state.liveSchedule,
                 onBack = { viewModel.goBack() },
             )
         }
@@ -278,6 +318,16 @@ private fun IptvBuroRoot(
                 onOpenChannel = viewModel::openChannel,
                 onPlayMovie = viewModel::playSelectedMovie,
                 onToggleMovieFavorite = viewModel::toggleSelectedMovieFavorite,
+                onShareTitle = { request ->
+                    shareTitle(
+                        activity = activity,
+                        kind = request.kind,
+                        title = request.title,
+                        year = request.year,
+                        artworkUrl = request.artworkUrl,
+                        description = request.description,
+                    )
+                },
                 onOpenPerson = viewModel::openPerson,
                 onRequestCastPhotos = viewModel::ensureCastPhotos,
                 onCatalogueFilterChange = viewModel::setCatalogueFilter,

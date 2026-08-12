@@ -223,6 +223,11 @@
     <string name="settings_language_title">Lingua</string>
     <string name="settings_language_current">In uso</string>
     <string name="details_trailer">Trailer</string>
+    <string name="details_share">Condividi</string>
+    <string name="share_chooser_title">Condividi questo titolo</string>
+    <string name="share_sent_with">Condiviso con IPTV BURO</string>
+    <string name="share_opening_title">Apertura del titolo condiviso…</string>
+    <string name="share_title_not_in_library">Questo titolo non è nella tua lista.</string>
     <string name="common_refresh">Aggiorna la lista</string>
     <string name="player_aspect_ratio">Formato immagine</string>
     <string name="player_scale_original">Originale</string>
@@ -242,4 +247,8 @@
     <string name="series_episode_watched">Visto</string>
     <string name="legal_body_two">Proseguendo, dichiari di disporre di autorizzazione legale per accedere a tutto ciò che aggiungi e di essere l unico responsabile delle fonti che usi. L app non aggira DRM, autenticazione, paywall o qualsiasi protezione tecnica. Se la tua fonte lo richiede, qui non funzionerà.</string>
     <string name="legal_body_three">IPTV BURO non è affiliato ad alcun fornitore, emittente o servizio di streaming e non risponde dei contenuti forniti da terzi. Usa l app nel rispetto della legge del tuo paese.</string>
+    <string name="settings_active_profile">Profilo attivo</string>
+    <string name="settings_choose_profile">Scegli un profilo</string>
+    <string name="live_schedule_title">Programmazione</string>
+    <string name="live_schedule_empty">Il tuo fornitore non ha inviato la guida per questo canale. Molte liste non ne hanno: non c è nulla di sbagliato nell app né nella tua connessione.</string>
 </resources>

@@ -1,7 +1,6 @@
 package com.lucasserafin94.iptvburo.data.billing
 
 import android.app.Activity
-import android.provider.Settings
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
@@ -17,7 +16,6 @@ import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.data.licensing.GooglePlayPurchaseSubmission
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
-import java.time.Period
 import java.util.ArrayDeque
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,7 +74,7 @@ class GooglePlayBillingManager(
                         onOutcome(GooglePlayBillingOutcome.Unavailable)
                         return@queryProductDetailsAsync
                     }
-                val offer = selectRentalOffer(details) ?: run {
+                val offer = selectPurchaseOffer(details) ?: run {
                     onOutcome(GooglePlayBillingOutcome.Unavailable)
                     return@queryProductDetailsAsync
                 }
@@ -185,15 +183,13 @@ class GooglePlayBillingManager(
         }
     }
 
-    private fun selectRentalOffer(details: ProductDetails): ProductDetails.OneTimePurchaseOfferDetails? =
+    private fun selectPurchaseOffer(details: ProductDetails): ProductDetails.OneTimePurchaseOfferDetails? =
         details.oneTimePurchaseOfferDetailsList
             .orEmpty()
             .firstOrNull { offer ->
                 offer.purchaseOptionId == BuildConfig.GOOGLE_PLAY_PURCHASE_OPTION_ID &&
                     offer.offerToken?.isNotBlank() == true &&
-                    offer.rentalDetails?.rentalPeriod
-                        ?.let { runCatching { Period.parse(it) }.getOrNull() }
-                        ?.let { period -> period == Period.parse(BuildConfig.GOOGLE_PLAY_RENTAL_PERIOD) } == true
+                    offer.rentalDetails == null
             }
 
     private fun whenReady(action: () -> Unit) {
@@ -225,11 +221,11 @@ class GooglePlayBillingManager(
     }
 
     private fun currentAccountId(): String? {
-        val androidId =
-            Settings.Secure.getString(activity.contentResolver, Settings.Secure.ANDROID_ID)
-                ?.takeIf(String::isNotBlank)
-                ?: return null
-        return obfuscatedPlayAccountId(androidId, BuildConfig.APPLICATION_ID.removeSuffix(".debug"))
+        val installationId = requestedDeviceId?.takeIf(String::isNotBlank) ?: return null
+        return obfuscatedPlayAccountId(
+            installationId,
+            BuildConfig.APPLICATION_ID.removeSuffix(".debug"),
+        )
     }
 }
 
@@ -241,9 +237,9 @@ enum class GooglePlayBillingOutcome {
     Unavailable,
 }
 
-internal fun obfuscatedPlayAccountId(androidId: String, applicationId: String): String =
+internal fun obfuscatedPlayAccountId(installationId: String, applicationId: String): String =
     MessageDigest.getInstance("SHA-256")
         .digest(
-            "iptvburo-play-account-v1\n$applicationId\n$androidId"
+            "iptvburo-play-account-v1\n$applicationId\n$installationId"
                 .toByteArray(StandardCharsets.UTF_8),
         ).joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xFF) }

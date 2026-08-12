@@ -115,6 +115,21 @@ data class MovieDetailsUi(
     val youtubeTrailerId: String?,
 )
 
+/**
+ * A title as the share sheet needs to describe it.
+ *
+ * Carries what the *screen* knows, not what may be shared: [TitleShareLink] applies that rule, and
+ * drops a provider-hosted poster rather than trusting the caller to have filtered one out. Keeping
+ * the two apart means a new call site cannot leak an artwork URL by forgetting a check.
+ */
+data class ShareRequestUi(
+    val kind: ContentKind,
+    val title: String,
+    val year: Int?,
+    val artworkUrl: String?,
+    val description: String?,
+)
+
 data class EpisodeUi(
     val id: String,
     val title: String,
@@ -126,6 +141,15 @@ data class EpisodeUi(
 data class LiveProgramUi(
     val title: String,
     val description: String? = null,
+    /**
+     * When the programme starts and ends, in epoch seconds, or null when the provider omitted it.
+     *
+     * Carried so the guide can print a time against each entry. An entry without a start is still
+     * listed — the title is worth having — but it cannot be placed on a clock, and the guide says
+     * so rather than inventing one.
+     */
+    val startEpochSeconds: Long? = null,
+    val endEpochSeconds: Long? = null,
 )
 
 enum class SourceImportMethod {
@@ -472,8 +496,14 @@ data class AppUiState(
     val hasCatalogError: Boolean = false,
     val isResolvingPlayback: Boolean = false,
     val hasPlaybackError: Boolean = false,
+    /** A shared link is being looked up in this device's catalogue. */
+    val isResolvingSharedTitle: Boolean = false,
+    /** A shared link was opened, but this device's list does not carry the title. */
+    val sharedTitleMissing: Boolean = false,
     val liveNow: LiveProgramUi? = null,
     val liveNext: LiveProgramUi? = null,
+    /** The whole schedule for the open live channel, for the guide. Empty when there is none. */
+    val liveSchedule: List<LiveProgramUi> = emptyList(),
     val isLiveEpgLoading: Boolean = false,
     val movieDetails: MovieDetailsUi? = null,
     /**

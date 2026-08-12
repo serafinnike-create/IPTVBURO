@@ -244,12 +244,17 @@ class RoomCatalogRepository @Inject constructor(
             val source = sourceDao.getById(sourceId) ?: return@withContext LiveEpg()
             if (source.type != SourceType.XTREAM.name) return@withContext LiveEpg()
             val credentials = sourceConnectionStore.readXtream(sourceId) ?: return@withContext LiveEpg()
-            val (now, next) =
-                xtreamClient.shortEpg(credentials, providerStreamId)
-                    .nowAndNext(System.currentTimeMillis() / 1_000L)
+            // The whole schedule, asked for at the provider's maximum rather than the default of
+            // eight: this is what a guide is, and the request costs the same either way.
+            val epg = xtreamClient.shortEpg(credentials, providerStreamId, limit = SCHEDULE_LIMIT)
+            val (now, next) = epg.nowAndNext(System.currentTimeMillis() / 1_000L)
             LiveEpg(
                 now = now?.let { LiveProgram(it.title, it.description, it.startEpochSeconds, it.endEpochSeconds) },
                 next = next?.let { LiveProgram(it.title, it.description, it.startEpochSeconds, it.endEpochSeconds) },
+                schedule =
+                    epg.programs
+                        .sortedBy { it.startEpochSeconds ?: Long.MAX_VALUE }
+                        .map { LiveProgram(it.title, it.description, it.startEpochSeconds, it.endEpochSeconds) },
             )
         }
 
@@ -896,6 +901,14 @@ class RoomCatalogRepository @Inject constructor(
         }
 
     private companion object {
+        /**
+         * How many programmes to ask for.
+         *
+         * The provider's own maximum. A guide of eight entries usually stops before the evening,
+         * which is exactly what somebody opening it wants to see.
+         */
+        const val SCHEDULE_LIMIT = 50
+
         /**
          * Shortest fragment worth searching on.
          *

@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BrightnessHigh
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -156,6 +157,8 @@ fun PlayerScreen(
     onToggleFavorite: (() -> Unit)? = null,
     /** How subtitles are drawn, from settings. */
     subtitles: SubtitlePresentation = SubtitlePresentation(),
+    /** The channel's schedule, for the guide. Empty for anything that is not live television. */
+    liveSchedule: List<LiveProgramUi> = emptyList(),
 ) {
     val progressIdentity = remember(channel.id, activeProfileId) {
         playbackProgressIdentity(activeProfileId, channel)
@@ -176,6 +179,7 @@ fun PlayerScreen(
     var playbackSpeed by remember(player) { mutableFloatStateOf(1f) }
     var videoBounds by remember(player) { mutableStateOf<Rect?>(null) }
     var scaleMode by remember(player) { mutableStateOf(VideoScaleMode.FIT) }
+    var showSchedule by remember(player) { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val activity = context.findActivity()
@@ -616,6 +620,8 @@ fun PlayerScreen(
                     },
                     scaleMode = scaleMode,
                     onCycleScaleMode = { scaleMode = scaleMode.next() },
+                    isLive = channel.contentType == CatalogContentType.LIVE,
+                    onOpenSchedule = { showSchedule = true },
                     onPictureInPicture = {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             val builder = PictureInPictureParams.Builder()
@@ -657,6 +663,15 @@ fun PlayerScreen(
                         )
                     },
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = 18.dp),
+                )
+            }
+
+            if (showSchedule) {
+                LiveScheduleSheet(
+                    channelName = channel.name,
+                    schedule = liveSchedule,
+                    isLoading = isEpgLoading,
+                    onDismiss = { showSchedule = false },
                 )
             }
 
@@ -948,6 +963,9 @@ private fun PlayerControls(
     onCycleSpeed: () -> Unit,
     scaleMode: VideoScaleMode,
     onCycleScaleMode: () -> Unit,
+    /** True for live television, which is the only thing with a schedule to show. */
+    isLive: Boolean,
+    onOpenSchedule: () -> Unit,
     onPictureInPicture: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onLock: () -> Unit,
@@ -1030,6 +1048,21 @@ private fun PlayerControls(
                     }
                 },
             )
+            // The schedule, for live television only. A film has no "what is on later", and a
+            // button that opens an empty sheet on every VOD title would be noise.
+            if (isLive) {
+                ControlButton(
+                    onClick = onOpenSchedule,
+                    icon = {
+                        Icon(
+                            Icons.Default.CalendarMonth,
+                            contentDescription = stringResource(R.string.live_schedule_title),
+                            tint = BuroTextPrimary,
+                        )
+                    },
+                )
+            }
+
             // The picture's shape. Next to speed because both are "how this is playing" rather
             // than "what is playing", and the current mode is named on the button so the effect
             // is legible before it is pressed.

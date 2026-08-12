@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="buro_placeholder_title">%1$s está en preparación</string>
+    <string name="buro_placeholder_body">Esta área ya forma parte de la navegación de IPTV BURO. La experiencia completa llegará en un próximo hito; aquí no se simula ningún catálogo ni transmisión.</string>
+    <string name="buro_placeholder_sources_action">Abrir mis fuentes</string>
+    <string name="buro_placeholder_settings_action">Abrir los ajustes</string>
+</resources>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_picker_title">¿Quién está viendo?</string>
+    <string name="profile_picker_subtitle">Cada persona conserva sus favoritos, idioma y progreso.</string>
+    <string name="profile_picker_add">Añadir</string>
+    <string name="profile_picker_open_settings">Definir la clave de TMDB de este perfil</string>
+    <string name="profile_picker_name">Nombre del perfil</string>
+    <string name="profile_picker_child"> Infantil</string>
+    <string name="profile_picker_adult"> Adulto</string>
+    <string name="profile_picker_create">Crear perfil</string>
+    <string name="profile_edit_title">Editar perfil</string>
+    <string name="profile_edit_avatar">Avatar</string>
+    <string name="profile_edit_kids_hint">Un perfil infantil oculta el contenido para adultos.</string>
+    <string name="profile_edit_save">Guardar</string>
+    <string name="profile_edit_delete">Eliminar este perfil</string>
+    <string name="profile_edit_delete_confirm">Toca de nuevo para eliminar: los favoritos y el historial se van con él</string>
+    <string name="profile_edit_open">Editar</string>
+    <string name="profile_picker_kids_badge">Infantil</string>
+    <string name="profile_edit_choose_photo">Elegir una foto</string>
+    <string name="profile_edit_remove_photo">Quitar la foto</string>
+    <string name="profile_edit_source">Lista</string>
+    <string name="profile_edit_source_any">Cualquiera</string>
+    <string name="profile_edit_source_new">Añadir otra…</string>
+    <string name="profile_default_name">Mi perfil</string>
+</resources>

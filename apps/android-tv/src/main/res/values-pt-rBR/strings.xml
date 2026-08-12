@@ -223,6 +223,11 @@
     <string name="settings_language_title">Idioma</string>
     <string name="settings_language_current">Em uso</string>
     <string name="details_trailer">Trailer</string>
+    <string name="details_share">Compartilhar</string>
+    <string name="share_chooser_title">Compartilhar este título</string>
+    <string name="share_sent_with">Compartilhado pelo IPTV BURO</string>
+    <string name="share_opening_title">Abrindo o título compartilhado…</string>
+    <string name="share_title_not_in_library">Este título não está na sua lista.</string>
     <string name="common_refresh">Atualizar lista</string>
     <string name="player_aspect_ratio">Formato da imagem</string>
     <string name="player_scale_original">Original</string>
@@ -242,4 +247,8 @@
     <string name="series_episode_watched">Assistido</string>
     <string name="legal_body_two">Ao continuar, você declara que possui autorização legal para acessar todo conteúdo que adicionar, e que é o único responsável pelas fontes que usar. O aplicativo não contorna DRM, autenticação, paywall ou qualquer proteção técnica. Se a sua fonte exigir isso, ela não vai funcionar aqui.</string>
     <string name="legal_body_three">O IPTV BURO não tem vínculo com nenhum provedor, emissora ou serviço de streaming, e não se responsabiliza pelo conteúdo entregue por terceiros. Use o aplicativo conforme a lei do seu país.</string>
+    <string name="settings_active_profile">Perfil ativo</string>
+    <string name="settings_choose_profile">Selecionar perfil</string>
+    <string name="live_schedule_title">Programação</string>
+    <string name="live_schedule_empty">Seu provedor não enviou guia para este canal. Muitas listas não trazem nenhum — não há nada errado com o aplicativo nem com a sua conexão.</string>
 </resources>

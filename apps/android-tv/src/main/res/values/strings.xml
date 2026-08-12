@@ -218,6 +218,11 @@
     <string name="settings_language_title">Language</string>
     <string name="settings_language_current">In use</string>
     <string name="details_trailer">Trailer</string>
+    <string name="details_share">Share</string>
+    <string name="share_chooser_title">Share this title</string>
+    <string name="share_sent_with">Shared from IPTV BURO</string>
+    <string name="share_opening_title">Opening the shared title…</string>
+    <string name="share_title_not_in_library">This title is not in your list.</string>
     <string name="common_refresh">Refresh playlist</string>
     <string name="player_aspect_ratio">Picture shape</string>
     <string name="player_scale_original">Original</string>
@@ -237,4 +242,8 @@
     <string name="series_episode_watched">Watched</string>
     <string name="legal_body_two">By continuing, you confirm that you hold lawful authorisation to access everything you add, and that you alone are responsible for the sources you use. The app does not bypass DRM, authentication, paywalls or any technical protection. If your source requires that, it will not work here.</string>
     <string name="legal_body_three">IPTV BURO is not affiliated with any provider, broadcaster or streaming service, and is not responsible for content delivered by third parties. Use the app in accordance with the law where you live.</string>
+    <string name="settings_active_profile">Active profile</string>
+    <string name="settings_choose_profile">Choose a profile</string>
+    <string name="live_schedule_title">Schedule</string>
+    <string name="live_schedule_empty">Your provider sent no guide for this channel. Many playlists carry none — nothing is wrong with the app or your connection.</string>
 </resources>

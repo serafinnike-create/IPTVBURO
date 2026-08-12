@@ -37,6 +37,39 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
+
+            <!--
+                Shared titles arriving as an https link.
+
+                autoVerify makes Android check /.well-known/assetlinks.json on the domain and, once
+                it matches this app's signing certificate, open the link here without the
+                disambiguation dialog. Until that check passes the link opens in a browser, which is
+                the same page a recipient without the app gets — so the feature degrades to the web
+                page rather than breaking.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="iptvburo.pages.dev"
+                    android:pathPrefix="/t/" />
+            </intent-filter>
+
+            <!--
+                The private scheme. Kept separate from the verified filter above because it must not
+                carry autoVerify — and it is what the web page redirects to, which is how an
+                installed app is reached even on a device where domain verification has not run.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="iptvburo"
+                    android:host="title" />
+            </intent-filter>
         </activity>
 
     </application>

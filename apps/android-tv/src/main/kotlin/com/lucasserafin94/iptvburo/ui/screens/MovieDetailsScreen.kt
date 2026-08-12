@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -78,6 +79,8 @@ internal fun MovieDetailsScreen(
     onPlay: () -> Unit,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
+    /** Sends this title to the system share sheet. Null hides the button entirely. */
+    onShare: (() -> Unit)? = null,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
     onDeleteDownload: () -> Unit,
@@ -294,6 +297,17 @@ internal fun MovieDetailsScreen(
                                 ),
                                 maxLines = 1,
                             )
+                        }
+                    }
+                    onShare?.let { share ->
+                        BuroButton(
+                            onClick = share,
+                            // Available while the full record is still loading: the title and year
+                            // come from the catalogue row, so a share is complete without it.
+                            style = BuroButtonStyle.Secondary,
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null)
+                            Text(stringResource(R.string.details_share))
                         }
                     }
                     if (offlineSupported) {

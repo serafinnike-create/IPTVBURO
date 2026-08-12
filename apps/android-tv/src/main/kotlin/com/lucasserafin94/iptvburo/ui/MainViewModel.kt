@@ -17,6 +17,7 @@ import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.data.security.MetadataKeyStore
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
+import com.lucasserafin94.iptvburo.data.repository.LiveProgram
 import com.lucasserafin94.iptvburo.data.repository.CatalogCursor
 import com.lucasserafin94.iptvburo.data.repository.BuroProfile
 import com.lucasserafin94.iptvburo.data.repository.ProfileType
@@ -36,6 +37,9 @@ import com.lucasserafin94.iptvburo.domain.model.CatalogueFilter
 import com.lucasserafin94.iptvburo.domain.model.CatalogueLayout
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
+import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
+import com.lucasserafin94.iptvburo.domain.model.ContentKind
+import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
 import com.lucasserafin94.iptvburo.domain.model.Episode
 import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
 import com.lucasserafin94.iptvburo.domain.model.LibraryOfferPolicy
@@ -110,6 +114,16 @@ class MainViewModel @Inject constructor(
     private var licenseJob: Job? = null
     private var subscriptionsJob: Job? = null
     private var subscriptionSelectionJob: Job? = null
+    private var sharedLinkJob: Job? = null
+
+    /**
+     * A shared title waiting for a catalogue to look it up in.
+     *
+     * A link tapped from a cold start arrives before the database has any rows, so it is held here
+     * and retried once the catalogue is ready. Cleared only when it actually opens — a link that
+     * finds nothing stays pending, so importing the list afterwards still lands on the film.
+     */
+    private var pendingSharedTitle: TitleShareLink? = null
 
     /**
      * Names already looked up this session, so a details screen redrawn on every recomposition does
@@ -699,6 +713,77 @@ class MainViewModel @Inject constructor(
             // The category is only a label on the details header; opening does not need it.
             openChannel(channel.toCatalogUi(""))
         }
+    }
+
+    /**
+     * Opens a title someone shared, resolving it against **this** device's catalogue.
+     *
+     * The link cannot carry a catalogue row id: that id is minted when a playlist is imported, so
+     * the sender's id names a row in their database and either nothing or the wrong film in the
+     * recipient's. What travels instead is a [ContentIdentity] — the normalised title, kind and
+     * year — and the row is found here by recomputing the same identity over the local catalogue.
+     * Two people on different providers can then share a film and each open their own copy.
+     *
+     * Held until the catalogue is ready rather than answered immediately: a link tapped from a cold
+     * start arrives long before the database has rows to search, and reporting "not in your list"
+     * at that moment would be wrong for a film the user does have.
+     */
+    fun openSharedLink(rawLink: String) {
+        val shared = TitleShareLink.parse(rawLink) ?: return
+        pendingSharedTitle = shared
+        resolvePendingSharedTitle()
+    }
+
+    /**
+     * Resolves a link that is waiting on the catalogue, if there is one.
+     *
+     * Called both when the link arrives and when the catalogue finishes loading, because either can
+     * happen first and only the later of the two can succeed.
+     */
+    private fun resolvePendingSharedTitle() {
+        val shared = pendingSharedTitle ?: return
+        if (mutableState.value.activeProfile == null) return
+
+        sharedLinkJob?.cancel()
+        sharedLinkJob =
+            viewModelScope.launch {
+                mutableState.update { it.copy(isResolvingSharedTitle = true) }
+                val match =
+                    withContext(ioDispatcher) {
+                        runCatching {
+                            // The slug's own words are the search term: the local copy is decorated
+                            // differently from the sender's ("[4K] Duna DUAL" against "Duna 1080p"),
+                            // so a query on the sender's exact title would miss it. The identity
+                            // comparison below is what actually decides.
+                            catalogRepository
+                                .findLibraryCandidates(shared.identity.searchFragment())
+                                .firstOrNull { candidate -> candidate.matches(shared.identity) }
+                        }.getOrNull()
+                    }
+
+                if (match == null) {
+                    // Kept pending: the catalogue may still be importing, and a later refresh can
+                    // resolve the same link without the user tapping it again.
+                    mutableState.update {
+                        it.copy(
+                            isResolvingSharedTitle = false,
+                            sharedTitleMissing = true,
+                        )
+                    }
+                    return@launch
+                }
+
+                pendingSharedTitle = null
+                mutableState.update {
+                    it.copy(isResolvingSharedTitle = false, sharedTitleMissing = false)
+                }
+                openChannel(match.toCatalogUi(""))
+            }
+    }
+
+    /** Dismisses the "not in your list" notice without discarding the pending link. */
+    fun dismissSharedTitleNotice() {
+        mutableState.update { it.copy(sharedTitleMissing = false) }
     }
 
     /** Returns from a title's offers to the shelves. */
@@ -1534,6 +1619,7 @@ class MainViewModel @Inject constructor(
                                 hasPlaybackError = false,
                                 liveNow = null,
                                 liveNext = null,
+                                liveSchedule = emptyList(),
                                 isLiveEpgLoading = resolved.contentType == CatalogContentType.LIVE,
                             )
                         }
@@ -1566,8 +1652,9 @@ class MainViewModel @Inject constructor(
             if (currentPlayer?.channel?.id != channel.id) return@launch
             mutableState.update { state ->
                 state.copy(
-                    liveNow = epg?.now?.let { LiveProgramUi(it.title, it.description) },
-                    liveNext = epg?.next?.let { LiveProgramUi(it.title, it.description) },
+                    liveNow = epg?.now?.toUi(),
+                    liveNext = epg?.next?.toUi(),
+                    liveSchedule = epg?.schedule.orEmpty().map { it.toUi() },
                     isLiveEpgLoading = false,
                 )
             }
@@ -2408,6 +2495,9 @@ class MainViewModel @Inject constructor(
         if (mutableState.value.bootStage != BootStageUi.READY) {
             mutableState.update { it.copy(bootStage = BootStageUi.READY) }
         }
+        // A link tapped from a cold start has been waiting for rows to search. This is the first
+        // moment there are any, so it is the first moment the lookup can honestly say "not found".
+        resolvePendingSharedTitle()
     }
 
     private fun observeOnboarding() {
@@ -2914,6 +3004,15 @@ class MainViewModel @Inject constructor(
             rating = rating,
         )
 
+    /** Keeps the times, which is what lets the guide print a clock against each programme. */
+    private fun LiveProgram.toUi(): LiveProgramUi =
+        LiveProgramUi(
+            title = title,
+            description = description,
+            startEpochSeconds = startEpochSeconds,
+            endEpochSeconds = endEpochSeconds,
+        )
+
     private fun Channel.toPlaybackUi(categoryName: String?): ChannelUi =
         ChannelUi(
             id = id,
@@ -3112,3 +3211,56 @@ internal fun dailyCatalogTitleKey(title: String): String =
         .replace(Regex("\\b(4k|uhd|fhd|hd|sd|h\\.?265|hevc|multi|dual)\\b"), " ")
         .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
         .trim()
+
+/**
+ * A SQL `LIKE` fragment for finding candidate rows for a shared identity.
+ *
+ * The identity is `kind:slug-words:year`, and its slug has already had the provider's decoration
+ * stripped — which is exactly why it cannot be matched against `name` directly: the local row still
+ * *has* its decoration. So the longest word of the slug is used as the search term and the identity
+ * comparison decides from there.
+ *
+ * The longest word rather than the first: leading articles ("o", "a", "the") appear in thousands of
+ * rows and would return a candidate page that does not contain the film at all. A distinctive word
+ * keeps the candidate set small and is far likelier to survive however the provider wrote the name.
+ */
+internal fun ContentIdentity.searchFragment(): String {
+    val slug = key.substringAfter(':').substringBeforeLast(':', missingDelimiterValue = "")
+    val stem = slug.ifEmpty { key.substringAfter(':') }
+    return stem.split('-').maxByOrNull(String::length).orEmpty()
+}
+
+/**
+ * Whether this catalogue row is the work [identity] names.
+ *
+ * The row's own identity is recomputed and compared, so the same normalisation runs on both sides:
+ * the sender's "[4K] Duna (2021) DUAL" and the recipient's "Duna 1080p LEG" reduce to one key. A
+ * year written into the name is read out of it when the provider left the field empty, which is the
+ * common case in an Xtream list.
+ */
+internal fun Channel.matches(identity: ContentIdentity): Boolean {
+    val kind =
+        when (contentType) {
+            CatalogContentType.SERIES -> ContentKind.SERIES
+            CatalogContentType.MOVIE -> ContentKind.MOVIE
+            else -> return false
+        }
+    val resolvedYear = year ?: ContentIdentity.yearFromTitle(name)
+    if (ContentIdentity.of(kind, name, resolvedYear) == identity) return true
+
+    // A row whose year is unknown still matches a link that carries one, provided the names agree.
+    // Playlists frequently omit the year entirely, and refusing those would fail on exactly the
+    // catalogues this feature is for. The reverse is never allowed: a row with a *different* year
+    // is a remake, and opening the wrong film is worse than opening nothing.
+    return resolvedYear == null && ContentIdentity.of(kind, name) == identity.withoutYear()
+}
+
+/** The identity without its trailing year, for comparing against a row that states none. */
+private fun ContentIdentity.withoutYear(): ContentIdentity {
+    val trailing = key.substringAfterLast(':', missingDelimiterValue = "")
+    return if (trailing.toIntOrNull() != null) {
+        ContentIdentity(key.substringBeforeLast(':'))
+    } else {
+        this
+    }
+}

@@ -54,20 +54,29 @@ fun LanguageSelectionScreen(
             Text("Escolha seu idioma", color = BuroTextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
             Text("Choose your language", color = BuroTextSecondary, fontSize = 16.sp)
             Spacer(Modifier.height(30.dp))
-            Row(
+            // One row per language rather than five side by side. Sharing a phone's width between
+            // five buttons left "Português (Brasil)" broken across three lines and "Español" split
+            // mid-word — a language you cannot read is not a language you can choose.
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 for (language in languages) {
                     FocusSurface(
                         onClick = { onSelect(language.tag) },
-                        modifier = Modifier.weight(1f).height(76.dp),
+                        modifier = Modifier.fillMaxWidth().height(58.dp),
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(language.displayName, color = BuroTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = language.displayName,
+                                color = BuroTextPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                            )
                         }
                     }
                 }

@@ -14,6 +14,57 @@ import java.util.Calendar
 import java.util.Locale
 
 /** Builds a small, stable home document from locally indexed catalog rows. */
+/**
+ * The rail titles and badges the home screen draws, already resolved.
+ *
+ * Passed in rather than looked up here: [RealHomeCatalog] is a pure object with no Context, which
+ * is what makes it testable — and the labels were hard-coded Portuguese, so the whole home screen
+ * stayed Portuguese whatever language the user picked.
+ */
+data class HomeLabels(
+    val continueWatching: String,
+    val continueBadge: String,
+    val newClassics: String,
+    val classicBadge: String,
+    val recentlyAdded: String,
+    val newBadge: String,
+    val topRated: String,
+    val topBadge: String,
+    val movies: String,
+    val movieBadge: String,
+    val series: String,
+    val seriesBadge: String,
+    val heroBadge: String,
+    /** Takes the year, so "%1$d releases" reads correctly in every language. */
+    val releases: (Int) -> String,
+) {
+    companion object {
+        /**
+         * The Portuguese wording the screen shipped with.
+         *
+         * Only for tests and previews, which have no resources to resolve. The app always passes
+         * the user's own language.
+         */
+        val Fallback =
+            HomeLabels(
+                continueWatching = "Continue assistindo",
+                continueBadge = "CONTINUAR",
+                newClassics = "Clássicos que chegaram agora",
+                classicBadge = "CLÁSSICO",
+                recentlyAdded = "Adicionados recentemente",
+                newBadge = "NOVO NA FONTE",
+                topRated = "Melhores avaliações",
+                topBadge = "★ DESTAQUE",
+                movies = "Filmes em destaque",
+                movieBadge = "FILME",
+                series = "Séries em destaque",
+                seriesBadge = "SÉRIE",
+                heroBadge = "DESTAQUE",
+                releases = { year -> "Lançamentos $year" },
+            )
+    }
+}
+
 object RealHomeCatalog {
     fun section(
         sources: List<HomeSourceSummary>,
@@ -33,6 +84,8 @@ object RealHomeCatalog {
          * not on a catalogue row, so it arrives a moment after the home does.
          */
         synopses: Map<String, String> = emptyMap(),
+        /** Rail titles and badges in the user's language. */
+        labels: HomeLabels = HomeLabels.Fallback,
     ): HomeSection {
         val continueById = continueWatching.associateBy { it.channel.id }
         val distinct = (catalogItems + continueWatching.map { it.channel }).distinctBy(ChannelUi::id)
@@ -91,7 +144,7 @@ object RealHomeCatalog {
         val heroChannel = rotationSource.firstOrNull() ?: distinct.first()
         val heroRotation =
             rotationSource.ifEmpty { listOf(heroChannel) }.map { channel ->
-                val item = channel.toHomeItem(HomeCardFormat.LANDSCAPE, "DESTAQUE")
+                val item = channel.toHomeItem(HomeCardFormat.LANDSCAPE, labels.heroBadge)
                 item.copy(
                     progress = continueById[channel.id]?.progress,
                     // The title's own plot where it has arrived, trimmed to a couple of lines: a
@@ -117,31 +170,31 @@ object RealHomeCatalog {
                 add(
                     HomeRail(
                         id = "real:rail:continue-watching",
-                        title = "Continue assistindo",
+                        title = labels.continueWatching,
                         kind = HomeRailKind.CONTINUE_WATCHING,
                         cardFormat = HomeCardFormat.LANDSCAPE,
                         items =
                             items.map { entry ->
                                 entry.channel
-                                    .toHomeItem(HomeCardFormat.LANDSCAPE, "CONTINUAR")
+                                    .toHomeItem(HomeCardFormat.LANDSCAPE, labels.continueBadge)
                                     .copy(progress = entry.progress)
                             },
                         isDemonstration = false,
                     ),
                 )
             }
-            releaseRail(currentYear, currentReleases)?.let(::add)
-            releaseRail(currentYear - 1, previousReleases)?.let(::add)
+            releaseRail(currentYear, currentReleases, labels)?.let(::add)
+            releaseRail(currentYear - 1, previousReleases, labels)?.let(::add)
             val newlyAdded = remaining.filter { it.categoryName == "Adicionado recentemente" }
             val newlyAddedClassics = newlyAdded.filter { (it.year ?: currentYear) <= currentYear - 15 }.take(12)
             newlyAddedClassics.takeIf(List<ChannelUi>::isNotEmpty)?.let { items ->
                 add(
                     HomeRail(
                         id = "real:rail:new-classics",
-                        title = "Clássicos que chegaram agora",
+                        title = labels.newClassics,
                         kind = HomeRailKind.EDITORIAL,
                         cardFormat = HomeCardFormat.POSTER,
-                        items = items.map { it.toHomeItem(HomeCardFormat.POSTER, "CLÁSSICO") },
+                        items = items.map { it.toHomeItem(HomeCardFormat.POSTER, labels.classicBadge) },
                         isDemonstration = false,
                     ),
                 )
@@ -155,10 +208,10 @@ object RealHomeCatalog {
                     add(
                         HomeRail(
                             id = "real:rail:recently-added",
-                            title = "Adicionados recentemente",
+                            title = labels.recentlyAdded,
                             kind = HomeRailKind.EDITORIAL,
                             cardFormat = HomeCardFormat.POSTER,
-                            items = items.map { it.toHomeItem(HomeCardFormat.POSTER, "NOVO NA FONTE") },
+                            items = items.map { it.toHomeItem(HomeCardFormat.POSTER, labels.newBadge) },
                             isDemonstration = false,
                         ),
                     )
@@ -173,10 +226,10 @@ object RealHomeCatalog {
                     add(
                         HomeRail(
                             id = "real:rail:top-rated",
-                            title = "Melhores avaliações",
+                            title = labels.topRated,
                             kind = HomeRailKind.EDITORIAL,
                             cardFormat = HomeCardFormat.POSTER,
-                            items = items.map { it.toHomeItem(HomeCardFormat.POSTER, "★ DESTAQUE") },
+                            items = items.map { it.toHomeItem(HomeCardFormat.POSTER, labels.topBadge) },
                             isDemonstration = false,
                         ),
                     )
@@ -188,10 +241,10 @@ object RealHomeCatalog {
                 add(
                     HomeRail(
                         id = "real:rail:movies",
-                        title = "Filmes em destaque",
+                        title = labels.movies,
                         kind = HomeRailKind.EDITORIAL,
                         cardFormat = HomeCardFormat.POSTER,
-                        items = items.map { it.toHomeItem(HomeCardFormat.POSTER, "FILME") },
+                        items = items.map { it.toHomeItem(HomeCardFormat.POSTER, labels.movieBadge) },
                         isDemonstration = false,
                     ),
                 )
@@ -200,10 +253,10 @@ object RealHomeCatalog {
                 add(
                     HomeRail(
                         id = "real:rail:series",
-                        title = "Séries em destaque",
+                        title = labels.series,
                         kind = HomeRailKind.EDITORIAL,
                         cardFormat = HomeCardFormat.POSTER,
-                        items = items.map { it.toHomeItem(HomeCardFormat.POSTER, "SÉRIE") },
+                        items = items.map { it.toHomeItem(HomeCardFormat.POSTER, labels.seriesBadge) },
                         isDemonstration = false,
                     ),
                 )
@@ -262,11 +315,15 @@ object RealHomeCatalog {
     /** Enough for a browsing session without the banner becoming a slideshow nobody can act on. */
     private const val HERO_ROTATION_SIZE = 10
 
-    private fun releaseRail(year: Int, items: List<ChannelUi>): HomeRail? =
+    private fun releaseRail(
+        year: Int,
+        items: List<ChannelUi>,
+        labels: HomeLabels,
+    ): HomeRail? =
         items.takeIf(List<ChannelUi>::isNotEmpty)?.let { releases ->
             HomeRail(
                 id = "real:rail:releases:$year",
-                title = "Lançamentos $year",
+                title = labels.releases(year),
                 kind = HomeRailKind.EDITORIAL,
                 cardFormat = HomeCardFormat.POSTER,
                 items = releases.map { it.toHomeItem(HomeCardFormat.POSTER, year.toString()) },

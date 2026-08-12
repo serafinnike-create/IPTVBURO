@@ -8,10 +8,10 @@ import org.junit.Test
 
 class GooglePlayBillingContractTest {
     @Test
-    fun `account id is stable opaque and scoped to the release application`() {
-        val first = obfuscatedPlayAccountId("android-id-123", "com.lucasserafin94.iptvburo")
-        val repeated = obfuscatedPlayAccountId("android-id-123", "com.lucasserafin94.iptvburo")
-        val anotherDevice = obfuscatedPlayAccountId("android-id-456", "com.lucasserafin94.iptvburo")
+    fun `account id is stable opaque and scoped to the release installation`() {
+        val first = obfuscatedPlayAccountId("DEVICE-CODE1", "com.lucasserafin94.iptvburo")
+        val repeated = obfuscatedPlayAccountId("DEVICE-CODE1", "com.lucasserafin94.iptvburo")
+        val anotherDevice = obfuscatedPlayAccountId("DEVICE-CODE2", "com.lucasserafin94.iptvburo")
 
         assertEquals(first, repeated)
         assertTrue(first.matches(Regex("^[a-f0-9]{64}$")))
