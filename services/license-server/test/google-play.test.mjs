@@ -1,7 +1,9 @@
 import { strict as assert } from 'node:assert';
+import { generateKeyPairSync } from 'node:crypto';
 import { test } from 'node:test';
 import {
   acknowledgeGooglePlayPurchase,
+  consumeGooglePlayPurchase,
   inspectGooglePlayPurchase,
   openGooglePurchaseToken,
   purchaseTokenHash,
@@ -17,8 +19,7 @@ function resource(overrides = {}) {
     productLineItem: [{
       productId: 'iptvburo_730_days',
       productOfferDetails: {
-        purchaseOptionId: 'rent_730_days',
-        rentOfferDetails: {},
+        purchaseOptionId: 'buy-730-days',
         quantity: 1,
         refundableQuantity: 1,
         consumptionState: 'CONSUMPTION_STATE_YET_TO_BE_CONSUMED',
@@ -36,7 +37,7 @@ function config(overrides = {}) {
   return {
     packageName: 'com.lucasserafin94.iptvburo',
     productId: 'iptvburo_730_days',
-    purchaseOptionId: 'rent_730_days',
+    purchaseOptionId: 'buy-730-days',
     serviceAccountEmail: 'fixture@example.iam.gserviceaccount.com',
     privateKey: 'configured-by-network-test',
     acceptTestPurchases: false,
@@ -44,11 +45,12 @@ function config(overrides = {}) {
   };
 }
 
-test('only the server-owned 730-day rental option can become a Play entitlement', () => {
+test('only the server-owned 730-day buy option can become a Play entitlement', () => {
   const valid = validateGooglePlayPurchaseResource(resource(), ACCOUNT_ID, config());
   assert.equal(valid.ok, true);
   assert.equal(valid.state, 'PURCHASED');
   assert.equal(valid.refundableQuantity, 1);
+  assert.equal(valid.consumptionState, 'CONSUMPTION_STATE_YET_TO_BE_CONSUMED');
   assert.equal(valid.completionTime.toISOString(), '2026-08-10T08:00:00.000Z');
 
   assert.equal(
@@ -62,9 +64,20 @@ test('only the server-owned 730-day rental option can become a Play entitlement'
   assert.equal(
     validateGooglePlayPurchaseResource(resource({ productLineItem: [{
       productId: 'iptvburo_730_days',
-      productOfferDetails: { purchaseOptionId: 'buy_forever', quantity: 1 },
+      productOfferDetails: { purchaseOptionId: 'rent_60_days', rentOfferDetails: {}, quantity: 1 },
     }] }), ACCOUNT_ID, config()).reason,
     'wrong_purchase_option',
+  );
+  assert.equal(
+    validateGooglePlayPurchaseResource(resource({ productLineItem: [{
+      productId: 'iptvburo_730_days',
+      productOfferDetails: {
+        purchaseOptionId: 'buy-730-days',
+        rentOfferDetails: {},
+        quantity: 1,
+      },
+    }] }), ACCOUNT_ID, config()).reason,
+    'buy_purchase_required',
   );
   assert.equal(
     validateGooglePlayPurchaseResource(resource({ testPurchaseContext: { fopType: 'TEST' } }), ACCOUNT_ID, config()).reason,
@@ -75,10 +88,7 @@ test('only the server-owned 730-day rental option can become a Play entitlement'
   assert.equal(validateGooglePlayPurchaseResource(refunded, ACCOUNT_ID, config()).state, 'REFUNDED');
   const consumed = resource();
   consumed.productLineItem[0].productOfferDetails.consumptionState = 'CONSUMPTION_STATE_CONSUMED';
-  assert.equal(
-    validateGooglePlayPurchaseResource(consumed, ACCOUNT_ID, config()).reason,
-    'unexpected_consumption_state',
-  );
+  assert.equal(validateGooglePlayPurchaseResource(consumed, ACCOUNT_ID, config()).ok, true);
 });
 
 test('purchase tokens are hashed for identity and encrypted before persistence', async () => {
@@ -108,7 +118,7 @@ test('the Worker authenticates as a service account and verifies directly with G
   const env = {
     GOOGLE_PLAY_PACKAGE_NAME: 'com.lucasserafin94.iptvburo',
     GOOGLE_PLAY_PRODUCT_ID: 'iptvburo_730_days',
-    GOOGLE_PLAY_PURCHASE_OPTION_ID: 'rent_730_days',
+    GOOGLE_PLAY_PURCHASE_OPTION_ID: 'buy-730-days',
     GOOGLE_PLAY_ACCEPT_TEST_PURCHASES: 'false',
     GOOGLE_SERVICE_ACCOUNT_EMAIL: 'fixture@example.iam.gserviceaccount.com',
     GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: privateKey,
@@ -121,7 +131,9 @@ test('the Worker authenticates as a service account and verifies directly with G
       return Response.json({ access_token: 'fixture-access-token-with-safe-length' });
     }
     if (String(url).includes('/purchases/productsv2/tokens/')) return Response.json(resource());
-    if (String(url).endsWith(':acknowledge')) return new Response('', { status: 200 });
+    if (String(url).endsWith(':acknowledge') || String(url).endsWith(':consume')) {
+      return new Response('', { status: 200 });
+    }
     throw new Error('UnexpectedGoogleRequest');
   });
 
@@ -138,4 +150,40 @@ test('the Worker authenticates as a service account and verifies directly with G
   );
   assert.equal(calls.length, 3);
   assert.equal(calls[2].options.method, 'POST');
+
+  assert.equal(
+    await consumeGooglePlayPurchase(PURCHASE_TOKEN, inspected.accessToken, env),
+    true,
+  );
+  assert.equal(calls.length, 4);
+  assert.equal(calls[3].options.method, 'POST');
+  assert.match(String(calls[3].url), /:consume$/);
+});
+
+test('Google API failures distinguish a malformed token from denied service-account access', async (t) => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const env = {
+    GOOGLE_PLAY_PACKAGE_NAME: 'com.lucasserafin94.iptvburo',
+    GOOGLE_PLAY_PRODUCT_ID: 'iptvburo_730_days',
+    GOOGLE_PLAY_PURCHASE_OPTION_ID: 'buy-730-days',
+    GOOGLE_PLAY_ACCEPT_TEST_PURCHASES: 'false',
+    GOOGLE_SERVICE_ACCOUNT_EMAIL: 'fixture@example.iam.gserviceaccount.com',
+    GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+  };
+  let publisherStatus = 400;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (String(url) === 'https://oauth2.googleapis.com/token') {
+      return Response.json({ access_token: 'fixture-access-token-with-safe-length' });
+    }
+    return new Response('', { status: publisherStatus });
+  });
+
+  const rejected = await inspectGooglePlayPurchase(PURCHASE_TOKEN, ACCOUNT_ID, env);
+  assert.equal(rejected.reason, 'purchase_token_rejected');
+  assert.equal(rejected.retryable, false);
+
+  publisherStatus = 403;
+  const denied = await inspectGooglePlayPurchase(PURCHASE_TOKEN, ACCOUNT_ID, env);
+  assert.equal(denied.reason, 'google_api_denied');
+  assert.equal(denied.retryable, false);
 });

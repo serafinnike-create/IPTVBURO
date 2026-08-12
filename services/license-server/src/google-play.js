@@ -2,8 +2,9 @@
  * Server-side Google Play purchase verification.
  *
  * The Android client is only a courier for the opaque purchase token. Google is queried from the
- * Worker with a service account, and only a PURCHASED 730-day rental option can become an
- * entitlement. Tokens are never logged and are encrypted before D1 persistence.
+ * Worker with a service account, and only the configured PURCHASED buy option can become an
+ * entitlement. The Worker consumes the purchase only after durably granting 730 days so the user
+ * can buy another term later. Tokens are never logged and are encrypted before D1 persistence.
  */
 
 const ANDROID_PUBLISHER_SCOPE = 'https://www.googleapis.com/auth/androidpublisher';
@@ -37,9 +38,16 @@ export async function inspectGooglePlayPurchase(
     headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' },
   });
   if (!response.ok) {
+    const reason = response.status === 404
+      ? 'purchase_not_found'
+      : response.status === 400
+        ? 'purchase_token_rejected'
+        : response.status === 401 || response.status === 403
+          ? 'google_api_denied'
+          : 'google_api_failed';
     return {
       ok: false,
-      reason: response.status === 404 ? 'purchase_not_found' : 'google_api_failed',
+      reason,
       retryable: response.status === 429 || response.status >= 500,
     };
   }
@@ -75,8 +83,8 @@ export function validateGooglePlayPurchaseResource(resource, expectedAccountId, 
   if (offer?.purchaseOptionId !== config.purchaseOptionId) {
     return { ok: false, reason: 'wrong_purchase_option' };
   }
-  if (!offer?.rentOfferDetails || offer?.preorderOfferDetails) {
-    return { ok: false, reason: 'rental_required' };
+  if (offer?.rentOfferDetails || offer?.preorderOfferDetails) {
+    return { ok: false, reason: 'buy_purchase_required' };
   }
   if (Number(offer?.quantity ?? 1) !== 1) return { ok: false, reason: 'bad_quantity' };
   if (purchaseState === 'PURCHASED' && offer?.refundableQuantity === undefined) {
@@ -86,9 +94,11 @@ export function validateGooglePlayPurchaseResource(resource, expectedAccountId, 
   if (!Number.isInteger(refundableQuantity) || refundableQuantity < 0 || refundableQuantity > 1) {
     return { ok: false, reason: 'bad_refundable_quantity' };
   }
+  const consumptionState = String(offer?.consumptionState ?? '');
   if (
     purchaseState === 'PURCHASED' &&
-    offer?.consumptionState !== 'CONSUMPTION_STATE_YET_TO_BE_CONSUMED'
+    consumptionState !== 'CONSUMPTION_STATE_YET_TO_BE_CONSUMED' &&
+    consumptionState !== 'CONSUMPTION_STATE_CONSUMED'
   ) {
     return { ok: false, reason: 'unexpected_consumption_state' };
   }
@@ -114,8 +124,28 @@ export function validateGooglePlayPurchaseResource(resource, expectedAccountId, 
     completionTime,
     refundableQuantity,
     acknowledgementState: String(resource?.acknowledgementState ?? ''),
+    consumptionState,
     testPurchase: Boolean(resource?.testPurchaseContext),
   };
+}
+
+export async function consumeGooglePlayPurchase(purchaseToken, accessToken, env) {
+  const token = validPurchaseToken(purchaseToken);
+  const config = googlePlayConfiguration(env);
+  if (!token || !accessToken || !config) return false;
+  const endpoint =
+    'https://androidpublisher.googleapis.com/androidpublisher/v3/applications/'
+    + `${encodeURIComponent(config.packageName)}/purchases/products/`
+    + `${encodeURIComponent(config.productId)}/tokens/${encodeURIComponent(token)}:consume`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: '{}',
+  });
+  return response.ok;
 }
 
 export async function acknowledgeGooglePlayPurchase(purchaseToken, accessToken, env) {

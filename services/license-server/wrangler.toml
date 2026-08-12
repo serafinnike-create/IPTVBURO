@@ -35,7 +35,7 @@ crons = ["17 * * * *"]
 STRIPE_MODE = "live"
 GOOGLE_PLAY_PACKAGE_NAME = "com.lucasserafin94.iptvburo"
 GOOGLE_PLAY_PRODUCT_ID = "iptvburo_730_days"
-GOOGLE_PLAY_PURCHASE_OPTION_ID = "rent_730_days"
+GOOGLE_PLAY_PURCHASE_OPTION_ID = "buy-730-days"
 GOOGLE_PLAY_ACCEPT_TEST_PURCHASES = "false"
 
 # Coarse abuse brakes at Cloudflare's edge. Device possession proofs and webhook signatures remain

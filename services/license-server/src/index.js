@@ -1,6 +1,6 @@
 import { signLicense } from './signing.js';
 import {
-  acknowledgeGooglePlayPurchase,
+  consumeGooglePlayPurchase,
   inspectGooglePlayPurchase,
   openGooglePurchaseToken,
   purchaseTokenHash,
@@ -716,10 +716,10 @@ async function handleRedeem(request, env) {
 }
 
 /**
- * Verifies a Google Play rental purchase and binds it to a proved Android installation.
+ * Verifies a Google Play purchase and binds it to a proved Android installation.
  *
  * The token is never trusted as a receipt. Google is queried server-to-server, the configured
- * product and 730-day rental option are checked, and the token is encrypted before D1 persistence.
+ * product and purchase option are checked, and the token is encrypted before D1 persistence.
  */
 async function handleGooglePlayPurchase(request, env) {
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
@@ -764,6 +764,13 @@ async function handleGooglePlayPurchase(request, env) {
     .first();
   if (existing && existing.obfuscated_account_id !== authorization.accountId) {
     return json({ error: 'purchase_already_bound' }, 409);
+  }
+  if (
+    inspected.state === 'PURCHASED' &&
+    inspected.consumptionState === 'CONSUMPTION_STATE_CONSUMED' &&
+    !existing
+  ) {
+    return json({ error: 'purchase_already_consumed' }, 409);
   }
 
   if (inspected.state === 'PENDING') {
@@ -865,23 +872,23 @@ async function handleGooglePlayPurchase(request, env) {
     return json({ error: 'purchase_ledger_conflict' }, 409);
   }
 
-  const needsAcknowledgement =
-    inspected.acknowledgementState !== 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED';
-  if (needsAcknowledgement) {
-    const acknowledged = await acknowledgeGooglePlayPurchase(
+  const needsConsumption =
+    inspected.consumptionState !== 'CONSUMPTION_STATE_CONSUMED';
+  if (needsConsumption) {
+    const consumed = await consumeGooglePlayPurchase(
       authorization.purchaseToken,
       inspected.accessToken,
       env,
     );
-    if (!acknowledged) return json({ error: 'google_acknowledgement_pending' }, 503);
-    await env.DB.prepare(
-      `UPDATE google_play_purchases
-       SET acknowledgement_state = 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED', updated_at = ?
-       WHERE purchase_token_hash = ?`,
-    )
-      .bind(iso(new Date()), inspected.purchaseTokenHash)
-      .run();
+    if (!consumed) return json({ error: 'google_consumption_pending' }, 503);
   }
+  await env.DB.prepare(
+    `UPDATE google_play_purchases
+     SET acknowledgement_state = 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED', updated_at = ?
+     WHERE purchase_token_hash = ?`,
+  )
+    .bind(iso(new Date()), inspected.purchaseTokenHash)
+    .run();
 
   return await respondWithLicense(env, authorization.deviceId, authorization.nonce, now);
 }
@@ -1070,16 +1077,17 @@ export async function reconcileGooglePlayPurchases(
       );
       changed += purchase.status === 'PENDING' ? 1 : 0;
 
-      if (inspected.acknowledgementState !== 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED') {
-        const acknowledged = await acknowledgeGooglePlayPurchase(token, inspected.accessToken, env);
-        if (acknowledged) {
-          await env.DB.prepare(
-            `UPDATE google_play_purchases
-             SET acknowledgement_state = 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED',
-                 last_checked_at = ?, updated_at = ?
-             WHERE purchase_token_hash = ?`,
-          ).bind(timestamp, timestamp, purchase.purchase_token_hash).run();
-        }
+      const alreadyConsumed =
+        inspected.consumptionState === 'CONSUMPTION_STATE_CONSUMED';
+      const delivered = alreadyConsumed ||
+        await consumeGooglePlayPurchase(token, inspected.accessToken, env);
+      if (delivered) {
+        await env.DB.prepare(
+          `UPDATE google_play_purchases
+           SET acknowledgement_state = 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED',
+               last_checked_at = ?, updated_at = ?
+           WHERE purchase_token_hash = ?`,
+        ).bind(timestamp, timestamp, purchase.purchase_token_hash).run();
       }
     } catch (error) {
       // Never log the row or token. A corrupt envelope or temporary API problem is retried later.
@@ -2557,6 +2565,16 @@ function html(body, status = 200, policy = PUBLIC_CSP) {
       'x-content-type-options': 'nosniff',
       'content-security-policy': policy,
       'cache-control': 'no-store',
+      // Keep these pages out of search results.
+      //
+      // The admin panel is a login box at a fixed, guessable path. Nothing behind it is reachable
+      // without the token, so being indexed is not a breach — but a panel that turns up in a search
+      // for the product is an invitation to try the box, and the activation pages carry a device
+      // code in their query string that has no business in anyone's index either.
+      'x-robots-tag': 'noindex, nofollow, noarchive',
+      // The panel grants licences and the payment pages take a device code, so the browser should
+      // refuse to talk to either over plain http after the first visit.
+      'strict-transport-security': 'max-age=31536000; includeSubDomains',
     },
   });
 }

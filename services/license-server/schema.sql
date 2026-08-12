@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS stripe_events (
 
 CREATE INDEX IF NOT EXISTS stripe_events_by_status ON stripe_events (status, updated_at);
 
--- Google Play one-time rental purchases. The token hash is the stable idempotency key; the opaque
+-- Google Play consumable one-time purchases. The token hash is the stable idempotency key; the opaque
 -- token is AES-GCM encrypted so the Worker can re-query Google without leaving a bearer credential
 -- in readable D1 rows or admin output.
 CREATE TABLE IF NOT EXISTS google_play_purchases (

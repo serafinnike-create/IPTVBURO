@@ -140,10 +140,11 @@ No Play Console, para o pacote `com.lucasserafin94.iptvburo`:
 
 1. envie primeiro um AAB assinado para uma faixa de teste fechada;
 2. crie o produto único `iptvburo_730_days`;
-3. crie e ative a opção de compra `rent_730_days`, do tipo aluguel, duração `P730D` e quantidade
-   máxima um;
+3. crie e ative a opção de compra `buy-730-days`, do tipo compra, com quantidade máxima um;
+   o Worker consome o item apenas depois de persistir a licença de 730 dias, permitindo recompra
+   futura sem depender do limite de 60 dias do aluguel do Google Play;
 4. ligue o aplicativo ao projeto Google Cloud, habilite a Google Play Android Developer API e dê à
-   conta de serviço somente as permissões necessárias para consultar e reconhecer compras;
+   conta de serviço somente as permissões necessárias para consultar e consumir compras;
 5. não reutilize a conta de serviço em outros produtos.
 
 Entregue as credenciais ao Worker. O e-mail pode ficar como segredo para manter toda a identidade
@@ -253,6 +254,6 @@ teste.
 3. Compra, webhook, validação do aplicativo, reembolso parcial, reembolso total e disputa testados.
 4. O painel administrativo protegido por Cloudflare Access/MFA; o token isolado não é suficiente
    para uma operação comercial definitiva.
-5. Produto/opção de aluguel Google ativos e E2E fechado aprovado, inclusive reembolso/restauração.
+5. Produto/opção de compra consumível Google ativos e E2E fechado aprovado, inclusive reembolso/restauração.
 6. Android release assinado e Windows launcher/MSI assinados e verificados pelo sistema operacional.
 7. Nenhum segredo, cache `.wrangler`, `.dev.vars` ou token local incluído num commit.

@@ -215,7 +215,7 @@ function environment() {
     STRIPE_MODE: 'test',
     GOOGLE_PLAY_PACKAGE_NAME: 'com.lucasserafin94.iptvburo',
     GOOGLE_PLAY_PRODUCT_ID: 'iptvburo_730_days',
-    GOOGLE_PLAY_PURCHASE_OPTION_ID: 'rent_730_days',
+    GOOGLE_PLAY_PURCHASE_OPTION_ID: 'buy-730-days',
     GOOGLE_PLAY_ACCEPT_TEST_PURCHASES: 'false',
     GOOGLE_SERVICE_ACCOUNT_EMAIL: 'fixture@example.iam.gserviceaccount.com',
     GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: googleServicePrivateKey,
@@ -474,12 +474,13 @@ test('chunked form bodies cannot bypass the checkout and activation size limit',
   }
 });
 
-test('Google Play is verified server-side, acknowledged and restored only to the same account id', async (t) => {
+test('Google Play is verified server-side, consumed and restored only to the same account id', async (t) => {
   const env = environment();
   const purchaseToken = 'opaque-play-token-worker-integration-0001';
   const accountId = 'c'.repeat(64);
   const completion = '2026-08-10T08:00:00Z';
-  let acknowledgementCalls = 0;
+  let consumptionCalls = 0;
+  let consumptionState = 'CONSUMPTION_STATE_YET_TO_BE_CONSUMED';
   let refundableQuantity = 1;
   t.mock.method(globalThis, 'fetch', async (url) => {
     const target = String(url);
@@ -492,20 +493,22 @@ test('Google Play is verified server-side, acknowledged and restored only to the
           productId: env.GOOGLE_PLAY_PRODUCT_ID,
           productOfferDetails: {
             purchaseOptionId: env.GOOGLE_PLAY_PURCHASE_OPTION_ID,
-            rentOfferDetails: {},
             quantity: 1,
             refundableQuantity,
-            consumptionState: 'CONSUMPTION_STATE_YET_TO_BE_CONSUMED',
+            consumptionState,
           },
         }],
         purchaseStateContext: { purchaseState: 'PURCHASED' },
         obfuscatedExternalAccountId: accountId,
         purchaseCompletionTime: completion,
-        acknowledgementState: 'ACKNOWLEDGEMENT_STATE_PENDING',
+        acknowledgementState: consumptionState === 'CONSUMPTION_STATE_CONSUMED'
+          ? 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED'
+          : 'ACKNOWLEDGEMENT_STATE_PENDING',
       });
     }
-    if (target.endsWith(':acknowledge')) {
-      acknowledgementCalls += 1;
+    if (target.endsWith(':consume')) {
+      consumptionCalls += 1;
+      consumptionState = 'CONSUMPTION_STATE_CONSUMED';
       return new Response('', { status: 200 });
     }
     throw new Error('UnexpectedGooglePlayCall');
@@ -545,7 +548,7 @@ test('Google Play is verified server-side, acknowledged and restored only to the
     assert.equal(row(env, 'SELECT status FROM devices WHERE device_id = ?', DEVICE_A).status, 'REVOKED');
     assert.equal(row(env, 'SELECT status FROM devices WHERE device_id = ?', DEVICE_B).status, 'ACTIVE');
     assert.equal(row(env, 'SELECT device_id FROM google_play_purchases').device_id, DEVICE_B);
-    assert.equal(acknowledgementCalls, 2);
+    assert.equal(consumptionCalls, 1);
 
     // A full refund is visible as zero refundable quantity even if Google's top-level purchase
     // state still says PURCHASED. The hourly server reconciliation revokes it without app help.
@@ -558,6 +561,52 @@ test('Google Play is verified server-side, acknowledged and restored only to the
       count(env, "SELECT COUNT(*) AS n FROM events WHERE kind = 'google_play_refunded'"),
       1,
     );
+  } finally {
+    env.DB.close();
+  }
+});
+
+test('a consumed Google Play token cannot create a new entitlement without a prior ledger row', async (t) => {
+  const env = environment();
+  const purchaseToken = 'opaque-play-token-consumed-without-ledger-0001';
+  const accountId = 'd'.repeat(64);
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    const target = String(url);
+    if (target === 'https://oauth2.googleapis.com/token') {
+      return Response.json({ access_token: 'worker-integration-access-token' });
+    }
+    if (target.includes('/purchases/productsv2/tokens/')) {
+      return Response.json({
+        productLineItem: [{
+          productId: env.GOOGLE_PLAY_PRODUCT_ID,
+          productOfferDetails: {
+            purchaseOptionId: env.GOOGLE_PLAY_PURCHASE_OPTION_ID,
+            quantity: 1,
+            refundableQuantity: 1,
+            consumptionState: 'CONSUMPTION_STATE_CONSUMED',
+          },
+        }],
+        purchaseStateContext: { purchaseState: 'PURCHASED' },
+        obfuscatedExternalAccountId: accountId,
+        purchaseCompletionTime: '2026-08-10T08:00:00Z',
+        acknowledgementState: 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED',
+      });
+    }
+    throw new Error('UnexpectedGooglePlayCall');
+  });
+
+  try {
+    await registerDevice(env, deviceIdentityA);
+    const response = await worker.fetch(
+      postJson(
+        '/v1/google-play/purchase',
+        await googlePlayProofBody(deviceIdentityA, purchaseToken, accountId),
+      ),
+      env,
+    );
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).error, 'purchase_already_consumed');
+    assert.equal(count(env, 'SELECT COUNT(*) AS n FROM google_play_purchases'), 0);
   } finally {
     env.DB.close();
   }
@@ -1777,6 +1826,58 @@ test('a redemption key is single-use under concurrent requests', async () => {
     assert.equal(count(env, "SELECT COUNT(*) AS n FROM devices WHERE status = 'ACTIVE'"), 1);
     assert.equal(count(env, "SELECT COUNT(*) AS n FROM events WHERE kind = 'redeemed'"), 1);
     assert.ok(row(env, "SELECT redeemed_by FROM redemption_keys WHERE key_code = 'ABCD-EFGH'").redeemed_by);
+  } finally {
+    env.DB.close();
+  }
+});
+
+/**
+ * The admin panel must not be indexable.
+ *
+ * It is a login box at a fixed, guessable path. Nothing behind it is reachable without the token,
+ * so appearing in a search result is not a breach — but a panel that turns up in a search for the
+ * product is an invitation to sit and try the box, and there is no reason to extend that invitation.
+ */
+test('the admin page asks search engines to stay away', async () => {
+  const env = environment();
+  try {
+    const response = await worker.fetch(new Request('https://local.test/admin'), env);
+
+    assert.equal(response.status, 200);
+    const robots = response.headers.get('x-robots-tag') ?? '';
+    assert.match(robots, /noindex/);
+    assert.match(robots, /nofollow/);
+  } finally {
+    env.DB.close();
+  }
+});
+
+/** The panel grants licences, so a browser must refuse plain http to it after the first visit. */
+test('html responses carry HSTS', async () => {
+  const env = environment();
+  try {
+    const response = await worker.fetch(new Request('https://local.test/admin'), env);
+
+    assert.match(response.headers.get('strict-transport-security') ?? '', /max-age=\d+/);
+  } finally {
+    env.DB.close();
+  }
+});
+
+/**
+ * The page itself is public; everything that reads or writes data is not.
+ *
+ * Worth pinning rather than assuming: the panel is one route away from the tables that decide who
+ * has paid, and "the login box is served to anyone" must never quietly become "the data is too".
+ */
+test('every admin data route refuses an unauthenticated caller', async () => {
+  const env = environment();
+  try {
+    const paths = ['/admin/summary', '/admin/search', '/admin/list', '/admin/keys'];
+    for (const path of paths) {
+      const response = await worker.fetch(new Request(`https://local.test${path}`), env);
+      assert.equal(response.status, 401, `${path} should refuse an anonymous caller`);
+    }
   } finally {
     env.DB.close();
   }
