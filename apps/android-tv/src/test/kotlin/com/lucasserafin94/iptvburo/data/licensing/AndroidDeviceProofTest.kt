@@ -6,6 +6,7 @@ import java.security.Signature
 import java.security.spec.ECGenParameterSpec
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -22,15 +23,35 @@ class AndroidDeviceProofTest {
         )
     }
 
+    /**
+     * The derivation is fixed, so a device keeps its name across app versions.
+     *
+     * The expected value changed once, deliberately: the id used to be derived from the Keystore
+     * public key as well as the installation id, and the key pair does not survive an uninstall.
+     * That made a paid licence unrecoverable on reinstall — the user was dropped back onto the
+     * trial. Changing it was a one-off migration, and this test is what stops it drifting again.
+     */
     @Test
     fun `device id derivation remains stable`() {
         assertEquals(
-            "ENH7-2JFH-F4B5",
-            deriveDeviceId(
-                publicKey = "public-key".toByteArray(StandardCharsets.UTF_8),
-                installationId = "550e8400-e29b-41d4-a716-446655440000",
-            ),
+            "WQW8-D5NZ-GMFM",
+            deriveDeviceId(installationId = "550e8400-e29b-41d4-a716-446655440000"),
         )
+    }
+
+    /**
+     * The same installation id yields the same device id however often it is asked for.
+     *
+     * The whole reinstall fix rests on this: the app recomputes the id from scratch after being
+     * reinstalled, and the server has to recognise the result as the device it already knows.
+     */
+    @Test
+    fun `the same installation id always yields the same device id`() {
+        val first = deriveDeviceId(installationId = "installation-under-test")
+        val second = deriveDeviceId(installationId = "installation-under-test")
+
+        assertEquals(first, second)
+        assertNotEquals(first, deriveDeviceId(installationId = "a-different-installation"))
     }
 
     @Test

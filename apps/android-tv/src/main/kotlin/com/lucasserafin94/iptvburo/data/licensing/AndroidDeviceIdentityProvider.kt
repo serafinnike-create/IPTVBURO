@@ -1,6 +1,7 @@
 package com.lucasserafin94.iptvburo.data.licensing
 
 import android.content.Context
+import android.provider.Settings
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -71,7 +72,7 @@ object AndroidDeviceIdentityProvider {
         val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
         val installationId =
             preferences.getString(KEY_INSTALLATION_ID, null)
-                ?: UUID.randomUUID().toString().also { generated ->
+                ?: stableInstallationId(context).also { generated ->
                     preferences.edit().putString(KEY_INSTALLATION_ID, generated).apply()
                 }
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
@@ -89,16 +90,63 @@ object AndroidDeviceIdentityProvider {
         val privateKey = requireNotNull(keyStore.getKey(KEY_ALIAS, null) as? PrivateKey)
         return AndroidDeviceInstallationIdentity(
             installationId = installationId,
-            deviceId = deriveDeviceId(publicKey, installationId),
+            deviceId = deriveDeviceId(installationId),
             publicKeyDerBase64 = Base64.encodeToString(publicKey, Base64.NO_WRAP),
             privateKey = privateKey,
         )
+    }
+
+    /**
+     * An installation id that survives the app being uninstalled.
+     *
+     * This is the fix for a paid licence being lost on reinstall. The id used to be a random UUID
+     * in SharedPreferences, and the device id was derived from it *and* the Keystore public key —
+     * both of which Android deletes with the app. Reinstalling therefore produced a device the
+     * server had never seen, and a user who had paid for thirty days was dropped back onto the
+     * seven-day trial. `allowBackup="false"`, which is right for a credential store, guarantees
+     * neither comes back.
+     *
+     * `ANDROID_ID` is the one identifier available without a permission that outlives an
+     * uninstall: it is scoped to the app's signing key, the user and the device, so it is stable
+     * across reinstalls of *this* app while telling us nothing about any other app and giving no
+     * cross-app tracking handle. A factory reset changes it, which matches the user's own
+     * expectation that a wiped device is a new device.
+     *
+     * It is hashed with a fixed salt rather than sent as-is, so the value that leaves the phone
+     * cannot be correlated with `ANDROID_ID` observed anywhere else.
+     *
+     * The random UUID stays as the fallback for the case where the platform returns nothing: a
+     * device that cannot be identified stably is still usable, it simply loses the reinstall
+     * grace, which is strictly better than refusing to run.
+     */
+    private fun stableInstallationId(context: Context): String {
+        val androidId =
+            runCatching {
+                Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+            }.getOrNull()
+
+        // Some devices historically returned this well-known broken value for every install.
+        if (androidId.isNullOrBlank() || androidId == BROKEN_ANDROID_ID) {
+            return UUID.randomUUID().toString()
+        }
+
+        val digest =
+            MessageDigest.getInstance("SHA-256").digest(
+                (INSTALLATION_ID_SALT + androidId).toByteArray(StandardCharsets.UTF_8),
+            )
+        return Base64.encodeToString(digest, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
     }
 
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
     private const val KEY_ALIAS = "iptv_buro_device_signing_v1"
     private const val PREFERENCES_NAME = "device_identity"
     private const val KEY_INSTALLATION_ID = "installation_id"
+
+    /** Domain separation, so the value sent is not `ANDROID_ID` under another name. */
+    private const val INSTALLATION_ID_SALT = "iptvburo-installation-v1\n"
+
+    /** A value several buggy devices returned for every app; treated as no answer at all. */
+    private const val BROKEN_ANDROID_ID = "9774d56d682e549c"
 }
 
 internal fun canonicalDeviceProof(
@@ -114,10 +162,21 @@ internal fun canonicalGooglePlayPurchaseProof(
     accountId: String,
 ): String = "iptvburo-google-play-purchase-v1\n$deviceId\n$nonce\n$purchaseTokenHash\n$accountId"
 
-internal fun deriveDeviceId(publicKey: ByteArray, installationId: String): String {
+/**
+ * The device id, derived from the installation id alone.
+ *
+ * The Keystore public key used to be mixed in here, which quietly made the id unrecoverable: the
+ * key pair is destroyed when the app is uninstalled, so even a perfectly stable installation id
+ * produced a different device id on reinstall, and the user's paid licence went with it.
+ *
+ * Dropping the key from the derivation costs nothing in security. The key's job is to *prove*
+ * possession of this identity — it still signs every request through [AndroidDeviceInstallationIdentity.proof]
+ * — and a name does not need to be unguessable to be safe when every use of it is authenticated.
+ */
+internal fun deriveDeviceId(installationId: String): String {
     val digest =
         MessageDigest.getInstance("SHA-256").digest(
-            publicKey + installationId.toByteArray(StandardCharsets.UTF_8),
+            installationId.toByteArray(StandardCharsets.UTF_8),
         )
     var bitBuffer = 0
     var bitCount = 0
