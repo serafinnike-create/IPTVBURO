@@ -70,6 +70,21 @@ object SingleInstance {
     /** Takes the link handed over by a second instance, if there is one. Consumes it. */
     fun takeHandedOverLink(): TitleShareLink? = handedOver.getAndSet(null)
 
+    /**
+     * Called on the listener thread when a link arrives, so the UI need not poll for one.
+     *
+     * The first version of this woke a coroutine once a second for the whole session to look at a
+     * slot that is almost always empty — 3,600 wakeups an hour on an idle app, for an event most
+     * users never trigger. The listener already knows the moment a link lands; it just had no way
+     * to say so.
+     */
+    @Volatile
+    private var onLinkReceived: (() -> Unit)? = null
+
+    fun setLinkListener(listener: (() -> Unit)?) {
+        onLinkReceived = listener
+    }
+
     /** Releases the port file and stops listening. Safe to call when nothing was ever claimed. */
     fun release() {
         runCatching { listener.getAndSet(null)?.close() }
@@ -94,7 +109,11 @@ object SingleInstance {
                         // machine, so the input is treated as untrusted regardless of how it got
                         // here. Anything that is not a share link is simply dropped.
                         if (line.length <= MAX_PAYLOAD_LENGTH) {
-                            TitleShareLink.parse(line)?.let(handedOver::set)
+                            TitleShareLink.parse(line)?.let { link ->
+                                handedOver.set(link)
+                                // Published before waking anyone, so the listener always finds it.
+                                runCatching { onLinkReceived?.invoke() }
+                            }
                         }
                     }
                 }

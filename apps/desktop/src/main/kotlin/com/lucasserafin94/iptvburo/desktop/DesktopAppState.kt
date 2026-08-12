@@ -286,6 +286,14 @@ class DesktopAppState(
     private val MAX_CAST_PHOTOS = 600
 
     /**
+     * Cap on remembered hero synopses.
+     *
+     * Far more than a day of rotation reaches, so the cache still answers instantly for anything
+     * recently on screen, while a session left open for days cannot grow without limit.
+     */
+    private val MAX_HERO_SYNOPSES = 200
+
+    /**
      * Fetches the photo for [name] if it has not been tried yet.
      *
      * A miss is cached as null, so a person TMDb does not know is not asked for again every time
@@ -295,7 +303,23 @@ class DesktopAppState(
         val key = name.trim().lowercase(Locale.ROOT)
         if (key.isBlank() || key in castPhotos || !metadataClient.isConfigured) return
         if (!castLookupsInFlight.add(key)) return
-        val photo = withContext(Dispatchers.IO) { metadataClient.findPerson(name)?.profileImageUrl }
+        // The in-flight marker is released whatever happens.
+        //
+        // It used to be removed only on the line after a successful lookup, so a TMDb request that
+        // threw — a timeout, a reset connection, a cancelled screen — left the name marked as
+        // in flight for the rest of the session. That face never loaded again however many times
+        // the user reopened the film, and the set grew by one entry per failure with nothing ever
+        // clearing it.
+        val photo =
+            try {
+                withContext(Dispatchers.IO) { metadataClient.findPerson(name)?.profileImageUrl }
+            } catch (error: Throwable) {
+                castLookupsInFlight.remove(key)
+                // Cancellation is not a failure to record: the screen simply went away, and the
+                // next visit should be free to ask again.
+                error.rethrowIfCancellation()
+                return
+            }
         // Bounded, because this app is left running for hours.
         //
         // Every actor ever seen was kept for the life of the session, along with its in-flight
@@ -1556,7 +1580,18 @@ class DesktopAppState(
             // A profile/provider/policy switch invalidates the Home while this network request is
             // running. Its old synopsis must not be published into the new catalogue afterwards.
             if (requestGeneration != dailyHomeRequestGeneration) return@launch
-            heroSynopsis = heroSynopsis + (cacheKey to plot)
+            // Bounded, for the same reason the cast photos are.
+            //
+            // Each entry is a full plot paragraph and the only thing that emptied this map was
+            // changing source. The hero rotates, and a session left open for a day accumulates a
+            // synopsis per title it ever showed — small individually, unbounded in aggregate.
+            heroSynopsis =
+                if (heroSynopsis.size >= MAX_HERO_SYNOPSES) {
+                    heroSynopsis.entries.drop(heroSynopsis.size / 2).associate { it.key to it.value } +
+                        (cacheKey to plot)
+                } else {
+                    heroSynopsis + (cacheKey to plot)
+                }
         }
     }
 

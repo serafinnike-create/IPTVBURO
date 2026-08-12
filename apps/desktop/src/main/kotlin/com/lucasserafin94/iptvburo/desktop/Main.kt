@@ -253,16 +253,33 @@ fun main(args: Array<String>) {
             // which is the common case, not the exception.
             LaunchedEffect(appState) {
                 startupShareLink?.let(appState::submitShareLink)
-                while (true) {
-                    SingleInstance.takeHandedOverLink()?.let { link ->
-                        window.toFront()
-                        window.requestFocus()
-                        appState.submitShareLink(link)
+                // Signalled by the listener thread rather than polled.
+                //
+                // This used to wake once a second for the entire session to inspect a slot that is
+                // almost always empty: 3,600 wakeups an hour on a completely idle app, for an event
+                // most users never trigger at all. A share link is an event, so it is delivered as
+                // one.
+                val pending = kotlinx.coroutines.channels.Channel<Unit>(capacity = 1)
+                SingleInstance.setLinkListener { pending.trySend(Unit) }
+                try {
+                    for (signal in pending) {
+                        SingleInstance.takeHandedOverLink()?.let { link ->
+                            window.toFront()
+                            window.requestFocus()
+                            appState.submitShareLink(link)
+                        }
                     }
-                    // Retries a link that arrived before the catalogue existed.
-                    appState.resolvePendingShareLink()
-                    kotlinx.coroutines.delay(1_000)
+                } finally {
+                    SingleInstance.setLinkListener(null)
                 }
+            }
+            // A link that arrived before the catalogue existed, resolved the moment it does.
+            //
+            // Keyed on the summary rather than retried on a timer: this recomposes exactly when the
+            // catalogue becomes available, which is the only moment the answer can change. Doing it
+            // by polling is what the loop above was really for.
+            LaunchedEffect(appState.xtreamSummary, appState.pendingShareLink) {
+                if (appState.pendingShareLink != null) appState.resolvePendingShareLink()
             }
             // The title bar is drawn by Windows, not by Compose, so it stayed light against the
             // near-black app. Keyed on placement because the native frame is rebuilt when the

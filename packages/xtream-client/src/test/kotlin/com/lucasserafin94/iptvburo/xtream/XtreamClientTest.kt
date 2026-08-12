@@ -584,6 +584,39 @@ class XtreamClientTest {
         assertEquals(XtreamFailureReason.INVALID_RESPONSE, error.reason)
     }
 
+    /**
+     * The buffered path is bounded far below the streamed one.
+     *
+     * `request` holds the body as bytes, as a String and as a JSON tree at the same time. The app
+     * runs on a 768 MB heap, so sharing the 512 MB streamed ceiling meant one oversized response
+     * could take the entire heap — an OutOfMemoryError reported to the user as their provider
+     * sending a malformed catalogue.
+     */
+    @Test
+    fun `a buffered response is refused well below the streamed ceiling`() {
+        val overLimit = 2 * 1024 * 1024
+        val client =
+            XtreamClient(
+                httpClient = OkHttpClient.Builder().readTimeout(5, TimeUnit.SECONDS).build(),
+                maximumBufferedBytes = 1024 * 1024,
+            )
+        // Valid JSON, simply too large to hold.
+        server.enqueue(MockResponse().setBody("""{"user_info":{"auth":1},"padding":"${"x".repeat(overLimit)}"}"""))
+
+        val error =
+            assertThrows(XtreamClientException::class.java) { client.authenticate(credentials()) }
+
+        assertEquals(XtreamFailureReason.RESPONSE_TOO_LARGE, error.reason)
+    }
+
+    /** The buffered ceiling may never exceed the streamed one, or the split protects nothing. */
+    @Test
+    fun `the buffered ceiling cannot exceed the streamed one`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            XtreamClient(maximumResponseBytes = 1024, maximumBufferedBytes = 2048)
+        }
+    }
+
     private fun credentials(): XtreamCredentials =
         XtreamCredentials(
             serverUrl = server.url("/").toString(),

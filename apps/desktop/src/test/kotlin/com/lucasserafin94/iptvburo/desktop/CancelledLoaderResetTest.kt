@@ -57,7 +57,17 @@ class CancelledLoaderResetTest {
                         SUPERSEDED_GUARD.containsMatchIn(candidate)
                     }
 
+                    // An in-flight *marker* released counts as the reset, the same as a status put
+                    // back to rest. `ensureCastPhoto` guards on a set of names rather than on a
+                    // status enum, and removing the key before the rethrow leaves nothing stuck —
+                    // the next visit is free to ask again, which is the property this test is
+                    // actually about. Without this the check reports a correct loader as broken.
+                    val markerReleased = preceding.any { candidate ->
+                        IN_FLIGHT_RELEASE.containsMatchIn(candidate)
+                    }
+
                     !supersededBranch &&
+                        !markerReleased &&
                         preceding.none { candidate -> RESTING_STATE.containsMatchIn(candidate) }
                 }
             }
@@ -162,5 +172,15 @@ class CancelledLoaderResetTest {
          * same class of bug as the one this test exists to catch, pointing the other way.
          */
         val SUPERSEDED_GUARD = Regex("""requestGeneration\s*!=|generation\s*!=""")
+
+        /**
+         * An in-flight marker being released, the set-based equivalent of a status reset.
+         *
+         * A loader that guards with `if (!inFlight.add(key)) return` is stuck exactly as badly as
+         * one guarding on a status, and unstuck by exactly the same act: removing the key. Matching
+         * `.remove(` on an in-flight collection recognises that form without weakening the check —
+         * a loader that removes nothing before rethrowing is still reported.
+         */
+        val IN_FLIGHT_RELEASE = Regex("""\w*[Ii]nFlight\w*\.remove\(""")
     }
 }

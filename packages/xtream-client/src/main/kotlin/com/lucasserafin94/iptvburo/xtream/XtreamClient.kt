@@ -40,12 +40,19 @@ class XtreamClient(
             .build(),
     private val userAgent: String = DEFAULT_USER_AGENT,
     private val maximumResponseBytes: Int = DEFAULT_MAXIMUM_RESPONSE_BYTES,
+    private val maximumBufferedBytes: Int = DEFAULT_MAXIMUM_BUFFERED_BYTES,
     private val maximumTransientRetries: Int = DEFAULT_MAXIMUM_TRANSIENT_RETRIES,
     private val retryDelayMillis: Long = DEFAULT_RETRY_DELAY_MILLIS,
 ) {
     init {
         require(userAgent.isNotBlank()) { "userAgent cannot be blank" }
         require(maximumResponseBytes > 0) { "maximumResponseBytes must be positive" }
+        require(maximumBufferedBytes > 0) { "maximumBufferedBytes must be positive" }
+        // A buffered body is held whole; a streamed one is not. Allowing the buffered ceiling to
+        // exceed the streamed one would invert the safety this split exists to provide.
+        require(maximumBufferedBytes <= maximumResponseBytes) {
+            "maximumBufferedBytes cannot exceed maximumResponseBytes"
+        }
         require(maximumTransientRetries in 0..MAXIMUM_TRANSIENT_RETRIES) { "maximumTransientRetries is outside the safe range" }
         require(retryDelayMillis in 0..MAXIMUM_RETRY_DELAY_MILLIS) { "retryDelayMillis is outside the safe range" }
     }
@@ -335,8 +342,10 @@ class XtreamClient(
                     "The Xtream server returned HTTP ${response.code}.",
                 )
             }
+            // The buffered ceiling, not the streamed one: everything below holds the whole body in
+            // memory at once, so this is where an oversized response becomes an OutOfMemoryError.
             val declaredLength = response.body.contentLength()
-            if (declaredLength > maximumResponseBytes) {
+            if (declaredLength > maximumBufferedBytes) {
                 throw XtreamClientException(
                     XtreamFailureReason.RESPONSE_TOO_LARGE,
                     "The Xtream response exceeded the configured safety limit.",
@@ -344,9 +353,9 @@ class XtreamClient(
             }
             val bytes =
                 response.body.byteStream().use { input ->
-                    input.readAtMost(maximumResponseBytes + 1)
+                    input.readAtMost(maximumBufferedBytes + 1)
                 }
-            if (bytes.size > maximumResponseBytes) {
+            if (bytes.size > maximumBufferedBytes) {
                 throw XtreamClientException(
                     XtreamFailureReason.RESPONSE_TOO_LARGE,
                     "The Xtream response exceeded the configured safety limit.",
@@ -699,7 +708,29 @@ class XtreamClient(
 
     private companion object {
         const val DEFAULT_USER_AGENT = "IPTV BURO/0.2"
+
+        /**
+         * Ceiling for a *streamed* response, which is never held whole.
+         *
+         * The parser reads it item by item and the byte counter only stops a body that would not
+         * end, so a large number here costs nothing in memory.
+         */
         const val DEFAULT_MAXIMUM_RESPONSE_BYTES = 512 * 1024 * 1024
+
+        /**
+         * Ceiling for a *buffered* response, which is held whole — three times over.
+         *
+         * `request` reads the body into a ByteArray, decodes that into a String, and parses that
+         * into a JsonElement tree, all alive at once. Against a 768 MB heap the streamed ceiling
+         * was a loaded gun: one oversized body could take the whole heap and kill the app with an
+         * OutOfMemoryError, which is exactly the freeze-then-fail a user reported while their
+         * catalogue was loading.
+         *
+         * The endpoints that still buffer are the small ones — the account handshake, series and
+         * film details, the short EPG. None is anywhere near this; a provider that sends more than
+         * 32 MB for one of them is malfunctioning, and refusing it is the correct answer.
+         */
+        const val DEFAULT_MAXIMUM_BUFFERED_BYTES = 32 * 1024 * 1024
         const val DEFAULT_MAXIMUM_CATALOG_ITEMS = 1_000_000
 
         /**
