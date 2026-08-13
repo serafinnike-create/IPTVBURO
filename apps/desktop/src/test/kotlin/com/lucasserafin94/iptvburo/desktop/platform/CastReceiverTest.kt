@@ -46,6 +46,70 @@ class CastReceiverTest {
         }
     }
 
+    /**
+     * Guessing the code has to get slower, or four digits protect nothing.
+     *
+     * The code is the whole security model of this feature: the listener binds every interface, so
+     * on a shared network — a hotel, a café, an office — anyone can reach it. Ten thousand
+     * possibilities is seconds of work for a machine, and comparing the code in constant time does
+     * nothing about simply trying them all.
+     *
+     * Measured by how long the *receiver* takes to work through the attempts, not by how long the
+     * sender takes to fire them. Sending is fire-and-forget — the socket closes before the receiver
+     * has finished reading — so a guesser can always spray connections quickly. What the brake
+     * controls is the rate at which guesses are actually *checked*, and that is the rate that
+     * decides how long ten thousand of them take.
+     *
+     * The probe for that is a correct code sent last: it can only be delivered once the receiver
+     * has chewed through the wrong ones ahead of it.
+     */
+    @Test
+    fun `guessing the pairing code gets slower`() {
+        val delivered = CountDownLatch(1)
+        val code = assertNotNull(receiver.start { delivered.countDown() })
+        val port = listeningPort()
+        val identity = ContentIdentity.of(ContentKind.MOVIE, "Qualquer", 2024)
+
+        repeat(6) { attempt ->
+            val wrong = String.format("%04d", attempt)
+            runCatching { send(port, CastMessage(identity, "Qualquer", 0, wrong).encode()) }
+        }
+
+        val startedAt = System.nanoTime()
+        runCatching { send(port, CastMessage(identity, "Correto", 0, code).encode()) }
+        delivered.await(30, TimeUnit.SECONDS)
+        val elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000
+
+        assertTrue(
+            elapsedMillis >= 500,
+            "the receiver cleared six wrong codes in ${elapsedMillis}ms, so guessing is unthrottled",
+        )
+    }
+
+    /**
+     * The brake must not punish the person who owns the screen.
+     *
+     * A correct code after several wrong ones has to work, and has to reset the penalty — otherwise
+     * a burst of junk from anyone on the network would lock the feature for its owner, which is a
+     * denial of service handed out for free.
+     */
+    @Test
+    fun `a correct code still works after wrong ones`() {
+        val delivered = CountDownLatch(1)
+        var received: CastMessage? = null
+        val code = assertNotNull(receiver.start { message -> received = message; delivered.countDown() })
+        val port = listeningPort()
+        val identity = ContentIdentity.of(ContentKind.MOVIE, "Depois das tentativas", 2024)
+
+        repeat(4) { attempt ->
+            send(port, CastMessage(identity, "Errado", 0, String.format("%04d", attempt)).encode())
+        }
+        send(port, CastMessage(identity, "Depois das tentativas", 0, code).encode())
+
+        assertTrue(delivered.await(30, TimeUnit.SECONDS), "the owner was locked out by the brake")
+        assertEquals(identity, received?.identity)
+    }
+
     private fun send(port: Int, payload: String) {
         Socket().use { socket ->
             socket.connect(java.net.InetSocketAddress(InetAddress.getLoopbackAddress(), port), 2_000)

@@ -40,6 +40,9 @@ class CastReceiver(
     private val udpSocket = AtomicReference<DatagramSocket?>(null)
     private val received = AtomicReference<CastMessage?>(null)
 
+    /** Wrong pairing codes seen in a row, which is what the guessing brake counts. */
+    private val consecutiveFailures = java.util.concurrent.atomic.AtomicInteger(0)
+
     /** The code the user reads off this screen and types into the sender. Null when stopped. */
     @Volatile
     var pairingCode: String? = null
@@ -105,6 +108,7 @@ class CastReceiver(
     }
 
     fun stop() {
+        consecutiveFailures.set(0)
         pairingCode = null
         listeningPort = null
         onMessage = null
@@ -120,19 +124,63 @@ class CastReceiver(
         Thread {
             while (!socket.isClosed) {
                 val client = runCatching { socket.accept() }.getOrNull() ?: break
-                runCatching {
+                // Each connection is handled on its own thread so the brake below can hold *one*
+                // sender without holding the queue.
+                //
+                // Sleeping on this loop instead looked equivalent and was not: accept stops while
+                // it sleeps, the listen backlog fills after TCP_BACKLOG connections, and the OS
+                // then refuses everything else outright — including the person who owns the screen
+                // and typed the right code. A guessing brake that locks out the owner is a denial
+                // of service handed to anyone on the network for free.
+                //
+                // Daemon, like the accept thread, so a handler waiting on a read cannot keep the
+                // app alive.
+                Thread {
+                    runCatching {
                     client.use { connection ->
                         connection.soTimeout = READ_TIMEOUT_MILLIS
                         val line = readBoundedLine(connection.getInputStream().bufferedReader(Charsets.UTF_8))
                         // Decoded, not trusted. The pairing code is checked inside decode, and a
                         // message that fails any check is simply dropped — an exception here would
                         // be a way for anyone on the network to stop the listener.
-                        CastMessage.decode(line, code)?.let { message ->
+                        val message = CastMessage.decode(line, code)
+                        if (message == null) {
+                            // A wrong code costs the sender a wait that grows.
+                            //
+                            // The code is four digits: ten thousand possibilities, one TCP
+                            // connection each, which a machine on the same network works through
+                            // in seconds. Constant-time comparison stops the code leaking through
+                            // timing but does nothing about simply trying them all, and the
+                            // listener binds every interface — so on the café wifi this protects
+                            // nothing without a brake.
+                            //
+                            // The brake: the guesser's own connection is held open, doing nothing,
+                            // for a wait that grows with each consecutive miss. Ten thousand codes
+                            // at several seconds each stops being an attack anyone runs.
+                            //
+                            // Held on the handler thread rather than the accept loop, so the queue
+                            // keeps draining and the owner's correct code still gets through.
+                            // Capped, and reset by any message that decodes.
+                            val failures = consecutiveFailures.incrementAndGet()
+                            if (failures >= FAILURES_BEFORE_DELAY) {
+                                val penalty =
+                                    minOf(
+                                        FAILURE_DELAY_MILLIS * (failures - FAILURES_BEFORE_DELAY + 1),
+                                        MAX_FAILURE_DELAY_MILLIS,
+                                    )
+                                runCatching { Thread.sleep(penalty) }
+                            }
+                        } else {
+                            consecutiveFailures.set(0)
                             received.set(message)
                             runCatching { onMessage?.invoke(message) }
                         }
                     }
-                }
+                    }
+                }.apply {
+                    name = "iptvburo-cast-client"
+                    isDaemon = true
+                }.start()
             }
         }.apply {
             name = "iptvburo-cast-accept"
@@ -208,6 +256,27 @@ class CastReceiver(
 
         private const val TCP_BACKLOG = 2
         private const val READ_TIMEOUT_MILLIS = 3_000
+
+        /**
+         * Wrong codes tolerated at full speed before the brake engages.
+         *
+         * A person mistyping the code on a phone gets a couple of free goes; a machine working
+         * through ten thousand possibilities does not.
+         */
+        private const val FAILURES_BEFORE_DELAY = 3
+
+        /** Added per wrong code beyond the free ones, so guessing gets slower the longer it runs. */
+        private const val FAILURE_DELAY_MILLIS = 500L
+
+        /**
+         * Ceiling on that delay.
+         *
+         * Without it a long burst of junk would park the accept thread for minutes and the feature
+         * would be unusable for the person it belongs to — a denial of service handed to whoever
+         * sent the junk. Five seconds per attempt still puts ten thousand guesses well beyond a
+         * session on someone else's wifi.
+         */
+        private const val MAX_FAILURE_DELAY_MILLIS = 5_000L
         private const val DISCOVERY_BUFFER_BYTES = 256
 
         /** Finds receivers on this network, for the sender's device list. */
