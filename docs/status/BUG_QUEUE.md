@@ -42,6 +42,69 @@ o servidor) continua aguardando o log do usuário.
 
 ---
 
+## TAREFA-029 — Guia Fontes no Windows, como já existe no celular
+
+**Status:** pedido registrado — **não implementado**
+**Pedido em:** 2026-08-13
+**Relato:** "no app do celular tem uma guia chamada Fontes, nela aparece arquivo
+M3U, login Xtream etc, e minhas listas registradas. Adicione essa guia também no
+app Windows"
+
+### O que existe hoje em cada plataforma
+
+| | Android | Windows |
+|---|---|---|
+| Guia Fontes | ✅ `AppSection.SOURCES` | ❌ não existe |
+| Importar M3U | ✅ pela guia | ❌ só Xtream |
+| Login Xtream | ✅ pela guia | 🟡 só no onboarding e na troca de perfil |
+| Portal Stalker | ✅ pela guia | ❌ |
+| **Listas já registradas** | ✅ listadas na guia | 🟡 **guardadas, mas sem tela** |
+
+A última linha é a que mais importa. O Windows **já** mantém várias assinaturas
+— `XtreamSourceLibrary` guarda cada uma com o seu próprio cofre DPAPI, e
+`savedSources()` as devolve. Mas elas só aparecem na escolha de perfil e no
+seletor: não há lugar para **ver**, **renomear** ou **remover** uma lista.
+
+Ou seja: dá para acumular assinaturas no Windows e não dá para se livrar delas.
+
+### O que a guia precisa ter
+
+- **Adicionar**: arquivo M3U/M3U8, login Xtream e portal Stalker — os três que o
+  Android oferece. Xtream e Stalker já têm cliente pronto no domínio
+  compartilhado; o que falta no Windows é a tela;
+- **Listar o que está registrado**, com nome, tipo e quantos itens tem;
+- **Remover**, apagando junto o cofre DPAPI daquela fonte — remover a entrada e
+  deixar as credenciais no disco seria pior do que não remover;
+- **Renomear**, porque "Xtream" repetido três vezes não diz qual é qual;
+- **Reconectar/atualizar** uma fonte existente sem ter que apagar e recriar.
+
+### Onde entra
+
+Junto de Perfil e Configurações no fim da navegação, pela mesma razão: é
+administração, não conteúdo. A ordem final ficaria:
+
+```text
+…
+Assinaturas
+Fontes            ← esta tarefa
+Perfil            ← TAREFA-028
+Configurações     ← TAREFA-028
+```
+
+Vale fazer **depois** da TAREFA-028, que é quem cria os itens de administração na
+barra — fazer as duas ao mesmo tempo é mexer no mesmo arquivo duas vezes.
+
+### Cuidados
+
+- Cada fonte continua com o cofre próprio; nada de juntar credenciais num arquivo
+  só para facilitar a listagem;
+- a tela mostra **nome e tipo**, nunca a senha, e o `toString()` das entradas já é
+  redigido — manter assim;
+- remover uma fonte que está em uso por um perfil precisa dizer isso antes, não
+  deixar o perfil apontando para o vazio.
+
+---
+
 ## TAREFA-028 — Guia Configurações e atalho de Perfil na navegação
 
 **Status:** pedido registrado — **não implementado**
