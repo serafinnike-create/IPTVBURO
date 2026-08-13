@@ -21,7 +21,7 @@ plugins {
 }
 
 group = "com.lucasserafin94.iptvburo"
-version = "2.0.0-alpha.7"
+version = "2.0.0-alpha.8"
 
 val desktopReleaseVersion = version.toString()
 
