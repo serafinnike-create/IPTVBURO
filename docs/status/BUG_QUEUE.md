@@ -42,6 +42,70 @@ o servidor) continua aguardando o log do usuário.
 
 ---
 
+## TAREFA-027 — Lembretes: avisar sobre um filme, e sobre um lançamento
+
+**Status:** pedido registrado — **não implementado**
+**Pedido em:** 2026-08-13
+**Relato:** "novo sistema chamado lembrete... user vai no filme, tem opção
+lembrete... app sempre vai notificar ele todos os dias ou toda vez que ele abre o
+app... guia lembretes... configurar tempo de notificação... fica também na tela
+inicial embaixo de continua assistindo... em assinaturas, lançamentos em breve,
+user pode marcar esses filmes como lembrete para caso o filme tenha data de
+lançamento o app notificar que o filme foi lançado"
+
+São **dois** recursos com a mesma marcação, e a diferença importa:
+
+| | Filme da lista | Lançamento em Assinaturas |
+|---|---|---|
+| O que dispara | uma rotina que o usuário escolhe | uma **data** que o TMDb informa |
+| Quando para | quando ele desmarca | quando o filme sai |
+| Já é assistível | sim | não, e é esse o ponto |
+
+### Como fica
+
+- **Marcar:** botão na tela do filme, ao lado de Favoritos, e nos cartões de
+  "Em breve" dentro de Assinaturas.
+- **Guia Lembretes:** lista tudo o que está marcado, permite desmarcar e é onde
+  se escolhe o horário do aviso.
+- **Tela inicial:** uma prateleira logo abaixo de "Continuar assistindo".
+- **Desmarcar:** pelo mesmo botão do filme ou pela guia.
+
+### Decisões que precisam ser tomadas antes de programar
+
+1. **"Todos os dias" não pode virar aborrecimento.** Um aviso diário sobre um
+   filme que a pessoa já podia assistir ontem vira ruído, e ruído acaba com a
+   permissão de notificação sendo desligada — o que mata também o aviso de
+   lançamento, que é o realmente valioso. Proposta: **um** horário por dia,
+   escolhido pelo usuário, e o lembrete se cala sozinho depois que o filme é
+   assistido.
+2. **Aviso ao abrir o app** é diferente de notificação do sistema. O primeiro é
+   barato e não precisa de permissão; o segundo precisa de `POST_NOTIFICATIONS`
+   no Android 13+ e de agendamento que sobreviva a reinício do aparelho.
+3. **Lançamento sem data é comum.** O TMDb frequentemente traz "em breve" sem dia
+   certo, ou com uma data que muda. O lembrete tem de dizer *"sem data ainda"* em
+   vez de inventar uma, e reagir quando a data mudar.
+4. **A data é por região.** Um filme sai em dias diferentes no Brasil e nos EUA;
+   o aviso tem de usar a região do perfil, que já existe em Assinaturas.
+5. **No Windows não há notificação de sistema hoje.** Ou se implementa, ou o
+   Windows fica com o aviso na abertura e a prateleira — e isso precisa ser dito
+   ao usuário, não descoberto por ele.
+
+### Restrições
+
+- Lembrete é **por perfil**, como favoritos — o filme que um marcou não avisa o
+  outro.
+- Precisa de migration Room no Android e de teste de migration, como toda mudança
+  de schema.
+- Um lembrete guarda a **identidade** do título (`ContentIdentity`), nunca uma URL
+  nem credencial — igual ao que compartilhar e transmitir já fazem.
+- Nada de notificação para perfil Kids sem o mesmo tratamento de conteúdo que o
+  resto do app aplica.
+
+**Próximo passo:** confirmar com o usuário a decisão 1 (frequência) e a 5
+(Windows sem notificação de sistema). As demais dá para resolver implementando.
+
+---
+
 ## BUG-025 — "Enviar à tela" não encontra o outro aparelho
 
 **Status:** uma causa encontrada e corrigida — **falta testar entre os aparelhos**
@@ -91,7 +155,7 @@ broadcast — e hoje não existe essa saída.
 
 ## TAREFA-026 — Fonte P2P no perfil, para quem não tem lista nem Xtream
 
-**Status:** pedido registrado — **não implementado, e precisa de pesquisa antes**
+**Status:** pesquisado — **provavelmente já resolvido pela leitura de link colado**
 **Pedido em:** 2026-08-13
 **Relato:** "meu amigo usa IPTV porém o IPTV dele é P2P, pesquise sobre isso e
 adicione essa função no perfil, caso o user não tenha lista, usuário e senha, só
@@ -129,8 +193,30 @@ dele, resolve em minutos qual dos três é.
 - a fonte só aparece no perfil se a plataforma realmente suportar — capability
   real, não caixa que não faz nada.
 
-**Próximo passo:** descobrir qual dos três é o caso do amigo. Sem isso, qualquer
-implementação teria boa chance de ser a errada.
+### O que a pesquisa confirmou (2026-08-13)
+
+Fonte: [Ace Stream Engine HTTP API](https://wiki.acestream.media/Engine_HTTP_API)
+e a documentação de conversão de credenciais de painéis.
+
+- **Ace Stream não usa usuário e senha.** O conteúdo é pedido por
+  `http://<engine>:6878/ace/getstream?id=<content_id>`. Quem tem "usuário e
+  senha" quase certamente **não** está nesse caso;
+- **"P2P" em painel de operadora é, na prática, Xtream com outro nome.** As mesmas
+  credenciais montam `get.php?username=…&password=…` ou
+  `player_api.php?username=…&password=…`. É por isso que existem tantos
+  conversores "M3U ⇄ Xtream" na internet: a informação é a mesma, muda a forma.
+
+**Conclusão:** o caso do amigo é, com alta probabilidade, uma conta Xtream comum
+entregue em outro formato — e isso o BURO **já** suporta. O que faltava era
+aceitar o formato: veja a mudança de hoje, que passou a ler usuário e senha de
+qualquer link colado, incluindo `/playlist/USUARIO/SENHA/m3u_plus`, que é
+exatamente a forma que costuma vir rotulada como P2P.
+
+**Próximo passo, muito mais barato do que era:** pedir ao amigo para colar o link
+que ele recebeu na tela de conexão. Se conectar, está resolvido e nenhuma fonte
+nova é necessária. Só se **não** conectar é que vale investigar Ace Stream — e aí
+o BURO falaria com um motor que o próprio usuário instalou, nunca embutindo um
+nem agindo como par da rede.
 
 ---
 
