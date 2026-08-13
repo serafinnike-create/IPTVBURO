@@ -54,36 +54,37 @@ class CastReceiverTest {
      * possibilities is seconds of work for a machine, and comparing the code in constant time does
      * nothing about simply trying them all.
      *
-     * Measured by how long the *receiver* takes to work through the attempts, not by how long the
-     * sender takes to fire them. Sending is fire-and-forget — the socket closes before the receiver
-     * has finished reading — so a guesser can always spray connections quickly. What the brake
-     * controls is the rate at which guesses are actually *checked*, and that is the rate that
-     * decides how long ten thousand of them take.
-     *
-     * The probe for that is a correct code sent last: it can only be delivered once the receiver
-     * has chewed through the wrong ones ahead of it.
+     * Asserted on the delay the receiver computes rather than on elapsed wall-clock time. Timing
+     * the sender measures nothing, because sending is fire-and-forget: the socket closes before the
+     * receiver has read the line, so a guesser always *sends* quickly whatever the receiver does.
+     * Timing the receiver from the outside is no better — the wrong codes are processed while the
+     * test is still writing them, so the measurement lands wherever the scheduler leaves it. What
+     * matters is the rule, and the rule is what this checks.
      */
     @Test
     fun `guessing the pairing code gets slower`() {
-        val delivered = CountDownLatch(1)
-        val code = assertNotNull(receiver.start { delivered.countDown() })
-        val port = listeningPort()
-        val identity = ContentIdentity.of(ContentKind.MOVIE, "Qualquer", 2024)
-
-        repeat(6) { attempt ->
-            val wrong = String.format("%04d", attempt)
-            runCatching { send(port, CastMessage(identity, "Qualquer", 0, wrong).encode()) }
-        }
-
-        val startedAt = System.nanoTime()
-        runCatching { send(port, CastMessage(identity, "Correto", 0, code).encode()) }
-        delivered.await(30, TimeUnit.SECONDS)
-        val elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000
-
+        // Nothing is free after the first few, and each further guess costs more than the last.
+        assertEquals(0L, CastReceiver.guessPenaltyMillis(1))
+        assertEquals(0L, CastReceiver.guessPenaltyMillis(2))
+        assertTrue(CastReceiver.guessPenaltyMillis(3) > 0, "the brake never engages")
         assertTrue(
-            elapsedMillis >= 500,
-            "the receiver cleared six wrong codes in ${elapsedMillis}ms, so guessing is unthrottled",
+            CastReceiver.guessPenaltyMillis(6) > CastReceiver.guessPenaltyMillis(3),
+            "the penalty does not grow, so a long run of guesses is no dearer than a short one",
         )
+    }
+
+    /**
+     * The penalty is capped, or a burst of junk becomes a denial of service.
+     *
+     * Without a ceiling anyone on the network could park the accept thread for minutes and lock
+     * the owner out of their own screen — trading one weakness for a worse one.
+     */
+    @Test
+    fun `the guessing penalty is capped`() {
+        val far = CastReceiver.guessPenaltyMillis(10_000)
+
+        assertEquals(CastReceiver.guessPenaltyMillis(1_000), far)
+        assertTrue(far <= 5_000, "a single wrong code should never block the receiver for ${far}ms")
     }
 
     /**

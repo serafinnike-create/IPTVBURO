@@ -161,15 +161,8 @@ class CastReceiver(
                             // Held on the handler thread rather than the accept loop, so the queue
                             // keeps draining and the owner's correct code still gets through.
                             // Capped, and reset by any message that decodes.
-                            val failures = consecutiveFailures.incrementAndGet()
-                            if (failures >= FAILURES_BEFORE_DELAY) {
-                                val penalty =
-                                    minOf(
-                                        FAILURE_DELAY_MILLIS * (failures - FAILURES_BEFORE_DELAY + 1),
-                                        MAX_FAILURE_DELAY_MILLIS,
-                                    )
-                                runCatching { Thread.sleep(penalty) }
-                            }
+                            val penalty = guessPenaltyMillis(consecutiveFailures.incrementAndGet())
+                            if (penalty > 0) runCatching { Thread.sleep(penalty) }
                         } else {
                             consecutiveFailures.set(0)
                             received.set(message)
@@ -253,6 +246,23 @@ class CastReceiver(
 
         const val DISCOVERY_PROBE = "buro-cast-discover-1"
         const val DISCOVERY_REPLY = "buro-cast-here-1"
+
+        /**
+         * How long a wrong pairing code costs, given how many have arrived in a row.
+         *
+         * Exposed so the rule can be asserted directly. Timing it from the outside measures the
+         * scheduler rather than the policy: sending is fire-and-forget, so the wrong codes are
+         * processed while the sender is still writing them.
+         */
+        fun guessPenaltyMillis(consecutiveFailures: Int): Long =
+            if (consecutiveFailures < FAILURES_BEFORE_DELAY) {
+                0L
+            } else {
+                minOf(
+                    FAILURE_DELAY_MILLIS * (consecutiveFailures - FAILURES_BEFORE_DELAY + 1),
+                    MAX_FAILURE_DELAY_MILLIS,
+                )
+            }
 
         private const val TCP_BACKLOG = 2
         private const val READ_TIMEOUT_MILLIS = 3_000
