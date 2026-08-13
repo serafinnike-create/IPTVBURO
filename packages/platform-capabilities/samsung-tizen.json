@@ -10,8 +10,8 @@
   "playback": {
     "engine": "Samsung AVPlay",
     "hls": true,
-    "dash": true,
-    "seek": true,
+    "dash": false,
+    "seek": false,
     "pip": false,
     "multiview": false,
     "hdr": false
@@ -26,8 +26,15 @@
   "notes": [
     "Preview inicial: nenhuma capability foi validada em TV fisica ainda.",
     "Navegacao e exclusivamente por D-pad do controle remoto; nao ha toque nem mouse.",
-    "AVPlay suporta HLS e DASH, mas os codecs reais dependem do modelo e do ano da TV.",
-    "Offline permanece desligado: o armazenamento gravavel do app Tizen e limitado e nao foi validado.",
+    "O shell Samsung implementa onboarding, perfis, fontes M3U e Xtream, catalogo sob demanda, detalhes, EPG curto, busca local, preferencias e resolucao tardia para AVPlay.",
+    "O adapter Stalker/Ministra existe e tem testes de contrato, mas a UI permanece desativada ate confirmar Cookie e identidade MAG no transporte Tizen.",
+    "Controle parental local inclui categorias ocultas, perfil Kids, PIN com hash salgado e bloqueio de categorias; o PIN nao e uma fronteira de seguranca forte.",
+    "Somente HLS esta declarado nesta preview; DASH, seek, trilhas, progresso e series por episodio ainda nao passaram pelos gates Samsung.",
+    "Codecs reais dependem do modelo e do ano da TV.",
+    "Offline permanece declarado como falso porque nao ha nenhuma garantia estatica: o armazenamento interno do app Tizen nao comporta video, e o download so existe quando ha um dispositivo USB montado.",
+    "O download por USB esta implementado (js/usb.js e js/downloads.js) e e habilitado em tempo de execucao por BuroDownloads.enabled(), que exige um volume removable_ montado. Sem USB a acao nao aparece na interface.",
+    "Conforme ADR-008: TV ao vivo e recusada, o nome do arquivo vem da identidade de conteudo e nunca da URL, e o conteudo protegido e gravado como recebido.",
+    "O download por USB nao foi validado em TV fisica nem em emulador: nenhuma das APIs tizen.download e tizen.filesystem foi exercitada contra a plataforma real.",
     "HDR e multiview seguem desligados ate medicao em hardware real."
   ]
 }

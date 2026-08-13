@@ -24,7 +24,7 @@ pode servir como conta ou licença do IPTV BURO.
    derivado da chave pública e do UUID. Não usamos o endereço MAC real.
 2. A avaliação e a licença são entitlements assinados pelo backend. O cliente
    nunca se autolicencia e não decide sozinho se um recibo é válido.
-3. No Google Play, a compra usa a opção de aluguel de 730 dias definida no
+3. No Google Play, a compra usa a opção consumível de 730 dias definida no
    ADR-011, validada e reconhecida pelo backend com a API oficial.
 4. No Windows e no portal, a compra será um Checkout de pagamento único. O
    backend concede o entitlement somente após webhook assinado e verificado.
