@@ -485,6 +485,59 @@ test('a licence carries an ECDSA signature over the same bytes, for clients with
   }
 });
 
+test('the signing-key check publishes the ECDSA public half for whoever builds the TV client', async () => {
+  const env = environment();
+  try {
+    const response = await worker.fetch(
+      postJson('/v1/signing-key-check', { nonce: nextProofNonce() }),
+      env,
+    );
+    assert.equal(response.status, 200);
+    const envelope = await response.json();
+
+    // It must be the public half of the deployed key, not merely a well-formed one: a key from a
+    // different pair verifies nothing, and that failure would only surface on a TV at activation.
+    assert.equal(envelope.publicKeyEcdsa, ecdsaSigningKeys.publicKeySpkiBase64);
+
+    const key = await crypto.subtle.importKey(
+      'spki',
+      Buffer.from(envelope.publicKeyEcdsa, 'base64'),
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['verify'],
+    );
+    assert.equal(
+      await crypto.subtle.verify(
+        { name: 'ECDSA', hash: 'SHA-256' },
+        key,
+        Buffer.from(envelope.signatureEcdsa, 'base64'),
+        new TextEncoder().encode(envelope.payload),
+      ),
+      true,
+      'the published key must verify the signature it comes with',
+    );
+
+    // The negative half, stated outright rather than left to follow from the above: this endpoint
+    // derives a public key from a private one, so the assertion that actually matters is that the
+    // private half never travels with it. A single wrong export here would hand out the key that
+    // signs every licence.
+    const body = JSON.stringify(envelope);
+    assert.ok(
+      !body.includes(env.SIGNING_KEY_ECDSA),
+      'the response carried the ECDSA private key',
+    );
+    assert.ok(
+      !body.includes(env.SIGNING_KEY),
+      'the response carried the Ed25519 private key',
+    );
+    // `d` is the private scalar in a JWK. Its absence is what makes the derivation safe, so the
+    // shape of the answer is checked too, not only the exact key material.
+    assert.ok(!('d' in envelope), 'the response exposed a private JWK component');
+  } finally {
+    env.DB.close();
+  }
+});
+
 test('a deployment without an ECDSA key simply omits the field', async () => {
   const env = environment();
   delete env.SIGNING_KEY_ECDSA;
