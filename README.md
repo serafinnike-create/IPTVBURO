@@ -106,14 +106,16 @@ O fluxo importação → categoria → canal → primeiro frame foi validado em 
 
 Prévia do Windows e do Android. **Os dois instaladores estão na mesma página:**
 
-**➜ [Baixar a versão mais recente](https://github.com/serafinnike-create/IPTVBURO/releases/latest)**
+**➜ [Página da versão v2.0.0-alpha.7](https://github.com/serafinnike-create/IPTVBURO/releases/tag/v2.0.0-alpha.7)**
+· [todas as versões](https://github.com/serafinnike-create/IPTVBURO/releases)
 
-| Plataforma | Arquivo |
+| Plataforma | Baixar |
 |---|---|
-| Windows 10/11 (64 bits) | `IPTV-BURO-v2.0.0-alpha.7-windows-x64-unsigned.msi` |
-| Android / Android TV | `IPTV-BURO-v2.0.0-alpha.7-android-debug.apk` |
+| Windows 10/11 (64 bits) | [`IPTV-BURO-v2.0.0-alpha.7-windows-x64-unsigned.msi`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.0-alpha.7/IPTV-BURO-v2.0.0-alpha.7-windows-x64-unsigned.msi) |
+| Android / Android TV | [`IPTV-BURO-v2.0.0-alpha.7-android-debug.apk`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.0-alpha.7/IPTV-BURO-v2.0.0-alpha.7-android-debug.apk) |
 
-O `SHA256SUMS.txt` da mesma página permite conferir os dois arquivos.
+O [`SHA256SUMS.txt`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.0-alpha.7/SHA256SUMS.txt)
+da mesma página permite conferir os dois arquivos.
 
 > [!NOTE]
 > O MSI **não é assinado**, então o Windows pode mostrar um aviso de "Editor
