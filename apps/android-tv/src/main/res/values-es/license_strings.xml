@@ -26,6 +26,7 @@
     <string name="license_gate_working">Verificando…</string>
     <string name="license_gate_redeem_failed">No se pudo activar esta clave. Revísala e inténtalo de nuevo.</string>
     <string name="license_gate_key_unknown">Clave no encontrada. Revisa las letras y los números e inténtalo de nuevo.</string>
+    <string name="license_gate_key_is_device_code">Ese es el código de este dispositivo, no una clave de activación. Úsalo en la página de compra para adquirir una clave.</string>
     <string name="license_gate_key_in_use">Esta clave ya está activada en otro dispositivo. Cada clave sirve para un solo dispositivo.</string>
     <string name="license_gate_key_expired">Esta clave ha caducado y ya no se puede activar.</string>
     <string name="license_gate_key_offline">No se pudo contactar con el servidor. Revisa tu conexión e inténtalo de nuevo.</string>
@@ -35,6 +36,8 @@
     <string name="license_gate_key_state_in_use">Esta clave está en uso en otro dispositivo y no se puede transferir.</string>
     <string name="license_gate_key_state_expired">Esta clave ha caducado.</string>
     <string name="license_gate_key_state_unknown">No hay ninguna clave con este código.</string>
+    <string name="license_redeem_activated">Clave activada. Este dispositivo ya tiene licencia.</string>
+    <plurals name="license_redeem_activated_days"><item quantity="one">Clave activada · %1$d día de acceso</item><item quantity="other">Clave activada · %1$d días de acceso</item></plurals>
     <string name="license_gate_privacy">Este código proviene de una clave del Android Keystore, no de la MAC del móvil.</string>
     <string name="license_status_active">Activo</string>
     <plurals name="license_status_trial_days"><item quantity="one">Prueba · queda %1$d día</item><item quantity="other">Prueba · quedan %1$d días</item></plurals>

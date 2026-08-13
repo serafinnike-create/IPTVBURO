@@ -456,6 +456,13 @@ data class AppUiState(
     val bootBackdropUrls: List<String> = emptyList(),
     val hasAcceptedLegalNotice: Boolean = false,
     val license: LicenseUiState = LicenseUiState.NotChecked,
+    /**
+     * Outcome of the last activation-key attempt, from either the gate or the Settings card.
+     *
+     * Held outside [license] because a key can be redeemed while the licence is valid — extending a
+     * subscription — and the Settings card cannot see the gate's Blocked state.
+     */
+    val redemption: RedemptionUi = RedemptionUi.Idle,
     val isProfilesLoading: Boolean = true,
     val profiles: List<ProfileUi> = emptyList(),
     val activeProfile: ProfileUi? = null,

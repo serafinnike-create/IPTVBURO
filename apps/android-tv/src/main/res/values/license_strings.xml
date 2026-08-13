@@ -26,6 +26,7 @@
     <string name="license_gate_working">Verifying…</string>
     <string name="license_gate_redeem_failed">This key could not be activated. Check it and try again.</string>
     <string name="license_gate_key_unknown">No such key. Check the letters and numbers and try again.</string>
+    <string name="license_gate_key_is_device_code">That is this device’s code, not an activation key. Use it on the purchase page to buy a key.</string>
     <string name="license_gate_key_in_use">This key is already activated on another device. Each key works on one device only.</string>
     <string name="license_gate_key_expired">This key has expired and can no longer be activated.</string>
     <string name="license_gate_key_offline">Could not reach the server. Check your connection and try again.</string>
@@ -35,6 +36,8 @@
     <string name="license_gate_key_state_in_use">This key is in use on another device and cannot be moved.</string>
     <string name="license_gate_key_state_expired">This key has expired.</string>
     <string name="license_gate_key_state_unknown">No key with this code.</string>
+    <string name="license_redeem_activated">Key activated. This device is now licensed.</string>
+    <plurals name="license_redeem_activated_days"><item quantity="one">Key activated · %1$d day of access</item><item quantity="other">Key activated · %1$d days of access</item></plurals>
     <string name="license_gate_privacy">This code comes from an Android Keystore key, not from the phone MAC address.</string>
     <string name="license_status_active">Active</string>
     <plurals name="license_status_trial_days"><item quantity="one">Trial · %1$d day left</item><item quantity="other">Trial · %1$d days left</item></plurals>

@@ -248,6 +248,8 @@ fun LicenseGateScreen(
                             stringResource(
                                 when (state.activationFailure) {
                                     RedeemFailure.UNKNOWN_KEY -> R.string.license_gate_key_unknown
+                                    RedeemFailure.DEVICE_CODE_NOT_KEY ->
+                                        R.string.license_gate_key_is_device_code
                                     RedeemFailure.ALREADY_USED -> R.string.license_gate_key_in_use
                                     RedeemFailure.EXPIRED -> R.string.license_gate_key_expired
                                     RedeemFailure.UNREACHABLE -> R.string.license_gate_key_offline

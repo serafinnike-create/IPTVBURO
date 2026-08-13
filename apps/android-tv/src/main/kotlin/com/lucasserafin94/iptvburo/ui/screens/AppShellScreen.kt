@@ -111,7 +111,9 @@ import com.lucasserafin94.iptvburo.domain.model.CatalogueFilter
 import com.lucasserafin94.iptvburo.domain.model.CatalogueLayout
 import com.lucasserafin94.iptvburo.ui.AppSection
 import com.lucasserafin94.iptvburo.ui.AppUiState
+import com.lucasserafin94.iptvburo.data.licensing.RedeemFailure
 import com.lucasserafin94.iptvburo.ui.LicenseUiState
+import com.lucasserafin94.iptvburo.ui.RedemptionUi
 import com.lucasserafin94.iptvburo.ui.CategoryUi
 import com.lucasserafin94.iptvburo.ui.ChannelUi
 import com.lucasserafin94.iptvburo.ui.ContinueWatchingUi
@@ -593,6 +595,7 @@ fun AppShellScreen(
                             onSaveTmdbKey = onSaveTmdbKey,
                             onOpenPurchase = onOpenPurchase,
                             onRedeemLicense = onRedeemLicense,
+                            redemption = state.redemption,
                             sharedTmdbKeyConfigured = state.sharedTmdbKeyConfigured,
                             onSaveSharedTmdbKey = onSaveSharedTmdbKey,
                             onSelectLanguage = onSelectLanguage,
@@ -2897,6 +2900,8 @@ private fun SettingsContent(
     onSaveTmdbKey: (String) -> Unit,
     onOpenPurchase: (String) -> Unit,
     onRedeemLicense: (String) -> Unit,
+    /** Outcome of the last key attempt, so the licence card can report it. */
+    redemption: RedemptionUi,
     sharedTmdbKeyConfigured: Boolean,
     onSaveSharedTmdbKey: (String) -> Unit,
     onSelectLanguage: (String) -> Unit,
@@ -2935,6 +2940,7 @@ private fun SettingsContent(
                 onRedeemKey = onRedeemLicense,
                 deviceId = deviceId,
                 license = license,
+                redemption = redemption,
                 compact = compact,
             )
             Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
@@ -3229,6 +3235,8 @@ private fun DeviceLicenceCard(
     onRedeemKey: (String) -> Unit,
     deviceId: String?,
     license: LicenseUiState,
+    /** What the last key attempt did. Without this the card redeemed in complete silence. */
+    redemption: RedemptionUi,
     compact: Boolean,
 ) {
     val clipboard = LocalClipboardManager.current
@@ -3362,18 +3370,75 @@ private fun DeviceLicenceCard(
             FocusSurface(
                 onClick = {
                     onRedeemKey(activationKey)
-                    activationKey = ""
+                    // The field is *not* cleared here any more. It used to be wiped the instant the
+                    // button was pressed, so a key that failed had to be typed again from scratch,
+                    // with no message saying what had gone wrong. It clears on success below.
                 },
-                enabled = activationKey.isNotBlank(),
+                enabled = activationKey.isNotBlank() && redemption != RedemptionUi.Working,
                 modifier = Modifier.fillMaxWidth().height(if (compact) 46.dp else 52.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = stringResource(R.string.license_gate_redeem),
+                    text =
+                        stringResource(
+                            if (redemption == RedemptionUi.Working) {
+                                R.string.license_gate_working
+                            } else {
+                                R.string.license_gate_redeem
+                            },
+                        ),
                     color = BuroTextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
+            }
+
+            // What happened. This card previously said nothing at all — it called redeem, wiped the
+            // field and left the user staring at an unchanged screen, which is exactly how a key
+            // that was never even sent looked identical to one that was refused.
+            when (redemption) {
+                RedemptionUi.Idle, RedemptionUi.Working -> Unit
+
+                is RedemptionUi.Activated -> {
+                    LaunchedEffect(redemption) { activationKey = "" }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text =
+                            redemption.daysRemaining
+                                ?.let { days ->
+                                    pluralStringResource(
+                                        R.plurals.license_redeem_activated_days,
+                                        days.toInt(),
+                                        days.toInt(),
+                                    )
+                                }
+                                ?: stringResource(R.string.license_redeem_activated),
+                        color = BuroGold,
+                        fontSize = 13.sp,
+                    )
+                }
+
+                is RedemptionUi.Failed -> {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text =
+                            stringResource(
+                                when (redemption.reason) {
+                                    RedeemFailure.UNKNOWN_KEY -> R.string.license_gate_key_unknown
+                                    RedeemFailure.DEVICE_CODE_NOT_KEY ->
+                                        R.string.license_gate_key_is_device_code
+                                    RedeemFailure.ALREADY_USED -> R.string.license_gate_key_in_use
+                                    RedeemFailure.EXPIRED -> R.string.license_gate_key_expired
+                                    RedeemFailure.UNREACHABLE -> R.string.license_gate_key_offline
+                                    RedeemFailure.NOT_REGISTERED ->
+                                        R.string.license_gate_key_not_registered
+                                    RedeemFailure.REFUSED -> R.string.license_gate_redeem_failed
+                                },
+                            ),
+                        color = BuroDanger,
+                        fontSize = 13.sp,
+                    )
+                }
             }
         }
 

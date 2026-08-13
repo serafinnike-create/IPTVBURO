@@ -39,6 +39,26 @@ sealed interface LicenseUiState {
     ) : LicenseUiState
 }
 
+/**
+ * The result of the last activation-key attempt, wherever it was made from.
+ *
+ * Separate from [LicenseUiState] because the Settings card can be used while the licence is
+ * perfectly valid — someone extending a subscription they are currently using — and that card has
+ * no access to the gate's Blocked state. Keeping the outcome here is what lets both screens report
+ * the same thing.
+ */
+sealed interface RedemptionUi {
+    /** Nothing attempted, or the notice has been read. */
+    data object Idle : RedemptionUi
+
+    data object Working : RedemptionUi
+
+    /** [daysRemaining] is null when the server granted access without stating a duration. */
+    data class Activated(val daysRemaining: Long?) : RedemptionUi
+
+    data class Failed(val reason: RedeemFailure) : RedemptionUi
+}
+
 internal fun AndroidLicenseStatus.toUiState(): LicenseUiState =
     if (allowsUse) {
         LicenseUiState.Allowed(

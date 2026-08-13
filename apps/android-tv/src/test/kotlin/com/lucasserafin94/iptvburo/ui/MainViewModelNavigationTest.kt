@@ -535,6 +535,56 @@ class MainViewModelNavigationTest {
         assertEquals(AppContent.Home, viewModel.state.value.content)
     }
 
+    /**
+     * Redeeming has to work while the licence is *valid*, which is where it silently did nothing.
+     *
+     * `redeemLicense` began with `license as? Blocked ?: return`, so during the seven-day trial —
+     * the commonest moment to type a key, and the whole reason the Settings card has a field — the
+     * key never left the phone. Reported as "I typed my key, nothing happened, still seven days".
+     *
+     * The fake below reports a trial, exactly as the real service does in that situation, and
+     * records whether the server was reached at all.
+     */
+    @Test
+    fun `a key is sent to the server during the trial, not silently dropped`() = runTest {
+        val licence = RecordingLicenseService()
+        val viewModel = createViewModel(FakeCatalogRepository(), licenseService = licence)
+        runCurrent()
+
+        viewModel.redeemLicense("PGRF-AWH5-5ZZK")
+        runCurrent()
+
+        assertEquals(listOf("PGRF-AWH5-5ZZK"), licence.redeemed)
+    }
+
+    /** Whatever the server answers has to reach the screen; silence is what the report was about. */
+    @Test
+    fun `the redemption outcome is published for the settings card`() = runTest {
+        val licence = RecordingLicenseService()
+        val viewModel = createViewModel(FakeCatalogRepository(), licenseService = licence)
+        runCurrent()
+
+        viewModel.redeemLicense("SOME-KEY-HERE")
+        runCurrent()
+
+        assertEquals(
+            RedemptionUi.Failed(RedeemFailure.ALREADY_USED),
+            viewModel.state.value.redemption,
+        )
+    }
+
+    @Test
+    fun `a blank key is not sent at all`() = runTest {
+        val licence = RecordingLicenseService()
+        val viewModel = createViewModel(FakeCatalogRepository(), licenseService = licence)
+        runCurrent()
+
+        viewModel.redeemLicense("   ")
+        runCurrent()
+
+        assertEquals(emptyList<String>(), licence.redeemed)
+    }
+
     @Test
     fun `selecting a profile without sources opens source connection`() = runTest {
         val viewModel = createViewModel(FakeCatalogRepository())
@@ -564,6 +614,7 @@ class MainViewModelNavigationTest {
         repository: FakeCatalogRepository,
         logger: AppLogger = NoOpLogger,
         isTelevision: Boolean = false,
+        licenseService: AndroidLicenseService = FakeLicenseService,
     ): MainViewModel {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
@@ -597,7 +648,7 @@ class MainViewModelNavigationTest {
             userLibraryRepository = UserLibraryRepository(FakeProfileDao(), FakeFavoriteDao(), dispatcher),
             // The manager resolves storage lazily, so these navigation assertions never touch it.
             downloadManager = AndroidDownloadManager(contextProvider, OkHttpClient(), dispatcher),
-            licenseService = FakeLicenseService,
+            licenseService = licenseService,
             metadataKeyStore = FakeMetadataKeyStore,
             // Builds no catalogue: FakeMetadataKeyStore has no key, so every discovery call is a
             // no-op and these navigation assertions never reach the network.
@@ -651,6 +702,30 @@ private data object FakeLicenseService : AndroidLicenseService {
     // These navigation tests never redeem; the reason is arbitrary but has to be a real one.
     override fun redeem(key: String, now: Instant): RedeemOutcome =
         RedeemOutcome.Failed(RedeemFailure.UNREACHABLE)
+}
+
+/**
+ * Reports a live trial and records every key it is asked to redeem.
+ *
+ * A trial is the state the silent-drop bug lived in, so it is the state worth testing from. The
+ * refusal it answers with is arbitrary — what matters is that the call happened at all and that the
+ * answer reaches the state.
+ */
+private class RecordingLicenseService : AndroidLicenseService {
+    val redeemed = mutableListOf<String>()
+
+    override fun check(now: Instant): AndroidLicenseStatus =
+        AndroidLicenseStatus(
+            decision = LicenseDecision.Allowed(Duration.ofDays(7), isTrial = true),
+            deviceId = "TEST-TEST-TEST",
+            offline = false,
+            clockSuspect = false,
+        )
+
+    override fun redeem(key: String, now: Instant): RedeemOutcome {
+        redeemed += key
+        return RedeemOutcome.Failed(RedeemFailure.ALREADY_USED)
+    }
 }
 
 private data object FakeMetadataKeyStore : MetadataKeyStore {

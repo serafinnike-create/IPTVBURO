@@ -375,11 +375,25 @@ class MainViewModel @Inject constructor(
     }
 
     fun redeemLicense(key: String) {
-        val blocked = mutableState.value.license as? LicenseUiState.Blocked ?: return
-        if (blocked.isWorking || key.isBlank()) return
+        if (key.isBlank()) return
+        // Deliberately *not* gated on the licence being Blocked.
+        //
+        // It used to start with `license as? Blocked ?: return`, which meant redeeming did nothing
+        // at all while the app was inside its trial — the commonest moment to type a key, and the
+        // one the Settings card exists for. The key never left the phone, nothing was shown, and
+        // the trial ran on: reported as "I typed my key, nothing happened, still seven days".
+        //
+        // Someone extending a licence they can currently use is the normal case, not an edge one.
+        val blocked = mutableState.value.license as? LicenseUiState.Blocked
+        if (blocked?.isWorking == true || mutableState.value.redemption == RedemptionUi.Working) return
+
         licenseJob?.cancel()
         mutableState.update {
-            it.copy(license = blocked.copy(isWorking = true, activationFailed = false))
+            it.copy(
+                license = blocked?.copy(isWorking = true, activationFailed = false) ?: it.license,
+                // The one place the Settings card can read, since it never sees the gate's state.
+                redemption = RedemptionUi.Working,
+            )
         }
         licenseJob =
             viewModelScope.launch {
@@ -388,7 +402,7 @@ class MainViewModel @Inject constructor(
                         mutableState.update {
                             it.copy(
                                 license =
-                                    blocked.copy(
+                                    blocked?.copy(
                                         isWorking = false,
                                         activationFailed = true,
                                         // Carried so the gate can say *which* problem it was. A
@@ -396,7 +410,8 @@ class MainViewModel @Inject constructor(
                                         // a dead connection need three different actions from the
                                         // user, and one sentence for all three told them nothing.
                                         activationFailure = outcome.reason,
-                                    ),
+                                    ) ?: it.license,
+                                redemption = RedemptionUi.Failed(outcome.reason),
                             )
                         }
 
@@ -405,10 +420,19 @@ class MainViewModel @Inject constructor(
                             it.copy(
                                 license = outcome.status.toUiState(),
                                 deviceId = outcome.status.deviceId.takeIf(String::isNotBlank),
+                                redemption =
+                                    RedemptionUi.Activated(outcome.status.daysRemaining),
                             )
                         }
                 }
             }
+    }
+
+    /** Clears the redemption notice once the user has read it. */
+    fun dismissRedemptionNotice() {
+        if (mutableState.value.redemption != RedemptionUi.Idle) {
+            mutableState.update { it.copy(redemption = RedemptionUi.Idle) }
+        }
     }
 
     fun selectSection(section: AppSection) {

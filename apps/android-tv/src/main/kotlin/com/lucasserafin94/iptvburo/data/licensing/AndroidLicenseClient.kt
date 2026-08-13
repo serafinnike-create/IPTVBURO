@@ -104,6 +104,11 @@ class AndroidLicenseClient @Inject constructor(
         // that does not exist are the same mistake with the same fix.
         val clean = key.trim().uppercase().takeIf { it.length in 4..128 }
             ?: return RedeemOutcome.Failed(RedeemFailure.UNKNOWN_KEY)
+
+        // Caught here rather than at the server, which can only report it as "no such key".
+        if (clean.looksLikeDeviceCode()) {
+            return RedeemOutcome.Failed(RedeemFailure.DEVICE_CODE_NOT_KEY)
+        }
         val identity = runCatching { AndroidDeviceIdentityProvider.getOrCreate(context) }.getOrNull()
             ?: return RedeemOutcome.Failed(RedeemFailure.UNREACHABLE)
         val nonce = freshNonce()
@@ -403,6 +408,19 @@ enum class RedeemFailure {
     /** No key by that name. Usually a typo. */
     UNKNOWN_KEY,
 
+    /**
+     * What was typed is this app's *device code*, not an activation key.
+     *
+     * The two look alike — same alphabet, same dashed grouping — and differ only in length: a
+     * device code is twelve characters in three groups, a key is eight in two. The field accepted
+     * the device code without comment and the server answered "no such key", which sends the user
+     * off checking a code that was never wrong for anything except being the wrong *kind* of code.
+     *
+     * Worth its own case because the remedy is completely different: the device code is what you
+     * give the shop to *buy* a key, not something to redeem.
+     */
+    DEVICE_CODE_NOT_KEY,
+
     /** The key exists but is already bound to a device. */
     ALREADY_USED,
 
@@ -472,6 +490,23 @@ sealed interface RedeemOutcome {
  * press Use key and get a real, server-decided answer, whereas a guess would put a wrong word next
  * to a key that is perfectly fine.
  */
+/**
+ * Whether this looks like a device code rather than an activation key.
+ *
+ * The two are generated from the same alphabet and printed the same way, so only the shape tells
+ * them apart: a device code is twelve characters in three groups of four (`PGRF-AWH5-5ZZK`), an
+ * activation key is eight in two (`ABCD-EFGH`). Both come from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`
+ * in the Worker — see `DEVICE_ID_ALPHABET` and `randomKey`.
+ *
+ * Matching on the three-group shape is deliberately narrow. A future key format with three groups
+ * would start being reported as a device code, so this errs towards saying nothing: anything that
+ * is not exactly this shape still goes to the server, which has the final word.
+ */
+internal fun String.looksLikeDeviceCode(): Boolean =
+    DEVICE_CODE_SHAPE.matches(this)
+
+private val DEVICE_CODE_SHAPE = Regex("^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$")
+
 internal fun String.toKeyState(): KeyState? =
     when (this) {
         "available" -> KeyState.AVAILABLE

@@ -1,6 +1,8 @@
 package com.lucasserafin94.iptvburo.data.licensing
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -47,5 +49,37 @@ class RedeemFailureTest {
     fun `matching is exact`() {
         assertEquals(RedeemFailure.REFUSED, "UNKNOWN_KEY".toRedeemFailure())
         assertEquals(RedeemFailure.REFUSED, "already used".toRedeemFailure())
+    }
+
+    /**
+     * A device code typed into the key field is recognised for what it is.
+     *
+     * The two are printed alike and differ only in shape — twelve characters in three groups
+     * against eight in two — and the server can only answer "no such key", which sends the user
+     * off checking a code that was never wrong. `PGRF-AWH5-5ZZK` is a real device code from a real
+     * admin panel, typed into the activation field by the person who built the system.
+     */
+    @Test
+    fun `a device code is not mistaken for an unknown key`() {
+        assertTrue("PGRF-AWH5-5ZZK".looksLikeDeviceCode())
+        assertTrue("YFR2-RNRR-WDBQ".looksLikeDeviceCode())
+        assertTrue("T9JV-2993-8EUL".looksLikeDeviceCode())
+    }
+
+    /**
+     * A real activation key is two groups, and must reach the server untouched.
+     *
+     * Stopping one here would be far worse than the confusion this fixes: a paying customer would
+     * be told their valid key is a device code.
+     */
+    @Test
+    fun `an activation key is never treated as a device code`() {
+        assertFalse("ABCD-EFGH".looksLikeDeviceCode())
+        assertFalse("PORT-AL12".looksLikeDeviceCode())
+        assertFalse("".looksLikeDeviceCode())
+        assertFalse("PGRF-AWH5-5ZZK-EXTRA".looksLikeDeviceCode())
+        // Lower case and the excluded letters (I, O) are not what the generator produces.
+        assertFalse("pgrf-awh5-5zzk".looksLikeDeviceCode())
+        assertFalse("PGRF-AWHI-5ZZK".looksLikeDeviceCode())
     }
 }
