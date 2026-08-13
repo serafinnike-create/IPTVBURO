@@ -180,7 +180,11 @@ class CastReceiverTest {
         val identity = ContentIdentity.of(ContentKind.MOVIE, "Ainda Funciona", 2024)
         send(port, CastMessage(identity, "Ainda Funciona", 0, code).encode())
 
-        assertTrue(delivered.await(5, TimeUnit.SECONDS), "the receiver stopped after bad input")
+        // Generous on purpose. Four pieces of junk in a row trip the guessing brake, so the good
+        // message that follows waits out a penalty before it is even read — the delay is the
+        // feature working, not the receiver failing. Five seconds was close enough to that penalty
+        // to fail intermittently, which is worse than useless in a test guarding a real property.
+        assertTrue(delivered.await(30, TimeUnit.SECONDS), "the receiver stopped after bad input")
         assertEquals(identity, received?.identity)
     }
 

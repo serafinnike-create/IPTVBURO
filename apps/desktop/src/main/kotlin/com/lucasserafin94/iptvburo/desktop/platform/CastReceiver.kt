@@ -225,7 +225,13 @@ class CastReceiver(
                 runCatching {
                     val text = String(packet.data, 0, packet.length, Charsets.UTF_8).trim()
                     if (text != DISCOVERY_PROBE) return@runCatching
-                    val reply = "$DISCOVERY_REPLY\u001F$tcpPort\u001F$displayName".toByteArray(Charsets.UTF_8)
+                    // Sanitised on the way out as well as on the way in. The name comes from
+                    // COMPUTERNAME, which is not hostile but is not guaranteed to be free of the
+                    // separator either, and a name carrying one would split the reply into four
+                    // fields, which every reader rejects. Cleaning both ends means the wire format
+                    // holds whatever the machine happens to be called.
+                    val safeName = displayNameFrom(displayName, "IPTV BURO")
+                    val reply = "$DISCOVERY_REPLY\u001F$tcpPort\u001F$safeName".toByteArray(Charsets.UTF_8)
                     socket.send(DatagramPacket(reply, reply.size, packet.address, packet.port))
                 }
             }
@@ -314,13 +320,46 @@ class CastReceiver(
                             String(packet.data, 0, packet.length, Charsets.UTF_8).split('\u001F')
                         if (parts.size != 3 || parts[0] != DISCOVERY_REPLY) continue
                         val port = parts[1].toIntOrNull()?.takeIf { it in 1..65_535 } ?: continue
-                        val name = parts[2].take(60).ifBlank { packet.address.hostAddress }
+                        val name = displayNameFrom(parts[2], packet.address.hostAddress)
                         // Keyed by address, so a machine answering twice appears once.
+                        //
+                        // The address is the packet's own source rather than anything the reply
+                        // claims, which is what stops a responder pointing this app at a third
+                        // machine: it can only offer itself.
                         found[packet.address.hostAddress] = CastTarget(packet.address.hostAddress, port, name)
                     }
                     found.values.toList()
                 }
             }.getOrDefault(emptyList())
+
+        /**
+         * The name a discovered screen is allowed to show, or the address when it offers none.
+         *
+         * The reply's name is free text from whoever answered, and anyone on the network can
+         * answer. It ends up in a list the user picks from, so it is the one part of discovery that
+         * can *deceive* rather than merely be wrong: a newline lets a responder paint extra lines
+         * into the list, and a right-to-left override lets it reverse what is drawn, so a machine
+         * can present itself as a name it does not have.
+         *
+         * Only characters that draw as themselves survive. Control characters and the bidirectional
+         * formatting marks are dropped rather than escaped — there is no legitimate device name
+         * that needs them, and showing an escape sequence would be its own kind of confusing.
+         * Runs of whitespace collapse, so padding cannot push a suffix out of view.
+         */
+        internal fun displayNameFrom(claimed: String, address: String): String =
+            claimed
+                // Whitespace first, so a newline becomes a space rather than vanishing: dropping it
+                // would weld "Sala" and "Administrador" into one word, which is harder to read than
+                // the truth and no safer.
+                .replace(WHITESPACE_RUN, " ")
+                .filter { character ->
+                    !Character.isISOControl(character) && character.category != CharCategory.FORMAT
+                }.trim()
+                .take(MAX_NAME_LENGTH)
+                .ifBlank { address }
+
+        private val WHITESPACE_RUN = Regex("\\s+")
+        private const val MAX_NAME_LENGTH = 60
 
         /**
          * Hands [message] to [target].
