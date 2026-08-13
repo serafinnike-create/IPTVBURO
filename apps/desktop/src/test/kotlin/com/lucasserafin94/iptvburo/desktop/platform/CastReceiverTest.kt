@@ -114,6 +114,44 @@ class CastReceiverTest {
         assertFalse(mine.toString().contains(code), "discovery leaked the pairing code")
     }
 
+    /**
+     * A sender that never stops talking must not be able to make the receiver hold it all.
+     *
+     * `BufferedReader.readLine` has no upper bound: it reads until a newline arrives. Anyone on the
+     * network can open this socket, so without a limit a sender that omits the newline would have
+     * the whole read timeout to make the app allocate as much as their link can carry.
+     *
+     * Asserted through a real socket rather than by calling the reader directly, because the thing
+     * being proved is what the *listener* does with a hostile connection.
+     */
+    @Test
+    fun `an oversized line is refused rather than buffered`() {
+        val code = assertNotNull(receiver.start { error("an oversized line must never be delivered") })
+        val port = listeningPort()
+
+        // Well past the limit, and deliberately with no newline: the receiver has to decide to stop
+        // on length alone rather than on the end of the line.
+        Socket().use { socket ->
+            socket.connect(java.net.InetSocketAddress(InetAddress.getLoopbackAddress(), port), 2_000)
+            socket.getOutputStream().use { output ->
+                output.write("x".repeat(CastMessage.MAX_ENCODED_LENGTH * 8).toByteArray(Charsets.UTF_8))
+                output.flush()
+            }
+        }
+
+        // The listener survived, which is the point: a good message still gets through afterwards.
+        val delivered = CountDownLatch(1)
+        var received: CastMessage? = null
+        receiver.stop()
+        val freshCode = assertNotNull(receiver.start { message -> received = message; delivered.countDown() })
+        val identity = ContentIdentity.of(ContentKind.MOVIE, "Depois do excesso", 2024)
+        send(listeningPort(), CastMessage(identity, "Depois do excesso", 0, freshCode).encode())
+
+        assertTrue(delivered.await(5, TimeUnit.SECONDS), "the listener stopped accepting connections")
+        assertEquals(identity, received?.identity)
+        assertFalse(code == freshCode, "a restarted receiver should mint a new code")
+    }
+
     /** Stopping releases the ports, so the feature can be turned off and on again. */
     @Test
     fun `a stopped receiver answers nothing`() {

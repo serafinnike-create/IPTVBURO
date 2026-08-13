@@ -97,11 +97,7 @@ class CastReceiver(
                 runCatching {
                     client.use { connection ->
                         connection.soTimeout = READ_TIMEOUT_MILLIS
-                        val line =
-                            connection.getInputStream()
-                                .bufferedReader(Charsets.UTF_8)
-                                .let(BufferedReader::readLine)
-                                .orEmpty()
+                        val line = readBoundedLine(connection.getInputStream().bufferedReader(Charsets.UTF_8))
                         // Decoded, not trusted. The pairing code is checked inside decode, and a
                         // message that fails any check is simply dropped — an exception here would
                         // be a way for anyone on the network to stop the listener.
@@ -117,6 +113,32 @@ class CastReceiver(
             // Daemon, so a listener waiting on accept can never keep the app from exiting.
             isDaemon = true
         }.start()
+    }
+
+    /**
+     * Reads one line, refusing to grow past what a valid message can be.
+     *
+     * `BufferedReader.readLine` reads until a newline arrives, with no upper bound. Anyone on the
+     * network can open this socket, so a sender that never sends a newline would have three seconds
+     * — the read timeout — to make this allocate as much memory as their link can carry. The
+     * timeout ends the connection but does nothing about what was already buffered.
+     *
+     * [CastMessage.MAX_ENCODED_LENGTH] is the whole budget: a longer line cannot decode into
+     * anything, so there is no reason to hold it. Reading one character past the limit is enough to
+     * know the line is oversized, and the answer is the same as for any other malformed input —
+     * drop it, silently, without throwing.
+     */
+    private fun readBoundedLine(reader: BufferedReader): String {
+        val builder = StringBuilder()
+        while (builder.length <= CastMessage.MAX_ENCODED_LENGTH) {
+            val next = reader.read()
+            // End of stream or end of line: what was collected is the whole message.
+            if (next < 0 || next == '\n'.code) return builder.toString()
+            if (next != '\r'.code) builder.append(next.toChar())
+        }
+        // Oversized. Returning empty rather than the truncated head, because a prefix of something
+        // too long is not a message that was sent — decoding it would be inventing one.
+        return ""
     }
 
     /**
