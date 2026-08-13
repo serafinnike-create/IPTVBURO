@@ -281,38 +281,46 @@ internal fun SeriesDetailsScreen(
                                 }
                             }
                         }
-                        details.youtubeTrailerId?.let { trailerId ->
-                            BuroButton(
-                                onClick = {
+                        // Always drawn, disabled when the provider gave no trailer id. The
+                        // same reason as on the film screen: a button that appears only under its
+                        // condition reflows every button after it, so the row was laid out
+                        // differently on each title.
+                        val trailerId = details.youtubeTrailerId
+                        BuroButton(
+                            onClick = {
+                                trailerId?.let { id ->
                                     runCatching {
                                         androidContext.startActivity(
                                             Intent(
                                                 Intent.ACTION_VIEW,
-                                                Uri.parse("https://www.youtube.com/watch?v=$trailerId"),
+                                                Uri.parse("https://www.youtube.com/watch?v=$id"),
                                             ),
                                         )
                                     }
-                                },
-                                style = BuroButtonStyle.Secondary,
-                            ) {
-                                Text(stringResource(R.string.details_trailer))
-                            }
+                                }
+                            },
+                            enabled = trailerId != null,
+                            style = BuroButtonStyle.Secondary,
+                        ) {
+                            Text(stringResource(R.string.details_trailer))
                         }
-                        // Beside Trailer, outside the block above: a series with no trailer still
-                        // has something to share, so nesting this inside that `let` would hide it.
-                        onShare?.let { share ->
-                            BuroButton(onClick = share, style = BuroButtonStyle.Secondary) {
-                                Icon(Icons.Default.Share, contentDescription = null)
-                                Text(stringResource(R.string.details_share))
-                            }
+                        BuroButton(
+                            onClick = { onShare?.invoke() },
+                            enabled = onShare != null,
+                            style = BuroButtonStyle.Secondary,
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null)
+                            Text(stringResource(R.string.details_share))
                         }
-                        // Beside Compartilhar, for the same reason: what travels is the identity of
-                        // the title, which the catalogue row already provides.
-                        onCast?.let { cast ->
-                            BuroButton(onClick = cast, style = BuroButtonStyle.Secondary) {
-                                Icon(Icons.Default.Cast, contentDescription = null)
-                                Text(stringResource(R.string.cast_action))
-                            }
+                        // Beside Compartilhar: what travels is the identity of the title, which
+                        // the catalogue row already provides.
+                        BuroButton(
+                            onClick = { onCast?.invoke() },
+                            enabled = onCast != null,
+                            style = BuroButtonStyle.Secondary,
+                        ) {
+                            Icon(Icons.Default.Cast, contentDescription = null)
+                            Text(stringResource(R.string.cast_action))
                         }
                         // Downloading the lot. Confirmed rather than immediate: this is the one
                         // button on the screen that can start eighty transfers and fill a phone,
@@ -321,19 +329,20 @@ internal fun SeriesDetailsScreen(
                         // that would promise zero transfers. "Already downloaded" is a state the
                         // episode rows show individually; a button offering to fetch nothing is not
                         // a useful thing to press.
-                        onDownloadSeries
-                            ?.takeIf {
-                                details.episodes.any { episode ->
-                                    downloadStateOf(episode) != DownloadStateUi.Completed
-                                }
-                            }?.let { download ->
-                            BuroButton(
-                                onClick = { pendingBulkDownload = BulkDownload.WholeSeries },
-                                style = BuroButtonStyle.Secondary,
-                            ) {
-                                Icon(Icons.Default.Download, contentDescription = null)
-                                Text(stringResource(R.string.series_download_all))
+                        // Disabled rather than hidden once every episode is stored. A button that
+                        // vanishes on completion moves the whole row, and "everything is already
+                        // downloaded" is worth saying plainly — the greyed button says it.
+                        val anythingLeftToDownload =
+                            details.episodes.any { episode ->
+                                downloadStateOf(episode) != DownloadStateUi.Completed
                             }
+                        BuroButton(
+                            onClick = { pendingBulkDownload = BulkDownload.WholeSeries },
+                            enabled = onDownloadSeries != null && anythingLeftToDownload,
+                            style = BuroButtonStyle.Secondary,
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null)
+                            Text(stringResource(R.string.series_download_all))
                         }
                     }
                 }

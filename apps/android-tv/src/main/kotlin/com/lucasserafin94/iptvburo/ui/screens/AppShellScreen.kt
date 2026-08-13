@@ -3734,7 +3734,13 @@ private fun SearchContent(
                             MyBuroMediaRow(
                                 channel = channel,
                                 progress = null,
-                                status = channel.categoryName.orEmpty(),
+                                // What the result *is*, not which folder it came from.
+                                //
+                                // This printed categoryName, which the search maps from the
+                                // catalogue's category *id* — so every row was subtitled with a
+                                // raw UUID. The kind is the useful distinction anyway: it answers
+                                // "is this the film or the series" for a name that is both.
+                                status = stringResource(channel.contentType.favoriteKindLabel()),
                                 onOpen = { onOpenChannel(channel) },
                             )
                         }

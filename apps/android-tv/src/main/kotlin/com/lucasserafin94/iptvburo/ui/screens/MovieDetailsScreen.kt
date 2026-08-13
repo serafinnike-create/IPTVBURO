@@ -332,18 +332,27 @@ internal fun MovieDetailsScreen(
                             Text(downloadState.label())
                         }
                     }
-                    details?.youtubeTrailerId?.let { trailerId ->
-                        BuroButton(
-                            onClick = {
-                                val uri = Uri.parse("https://www.youtube.com/watch?v=$trailerId")
+                    // Always drawn, disabled when the provider gave no trailer id.
+                    //
+                    // Reported from a phone: the action buttons "behave differently on every
+                    // film". They did — Trailer and Baixar appeared only under their conditions,
+                    // and a FlowRow reflows everything after a missing one, so Compartilhar moved
+                    // between titles and sometimes wrapped onto a second line. Keeping the slot
+                    // and greying it out costs one dull button and buys a row that never moves.
+                    val trailerId = details?.youtubeTrailerId
+                    BuroButton(
+                        onClick = {
+                            trailerId?.let { id ->
+                                val uri = Uri.parse("https://www.youtube.com/watch?v=$id")
                                 runCatching {
                                     androidContext.startActivity(Intent(Intent.ACTION_VIEW, uri))
                                 }
-                            },
-                            style = BuroButtonStyle.Secondary,
-                        ) {
-                            Text(stringResource(R.string.details_trailer))
-                        }
+                            }
+                        },
+                        enabled = trailerId != null,
+                        style = BuroButtonStyle.Secondary,
+                    ) {
+                        Text(stringResource(R.string.details_trailer))
                     }
                     // Beside Trailer, and deliberately outside the block above: a film with no
                     // trailer still has something to share, and nesting this inside that `let`
@@ -352,24 +361,25 @@ internal fun MovieDetailsScreen(
                     // Last in the row rather than beside Favoritar, where it was: five buttons do
                     // not fit one line on a phone, so the FlowRow wrapped and Compartilhar landed
                     // on a second line that reads as the button being absent.
-                    onShare?.let { share ->
-                        BuroButton(
-                            onClick = share,
-                            // Enabled while the full record is still loading: the title and year
-                            // come from the catalogue row, so a share is complete without it.
-                            style = BuroButtonStyle.Secondary,
-                        ) {
-                            Icon(Icons.Default.Share, contentDescription = null)
-                            Text(stringResource(R.string.details_share))
-                        }
+                    // Enabled while the full record is still loading: the title and year come
+                    // from the catalogue row, so a share is complete without it.
+                    BuroButton(
+                        onClick = { onShare?.invoke() },
+                        enabled = onShare != null,
+                        style = BuroButtonStyle.Secondary,
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null)
+                        Text(stringResource(R.string.details_share))
                     }
-                    // Beside Compartilhar, and enabled on the same terms: what travels is the
-                    // title's identity, which the catalogue row already provides.
-                    onCast?.let { cast ->
-                        BuroButton(onClick = cast, style = BuroButtonStyle.Secondary) {
-                            Icon(Icons.Default.Cast, contentDescription = null)
-                            Text(stringResource(R.string.cast_action))
-                        }
+                    // Beside Compartilhar, on the same terms: what travels is the title's
+                    // identity, which the catalogue row already provides.
+                    BuroButton(
+                        onClick = { onCast?.invoke() },
+                        enabled = onCast != null,
+                        style = BuroButtonStyle.Secondary,
+                    ) {
+                        Icon(Icons.Default.Cast, contentDescription = null)
+                        Text(stringResource(R.string.cast_action))
                     }
                 }
             }

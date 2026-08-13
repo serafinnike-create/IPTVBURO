@@ -485,7 +485,11 @@ class MainViewModel @Inject constructor(
                     }
                 val visible =
                     found
-                        .map { channel -> channel.toCatalogUi(channel.categoryId.orEmpty()) }
+                        // Blank rather than the category *id*, which is what was passed here: the
+                        // field is a display name, and a UUID was being printed under every
+                        // result. The search screen labels rows by kind instead, and nothing else
+                        // reads this for a search result.
+                        .map { channel -> channel.toCatalogUi("") }
                         .filterKidsContentIfNeeded(mutableState.value.activeProfile)
                 mutableState.update { state ->
                     // Ignore an answer for a query the user has already moved on from.
