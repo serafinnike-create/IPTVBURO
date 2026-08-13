@@ -42,6 +42,40 @@ o servidor) continua aguardando o log do usuário.
 
 ---
 
+## AUDITORIA-023 — Nova varredura: estabilidade, otimização, bugs e segurança
+
+**Status:** pedido registrado — **não iniciada**
+**Pedido em:** 2026-08-13
+**Relato:** "verificar instabilidade no app, otimizar, procurar bugs e falhas de
+segurança"
+
+Segunda varredura, pedida depois da `alpha.7`. A [AUDITORIA-022](#auditoria-022--segurança-e-estabilidade-antes-de-publicar)
+cobriu o estado anterior; o que entrou desde então ainda **não** foi auditado com
+o mesmo rigor:
+
+- o **remetente de transmissão do Windows** (`CastReceiver.send`) — abre conexão
+  de saída para um endereço vindo da descoberta na rede, que é entrada não
+  confiável;
+- o **caminho do token v4 do TMDb** — a credencial passou a viajar em cabeçalho.
+  Confirmar que ela não aparece em log, em `toString()` nem em mensagem de erro,
+  e que o cabeçalho não é anexado a requisição para host que não seja o TMDb;
+- o **download em lote** — quarenta transferências simultâneas contra memória,
+  disco cheio e rede caindo no meio;
+- a **busca no catálogo**, recém-adicionada, sob consulta muito longa ou com
+  caractere estranho;
+- **regressão de desempenho** na tela de série com 1.171 episódios, agora que ela
+  ganhou dois botões que percorrem a lista inteira a cada recomposição —
+  `downloadStateForEpisode` é chamado por episódio, e isso merece medição real.
+
+Também vale repetir o que a 022 já verificou, porque o código mudou desde então:
+segredos no repositório, redação de credenciais, TLS, e o limite de leitura em
+socket.
+
+**Nada aqui é suspeita concreta ainda** — é a lista do que a varredura tem de
+cobrir para poder afirmar que está limpo.
+
+---
+
 ## AUDITORIA-022 — Segurança e estabilidade antes de publicar
 
 **Status:** ✅ CONCLUÍDA em 2026-08-13 — **1 correção aplicada**
