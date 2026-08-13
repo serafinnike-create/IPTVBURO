@@ -42,6 +42,69 @@ o servidor) continua aguardando o log do usuário.
 
 ---
 
+## AUDITORIA-022 — Segurança e estabilidade antes de publicar
+
+**Status:** ✅ CONCLUÍDA em 2026-08-13 — **1 correção aplicada**
+**Motivo:** varredura pedida antes de subir a versão nova.
+
+### A falha encontrada e corrigida
+
+**O receptor de transmissão lia sem limite.** O `BufferedReader.readLine` lê até
+chegar uma quebra de linha — e não tem teto. Qualquer um na mesma rede abre esse
+socket, então um remetente que simplesmente **não** mandasse a quebra de linha
+teria os três segundos inteiros do tempo limite para fazer o aplicativo alocar
+tudo o que o link dele conseguisse despejar. O tempo limite encerra a conexão,
+mas não desfaz o que já foi acumulado, e a recusa do `decode` acima de 2 KB só
+acontece **depois** que a string existe.
+
+Agora a leitura para um caractere além de `MAX_ENCODED_LENGTH`, que é todo o
+orçamento que uma mensagem válida pode usar. Linha grande demais é descartada
+como qualquer outra entrada malformada — em silêncio, sem lançar exceção, porque
+uma exceção na thread que escuta um socket público seria um jeito de derrubar o
+aplicativo. O começo truncado é jogado fora em vez de decodificado: um pedaço de
+algo grande demais não é uma mensagem que alguém enviou.
+
+Testado por socket real, porque o que importa é o que o **ouvinte** faz com uma
+conexão hostil. A verificação é que uma mensagem boa ainda chega depois — ele tem
+que sobreviver, não só recusar.
+
+### Verificado e correto (não mexer sem motivo)
+
+- **Nenhum segredo versionado.** `local.properties` está no `.gitignore`, e não há
+  chave, `.pem`, `.env` ou playlist privada rastreada.
+- **A transmissão não carrega credencial.** A `CastMessage` leva identidade,
+  título, posição e código de pareamento — nada de URL, usuário ou senha. Todos os
+  campos com tamanho limitado, comparação do código em tempo constante, e a
+  descoberta responde **sem** revelar o código.
+- **A chave privada do servidor não vaza.** O `/v1/signing-key-check` deriva a
+  pública a partir da privada; o `d` (escalar privado) é removido antes da
+  reimportação e só o SPKI sai. Agora **afirmado em teste**, não presumido.
+- **A busca não é injetável.** Room com parâmetro vinculado (`:query`) e
+  `LIMIT 200`.
+- **O atualizador está bem fechado** — é o código que causou o BUG-009. Exige
+  HTTPS, host fixo em `github.com`, sem `userinfo`, porta 443, caminho preso ao
+  repositório do projeto, SHA-256 conferido antes de executar e tamanho limitado.
+- **Nenhum `TrustManager` permissivo** e nenhum `hostnameVerifier` frouxo.
+- **`usesCleartextTraffic="true"` é seguro aqui**, porque o
+  `network_security_config.xml` o anula onde importa: HTTP liberado apenas para os
+  provedores do usuário (que realmente servem em HTTP), e HTTPS obrigatório para
+  licença, TMDb e Google.
+- **Credenciais são apagadas da memória** (`Arrays.fill(password, '\u0000')`) e o
+  `RememberedXtreamStore` tem `toString()` redigido. O `XtreamSource` só carrega
+  `id` e `label` — as credenciais ficam em arquivos DPAPI separados.
+- **O descarte do player VLC é robusto**: idempotente, trata a corrida com um
+  `startVlc` em andamento e força o encerramento. Trocar o áudio muitas vezes não
+  deixa processo órfão.
+- **Estado entre threads** no receptor é todo `AtomicReference` ou `@Volatile`.
+- **Dependências atuais**: OkHttp 5.3.0, Room 2.8.4, Media3 1.10.1, Coil 3.5.0,
+  Gson 2.14.0 — nenhuma versão com vulnerabilidade conhecida.
+
+### Testes
+
+**1566 no total, nenhuma falha:** 1384 no Gradle, 171 no worker, 11 no Tizen.
+
+---
+
 ## BUG-019 — Trocar o áudio deixa a tela preta e o vídeo não volta
 
 **Status:** corrigido no código — **falta verificar em uso real**
