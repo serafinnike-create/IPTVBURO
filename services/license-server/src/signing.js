@@ -64,21 +64,35 @@ export async function signLicenseEcdsa(payload, privateKeyPkcs8Base64) {
   // rather than the endpoint failing.
   if (!privateKeyPkcs8Base64) return null;
 
-  const key = await crypto.subtle.importKey(
-    'pkcs8',
-    base64ToBytes(privateKeyPkcs8Base64),
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    false,
-    ['sign'],
-  );
+  // A *broken* key is treated the same as an absent one, and this is the whole point of the
+  // try/catch: this signature is an addition for Smart TVs, and every other client — Android,
+  // Windows — verifies the Ed25519 signature and ignores this field entirely. Letting an
+  // unimportable key throw took the entire licence endpoint down with it, so `/v1/validate`
+  // answered 500 to every device on earth and each of them fell back to "offline verification"
+  // until its grace ran out. That is a total outage caused by an optional extra.
+  //
+  // Deliberately silent about the key itself. The secret must not reach a log, and the name is
+  // enough to find this line.
+  try {
+    const key = await crypto.subtle.importKey(
+      'pkcs8',
+      base64ToBytes(privateKeyPkcs8Base64),
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['sign'],
+    );
 
-  const signature = await crypto.subtle.sign(
-    { name: 'ECDSA', hash: 'SHA-256' },
-    key,
-    new TextEncoder().encode(payload),
-  );
+    const signature = await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      key,
+      new TextEncoder().encode(payload),
+    );
 
-  return bytesToBase64(new Uint8Array(signature));
+    return bytesToBase64(new Uint8Array(signature));
+  } catch (error) {
+    console.error('SIGNING_KEY_ECDSA is set but unusable', error?.name);
+    return null;
+  }
 }
 
 /**
