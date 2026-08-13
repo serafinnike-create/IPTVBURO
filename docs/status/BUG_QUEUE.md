@@ -44,7 +44,7 @@ o servidor) continua aguardando o log do usuário.
 
 ## AUDITORIA-023 — Nova varredura: estabilidade, otimização, bugs e segurança
 
-**Status:** pedido registrado — **não iniciada**
+**Status:** ✅ CONCLUÍDA em 2026-08-13 — **2 correções aplicadas**
 **Pedido em:** 2026-08-13
 **Relato:** "verificar instabilidade no app, otimizar, procurar bugs e falhas de
 segurança"
@@ -73,6 +73,61 @@ socket.
 
 **Nada aqui é suspeita concreta ainda** — é a lista do que a varredura tem de
 cobrir para poder afirmar que está limpo.
+
+### Resultado — 2 falhas encontradas e corrigidas
+
+**1. Uma tela descoberta podia mentir sobre o próprio nome.** Qualquer um na rede
+responde a uma sondagem de descoberta, e o nome dessa resposta ia para a lista de
+aparelhos depois de nada além de um corte de tamanho. É a lista que o usuário lê
+antes de escolher para onde mandar um título, então esse nome é a única parte da
+descoberta capaz de **enganar**, e não só de estar errada: uma quebra de linha
+pinta linhas extras, um override `U+202E` inverte o que é desenhado, e uma
+sequência de espaços empurra a parte honesta para fora da vista deixando só um
+final tranquilizador.
+
+Agora só sobrevive caractere que se desenha como ele mesmo. Controle e marcas de
+formatação bidirecional são descartados; sequências de espaço viram um espaço só.
+A mesma limpeza passou a valer na resposta que **esta** máquina envia — o
+`COMPUTERNAME` não é hostil, mas nada garante que ele não contenha o separador, e
+um nome com um partiria a resposta em quatro campos que todo leitor recusa.
+
+**2. Os botões de baixar temporada liam o disco a cada recomposição** — falha
+minha, introduzida com os próprios botões. O `downloadStateForEpisode` chega ao
+`isDownloaded`, que roda `Files.list` na pasta de downloads: **uma listagem de
+diretório por episódio**. Medido, não estimado: 1.171 episódios custam ~460 ms
+por varredura, e havia **três** varreduras por passada — mais de um segundo de
+I/O na thread de interface toda vez que algo mudava na tela. Numa série desse
+tamanho a página engasga, que é exatamente o problema que a paginação de
+episódios existia para evitar.
+
+Agora as respostas são calculadas uma vez, por série e por lista de episódios, e
+o botão da temporada estreita esse resultado por um conjunto de ids em vez de
+consultar o disco de novo. Abrir uma série grande paga uma varredura; redesenhar
+não paga nada.
+
+### Verificado e correto (não mexer sem motivo)
+
+- **O endereço de destino não é falsificável.** Vem do endereço de origem do
+  pacote UDP, não do que a resposta afirma — então um respondedor só consegue
+  oferecer a si mesmo, nunca apontar o app para uma terceira máquina.
+- **O token v4 do TMDb não vaza em redirecionamento.** Ele viaja em cabeçalho
+  `Authorization`, o que é uma exposição diferente da chave v3 (parâmetro de URL,
+  que nunca sai do endereço discado). O OkHttp remove o cabeçalho ao trocar de
+  host — mas isso é decisão dele, não nossa, e pode mudar numa atualização, então
+  virou teste contra um redirecionamento real que **é** seguido.
+- **O token não aparece em log.** O cliente de metadados não registra nada, e o
+  desktop imprime só o *tipo* da exceção, nunca a mensagem — que carregaria a URL
+  com a credencial. O `toString()` está redigido.
+- **A busca não é injetável nem ilimitada:** parâmetro vinculado pelo Room,
+  entrada cortada em 80 caracteres na interface, `LIMIT 200` no SQL e a consulta
+  anterior é cancelada a cada tecla. `%` e `_` são texto para o LIKE — dão
+  resultado amplo, não risco.
+
+### Ainda não coberto
+
+O **download em lote sob disco cheio e rede caindo no meio** continua sem
+verificação. É o único item da lista original que exige uso real para valer
+alguma coisa.
 
 ---
 
