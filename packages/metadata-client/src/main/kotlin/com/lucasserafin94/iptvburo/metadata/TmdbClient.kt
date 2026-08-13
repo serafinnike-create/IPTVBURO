@@ -89,6 +89,25 @@ class TmdbClient(
         get() = !apiKey.isNullOrBlank()
 
     /**
+     * Whether the configured credential is a v4 Read Access Token rather than a v3 API key.
+     *
+     * TMDb hands out two things from the same settings page, and people quite reasonably copy
+     * whichever they land on. They are not interchangeable: a v3 key goes in the `api_key` query
+     * parameter, while a v4 token is a JWT and must travel as `Authorization: Bearer`. Sent the
+     * wrong way, a perfectly valid token is answered with 401 — which is exactly what happened on a
+     * real install, and looked to the user like their key was bad.
+     *
+     * Detected by shape rather than by asking the user which one they pasted. A JWT is three
+     * base64url segments separated by dots and always begins `eyJ`, which no v3 key does: those are
+     * 32 hexadecimal characters.
+     */
+    private val usesBearerToken: Boolean
+        get() {
+            val key = apiKey?.trim().orEmpty()
+            return key.startsWith("eyJ") && key.count { it == '.' } == 2
+        }
+
+    /**
      * The person TMDb knows by [name], or null when there is no confident match.
      *
      * Only the first result is taken. Name searches are ambiguous and picking further down the list
@@ -652,10 +671,21 @@ class TmdbClient(
      */
     private fun get(url: HttpUrl): JsonObject? =
         try {
+            // A v4 token travels in the header, and the `api_key` parameter every caller added is
+            // removed rather than left alongside it: TMDb rejects the request on the bad parameter
+            // even when the header would have been accepted.
+            //
+            // Done here, in the one place every request passes through, so the fifteen call sites
+            // that build URLs stay as they are and none of them can forget.
+            val effectiveUrl =
+                if (usesBearerToken) url.newBuilder().removeAllQueryParameters("api_key").build() else url
             val request =
                 Request.Builder()
-                    .url(url)
+                    .url(effectiveUrl)
                     .header("Accept", "application/json")
+                    .apply {
+                        if (usesBearerToken) header("Authorization", "Bearer ${apiKey.orEmpty().trim()}")
+                    }
                     .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {

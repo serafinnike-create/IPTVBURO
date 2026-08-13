@@ -37,6 +37,44 @@ class TmdbClientTest {
     private fun json(body: String) =
         MockResponse().setBody(body).setHeader("Content-Type", "application/json")
 
+    /**
+     * TMDb hands out two credentials from the same settings page and they are not interchangeable.
+     *
+     * A v3 key goes in the `api_key` parameter; a v4 Read Access Token is a JWT and must travel as
+     * `Authorization: Bearer`. Sent the wrong way a perfectly valid token is answered with 401,
+     * which is what happened on a real install — the user's token was fine and the app was asking
+     * wrongly, while the screen told them to check their key.
+     */
+    @Test
+    fun `a v3 key travels as a query parameter`() {
+        server.enqueue(json("""{"results":[]}"""))
+
+        client(apiKey = "abcdef0123456789abcdef0123456789").findPerson("Anyone")
+
+        val request = server.takeRequest()
+        assertEquals("abcdef0123456789abcdef0123456789", request.requestUrl?.queryParameter("api_key"))
+        assertNull(request.getHeader("Authorization"), "a v3 key must not be sent as a bearer token")
+    }
+
+    @Test
+    fun `a v4 read access token travels as a bearer header`() {
+        // Shaped like a real one: three base64url segments, leading `eyJ`. The content is irrelevant
+        // — the client decides by shape, never by asking which kind was pasted.
+        val token = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJzeW50aGV0aWMifQ.c3ludGhldGljLXNpZ25hdHVyZQ"
+        server.enqueue(json("""{"results":[]}"""))
+
+        client(apiKey = token).findPerson("Anyone")
+
+        val request = server.takeRequest()
+        assertEquals("Bearer $token", request.getHeader("Authorization"))
+        // The parameter is removed rather than left alongside the header: TMDb rejects the request
+        // on the bad parameter even when the header alone would have been accepted.
+        assertNull(
+            request.requestUrl?.queryParameter("api_key"),
+            "a bearer request must not also carry api_key",
+        )
+    }
+
     @Test
     fun `finds a person and builds the photo url`() {
         server.enqueue(
