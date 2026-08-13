@@ -84,8 +84,10 @@ import com.lucasserafin94.iptvburo.domain.model.PlaybackContentType
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressIdentity
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgress
 import com.lucasserafin94.iptvburo.desktop.platform.CastReceiver
+import com.lucasserafin94.iptvburo.desktop.platform.CastTarget
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
+import com.lucasserafin94.iptvburo.domain.model.CastMessage
 import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
 import com.lucasserafin94.iptvburo.domain.model.BestOfferPolicy
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
@@ -130,6 +132,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** Provider ids are reused between film and series catalogues, so both parts form the cache key. */
@@ -2988,6 +2991,103 @@ class DesktopAppState(
         private set
 
     // -----------------------------------------------------------------------------------------
+    // Sending a title to another screen on the same network
+    // -----------------------------------------------------------------------------------------
+
+    /** What the send sheet is doing. Idle means it is closed. */
+    var castSendState by mutableStateOf<CastSendState>(CastSendState.Idle)
+        private set
+
+    /** The title the open sheet would send. Null whenever [castSendState] is Idle. */
+    private var castSendRequest: TitleShareLink? = null
+
+    private var castSendJob: Job? = null
+
+    /**
+     * Opens the send sheet for [link] and starts looking for screens.
+     *
+     * Takes the same [TitleShareLink] the share button builds, for the same reason casting exists:
+     * both name a title rather than a location. The receiving screen finds it in its own catalogue
+     * and plays from the provider directly, so this machine's credentials never travel.
+     */
+    fun startCastTo(link: TitleShareLink) {
+        castSendRequest = link
+        searchForCastTargets()
+    }
+
+    /** Looks for screens again. Used when the sheet opens and by "procurar de novo". */
+    fun searchForCastTargets() {
+        castSendJob?.cancel()
+        castSendState = CastSendState.Searching
+        castSendJob =
+            downloadScope.launch {
+                val targets = withContext(Dispatchers.IO) { CastReceiver.discover() }
+                lastCastTargets = targets
+                castSendState = CastSendState.Found(targets)
+            }
+    }
+
+    fun chooseCastTarget(target: CastTarget) {
+        castSendState = CastSendState.NeedsCode(target)
+    }
+
+    /**
+     * Back to the list, so a wrong choice does not need the sheet closed and reopened.
+     *
+     * Shows the screens the last search found rather than searching again: discovery takes over a
+     * second, and repeating it because somebody tapped the wrong row would make correcting a
+     * mistake slower than making it.
+     */
+    fun backToCastTargets() {
+        castSendState = CastSendState.Found(lastCastTargets)
+    }
+
+    /** The screens the last search found, kept so going back does not need another search. */
+    private var lastCastTargets: List<CastTarget> = emptyList()
+
+    fun closeCastSend() {
+        castSendJob?.cancel()
+        castSendJob = null
+        castSendRequest = null
+        castSendState = CastSendState.Idle
+    }
+
+    /**
+     * Sends the open title with the code shown on the chosen screen.
+     *
+     * A malformed code is refused here rather than sent: four digits is the whole contract, and a
+     * message the receiver will silently drop is worse than one never sent, because the sender is
+     * told nothing either way.
+     */
+    fun sendToCastTarget(code: String) {
+        val target = (castSendState as? CastSendState.NeedsCode)?.target ?: return
+        val link = castSendRequest ?: return
+        if (!CastMessage.isWellFormedPairingCode(code)) {
+            castSendState = CastSendState.NeedsCode(target, badCode = true)
+            return
+        }
+
+        castSendState = CastSendState.Sending(target)
+        castSendJob?.cancel()
+        castSendJob =
+            downloadScope.launch {
+                val message =
+                    CastMessage(
+                        identity = link.identity,
+                        title = link.title,
+                        // Zero: this machine sends a title, not a position. Resuming where the
+                        // viewer left off would need the receiving end to apply it, and that path
+                        // opens the title's page rather than starting playback.
+                        positionMillis = 0L,
+                        pairingCode = code,
+                    )
+                val delivered = withContext(Dispatchers.IO) { CastReceiver.send(target, message) }
+                castSendState =
+                    if (delivered) CastSendState.Sent(target) else CastSendState.Failed(target)
+            }
+    }
+
+    // -----------------------------------------------------------------------------------------
     // Receiving a title from a phone on the same network
     // -----------------------------------------------------------------------------------------
 
@@ -5062,6 +5162,37 @@ sealed interface LiveEpgStatus {
 }
 
 /** UI-facing state of an offline copy. */
+/** What the "send to another screen" sheet is doing, and what it should show. */
+sealed interface CastSendState {
+    /** Closed. */
+    data object Idle : CastSendState
+
+    data object Searching : CastSendState
+
+    /**
+     * Screens found. Empty is a real answer and needs its own wording — plenty of home routers keep
+     * wifi and ethernet apart and drop the broadcast, so "none found" is not "none exist".
+     */
+    data class Found(val targets: List<CastTarget>) : CastSendState
+
+    /** A screen was chosen and is waiting for the code shown on it. */
+    data class NeedsCode(val target: CastTarget, val badCode: Boolean = false) : CastSendState
+
+    data class Sending(val target: CastTarget) : CastSendState
+
+    /**
+     * Delivered.
+     *
+     * Says "sent", never "playing". A receiver answers a wrong code with silence, so this machine
+     * genuinely cannot tell a mistyped code from a screen that stopped listening, and claiming
+     * playback started would be a guess presented as fact.
+     */
+    data class Sent(val target: CastTarget) : CastSendState
+
+    /** The bytes did not arrive: the screen went away, or the network refused the connection. */
+    data class Failed(val target: CastTarget) : CastSendState
+}
+
 sealed interface DownloadState {
     data object Idle : DownloadState
 

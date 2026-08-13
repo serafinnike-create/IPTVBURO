@@ -184,6 +184,54 @@ class CastReceiverTest {
         assertFalse(code == freshCode, "a restarted receiver should mint a new code")
     }
 
+    /**
+     * This machine can send as well as receive, which is what the button on the film page needs.
+     *
+     * Asserted against a real receiver rather than a mock: the two halves have to agree on the
+     * wire format, and a test that only checked the encoder would pass while the protocol drifted.
+     */
+    @Test
+    fun `the sender delivers a title to a receiver`() {
+        val delivered = CountDownLatch(1)
+        var received: CastMessage? = null
+        val code = assertNotNull(receiver.start { message -> received = message; delivered.countDown() })
+        val target =
+            CastTarget(
+                address = InetAddress.getLoopbackAddress().hostAddress,
+                port = listeningPort(),
+                displayName = "Notebook de teste",
+            )
+
+        val identity = ContentIdentity.of(ContentKind.MOVIE, "Enviado Daqui", 2024)
+        val sent = CastReceiver.send(target, CastMessage(identity, "Enviado Daqui", 0, code))
+
+        assertTrue(sent, "the sender reported a failure")
+        assertTrue(delivered.await(5, TimeUnit.SECONDS), "the message never arrived")
+        assertEquals(identity, received?.identity)
+    }
+
+    /** A wrong code is refused on the sending path too, exactly as it is from a phone. */
+    @Test
+    fun `the sender cannot bypass the pairing code`() {
+        val delivered = CountDownLatch(1)
+        val code = assertNotNull(receiver.start { delivered.countDown() })
+        val wrongCode = if (code == "0000") "1111" else "0000"
+        val target =
+            CastTarget(
+                address = InetAddress.getLoopbackAddress().hostAddress,
+                port = listeningPort(),
+                displayName = "Notebook de teste",
+            )
+
+        val identity = ContentIdentity.of(ContentKind.MOVIE, "Nao Deve Chegar", 2024)
+        // Delivery succeeds — the bytes arrive — while acceptance does not. That difference is why
+        // the UI says "sent" rather than claiming playback started.
+        assertTrue(CastReceiver.send(target, CastMessage(identity, "Nao Deve Chegar", 0, wrongCode)))
+
+        assertFalse(delivered.await(1500, TimeUnit.MILLISECONDS), "an unpaired message was accepted")
+        assertNull(receiver.takeMessage())
+    }
+
     /** Stopping releases the ports, so the feature can be turned off and on again. */
     @Test
     fun `a stopped receiver answers nothing`() {

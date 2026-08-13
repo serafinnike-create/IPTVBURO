@@ -7,6 +7,7 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.net.Socket
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.random.Random
 
@@ -241,6 +242,36 @@ class CastReceiver(
                     found.values.toList()
                 }
             }.getOrDefault(emptyList())
+
+        /**
+         * Hands [message] to [target].
+         *
+         * The other half of the protocol, so this machine can send as well as receive: a title
+         * opened on the computer can be pushed to the television in the next room, or to a phone.
+         *
+         * True only means the bytes were delivered. Whether the screen *accepted* them depends on
+         * the pairing code, and a receiver answers a wrong code with silence rather than a refusal
+         * — so the sender genuinely cannot tell a mistyped code from a screen that stopped
+         * listening, and the UI says "sent" rather than claiming playback started.
+         *
+         * What travels is which title, never a URL: the receiving screen looks it up in its own
+         * catalogue and plays from the provider itself, so this machine's credentials stay here.
+         */
+        fun send(target: CastTarget, message: CastMessage): Boolean =
+            runCatching {
+                Socket().use { socket ->
+                    socket.connect(InetSocketAddress(target.address, target.port), CONNECT_TIMEOUT_MILLIS)
+                    socket.getOutputStream().use { output ->
+                        // Newline-terminated: the receiver reads one line, which is what bounds how
+                        // much it will take from a connection.
+                        output.write("${message.encode()}\n".toByteArray(Charsets.UTF_8))
+                        output.flush()
+                    }
+                }
+                true
+            }.getOrDefault(false)
+
+        private const val CONNECT_TIMEOUT_MILLIS = 2_500
     }
 }
 

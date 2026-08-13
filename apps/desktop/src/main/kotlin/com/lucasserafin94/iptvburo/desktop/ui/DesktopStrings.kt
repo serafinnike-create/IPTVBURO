@@ -552,6 +552,22 @@ data class DesktopStrings(
                     ),
                 shareStrings =
                     ShareStrings(
+                        cast =
+                            CastStrings(
+                                            castAction = "Enviar a pantalla",
+                                            castTitle = "Enviar a una pantalla",
+                                            castSearching = "Buscando pantallas en esta red…",
+                                            castNoneFound = "No se encontró ninguna pantalla. Abre el IPTV BURO en el otro equipo, activa «Recibir» y comprueba que ambos estén en la misma red.",
+                                            castSearchAgain = "Buscar de nuevo",
+                                            castCodePrompt = "Enviar a %s",
+                                            castCodeHint = "Escribe los cuatro dígitos que aparecen en esa pantalla.",
+                                            castCodeInvalid = "El código tiene cuatro dígitos.",
+                                            castSend = "Enviar",
+                                            castSending = "Enviando a %s…",
+                                            castSent = "Enviado a %s. Si no empieza, comprueba el código en esa pantalla.",
+                                            castFailed = "No se pudo contactar con %s.",
+                                            castChooseAnother = "Elegir otra pantalla",
+                            ),
                     share = "Compartir",
                     shareTitle = "Compartir título",
                     shareSubtitle = "Envía una recomendación, no tu lista.",
@@ -1028,6 +1044,22 @@ data class DesktopStrings(
                     ),
                 shareStrings =
                     ShareStrings(
+                        cast =
+                            CastStrings(
+                                            castAction = "Enviar à tela",
+                                            castTitle = "Enviar para uma tela",
+                                            castSearching = "Procurando telas nesta rede…",
+                                            castNoneFound = "Nenhuma tela encontrada. Abra o IPTV BURO no outro aparelho, ligue “Receber” e confirme que os dois estão na mesma rede.",
+                                            castSearchAgain = "Procurar de novo",
+                                            castCodePrompt = "Enviar para %s",
+                                            castCodeHint = "Digite os quatro dígitos que aparecem naquela tela.",
+                                            castCodeInvalid = "O código tem quatro dígitos.",
+                                            castSend = "Enviar",
+                                            castSending = "Enviando para %s…",
+                                            castSent = "Enviado para %s. Se não começar, confira o código naquela tela.",
+                                            castFailed = "Não foi possível alcançar %s.",
+                                            castChooseAnother = "Escolher outra tela",
+                            ),
                     share = "Compartilhar",
                     shareTitle = "Compartilhar título",
                     shareSubtitle = "Envie uma recomendação, não a sua lista.",
@@ -1504,6 +1536,22 @@ data class DesktopStrings(
                     ),
                 shareStrings =
                     ShareStrings(
+                        cast =
+                            CastStrings(
+                                            castAction = "Send to screen",
+                                            castTitle = "Send to a screen",
+                                            castSearching = "Looking for screens on this network…",
+                                            castNoneFound = "No screen found. Open IPTV BURO on the other device, turn on “Receive”, and make sure both are on the same network.",
+                                            castSearchAgain = "Search again",
+                                            castCodePrompt = "Send to %s",
+                                            castCodeHint = "Type the four digits shown on that screen.",
+                                            castCodeInvalid = "The code is four digits.",
+                                            castSend = "Send",
+                                            castSending = "Sending to %s…",
+                                            castSent = "Sent to %s. If nothing starts, check the code on that screen.",
+                                            castFailed = "Could not reach %s.",
+                                            castChooseAnother = "Choose another screen",
+                            ),
                     share = "Share",
                     shareTitle = "Share title",
                     shareSubtitle = "Send a recommendation, not your list.",
@@ -1978,6 +2026,22 @@ data class DesktopStrings(
                     ),
                 shareStrings =
                     ShareStrings(
+                        cast =
+                            CastStrings(
+                                            castAction = "An Bildschirm",
+                                            castTitle = "An einen Bildschirm senden",
+                                            castSearching = "Bildschirme in diesem Netzwerk werden gesucht …",
+                                            castNoneFound = "Kein Bildschirm gefunden. Öffnen Sie IPTV BURO auf dem anderen Gerät, schalten Sie „Empfangen“ ein und prüfen Sie, ob beide im selben Netzwerk sind.",
+                                            castSearchAgain = "Erneut suchen",
+                                            castCodePrompt = "An %s senden",
+                                            castCodeHint = "Geben Sie die vier Ziffern ein, die auf diesem Bildschirm stehen.",
+                                            castCodeInvalid = "Der Code besteht aus vier Ziffern.",
+                                            castSend = "Senden",
+                                            castSending = "Wird an %s gesendet …",
+                                            castSent = "An %s gesendet. Startet nichts, prüfen Sie den Code auf diesem Bildschirm.",
+                                            castFailed = "%s war nicht erreichbar.",
+                                            castChooseAnother = "Anderen Bildschirm wählen",
+                            ),
                     share = "Teilen",
                     shareTitle = "Titel teilen",
                     shareSubtitle = "Sende eine Empfehlung, nicht deine Liste.",
@@ -2459,6 +2523,22 @@ data class DesktopStrings(
                     ),
                 shareStrings =
                     ShareStrings(
+                        cast =
+                            CastStrings(
+                                            castAction = "Invia a schermo",
+                                            castTitle = "Invia a uno schermo",
+                                            castSearching = "Ricerca di schermi in questa rete…",
+                                            castNoneFound = "Nessuno schermo trovato. Apri IPTV BURO sull’altro dispositivo, attiva “Ricevi” e verifica che siano sulla stessa rete.",
+                                            castSearchAgain = "Cerca di nuovo",
+                                            castCodePrompt = "Invia a %s",
+                                            castCodeHint = "Digita le quattro cifre mostrate su quello schermo.",
+                                            castCodeInvalid = "Il codice è di quattro cifre.",
+                                            castSend = "Invia",
+                                            castSending = "Invio a %s…",
+                                            castSent = "Inviato a %s. Se non parte, controlla il codice su quello schermo.",
+                                            castFailed = "Impossibile raggiungere %s.",
+                                            castChooseAnother = "Scegli un altro schermo",
+                            ),
                     share = "Condividi",
                     shareTitle = "Condividi titolo",
                     shareSubtitle = "Invia un consiglio, non la tua lista.",
@@ -2956,6 +3036,33 @@ val strings: DesktopStrings
  * `ClassFormatError` that failed every desktop test before a single assertion ran. New groups of
  * related strings go in their own class from now on.
  */
+/**
+ * Sending a title to another screen on the network.
+ *
+ * Nested for the same reason [DownloadStrings] is: [DesktopStrings] is close to the JVM's
+ * 255-argument constructor limit, which has already been hit here once.
+ */
+data class CastStrings(
+    /** The button beside Compartilhar. */
+    val castAction: String,
+    val castTitle: String,
+    val castSearching: String,
+    val castNoneFound: String,
+    val castSearchAgain: String,
+    /** Takes the screen's name. */
+    val castCodePrompt: String,
+    val castCodeHint: String,
+    val castCodeInvalid: String,
+    val castSend: String,
+    /** Takes the screen's name. */
+    val castSending: String,
+    /** Takes the screen's name. Says *sent*, never *playing* — see CastSendState.Sent. */
+    val castSent: String,
+    /** Takes the screen's name. */
+    val castFailed: String,
+    val castChooseAnother: String,
+)
+
 data class DownloadStrings(
     /** The button beside Compartilhar. */
     val downloadSeries: String,
@@ -2969,6 +3076,13 @@ data class DownloadStrings(
 )
 
 data class ShareStrings(
+    /**
+     * Sending to a screen on the network.
+     *
+     * Nested here rather than on [DesktopStrings], which is at its enforced ceiling: casting is
+     * sharing with a different destination, so this is where it belongs anyway.
+     */
+    val cast: CastStrings,
     /** The button on the title page, beside Favourites. */
     val share: String,
     val shareTitle: String,

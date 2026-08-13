@@ -101,6 +101,9 @@ import com.lucasserafin94.iptvburo.desktop.DownloadState
 import com.lucasserafin94.iptvburo.desktop.MovieDetailsStatus
 import com.lucasserafin94.iptvburo.desktop.LiveEpgStatus
 import com.lucasserafin94.iptvburo.desktop.PersonFilmography
+import com.lucasserafin94.iptvburo.desktop.platform.CastTarget
+import com.lucasserafin94.iptvburo.domain.model.CastMessage
+import com.lucasserafin94.iptvburo.desktop.CastSendState
 import com.lucasserafin94.iptvburo.desktop.SeriesDetailsStatus
 import com.lucasserafin94.iptvburo.desktop.XtreamStatus
 import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
@@ -1326,6 +1329,22 @@ internal fun XtreamInternalDetailsPage(
                             description = movie?.details?.plot ?: series?.details?.plot,
                         )
                 },
+                onCast = {
+                    // The same link the share button builds — both name a title rather than a
+                    // location, which is exactly what the receiving screen needs to find it in its
+                    // own catalogue.
+                    //
+                    // `of` refuses a title it cannot identify, and a null there means there is
+                    // nothing a receiver could look up. Nothing opens rather than a sheet that
+                    // could only fail.
+                    TitleShareLink.of(
+                        identity = item.contentIdentity(),
+                        title = item.name.editorialTitle(),
+                        year = item.year,
+                        artworkUrl = movie?.details?.artworkUrl ?: series?.details?.artworkUrl,
+                        description = movie?.details?.plot ?: series?.details?.plot,
+                    )?.let(appState::startCastTo)
+                },
                 resumeDecisionFor = appState::resumeDecision,
                 compact = false,
                 modifier = Modifier.weight(1f).widthIn(max = 1_040.dp).align(Alignment.CenterHorizontally),
@@ -1392,6 +1411,16 @@ internal fun XtreamInternalDetailsPage(
                 onOpenUrl = { url -> appState.openPublicUrl(url) },
             )
         }
+
+        CastSendDialog(
+            state = appState.castSendState,
+            onSearchAgain = appState::searchForCastTargets,
+            onChoose = appState::chooseCastTarget,
+            onBack = appState::backToCastTargets,
+            onSend = appState::sendToCastTarget,
+            onClose = appState::closeCastSend,
+            text = strings,
+        )
     }
 }
 
@@ -1415,6 +1444,8 @@ internal fun XtreamItemDetail(
      * rather than a title, and the recipient's own list would have nothing to resolve it to.
      */
     onShare: (() -> Unit)? = null,
+    /** Opens the sheet that sends this title to another screen on the network. Null hides it. */
+    onCast: (() -> Unit)? = null,
     resumeDecisionFor: (XtreamPlaybackTarget) -> ResumeDecision,
     compact: Boolean,
     modifier: Modifier,
@@ -1660,6 +1691,24 @@ internal fun XtreamItemDetail(
                                     ),
                             ) {
                                 Text("↗  ${text.shareStrings.share}", fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        // Sending this title to another screen on the network — a television, a
+                        // phone, another computer. Beside Compartilhar because it is the same idea
+                        // with a different destination: both hand over *which* title, never a
+                        // stream, so the other end plays from its own list and this machine's
+                        // credentials stay here.
+                        onCast?.let { cast ->
+                            OutlinedButton(
+                                onClick = cast,
+                                modifier = Modifier.height(48.dp),
+                                shape = BuroRadius.Small,
+                                colors =
+                                    ButtonDefaults.outlinedButtonColors(
+                                        contentColor = BuroColors.Text,
+                                    ),
+                            ) {
+                                Text("⇥  ${text.shareStrings.cast.castAction}", fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -2225,6 +2274,8 @@ private fun SeriesDetailContent(
     onToggleFavorite: () -> Unit,
     /** Null when the page has no share target; see the parameter of the same name on the detail. */
     onShare: (() -> Unit)?,
+    /** Opens the sheet that sends this title to another screen on the network. Null hides it. */
+    onCast: (() -> Unit)? = null,
     onLoadSeries: () -> Unit,
     onOpenTrailer: (String) -> Unit,
     resumeDecisionForEpisode: (XtreamEpisode) -> ResumeDecision,
@@ -2360,6 +2411,18 @@ private fun SeriesDetailContent(
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
                     ) {
                         Text("↗  ${text.shareStrings.share}", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                // Same reasoning as on the film page: what is handed over is which title, so the
+                // other screen plays from its own list.
+                onCast?.let { cast ->
+                    OutlinedButton(
+                        onClick = cast,
+                        modifier = Modifier.height(48.dp),
+                        shape = BuroRadius.Small,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+                    ) {
+                        Text("⇥  ${text.shareStrings.cast.castAction}", fontWeight = FontWeight.SemiBold)
                     }
                 }
                 // Beside Compartilhar, where the whole series can be asked for at once.
@@ -2555,6 +2618,164 @@ private fun SeriesDetailContent(
             }
         }
     }
+}
+
+/**
+ * Choosing a screen and entering its code.
+ *
+ * Three steps, one at a time, because the code belongs to a particular screen: asking for it before
+ * one is chosen would be asking for a number the user cannot see yet.
+ *
+ * The success wording says **sent**, never *playing*. A receiver answers a wrong code with silence,
+ * so this machine genuinely cannot tell a mistyped code from a screen that stopped listening, and
+ * saying "playing" would state as fact something it does not know.
+ */
+@Composable
+internal fun CastSendDialog(
+    state: CastSendState,
+    onSearchAgain: () -> Unit,
+    onChoose: (CastTarget) -> Unit,
+    onBack: () -> Unit,
+    onSend: (String) -> Unit,
+    onClose: () -> Unit,
+    text: DesktopStrings,
+) {
+    if (state == CastSendState.Idle) return
+    val strings = text.shareStrings.cast
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = BuroColors.Surface,
+        title = { Text(strings.castTitle, color = BuroColors.Text, fontWeight = FontWeight.Bold) },
+        text = {
+            when (state) {
+                CastSendState.Idle -> Unit
+
+                CastSendState.Searching ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        Text(
+                            text = strings.castSearching,
+                            color = BuroColors.TextMuted,
+                            modifier = Modifier.padding(start = 12.dp),
+                        )
+                    }
+
+                is CastSendState.Found ->
+                    if (state.targets.isEmpty()) {
+                        // An empty result is ordinary rather than broken: plenty of home routers
+                        // keep wifi and ethernet apart and drop the broadcast. Saying so is more
+                        // useful than an error, because the fix is on the router and not here.
+                        Text(strings.castNoneFound, color = BuroColors.TextMuted)
+                    } else {
+                        Column {
+                            state.targets.forEach { target ->
+                                BuroInteractiveSurface(
+                                    onClick = { onChoose(target) },
+                                    shape = BuroRadius.Small,
+                                    background = BuroColors.SurfaceHover,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                ) { _ ->
+                                    Column(Modifier.padding(12.dp)) {
+                                        Text(target.displayName, color = BuroColors.Text)
+                                        Text(
+                                            target.address,
+                                            color = BuroColors.TextMuted,
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                is CastSendState.NeedsCode -> {
+                    var code by remember(state.target) { mutableStateOf("") }
+                    Column {
+                        Text(
+                            strings.castCodePrompt.format(state.target.displayName),
+                            color = BuroColors.Text,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            strings.castCodeHint,
+                            color = BuroColors.TextMuted,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = code,
+                            // Filtered as it is typed rather than validated on submit: the code is
+                            // four digits and nothing else, so a letter is a keystroke to ignore
+                            // rather than an error to report.
+                            onValueChange = { typed ->
+                                code = typed.filter(Char::isDigit).take(CastMessage.PAIRING_CODE_LENGTH)
+                            },
+                            singleLine = true,
+                            isError = state.badCode,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        if (state.badCode) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                strings.castCodeInvalid,
+                                color = BuroColors.TextMuted,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = { onSend(code) },
+                            // Enabled only on a complete code, so the button cannot send something
+                            // the receiver will discard without saying anything.
+                            enabled = code.length == CastMessage.PAIRING_CODE_LENGTH,
+                            colors = ButtonDefaults.buttonColors(containerColor = BuroColors.Primary),
+                        ) {
+                            Text(strings.castSend, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
+                is CastSendState.Sending ->
+                    Text(strings.castSending.format(state.target.displayName), color = BuroColors.TextMuted)
+
+                is CastSendState.Sent ->
+                    Text(strings.castSent.format(state.target.displayName), color = BuroColors.Text)
+
+                is CastSendState.Failed ->
+                    Text(strings.castFailed.format(state.target.displayName), color = BuroColors.Text)
+            }
+        },
+        confirmButton = {
+            when (state) {
+                is CastSendState.Found ->
+                    OutlinedButton(
+                        onClick = onSearchAgain,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+                    ) {
+                        Text(strings.castSearchAgain, fontWeight = FontWeight.SemiBold)
+                    }
+
+                is CastSendState.NeedsCode, is CastSendState.Failed ->
+                    OutlinedButton(
+                        onClick = onBack,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+                    ) {
+                        Text(strings.castChooseAnother, fontWeight = FontWeight.SemiBold)
+                    }
+
+                else -> Unit
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onClose,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+            ) {
+                Text(text.close, fontWeight = FontWeight.SemiBold)
+            }
+        },
+    )
 }
 
 /**
