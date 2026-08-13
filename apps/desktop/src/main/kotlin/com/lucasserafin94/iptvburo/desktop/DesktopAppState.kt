@@ -1567,8 +1567,33 @@ class DesktopAppState(
     var streamingShelves by mutableStateOf<List<TmdbServiceShelf>>(emptyList())
         private set
 
-    /** True only when the current shelf request failed, never for a valid empty catalogue. */
-    var streamingLoadFailed by mutableStateOf(false)
+    /**
+     * True when the current shelf request failed *because TMDb rejected the key*.
+     *
+     * Separate from [streamingLoadFailed] so the screen can name the cause. Telling someone whose
+     * playlist is loading 41.924 items to "check the connection" was the actual harm in BUG-021:
+     * the connection was fine and the key was the thing to fix.
+     */
+    var streamingKeyRejected by mutableStateOf(false)
+        private set
+
+    /**
+     * True only when the current shelf request failed, never for a valid empty catalogue.
+     *
+     * Clearing this always clears [streamingKeyRejected]: the reason only means anything while
+     * there is a failure to explain, and leaving it set would keep accusing a key that has since
+     * worked. Going through one setter is what guarantees the two cannot drift apart — there are
+     * seven places that reset the failure, and remembering to reset both in each was a bug waiting
+     * to be written.
+     */
+    var streamingLoadFailed: Boolean
+        get() = streamingLoadFailedState
+        private set(value) {
+            streamingLoadFailedState = value
+            if (!value) streamingKeyRejected = false
+        }
+
+    private var streamingLoadFailedState by mutableStateOf(false)
         private set
 
     /**
@@ -1774,10 +1799,16 @@ class DesktopAppState(
                         // the console. The failure type is what distinguishes the cases anyone
                         // actually needs to tell apart.
                         println("[streaming] shelf load failed: ${error::class.simpleName}")
-                    }.getOrDefault(TmdbShelfLoadResult.Unavailable)
-            val failed = result is TmdbShelfLoadResult.Unavailable
+                    }.getOrDefault(TmdbShelfLoadResult.Unavailable())
+            val unavailable = result as? TmdbShelfLoadResult.Unavailable
+            val failed = unavailable != null
+            val keyRejected = unavailable?.keyRejected == true
             val loaded = (result as? TmdbShelfLoadResult.Loaded)?.shelves.orEmpty()
-            if (failed) println("[streaming] shelf load unavailable")
+            // The reason is logged too: "unavailable" alone cost a diagnosis round-trip with the
+            // user, because a rejected key and an unreachable network look identical in the log.
+            if (failed) {
+                println("[streaming] shelf load unavailable (key rejected: $keyRejected)")
+            }
             println("[streaming] loaded ${loaded.size} $kind shelves")
             if (!failed) shelfCache[kind] = loaded
             // Kept for tomorrow. The region is the one this request was issued for, read before the
@@ -1803,7 +1834,9 @@ class DesktopAppState(
             // because the state was never actually set. Snapshot state is safe to write from any
             // thread; every other loader in this class does the same.
             streamingShelves = loaded
+            // Order matters: assigning the failure clears the reason, so the reason goes second.
             streamingLoadFailed = failed
+            streamingKeyRejected = keyRejected
         }
     }
 

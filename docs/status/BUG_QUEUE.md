@@ -42,6 +42,177 @@ o servidor) continua aguardando o log do usuário.
 
 ---
 
+## BUG-019 — Trocar o áudio deixa a tela preta e o vídeo não volta
+
+**Status:** corrigido no código — **falta verificar em uso real**
+**Reportado em:** 2026-08-13
+**Relato:** "mudei audio tela ficou preta nada aconteceu"
+
+Na captura enviada: área do vídeo toda preta, relógio em `00:00 / 00:00`, botão
+em "Reproduzir", barra de progresso no fim e o rótulo já mostrando `Áudio: 2.0`.
+Ou seja: a troca foi registrada, e a reprodução morreu junto.
+
+**Causa.** O VLC monta a cadeia de áudio junto com o resto do pipeline, então
+mudar o layout de caixas exige um processo novo — e é isso que o código faz,
+recriando o `VlcDesktopPlayer` e descartando o antigo.
+
+O que faltava é que o `SwingPanel` chama `factory` **uma única vez** e guarda o
+componente AWT resultante; ele não é keyed em nada que o lambda captura. Então o
+player antigo era destruído — levando junto o processo dono do canvas visível —
+e o novo nunca recebia superfície de vídeo nenhuma, porque `factory` não rodava
+de novo. Sobrava o canvas órfão de um processo morto: tela preta.
+
+**Correção** (`DesktopPlayerOverlay.kt`):
+
+- `key(controller) { SwingPanel(...) }` — descarta a subárvore e constrói uma
+  superfície nova para o player novo;
+- `remember(controller)` no `state`, que estava keyed só no `request`. Como a
+  troca de áudio não muda o `request`, o snapshot do motor morto sobrevivia à
+  substituição e continuava reportando `ready` e duração do player anterior — era
+  por isso que Espaço e o clique seguiam habilitados sobre uma imagem inexistente.
+
+**Correção secundária, no mesmo caminho.** A posição de retomada vinha de
+`lastCheckpointMillis`, que lê o checkpoint **persistido**. Só que o checkpoint é
+gravado no descarte do player — depois deste callback — e fora isso só a cada 12
+segundos. Trocar o áudio rebobinava o filme em até 12 segundos. Agora a posição
+viva do snapshot viaja junto com o modo, e o valor armazenado só entra como
+reserva quando o motor ainda não reportou posição alguma.
+
+**Falta:** trocar o áudio com um filme rodando e confirmar que a imagem volta na
+posição certa. O teste automatizado não alcança isto — o defeito está no ciclo de
+vida da interoperação Compose/Swing, não em lógica pura.
+
+---
+
+## BUG-020 — Não existe botão para enviar o filme à TV ou ao computador
+
+**Status:** confirmado — **não implementado na interface**
+**Reportado em:** 2026-08-13
+**Relato:** "tbm nao encontro botao de tela que envia para celular ou para tv nem
+na tela do filme nem na tela onde fica capa"
+
+**Não é problema de descoberta: o botão não existe.** `CastSheet` está definido em
+`ui/cast/CastSheet.kt` e **não é chamado em lugar nenhum** do aplicativo; o mesmo
+vale para `CastController` e `CastSender`.
+
+O que a TAREFA-015 entregou de fato foi a metade de baixo: o protocolo
+(`CastMessage`), o receptor no Windows (`CastReceiver`, com o interruptor em
+Opções → Receber do celular) e o remetente no Android, com testes dos dois lados.
+O que ficou faltando é o ponto de entrada no Android — nenhuma tela abre o
+`CastSheet`.
+
+Registrado como pendência real: a nota de versão do `alpha.4` descreve o recurso
+como utilizável, e no Android ele não é.
+
+**Próximo passo:** acrescentar a ação na tela de detalhes do título (junto de
+Favoritos/Compartilhar) e no player, ambas abrindo o `CastSheet` já existente,
+visível só quando houver receptor descoberto na rede.
+
+---
+
+## TAREFA-016 — Baixar a temporada inteira na tela da série
+
+**Status:** pedido registrado — **não implementado**
+**Pedido em:** 2026-08-13
+**Relato:** "tela de serie poderia tbm ter opcao de baixar temporada toda, botao
+do lado de compartilhar que baixa toda a serie que user selecionou, mas mantém
+baixar cada um individual ainda"
+
+Hoje a tela da série tem `▶ Assistir T1 E1`, `♡ Favoritos` e `↗ Compartilhar`, e
+cada episódio traz o seu próprio "Baixar" à direita. Falta a ação de temporada.
+
+**Escopo:** um botão ao lado de Compartilhar que enfileira todos os episódios da
+temporada **selecionada** (a aba T1…T8 ativa), preservando o "Baixar" individual
+de cada linha exatamente como está.
+
+**Pontos a resolver antes de implementar** — nenhum é decorativo:
+
+- **Volume.** As temporadas da captura têm de 14 a 40 episódios. Isso entra na
+  fila de downloads existente com limite de simultâneas, nunca como 40 conexões
+  de uma vez ao provedor.
+- **Já baixados e em andamento.** Reenfileirar o que já existe em disco
+  duplicaria arquivo e banda; o botão precisa pular esses e dizer quantos vai
+  buscar de fato.
+- **Confirmação.** Uma temporada pode ser dezenas de gigabytes. O botão deve
+  informar quantos episódios e pedir confirmação antes de começar.
+- **Estado do botão.** Enquanto a temporada estiver na fila, ele mostra o
+  progresso e permite cancelar o lote — sem isso, o único jeito de parar seria
+  cancelar 40 itens um a um.
+- **Credenciais.** As URLs autenticadas continuam sendo resolvidas o mais tarde
+  possível e só em memória, item a item, como no download individual. O lote não
+  pode materializar 40 URLs assinadas de antemão.
+
+---
+
+## BUG-021 — Assinaturas não carrega: a chave TMDb é recusada
+
+**Status:** mensagem corrigida — **a chave em si é do usuário**
+**Reportado em:** 2026-08-13
+**Relato:** "estalei verao do github lista funcionou porem tmdb nao carrega"
+
+Tela: "Não foi possível carregar os serviços. Confira a conexão e tente
+novamente." A lista Xtream funciona normalmente (41.924 itens), então rede não
+falta.
+
+**O log descarta a conexão.** Em `~/.iptvburo/logs/iptvburo.log`:
+
+```text
+02:35:00.516 [streaming] loading MOVIES shelves for region BR
+02:35:00.811 [streaming] shelf load unavailable
+```
+
+Entre 120 e 360 ms por tentativa, repetidamente. Um problema de rede não responde
+nesse tempo — isso é uma resposta HTTP de erro, quase certamente 401 (chave
+ausente, inválida ou não confirmada no TMDb).
+
+Duas situações aparecem no mesmo log, o que confirma a leitura:
+
+- `no catalogue: metadata key missing or blank` — quando não há chave nenhuma,
+  o app nem tenta, e este caminho está correto;
+- `shelf load unavailable` — há chave configurada, a requisição sai e volta
+  recusada.
+
+O pacote publicado traz `BUNDLED_TMDB_KEY` vazio de propósito (nenhuma chave de
+API vai no instalador), então a chave é sempre a que o usuário informa em Opções.
+
+**O defeito que resta é a mensagem.** Dizer "confira a conexão" quando a conexão
+está boa e o problema é a chave manda o usuário procurar no lugar errado — foi
+justamente o que aconteceu. A falha precisa distinguir *recusada* de
+*inalcançável*, como já se faz com os erros do Xtream em `FailureMessages`.
+
+**Cuidado obrigatório:** o TMDb recebe a chave como parâmetro de URL e o OkHttp
+põe a URL inteira na mensagem da exceção. A mensagem do erro não pode ser
+exibida nem registrada — só o tipo/código.
+
+### Correção aplicada
+
+A recusa da chave agora atravessa as camadas até a tela:
+
+- `TmdbClient` marca `keyRejected` quando a resposta é 401 (chave inválida ou
+  ainda não ativa) ou 403 (chave suspensa). **Só o código de status** é guardado;
+  nem URL nem corpo, justamente pelo motivo acima;
+- `TmdbShelfLoadResult.Unavailable` passou a carregar esse motivo. Virou `data
+  class` com valor padrão, então todo `is Unavailable` que não se importa com a
+  razão continua igual;
+- `DesktopAppState` expõe `streamingKeyRejected`. Limpar `streamingLoadFailed`
+  limpa o motivo junto, por um único setter — são sete lugares que zeram a falha,
+  e lembrar de zerar os dois em cada um era um bug esperando para acontecer;
+- a tela escolhe a frase: "O TMDb recusou a chave de API. Confira a chave em
+  Opções — uma chave nova pode levar alguns minutos para valer." Traduzida nos
+  cinco idiomas;
+- o log agora diz `shelf load unavailable (key rejected: true/false)`, porque
+  "unavailable" sozinho custou uma ida e volta de diagnóstico com o usuário.
+
+Três testes novos em `TmdbStreamingCatalogueTest`: 401 e 403 acusam a chave, 500
+**não** acusa — essa última é a que mantém a distinção honesta.
+
+**O que isto não faz:** não arruma a chave do usuário. O instalador não embute
+chave nenhuma de propósito, então a chave é sempre a que ele informa em Opções. A
+correção é o app dizer a verdade sobre o que está errado, em vez de mandar
+conferir uma conexão que está boa.
+
+---
+
 ## BUG-017 — "Não foi possível alcançar o servidor" ao conectar a lista
 
 **Status:** aguardando informação — **não reproduzido**

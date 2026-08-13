@@ -9,7 +9,18 @@ import com.lucasserafin94.iptvburo.domain.model.StreamingProvider
 /** Result of building the service shelves, preserving the difference between empty and failed. */
 sealed interface TmdbShelfLoadResult {
     data class Loaded(val shelves: List<TmdbServiceShelf>) : TmdbShelfLoadResult
-    data object Unavailable : TmdbShelfLoadResult
+
+    /**
+     * The request failed, so the empty result says nothing about the catalogue.
+     *
+     * [keyRejected] separates the two failures a user can be told apart: TMDb refusing the key
+     * (401/403) and everything else. They need opposite actions — fix the key in Options, or check
+     * the connection — and a single "unavailable" sent people to the wrong one.
+     *
+     * A data class with a default rather than two objects, so existing `is Unavailable` checks and
+     * every caller that does not care about the reason keep working unchanged.
+     */
+    data class Unavailable(val keyRejected: Boolean = false) : TmdbShelfLoadResult
 }
 
 /**
@@ -44,7 +55,7 @@ class TmdbStreamingCatalogue(
     fun shelves(kind: TmdbDiscoverKind = TmdbDiscoverKind.MOVIES): List<TmdbServiceShelf> =
         when (val result = loadShelves(kind)) {
             is TmdbShelfLoadResult.Loaded -> result.shelves
-            TmdbShelfLoadResult.Unavailable -> emptyList()
+            is TmdbShelfLoadResult.Unavailable -> emptyList()
         }
 
     /**
@@ -55,7 +66,7 @@ class TmdbStreamingCatalogue(
     fun loadShelves(kind: TmdbDiscoverKind = TmdbDiscoverKind.MOVIES): TmdbShelfLoadResult {
         val diagnosed = client.withRequestDiagnostics { buildShelves(kind) }
         return if (diagnosed.value.isEmpty() && diagnosed.failureCount > 0) {
-            TmdbShelfLoadResult.Unavailable
+            TmdbShelfLoadResult.Unavailable(keyRejected = diagnosed.keyRejected)
         } else {
             TmdbShelfLoadResult.Loaded(diagnosed.value)
         }

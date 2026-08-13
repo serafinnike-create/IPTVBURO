@@ -14,6 +14,17 @@ import okhttp3.Request
 internal data class TmdbRequestDiagnostics<T>(
     val value: T,
     val failureCount: Int,
+    /**
+     * Whether TMDb answered at least one of those calls by rejecting the key.
+     *
+     * Kept separate from the count because it is the one failure the user can actually act on, and
+     * telling them to check their connection when the connection is fine sends them looking in the
+     * wrong place — which is exactly what happened in BUG-021.
+     *
+     * A boolean rather than the status or the response body: TMDb takes the key as a query
+     * parameter, so anything richer risks carrying it out of this class.
+     */
+    val keyRejected: Boolean = false,
 )
 
 /**
@@ -47,19 +58,30 @@ class TmdbClient(
      */
     private val requestFailures = ThreadLocal.withInitial { 0 }
 
+    /** Set when TMDb rejected the key during the current diagnosed operation. See [keyRejected]. */
+    private val requestKeyRejected = ThreadLocal.withInitial { false }
+
     internal fun <T> withRequestDiagnostics(block: () -> T): TmdbRequestDiagnostics<T> {
-        val previous = requestFailures.get()
+        val previousFailures = requestFailures.get()
+        val previousRejected = requestKeyRejected.get()
         requestFailures.set(0)
+        requestKeyRejected.set(false)
         return try {
             val value = block()
-            TmdbRequestDiagnostics(value = value, failureCount = requestFailures.get())
+            TmdbRequestDiagnostics(
+                value = value,
+                failureCount = requestFailures.get(),
+                keyRejected = requestKeyRejected.get(),
+            )
         } finally {
-            requestFailures.set(previous)
+            requestFailures.set(previousFailures)
+            requestKeyRejected.set(previousRejected)
         }
     }
 
-    private fun recordRequestFailure() {
+    private fun recordRequestFailure(keyRejected: Boolean = false) {
         requestFailures.set(requestFailures.get() + 1)
+        if (keyRejected) requestKeyRejected.set(true)
     }
 
     /** Whether metadata lookups can run at all. */
@@ -637,7 +659,10 @@ class TmdbClient(
                     .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    recordRequestFailure()
+                    // 401 is TMDb's answer for an invalid or unconfirmed key, 403 for a suspended
+                    // one. Both mean "fix the key", which is worth telling the user apart from
+                    // every other failure — the status alone is recorded, never the URL or body.
+                    recordRequestFailure(keyRejected = response.code == 401 || response.code == 403)
                     return@use null
                 }
                 // Checked rather than cast. `asJsonObject` throws ClassCastException on a JSON

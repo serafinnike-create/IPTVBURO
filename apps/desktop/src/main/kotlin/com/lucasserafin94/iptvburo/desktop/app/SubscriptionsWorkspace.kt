@@ -98,6 +98,8 @@ fun SubscriptionsWorkspace(
     onSelectKind: (TmdbDiscoverKind) -> Unit = {},
     /** A failed TMDb request, distinct from a successful catalogue with no shelves. */
     loadFailed: Boolean = false,
+    /** Whether that failure was TMDb rejecting the key, which needs a different instruction. */
+    keyRejected: Boolean = false,
     onRetry: () -> Unit = {},
     modifier: Modifier = Modifier,
     /**
@@ -162,7 +164,8 @@ fun SubscriptionsWorkspace(
                     onSelectTitle = onSelectTitle,
                     emptyMessage = text.subscriptionsNoShelves,
                     loadFailed = loadFailed,
-                    failureMessage = text.subscriptionsLoadFailed,
+                    failureMessage =
+                        if (keyRejected) text.subscriptionsKeyRejected else text.subscriptionsLoadFailed,
                     retryLabel = text.tryAgain,
                     onRetry = onRetry,
                 )

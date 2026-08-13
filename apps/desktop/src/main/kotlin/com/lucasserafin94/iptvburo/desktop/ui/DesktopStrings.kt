@@ -512,6 +512,13 @@ data class DesktopStrings(
     val subscriptionsBrowseByService: String,
     val subscriptionsNoShelves: String,
     val subscriptionsLoadFailed: String,
+    /**
+     * Shown instead of [subscriptionsLoadFailed] when TMDb rejected the key.
+     *
+     * Names the real cause and where to fix it. The generic message told people to check a
+     * connection that was working, which is the whole reason this string exists.
+     */
+    val subscriptionsKeyRejected: String,
     val subscriptionsBackToServices: String,
     val subscriptionsSelectedTitle: String,
 ) {
@@ -931,6 +938,8 @@ data class DesktopStrings(
                 subscriptionsBrowseByService = "Por servicio",
                 subscriptionsNoShelves = "Todavía no hay servicios que mostrar.",
                 subscriptionsLoadFailed = "No pudimos cargar los servicios. Comprueba la conexión e inténtalo de nuevo.",
+                subscriptionsKeyRejected =
+                    "TMDb rechazó la clave de API. Revísala en Opciones — una clave nueva puede tardar unos minutos en activarse.",
                 subscriptionsBackToServices = "Volver a los servicios",
                 subscriptionsSelectedTitle = "Título seleccionado",
                 licenseText =
@@ -1396,6 +1405,8 @@ data class DesktopStrings(
                 subscriptionsBrowseByService = "Por serviço",
                 subscriptionsNoShelves = "Nenhum serviço para mostrar ainda.",
                 subscriptionsLoadFailed = "Não foi possível carregar os serviços. Confira a conexão e tente novamente.",
+                subscriptionsKeyRejected =
+                    "O TMDb recusou a chave de API. Confira a chave em Opções — uma chave nova pode levar alguns minutos para valer.",
                 subscriptionsBackToServices = "Voltar aos serviços",
                 subscriptionsSelectedTitle = "Título selecionado",
                 licenseText =
@@ -1860,6 +1871,8 @@ data class DesktopStrings(
                 subscriptionsBrowseByService = "By service",
                 subscriptionsNoShelves = "No services to show yet.",
                 subscriptionsLoadFailed = "We could not load the services. Check your connection and try again.",
+                subscriptionsKeyRejected =
+                    "TMDb refused the API key. Check it in Options — a new key can take a few minutes to become active.",
                 subscriptionsBackToServices = "Back to services",
                 subscriptionsSelectedTitle = "Selected title",
                 licenseText =
@@ -2327,6 +2340,9 @@ data class DesktopStrings(
                 subscriptionsBrowseByService = "Nach Dienst",
                 subscriptionsNoShelves = "Noch keine Dienste vorhanden.",
                 subscriptionsLoadFailed = "Die Dienste konnten nicht geladen werden. Verbindung prüfen und erneut versuchen.",
+                subscriptionsKeyRejected =
+                    "TMDb hat den API-Schlüssel abgelehnt. Prüfen Sie ihn in den Optionen — ein neuer Schlüssel " +
+                        "kann einige Minuten bis zur Aktivierung brauchen.",
                 subscriptionsBackToServices = "Zurück zu den Diensten",
                 subscriptionsSelectedTitle = "Ausgewählter Titel",
                 licenseText =
@@ -2792,6 +2808,8 @@ data class DesktopStrings(
                 subscriptionsBrowseByService = "Per servizio",
                 subscriptionsNoShelves = "Nessun servizio da mostrare per ora.",
                 subscriptionsLoadFailed = "Impossibile caricare i servizi. Controlla la connessione e riprova.",
+                subscriptionsKeyRejected =
+                    "TMDb ha rifiutato la chiave API. Controllala nelle Opzioni — una chiave nuova può richiedere qualche minuto.",
                 subscriptionsBackToServices = "Torna ai servizi",
                 subscriptionsSelectedTitle = "Titolo selezionato",
                 licenseText =

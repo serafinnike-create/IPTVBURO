@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -80,8 +81,13 @@ fun DesktopPlayerOverlay(
     subtitleStyle: SubtitleStyle = SubtitleStyle(),
     /** Speaker layout asked of the sound card. Applied when the engine starts, like the style. */
     audioOutput: AudioOutputMode = AudioOutputMode.SYSTEM,
-    /** Changes the layout. The engine restarts, so playback resumes from where it was. */
-    onSelectAudioOutput: (AudioOutputMode) -> Unit = {},
+    /**
+     * Changes the layout. The engine restarts, so playback resumes from where it was.
+     *
+     * Takes the position the engine has actually reached, because the caller has no way to read it
+     * once this returns — see the call site.
+     */
+    onSelectAudioOutput: (AudioOutputMode, Long) -> Unit = { _, _ -> },
     onClose: () -> Unit,
 ) {
     // Keyed on the style and the audio mode as well as the request: VLC builds its text renderer
@@ -89,7 +95,11 @@ fun DesktopPlayerOverlay(
     // through a fresh player.
     val controller =
         remember(request, subtitleStyle, audioOutput) { VlcDesktopPlayer(subtitleStyle, audioOutput) }
-    var state by remember(request) { mutableStateOf(DesktopPlaybackSnapshot()) }
+    // Keyed on the controller, not on the request. Changing the speaker layout builds a new player
+    // without changing the request, so a request-keyed snapshot survived the swap and reported the
+    // dead engine's `ready` and duration for the new one — which is what left Space and the click
+    // handler enabled over a picture that was not there.
+    var state by remember(controller) { mutableStateOf(DesktopPlaybackSnapshot()) }
 
     DisposableEffect(controller) {
         onDispose {
@@ -275,6 +285,17 @@ fun DesktopPlayerOverlay(
             }
         }
         Box(Modifier.fillMaxWidth().weight(1f)) {
+            // `key(controller)` is what makes changing the speaker layout work.
+            //
+            // SwingPanel calls `factory` once and then keeps that AWT component for the life of the
+            // composition — it is not keyed on anything the lambda captures. Selecting a new layout
+            // builds a fresh VlcDesktopPlayer (VLC fixes its audio chain at process start, so there
+            // is no other way to apply it) and disposes the old one, killing the process that owned
+            // the canvas on screen. Without this key, `factory` never ran again: the new player was
+            // never given a video surface, so the picture went black and the clock sat at 00:00.
+            //
+            // Keying the subtree discards the old panel and builds the new player its own.
+            key(controller) {
             SwingPanel(
                 // Movement over the video surface reaches Compose only through this callback: the
                 // AWT canvas consumes it, so without this the controls never knew the user was
@@ -325,6 +346,7 @@ fun DesktopPlayerOverlay(
                 },
                 modifier = Modifier.fillMaxSize(),
             )
+            }
             state.errorMessage?.let { message ->
                 Column(
                     Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).padding(32.dp),
@@ -556,7 +578,12 @@ fun DesktopPlayerOverlay(
                     // never one too few, and every option remains safe to pick.
                     val options = AudioOutputMode.optionsFor(channels = 2)
                     val next = options[(options.indexOf(audioOutput) + 1) % options.size]
-                    onSelectAudioOutput(next)
+                    // The live position goes with the mode, because the caller cannot get it any
+                    // other way in time: the disposal checkpoint is written when the old player is
+                    // torn down, which is *after* this returns, and the stored one is only updated
+                    // every twelve seconds. Reading it there rewound the film by up to twelve
+                    // seconds on every audio change.
+                    onSelectAudioOutput(next, state.positionMillis.toLong())
                 }
                 // Cycles rather than opening a menu: six values, and a viewer fixing a squashed
                 // picture wants to see the next one immediately, not pick from a list.

@@ -410,6 +410,7 @@ fun DesktopApp(
                                 kind = appState.streamingKind,
                                 onSelectKind = appState::selectStreamingKind,
                                 loadFailed = appState.streamingLoadFailed,
+                                keyRejected = appState.streamingKeyRejected,
                                 onRetry = { appState.loadStreamingShelves(force = true) },
                                 page = appState.streamingPage,
                                 onOpenTrailerExternally = { id -> appState.openPublicTrailer(id) },
@@ -604,13 +605,19 @@ fun DesktopApp(
                         onToggleFavorite = appState::togglePlayingFavorite,
                         subtitleStyle = appState.subtitleStyle,
                         audioOutput = appState.audioOutput,
-                        onSelectAudioOutput = { mode ->
+                        onSelectAudioOutput = { mode, positionMillis ->
                             // The engine has to be rebuilt, because VLC constructs its audio chain
                             // with the rest of the pipeline. Restarting it from zero would throw the
                             // viewer back to the opening titles, so the request is rebuilt carrying
-                            // the position playback had reached — the same value the checkpoint
-                            // already records, reused rather than invented.
-                            val resumeAt = appState.lastCheckpointMillis(request)
+                            // the position playback had reached.
+                            //
+                            // That position comes from the overlay's live snapshot rather than from
+                            // the stored checkpoint: the checkpoint is written on disposal, which
+                            // has not happened yet at this point, and is otherwise only refreshed
+                            // every twelve seconds. Falling back to the stored value when the engine
+                            // has not reported a position yet, which is the only case it is better.
+                            val resumeAt =
+                                positionMillis.takeIf { it > 0L } ?: appState.lastCheckpointMillis(request)
                             appState.selectAudioOutput(mode)
                             activePlayback = request.copy(startPositionMillis = resumeAt)
                         },

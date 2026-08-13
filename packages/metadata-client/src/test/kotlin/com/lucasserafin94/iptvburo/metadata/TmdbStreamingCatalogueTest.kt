@@ -140,6 +140,35 @@ class TmdbStreamingCatalogueTest {
     }
 
     @Test
+    fun `a rejected key is reported as such rather than as a network failure`() {
+        // 401 is what TMDb answers for an invalid or not-yet-active key. The user in BUG-021 was
+        // told to check a connection that was working perfectly, and went looking in the wrong
+        // place; the distinction exists so the screen can name the key instead.
+        server.enqueue(MockResponse().setResponseCode(401))
+
+        val result = assertIs<TmdbShelfLoadResult.Unavailable>(catalogue().loadShelves())
+        assertTrue(result.keyRejected)
+    }
+
+    @Test
+    fun `a suspended key is reported as a rejected key too`() {
+        server.enqueue(MockResponse().setResponseCode(403))
+
+        val result = assertIs<TmdbShelfLoadResult.Unavailable>(catalogue().loadShelves())
+        assertTrue(result.keyRejected)
+    }
+
+    @Test
+    fun `a server fault does not blame the key`() {
+        // The other half of the distinction, and the one that keeps it honest: a 500 must not send
+        // the user off to re-check a key that is fine.
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        val result = assertIs<TmdbShelfLoadResult.Unavailable>(catalogue().loadShelves())
+        assertFalse(result.keyRejected)
+    }
+
+    @Test
     fun `malformed catalogue data is reported as unavailable`() {
         server.enqueue(json("[]"))
 
