@@ -16,6 +16,18 @@
     -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!--
+        ACCESS_WIFI_STATE goes with the one above rather than being an extra.
+
+        CHANGE_WIFI_MULTICAST_STATE is what *allows* a multicast lock, but taking one starts with
+        `getSystemService(WIFI_SERVICE)` and `createMulticastLock`, and those need this. Without it
+        the lock is never acquired, Android goes on discarding the broadcast replies, and discovery
+        finds nothing at all — with no error to show for it, because the code treats an empty
+        result as the ordinary "no screens here" answer.
+
+        Install-time like the others, granting no access to content or location.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <uses-feature
         android:name="android.software.leanback"

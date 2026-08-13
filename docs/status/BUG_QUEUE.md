@@ -42,6 +42,145 @@ o servidor) continua aguardando o log do usuário.
 
 ---
 
+## BUG-025 — "Enviar à tela" não encontra o outro aparelho
+
+**Status:** uma causa encontrada e corrigida — **falta testar entre os aparelhos**
+**Reportado em:** 2026-08-13
+**Relato:** "estou com app no celular e no notebook, cliquei em enviar tela, não
+acha"
+
+### A causa encontrada: faltava uma permissão no Android
+
+O manifesto declarava `CHANGE_WIFI_MULTICAST_STATE`, que é a permissão que
+**autoriza** um multicast lock — mas **não** declarava `ACCESS_WIFI_STATE`, que é
+a que permite `getSystemService(WIFI_SERVICE)` e `createMulticastLock`
+funcionarem.
+
+Sem o lock, o Android continua **descartando** os pacotes de broadcast que não são
+endereçados ao aparelho, para poupar bateria. As respostas do notebook chegam à
+interface de rede e o sistema as joga fora antes do app ver qualquer coisa. O
+resultado é uma lista vazia.
+
+Pior: `discover` faz `runCatching { lock?.acquire() }` e **engole a falha em
+silêncio**, e uma lista vazia é tratada como a resposta normal "não há telas
+aqui". Ou seja, o defeito não tinha como aparecer — nem para o usuário, nem no
+log.
+
+`ACCESS_WIFI_STATE` foi adicionada. É install-time e não dá acesso a conteúdo nem
+a localização.
+
+### O que ainda precisa ser confirmado
+
+A permissão só entra em vigor **reinstalando o APK** — atualizar por cima não
+concede permissão nova em todos os casos. E há duas outras condições que nenhuma
+correção substitui:
+
+1. **O receptor precisa estar ligado no notebook**: Opções → Receber do celular.
+   Ele não fica ligado sozinho, de propósito — é a única parte do app que fica
+   escutando na rede.
+2. **Os dois aparelhos na mesma rede, e o roteador precisa deixar o broadcast
+   passar.** Muitos roteadores domésticos separam wifi de cabo, e vários têm
+   "isolamento de clientes" ligado, que impede aparelhos de se enxergarem. Isso
+   é configuração do roteador e nenhum app contorna.
+
+**Próximo passo:** um endereço manual como alternativa. Quando a descoberta não
+acha nada, digitar o IP do notebook resolve o caso do roteador que bloqueia
+broadcast — e hoje não existe essa saída.
+
+---
+
+## TAREFA-026 — Fonte P2P no perfil, para quem não tem lista nem Xtream
+
+**Status:** pedido registrado — **não implementado, e precisa de pesquisa antes**
+**Pedido em:** 2026-08-13
+**Relato:** "meu amigo usa IPTV porém o IPTV dele é P2P, pesquise sobre isso e
+adicione essa função no perfil, caso o user não tenha lista, usuário e senha, só
+tenha P2P usuário e senha"
+
+Hoje o app aceita três formas de fonte: arquivo M3U/M3U8, Xtream (host, usuário,
+senha) e portal Stalker/Ministra (MAC). O pedido é uma quarta, para quem recebe
+do provedor apenas um usuário e uma senha de um serviço P2P.
+
+### O que precisa ser esclarecido antes de escrever qualquer código
+
+"P2P" no mundo IPTV não é **um** protocolo, e é isso que impede começar já:
+
+- **Ace Stream / Acestream** — o mais comum. O conteúdo é identificado por um
+  *content id* e servido por um motor local (`acestreamengine`) que expõe HTTP em
+  `127.0.0.1:6878`. Normalmente **não usa usuário e senha**;
+- **Soda / P2P proxies de operadora** — o provedor entrega usuário e senha, e um
+  gateway converte para HLS comum. Nesse caso, do ponto de vista do app, é quase
+  um Xtream com outro endereço;
+- **Painéis com "modo P2P"** — muitos painéis Xtream chamam de P2P uma opção que
+  continua sendo Xtream por baixo.
+
+**A pergunta que decide tudo:** o amigo recebeu **só** usuário e senha, ou também
+um endereço/aplicativo? O nome do serviço, ou uma captura da tela de configuração
+dele, resolve em minutos qual dos três é.
+
+### Restrições que valem em qualquer um dos casos
+
+- O IPTV BURO **não distribui conteúdo** e não vai embutir motor de terceiro nem
+  agir como par de uma rede de compartilhamento. Se o caminho for Ace Stream, o
+  máximo aceitável é **falar com um motor que o próprio usuário instalou**,
+  exatamente como hoje se fala com um servidor Xtream que o usuário contratou;
+- credenciais de P2P entram no mesmo cofre das demais (DPAPI no Windows,
+  Keystore no Android), com a mesma redação em log e `toString()`;
+- a fonte só aparece no perfil se a plataforma realmente suportar — capability
+  real, não caixa que não faz nada.
+
+**Próximo passo:** descobrir qual dos três é o caso do amigo. Sem isso, qualquer
+implementação teria boa chance de ser a errada.
+
+---
+
+## BUG-024 — O botão de trailer sumiu da tela do filme
+
+**Status:** botão movido para a linha de ações — **falta confirmar**
+**Reportado em:** 2026-08-13, na `2.0.8`
+**Relato:** "botao trailer sumiu"
+
+### O que o código diz
+
+Existem **dois** pontos de trailer no Windows, e eles se comportam de forma
+diferente:
+
+| Onde | Como aparece |
+|---|---|
+| Tela da **série** | Botão `Trailer` na linha de ações, ao lado de Compartilhar |
+| Tela do **filme** | Botão `Assistir ao trailer`, largura total, **dentro da ficha completa** — depois de sinopse, direção e elenco |
+
+Nos dois casos ele só é desenhado quando `details.youtubeTrailerId` **não é nulo**,
+e esse id vem do **TMDb**, não do provedor da lista.
+
+### Duas hipóteses, e como separar
+
+1. **O filme não tem trailer no TMDb.** Nesse caso o botão nunca deveria aparecer
+   para aquele título, e o comportamento está correto — mas é indistinguível de
+   um defeito para quem está olhando.
+2. **A ficha do TMDb não carregou.** Aí não é só o trailer que some: a sinopse,
+   a direção e as fotos do elenco somem junto. Foi exatamente o sintoma do
+   [BUG-021](#bug-021--assinaturas-não-carrega-a-chave-tmdb-é-recusada), e a
+   correção do token v4 entrou na `2.0.8`.
+
+**A pergunta que decide:** na mesma tela onde o trailer sumiu, **as fotos do
+elenco aparecem?** Se sim, é o caso 1 (aquele título não tem trailer). Se não, a
+ficha inteira não veio, e o trailer é só o sintoma mais visível.
+
+### O que já foi descartado
+
+Não foi regressão do trabalho recente: `git log -S` sobre o texto do botão mostra
+que nenhuma linha de trailer foi removida pelas mudanças da `alpha.5` à `alpha.8`
+— o botão do filme **nunca** esteve na linha de ações, sempre dentro da ficha.
+
+### Possível melhoria, independente da causa
+
+O botão do filme fica no fim de uma página longa, enquanto o da série fica na
+linha de ações. Essa diferença por si só faz parecer que sumiu. Vale colocar os
+dois no mesmo lugar.
+
+---
+
 ## AUDITORIA-023 — Nova varredura: estabilidade, otimização, bugs e segurança
 
 **Status:** ✅ CONCLUÍDA em 2026-08-13 — **2 correções aplicadas**

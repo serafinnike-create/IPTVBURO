@@ -1711,6 +1711,27 @@ internal fun XtreamItemDetail(
                                 Text("⇥  ${text.shareStrings.cast.castAction}", fontWeight = FontWeight.SemiBold)
                             }
                         }
+                        // Beside the other actions, where the series page has always had it.
+                        //
+                        // This used to sit at the very bottom of the full record, after the plot,
+                        // the director and the cast strip, so on a long page it was below the fold
+                        // and read as missing. Same button, somewhere it can be found.
+                        //
+                        // Still only drawn when TMDb actually gave a trailer id for this title:
+                        // a button that opens nothing would be worse than its absence.
+                        (movieStatus as? MovieDetailsStatus.Loaded)?.details?.youtubeTrailerId?.let { trailerId ->
+                            OutlinedButton(
+                                onClick = { onOpenTrailer(trailerId) },
+                                modifier = Modifier.height(48.dp),
+                                shape = BuroRadius.Small,
+                                colors =
+                                    ButtonDefaults.outlinedButtonColors(
+                                        contentColor = BuroColors.Text,
+                                    ),
+                            ) {
+                                Text("▶  Trailer", fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                     }
                     if (downloadState != null && onDownload != null) {
                         DownloadButton(
@@ -1934,15 +1955,6 @@ private fun MovieDetailContent(
                     photoFor = castPhotoFor,
                     onRequestPhoto = onRequestCastPhoto,
                 )
-            }
-            details.youtubeTrailerId?.let { trailerId ->
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = { onOpenTrailer(trailerId) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Assistir ao trailer")
-                }
             }
         }
     }
@@ -2453,10 +2465,15 @@ private fun SeriesDetailContent(
                 // on a build or platform without them, and a button that queues nothing is worse
                 // than no button. Hidden too once every episode is already stored, for the same
                 // reason: there would be nothing left to fetch.
+                // Disabled rather than hidden once every episode is stored, so the row keeps its
+                // shape. Still absent entirely where the platform offers no downloads at all —
+                // that is a property of the build, not of the title, so it cannot move the row
+                // between one series and the next.
                 val pendingSeries = pendingEpisodes
-                if (downloadsOffered && pendingSeries.isNotEmpty()) {
+                if (downloadsOffered) {
                     OutlinedButton(
                         onClick = { pendingBulkDownload = BulkDownload.WholeSeries(pendingSeries) },
+                        enabled = pendingSeries.isNotEmpty(),
                         modifier = Modifier.height(48.dp),
                         shape = BuroRadius.Small,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
@@ -2464,15 +2481,22 @@ private fun SeriesDetailContent(
                         Text("⭳  ${text.downloadStrings.downloadSeries}", fontWeight = FontWeight.SemiBold)
                     }
                 }
-                details.youtubeTrailerId?.let { trailerId ->
-                    OutlinedButton(
-                        onClick = { onOpenTrailer(trailerId) },
-                        modifier = Modifier.height(48.dp),
-                        shape = BuroRadius.Small,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
-                    ) {
-                        Text("Trailer", fontWeight = FontWeight.SemiBold)
-                    }
+                // Always drawn, disabled when the provider gave no trailer id.
+                //
+                // Reported as "the trailer button disappeared": it had not been removed, it is
+                // simply absent on any title without a trailer id, which moves every button after
+                // it and makes each title lay out differently. The Android screens were fixed the
+                // same way. A greyed button also says something true that a missing one does not —
+                // this title has no trailer.
+                val trailerId = details.youtubeTrailerId
+                OutlinedButton(
+                    onClick = { trailerId?.let(onOpenTrailer) },
+                    enabled = trailerId != null,
+                    modifier = Modifier.height(48.dp),
+                    shape = BuroRadius.Small,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+                ) {
+                    Text("Trailer", fontWeight = FontWeight.SemiBold)
                 }
             }
             Spacer(Modifier.height(BuroSpacing.Lg))
@@ -2548,7 +2572,13 @@ private fun SeriesDetailContent(
                     val visibleIds = visible.mapTo(HashSet<String>()) { episode -> episode.providerId }
                     val pendingSeason =
                         pendingEpisodes.filter { episode -> episode.providerId in visibleIds }
-                    if (downloadsOffered && pendingSeason.isNotEmpty()) {
+                    // Per-season, and only where there is more than one season.
+                    //
+                    // With a single season this button covered exactly what "Baixar série" above
+                    // already covers, and it relabelled itself to say so — leaving two buttons
+                    // reading "Baixar série" on the same screen, which is what a user reported.
+                    // One season means one choice, and the action row already offers it.
+                    if (downloadsOffered && pendingSeason.isNotEmpty() && seasons.size > 1) {
                         OutlinedButton(
                             onClick = {
                                 pendingBulkDownload = BulkDownload.Season(openSeason, pendingSeason)
@@ -2557,12 +2587,7 @@ private fun SeriesDetailContent(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
                         ) {
                             Text(
-                                text =
-                                    if (seasons.size > 1) {
-                                        "⭳  ${text.downloadStrings.downloadSeason.format(openSeason)}"
-                                    } else {
-                                        "⭳  ${text.downloadStrings.downloadSeries}"
-                                    },
+                                text = "⭳  ${text.downloadStrings.downloadSeason.format(openSeason)}",
                                 fontWeight = FontWeight.SemiBold,
                             )
                         }
