@@ -645,13 +645,28 @@ private fun BulkDownloadDialog(
                 fontSize = 14.sp,
             )
             Spacer(Modifier.height(18.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                BuroButton(onClick = onDismiss, style = BuroButtonStyle.Secondary) {
+            // A Row with equal weights, not a FlowRow.
+            //
+            // The two buttons do not fit the card's width side by side, so a FlowRow wrapped them
+            // and Cancelar ended up alone on a line above Baixar, reading as a link rather than a
+            // choice. Sharing the width keeps them side by side at any size, and keeps the safe
+            // option as visibly a button as the expensive one.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                BuroButton(
+                    onClick = onDismiss,
+                    style = BuroButtonStyle.Secondary,
+                    modifier = Modifier.weight(1f),
+                ) {
                     Text(stringResource(R.string.common_cancel))
                 }
-                BuroButton(onClick = onConfirm) {
+                BuroButton(onClick = onConfirm, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.Download, contentDescription = null)
-                    Text(stringResource(R.string.download_action))
+                    // One line, always. Equal weights leave each button about half the card, and
+                    // the icon eats into that, so "Baixar" was wrapping into "Baix / ar".
+                    Text(stringResource(R.string.download_action), maxLines = 1)
                 }
             }
         }
