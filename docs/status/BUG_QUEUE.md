@@ -139,7 +139,7 @@ justamente o que teste nenhum reproduz.
 
 ## TAREFA-016 — Baixar a temporada inteira na tela da série
 
-**Status:** pedido registrado — **não implementado**
+**Status:** ✅ IMPLEMENTADO em 2026-08-13 — **falta testar com uma série real**
 **Pedido em:** 2026-08-13
 **Relato:** "tela de serie poderia tbm ter opcao de baixar temporada toda, botao
 do lado de compartilhar que baixa toda a serie que user selecionou, mas mantém
@@ -168,6 +168,47 @@ de cada linha exatamente como está.
 - **Credenciais.** As URLs autenticadas continuam sendo resolvidas o mais tarde
   possível e só em memória, item a item, como no download individual. O lote não
   pode materializar 40 URLs assinadas de antemão.
+
+### O que foi implementado
+
+Botão **"Baixar série"** ao lado de Compartilhar e **"Baixar temporada N"** no
+cabeçalho de cada temporada. O "Baixar" de cada episódio continua exatamente como
+estava.
+
+Cada preocupação acima, e como ficou resolvida:
+
+- **Volume** — os downloads passam pelo mesmo semáforo de sempre
+  (`DOWNLOAD_SLOTS`), então 40 episódios entram na fila e poucos correm por vez.
+  Sem isso, cada um abriria a própria conexão ao mesmo tempo: satura a linha do
+  usuário, deixa cada arquivo mais lento do que se fossem em ordem, e parece
+  abuso para o provedor;
+- **Já baixados** — episódios que já estão em disco ficam **de fora**. O
+  `startDownload` recusa um download *em andamento*, mas não diz nada sobre um já
+  guardado: sem essa regra, apertar "Baixar temporada" numa temporada que a
+  pessoa já tem baixaria tudo de novo, gastando os dados dela e a banda do
+  provedor para produzir bytes que já existiam;
+- **Botão sem nada a fazer** — os dois botões de lote **somem** quando não resta
+  episódio a buscar, em vez de abrir um diálogo prometendo zero transferências;
+- **Confirmação** — o diálogo conta o que **realmente** vai entrar na fila, pela
+  mesma regra, então o número prometido é o número de transferências que começam;
+- **Credenciais** — inalterado: cada episódio resolve a própria URL dentro do
+  `startDownload`, tarde e só em memória. O lote não materializa URL assinada
+  nenhuma de antemão.
+
+**De propósito, a regra não vale para o "Baixar" individual.** Apertar o botão de
+um episódio já guardado é alguém pedindo de novo, quase sempre porque a cópia
+está quebrada. Ninguém aperta "baixar a temporada inteira" querendo dizer "busque
+os 40 que eu já tenho".
+
+A regra virou função de `AppUiState`, não método — assim dá para testá-la pelo que
+ela é (uma decisão sobre uma lista), sem ViewModel, sem gerenciador de download e
+sem sistema de arquivos atrás. **Sete testes**, incluindo o de que um download
+*em andamento* continua na fila em vez de ser confundido com um já guardado:
+tratá-lo como guardado faria um download cancelado sumir do botão sem arquivo
+nenhum para mostrar.
+
+**Falta:** baixar uma temporada de verdade e conferir o comportamento com o disco
+cheio e com a rede caindo no meio.
 
 ---
 
