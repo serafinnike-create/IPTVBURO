@@ -152,13 +152,22 @@ class AndroidLicenseClient @Inject constructor(
         val identity = runCatching { AndroidDeviceIdentityProvider.getOrCreate(context) }.getOrNull()
             ?: return null
         val nonce = freshNonce()
+        // Signing is inside the guard, not outside it.
+        //
+        // `proof` reaches Android Keystore and parses the DER signature that comes back, and both
+        // can throw — a key invalidated by a biometric change is the ordinary way that happens.
+        // Building the body outside the runCatching below meant that threw straight out of a
+        // function whose whole contract is "returns null when it cannot answer", crashing the app
+        // while someone was typing a key.
         val body =
-            JsonObject().apply {
-                addProperty("deviceId", identity.deviceId)
-                addProperty("nonce", nonce)
-                addProperty("proof", identity.proof(AndroidDeviceProofAction.VALIDATE, nonce))
-                addProperty("key", clean)
-            }
+            runCatching {
+                JsonObject().apply {
+                    addProperty("deviceId", identity.deviceId)
+                    addProperty("nonce", nonce)
+                    addProperty("proof", identity.proof(AndroidDeviceProofAction.VALIDATE, nonce))
+                    addProperty("key", clean)
+                }
+            }.getOrNull() ?: return null
 
         return runCatching {
             http.newCall(
@@ -196,21 +205,29 @@ class AndroidLicenseClient @Inject constructor(
             ?: return GooglePlayPurchaseSubmission.Unreachable
         val nonce = freshNonce()
         val tokenHash = sha256Base64Url(token)
+        // Signed inside the guard, because signing can throw.
+        //
+        // This is the worst place in the app for an uncaught exception: it runs immediately after
+        // the user has paid, so a Keystore key invalidated by a biometric change would crash the
+        // app with the purchase already made at Google and not yet reported here. Unreachable is
+        // the honest answer — the purchase is intact and the next attempt submits it.
         val body =
-            JsonObject().apply {
-                addProperty("deviceId", identity.deviceId)
-                addProperty("nonce", nonce)
-                addProperty("purchaseToken", token)
-                addProperty("accountId", account)
-                addProperty(
-                    "proof",
-                    identity.googlePlayPurchaseProof(
-                        nonce = nonce,
-                        purchaseTokenHash = tokenHash,
-                        accountId = account,
-                    ),
-                )
-            }
+            runCatching {
+                JsonObject().apply {
+                    addProperty("deviceId", identity.deviceId)
+                    addProperty("nonce", nonce)
+                    addProperty("purchaseToken", token)
+                    addProperty("accountId", account)
+                    addProperty(
+                        "proof",
+                        identity.googlePlayPurchaseProof(
+                            nonce = nonce,
+                            purchaseTokenHash = tokenHash,
+                            accountId = account,
+                        ),
+                    )
+                }
+            }.getOrNull() ?: return GooglePlayPurchaseSubmission.Unreachable
         val request =
             Request.Builder()
                 .url(AndroidLicenseEndpoints.GOOGLE_PLAY_PURCHASE)
