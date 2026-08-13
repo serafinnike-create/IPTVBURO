@@ -8,8 +8,8 @@ Transforma fontes de mídia autorizadas pelo usuário em uma biblioteca organiza
 
 ![Status](https://img.shields.io/badge/status-em%20desenvolvimento-7c3aed)
 ![GDD](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%209.0-2563eb)
-![Android TV](https://img.shields.io/badge/Android%20TV-v0.2.0--alpha.5-3ddc84)
-![Windows](https://img.shields.io/badge/Windows-v2.0.0--alpha.1%20candidate-e2b458)
+![Android TV](https://img.shields.io/badge/Android%20TV-v2.0.0--alpha.7-3ddc84)
+![Windows](https://img.shields.io/badge/Windows-v2.0.0--alpha.7-e2b458)
 ![Multiplataforma](https://img.shields.io/badge/escopo-universal-0f766e)
 ![Offline Mobile](https://img.shields.io/badge/Offline%20Vault-planejado-f59e0b)
 
@@ -42,8 +42,8 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 | Entrega | Estado |
 |---|---|
 | GDDs 1.0 a 9.0 | ✅ Documentados na `main` |
-| Aplicação Android/Android TV | 🧪 Prévia `v0.2.0-alpha.5` |
-| Aplicação Windows | 🧪 Candidato `v2.0.0-alpha.1`; publicação aguarda assinatura Authenticode |
+| Aplicação Android/Android TV | 🧪 Prévia `v2.0.0-alpha.7` |
+| Aplicação Windows | 🧪 Prévia `v2.0.0-alpha.7`; MSI ainda sem assinatura Authenticode |
 | **Onde assistir** (GDD 9) — prateleira por serviço, com capas | 🧪 Windows, dados reais do TMDb |
 | **Já está na sua lista** — o título encontrado no catálogo do usuário | 🧪 Só um casamento confiante produz a linha |
 | Redirecionamento ao serviço oficial | ✅ Nunca reproduz stream protegido; recusa endereço com token ou mídia |
@@ -66,7 +66,8 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 | Windows | 🧪 Compose Desktop, player compatível e MSI local aprovados |
 | Continuidade de reprodução por perfil | 🧪 Android e Windows implementados; migração Android validada em aparelho físico |
 | XMLTV/EPG e Offline Vault autorizado | 🧭 Pendentes |
-| Samsung, LG, Titan OS e plataformas Apple | 🧭 Planejados |
+| Samsung Tizen | 🧪 Preview própria compilada e assinada; a imagem Tizen 10 atual recusa até pacote mínimo, e validação em TV física permanece pendente |
+| LG, Titan OS e plataformas Apple | 🧭 Planejados |
 | Publicação em lojas | 🧭 Não iniciada |
 
 > [!NOTE]
@@ -101,47 +102,53 @@ A primeira vertical slice está na `main` e possui:
 
 O fluxo importação → categoria → canal → primeiro frame foi validado em aparelho Android físico usando uma playlist HLS pública de teste.
 
-### Prévia para download
+### Baixar
 
-- [GitHub Pre-release v0.1.0-alpha.1](https://github.com/lucasserafin94/IPTVBURO/releases/tag/v0.1.0-alpha.1)
-- [APK Android/Android TV](https://github.com/lucasserafin94/IPTVBURO/releases/download/v0.1.0-alpha.1/IPTV-BURO-v0.1.0-alpha.1-android-debug.apk)
-- arquivo: `IPTV-BURO-v0.1.0-alpha.1-android-debug.apk`
-- tamanho: 24.864.542 bytes
-- SHA-256: `179537447d53ef062daf9cd100b5ed52416be796ceedb61cb64601a930965dc6`
+Prévia do Windows e do Android. **Os dois instaladores estão na mesma página:**
 
-A prévia usa assinatura de desenvolvimento e não é uma versão de loja.
+**➜ [Baixar a versão mais recente](https://github.com/serafinnike-create/IPTVBURO/releases/latest)**
 
-### Candidato Windows v2.0.0-alpha.1
+| Plataforma | Arquivo |
+|---|---|
+| Windows 10/11 (64 bits) | `IPTV-BURO-v2.0.0-alpha.7-windows-x64-unsigned.msi` |
+| Android / Android TV | `IPTV-BURO-v2.0.0-alpha.7-android-debug.apk` |
 
-O Windows restaura a fonte via DPAPI e oferece perfis, idiomas, favoritos,
-catálogo paginado, detalhes e filmografia na mesma janela, continuidade por
-perfil e Home editorial diária. O instalador inclui o VLC oficial para reprodução
-H.264/H.265/HEVC, AAC, MP4, MKV e HLS, com play/pause, seek, volume, velocidade e
-tela cheia. A cada clique, o botão `Verificar atualização` força uma consulta
-nova ao GitHub Releases de `serafinnike-create/IPTVBURO`, baixa somente um MSI
-semanticamente mais novo e valida o digest SHA-256 antes de executá-lo.
+O `SHA256SUMS.txt` da mesma página permite conferir os dois arquivos.
 
-Nesta revisão, o Android usa apenas um painel de controles, altera o volume real
-de mídia do aparelho e oferece rotação/tela cheia. A Home separa o ano real de
-lançamento da data de entrada na fonte, restaura o hero corretamente com uma
-fonte real e mantém os cinco destinos visíveis no celular. No Windows, a versão
-fica visível no topo e o player aceita F11, Escape e Espaço além dos controles.
+> [!NOTE]
+> O MSI **não é assinado**, então o Windows pode mostrar um aviso de "Editor
+> desconhecido" ou do SmartScreen. O APK usa assinatura de desenvolvimento e não
+> é uma versão de loja.
 
-O candidato `2.0.0-alpha.1` é gerado sem playlists, fontes, credenciais, perfis,
-histórico, downloads, registos de utilizador ou chave TMDb da máquina de build.
-O cofre DPAPI e todos os demais dados do utilizador vivem fora do instalador. A
-chave TMDb passa a ser configurada pelo próprio utilizador, por perfil.
+**Atualizar pelo app funciona.** Em **Opções → Buscar atualização** o aplicativo
+consulta esta página, baixa somente um MSI semanticamente mais novo e confere o
+digest SHA-256 antes de executá-lo. Perfis, lista, favoritos e licença são
+preservados.
 
-Esta continua sendo uma prévia. A publicação do instalador está bloqueada até o
-launcher e o MSI possuírem assinatura Authenticode válida e com timestamp. O
-workflow recusa publicar quando os segredos de assinatura não estão configurados.
+Nenhuma chave de API viaja dentro dos pacotes: a chave do TMDb é configurada pelo
+próprio usuário, por perfil, e as credenciais da lista ficam no cofre DPAPI do
+Windows, fora do instalador.
 
-- [Releases do repositório atual](https://github.com/serafinnike-create/IPTVBURO/releases)
-- versão preparada: `v2.0.0-alpha.1`;
-- artefato esperado: `IPTV-BURO-v2.0.0-alpha.1-windows-x64.msi`;
-- validação local: 597 testes, 0 falhas; imagem limpa com 875 arquivos e
-  auditoria de privacidade aprovada;
-- estado: candidato local; ainda não publicado por falta do certificado de assinatura.
+### Novidades desta prévia
+
+- **A chave v4 do TMDb funciona.** O TMDb entrega duas credenciais na mesma
+  página: a v3, que vai na URL, e o *Read Access Token* v4, que é um JWT e tem de
+  ir no cabeçalho. O app só sabia a primeira forma, então um token perfeitamente
+  válido era recusado e a tela mandava conferir uma chave que estava certa. Isso
+  resolve **Assinaturas** e as **fotos do elenco** de uma vez.
+- **Baixar temporada inteira**, no Windows e no Android, mantendo o download de
+  cada episódio. Episódios já em disco são pulados, e a confirmação conta o que
+  realmente vai ser baixado.
+- **Enviar para outra tela** — do celular para o computador **e** do computador
+  para outra tela. O que trafega é *qual* título, nunca o vídeo nem as
+  credenciais: a outra tela procura na lista dela e reproduz direto da fonte.
+- **Trocar o áudio não deixa mais a tela preta.** Mudar o layout de caixas exige
+  um motor novo, e a superfície de vídeo não estava sendo recriada junto.
+- **Áudio 2.0 / 5.1 / 7.1** e modo binaural para fone.
+- **Imagem mais nítida em 4K** — as capas passam a ser pedidas no tamanho do seu
+  monitor, em vez de esticadas a partir de 1080p.
+- **Reinstalar não perde mais a licença**, e a atualização pelo app deixou de
+  apagar o aplicativo.
 
 ### Build
 
@@ -248,7 +255,7 @@ A função não será exibida nas aplicações de TV durante o P0.
 | Apple TV | SwiftUI e AVPlayer | 🧭 Planejado |
 | iPhone/iPad | SwiftUI, AVFoundation e Offline Vault | 🧭 Planejado |
 | macOS | SwiftUI/AppKit e AVPlayer | 🧭 Planejado |
-| Samsung Tizen | aplicação própria com AVPlay | 🧭 Planejado |
+| Samsung Tizen | aplicação própria com AVPlay | 🧪 Preview compilada/assinada; instalação bloqueada pela imagem de emulador atual |
 | LG webOS | aplicação própria | 🧭 Planejado |
 | Philips Titan OS | aplicação compatível com SDK oficial | 🧭 Planejado |
 | Windows | Compose Desktop; adapter nativo futuro | 🧪 Preview MSI |
@@ -303,7 +310,7 @@ Princípios:
 ### Agora — fechar a prévia Windows 2.0
 
 - configurar certificado Authenticode e timestamp no GitHub Secrets;
-- publicar `v2.0.0-alpha.1` com MSI assinado e `SHA256SUMS.txt`;
+- publicar uma versão com MSI assinado (Authenticode) e `SHA256SUMS.txt`;
 - validar instalação e atualização numa conta Windows limpa;
 - manter dados pessoais e chaves fora de todos os artefatos.
 
