@@ -44,6 +44,18 @@ class CastReceiver(
     var pairingCode: String? = null
         private set
 
+    /**
+     * The TCP port senders connect to, or null when stopped.
+     *
+     * Published because the port is ephemeral and otherwise only discoverable over multicast. A
+     * sender on the network should still find it that way; a *test* should not have to, since a CI
+     * runner has no dependable multicast loopback and the check would then be measuring the
+     * runner's network rather than this class.
+     */
+    @Volatile
+    var listeningPort: Int? = null
+        private set
+
     @Volatile
     private var onMessage: ((CastMessage) -> Unit)? = null
 
@@ -67,6 +79,7 @@ class CastReceiver(
 
             this.onMessage = onMessage
             pairingCode = code
+            listeningPort = tcp.localPort
             tcpSocket.set(tcp)
             udpSocket.set(udp)
 
@@ -81,6 +94,7 @@ class CastReceiver(
 
     fun stop() {
         pairingCode = null
+        listeningPort = null
         onMessage = null
         runCatching { tcpSocket.getAndSet(null)?.close() }
         runCatching { udpSocket.getAndSet(null)?.close() }
