@@ -125,6 +125,7 @@ class MainViewModel @Inject constructor(
     private var subscriptionSelectionJob: Job? = null
     private var sharedLinkJob: Job? = null
     private var keyInspectionJob: Job? = null
+    private var searchJob: Job? = null
 
     /**
      * How many downloads may be transferring at once.
@@ -453,6 +454,48 @@ class MainViewModel @Inject constructor(
         if (mutableState.value.redemption != RedemptionUi.Idle) {
             mutableState.update { it.copy(redemption = RedemptionUi.Idle) }
         }
+    }
+
+    /**
+     * Searches the local catalogue for [query].
+     *
+     * Debounced by the screen rather than here: this runs whenever it is called, and the caller
+     * decides how often that is. Cancelling the previous job means a fast typist produces one
+     * query against the database rather than one per keystroke left running.
+     *
+     * Searches only what is already imported. Nothing is asked of the provider, so this works
+     * offline and cannot leak the query to anyone.
+     */
+    fun search(query: String) {
+        val clean = query.trim()
+        searchJob?.cancel()
+        if (clean.isEmpty()) {
+            mutableState.update {
+                it.copy(searchQuery = query, searchResults = emptyList(), isSearching = false)
+            }
+            return
+        }
+
+        mutableState.update { it.copy(searchQuery = query, isSearching = true) }
+        searchJob =
+            viewModelScope.launch {
+                val found =
+                    withContext(ioDispatcher) {
+                        runCatching { catalogRepository.search(clean) }.getOrDefault(emptyList())
+                    }
+                val visible =
+                    found
+                        .map { channel -> channel.toCatalogUi(channel.categoryId.orEmpty()) }
+                        .filterKidsContentIfNeeded(mutableState.value.activeProfile)
+                mutableState.update { state ->
+                    // Ignore an answer for a query the user has already moved on from.
+                    if (state.searchQuery.trim() != clean) {
+                        state
+                    } else {
+                        state.copy(searchResults = visible, isSearching = false)
+                    }
+                }
+            }
     }
 
     fun selectSection(section: AppSection) {
@@ -1628,12 +1671,8 @@ class MainViewModel @Inject constructor(
      * time this is called the user has said yes.
      */
     fun downloadSeason(seasonNumber: Int) {
-        val episodes =
-            mutableState.value.seriesDetails
-                ?.episodes
-                ?.filter { episode -> episode.seasonNumber == seasonNumber }
-                .orEmpty()
-        episodes.forEach(::downloadEpisode)
+        episodesWorthDownloading { episode -> episode.seasonNumber == seasonNumber }
+            .forEach(::downloadEpisode)
     }
 
     /**
@@ -1644,11 +1683,27 @@ class MainViewModel @Inject constructor(
      * order, because [DOWNLOAD_SLOTS] means most of these are waiting rather than running.
      */
     fun downloadWholeSeries() {
-        mutableState.value.seriesDetails
-            ?.episodes
-            ?.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber ?: Int.MAX_VALUE }))
-            ?.forEach(::downloadEpisode)
+        episodesWorthDownloading().forEach(::downloadEpisode)
     }
+
+    /**
+     * The episodes a bulk download would actually fetch, in playing order.
+     *
+     * Episodes already on disk are left out. [startDownload] refuses one that is *running*, but
+     * says nothing about one already stored — so without this, "Baixar temporada" on a season the
+     * user already has would re-fetch every file, spending their data and the provider's bandwidth
+     * to produce bytes that are already there.
+     *
+     * Deliberately not applied to a single "Baixar": tapping one episode's own button on a stored
+     * file is a person asking for it again, most often because the copy is broken. A bulk button is
+     * not that — nobody taps "download the whole season" meaning "fetch the forty I already have".
+     *
+     * Used for the count in the confirmation too, so the number the dialog promises is the number
+     * of transfers that start.
+     */
+    private fun episodesWorthDownloading(
+        where: (EpisodeUi) -> Boolean = { true },
+    ): List<EpisodeUi> = episodesWorthDownloading(mutableState.value, where)
 
     fun downloadEpisode(episode: EpisodeUi) {
         val content = mutableState.value.content as? AppContent.SeriesDetails ?: return

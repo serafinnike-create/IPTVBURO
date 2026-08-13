@@ -87,6 +87,14 @@ interface CatalogRepository {
      */
     suspend fun findLibraryCandidates(titleFragment: String, limit: Int = 40): List<Channel>
 
+    /**
+     * Everything whose name contains [query], for the search screen.
+     *
+     * Unlike [findLibraryCandidates] this includes live channels and is not feeding a matching
+     * policy: the caller is a person typing, and what comes back is shown to them directly.
+     */
+    suspend fun search(query: String, limit: Int = 200): List<Channel> = emptyList()
+
     /** Resolves persisted playback history without ever persisting a credential-bearing URL. */
     suspend fun findStoredContent(
         sourceId: String,

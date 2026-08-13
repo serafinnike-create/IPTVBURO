@@ -149,6 +149,35 @@ interface ChannelDao {
     )
     suspend fun findLibraryCandidates(titleFragment: String, limit: Int = 40): List<ChannelEntity>
 
+    /**
+     * Anything whose name contains [query], for the search screen.
+     *
+     * Separate from [findLibraryCandidates] rather than a parameter on it, because the two want
+     * opposite things. That one gathers *candidates* for a matching policy and is restricted to
+     * films and series; this one answers a person typing into a box, so live channels count — "band"
+     * is a channel, and a search that hid it would look broken.
+     *
+     * Films and series first, then live: someone searching by name is usually after a title, and a
+     * catalogue with three hundred matching channels would otherwise bury the one film they meant.
+     * Within a kind the catalogue's own order is kept, which is the order they see everywhere else.
+     */
+    @Query(
+        """
+        SELECT * FROM channels
+        WHERE name LIKE '%' || :query || '%' COLLATE NOCASE
+        ORDER BY
+          CASE content_type
+            WHEN 'MOVIE' THEN 0
+            WHEN 'SERIES' THEN 1
+            ELSE 2
+          END,
+          sort_order,
+          id
+        LIMIT :limit
+        """,
+    )
+    suspend fun search(query: String, limit: Int = 200): List<ChannelEntity>
+
     @Query(
         """
         SELECT * FROM channels

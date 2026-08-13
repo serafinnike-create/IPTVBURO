@@ -156,6 +156,18 @@ class RoomCatalogRepository @Inject constructor(
         )
     }
 
+    override suspend fun search(query: String, limit: Int): List<Channel> =
+        withContext(ioDispatcher) {
+            val clean = query.trim()
+            // Two characters is the shortest search worth running. One letter matches most of a
+            // catalogue, which is slow to fetch and useless to read.
+            if (clean.length < MIN_SEARCH_QUERY) {
+                emptyList()
+            } else {
+                channelDao.search(clean, limit).map { it.toDomain() }
+            }
+        }
+
     override suspend fun findLibraryCandidates(titleFragment: String, limit: Int): List<Channel> =
         withContext(ioDispatcher) {
             val clean = titleFragment.trim()
@@ -916,6 +928,16 @@ class RoomCatalogRepository @Inject constructor(
          * noise to sift and the database a scan for nothing.
          */
         const val MIN_LIBRARY_FRAGMENT = 3
+
+        /**
+         * Shortest query worth running against the catalogue.
+         *
+         * Lower than [MIN_LIBRARY_FRAGMENT] because the two answer different questions: a person
+         * typing into the search box gets to see partial matches from the second letter, while the
+         * automatic library matcher needs a fragment specific enough not to drown a title in
+         * coincidences.
+         */
+        const val MIN_SEARCH_QUERY = 2
 
         const val TAG = "CatalogRepository"
         const val MAX_DISPLAY_NAME_LENGTH = 120

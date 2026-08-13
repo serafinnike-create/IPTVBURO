@@ -264,4 +264,10 @@
     <string name="series_download_all_confirm_title">Ganze Serie herunterladen?</string>
     <string name="series_download_season_confirm_title">Staffel %1$d herunterladen?</string>
     <plurals name="series_download_confirm_body"><item quantity="one">%1$d Folge wird heruntergeladen. Das kann viel Speicher und Daten verbrauchen.</item><item quantity="other">%1$d Folgen werden heruntergeladen. Das kann viel Speicher und Daten verbrauchen.</item></plurals>
+    <string name="search_subtitle">In allem, was du importiert hast</string>
+    <string name="search_label">Suchen</string>
+    <string name="search_hint">Name von Film, Serie oder Sender</string>
+    <string name="search_idle">Gib einen Namen ein, um deinen Katalog zu durchsuchen.</string>
+    <string name="search_working">Wird gesucht…</string>
+    <string name="search_empty">Dazu passt nichts in deinem Katalog.</string>
 </resources>

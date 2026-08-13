@@ -317,7 +317,16 @@ internal fun SeriesDetailsScreen(
                         // Downloading the lot. Confirmed rather than immediate: this is the one
                         // button on the screen that can start eighty transfers and fill a phone,
                         // and it sits next to buttons that do something small and instant.
-                        onDownloadSeries?.takeIf { details.episodes.isNotEmpty() }?.let { download ->
+                        // Hidden once every episode is stored, rather than left to open a dialog
+                        // that would promise zero transfers. "Already downloaded" is a state the
+                        // episode rows show individually; a button offering to fetch nothing is not
+                        // a useful thing to press.
+                        onDownloadSeries
+                            ?.takeIf {
+                                details.episodes.any { episode ->
+                                    downloadStateOf(episode) != DownloadStateUi.Completed
+                                }
+                            }?.let { download ->
                             BuroButton(
                                 onClick = { pendingBulkDownload = BulkDownload.WholeSeries },
                                 style = BuroButtonStyle.Secondary,
@@ -478,7 +487,11 @@ internal fun SeriesDetailsScreen(
                             // season they are about to start, not the whole run. Placed in the
                             // header so it is reachable without expanding, and confirmed for the
                             // same reason the series button is.
-                            onDownloadSeason?.let {
+                            onDownloadSeason?.takeIf {
+                                episodes.any { episode ->
+                                    downloadStateOf(episode) != DownloadStateUi.Completed
+                                }
+                            }?.let {
                                 item(key = "series:season:$season:download") {
                                     BuroButton(
                                         onClick = {
@@ -533,11 +546,20 @@ internal fun SeriesDetailsScreen(
         // separate line, because the number is the whole decision: twelve episodes and eighty are
         // very different answers to "is there room on this phone".
         pendingBulkDownload?.let { pending ->
+            // Counts what will actually be fetched, not what the season contains: episodes already
+            // on disk are skipped by the download itself, so including them here would promise
+            // eighty transfers and start three. The two numbers have to come from the same rule.
             val episodeCount =
-                when (pending) {
-                    BulkDownload.WholeSeries -> details?.episodes?.size ?: 0
-                    is BulkDownload.Season -> pending.episodeCount
-                }
+                details
+                    ?.episodes
+                    .orEmpty()
+                    .filter { episode ->
+                        when (pending) {
+                            BulkDownload.WholeSeries -> true
+                            is BulkDownload.Season -> episode.seasonNumber == pending.number
+                        }
+                    }
+                    .count { episode -> downloadStateOf(episode) != DownloadStateUi.Completed }
             BulkDownloadDialog(
                 episodeCount = episodeCount,
                 seasonNumber = (pending as? BulkDownload.Season)?.number,

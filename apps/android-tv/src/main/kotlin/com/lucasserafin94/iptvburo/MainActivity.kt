@@ -341,6 +341,7 @@ private fun IptvBuroRoot(
                 onOpenSource = viewModel::openSource,
                 onOpenCategory = viewModel::openCategory,
                 onOpenChannel = viewModel::openChannel,
+                onSearch = viewModel::search,
                 onPlayMovie = viewModel::playSelectedMovie,
                 onToggleMovieFavorite = viewModel::toggleSelectedMovieFavorite,
                 onShareTitle = { request ->

@@ -94,6 +94,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material.icons.filled.WorkspacePremium
@@ -183,6 +184,8 @@ fun AppShellScreen(
     onOpenSource: (SourceUi) -> Unit,
     onOpenCategory: (CategoryUi) -> Unit,
     onOpenChannel: (ChannelUi) -> Unit,
+    /** Runs a catalogue search. Called once the field settles, not per keystroke. */
+    onSearch: (String) -> Unit,
     onPlayMovie: () -> Unit,
     onToggleMovieFavorite: () -> Unit,
     /** Sends the open title to the system share sheet. */
@@ -475,15 +478,28 @@ fun AppShellScreen(
                             onOpenSource = onOpenSource,
                         )
 
-                        is AppContent.SectionPlaceholder -> SectionPlaceholderContent(
-                            section = content.section,
-                            onOpenSources = {
-                                onSelectSection(AppSection.SOURCES)
-                            },
-                            onOpenSettings = {
-                                onSelectSection(AppSection.SETTINGS)
-                            },
-                        )
+                        // Search has a real screen now; the other placeholder sections still show
+                        // the "coming soon" card.
+                        is AppContent.SectionPlaceholder ->
+                            if (content.section == AppSection.SEARCH) {
+                                SearchContent(
+                                    results = state.searchResults,
+                                    isSearching = state.isSearching,
+                                    onQueryChange = onSearch,
+                                    onOpenChannel = onOpenChannel,
+                                    onBack = onBack,
+                                )
+                            } else {
+                                SectionPlaceholderContent(
+                                    section = content.section,
+                                    onOpenSources = {
+                                        onSelectSection(AppSection.SOURCES)
+                                    },
+                                    onOpenSettings = {
+                                        onSelectSection(AppSection.SETTINGS)
+                                    },
+                                )
+                            }
 
                         is AppContent.Categories -> CategoriesContent(
                             title = content.sourceName,
@@ -995,6 +1011,9 @@ private fun mobileDestinations(
 ): List<MobileDestination> =
     buildList {
         add(MobileDestination(AppSection.HOME, Icons.Default.Home))
+        // Second, straight after Home: searching is how anyone finds a specific title in a
+        // catalogue of tens of thousands, and the destination existed with no way in.
+        add(MobileDestination(AppSection.SEARCH, Icons.Default.Search))
         add(MobileDestination(AppSection.LIVE, Icons.Default.LiveTv))
         add(MobileDestination(AppSection.MOVIES, Icons.Default.Movie))
         add(MobileDestination(AppSection.SERIES, Icons.Default.VideoLibrary))
@@ -3610,6 +3629,112 @@ internal data class WatchlistRow(
  * that is where the desktop puts them, and because "what was I half-way through" is a question
  * people arrive with rather than stumble upon.
  */
+/**
+ * Searching the imported catalogue.
+ *
+ * The destination was already in the navigation and answered with the "coming soon" card, so there
+ * was no way to look anything up by name at all — on a catalogue of tens of thousands of items that
+ * is the difference between a library and a list you scroll.
+ *
+ * Only what is already imported is searched: no external index, no request to the provider. It
+ * works with no connection, and the query never leaves the device.
+ *
+ * "Nothing matched" and "say what you are looking for" are told apart deliberately. Showing the
+ * first before anyone has typed reads as a search that is already broken.
+ */
+@Composable
+private fun SearchContent(
+    results: List<ChannelUi>,
+    isSearching: Boolean,
+    onQueryChange: (String) -> Unit,
+    onOpenChannel: (ChannelUi) -> Unit,
+    onBack: () -> Unit,
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val compactPortrait = maxWidth < 600.dp && maxHeight >= maxWidth
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    horizontal = if (compactPortrait) 16.dp else 42.dp,
+                    vertical = if (compactPortrait) 18.dp else 34.dp,
+                ),
+        ) {
+            ScreenHeader(
+                title = stringResource(R.string.buro_nav_search),
+                subtitle = stringResource(R.string.search_subtitle),
+                onBack = onBack,
+            )
+            Spacer(Modifier.height(if (compactPortrait) 14.dp else 20.dp))
+
+            // Held locally and published on a delay. Typing has to feel immediate, while the
+            // database should see one query for a typed title rather than one per character — on a
+            // catalogue of forty thousand rows that difference is felt.
+            var typed by remember { mutableStateOf("") }
+            OutlinedTextField(
+                value = typed,
+                onValueChange = { typed = it.take(80) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { androidx.compose.material3.Text(stringResource(R.string.search_label)) },
+                placeholder = {
+                    androidx.compose.material3.Text(stringResource(R.string.search_hint))
+                },
+                colors = BuroFieldColors,
+            )
+            LaunchedEffect(typed) {
+                delay(SEARCH_DEBOUNCE_MILLIS)
+                onQueryChange(typed)
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            when {
+                typed.isBlank() ->
+                    BuroEmptyState(
+                        title = stringResource(R.string.search_idle),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                    )
+
+                isSearching && results.isEmpty() ->
+                    BuroEmptyState(
+                        title = stringResource(R.string.search_working),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                    )
+
+                results.isEmpty() ->
+                    BuroEmptyState(
+                        title = stringResource(R.string.search_empty),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                    )
+
+                else ->
+                    LazyColumn(
+                        contentPadding = PaddingValues(bottom = 28.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(results, key = { channel -> channel.id }) { channel ->
+                            MyBuroMediaRow(
+                                channel = channel,
+                                progress = null,
+                                status = channel.categoryName.orEmpty(),
+                                onOpen = { onOpenChannel(channel) },
+                            )
+                        }
+                    }
+            }
+        }
+    }
+}
+
+/**
+ * How long the search field settles before the catalogue is queried.
+ *
+ * Long enough that typing a title runs one query rather than one per letter; short enough that the
+ * results read as a response to typing rather than to stopping.
+ */
+private const val SEARCH_DEBOUNCE_MILLIS = 300L
+
 @Composable
 private fun WatchlistContent(
     title: String,

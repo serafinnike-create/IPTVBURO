@@ -324,6 +324,43 @@ internal fun episodeDownloadKey(
     }
 
 /**
+ * The episodes a bulk download would actually fetch, in playing order.
+ *
+ * Episodes already on disk are left out. `startDownload` refuses a download that is *running*, but
+ * says nothing about one already stored — so without this rule, "Baixar temporada" on a season the
+ * viewer already has would re-fetch every file, spending their data and the provider's bandwidth to
+ * produce bytes that are already there.
+ *
+ * Deliberately not applied to a single "Baixar": tapping one episode's own button on a stored file
+ * is a person asking for it again, most often because the copy is broken. A bulk button is not that
+ * — nobody taps "download the whole season" meaning "fetch the forty I already have".
+ *
+ * A function of state rather than a method, so the rule can be tested for what it is — a decision
+ * about a list — without standing up a ViewModel, a download manager and a filesystem.
+ *
+ * Sorted by season then episode so the transfer *queue* is in playing order: most of these wait
+ * rather than run, so a viewer who starts watching before the last file lands gets the beginning
+ * first.
+ */
+internal fun episodesWorthDownloading(
+    state: AppUiState,
+    where: (EpisodeUi) -> Boolean = { true },
+): List<EpisodeUi> {
+    val seriesTitle =
+        state.seriesDetails?.title
+            ?: (state.content as? AppContent.SeriesDetails)?.fallbackTitle
+            ?: return emptyList()
+    return state.seriesDetails
+        ?.episodes
+        ?.filter(where)
+        ?.filterNot { episode ->
+            state.downloads[episodeDownloadKey(seriesTitle, episode)] == DownloadStateUi.Completed
+        }
+        ?.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber ?: Int.MAX_VALUE }))
+        .orEmpty()
+}
+
+/**
  * What the app is doing while it starts, for the boot screen to say out loud.
  *
  * A single "Preparing…" for the whole start-up left the user watching a spinner with no idea
@@ -469,6 +506,10 @@ data class AppUiState(
     /** Real catalogue covers already available while the rest of the home is still loading. */
     val bootBackdropUrls: List<String> = emptyList(),
     val hasAcceptedLegalNotice: Boolean = false,
+    /** What the user typed on the search screen, and what came back for it. */
+    val searchQuery: String = "",
+    val searchResults: List<ChannelUi> = emptyList(),
+    val isSearching: Boolean = false,
     val license: LicenseUiState = LicenseUiState.NotChecked,
     /**
      * Outcome of the last activation-key attempt, from either the gate or the Settings card.
