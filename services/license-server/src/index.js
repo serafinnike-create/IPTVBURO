@@ -1,4 +1,4 @@
-import { signLicense } from './signing.js';
+import { signLicense, signLicenseEcdsa } from './signing.js';
 import {
   consumeGooglePlayPurchase,
   inspectGooglePlayPurchase,
@@ -2511,7 +2511,12 @@ async function respondWithLicense(env, deviceId, nonce, now) {
   if (nonce) document.nonce = String(nonce).slice(0, 128);
 
   const signed = await signLicense(document, env.SIGNING_KEY);
-  return json({ payload: signed.payload, signature: signed.signature });
+  // Smart TVs cannot verify Ed25519; see signLicenseEcdsa. Absent when no ECDSA key is configured,
+  // which leaves existing clients exactly as they were.
+  const ecdsa = await signLicenseEcdsa(signed.payload, env.SIGNING_KEY_ECDSA);
+  const body = { payload: signed.payload, signature: signed.signature };
+  if (ecdsa) body.signatureEcdsa = ecdsa;
+  return json(body);
 }
 
 /** Moves a device out of TRIAL or ACTIVE once its date has passed, so the table matches reality. */

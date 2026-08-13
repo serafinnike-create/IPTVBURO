@@ -217,6 +217,49 @@ class LicenseClient(
     }
 
     /**
+     * What a key is, without spending it.
+     *
+     * The activation screen used to say nothing until a redemption succeeded or failed, so a
+     * customer holding a code learned only whether it worked — not that it was already theirs, or
+     * already used elsewhere, or worth thirty days.
+     *
+     * Null covers every failure the same way on purpose: no network, an unregistered device, a
+     * server that refused. The screen falls back to letting them try the key, which is what it did
+     * before this existed — a description that cannot be fetched must never block a redemption that
+     * would have worked.
+     */
+    fun keyInfo(key: String): KeyInfo? {
+        val identity = runCatching { identityProvider.getOrCreate() }.getOrNull() ?: return null
+        val nonce = freshNonce()
+        val body =
+            JsonObject().apply {
+                addProperty("deviceId", identity.deviceId)
+                addProperty("nonce", nonce)
+                // The same signed proof the redemption uses. Without it this endpoint would be an
+                // oracle for guessing codes, so the server refuses an unsigned request.
+                addProperty("proof", identity.proof(DeviceProofAction.VALIDATE, nonce))
+                addProperty("key", key.trim().uppercase())
+            }
+
+        return runCatching {
+            val request =
+                Request.Builder()
+                    .url(server.keyInfoUrl)
+                    .post(body.toString().toRequestBody(JSON))
+                    .build()
+            http.newCall(request).execute().use { response ->
+                val text = response.body?.string().orEmpty()
+                val json = JsonParser.parseString(text).takeIf { it.isJsonObject }?.asJsonObject
+                val state = json?.get("state")?.asString ?: return@use null
+                KeyInfo(
+                    state = KeyState.from(state) ?: return@use null,
+                    grantDays = json.get("grantDays")?.takeIf { !it.isJsonNull }?.asInt,
+                )
+            }
+        }.getOrNull()
+    }
+
+    /**
      * Re-verifies the stored server signature before granting offline use.
      *
      * A local clock more than [LicensePolicy.CLOCK_TOLERANCE] behind the last signed server time is
@@ -347,11 +390,20 @@ data class LicenseServerConfiguration(
     val validateUrl: String,
     val redeemUrl: String,
     val publicKeyBase64: String,
+    /**
+     * Last and defaulted, deliberately.
+     *
+     * Describing a key is a fixed endpoint on the same server, so requiring every caller to repeat
+     * it would only be a way to get it wrong. Placing it after the required parameters keeps the
+     * positional calls that already exist compiling — inserting it in the middle silently shifted
+     * publicKeyBase64 in a test that passes four arguments by position.
+     */
+    val keyInfoUrl: String = LicenseEndpoints.KEY_INFO,
 ) {
     val isConfigured: Boolean
         get() =
             publicKeyBase64.isNotBlank() &&
-                listOf(registerUrl, validateUrl, redeemUrl).all(String::isNotBlank)
+                listOf(registerUrl, validateUrl, redeemUrl, keyInfoUrl).all(String::isNotBlank)
 
     companion object {
         fun production(): LicenseServerConfiguration =
@@ -359,6 +411,7 @@ data class LicenseServerConfiguration(
                 registerUrl = LicenseEndpoints.REGISTER,
                 validateUrl = LicenseEndpoints.VALIDATE,
                 redeemUrl = LicenseEndpoints.REDEEM,
+                keyInfoUrl = LicenseEndpoints.KEY_INFO,
                 publicKeyBase64 = LicenseEndpoints.SERVER_PUBLIC_KEY,
             )
     }
@@ -417,4 +470,43 @@ data class LicenseStatus(
 
     val blockReason: LicenseBlockReason?
         get() = (decision as? LicenseDecision.Blocked)?.reason
+}
+
+/**
+ * What the server says a key is, without spending it.
+ *
+ * Deliberately says nothing about *which* device holds a key that is in use — that is another
+ * customer's business, and returning it would turn a mistyped code into a disclosure.
+ */
+data class KeyInfo(
+    val state: KeyState,
+    /** How many days it grants, or null when the server did not say. */
+    val grantDays: Int?,
+)
+
+enum class KeyState {
+    /** Never redeemed: it will work here. */
+    AVAILABLE,
+
+    /** Already redeemed by *this* device, which may redeem it again. */
+    YOURS,
+
+    /** Held by another device. It will not work here. */
+    IN_USE,
+
+    EXPIRED,
+    ;
+
+    companion object {
+        fun from(wire: String): KeyState? =
+            when (wire) {
+                "available" -> AVAILABLE
+                "yours" -> YOURS
+                "in_use" -> IN_USE
+                "expired" -> EXPIRED
+                // An unknown state from a newer server is treated as "cannot say" rather than
+                // guessed at, so the screen falls back to simply letting the key be tried.
+                else -> null
+            }
+    }
 }

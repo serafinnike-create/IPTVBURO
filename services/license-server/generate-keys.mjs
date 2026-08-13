@@ -33,10 +33,38 @@ const publicKey = Buffer.from(
   await webcrypto.subtle.exportKey('spki', pair.publicKey),
 ).toString('base64');
 
+/*
+ * A second pair, for clients that cannot verify Ed25519.
+ *
+ * Smart TVs are the reason. Ed25519 only reached Chromium in version 137, and Samsung TVs in use
+ * today run engines from Chrome 47 to M130 — none of which can verify the signature above. The
+ * server signs the same payload twice so the TV verifies real cryptography instead of trusting
+ * whatever the network hands it.
+ */
+const ecdsaPair = await webcrypto.subtle.generateKey(
+  { name: 'ECDSA', namedCurve: 'P-256' },
+  true,
+  ['sign', 'verify'],
+);
+
+const ecdsaPrivateKey = Buffer.from(
+  await webcrypto.subtle.exportKey('pkcs8', ecdsaPair.privateKey),
+).toString('base64');
+
+const ecdsaPublicKey = Buffer.from(
+  await webcrypto.subtle.exportKey('spki', ecdsaPair.publicKey),
+).toString('base64');
+
 console.log('');
 console.log('=== PRIVATE (Worker secret: SIGNING_KEY) — never commit this ===');
 console.log(privateKey);
 console.log('');
 console.log('=== PUBLIC (client: LicenseEndpoints.SERVER_PUBLIC_KEY) ===');
 console.log(publicKey);
+console.log('');
+console.log('=== PRIVATE ECDSA (Worker secret: SIGNING_KEY_ECDSA) — never commit this ===');
+console.log(ecdsaPrivateKey);
+console.log('');
+console.log('=== PUBLIC ECDSA (TV client: BuroLicense SERVER_PUBLIC_KEY_ECDSA) ===');
+console.log(ecdsaPublicKey);
 console.log('');

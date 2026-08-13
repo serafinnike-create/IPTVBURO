@@ -46,6 +46,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lucasserafin94.iptvburo.desktop.license.KeyInfo
+import com.lucasserafin94.iptvburo.desktop.license.KeyState
 import com.lucasserafin94.iptvburo.desktop.license.LicenseClient
 import com.lucasserafin94.iptvburo.desktop.license.LicenseEndpoints
 import com.lucasserafin94.iptvburo.desktop.license.LicenseStatus
@@ -135,6 +137,11 @@ fun LicenseGate(
 
     var busy by remember { mutableStateOf(false) }
     var keyInput by remember { mutableStateOf("") }
+    // What the server says the typed key is, or null while unknown.
+    //
+    // Null covers "not asked yet", "still asking" and "could not ask" alike, and all three show
+    // nothing: a description that failed to load must never look like a verdict on the key.
+    var keyInfo by remember { mutableStateOf<KeyInfo?>(null) }
     var keyFailed by remember { mutableStateOf(false) }
     var enteringKey by remember { mutableStateOf(false) }
     var copied by remember { mutableStateOf(false) }
@@ -155,6 +162,21 @@ fun LicenseGate(
     var quote by remember { mutableStateOf<PriceQuote?>(null) }
     LaunchedEffect(Unit) {
         quote = priceLoader()
+    }
+
+    // Describes the key shortly after typing stops.
+    //
+    // Keyed on the input, so each edit cancels the previous lookup — asking on every keystroke
+    // would send a request per character and describe codes the user was still halfway through.
+    // The wait is what makes it one request per pause rather than per letter.
+    LaunchedEffect(keyInput) {
+        keyInfo = null
+        val candidate = keyInput.trim()
+        // Short entries are still being typed. Asking about them would mostly return "unknown",
+        // which reads as a verdict on a code that is not finished.
+        if (candidate.length < 6) return@LaunchedEffect
+        kotlinx.coroutines.delay(600)
+        keyInfo = withContext(Dispatchers.IO) { client.keyInfo(candidate) }
     }
 
     // The confirmation fades by itself. A permanent "Copied" beside the code would still be there
@@ -282,6 +304,7 @@ fun LicenseGate(
                     busy = busy,
                     keyInput = keyInput,
                     keyFailed = keyFailed,
+                    keyInfo = keyInfo,
                     onKeyChange = {
                         keyInput = it.uppercase()
                         keyFailed = false
@@ -508,6 +531,8 @@ private fun PaymentSection(
     busy: Boolean,
     keyInput: String,
     keyFailed: Boolean,
+    /** What the server says the typed key is. Null shows nothing. */
+    keyInfo: KeyInfo? = null,
     onKeyChange: (String) -> Unit,
     onRedeem: () -> Unit,
     onEnteringKeyChange: (Boolean) -> Unit,
@@ -521,6 +546,7 @@ private fun PaymentSection(
             text = text,
             keyInput = keyInput,
             keyFailed = keyFailed,
+            keyInfo = keyInfo,
             busy = busy,
             onKeyChange = onKeyChange,
             onRedeem = onRedeem,
@@ -607,6 +633,7 @@ private fun KeyEntry(
     text: LicenseStrings,
     keyInput: String,
     keyFailed: Boolean,
+    keyInfo: KeyInfo? = null,
     busy: Boolean,
     onKeyChange: (String) -> Unit,
     onRedeem: () -> Unit,
@@ -634,6 +661,38 @@ private fun KeyEntry(
     if (keyFailed) {
         Spacer(Modifier.height(BuroSpacing.Xxs))
         Text(text.redeemFailed, color = BuroColors.Error, fontSize = 12.sp)
+    }
+
+    // What the key is, once the server has said.
+    //
+    // Shown only when there is an answer and the redemption has not already failed: a description
+    // beside a red error would be two verdicts about the same code, and the failure is the one that
+    // just happened.
+    if (!keyFailed) {
+        keyInfo?.let { info ->
+            Spacer(Modifier.height(BuroSpacing.Xxs))
+            val days = info.grantDays
+            Text(
+                text =
+                    when (info.state) {
+                        // The days matter here: "30 dias" is the difference between a key worth
+                        // using now and one worth keeping for later.
+                        KeyState.AVAILABLE ->
+                            if (days != null) text.keyAvailableDays(days) else text.keyAvailable
+                        KeyState.YOURS -> text.keyYours
+                        KeyState.IN_USE -> text.keyInUse
+                        KeyState.EXPIRED -> text.keyExpired
+                    },
+                color =
+                    when (info.state) {
+                        KeyState.AVAILABLE, KeyState.YOURS -> BuroColors.Success
+                        // Not an error colour: a key belonging to another machine is a fact about
+                        // the key, not a mistake the person just made.
+                        KeyState.IN_USE, KeyState.EXPIRED -> BuroColors.TextSubtle
+                    },
+                fontSize = 12.sp,
+            )
+        }
     }
 
     Spacer(Modifier.height(BuroSpacing.Md))

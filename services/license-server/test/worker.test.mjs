@@ -13,7 +13,7 @@ import { test } from 'node:test';
 import worker, { reconcileGooglePlayPurchases } from '../src/index.js';
 import { LICENSE_PRODUCT } from '../src/checkout.js';
 import { purchaseTokenHash } from '../src/google-play.js';
-import { generateKeyPair } from '../src/signing.js';
+import { generateKeyPair, generateEcdsaKeyPair } from '../src/signing.js';
 
 const SCHEMA = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
 const MIGRATION = readFileSync(
@@ -42,6 +42,8 @@ const DEVICE_COUNTRY_MIGRATION = readFileSync(
 );
 const WEBHOOK_SECRET = 'local-fixture-webhook-signing-secret';
 const signingKeys = await generateKeyPair();
+// Smart TVs cannot verify Ed25519, so licences carry a second ECDSA signature over the same bytes.
+const ecdsaSigningKeys = await generateEcdsaKeyPair();
 const googleServicePair = await crypto.subtle.generateKey(
   {
     name: 'RSASSA-PKCS1-v1_5',
@@ -218,6 +220,7 @@ function environment() {
   return {
     DB: new LocalD1(),
     SIGNING_KEY: signingKeys.privateKeyPkcs8Base64,
+    SIGNING_KEY_ECDSA: ecdsaSigningKeys.privateKeyPkcs8Base64,
     STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
     STRIPE_SECRET_KEY: 'local-fixture-api-key',
     STRIPE_MODE: 'test',
@@ -424,6 +427,77 @@ test('non-object JSON is rejected as a bad proof request rather than becoming an
       assert.notEqual((await response.json()).error, 'internal', path);
     }
     assert.equal(count(env, 'SELECT COUNT(*) AS n FROM device_proof_nonces'), 0);
+  } finally {
+    env.DB.close();
+  }
+});
+
+test('a licence carries an ECDSA signature over the same bytes, for clients without Ed25519', async () => {
+  const env = environment();
+  try {
+    await registerDevice(env, deviceIdentityA);
+    const response = await worker.fetch(
+      postJson('/v1/validate', await deviceProofBody(deviceIdentityA, 'validate')),
+      env,
+    );
+    assert.equal(response.status, 200);
+    const envelope = await response.json();
+
+    // Both signatures must cover the identical payload string. If the server signed a re-serialised
+    // copy for one of them, a TV and a phone would be trusting different documents.
+    const ecdsaKey = await crypto.subtle.importKey(
+      'spki',
+      Buffer.from(ecdsaSigningKeys.publicKeySpkiBase64, 'base64'),
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['verify'],
+    );
+    assert.equal(
+      await crypto.subtle.verify(
+        { name: 'ECDSA', hash: 'SHA-256' },
+        ecdsaKey,
+        Buffer.from(envelope.signatureEcdsa, 'base64'),
+        new TextEncoder().encode(envelope.payload),
+      ),
+      true,
+      'the ECDSA signature must verify against the payload actually sent',
+    );
+
+    const ed25519Key = await crypto.subtle.importKey(
+      'spki',
+      Buffer.from(signingKeys.publicKeySpkiBase64, 'base64'),
+      { name: 'Ed25519' },
+      false,
+      ['verify'],
+    );
+    assert.equal(
+      await crypto.subtle.verify(
+        'Ed25519',
+        ed25519Key,
+        Buffer.from(envelope.signature, 'base64'),
+        new TextEncoder().encode(envelope.payload),
+      ),
+      true,
+      'existing clients must keep verifying exactly as before',
+    );
+  } finally {
+    env.DB.close();
+  }
+});
+
+test('a deployment without an ECDSA key simply omits the field', async () => {
+  const env = environment();
+  delete env.SIGNING_KEY_ECDSA;
+  try {
+    await registerDevice(env, deviceIdentityA);
+    const response = await worker.fetch(
+      postJson('/v1/validate', await deviceProofBody(deviceIdentityA, 'validate')),
+      env,
+    );
+    assert.equal(response.status, 200);
+    const envelope = await response.json();
+    assert.equal(envelope.signatureEcdsa, undefined);
+    assert.ok(envelope.signature, 'the Ed25519 signature is still mandatory');
   } finally {
     env.DB.close();
   }

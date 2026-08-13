@@ -5,46 +5,38 @@ investigada no código e o que ainda falta confirmar.
 
 ## Estado atual
 
-**Publicado:** `v2.0.0-alpha.3` — Windows (MSI) e Android (APK de depuração).
+**Publicado:** `v2.0.0-alpha.4` — Windows (MSI) e Android (APK de depuração).
+As versões anteriores foram removidas do GitHub a pedido do usuário, para que só
+exista um download e a atualização pelo app leve sempre a esta.
 
-Quem tem a `alpha.2` instalada recebe esta versão por **Opções → Buscar
-atualização**. O caminho foi verificado antes de publicar, não presumido:
+### A partir daqui, atualizar pelo app funciona
 
-- `isNewerVersion("2.0.0-alpha.3", "2.0.0-alpha.2")` é verdadeiro, e a versão
-  atual não se oferece a si mesma — coberto por teste de regressão;
-- o `DESKTOP_RELEASE_VERSION` gerado no build é `2.0.0-alpha.3`;
+O `alpha.4` é a primeira versão que declara ao Windows uma versão própria
+(`2.0.4`). Todas as anteriores diziam `2.0.0`, e era isso que fazia a atualização
+desinstalar o app sem reinstalar (BUG-009).
+
+Verificado antes de publicar, não presumido:
+
 - o nome do MSI casa com o filtro de instalador e o APK **não** casa, então o
   atualizador não pode baixar o pacote errado;
-- a URL de download satisfaz as cinco checagens de confiança (https, host
-  `github.com`, sem userinfo, porta padrão, caminho do repositório);
-- 286 MB contra um teto de 1 GB.
+- `2.0.4 > 2.0.0`, com o mesmo UpgradeCode, então o Windows reconhece um upgrade
+  legítimo e o passo destrutivo nunca é alcançado;
+- o `DESKTOP_RELEASE_VERSION` embutido é `2.0.0-alpha.4`;
+- `BUNDLED_TMDB_KEY` está vazio — nenhuma chave de API no pacote;
+- o certificado do APK bate com a impressão digital publicada em
+  `assetlinks.json`, então o link compartilhado abre o app.
 
-Corrigidos e publicados: BUG-001, BUG-002, BUG-004, BUG-006, BUG-007, BUG-008.
+Apagar as releases antigas é seguro para o atualizador: ele lista todas e escolhe
+a mais nova, então só precisa que exista uma. O custo é que links diretos antigos
+passam a responder 404, e isso não tem volta.
 
-⚠️ **BUG-009 — a atualização pelo app apagava o aplicativo.** Corrigido.
+Corrigidos e publicados: BUG-001, BUG-002, BUG-004, BUG-006, BUG-007, BUG-008,
+BUG-009, BUG-012, BUG-018, TAREFA-011, TAREFA-013, TAREFA-014, TAREFA-015.
 
-A correção principal está na **versão do MSI**, que viaja dentro do pacote novo —
-não no script, que é escrito pela build antiga. Por isso ela vale mesmo para quem
-está na `alpha.1`/`alpha.2`/`alpha.3`:
-
-O script antigo tenta `msiexec /i` primeiro e só desinstala se esse passo falhar.
-Ele falhava porque as versões eram idênticas (`2.0.0` dos dois lados). Com a
-`alpha.4` declarando `2.0.4`, o Windows reconhece um upgrade legítimo, o primeiro
-passo conclui e o passo destrutivo nunca é alcançado.
-
-As melhorias no próprio script (mensagem de recuperação, retry visível) só entram
-em vigor a partir da próxima atualização, mas são a rede de segurança — não a
-correção. Detalhes no BUG-009.
-
-**Auditado depois de publicar:** capa, sinopse e trailer na tela de Assinaturas
-(itens 2 e 3 do BUG-006). O caminho está inteiro e correto do cliente até o
-composable, e a API devolve os dados — não havia um segundo defeito ali. A única
-forma de a tela ficar vazia era o cliente TMDb obsoleto do item 4, já corrigido.
-Detalhes no BUG-006.
-
-**O que ainda não foi confirmado por uso real:** todas as correções acima foram
-verificadas por teste automatizado e contra a API do TMDb, mas ninguém abriu a
-alpha.3 instalada e olhou a tela. Vale um teste de instalação limpa.
+**O que ainda não foi confirmado por uso real:** o envio do celular para o
+computador tem teste automatizado dos dois lados, incluindo os sockets, mas
+ninguém enviou um filme de verdade entre dois aparelhos. E o BUG-017 (não alcança
+o servidor) continua aguardando o log do usuário.
 
 ---
 
@@ -163,7 +155,7 @@ ficou.
 
 ## BUG-016 — A migration 0005 não aplica num banco antigo
 
-**Status:** diagnosticado, **não corrigido** — é trabalho paralelo, não toquei
+**Status:** ✅ CORRIGIDO em 2026-08-13
 **Encontrado em:** 2026-08-13, ao rodar a suíte do worker
 
 ### Sintoma
@@ -209,17 +201,26 @@ migrations deste diretório tratam o mesmo problema.
 Vale conferir também se `updated_at` (que o `schema.sql` usa no índice
 `devices_by_archive`) tem o mesmo buraco.
 
-### Por que não corrigi
+### Correção aplicada
 
-O arquivo é de outra frente de trabalho em andamento, e mexer numa migration que
-outra pessoa está escrevendo é a forma mais rápida de criar um conflito difícil de
-enxergar. Se quiser, corrijo — é uma linha.
+`ALTER TABLE devices ADD COLUMN first_seen_at TEXT;` antes do índice, na própria
+`0005`. Nulo em vez de `NOT NULL` como no `schema.sql`: o SQLite não aceita
+adicionar coluna `NOT NULL` sem valor padrão, e inventar uma data de primeira
+visita para linhas anteriores à coluna seria pior do que admitir que não se sabe
+— o índice existe justamente para achar o **primeiro** teste de uma máquina, e
+uma data fabricada responderia errado em vez de não responder.
+
+Verificado aplicando as seis migrations em ordem sobre a tabela legada: todas
+passam. 170 testes do worker, 0 falhas.
+
+O arquivo estava commitado e sem alterações pendentes, então não havia edição de
+outra pessoa em curso para atropelar.
 
 ---
 
 ## BUG-012 — Reinstalar o app perdeu a licença paga e voltou ao teste de 7 dias
 
-**Status:** investigado, correção pendente — **prioridade alta, envolve dinheiro**
+**Status:** ✅ CORRIGIDO em 2026-08-13
 **Reportado em:** 2026-08-13
 **Ambiente:** Windows, licença de 30 dias ativada e perdida após reinstalar
 
@@ -254,15 +255,25 @@ sobreviveu a várias reinstalações. Falta descobrir o que o removeu no caso do
 usuário — limpeza manual, um "remover dados do app", ou o DPAPI ter falhado ao
 decifrar (nesse caso `load()` devolve null e um id novo é gerado).
 
-### Correção proposta — o id deve depender só da máquina
+### Correção aplicada
 
-Derivar o `deviceId` **apenas** do `installationId`, e deixar o par de chaves
-como prova de posse (que é o papel dele), não como parte da identidade. Assim,
-mesma máquina = mesmo id, sempre, e apagar arquivos não reseta nada — que é
-exatamente a propriedade anti-fraude que o comentário do `MachineAnchor` diz
-querer.
+O par de chaves passou a ser **derivado da âncora da máquina** em vez de gerado
+do zero (`deterministicKeyPair`). Assim a identidade inteira é reproduzível:
+mesma máquina, mesma chave, mesmo `deviceId`, quantas vezes o app for instalado.
 
-Precisa de migração: quem já tem id no formato antigo não pode perdê-lo.
+Preferido a mudar a fórmula do `deviceId`: alterar a derivação mudaria o id de
+**todos os clientes que já pagaram**, órfãos no servidor. Do jeito escolhido, o
+id continua o mesmo para quem já tem o arquivo, e volta a ser o mesmo para quem
+o perdeu.
+
+Sem âncora legível a chave continua aleatória — numa máquina cujo registro não
+pode ser lido, uma chave determinística vinda de semente aleatória não seria mais
+estável, só mais uma coisa para errar.
+
+Dois testes: o que afirmava que dois arquivos geram dispositivos diferentes agora
+afirma o contrário, e outro confirma que a chave reconstruída **ainda assina** o
+que o servidor já confia — o código certo sendo recusado seria a falha mais
+difícil de descobrir.
 
 ### Ainda a confirmar
 
@@ -274,7 +285,8 @@ de "DPAPI falhou ao decifrar".
 
 ## TAREFA-013 — Chave reutilizável pelo dono, bloqueada para os outros
 
-**Status:** pendente — desenhado, não implementado
+**Status:** ✅ IMPLEMENTADO em 2026-08-13 (falta a tela de ativação descrever a
+chave — ver a subseção no fim deste item)
 **Solicitado em:** 2026-08-13
 
 ### O pedido
@@ -333,10 +345,23 @@ os erros que ele devolve já distinguem os casos (`already_used`, `key_expired`,
 `unknown_key`). O que falta é uma consulta **antes** do resgate e uma tela que
 mostre a resposta em vez de só reagir ao sucesso ou à falha.
 
-Cuidado ao implementar: um endpoint que descreve qualquer chave transforma o
-servidor num oráculo para adivinhar códigos. Deve ficar atrás do mesmo rate
-limiter do resgate e **nunca** revelar o dispositivo dono — apenas "livre", "sua"
-ou "em uso", que é o que o usuário precisa saber.
+**Implementado dos dois lados em 2026-08-13.** `/v1/key-info` existe e está
+testado (4 testes): exige a mesma prova assinada do resgate, fica atrás do mesmo rate
+limiter, responde `available` / `yours` / `in_use` / `expired` com os dias de
+concessão, e **nunca** revela qual dispositivo detém a chave — devolver esse id
+transformaria um código digitado errado em informação sobre outro cliente.
+
+No Windows, `LicenseClient.keyInfo()` consulta e a tela de ativação mostra a
+resposta abaixo do campo, com espera de 600 ms depois da última tecla — sem isso
+seria uma requisição por caractere, descrevendo códigos que a pessoa ainda está
+digitando. Códigos curtos nem chegam a ser consultados, porque "desconhecida"
+sobre um código pela metade lê como veredito.
+
+Qualquer falha (sem rede, dispositivo não registrado, servidor recusando) não
+mostra nada e deixa a pessoa tentar a chave: uma descrição que não carregou nunca
+pode impedir um resgate que teria funcionado.
+
+**Falta o Android**, que ainda não consulta o endpoint.
 
 ### Reinstalação legítima vs. fraude
 

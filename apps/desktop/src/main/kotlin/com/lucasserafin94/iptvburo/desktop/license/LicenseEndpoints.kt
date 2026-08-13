@@ -44,6 +44,14 @@ object LicenseEndpoints {
     const val REDEEM = "https://$DOMAIN/v1/redeem"
 
     /**
+     * Describes a key without spending it, so the screen can say what it is before redeeming.
+     *
+     * Separate from [REDEEM] because looking must never be a side effect of asking: a customer
+     * checking whether they typed the right code should not consume the key by doing so.
+     */
+    const val KEY_INFO = "https://$DOMAIN/v1/key-info"
+
+    /**
      * What this machine would actually be charged.
      *
      * Asked rather than worked out locally. The app once decided currency from the operating
