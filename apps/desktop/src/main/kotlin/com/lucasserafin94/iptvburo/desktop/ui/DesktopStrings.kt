@@ -247,6 +247,7 @@ data class DesktopStrings(
      * before running a single assertion. Nested groups are how the file stays under the ceiling.
      */
     val shareStrings: ShareStrings,
+    val downloadStrings: DownloadStrings,
     val search: String,
     val sources: String,
     val profile: String,
@@ -540,6 +541,15 @@ data class DesktopStrings(
                 movies = "Películas",
                 series = "Series",
                 favorites = "Favoritos",
+                downloadStrings =
+                    DownloadStrings(
+                        downloadSeries = "Descargar serie",
+                        downloadSeason = "Descargar temporada %d",
+                        downloadSeriesConfirmTitle = "¿Descargar la serie completa?",
+                        downloadSeasonConfirmTitle = "¿Descargar la temporada %d?",
+                        downloadConfirmBody = "Se descargarán %d episodios. Esto puede usar mucho espacio y datos.",
+                        downloadConfirmAction = "Descargar",
+                    ),
                 shareStrings =
                     ShareStrings(
                     share = "Compartir",
@@ -1007,6 +1017,15 @@ data class DesktopStrings(
                 movies = "Filmes",
                 series = "Séries",
                 favorites = "Favoritos",
+                downloadStrings =
+                    DownloadStrings(
+                        downloadSeries = "Baixar série",
+                        downloadSeason = "Baixar temporada %d",
+                        downloadSeriesConfirmTitle = "Baixar a série inteira?",
+                        downloadSeasonConfirmTitle = "Baixar a temporada %d?",
+                        downloadConfirmBody = "%d episódios serão baixados. Isso pode usar bastante espaço e dados.",
+                        downloadConfirmAction = "Baixar",
+                    ),
                 shareStrings =
                     ShareStrings(
                     share = "Compartilhar",
@@ -1474,6 +1493,15 @@ data class DesktopStrings(
                 movies = "Movies",
                 series = "Series",
                 favorites = "Favorites",
+                downloadStrings =
+                    DownloadStrings(
+                        downloadSeries = "Download series",
+                        downloadSeason = "Download season %d",
+                        downloadSeriesConfirmTitle = "Download the whole series?",
+                        downloadSeasonConfirmTitle = "Download season %d?",
+                        downloadConfirmBody = "%d episodes will be downloaded. This can use a lot of storage and data.",
+                        downloadConfirmAction = "Download",
+                    ),
                 shareStrings =
                     ShareStrings(
                     share = "Share",
@@ -1939,6 +1967,15 @@ data class DesktopStrings(
                 movies = "Filme",
                 series = "Serien",
                 favorites = "Favoriten",
+                downloadStrings =
+                    DownloadStrings(
+                        downloadSeries = "Serie herunterladen",
+                        downloadSeason = "Staffel %d herunterladen",
+                        downloadSeriesConfirmTitle = "Die ganze Serie herunterladen?",
+                        downloadSeasonConfirmTitle = "Staffel %d herunterladen?",
+                        downloadConfirmBody = "%d Folgen werden heruntergeladen. Das kann viel Speicher und Daten verbrauchen.",
+                        downloadConfirmAction = "Herunterladen",
+                    ),
                 shareStrings =
                     ShareStrings(
                     share = "Teilen",
@@ -2411,6 +2448,15 @@ data class DesktopStrings(
                 movies = "Film",
                 series = "Serie",
                 favorites = "Preferiti",
+                downloadStrings =
+                    DownloadStrings(
+                        downloadSeries = "Scarica serie",
+                        downloadSeason = "Scarica stagione %d",
+                        downloadSeriesConfirmTitle = "Scaricare l’intera serie?",
+                        downloadSeasonConfirmTitle = "Scaricare la stagione %d?",
+                        downloadConfirmBody = "Verranno scaricati %d episodi. Può occupare molto spazio e traffico.",
+                        downloadConfirmAction = "Scarica",
+                    ),
                 shareStrings =
                     ShareStrings(
                     share = "Condividi",
@@ -2902,6 +2948,26 @@ val strings: DesktopStrings
  * provider travels. See `TitleShareLink` in the domain, which enforces that; these strings say it
  * to the user.
  */
+/**
+ * Downloading a whole season or series.
+ *
+ * Nested rather than added to [DesktopStrings] directly. That class is a few fields short of the
+ * JVM's 255-argument limit for a constructor, which has already been hit once here and produced a
+ * `ClassFormatError` that failed every desktop test before a single assertion ran. New groups of
+ * related strings go in their own class from now on.
+ */
+data class DownloadStrings(
+    /** The button beside Compartilhar. */
+    val downloadSeries: String,
+    /** Takes the season number. */
+    val downloadSeason: String,
+    val downloadSeriesConfirmTitle: String,
+    val downloadSeasonConfirmTitle: String,
+    /** Takes the episode count — the number the confirmation actually promises to fetch. */
+    val downloadConfirmBody: String,
+    val downloadConfirmAction: String,
+)
+
 data class ShareStrings(
     /** The button on the title page, beside Favourites. */
     val share: String,

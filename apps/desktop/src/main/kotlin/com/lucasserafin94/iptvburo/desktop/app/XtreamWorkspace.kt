@@ -56,6 +56,7 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -2263,6 +2264,15 @@ private fun SeriesDetailContent(
         is SeriesDetailsStatus.Loaded -> {
             val details = status.details
             val episodes = details.episodes
+            // Which bulk download is waiting to be confirmed, or null. Reset per series so leaving
+            // one title and opening another cannot carry a pending confirmation across.
+            var pendingBulkDownload by remember(details.providerId) {
+                mutableStateOf<BulkDownload?>(null)
+            }
+            // Whether offline copies are available at all on this build and platform:
+            // `downloadStateForEpisode` answers null when they are not, and a bulk button that
+            // could never queue anything is worse than no button.
+            val downloadsOffered = episodes.any { episode -> downloadStateForEpisode(episode) != null }
             val facts =
                 listOfNotNull(
                     details.releaseDate,
@@ -2352,6 +2362,24 @@ private fun SeriesDetailContent(
                         Text("↗  ${text.shareStrings.share}", fontWeight = FontWeight.SemiBold)
                     }
                 }
+                // Beside Compartilhar, where the whole series can be asked for at once.
+                //
+                // Only when downloads are available at all — `downloadStateForEpisode` answers null
+                // on a build or platform without them, and a button that queues nothing is worse
+                // than no button. Hidden too once every episode is already stored, for the same
+                // reason: there would be nothing left to fetch.
+                val pendingSeries =
+                    episodes.filter { episode -> downloadStateForEpisode(episode) != DownloadState.Completed }
+                if (downloadsOffered && pendingSeries.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = { pendingBulkDownload = BulkDownload.WholeSeries(pendingSeries) },
+                        modifier = Modifier.height(48.dp),
+                        shape = BuroRadius.Small,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+                    ) {
+                        Text("⭳  ${text.downloadStrings.downloadSeries}", fontWeight = FontWeight.SemiBold)
+                    }
+                }
                 details.youtubeTrailerId?.let { trailerId ->
                     OutlinedButton(
                         onClick = { onOpenTrailer(trailerId) },
@@ -2411,16 +2439,48 @@ private fun SeriesDetailContent(
                     Spacer(Modifier.height(BuroSpacing.Md))
                 }
                 val visible = seasons[openSeason] ?: episodes
-                Text(
-                    text =
-                        if (seasons.size > 1) {
-                            "Temporada $openSeason  ·  ${visible.size} episódios"
-                        } else {
-                            "${episodes.size} episódios"
-                        },
-                    color = BuroColors.TextMuted,
-                    style = MaterialTheme.typography.labelLarge,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text =
+                            if (seasons.size > 1) {
+                                "Temporada $openSeason  ·  ${visible.size} episódios"
+                            } else {
+                                "${episodes.size} episódios"
+                            },
+                        color = BuroColors.TextMuted,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    // The season the user is actually looking at, which is the one most people
+                    // want: the season they are about to start, not the whole run.
+                    //
+                    // Hidden when every episode of it is already stored, for the same reason the
+                    // series button is: a control that would queue nothing is not worth pressing.
+                    val pendingSeason =
+                        visible.filter { episode -> downloadStateForEpisode(episode) != DownloadState.Completed }
+                    if (downloadsOffered && pendingSeason.isNotEmpty()) {
+                        OutlinedButton(
+                            onClick = {
+                                pendingBulkDownload = BulkDownload.Season(openSeason, pendingSeason)
+                            },
+                            shape = BuroRadius.Small,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+                        ) {
+                            Text(
+                                text =
+                                    if (seasons.size > 1) {
+                                        "⭳  ${text.downloadStrings.downloadSeason.format(openSeason)}"
+                                    } else {
+                                        "⭳  ${text.downloadStrings.downloadSeries}"
+                                    },
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(BuroSpacing.Sm))
 
                 // Drawn in pages, not all at once.
@@ -2467,8 +2527,104 @@ private fun SeriesDetailContent(
                     }
                 }
             }
+
+            // Asked before anything is queued. This is the one control on the page that can start
+            // eighty transfers and fill a disk, and it sits beside buttons that do something small
+            // and instant.
+            pendingBulkDownload?.let { pending ->
+                BulkDownloadDialog(
+                    episodeCount = pending.episodes.size,
+                    seasonNumber = (pending as? BulkDownload.Season)?.number,
+                    onConfirm = {
+                        // Queued in playing order, because most of these wait rather than run: a
+                        // viewer who starts watching before the last file lands gets the beginning
+                        // first. Each one goes through the ordinary single-episode path, so the
+                        // transfer limit and the late, in-memory URL resolution are unchanged.
+                        pending.episodes
+                            .sortedWith(
+                                compareBy(
+                                    { it.seasonNumber },
+                                    { it.episodeNumber ?: Int.MAX_VALUE },
+                                ),
+                            ).forEach(onDownloadEpisode)
+                        pendingBulkDownload = null
+                    },
+                    onDismiss = { pendingBulkDownload = null },
+                    text = text,
+                )
+            }
         }
     }
+}
+
+/**
+ * A bulk download waiting to be confirmed.
+ *
+ * Carries the episodes themselves rather than a season number to look up later, so what the dialog
+ * counts and what the confirmation queues cannot drift apart. Already-stored episodes are filtered
+ * out before this is built, which is what makes the promised number the real one.
+ */
+private sealed interface BulkDownload {
+    val episodes: List<XtreamEpisode>
+
+    data class WholeSeries(override val episodes: List<XtreamEpisode>) : BulkDownload
+
+    data class Season(val number: Int?, override val episodes: List<XtreamEpisode>) : BulkDownload
+}
+
+/**
+ * Asks before queueing a season or a whole series.
+ *
+ * Deliberately plain: a question, the count, and two buttons. A season can be dozens of gigabytes,
+ * and the count is on its own line because the number is the whole decision — twelve episodes and
+ * eighty are very different answers to "is there room on this disk".
+ */
+@Composable
+private fun BulkDownloadDialog(
+    episodeCount: Int,
+    seasonNumber: Int?,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    text: DesktopStrings,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = BuroColors.Surface,
+        title = {
+            Text(
+                text =
+                    if (seasonNumber != null) {
+                        text.downloadStrings.downloadSeasonConfirmTitle.format(seasonNumber)
+                    } else {
+                        text.downloadStrings.downloadSeriesConfirmTitle
+                    },
+                color = BuroColors.Text,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Text(
+                text = text.downloadStrings.downloadConfirmBody.format(episodeCount),
+                color = BuroColors.TextMuted,
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = BuroColors.Primary),
+            ) {
+                Text(text.downloadStrings.downloadConfirmAction, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+            ) {
+                Text(text.cancel, fontWeight = FontWeight.SemiBold)
+            }
+        },
+    )
 }
 
 @Composable
