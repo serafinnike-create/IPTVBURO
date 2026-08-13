@@ -361,11 +361,13 @@ Qualquer falha (sem rede, dispositivo não registrado, servidor recusando) não
 mostra nada e deixa a pessoa tentar a chave: uma descrição que não carregou nunca
 pode impedir um resgate que teria funcionado.
 
-**O Android também já consulta**, implementado em paralelo: 
-chama o mesmo endpoint,  carrega o estado e a tela o mostra.
- cobre o mapeamento real usado pelo cliente em vez de uma
-cópia — um  duplicado no teste continuaria passando enquanto o de verdade
-divergisse. Item fechado nas duas plataformas.
+**O Android também já consulta**, implementado em paralelo:
+`AndroidLicenseClient.keyState()` chama o mesmo endpoint, `LicenseUiState`
+carrega o estado e a tela o mostra. `KeyInspectionTest` cobre o mapeamento real
+usado pelo cliente em vez de uma cópia — um `when` duplicado no teste
+continuaria passando enquanto o de verdade divergisse.
+
+Item fechado nas duas plataformas.
 
 ### Reinstalação legítima vs. fraude
 
