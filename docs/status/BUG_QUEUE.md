@@ -42,6 +42,70 @@ o servidor) continua aguardando o log do usuário.
 
 ---
 
+## TAREFA-028 — Guia Configurações e atalho de Perfil na navegação
+
+**Status:** pedido registrado — **não implementado**
+**Pedido em:** 2026-08-13
+**Relato:** "remova as opções, crie uma guia configurações embaixo de assinaturas"
+
+Hoje as configurações do Windows vivem num **diálogo** (`SettingsDialog`), aberto
+por um botão. O pedido é que virem um **destino da navegação lateral**, logo
+abaixo de Assinaturas — como as demais áreas do app.
+
+### Por que isso melhora, além do gosto
+
+O diálogo é modal: ele cobre a tela, não tem endereço próprio e não pode ser
+deixado aberto enquanto se olha outra coisa. Como ele já reúne chave do TMDb,
+áudio, legendas, atualização, receber do celular, licença e redefinir, é bastante
+coisa para uma janela que precisa ser fechada para se ver qualquer outra.
+
+### O que precisa acontecer
+
+- `DesktopDestination` ganha `SETTINGS` — hoje o enum tem `HOME, CATALOG,
+  FAVORITES, DOWNLOADS, CONTINUE, MUSIC, SUBSCRIPTIONS, HISTORY` e nada de
+  configurações, porque elas nunca foram um destino;
+- o conteúdo do `SettingsDialog` migra para uma página, sem virar uma parede: com
+  a quantidade de opções que já existe, vale agrupar em seções (Conta e licença,
+  Reprodução, Metadados, Rede, Avançado);
+- o item entra na navegação **abaixo de Assinaturas**, com o ícone de engrenagem;
+- o diálogo é **removido**, não deixado como segundo caminho — dois lugares para
+  a mesma configuração é como uma delas fica desatualizada;
+- toda mensagem que hoje diz "confira em Opções" precisa passar a dizer
+  "Configurações". Há pelo menos uma na tela de Assinaturas (chave do TMDb
+  recusada) e outra no texto de ajuda da chave.
+
+### Atalho de Perfil, logo acima
+
+Pedido junto, e implementado junto por dividir a mesma navegação:
+
+> "adicione um atalho perfil, coloque em cima de configurações"
+
+A ordem final da parte de baixo da barra fica:
+
+```text
+…
+Assinaturas
+Perfil            ← novo
+Configurações     ← novo (substitui o diálogo de Opções)
+```
+
+O atalho de Perfil abre a troca de perfil, que hoje só aparece na abertura do app
+— depois disso, mudar de perfil exige caminho indireto. Vale mostrar **qual**
+perfil está ativo no próprio item (nome e avatar), porque é a informação que a
+pessoa procura antes de decidir trocar.
+
+Os dois itens ficam no fim da lista, separados das áreas de conteúdo: quem
+navega está procurando algo para assistir, e conta e ajustes são outra categoria
+de coisa.
+
+### Cuidado
+
+O Android tem a própria tela de ajustes e uma navegação diferente. Este pedido é
+sobre o Windows; mexer nos dois de uma vez só se for pedido, para a mudança poder
+ser testada de verdade em uma plataforma antes de ir para a outra.
+
+---
+
 ## TAREFA-027 — Lembretes: avisar sobre um filme, e sobre um lançamento
 
 **Status:** pedido registrado — **não implementado**
