@@ -42,6 +42,88 @@ o servidor) continua aguardando o log do usuário.
 
 ---
 
+## TAREFA-030 — Guia Pesquisar no Windows, e ícones na navegação
+
+**Status:** pedido registrado — **não implementado**
+**Pedido em:** 2026-08-13
+**Relato:** "no app do celular tenho uma guia pesquisar de fácil acesso para
+pesquisar filmes, série, canal ao vivo rápido. Adicione essa guia pesquisar
+embaixo de Início... no app do celular tenho ícones preto e branco de cada guia
+que dá efeito muito bom, veja como é no app do celular, coloque nas guias do
+Windows também"
+
+São dois pedidos que caem no mesmo arquivo, então ficam na mesma tarefa.
+
+### 1. Guia Pesquisar
+
+O Windows **tem** busca, mas presa dentro de cada tela: uma caixa no catálogo,
+outra na lista de canais. Não existe um lugar único onde se digita um nome e
+aparecem filmes, séries e canais ao vivo juntos — que é justamente o que torna a
+guia do celular rápida.
+
+O Android já tem tudo o que falta: `AppSection.SEARCH`, o `search(query)` no
+ViewModel com debounce e cancelamento da consulta anterior, e o DAO
+`ChannelDao.search` com parâmetro vinculado, `LIMIT 200` e ordenação que põe
+filmes e séries antes dos canais — porque quem busca por nome quase sempre quer
+um título, e trezentos canais correspondentes enterrariam o filme pretendido.
+
+**Falta no Windows apenas a tela**, e ela entra **abaixo de Início**, como pedido.
+
+### 2. Ícones na navegação
+
+O `NavigationItem` do Windows recebe hoje só `label` — **nenhum ícone**. Por isso
+a barra do celular parece melhor: lá cada destino tem o seu, e é o desenho que dá
+o ritmo visual da lista.
+
+O mapa já existe no Android e vale copiar em vez de inventar outro:
+
+| Guia | Ícone |
+|---|---|
+| Início | `Icons.Default.Home` |
+| Pesquisar | `Icons.Default.Search` |
+| Ao vivo | `Icons.Default.LiveTv` |
+| Filmes | `Icons.Default.Movie` |
+| Séries | `Icons.Default.VideoLibrary` |
+| Favoritos | `Icons.Default.Favorite` |
+| Continuar | `Icons.Default.PlayCircle` |
+| Histórico | `Icons.Default.History` |
+| Assinaturas | `Icons.Default.VideoLibrary` |
+| Downloads | `Icons.Default.Folder` |
+| Fontes | `Icons.Default.Router` |
+| Perfil | `Icons.Default.Person` |
+| Configurações | `Icons.Default.Settings` |
+
+**Sobre o "preto e branco":** o efeito vem de o ícone ser monocromático e assumir
+a cor do texto — apagado quando o item está inativo, aceso quando está
+selecionado. Isso é o comportamento padrão do `Icon` do Compose com `tint`, e o
+`BuroInteractiveRow` já entrega o estado de seleção. Não é preciso arte nova.
+
+### Ordem final da navegação, com as três tarefas de barra aplicadas
+
+```text
+Início
+Pesquisar         ← TAREFA-030
+Filmes
+Séries
+Ao vivo
+Continuar assistindo
+Favoritos
+Histórico
+Downloads
+Assinaturas
+Fontes            ← TAREFA-029
+Perfil            ← TAREFA-028
+Configurações     ← TAREFA-028
+```
+
+### Cuidado
+
+Três tarefas mexem nessa mesma barra (028, 029, 030). Vale fazer em sequência,
+não em paralelo — três edições simultâneas no mesmo trecho é conflito garantido.
+Os ícones são a parte mais barata e podem entrar junto com qualquer uma delas.
+
+---
+
 ## TAREFA-029 — Guia Fontes no Windows, como já existe no celular
 
 **Status:** pedido registrado — **não implementado**
