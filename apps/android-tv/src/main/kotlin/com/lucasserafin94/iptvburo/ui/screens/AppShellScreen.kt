@@ -126,6 +126,9 @@ import com.lucasserafin94.iptvburo.ui.ParentalMessage
 import com.lucasserafin94.iptvburo.ui.PersonCreditUi
 import com.lucasserafin94.iptvburo.ui.ProfileUi
 import com.lucasserafin94.iptvburo.ui.ShareRequestUi
+import com.lucasserafin94.iptvburo.ui.cast.CastSheet
+import com.lucasserafin94.iptvburo.ui.cast.CastTarget
+import com.lucasserafin94.iptvburo.ui.cast.CastUiState
 import com.lucasserafin94.iptvburo.ui.localization.AppLocaleController
 import com.lucasserafin94.iptvburo.ui.SourceImportMethod
 import com.lucasserafin94.iptvburo.ui.SourceUi
@@ -164,6 +167,7 @@ import com.lucasserafin94.iptvburo.ui.theme.BuroDanger
 import com.lucasserafin94.iptvburo.ui.theme.BuroFieldColors
 import com.lucasserafin94.iptvburo.ui.theme.BuroGold
 import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurfaceRaised
 import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
 import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
@@ -183,6 +187,13 @@ fun AppShellScreen(
     onToggleMovieFavorite: () -> Unit,
     /** Sends the open title to the system share sheet. */
     onShareTitle: (ShareRequestUi) -> Unit,
+    /** Opens the sheet that sends the open title to a screen on the same network. */
+    onCastTitle: () -> Unit,
+    onCastSearchAgain: () -> Unit,
+    onCastChoose: (CastTarget) -> Unit,
+    onCastBack: () -> Unit,
+    onCastSend: (String) -> Unit,
+    onCastClose: () -> Unit,
     onOpenPerson: (String) -> Unit,
     /** Opens a filmography entry on the "where to watch" page. */
     onOpenPersonCredit: (PersonCreditUi) -> Unit,
@@ -192,6 +203,10 @@ fun AppShellScreen(
     onOpenEpisode: (EpisodeUi) -> Unit,
     onDownloadMovie: () -> Unit,
     onDownloadEpisode: (EpisodeUi) -> Unit,
+    /** Queues a whole season, after the screen has confirmed the count with the user. */
+    onDownloadSeason: (Int) -> Unit,
+    /** Queues every episode of the open series, likewise confirmed first. */
+    onDownloadSeries: () -> Unit,
     onCancelDownload: (String) -> Unit,
     onDeleteDownload: (String) -> Unit,
     onPlayDownload: (String) -> Unit,
@@ -278,6 +293,10 @@ fun AppShellScreen(
                     hasPlaybackError = state.hasPlaybackError,
                     onOpenEpisode = onOpenEpisode,
                     onDownloadEpisode = onDownloadEpisode,
+                    // Null where offline storage is unavailable, which hides the buttons
+                    // rather than showing ones that would refuse.
+                    onDownloadSeason = onDownloadSeason.takeIf { offlineSupported },
+                    onDownloadSeries = onDownloadSeries.takeIf { offlineSupported },
                     onCancelEpisodeDownload = { episode ->
                         onCancelDownload(episodeDownloadKey(seriesTitle, episode))
                     },
@@ -293,6 +312,7 @@ fun AppShellScreen(
                     // to file, and a button that silently does nothing is worse than no button.
                     onToggleFavorite =
                         onToggleMovieFavorite.takeIf { content.channelId.isNotBlank() },
+                    onCast = onCastTitle,
                     onShare = {
                         onShareTitle(
                             ShareRequestUi(
@@ -331,6 +351,7 @@ fun AppShellScreen(
                     onPlay = onPlayMovie,
                     isFavorite = content.channelId in state.favoriteIds,
                     onToggleFavorite = onToggleMovieFavorite,
+                    onCast = onCastTitle,
                     onShare = {
                         val movieTitle = state.movieDetails?.title ?: content.fallbackTitle
                         onShareTitle(
@@ -626,6 +647,31 @@ fun AppShellScreen(
                 },
                 onDismiss = { showMobileNavigation = false },
             )
+        }
+    }
+
+    // The cast sheet, whenever it is not Idle.
+    //
+    // In a Dialog rather than inline on the details page: discovery, choosing a screen and typing a
+    // code is a short conversation that should sit above the page it was started from, and it must
+    // survive the details page scrolling underneath it.
+    if (state.cast != CastUiState.Idle) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = onCastClose) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(BuroSurfaceRaised, RoundedCornerShape(20.dp)),
+            ) {
+                CastSheet(
+                    state = state.cast,
+                    onSearchAgain = onCastSearchAgain,
+                    onChoose = onCastChoose,
+                    onBack = onCastBack,
+                    onSend = onCastSend,
+                    onClose = onCastClose,
+                )
+            }
         }
     }
 
@@ -3830,7 +3876,7 @@ private const val REFRESH_FEEDBACK_MILLIS = 900L
  * A value that does not start with a plausible year yields null rather than a wrong number: the
  * year narrows a shared link to the right remake, so a guess is worse than its absence.
  */
-private fun yearFromReleaseDate(releaseDate: String): Int? =
+internal fun yearFromReleaseDate(releaseDate: String): Int? =
     releaseDate.trim().take(4).toIntOrNull()?.takeIf { it in PLAUSIBLE_RELEASE_YEARS }
 
 private val PLAUSIBLE_RELEASE_YEARS = 1_888..2_100

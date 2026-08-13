@@ -4,6 +4,8 @@ package com.lucasserafin94.iptvburo.ui.screens
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
@@ -25,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -47,6 +50,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,6 +89,10 @@ internal fun SeriesDetailsScreen(
     hasPlaybackError: Boolean,
     onOpenEpisode: (EpisodeUi) -> Unit,
     onDownloadEpisode: (EpisodeUi) -> Unit,
+    /** Queues every episode of one season. Null where offline storage is unavailable. */
+    onDownloadSeason: ((Int) -> Unit)? = null,
+    /** Queues every episode of every season. Null where offline storage is unavailable. */
+    onDownloadSeries: (() -> Unit)? = null,
     onCancelEpisodeDownload: (EpisodeUi) -> Unit,
     onDeleteEpisodeDownload: (EpisodeUi) -> Unit,
     downloadStateOf: (EpisodeUi) -> DownloadStateUi,
@@ -96,6 +104,8 @@ internal fun SeriesDetailsScreen(
     onToggleFavorite: (() -> Unit)? = null,
     /** Sends this series to the system share sheet. Null hides the button entirely. */
     onShare: (() -> Unit)? = null,
+    /** Opens the sheet that sends this title to a screen on the same network. Null hides it. */
+    onCast: (() -> Unit)? = null,
     /** How far into each episode the viewer is, keyed by episode id. */
     episodeProgress: Map<String, Float> = emptyMap(),
     /** Actor photos already looked up, keyed by lower-cased name. */
@@ -110,6 +120,14 @@ internal fun SeriesDetailsScreen(
         val padding = if (portrait) 16.dp else 42.dp
         val backFocusRequester = remember(fallbackTitle) { FocusRequester() }
         var expandedSeason by remember(details?.title) { mutableStateOf<Int?>(null) }
+
+        // A bulk download waiting to be confirmed, or null.
+        //
+        // Keyed to the title so opening another series cannot leave a dialogue behind that would
+        // then queue the wrong show.
+        var pendingBulkDownload by remember(details?.title) {
+            mutableStateOf<BulkDownload?>(null)
+        }
         LaunchedEffect(fallbackTitle) {
             backFocusRequester.requestFocus()
         }
@@ -288,6 +306,26 @@ internal fun SeriesDetailsScreen(
                                 Text(stringResource(R.string.details_share))
                             }
                         }
+                        // Beside Compartilhar, for the same reason: what travels is the identity of
+                        // the title, which the catalogue row already provides.
+                        onCast?.let { cast ->
+                            BuroButton(onClick = cast, style = BuroButtonStyle.Secondary) {
+                                Icon(Icons.Default.Cast, contentDescription = null)
+                                Text(stringResource(R.string.cast_action))
+                            }
+                        }
+                        // Downloading the lot. Confirmed rather than immediate: this is the one
+                        // button on the screen that can start eighty transfers and fill a phone,
+                        // and it sits next to buttons that do something small and instant.
+                        onDownloadSeries?.takeIf { details.episodes.isNotEmpty() }?.let { download ->
+                            BuroButton(
+                                onClick = { pendingBulkDownload = BulkDownload.WholeSeries },
+                                style = BuroButtonStyle.Secondary,
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null)
+                                Text(stringResource(R.string.series_download_all))
+                            }
+                        }
                     }
                 }
             }
@@ -436,6 +474,25 @@ internal fun SeriesDetailsScreen(
                                     }
                                 }
                             }
+                            // One season at a time, which is what most people actually want: the
+                            // season they are about to start, not the whole run. Placed in the
+                            // header so it is reachable without expanding, and confirmed for the
+                            // same reason the series button is.
+                            onDownloadSeason?.let {
+                                item(key = "series:season:$season:download") {
+                                    BuroButton(
+                                        onClick = {
+                                            pendingBulkDownload =
+                                                BulkDownload.Season(season, episodes.size)
+                                        },
+                                        style = BuroButtonStyle.Secondary,
+                                        modifier = Modifier.padding(top = 8.dp),
+                                    ) {
+                                        Icon(Icons.Default.Download, contentDescription = null)
+                                        Text(stringResource(R.string.series_download_season, season))
+                                    }
+                                }
+                            }
                             if (expandedSeason == season) {
                                 items(
                                     items = episodes.chunked(columns),
@@ -466,6 +523,104 @@ internal fun SeriesDetailsScreen(
                                 }
                             }
                         }
+                }
+            }
+        }
+
+        // Confirming a bulk download.
+        //
+        // Drawn last so it sits above the list. The count is in the question rather than in a
+        // separate line, because the number is the whole decision: twelve episodes and eighty are
+        // very different answers to "is there room on this phone".
+        pendingBulkDownload?.let { pending ->
+            val episodeCount =
+                when (pending) {
+                    BulkDownload.WholeSeries -> details?.episodes?.size ?: 0
+                    is BulkDownload.Season -> pending.episodeCount
+                }
+            BulkDownloadDialog(
+                episodeCount = episodeCount,
+                seasonNumber = (pending as? BulkDownload.Season)?.number,
+                onConfirm = {
+                    when (pending) {
+                        BulkDownload.WholeSeries -> onDownloadSeries?.invoke()
+                        is BulkDownload.Season -> onDownloadSeason?.invoke(pending.number)
+                    }
+                    pendingBulkDownload = null
+                },
+                onDismiss = { pendingBulkDownload = null },
+            )
+        }
+    }
+}
+
+/**
+ * Asks before queueing a season or a whole series.
+ *
+ * Deliberately plain: a question, the count, and two buttons. The cancel action is the one a stray
+ * tap outside the dialogue takes, because the expensive choice should never be the accidental one.
+ */
+@Composable
+private fun BulkDownloadDialog(
+    episodeCount: Int,
+    seasonNumber: Int?,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Color(0xCC08090A))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .padding(24.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(BuroSurface)
+                    .padding(22.dp)
+                    // Swallows taps on the card itself, so pressing the text does not dismiss.
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    ),
+        ) {
+            Text(
+                text =
+                    seasonNumber
+                        ?.let { stringResource(R.string.series_download_season_confirm_title, it) }
+                        ?: stringResource(R.string.series_download_all_confirm_title),
+                color = BuroTextPrimary,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text =
+                    pluralStringResource(
+                        R.plurals.series_download_confirm_body,
+                        episodeCount,
+                        episodeCount,
+                    ),
+                color = BuroTextSecondary,
+                fontSize = 14.sp,
+            )
+            Spacer(Modifier.height(18.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                BuroButton(onClick = onDismiss, style = BuroButtonStyle.Secondary) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+                BuroButton(onClick = onConfirm) {
+                    Icon(Icons.Default.Download, contentDescription = null)
+                    Text(stringResource(R.string.download_action))
                 }
             }
         }
@@ -639,3 +794,17 @@ private fun EpisodeCard(
 
 /** Watched enough to be treated as finished; the last few per cent are usually credits. */
 private const val WATCHED_THRESHOLD = 0.92f
+
+/**
+ * A bulk download the user has asked for but not yet confirmed.
+ *
+ * Confirmed rather than immediate because these are the only buttons on the screen that can start
+ * dozens of transfers and fill a phone's storage, and they sit beside buttons that do something
+ * small and instant. The count travels with the request so the dialogue can state it — "download
+ * twelve episodes?" is a question someone can answer, "download the season?" is not.
+ */
+private sealed interface BulkDownload {
+    data object WholeSeries : BulkDownload
+
+    data class Season(val number: Int, val episodeCount: Int) : BulkDownload
+}

@@ -32,6 +32,11 @@ import com.lucasserafin94.iptvburo.stalker.StalkerFailureReason
 import com.lucasserafin94.iptvburo.stalker.StalkerMacAddress
 import com.lucasserafin94.iptvburo.ui.capabilities.AndroidPlatformCapabilities
 import com.lucasserafin94.iptvburo.ui.screens.playbackProgressIdentity
+import com.lucasserafin94.iptvburo.ui.screens.yearFromReleaseDate
+import com.lucasserafin94.iptvburo.ui.cast.CastController
+import com.lucasserafin94.iptvburo.ui.cast.CastSender
+import com.lucasserafin94.iptvburo.ui.cast.CastTarget
+import com.lucasserafin94.iptvburo.ui.cast.CastUiState
 import com.lucasserafin94.iptvburo.di.IoDispatcher
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import com.lucasserafin94.iptvburo.domain.model.CatalogueFilter
@@ -71,6 +76,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -118,6 +125,19 @@ class MainViewModel @Inject constructor(
     private var subscriptionSelectionJob: Job? = null
     private var sharedLinkJob: Job? = null
     private var keyInspectionJob: Job? = null
+
+    /**
+     * How many downloads may be transferring at once.
+     *
+     * Downloading a season turns one tap into dozens of coroutines. Without this they would each
+     * open a connection to the provider simultaneously, which saturates the user's line, makes
+     * every file slower than fetching them in turn, and looks indistinguishable from abuse to a
+     * provider — the sort of thing that gets an account throttled or closed.
+     *
+     * Three rather than one: a single slot wastes bandwidth whenever a transfer is waiting on the
+     * server, and a phone on wifi comfortably handles a few at once.
+     */
+    private val downloadSlots = Semaphore(DOWNLOAD_SLOTS)
 
     /**
      * A shared title waiting for a catalogue to look it up in.
@@ -1429,6 +1449,151 @@ class MainViewModel @Inject constructor(
     }
 
     // ---------------------------------------------------------------------------------------
+    // Sending a title to another screen
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Built on first use rather than injected, because it needs a [Context] and most sessions never
+     * cast at all. [CastController] itself is free of Android types; only the transport is not.
+     */
+    private val castController: CastController by lazy {
+        CastController(sender = CastSender(context), io = ioDispatcher)
+    }
+
+    private var castJob: Job? = null
+
+    /**
+     * Opens the cast sheet for whichever details page is open and starts looking for screens.
+     *
+     * The identity is what gets sent, never a URL: the receiving screen finds the title in its own
+     * list and plays from the provider directly, so this device's credentials stay on it. A title
+     * the app cannot identify is refused here rather than sent as something the receiver will fail
+     * to match — see [ContentIdentity].
+     */
+    fun openCast() {
+        val state = mutableState.value
+        val request =
+            when (val content = state.content) {
+                is AppContent.MovieDetails -> {
+                    val title = state.movieDetails?.title ?: content.fallbackTitle
+                    val year =
+                        state.movieDetails?.releaseDate?.let(::yearFromReleaseDate)
+                            ?: ContentIdentity.yearFromTitle(title)
+                    CastRequestUi(
+                        identity = ContentIdentity.of(ContentKind.MOVIE, title, year),
+                        title = title,
+                    )
+                }
+
+                is AppContent.SeriesDetails -> {
+                    val title = state.seriesDetails?.title ?: content.fallbackTitle
+                    val year = state.seriesDetails?.releaseDate?.let(::yearFromReleaseDate)
+                    CastRequestUi(
+                        identity = ContentIdentity.of(ContentKind.SERIES, title, year),
+                        title = title,
+                    )
+                }
+
+                else -> return
+            }
+
+        mutableState.update { current -> current.copy(castRequest = request) }
+        loadCastResumePosition()
+        searchForScreens()
+    }
+
+    /**
+     * Fills in where the viewer already is, so the other screen picks the film up rather than
+     * restarting it.
+     *
+     * Read here rather than carried in [AppUiState], which holds only a fraction for the progress
+     * bar — a percentage cannot be turned back into a position without the duration. Runs while
+     * discovery is happening, so it costs no extra waiting; the sheet cannot send before a screen
+     * has been chosen and a code typed, which is far longer than this takes.
+     *
+     * Failure leaves it at zero: starting from the beginning is a fair answer, and refusing to cast
+     * because a resume point could not be read would be worse.
+     */
+    private fun loadCastResumePosition() {
+        val profileId = mutableState.value.activeProfile?.id ?: return
+        // Only films: a series has no single position, and the episode a viewer would resume is a
+        // question this sheet does not ask. Series are sent at zero, which is honest.
+        val content = mutableState.value.content as? AppContent.MovieDetails ?: return
+        val channel = knownMovieChannels[content.channelId] ?: return
+        viewModelScope.launch {
+            val identity = playbackProgressIdentity(profileId, channel) ?: return@launch
+            val position =
+                withContext(ioDispatcher) {
+                    runCatching { playbackProgressRepository.find(identity)?.positionMs }.getOrNull()
+                } ?: return@launch
+            mutableState.update { current ->
+                // Only if the sheet is still open on the same title: closing it and opening another
+                // while this was in flight would otherwise stamp one film's position onto another.
+                val pending = current.castRequest ?: return@update current
+                if (pending.positionMillis != 0L) return@update current
+                current.copy(castRequest = pending.copy(positionMillis = position.coerceAtLeast(0L)))
+            }
+        }
+    }
+
+    /** Looks for screens again, for the "search again" action and when the sheet opens. */
+    fun searchForScreens() {
+        castJob?.cancel()
+        castJob =
+            viewModelScope.launch {
+                castController.search()
+                publishCastState()
+            }
+        publishCastState()
+    }
+
+    fun chooseCastTarget(target: CastTarget) {
+        castController.choose(target)
+        publishCastState()
+    }
+
+    fun backToCastTargets() {
+        castController.back()
+        publishCastState()
+    }
+
+    fun closeCast() {
+        castJob?.cancel()
+        castJob = null
+        castController.close()
+        mutableState.update { current -> current.copy(cast = CastUiState.Idle, castRequest = null) }
+    }
+
+    /** Sends the open title with the code shown on the chosen screen. */
+    fun sendToCastTarget(code: String) {
+        val request = mutableState.value.castRequest ?: return
+        castJob?.cancel()
+        castJob =
+            viewModelScope.launch {
+                castController.send(
+                    code = code,
+                    identity = request.identity,
+                    title = request.title,
+                    positionMillis = request.positionMillis,
+                )
+                publishCastState()
+            }
+        publishCastState()
+    }
+
+    /**
+     * Copies the controller's state into the flow.
+     *
+     * The controller keeps a plain `var` so it stays testable without Compose; this is the single
+     * place that turns it into something the screen observes. Called both before and after the
+     * suspending calls above, so "searching" and "sending" are visible while they happen rather
+     * than only once they finish.
+     */
+    private fun publishCastState() {
+        mutableState.update { current -> current.copy(cast = castController.state) }
+    }
+
+    // ---------------------------------------------------------------------------------------
     // Downloads
     // ---------------------------------------------------------------------------------------
 
@@ -1451,6 +1616,40 @@ class MainViewModel @Inject constructor(
     }
 
     /** Starts an offline copy of one episode of the series whose details are open. */
+    /**
+     * Queues every episode of one season.
+     *
+     * Built on [downloadEpisode] rather than beside it, so a season download and a single tap are
+     * the same operation repeated: the same content key, the same late URL resolution, the same
+     * refusal to start something already running. Nothing here is special-cased, which is what
+     * keeps a half-finished season indistinguishable from episodes picked by hand.
+     *
+     * Whether to ask first is the screen's decision — the confirmation names the count, and by the
+     * time this is called the user has said yes.
+     */
+    fun downloadSeason(seasonNumber: Int) {
+        val episodes =
+            mutableState.value.seriesDetails
+                ?.episodes
+                ?.filter { episode -> episode.seasonNumber == seasonNumber }
+                .orEmpty()
+        episodes.forEach(::downloadEpisode)
+    }
+
+    /**
+     * Queues every episode the open series has.
+     *
+     * Ordered by season and then episode so a viewer who starts watching before the last file
+     * lands gets the beginning first — and, more importantly, so the transfer *queue* is in that
+     * order, because [DOWNLOAD_SLOTS] means most of these are waiting rather than running.
+     */
+    fun downloadWholeSeries() {
+        mutableState.value.seriesDetails
+            ?.episodes
+            ?.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber ?: Int.MAX_VALUE }))
+            ?.forEach(::downloadEpisode)
+    }
+
     fun downloadEpisode(episode: EpisodeUi) {
         val content = mutableState.value.content as? AppContent.SeriesDetails ?: return
         val resolved = seriesEpisodes[episode.id] ?: return
@@ -1582,6 +1781,29 @@ class MainViewModel @Inject constructor(
             )
         }
         viewModelScope.launch {
+            // Only a few transfers run at once; the rest wait here.
+            //
+            // Downloading a whole season or series turns one tap into dozens of these coroutines,
+            // and without a limit every one of them would open its own connection to the provider
+            // at the same moment. That saturates the user's line, makes each file slower than if
+            // they had been fetched in turn, and looks to a provider exactly like abuse — the sort
+            // of thing that gets an account throttled or closed.
+            //
+            // The permit covers URL resolution as well as the transfer, because resolving is
+            // itself a provider request for authenticated sources.
+            downloadSlots.withPermit {
+                runDownload(contentKey, title, resolve)
+            }
+        }
+    }
+
+    /** The body of one download, once [startDownload] has been given a transfer slot. */
+    private suspend fun runDownload(
+        contentKey: String,
+        title: String,
+        resolve: suspend () -> Channel?,
+    ) {
+        run {
             val resolved = runCatching { resolve() }.getOrNull()
             // A live stream never ends, so downloading one would grow until storage fills. This is
             // a technical limit rather than a policy one — see ADR-008.
@@ -1592,7 +1814,7 @@ class MainViewModel @Inject constructor(
             ) {
                 logger.warn(TAG, "The selected item could not be prepared for offline storage")
                 markDownload(contentKey, DownloadStateUi.Failed)
-                return@launch
+                return
             }
 
             val result =
@@ -3303,6 +3525,9 @@ class MainViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "MainViewModel"
+
+        /** Concurrent transfers. See [downloadSlots] for why this is not unbounded. */
+        const val DOWNLOAD_SLOTS = 3
 
         /**
          * How much of a key has to be typed before it is worth asking the server about.

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -81,6 +82,8 @@ internal fun MovieDetailsScreen(
     onToggleFavorite: () -> Unit,
     /** Sends this title to the system share sheet. Null hides the button entirely. */
     onShare: (() -> Unit)? = null,
+    /** Opens the sheet that sends this title to a screen on the same network. Null hides it. */
+    onCast: (() -> Unit)? = null,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
     onDeleteDownload: () -> Unit,
@@ -358,6 +361,14 @@ internal fun MovieDetailsScreen(
                         ) {
                             Icon(Icons.Default.Share, contentDescription = null)
                             Text(stringResource(R.string.details_share))
+                        }
+                    }
+                    // Beside Compartilhar, and enabled on the same terms: what travels is the
+                    // title's identity, which the catalogue row already provides.
+                    onCast?.let { cast ->
+                        BuroButton(onClick = cast, style = BuroButtonStyle.Secondary) {
+                            Icon(Icons.Default.Cast, contentDescription = null)
+                            Text(stringResource(R.string.cast_action))
                         }
                     }
                 }

@@ -251,6 +251,7 @@
     <string name="settings_choose_profile">Scegli un profilo</string>
     <string name="live_schedule_title">Programmazione</string>
     <string name="live_schedule_empty">Il tuo fornitore non ha inviato la guida per questo canale. Molte liste non ne hanno: non c è nulla di sbagliato nell app né nella tua connessione.</string>
+    <string name="cast_action">Invia a schermo</string>
     <string name="cast_title">Invia a uno schermo</string>
     <string name="cast_searching">Ricerca di schermi in questa rete…</string>
     <string name="cast_none_found">Nessuno schermo trovato. Apri IPTV BURO sul computer o sulla TV, attiva “Ricevi” e verifica che siano sulla stessa rete.</string>
@@ -263,4 +264,9 @@
     <string name="cast_sent">Inviato a %1$s. Se non parte, controlla il codice su quello schermo.</string>
     <string name="cast_failed">Impossibile raggiungere %1$s.</string>
     <string name="cast_choose_another">Scegli un altro schermo</string>
+    <string name="series_download_all">Scarica la serie</string>
+    <string name="series_download_season">Scarica la stagione %1$d</string>
+    <string name="series_download_all_confirm_title">Scaricare tutta la serie?</string>
+    <string name="series_download_season_confirm_title">Scaricare la stagione %1$d?</string>
+    <plurals name="series_download_confirm_body"><item quantity="one">Verrà scaricato %1$d episodio. Può usare molto spazio e molti dati.</item><item quantity="many">Verranno scaricati %1$d episodi. Può usare molto spazio e molti dati.</item><item quantity="other">Verranno scaricati %1$d episodi. Può usare molto spazio e molti dati.</item></plurals>
 </resources>

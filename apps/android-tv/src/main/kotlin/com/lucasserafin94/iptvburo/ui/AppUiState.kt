@@ -14,6 +14,7 @@ import com.lucasserafin94.iptvburo.domain.model.ParentalLock
 import com.lucasserafin94.iptvburo.domain.model.SourceType
 import com.lucasserafin94.iptvburo.domain.model.StreamingDiscoveryCapability
 import com.lucasserafin94.iptvburo.domain.model.SubtitlePresentation
+import com.lucasserafin94.iptvburo.ui.cast.CastUiState
 
 data class ProfileUi(
     val id: String,
@@ -128,6 +129,19 @@ data class ShareRequestUi(
     val year: Int?,
     val artworkUrl: String?,
     val description: String?,
+)
+
+/**
+ * A title as casting needs to name it, held while the cast sheet is open.
+ *
+ * Carries the identity rather than a URL, which is the whole point of the feature: the receiving
+ * screen looks the title up in *its own* list and plays from the provider itself, so this device's
+ * credentials never travel.
+ */
+data class CastRequestUi(
+    val identity: ContentIdentity,
+    val title: String,
+    val positionMillis: Long = 0L,
 )
 
 data class EpisodeUi(
@@ -569,6 +583,15 @@ data class AppUiState(
     val pendingUnlock: PendingUnlockUi? = null,
     /** How subtitles are drawn, applied to the next player that opens. */
     val subtitles: SubtitlePresentation = SubtitlePresentation(),
+    /**
+     * What the cast sheet is doing. [CastUiState.Idle] means it is closed.
+     *
+     * Held here rather than inside a composable so that leaving the details screen mid-search does
+     * not strand a discovery, and so the sheet survives a rotation with its chosen screen intact.
+     */
+    val cast: CastUiState = CastUiState.Idle,
+    /** The title the open cast sheet would send. Null whenever [cast] is Idle. */
+    val castRequest: CastRequestUi? = null,
 ) {
     /**
      * [channels] narrowed and ordered by [catalogueFilter].

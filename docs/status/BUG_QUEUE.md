@@ -86,7 +86,7 @@ vida da interoperação Compose/Swing, não em lógica pura.
 
 ## BUG-020 — Não existe botão para enviar o filme à TV ou ao computador
 
-**Status:** confirmado — **não implementado na interface**
+**Status:** botão implementado — **falta testar entre dois aparelhos reais**
 **Reportado em:** 2026-08-13
 **Relato:** "tbm nao encontro botao de tela que envia para celular ou para tv nem
 na tela do filme nem na tela onde fica capa"
@@ -104,9 +104,36 @@ O que ficou faltando é o ponto de entrada no Android — nenhuma tela abre o
 Registrado como pendência real: a nota de versão do `alpha.4` descreve o recurso
 como utilizável, e no Android ele não é.
 
-**Próximo passo:** acrescentar a ação na tela de detalhes do título (junto de
-Favoritos/Compartilhar) e no player, ambas abrindo o `CastSheet` já existente,
-visível só quando houver receptor descoberto na rede.
+### Correção aplicada
+
+O botão **"Enviar à tela"** entrou ao lado de Compartilhar, nas telas de filme e
+de série, e abre o `CastSheet` que já existia:
+
+- `MainViewModel` ganhou o fluxo (`openCast`, `searchForScreens`,
+  `chooseCastTarget`, `backToCastTargets`, `sendToCastTarget`, `closeCast`). O
+  `CastController` guarda estado num `var` comum — de propósito, para continuar
+  testável sem Compose — então há um único ponto que copia esse estado para o
+  `StateFlow`, chamado antes **e** depois das chamadas suspensas, para que
+  "procurando" e "enviando" apareçam enquanto acontecem, e não só no fim;
+- o estado vive no ViewModel, não num composable: sair da tela no meio da busca
+  não aborta a descoberta, e a folha sobrevive a uma rotação com a tela escolhida;
+- o `CastSender` é construído na primeira utilização, porque precisa de `Context`
+  e a maioria das sessões nunca usa o recurso;
+- o que viaja é a **identidade** do título, nunca uma URL. O receptor resolve
+  pelo mesmo caminho de um link compartilhado — `message.identity` →
+  `itemByContentKey` — procurando na lista **dele**. Conferido nos dois lados.
+
+**Uma pendência real e assumida:** o `positionMillis` é preenchido pelo celular
+(lido do progresso salvo, só para filmes — uma série não tem posição única) e o
+Windows **descarta**. O caminho de link abre a ficha do título em vez de iniciar
+a reprodução, então não existe onde aplicar a retomada ainda. Ficou comentado no
+receptor; o protocolo já carrega o campo, então honrar isso depois não custa
+nada. Preenchê-lo agora sem uso seria fingir um recurso que não funciona.
+
+**Falta:** enviar um filme de verdade entre um celular e um PC na mesma rede.
+Os testes automatizados cobrem os dois lados, inclusive os sockets, mas o teste
+que vale é com o celular na mão — e a descoberta depende do roteador, que é
+justamente o que teste nenhum reproduz.
 
 ---
 

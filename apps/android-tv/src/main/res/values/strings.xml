@@ -246,6 +246,7 @@
     <string name="settings_choose_profile">Choose a profile</string>
     <string name="live_schedule_title">Schedule</string>
     <string name="live_schedule_empty">Your provider sent no guide for this channel. Many playlists carry none — nothing is wrong with the app or your connection.</string>
+    <string name="cast_action">Send to screen</string>
     <string name="cast_title">Send to a screen</string>
     <string name="cast_searching">Looking for screens on this network…</string>
     <string name="cast_none_found">No screen found. Open IPTV BURO on the computer or TV, turn on “Receive”, and make sure both are on the same network.</string>
@@ -258,4 +259,9 @@
     <string name="cast_sent">Sent to %1$s. If nothing starts, check the code on that screen.</string>
     <string name="cast_failed">Could not reach %1$s.</string>
     <string name="cast_choose_another">Choose another screen</string>
+    <string name="series_download_all">Download series</string>
+    <string name="series_download_season">Download season %1$d</string>
+    <string name="series_download_all_confirm_title">Download the whole series?</string>
+    <string name="series_download_season_confirm_title">Download season %1$d?</string>
+    <plurals name="series_download_confirm_body"><item quantity="one">%1$d episode will be downloaded. This can use a lot of storage and data.</item><item quantity="other">%1$d episodes will be downloaded. This can use a lot of storage and data.</item></plurals>
 </resources>

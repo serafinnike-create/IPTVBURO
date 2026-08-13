@@ -246,6 +246,7 @@
     <string name="settings_choose_profile">Profil wählen</string>
     <string name="live_schedule_title">Programm</string>
     <string name="live_schedule_empty">Ihr Anbieter hat für diesen Sender kein Programm geliefert. Viele Playlists enthalten keines — weder mit der App noch mit Ihrer Verbindung stimmt etwas nicht.</string>
+    <string name="cast_action">An Bildschirm</string>
     <string name="cast_title">An einen Bildschirm senden</string>
     <string name="cast_searching">Suche nach Bildschirmen in diesem Netzwerk…</string>
     <string name="cast_none_found">Kein Bildschirm gefunden. Öffne IPTV BURO am Rechner oder TV, aktiviere „Empfangen“ und stelle sicher, dass beide im selben Netzwerk sind.</string>
@@ -258,4 +259,9 @@
     <string name="cast_sent">An %1$s gesendet. Startet nichts, prüfe den Code auf dem Bildschirm.</string>
     <string name="cast_failed">%1$s war nicht erreichbar.</string>
     <string name="cast_choose_another">Anderen Bildschirm wählen</string>
+    <string name="series_download_all">Serie herunterladen</string>
+    <string name="series_download_season">Staffel %1$d herunterladen</string>
+    <string name="series_download_all_confirm_title">Ganze Serie herunterladen?</string>
+    <string name="series_download_season_confirm_title">Staffel %1$d herunterladen?</string>
+    <plurals name="series_download_confirm_body"><item quantity="one">%1$d Folge wird heruntergeladen. Das kann viel Speicher und Daten verbrauchen.</item><item quantity="other">%1$d Folgen werden heruntergeladen. Das kann viel Speicher und Daten verbrauchen.</item></plurals>
 </resources>

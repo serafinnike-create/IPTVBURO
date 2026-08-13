@@ -3014,6 +3014,12 @@ class DesktopAppState(
             castReceiver.start { message ->
                 // Resolved through the same path a shared link takes: both name a title rather than
                 // a stream, and both have to find it in *this* machine's catalogue.
+                //
+                // `message.positionMillis` is deliberately dropped for now. That path opens the
+                // title's page rather than starting playback, so there is nowhere to apply a resume
+                // point yet; carrying it into a field nothing reads would look like a working
+                // feature. The protocol already carries it, so honouring it later costs nothing
+                // here. See BUG-020 in the queue.
                 submitShareLink(
                     TitleShareLink(
                         identity = message.identity,
