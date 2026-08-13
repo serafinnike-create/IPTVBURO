@@ -25,19 +25,36 @@ import {
 import { adminPage } from './admin-page.js';
 import {
   archiveDevice,
+  adminBackup,
   cancelKey,
   createKeys,
   deviceDetails,
   devicesByStatus,
   grantDevice,
+  financialOverview,
   isAdmin,
+  listAdminAudit,
   listKeys,
+  listSecurityAlerts,
   paidDevices,
   revokeDevice,
   restoreDevice,
+  resolveSecurityAlert,
+  recordAdminAudit,
+  recordFailedRedemption,
+  recordSecurityAlert,
   searchDevices,
   summary,
+  updateDeviceSupport,
 } from './admin.js';
+import {
+  adminMfaStatus,
+  authenticateAdmin,
+  beginMfaSetup,
+  cleanupAdminSessions,
+  confirmMfaSetup,
+  createAdminSession,
+} from './admin-security.js';
 
 /**
  * IPTV BURO licence server.
@@ -169,6 +186,17 @@ export default {
         case '/admin/revoke':
         case '/admin/archive':
         case '/admin/restore':
+        case '/admin/support':
+        case '/admin/finance':
+        case '/admin/alerts':
+        case '/admin/alerts/resolve':
+        case '/admin/audit':
+        case '/admin/export':
+        case '/admin/backup':
+        case '/admin/session':
+        case '/admin/mfa/status':
+        case '/admin/mfa/setup':
+        case '/admin/mfa/confirm':
         case '/admin/keys':
         case '/admin/keys/cancel':
           return await handleAdmin(request, env, url);
@@ -186,7 +214,10 @@ export default {
   },
 
   async scheduled(_controller, env, context) {
-    context.waitUntil(reconcileGooglePlayPurchases(env));
+    context.waitUntil(Promise.all([
+      reconcileGooglePlayPurchases(env),
+      cleanupAdminSessions(env),
+    ]));
   },
 };
 
@@ -197,7 +228,27 @@ export default {
  * sixth route and forgets — and the thing being protected is the ability to give the product away.
  */
 async function handleAdmin(request, env, url) {
-  if (!isAdmin(request, env)) {
+  if (url.pathname === '/admin/mfa/status') {
+    if (!isAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
+    return json(await adminMfaStatus(env));
+  }
+  if (url.pathname === '/admin/mfa/setup') {
+    const result = await beginMfaSetup(request, env);
+    return json(result.ok ? result : { error: result.error }, result.status ?? 200);
+  }
+  if (url.pathname === '/admin/mfa/confirm') {
+    const body = await readJson(request);
+    const result = await confirmMfaSetup(request, body.code, env);
+    return json(result.ok ? result : { error: result.error }, result.status ?? 200);
+  }
+  if (url.pathname === '/admin/session') {
+    const body = await readJson(request);
+    const result = await createAdminSession(request, body, env);
+    return json(result.ok ? result : { error: result.error }, result.status ?? 200);
+  }
+
+  const administrator = await authenticateAdmin(request, env);
+  if (!administrator) {
     // 401 with no detail. Saying whether the token was missing or merely wrong tells someone
     // probing which of the two they are dealing with.
     return json({ error: 'unauthorized' }, 401);
@@ -217,6 +268,68 @@ async function handleAdmin(request, env, url) {
       return details ? json(details) : json({ error: 'not_found' }, 404);
     }
 
+    case '/admin/support': {
+      const body = await readJson(request);
+      const deviceId = validDeviceId(body.device);
+      if (!deviceId) return json({ error: 'bad_device' }, 400);
+      const updated = await updateDeviceSupport(deviceId, body, env);
+      if (!updated) return json({ error: 'not_found' }, 404);
+      await recordAdminAudit(
+        administrator.actor, 'DEVICE_SUPPORT_UPDATED', deviceId,
+        `order:${String(body.orderReference ?? '').slice(0, 100)}`,
+        request.cf?.country, env,
+      );
+      return json({ ok: true });
+    }
+
+    case '/admin/finance':
+      return json(await financialOverview(env));
+
+    case '/admin/alerts':
+      return json({ alerts: await listSecurityAlerts(env) });
+
+    case '/admin/alerts/resolve': {
+      const body = await readJson(request);
+      const resolved = await resolveSecurityAlert(body.id, body.note, env);
+      if (!resolved) return json({ error: 'not_found' }, 404);
+      await recordAdminAudit(
+        administrator.actor, 'SECURITY_ALERT_RESOLVED', null,
+        `alert:${Number(body.id)}`, request.cf?.country, env,
+      );
+      return json({ ok: true });
+    }
+
+    case '/admin/audit':
+      return json({ audit: await listAdminAudit(env) });
+
+    case '/admin/backup': {
+      const backup = await adminBackup(env);
+      await recordAdminAudit(
+        administrator.actor, 'BACKUP_EXPORTED', null, backup.createdAt,
+        request.cf?.country, env,
+      );
+      return json(backup, 200, {
+        'content-disposition': `attachment; filename="iptvburo-backup-${backup.createdAt.slice(0, 10)}.json"`,
+      });
+    }
+
+    case '/admin/export': {
+      const devices = await devicesByStatus('ALL', env);
+      const csv = devicesCsv(devices);
+      await recordAdminAudit(
+        administrator.actor, 'DEVICES_CSV_EXPORTED', null, `${devices.length} devices`,
+        request.cf?.country, env,
+      );
+      return new Response(csv, {
+        headers: {
+          'content-type': 'text/csv; charset=utf-8',
+          'content-disposition': `attachment; filename="iptvburo-dispositivos-${new Date().toISOString().slice(0, 10)}.csv"`,
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+        },
+      });
+    }
+
     case '/admin/list': {
       // What the summary counts link to. `paid` is not a status but a question about the ledger,
       // so it is named separately rather than being squeezed into the status filter.
@@ -234,6 +347,10 @@ async function handleAdmin(request, env, url) {
       // Bounded: a typo in the days field should not create a licence outliving everyone involved.
       const days = Math.max(1, Math.min(Number(body.days) || 30, 36_500));
       await grantDevice(deviceId, days, String(body.note ?? '').slice(0, 200), env);
+      await recordAdminAudit(
+        administrator.actor, 'DEVICE_GRANTED', deviceId, `${days}d: ${String(body.note ?? '').slice(0, 200)}`,
+        request.cf?.country, env,
+      );
       return json({ ok: true, days });
     }
 
@@ -242,6 +359,10 @@ async function handleAdmin(request, env, url) {
       const deviceId = validDeviceId(body.device);
       if (!deviceId) return json({ error: 'bad_device' }, 400);
       await revokeDevice(deviceId, String(body.note ?? '').slice(0, 200), env);
+      await recordAdminAudit(
+        administrator.actor, 'DEVICE_REVOKED', deviceId, String(body.note ?? '').slice(0, 200),
+        request.cf?.country, env,
+      );
       return json({ ok: true });
     }
 
@@ -250,6 +371,10 @@ async function handleAdmin(request, env, url) {
       const deviceId = validDeviceId(body.device);
       if (!deviceId) return json({ error: 'bad_device' }, 400);
       const archived = await archiveDevice(deviceId, String(body.note ?? '').slice(0, 200), env);
+      if (archived) await recordAdminAudit(
+        administrator.actor, 'DEVICE_ARCHIVED', deviceId, String(body.note ?? '').slice(0, 200),
+        request.cf?.country, env,
+      );
       return archived ? json({ ok: true }) : json({ error: 'not_found' }, 404);
     }
 
@@ -258,12 +383,20 @@ async function handleAdmin(request, env, url) {
       const deviceId = validDeviceId(body.device);
       if (!deviceId) return json({ error: 'bad_device' }, 400);
       const restored = await restoreDevice(deviceId, env);
+      if (restored) await recordAdminAudit(
+        administrator.actor, 'DEVICE_RESTORED', deviceId, 'visibility restored; remains revoked',
+        request.cf?.country, env,
+      );
       return restored ? json({ ok: true }) : json({ error: 'not_found' }, 404);
     }
 
     case '/admin/keys/cancel': {
       const body = await readJson(request);
       const cancelled = await cancelKey(body.key, env);
+      if (cancelled) await recordAdminAudit(
+        administrator.actor, 'ACTIVATION_KEY_CANCELLED', null, String(body.key ?? '').slice(0, 20),
+        request.cf?.country, env,
+      );
       // 404 rather than a silent success: "already used" and "never existed" both mean the code is
       // still out there doing whatever it was going to do, and the panel should say so.
       return cancelled ? json({ ok: true }) : json({ error: 'not_cancellable' }, 404);
@@ -275,6 +408,10 @@ async function handleAdmin(request, env, url) {
       const days = Math.max(1, Math.min(Number(body.days) || 30, 36_500));
       const count = Math.max(1, Math.min(Number(body.count) || 1, 50));
       const keys = await createKeys(count, days, String(body.note ?? '').slice(0, 200), env);
+      await recordAdminAudit(
+        administrator.actor, 'ACTIVATION_KEYS_CREATED', null, `${keys.length} keys; ${days}d`,
+        request.cf?.country, env,
+      );
       return json({ keys });
     }
 
@@ -324,7 +461,83 @@ async function handleSigningKeyCheck(request, env) {
     { purpose: 'iptvburo-signing-key-check-v1', nonce },
     env.SIGNING_KEY,
   );
-  return json({ payload: signed.payload, signature: signed.signature });
+  const answer = { payload: signed.payload, signature: signed.signature };
+
+  // The ECDSA half, for whoever is building the TV client. Publishing a public key is safe — it
+  // ships inside every installed app — and it removes the one step where the operator would
+  // otherwise have to handle the private key by hand to obtain it.
+  const ecdsaPublicKey = await ecdsaPublicKeyOf(env.SIGNING_KEY_ECDSA);
+  if (ecdsaPublicKey) {
+    answer.publicKeyEcdsa = ecdsaPublicKey;
+    answer.signatureEcdsa = await signLicenseEcdsa(signed.payload, env.SIGNING_KEY_ECDSA);
+  } else {
+    // This route is the operator's diagnostic, so it says what is wrong instead of leaving a
+    // missing field to be interpreted. It reveals nothing: only the key's length and prefix.
+    answer.ecdsaUnavailable = ecdsaKeyDiagnosis(env.SIGNING_KEY_ECDSA);
+  }
+  return json(answer);
+}
+
+/**
+ * Derives the public half of the configured ECDSA signing key.
+ *
+ * Web Crypto cannot export the public key from a private one directly, so the key is re-imported
+ * as JWK, the private component dropped, and the remainder exported as SPKI — the format the
+ * clients import.
+ */
+async function ecdsaPublicKeyOf(privateKeyPkcs8Base64) {
+  if (!privateKeyPkcs8Base64) return null;
+  try {
+    const material = Uint8Array.from(atob(privateKeyPkcs8Base64), (character) =>
+      character.charCodeAt(0),
+    );
+    const privateKey = await crypto.subtle.importKey(
+      'pkcs8',
+      material,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign'],
+    );
+    const jwk = await crypto.subtle.exportKey('jwk', privateKey);
+    delete jwk.d;
+    jwk.key_ops = ['verify'];
+    const publicKey = await crypto.subtle.importKey(
+      'jwk',
+      jwk,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['verify'],
+    );
+    const spki = new Uint8Array(await crypto.subtle.exportKey('spki', publicKey));
+    let binary = '';
+    for (const byte of spki) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  } catch {
+    // Swallowing this silently cost real debugging time once: an Ed25519 key pasted into
+    // SIGNING_KEY_ECDSA by mistake produced a healthy 200 with the field quietly missing, which
+    // reads as "the deployment is old" rather than "the secret is the wrong key". The caller
+    // turns this into a diagnosable answer.
+    return null;
+  }
+}
+
+/**
+ * Why the ECDSA key could not be used, in terms an operator can act on.
+ *
+ * Only shape is reported — length and prefix — never the key itself. That is enough to tell an
+ * Ed25519 key (64 characters) from a P-256 one (184, starting `MIGHAgEAMBMG`), which is the
+ * mistake this exists to catch.
+ */
+function ecdsaKeyDiagnosis(privateKeyPkcs8Base64) {
+  if (!privateKeyPkcs8Base64) return 'SIGNING_KEY_ECDSA is not set';
+  const length = privateKeyPkcs8Base64.length;
+  if (privateKeyPkcs8Base64.startsWith('MC4CAQAwBQYD')) {
+    return `SIGNING_KEY_ECDSA holds an Ed25519 key (${length} chars). It needs the ECDSA P-256 ` +
+      'key, which is 184 characters and starts MIGHAgEAMBMG — the third block printed by ' +
+      'generate-keys.mjs, not the first.';
+  }
+  return `SIGNING_KEY_ECDSA is not a usable ECDSA P-256 key (${length} chars, starts ` +
+    `${privateKeyPkcs8Base64.slice(0, 12)}). Expected 184 characters starting MIGHAgEAMBMG.`;
 }
 
 /**
@@ -745,7 +958,10 @@ async function handleRedeem(request, env) {
   await observeDevice(env, authorization.deviceId, body.deviceProfile, request.cf?.country, false, now);
 
   const outcome = await redeemKey(authorization.deviceId, keyCode, env, now);
-  if (!outcome.ok) return json({ error: outcome.error }, outcome.status);
+  if (!outcome.ok) {
+    await recordFailedRedemption(authorization.deviceId, outcome.error, env);
+    return json({ error: outcome.error }, outcome.status);
+  }
 
   return await respondWithLicense(env, authorization.deviceId, authorization.nonce, now);
 }
@@ -831,6 +1047,12 @@ async function handleGooglePlayPurchase(request, env) {
         : inspected.reason === 'purchase_account_mismatch'
           ? 403
           : 409;
+    if (inspected.reason === 'purchase_account_mismatch') {
+      await recordSecurityAlert(
+        authorization.deviceId, 'PAYMENT_DEVICE_CONFLICT', 'CRITICAL',
+        'Google Play recusou a conta vinculada ao comprovante', env,
+      );
+    }
     return json({ error: inspected.reason }, status);
   }
 
@@ -850,6 +1072,10 @@ async function handleGooglePlayPurchase(request, env) {
     .bind(inspected.purchaseTokenHash)
     .first();
   if (existing && existing.obfuscated_account_id !== authorization.accountId) {
+    await recordSecurityAlert(
+      authorization.deviceId, 'PAYMENT_DEVICE_CONFLICT', 'CRITICAL',
+      'Token Google Play já vinculado a outra conta', env,
+    );
     return json({ error: 'purchase_already_bound' }, 409);
   }
   if (
@@ -956,6 +1182,10 @@ async function handleGooglePlayPurchase(request, env) {
     ),
   ]);
   if (statementChanges(results?.[0]) === 0) {
+    await recordSecurityAlert(
+      authorization.deviceId, 'PAYMENT_DEVICE_CONFLICT', 'CRITICAL',
+      'Conflito ao vincular compra Google Play ao aparelho', env,
+    );
     return json({ error: 'purchase_ledger_conflict' }, 409);
   }
 
@@ -1477,6 +1707,11 @@ async function verifyRegistrationProof(body) {
 async function observeDevice(env, deviceId, reported, reportedCountry, recordActivationCountry, now) {
   const profile = normaliseDeviceProfile(reported);
   const country = normaliseCountry(reportedCountry);
+  const previous = country
+    ? await env.DB.prepare(
+        'SELECT last_country, country_updated_at FROM devices WHERE device_id = ?',
+      ).bind(deviceId).first()
+    : null;
   await env.DB.prepare(
     `UPDATE devices SET
        device_type = COALESCE(?, device_type),
@@ -1510,6 +1745,20 @@ async function observeDevice(env, deviceId, reported, reportedCountry, recordAct
       deviceId,
     )
     .run();
+
+  const previousAt = Date.parse(previous?.country_updated_at ?? '');
+  if (
+    country && previous?.last_country && previous.last_country !== country
+    && Number.isFinite(previousAt) && now.getTime() - previousAt < 6 * 60 * 60 * 1000
+  ) {
+    await recordSecurityAlert(
+      deviceId,
+      'RAPID_COUNTRY_CHANGE',
+      'WARNING',
+      `${previous.last_country} → ${country} em menos de 6 horas; pode ser VPN ou viagem`,
+      env,
+    );
+  }
 }
 
 /** Cloudflare country codes are coarse routing metadata, not client-reported location. */
@@ -2778,6 +3027,18 @@ function json(body, status = 200, extraHeaders = {}) {
       ...extraHeaders,
     },
   });
+}
+
+function devicesCsv(devices) {
+  const columns = [
+    'device_id', 'display_name', 'status', 'device_type', 'platform', 'manufacturer', 'model',
+    'os_version', 'app_version', 'activation_country', 'last_country', 'last_seen_at', 'source',
+    'customer_name', 'customer_email', 'order_reference', 'support_note', 'expires_at',
+  ];
+  const escape = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+  return `\uFEFF${columns.join(',')}\r\n${devices.map((device) =>
+    columns.map((column) => escape(device[column])).join(','),
+  ).join('\r\n')}\r\n`;
 }
 
 const PUBLIC_CORS_PATHS = new Set([

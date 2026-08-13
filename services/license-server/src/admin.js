@@ -28,6 +28,8 @@ const ADMIN_DEVICE_COLUMNS = `
   devices.device_type, devices.platform, devices.manufacturer, devices.model,
   devices.os_version, devices.app_version, devices.last_seen_at,
   devices.activation_country, devices.last_country, devices.country_updated_at,
+  devices.display_name, devices.customer_name, devices.customer_email,
+  devices.order_reference, devices.support_note,
   devices.archived_at, devices.archived_note,
   CASE
     WHEN devices.google_purchase_token_hash IS NOT NULL THEN 'GOOGLE_PLAY'
@@ -377,6 +379,158 @@ export async function summary(env) {
     expired: expired?.n ?? 0,
     archived: archived?.n ?? 0,
   };
+}
+
+/** Updates optional support labels; licence state and payment ownership are deliberately untouched. */
+export async function updateDeviceSupport(deviceId, values, env) {
+  const clean = {
+    displayName: supportText(values?.displayName, 80),
+    customerName: supportText(values?.customerName, 100),
+    customerEmail: supportEmail(values?.customerEmail),
+    orderReference: supportText(values?.orderReference, 100),
+    supportNote: supportText(values?.supportNote, 500),
+  };
+  const result = await env.DB.prepare(
+    `UPDATE devices SET display_name = ?, customer_name = ?, customer_email = ?,
+       order_reference = ?, support_note = ?, updated_at = ? WHERE device_id = ?`,
+  ).bind(
+    clean.displayName, clean.customerName, clean.customerEmail,
+    clean.orderReference, clean.supportNote, new Date().toISOString(), deviceId,
+  ).run();
+  return Number(result?.meta?.changes ?? 0) > 0;
+}
+
+export async function recordAdminAudit(actor, action, deviceId, detail, country, env) {
+  await env.DB.prepare(
+    `INSERT INTO admin_audit (actor, action, device_id, detail, country, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    supportText(actor, 80) || 'Administrador',
+    supportText(action, 60) || 'unknown',
+    deviceId || null,
+    supportText(detail, 500),
+    /^[A-Z]{2}$/.test(String(country ?? '').toUpperCase()) ? String(country).toUpperCase() : null,
+    new Date().toISOString(),
+  ).run();
+}
+
+export async function listAdminAudit(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT actor, action, device_id, detail, country, created_at
+     FROM admin_audit ORDER BY created_at DESC, id DESC LIMIT 200`,
+  ).all();
+  return results ?? [];
+}
+
+export async function financialOverview(env) {
+  const { results: stripe } = await env.DB.prepare(
+    `SELECT payments.device_id, payments.status, payments.amount_minor,
+       payments.amount_refunded_minor, payments.currency, payments.paid_at,
+       payments.created_at, payments.updated_at, devices.last_country
+     FROM payments LEFT JOIN devices ON devices.device_id = payments.device_id
+     ORDER BY payments.created_at DESC LIMIT 200`,
+  ).all();
+  const { results: googlePlay } = await env.DB.prepare(
+    `SELECT google_play_purchases.device_id, google_play_purchases.status,
+       google_play_purchases.purchase_completed_at, google_play_purchases.expires_at,
+       google_play_purchases.test_purchase, google_play_purchases.created_at,
+       google_play_purchases.updated_at, devices.last_country
+     FROM google_play_purchases
+     LEFT JOIN devices ON devices.device_id = google_play_purchases.device_id
+     ORDER BY google_play_purchases.created_at DESC LIMIT 200`,
+  ).all();
+  const { results: monthly } = await env.DB.prepare(
+    `SELECT substr(COALESCE(paid_at, created_at), 1, 7) AS month, currency,
+       COUNT(*) AS payments,
+       SUM(CASE WHEN status <> 'PENDING' THEN amount_minor ELSE 0 END) AS gross_minor,
+       SUM(amount_refunded_minor) AS refunded_minor
+     FROM payments GROUP BY month, currency ORDER BY month DESC, currency LIMIT 36`,
+  ).all();
+  return { stripe: stripe ?? [], googlePlay: googlePlay ?? [], monthly: monthly ?? [] };
+}
+
+export async function recordSecurityAlert(deviceId, kind, severity, detail, env) {
+  const existing = await env.DB.prepare(
+    `SELECT id FROM security_alerts
+     WHERE COALESCE(device_id, '') = COALESCE(?, '') AND kind = ? AND resolved_at IS NULL
+       AND observed_at >= datetime('now', '-24 hours') LIMIT 1`,
+  ).bind(deviceId || null, kind).first();
+  if (existing) return false;
+  await env.DB.prepare(
+    `INSERT INTO security_alerts (device_id, kind, severity, detail, observed_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).bind(
+    deviceId || null,
+    supportText(kind, 60) || 'unknown',
+    ['INFO', 'WARNING', 'CRITICAL'].includes(severity) ? severity : 'INFO',
+    supportText(detail, 500),
+    new Date().toISOString(),
+  ).run();
+  return true;
+}
+
+export async function recordFailedRedemption(deviceId, reason, env) {
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    'INSERT INTO events (device_id, kind, detail, created_at) VALUES (?, ?, ?, ?)',
+  ).bind(deviceId, 'redeem_failed', supportText(reason, 100), now).run();
+  const recent = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM events WHERE device_id = ? AND kind = 'redeem_failed'
+       AND created_at >= datetime('now', '-15 minutes')`,
+  ).bind(deviceId).first();
+  if (Number(recent?.n ?? 0) >= 5) {
+    await recordSecurityAlert(
+      deviceId, 'REPEATED_INVALID_KEYS', 'WARNING',
+      `${recent.n} tentativas de chave recusadas em 15 minutos`, env,
+    );
+  }
+}
+
+export async function listSecurityAlerts(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT id, device_id, kind, severity, detail, observed_at, resolved_at, resolution_note
+     FROM security_alerts ORDER BY resolved_at IS NULL DESC, observed_at DESC LIMIT 200`,
+  ).all();
+  return results ?? [];
+}
+
+export async function resolveSecurityAlert(id, note, env) {
+  const result = await env.DB.prepare(
+    `UPDATE security_alerts SET resolved_at = ?, resolution_note = ?
+     WHERE id = ? AND resolved_at IS NULL`,
+  ).bind(new Date().toISOString(), supportText(note, 300) || 'revisado', Number(id)).run();
+  return Number(result?.meta?.changes ?? 0) > 0;
+}
+
+/** Support-safe recovery export. Cryptographic keys, purchase tokens and unused activation codes stay out. */
+export async function adminBackup(env) {
+  const { results: devices } = await env.DB.prepare(
+    `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices ORDER BY updated_at DESC`,
+  ).all();
+  const { results: events } = await env.DB.prepare(
+    'SELECT device_id, kind, detail, created_at FROM events ORDER BY created_at DESC LIMIT 10000',
+  ).all();
+  const finances = await financialOverview(env);
+  const audit = await listAdminAudit(env);
+  return {
+    format: 'iptvburo-admin-backup-v1',
+    createdAt: new Date().toISOString(),
+    devices: devices ?? [],
+    events: events ?? [],
+    finances,
+    audit,
+  };
+}
+
+function supportText(value, maximum) {
+  const clean = String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+  return clean ? clean.slice(0, maximum) : null;
+}
+
+function supportEmail(value) {
+  const clean = supportText(value, 254);
+  if (!clean) return null;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean) ? clean.toLowerCase() : null;
 }
 
 /**

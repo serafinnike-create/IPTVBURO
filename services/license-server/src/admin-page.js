@@ -113,8 +113,16 @@ export function adminPage() {
     <p class="sub">Administração</p>
     <div class="row">
       <label class="field" style="flex:1">
+        <span>Seu nome (fica na auditoria)</span>
+        <input id="actor" autocomplete="name" placeholder="Administrador">
+      </label>
+      <label class="field" style="flex:1">
         <span>Token de acesso</span>
         <input id="token" type="password" autocomplete="current-password" aria-describedby="loginError" autofocus>
+      </label>
+      <label class="field" style="width:150px">
+        <span>Código MFA</span>
+        <input id="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000">
       </label>
       <button type="submit">Entrar</button>
     </div>
@@ -130,6 +138,20 @@ export function adminPage() {
     <div class="panel">
       <h2>Resumo</h2>
       <div class="stats" id="stats" role="status" aria-live="polite"></div>
+    </div>
+
+    <div class="panel">
+      <div class="row between"><div><h2>Segurança e auditoria</h2><p class="sub">Alertas apenas orientam a revisão; VPN e viagens não bloqueiam ninguém automaticamente.</p></div>
+        <div class="actions"><button type="button" onclick="loadAlerts()">Alertas</button><button type="button" class="ghost" onclick="loadAudit()">Auditoria</button><button type="button" class="ghost" onclick="loadMfa()">MFA</button></div>
+      </div>
+      <div id="securityResult" role="status" aria-live="polite"></div>
+    </div>
+
+    <div class="panel">
+      <div class="row between"><div><h2>Financeiro</h2><p class="sub">Stripe mostra valores reais. Google Play mostra estados; a receita oficial permanece no Play Console.</p></div>
+        <button type="button" onclick="loadFinance()">Atualizar financeiro</button>
+      </div>
+      <div id="financeResult" role="status" aria-live="polite"></div>
     </div>
 
     <div class="panel">
@@ -154,6 +176,13 @@ export function adminPage() {
         </label>
         <button type="submit">Procurar</button>
       </form>
+      <div class="row" style="margin-top:10px">
+        <label class="field"><span>Plataforma</span><select id="platformFilter" onchange="applyLocalFilters()"><option value="">Todas</option><option value="WINDOWS">Windows</option><option value="ANDROID">Android</option><option value="TIZEN">Samsung Tizen</option><option value="WEBOS">LG webOS</option></select></label>
+        <label class="field"><span>País</span><input id="countryFilter" maxlength="2" placeholder="BR" oninput="applyLocalFilters()" style="width:90px"></label>
+        <label class="field"><span>Atualização</span><select id="updateFilter" onchange="applyLocalFilters()"><option value="">Todas</option><option value="outdated">Desatualizados</option><option value="current">Atualizados</option></select></label>
+        <button type="button" class="ghost" onclick="downloadAdmin('/admin/export')">Exportar CSV</button>
+        <button type="button" class="ghost" onclick="downloadAdmin('/admin/backup')">Backup JSON</button>
+      </div>
       <div class="result-head"><p class="sub" id="resultCount">A carregar…</p><button type="button" class="ghost" onclick="refreshDevices()">Atualizar</button></div>
       <div id="results" role="status" aria-live="polite"></div>
     </div>
@@ -200,6 +229,8 @@ export function adminPage() {
   // Session storage rather than a cookie: per-tab, gone when the tab closes, and never sent
   // automatically to the customer-facing pages on this same origin.
   let token = sessionStorage.getItem('buro-admin') || '';
+  let adminSession = sessionStorage.getItem('buro-admin-session') || '';
+  let actor = sessionStorage.getItem('buro-admin-actor') || 'Administrador';
   // Declared before the automatic verification: api() writes it synchronously before verify()
   // reaches its first await, so declaring it later makes a returning signed-in tab hit the
   // temporal dead zone and show the login screen after every refresh.
@@ -207,14 +238,38 @@ export function adminPage() {
 
   if (token) { verify(); }
 
-  function signIn() {
+  async function signIn() {
     token = document.getElementById('token').value.trim();
-    verify();
+    actor = document.getElementById('actor').value.trim() || 'Administrador';
+    const code = document.getElementById('mfaCode').value.trim();
+    lastStatus = 0;
+    try {
+      const response = await fetch('/admin/session', {
+        method: 'POST',
+        headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        body: JSON.stringify({ actor: actor, code: code }),
+      });
+      lastStatus = response.status;
+      const result = response.ok ? await response.json() : null;
+      if (!result) {
+        document.getElementById('loginError').textContent = response.status === 401
+          ? 'Token ou código MFA inválido.' : 'Não foi possível iniciar a sessão.';
+        return;
+      }
+      adminSession = result.token;
+      sessionStorage.setItem('buro-admin-session', adminSession);
+      sessionStorage.setItem('buro-admin-actor', actor);
+      await verify();
+    } catch (_) {
+      document.getElementById('loginError').textContent = 'Sem resposta do servidor.';
+    }
   }
 
   function signOut() {
     token = '';
+    adminSession = '';
     sessionStorage.removeItem('buro-admin');
+    sessionStorage.removeItem('buro-admin-session');
     document.getElementById('panel').classList.add('hidden');
     document.getElementById('login').classList.remove('hidden');
     document.getElementById('token').value = '';
@@ -235,6 +290,7 @@ export function adminPage() {
       return;
     }
     sessionStorage.setItem('buro-admin', token);
+    sessionStorage.setItem('buro-admin-session', adminSession);
     document.getElementById('login').classList.add('hidden');
     document.getElementById('panel').classList.remove('hidden');
     document.getElementById('stats').innerHTML =
@@ -263,7 +319,12 @@ export function adminPage() {
     try {
       const response = await fetch(path, {
         method: body ? 'POST' : 'GET',
-        headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        headers: {
+          authorization: 'Bearer ' + token,
+          'x-admin-session': adminSession,
+          'x-admin-actor': actor,
+          'content-type': 'application/json',
+        },
         body: body ? JSON.stringify(body) : undefined,
       });
       lastStatus = response.status;
@@ -273,6 +334,7 @@ export function adminPage() {
   }
 
   let currentDevicePath = '/admin/list?status=ALL';
+  let currentDevices = [];
 
   async function search() {
     const query = document.getElementById('query').value.trim();
@@ -310,15 +372,36 @@ export function adminPage() {
       target.innerHTML = '<p class="sub">Tente atualizar.</p>';
       return;
     }
-    count.textContent = data.devices.length + (data.devices.length === 1 ? ' dispositivo' : ' dispositivos');
-    if (!data.devices.length) { target.innerHTML = '<p class="sub">Nada encontrado.</p>'; return; }
-    target.innerHTML = '<div class="device-list">' + data.devices.map(deviceCard).join('') + '</div>';
+    currentDevices = data.devices;
+    applyLocalFilters();
+  }
+
+  function applyLocalFilters() {
+    const target = document.getElementById('results');
+    const count = document.getElementById('resultCount');
+    const platform = document.getElementById('platformFilter').value;
+    const country = document.getElementById('countryFilter').value.trim().toUpperCase();
+    const update = document.getElementById('updateFilter').value;
+    const visible = currentDevices.filter(function (device) {
+      if (platform && device.platform !== platform) return false;
+      if (country && device.activation_country !== country && device.last_country !== country) return false;
+      const outdated = isOutdated(device);
+      if (update === 'outdated' && !outdated) return false;
+      if (update === 'current' && (outdated || !device.app_version)) return false;
+      return true;
+    });
+    count.textContent = visible.length + (visible.length === 1 ? ' dispositivo' : ' dispositivos');
+    target.innerHTML = visible.length
+      ? '<div class="device-list">' + visible.map(deviceCard).join('') + '</div>'
+      : '<p class="sub">Nada encontrado.</p>';
   }
 
   function deviceCard(device) {
     const id = esc(device.device_id);
     const archived = Boolean(device.archived_at);
-    const hardware = [device.manufacturer, device.model].filter(Boolean).join(' ') || 'Modelo ainda não informado';
+    const hardware = device.display_name
+      || [device.manufacturer, device.model].filter(Boolean).join(' ')
+      || 'Modelo ainda não informado';
     const actionButtons = archived
       ? '<button class="ghost" onclick="restoreDevice(\\'' + id + '\\')">Restaurar na lista</button>'
       : '<button class="ghost" onclick="showDetails(\\'' + id + '\\')">Detalhes e histórico</button>'
@@ -329,6 +412,7 @@ export function adminPage() {
     return '<article class="device-card' + (archived ? ' archived' : '') + '">'
       + '<div class="device-head"><div class="device-title"><strong>' + esc(hardware) + '</strong>'
       + '<code>' + id + '</code></div><div>' + tag(device.status)
+      + (isOutdated(device) ? ' <span class="tag dead">APP DESATUALIZADO</span>' : '')
       + (archived ? ' <span class="tag dead">ARQUIVADO</span>' : '') + '</div></div>'
       + '<div class="facts">'
       + fact('Tipo', deviceType(device.device_type))
@@ -343,6 +427,9 @@ export function adminPage() {
       + fact('Primeiro acesso', date(device.first_seen_at))
       + '</div>'
       + '<p class="sub" style="margin:0 0 12px">Nota: ' + esc(device.note || '—') + '</p>'
+      + (device.customer_name || device.customer_email
+          ? '<p class="sub" style="margin:0 0 12px">Cliente: ' + esc(device.customer_name || '—')
+            + (device.customer_email ? ' · ' + esc(device.customer_email) : '') + '</p>' : '')
       + '<div class="actions">' + actionButtons + '</div>'
       + '<div class="details hidden" id="details-' + id.replace(/-/g, '') + '"></div>'
       + '</article>';
@@ -397,14 +484,14 @@ export function adminPage() {
   }
 
   async function revoke(device) {
-    if (!confirm('Bloquear ' + device + '?\\n\\nO aplicativo perderá o acesso na próxima validação.')) return;
+    if (!confirmDeviceAction(device, 'BLOQUEAR')) return;
     const result = await api('/admin/revoke', { device: device, note: 'bloqueado no painel' });
     if (!result) alert('Não foi possível bloquear o dispositivo.');
     await refreshDevices();
   }
 
   async function archiveDevice(device) {
-    if (!confirm('Apagar ' + device + ' da lista?\\n\\nEle será bloqueado e ocultado, mas o histórico será preservado para impedir novo teste gratuito.')) return;
+    if (!confirmDeviceAction(device, 'APAGAR DA LISTA')) return;
     const result = await api('/admin/archive', { device: device, note: 'apagado da lista pelo administrador' });
     if (!result) alert('Não foi possível apagar da lista.');
     await refreshDevices();
@@ -423,12 +510,53 @@ export function adminPage() {
     target.textContent = 'A carregar histórico…';
     const result = await api('/admin/device?device=' + encodeURIComponent(device));
     if (!result) { target.textContent = 'Não foi possível carregar o histórico.'; return; }
-    if (!result.events.length) { target.innerHTML = '<p class="sub">Sem eventos registrados.</p>'; return; }
-    target.innerHTML = '<strong>Histórico</strong><ul class="timeline">'
+    const info = result.device;
+    const key = device.replace(/-/g, '');
+    target.innerHTML = '<strong>Atendimento</strong><div class="row" style="margin:10px 0">'
+      + supportField('Nome do aparelho', 'support-name-' + key, info.display_name)
+      + supportField('Nome do cliente', 'support-customer-' + key, info.customer_name)
+      + supportField('E-mail (opcional)', 'support-email-' + key, info.customer_email)
+      + supportField('Pedido / referência', 'support-order-' + key, info.order_reference)
+      + supportField('Nota de suporte', 'support-note-' + key, info.support_note)
+      + '<button type="button" onclick="saveSupport(\\'' + esc(device) + '\\')">Salvar atendimento</button></div>'
+      + '<strong>Histórico</strong>'
+      + (result.events.length ? '<ul class="timeline">'
       + result.events.map(function (entry) {
           return '<li><span>' + dateTime(entry.created_at) + '</span><b>' + esc(eventLabel(entry.kind))
             + '</b><span>' + esc(entry.detail || '—') + '</span></li>';
-        }).join('') + '</ul>';
+        }).join('') + '</ul>' : '<p class="sub">Sem eventos registrados.</p>');
+  }
+
+  function supportField(label, id, value) {
+    return '<label class="field" style="flex:1 1 190px"><span>' + esc(label) + '</span><input id="'
+      + id + '" value="' + esc(value || '') + '"></label>';
+  }
+
+  async function saveSupport(device) {
+    const key = device.replace(/-/g, '');
+    const result = await api('/admin/support', {
+      device: device,
+      displayName: document.getElementById('support-name-' + key).value,
+      customerName: document.getElementById('support-customer-' + key).value,
+      customerEmail: document.getElementById('support-email-' + key).value,
+      orderReference: document.getElementById('support-order-' + key).value,
+      supportNote: document.getElementById('support-note-' + key).value,
+    });
+    if (!result) return alert('Não foi possível salvar os dados de atendimento.');
+    await refreshDevices();
+  }
+
+  function confirmDeviceAction(device, action) {
+    const record = currentDevices.find(function (item) { return item.device_id === device; });
+    const paidWarning = record && ['STRIPE', 'GOOGLE_PLAY'].includes(record.source)
+      ? '\\nATENÇÃO: este aparelho possui pagamento registrado.' : '';
+    const archiveWarning = action === 'APAGAR DA LISTA'
+      ? '\\nO histórico será preservado para impedir novo teste gratuito.' : '';
+    const typed = prompt(
+      action + ' ' + device + '?' + paidWarning + archiveWarning
+      + '\\n\\nPara confirmar e evitar enganos, digite exatamente o código do dispositivo:',
+    );
+    return String(typed || '').trim().toUpperCase() === device;
   }
 
   async function makeKeys() {
@@ -496,6 +624,145 @@ export function adminPage() {
       alert('Não foi possível cancelar. Se já foi usado, revogue o dispositivo em vez disso.');
     }
     await loadKeys();
+  }
+
+  async function loadFinance() {
+    const target = document.getElementById('financeResult');
+    target.textContent = 'A carregar…';
+    const result = await api('/admin/finance');
+    if (!result) { target.textContent = 'Não foi possível carregar o financeiro.'; return; }
+    const totals = result.monthly.map(function (month) {
+      return '<tr><td>' + esc(month.month) + '</td><td>' + esc(String(month.currency).toUpperCase())
+        + '</td><td>' + month.payments + '</td><td>' + money(month.gross_minor, month.currency)
+        + '</td><td>' + money(month.refunded_minor, month.currency) + '</td></tr>';
+    }).join('');
+    const stripe = result.stripe.map(function (payment) {
+      return '<tr><td><code>' + esc(payment.device_id) + '</code></td><td>Stripe</td><td>'
+        + esc(payment.status) + '</td><td>' + money(payment.amount_minor, payment.currency)
+        + '</td><td>' + money(payment.amount_refunded_minor, payment.currency)
+        + '</td><td>' + countryLabel(payment.last_country) + '</td><td>'
+        + dateTime(payment.paid_at || payment.created_at) + '</td></tr>';
+    }).join('');
+    const google = result.googlePlay.map(function (payment) {
+      return '<tr><td><code>' + esc(payment.device_id) + '</code></td><td>Google Play</td><td>'
+        + esc(payment.status) + (payment.test_purchase ? ' (teste)' : '')
+        + '</td><td colspan="2">Consultar Play Console</td><td>' + countryLabel(payment.last_country)
+        + '</td><td>' + dateTime(payment.purchase_completed_at || payment.created_at) + '</td></tr>';
+    }).join('');
+    target.innerHTML = '<h3>Totais mensais Stripe</h3><div class="table-wrap"><table><thead><tr><th>Mês</th><th>Moeda</th><th>Pagamentos</th><th>Bruto</th><th>Reembolsado</th></tr></thead><tbody>'
+      + (totals || '<tr><td colspan="5">Sem pagamentos</td></tr>') + '</tbody></table></div>'
+      + '<h3 style="margin-top:18px">Transações</h3><div class="table-wrap"><table><thead><tr><th>Dispositivo</th><th>Origem</th><th>Estado</th><th>Valor</th><th>Reembolso</th><th>País</th><th>Data</th></tr></thead><tbody>'
+      + (stripe + google || '<tr><td colspan="7">Sem transações</td></tr>') + '</tbody></table></div>';
+  }
+
+  async function loadAlerts() {
+    const target = document.getElementById('securityResult');
+    target.textContent = 'A carregar alertas…';
+    const result = await api('/admin/alerts');
+    if (!result) { target.textContent = 'Não foi possível carregar alertas.'; return; }
+    target.innerHTML = result.alerts.length ? '<div class="table-wrap"><table><thead><tr><th>Nível</th><th>Dispositivo</th><th>Alerta</th><th>Data</th><th>Estado</th></tr></thead><tbody>'
+      + result.alerts.map(function (alertItem) {
+        return '<tr><td>' + esc(alertItem.severity) + '</td><td><code>' + esc(alertItem.device_id || '—')
+          + '</code></td><td>' + esc(alertLabel(alertItem.kind)) + '<div class="sub">' + esc(alertItem.detail || '')
+          + '</div></td><td>' + dateTime(alertItem.observed_at) + '</td><td>'
+          + (alertItem.resolved_at ? 'Revisado em ' + dateTime(alertItem.resolved_at)
+            : '<button class="ghost" onclick="resolveAlert(' + Number(alertItem.id) + ')">Marcar revisado</button>')
+          + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p class="sub">Nenhum alerta de segurança.</p>';
+  }
+
+  async function resolveAlert(id) {
+    const note = prompt('Resultado da revisão deste alerta:');
+    if (note == null) return;
+    const result = await api('/admin/alerts/resolve', { id: id, note: note });
+    if (!result) return alert('Não foi possível concluir a revisão.');
+    await loadAlerts();
+  }
+
+  async function loadAudit() {
+    const target = document.getElementById('securityResult');
+    target.textContent = 'A carregar auditoria…';
+    const result = await api('/admin/audit');
+    if (!result) { target.textContent = 'Não foi possível carregar a auditoria.'; return; }
+    target.innerHTML = result.audit.length ? '<div class="table-wrap"><table><thead><tr><th>Administrador</th><th>Ação</th><th>Dispositivo</th><th>País</th><th>Data</th></tr></thead><tbody>'
+      + result.audit.map(function (entry) {
+        return '<tr><td>' + esc(entry.actor) + '</td><td>' + esc(entry.action)
+          + '<div class="sub">' + esc(entry.detail || '') + '</div></td><td><code>'
+          + esc(entry.device_id || '—') + '</code></td><td>' + countryLabel(entry.country)
+          + '</td><td>' + dateTime(entry.created_at) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p class="sub">Nenhuma ação administrativa registrada ainda.</p>';
+  }
+
+  async function loadMfa() {
+    const target = document.getElementById('securityResult');
+    const status = await api('/admin/mfa/status');
+    if (!status) { target.textContent = 'Não foi possível consultar o MFA.'; return; }
+    if (status.enabled) {
+      target.innerHTML = '<p><span class="tag active">MFA ATIVO</span> O token sozinho não acessa mais dados administrativos.</p>';
+      return;
+    }
+    target.innerHTML = status.available
+      ? '<p><span class="tag trial">MFA PENDENTE</span> Ative usando Google Authenticator, Microsoft Authenticator, 1Password ou similar.</p><button onclick="beginMfa()">Iniciar configuração MFA</button>'
+      : '<p class="over">A chave de criptografia MFA ainda não está configurada no servidor.</p>';
+  }
+
+  async function beginMfa() {
+    const target = document.getElementById('securityResult');
+    const result = await api('/admin/mfa/setup', {});
+    if (!result) { target.textContent = 'Não foi possível iniciar o MFA.'; return; }
+    target.innerHTML = '<p>Adicione uma conta no autenticador usando esta chave:</p><p class="keys"><code>'
+      + esc(result.secret) + '</code></p><p class="sub">Ou use o endereço TOTP: <code>' + esc(result.otpauth)
+      + '</code></p><label class="field" style="max-width:220px"><span>Código de 6 dígitos</span><input id="mfaConfirmCode" inputmode="numeric" maxlength="6"></label><button style="margin-top:10px" onclick="confirmMfa()">Confirmar e ativar</button>';
+  }
+
+  async function confirmMfa() {
+    const code = document.getElementById('mfaConfirmCode').value.trim();
+    const result = await api('/admin/mfa/confirm', { code: code });
+    if (!result) return alert('Código inválido. Aguarde o próximo código e tente novamente.');
+    await loadMfa();
+  }
+
+  async function downloadAdmin(path) {
+    try {
+      const response = await fetch(path, { headers: {
+        authorization: 'Bearer ' + token, 'x-admin-session': adminSession, 'x-admin-actor': actor,
+      }});
+      if (!response.ok) return alert('Não foi possível gerar o arquivo.');
+      const blob = await response.blob();
+      const disposition = response.headers.get('content-disposition') || '';
+      const match = /filename="([^"]+)"/.exec(disposition);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = match ? match[1] : 'iptvburo-export';
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+    } catch (_) { alert('Não foi possível gerar o arquivo.'); }
+  }
+
+  function money(minor, currency) {
+    const amount = Number(minor || 0) / 100;
+    try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: String(currency).toUpperCase() }).format(amount); }
+    catch (_) { return amount.toFixed(2) + ' ' + String(currency || '').toUpperCase(); }
+  }
+
+  function isOutdated(device) {
+    const minimum = { WINDOWS: '2.0.0-alpha.5', ANDROID: '0.2.0-alpha.9' }[device.platform];
+    if (!minimum || !device.app_version) return false;
+    return compareVersion(device.app_version, minimum) < 0;
+  }
+
+  function compareVersion(left, right) {
+    const a = String(left).match(/\\d+/g) || [];
+    const b = String(right).match(/\\d+/g) || [];
+    for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+      const difference = Number(a[index] || 0) - Number(b[index] || 0);
+      if (difference) return difference;
+    }
+    return 0;
+  }
+
+  function alertLabel(value) {
+    return { RAPID_COUNTRY_CHANGE: 'Mudança rápida de país', REPEATED_INVALID_KEYS: 'Muitas chaves inválidas', PAYMENT_DEVICE_CONFLICT: 'Pagamento em outro aparelho' }[value] || value;
   }
 
   /** Days as something readable: "30 dias", "1 ano", "2 anos". */

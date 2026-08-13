@@ -81,6 +81,13 @@ CREATE TABLE IF NOT EXISTS devices (
     last_country       TEXT,
     country_updated_at TEXT,
 
+    -- Optional support labels entered by the administrator. None affect entitlement.
+    display_name     TEXT,
+    customer_name    TEXT,
+    customer_email   TEXT,
+    order_reference  TEXT,
+    support_note     TEXT,
+
     -- Admin "delete" is reversible archival. The row and its entitlement history must survive,
     -- both for audit and so deleting it cannot manufacture a new seven-day trial.
     archived_at   TEXT,
@@ -243,3 +250,46 @@ CREATE TABLE IF NOT EXISTS events (
 );
 
 CREATE INDEX IF NOT EXISTS events_by_device ON events (device_id, created_at);
+
+CREATE TABLE IF NOT EXISTS admin_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    device_id TEXT,
+    detail TEXT,
+    country TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS admin_audit_by_time ON admin_audit (created_at DESC);
+CREATE INDEX IF NOT EXISTS admin_audit_by_device ON admin_audit (device_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS security_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id TEXT,
+    kind TEXT NOT NULL,
+    severity TEXT NOT NULL CHECK (severity IN ('INFO', 'WARNING', 'CRITICAL')),
+    detail TEXT,
+    observed_at TEXT NOT NULL,
+    resolved_at TEXT,
+    resolution_note TEXT
+);
+CREATE INDEX IF NOT EXISTS security_alerts_open
+    ON security_alerts (resolved_at, severity, observed_at DESC);
+CREATE INDEX IF NOT EXISTS security_alerts_device
+    ON security_alerts (device_id, observed_at DESC);
+
+CREATE TABLE IF NOT EXISTS admin_sessions (
+    token_hash TEXT PRIMARY KEY,
+    actor TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    last_used_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS admin_sessions_expiry ON admin_sessions (expires_at);
+
+CREATE TABLE IF NOT EXISTS admin_mfa (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    secret_ciphertext TEXT NOT NULL,
+    enabled_at TEXT,
+    updated_at TEXT NOT NULL
+);

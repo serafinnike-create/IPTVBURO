@@ -6,6 +6,7 @@
 #   npx wrangler secret put SIGNING_KEY           # from generate-keys.mjs
 #   npx wrangler secret put STRIPE_WEBHOOK_SECRET # from the Stripe dashboard
 #   npx wrangler secret put ADMIN_TOKEN           # any long random string, for the admin panel
+#   npx wrangler secret put ADMIN_MFA_ENCRYPTION_KEY # 32 random bytes in base64; encrypts TOTP seed
 #   npx wrangler deploy
 #
 # Secrets are set with `wrangler secret`, never in this file. This file is committed; the signing

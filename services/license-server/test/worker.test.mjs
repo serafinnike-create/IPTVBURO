@@ -40,6 +40,10 @@ const DEVICE_COUNTRY_MIGRATION = readFileSync(
   new URL('../migrations/0007_device_country.sql', import.meta.url),
   'utf8',
 );
+const ADMIN_OPERATIONS_MIGRATION = readFileSync(
+  new URL('../migrations/0008_admin_operations.sql', import.meta.url),
+  'utf8',
+);
 const WEBHOOK_SECRET = 'local-fixture-webhook-signing-secret';
 const signingKeys = await generateKeyPair();
 // Smart TVs cannot verify Ed25519, so licences carry a second ECDSA signature over the same bytes.
@@ -375,6 +379,7 @@ test('the fresh schema and the P0 migration both apply cleanly', () => {
   legacy.database.exec(GOOGLE_PLAY_MIGRATION);
   legacy.database.exec(DEVICE_PROFILE_MIGRATION);
   legacy.database.exec(DEVICE_COUNTRY_MIGRATION);
+  legacy.database.exec(ADMIN_OPERATIONS_MIGRATION);
   assert.ok(
     legacy.database
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'stripe_events'")
@@ -413,6 +418,11 @@ test('the fresh schema and the P0 migration both apply cleanly', () => {
   assert.ok(
     legacy.database
       .prepare("SELECT name FROM pragma_table_info('devices') WHERE name = 'last_country'")
+      .get(),
+  );
+  assert.ok(
+    legacy.database
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'admin_audit'")
       .get(),
   );
   legacy.close();
@@ -533,6 +543,28 @@ test('the signing-key check publishes the ECDSA public half for whoever builds t
     // `d` is the private scalar in a JWK. Its absence is what makes the derivation safe, so the
     // shape of the answer is checked too, not only the exact key material.
     assert.ok(!('d' in envelope), 'the response exposed a private JWK component');
+  } finally {
+    env.DB.close();
+  }
+});
+
+test('an Ed25519 key pasted into the ECDSA secret is reported, not silently ignored', async () => {
+  const env = environment();
+  // The mistake this catches: the operator copies the first block generate-keys.mjs prints instead
+  // of the third. Both are valid keys, so nothing rejects it — the licence simply never verifies.
+  env.SIGNING_KEY_ECDSA = signingKeys.privateKeyPkcs8Base64;
+  try {
+    const response = await worker.fetch(
+      postJson('/v1/signing-key-check', { nonce: nextProofNonce() }),
+      env,
+    );
+    assert.equal(response.status, 200);
+    const envelope = await response.json();
+    assert.equal(envelope.publicKeyEcdsa, undefined);
+    assert.match(envelope.ecdsaUnavailable, /Ed25519/);
+    assert.match(envelope.ecdsaUnavailable, /MIGHAgEAMBMG/);
+    // The diagnosis describes the key without disclosing it.
+    assert.equal(envelope.ecdsaUnavailable.includes(signingKeys.privateKeyPkcs8Base64), false);
   } finally {
     env.DB.close();
   }
@@ -2073,7 +2105,9 @@ test('every admin data route refuses an unauthenticated caller', async () => {
   try {
     const paths = [
       '/admin/summary', '/admin/search', '/admin/list', '/admin/device',
-      '/admin/archive', '/admin/restore', '/admin/keys',
+      '/admin/archive', '/admin/restore', '/admin/keys', '/admin/support',
+      '/admin/finance', '/admin/alerts', '/admin/alerts/resolve', '/admin/audit',
+      '/admin/export', '/admin/backup',
     ];
     for (const path of paths) {
       const response = await worker.fetch(new Request(`https://local.test${path}`), env);
