@@ -51,6 +51,7 @@ import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButtonStyle
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroProgressBar
 import com.lucasserafin94.iptvburo.xtream.XtreamEndpointParser
+import com.lucasserafin94.iptvburo.xtream.XtreamSubscriptionParser
 import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
 import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
 import com.lucasserafin94.iptvburo.ui.theme.BuroDanger
@@ -180,7 +181,18 @@ internal fun XtreamSourceDialog(
                         Spacer(Modifier.height(14.dp))
                         XtreamTextField(
                             value = serverUrl,
-                            onValueChange = { serverUrl = sanitizeXtreamServerField(it) },
+                            onValueChange = { pasted ->
+                                // A pasted subscription link fills all three fields instead of
+                                // having its credentials thrown away. See acceptXtreamServerInput.
+                                val link = XtreamSubscriptionParser.parse(pasted)
+                                if (link == null) {
+                                    serverUrl = sanitizeXtreamServerField(pasted)
+                                } else {
+                                    serverUrl = link.endpoint.baseUrl.toString()
+                                    username = link.username
+                                    password = link.password
+                                }
+                            },
                             label = stringResource(R.string.sources_xtream_server),
                             placeholder = stringResource(R.string.sources_xtream_server_hint),
                             keyboardType = KeyboardType.Uri,
@@ -295,6 +307,13 @@ internal fun XtreamSourceDialog(
     }
 }
 
+/**
+ * Trims a pasted address down to the server.
+ *
+ * Only reached when the link carries no credentials — [XtreamSubscriptionParser] handles the rest,
+ * because a link that *does* carry them should fill the username and password rather than have
+ * them stripped and silently discarded, which is what this did on its own.
+ */
 internal fun sanitizeXtreamServerField(value: String): String {
     if ('?' !in value) return value
     return runCatching {

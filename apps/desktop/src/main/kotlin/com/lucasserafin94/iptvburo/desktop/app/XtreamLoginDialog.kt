@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.security.SecureTextBuffer
 import com.lucasserafin94.iptvburo.desktop.security.XtreamLoginInput
+import com.lucasserafin94.iptvburo.xtream.XtreamSubscriptionParser
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 
 @Composable
@@ -78,7 +79,7 @@ fun XtreamLoginDialog(
                 )
                 OutlinedTextField(
                     value = form.server.text,
-                    onValueChange = form.server::replace,
+                    onValueChange = form::acceptServerInput,
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Servidor") },
                     placeholder = { Text("http://servidor:porta") },
@@ -149,6 +150,32 @@ private class SecureXtreamLoginForm {
             val value = server.text.trim()
             return value.isNotEmpty() && "://" !in value
         }
+
+    /**
+     * Takes what was typed or pasted into the server field, splitting a full link into three.
+     *
+     * Providers hand out the same subscription in several shapes — `get.php?username=…`,
+     * `/playlist/USER/PASS/m3u_plus`, `player_api.php`, a stream URL copied from another player,
+     * or credentials in the userinfo. The person pasting did not choose the format and should not
+     * have to recognise it, so anything carrying a username and password fills all three fields
+     * and leaves only "Conectar" to press.
+     *
+     * A plain address is left exactly as typed: [XtreamSubscriptionParser] answers null there, and
+     * that is the ordinary case of someone typing a host and then the credentials by hand.
+     *
+     * Existing values are only overwritten when the link actually carries credentials — pasting a
+     * bare host after typing a username must not wipe it.
+     */
+    fun acceptServerInput(value: String) {
+        val link = XtreamSubscriptionParser.parse(value)
+        if (link == null) {
+            server.replace(value)
+            return
+        }
+        server.replace(link.endpoint.baseUrl.toString())
+        username.replace(link.username)
+        password.replace(link.password)
+    }
 
     fun consume(): XtreamLoginInput {
         val input =
