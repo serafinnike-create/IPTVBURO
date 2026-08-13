@@ -27,6 +27,25 @@ class CastReceiverTest {
         receiver.stop()
     }
 
+    /**
+     * Turning the receiver off and on again has to work, every time.
+     *
+     * The discovery port is fixed, so the socket from the previous session can still be in
+     * TIME_WAIT when the next bind runs. Without address reuse that bind fails, `start` returns
+     * null — its way of saying "the feature is unavailable" — and the user is told casting cannot
+     * run because they had used it a moment earlier.
+     *
+     * Found on CI rather than locally: two tests failed there at their `start` call while every
+     * local run passed, because the runner reuses one machine for the whole suite.
+     */
+    @Test
+    fun `the receiver restarts on the same discovery port`() {
+        repeat(4) {
+            assertNotNull(receiver.start { }, "the receiver failed to rebind after a stop")
+            receiver.stop()
+        }
+    }
+
     private fun send(port: Int, payload: String) {
         Socket().use { socket ->
             socket.connect(java.net.InetSocketAddress(InetAddress.getLoopbackAddress(), port), 2_000)

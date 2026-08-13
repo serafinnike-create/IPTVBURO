@@ -75,7 +75,18 @@ class CastReceiver(
                 .joinToString("")
 
             val tcp = ServerSocket(0, TCP_BACKLOG)
-            val udp = DatagramSocket(DISCOVERY_PORT)
+            // Bound with address reuse rather than by the convenience constructor.
+            //
+            // The discovery port is fixed, so a socket left in TIME_WAIT by the previous session
+            // makes the next bind fail — and `start` reports that failure as "the feature is
+            // unavailable", which is a poor answer to "I turned it off and on again". Reuse is the
+            // ordinary setting for a server that expects to be restarted on the same port, and it
+            // is what makes stopping and starting the receiver dependable.
+            val udp =
+                DatagramSocket(null).apply {
+                    reuseAddress = true
+                    bind(InetSocketAddress(DISCOVERY_PORT))
+                }
 
             this.onMessage = onMessage
             pairingCode = code
