@@ -1,6 +1,5 @@
 package com.lucasserafin94.iptvburo.ui.screens
 
-import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -93,16 +92,19 @@ internal fun ProfileEditorDialog(
     val photoPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
             if (uri != null) {
-                // Persisted, or the URI stops resolving the next time the app starts and the tile
-                // silently falls back to the drawn avatar.
-                runCatching {
-                    context.contentResolver.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                    )
-                }
-                photoUri = uri.toString()
-                photoCleared = false
+                // Copied into the app's own storage rather than stored as a reference.
+                //
+                // The picker grants read access for this session only; a persistable grant cannot
+                // be taken over one of its URIs, so `takePersistableUriPermission` threw and the
+                // `runCatching` around it swallowed the failure. The URI was written to the
+                // database and stopped resolving the moment the app restarted, which is why the
+                // avatar fell back to the drawn initial with nothing reported — the photo was set,
+                // and then quietly unreadable.
+                //
+                // Copying also keeps the app out of the user's photo library: what it holds is one
+                // file it owns, not a handle on the gallery.
+                photoUri = copyProfilePhoto(context, uri)?.also { photoCleared = false }
+                    ?: photoUri
             }
         }
 
@@ -411,3 +413,33 @@ private fun SourceChoice(
         )
     }
 }
+
+/**
+ * Copies a chosen photo into the app's own files, returning a URI that keeps working.
+ *
+ * The system photo picker grants read access for the current session only. A URI from it cannot be
+ * held across restarts — `takePersistableUriPermission` throws for exactly this reason — so storing
+ * one meant the avatar worked until the app was closed and silently reverted to the drawn initial
+ * afterwards. Copying the bytes is what makes the choice stick.
+ *
+ * The copy lives in the app's private directory, so it is removed with the app and is not visible
+ * to anything else. One file per profile, overwritten on each change, so choosing a new photo a
+ * dozen times leaves one file rather than a dozen.
+ *
+ * Returns null when the image cannot be read, which leaves the previous photo in place. A failed
+ * copy must not be mistaken for "the user removed their photo".
+ */
+private fun copyProfilePhoto(context: android.content.Context, source: android.net.Uri): String? =
+    runCatching {
+        val directory = java.io.File(context.filesDir, PROFILE_PHOTO_DIRECTORY).apply { mkdirs() }
+        // Named for the content, not the profile: the editor may be creating a profile that has no
+        // id yet, and a random name is one the caller cannot accidentally collide with.
+        val destination = java.io.File(directory, "profile-${java.util.UUID.randomUUID()}.jpg")
+        context.contentResolver.openInputStream(source)?.use { input ->
+            destination.outputStream().use { output -> input.copyTo(output) }
+        } ?: return null
+        android.net.Uri.fromFile(destination).toString()
+    }.getOrNull()
+
+/** Where profile photos are copied to, inside the app's private files directory. */
+private const val PROFILE_PHOTO_DIRECTORY = "profile-photos"

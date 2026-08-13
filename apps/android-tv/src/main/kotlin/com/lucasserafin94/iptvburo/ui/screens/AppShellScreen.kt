@@ -957,13 +957,30 @@ private fun MobileNavigationDrawer(
             // locked out one morning.
             LicenseChip(license = license, onClick = onOpenLicense)
             Spacer(Modifier.height(14.dp))
-            mobileDestinations(subscriptionsVisible, offlineSupported).forEach { destination ->
-                MobileDrawerItem(
-                    label = stringResource(destination.section.ribbonLabelResource()),
-                    icon = destination.icon,
-                    selected = selected == destination.section,
-                    onClick = { onSelect(destination.section) },
-                )
+            // Scrolls, because the list is longer than a phone screen.
+            //
+            // Reported as "Configurações não aparece": the drawer was a plain Column, so every
+            // destination past the bottom edge was simply unreachable — Perfis was the last one
+            // visible and Settings sat below it with no way to get there. The list grew past the
+            // screen when Pesquisa, Continuar assistindo, Histórico and Assinaturas were added,
+            // and nothing complained because a Column silently clips what does not fit.
+            //
+            // `weight(1f)` first, so the scrolling area is what is left after the header and the
+            // licence chip rather than the whole height: those two must stay put while the
+            // destinations move under them.
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                mobileDestinations(subscriptionsVisible, offlineSupported).forEach { destination ->
+                    MobileDrawerItem(
+                        label = stringResource(destination.section.ribbonLabelResource()),
+                        icon = destination.icon,
+                        selected = selected == destination.section,
+                        onClick = { onSelect(destination.section) },
+                    )
+                }
             }
         }
     }
