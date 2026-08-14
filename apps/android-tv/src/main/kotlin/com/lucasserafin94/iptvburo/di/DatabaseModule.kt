@@ -8,6 +8,7 @@ import com.lucasserafin94.iptvburo.data.local.dao.ChannelDao
 import com.lucasserafin94.iptvburo.data.local.dao.FavoriteDao
 import com.lucasserafin94.iptvburo.data.local.dao.ProfileDao
 import com.lucasserafin94.iptvburo.data.local.dao.PlaybackProgressDao
+import com.lucasserafin94.iptvburo.data.local.dao.ReminderDao
 import com.lucasserafin94.iptvburo.data.local.dao.SourceDao
 import dagger.Module
 import dagger.Provides
@@ -55,6 +56,9 @@ object DatabaseModule {
 
     @Provides
     fun provideFavoriteDao(database: IptvBuroDatabase): FavoriteDao = database.favoriteDao()
+
+    @Provides
+    fun provideReminderDao(database: IptvBuroDatabase): ReminderDao = database.reminderDao()
 
     @Provides
     fun providePlaybackProgressDao(database: IptvBuroDatabase): PlaybackProgressDao = database.playbackProgressDao()

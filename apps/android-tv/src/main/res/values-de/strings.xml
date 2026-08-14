@@ -270,4 +270,12 @@
     <string name="search_idle">Gib einen Namen ein, um deinen Katalog zu durchsuchen.</string>
     <string name="search_working">Wird gesucht…</string>
     <string name="search_empty">Dazu passt nichts in deinem Katalog.</string>
+    <string name="reminder_channel_name">Erinnerungen</string>
+    <string name="reminder_channel_description">Ein täglicher Hinweis zu den Titeln, an die du erinnert werden willst.</string>
+    <string name="reminder_line_released">%1$s ist jetzt verfügbar</string>
+    <plurals name="reminder_line_countdown"><item quantity="one">%1$s — noch 1 Tag</item><item quantity="other">%1$s — noch %2$d Tage</item></plurals>
+    <plurals name="reminder_title_released"><item quantity="one">1 Titel ist erschienen</item><item quantity="other">%1$d Titel sind erschienen</item></plurals>
+    <plurals name="reminder_title_waiting"><item quantity="one">Du hast 1 Erinnerung</item><item quantity="other">Du hast %1$d Erinnerungen</item></plurals>
+    <string name="reminder_add">Erinnern</string>
+    <string name="reminder_added">Erinnerung aktiv</string>
 </resources>

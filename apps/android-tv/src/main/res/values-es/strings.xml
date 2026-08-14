@@ -270,4 +270,12 @@
     <string name="search_idle">Escribe un nombre para buscar en tu catálogo.</string>
     <string name="search_working">Buscando…</string>
     <string name="search_empty">Nada en tu catálogo coincide con eso.</string>
+    <string name="reminder_channel_name">Recordatorios</string>
+    <string name="reminder_channel_description">Un aviso diario sobre los títulos que pediste recordar.</string>
+    <string name="reminder_line_released">%1$s ya está disponible</string>
+    <plurals name="reminder_line_countdown"><item quantity="one">%1$s — queda 1 día</item><item quantity="other">%1$s — quedan %2$d días</item></plurals>
+    <plurals name="reminder_title_released"><item quantity="one">1 título se ha estrenado</item><item quantity="other">%1$d títulos se han estrenado</item></plurals>
+    <plurals name="reminder_title_waiting"><item quantity="one">Tienes 1 recordatorio</item><item quantity="other">Tienes %1$d recordatorios</item></plurals>
+    <string name="reminder_add">Recordatorio</string>
+    <string name="reminder_added">Recordatorio activo</string>
 </resources>

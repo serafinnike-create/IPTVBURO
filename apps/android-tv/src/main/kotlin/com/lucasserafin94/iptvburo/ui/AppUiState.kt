@@ -11,6 +11,7 @@ import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.ContentKind
 import com.lucasserafin94.iptvburo.domain.model.OfferReason
 import com.lucasserafin94.iptvburo.domain.model.ParentalLock
+import com.lucasserafin94.iptvburo.domain.model.Reminder
 import com.lucasserafin94.iptvburo.domain.model.SourceType
 import com.lucasserafin94.iptvburo.domain.model.StreamingDiscoveryCapability
 import com.lucasserafin94.iptvburo.domain.model.SubtitlePresentation
@@ -526,6 +527,15 @@ data class AppUiState(
     /** Whether the household key exists. Every profile without its own falls back to it. */
     val sharedTmdbKeyConfigured: Boolean = false,
     val favoriteIds: Set<String> = emptySet(),
+    /**
+     * Content keys the active profile asked to be reminded about.
+     *
+     * Keys rather than rows, for the reason [Reminder] itself is keyed that way: an upcoming title
+     * is not in the catalogue yet, so there is no row to point at when the reminder is made.
+     */
+    val reminderKeys: Set<String> = emptySet(),
+    /** What is marked, in full, for the reminders page and the home shelf. */
+    val reminders: List<Reminder> = emptyList(),
     val favoriteItems: List<ChannelUi> = emptyList(),
     val section: AppSection = AppSection.HOME,
     val content: AppContent = AppContent.Home,
@@ -642,6 +652,31 @@ data class AppUiState(
      * identically. The ids are mapped back to the original items, keeping every field the grid
      * needs without the domain having to know about them.
      */
+    /**
+     * The key a reminder for the open film would have, or null when no film is open.
+     *
+     * Derived here so the button and the toggle cannot disagree about which title they mean: both
+     * ask this, and the identity is built the same way sharing and casting build theirs.
+     */
+    val movieReminderKey: String?
+        get() {
+            val content = content as? AppContent.MovieDetails ?: return null
+            val name = movieDetails?.title ?: content.fallbackTitle
+            val year =
+                movieDetails?.releaseDate?.let { date -> date.trim().take(4).toIntOrNull() }
+                    ?: ContentIdentity.yearFromTitle(name)
+            return ContentIdentity.of(ContentKind.MOVIE, name, year).key
+        }
+
+    /** The same, for an open series. */
+    val seriesReminderKey: String?
+        get() {
+            val content = content as? AppContent.SeriesDetails ?: return null
+            val name = seriesDetails?.title ?: content.fallbackTitle
+            val year = seriesDetails?.releaseDate?.let { date -> date.trim().take(4).toIntOrNull() }
+            return ContentIdentity.of(ContentKind.SERIES, name, year).key
+        }
+
     val visibleChannels: List<ChannelUi>
         get() {
             if (!catalogueFilter.isActive) return channels

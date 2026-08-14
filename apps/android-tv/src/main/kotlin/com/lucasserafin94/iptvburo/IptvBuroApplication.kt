@@ -1,6 +1,9 @@
 package com.lucasserafin94.iptvburo
 
 import android.app.Application
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
+import javax.inject.Inject
 import androidx.annotation.OptIn
 import androidx.media3.common.util.Log
 import androidx.media3.common.util.UnstableApi
@@ -15,7 +18,20 @@ import coil3.request.crossfade
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
-class IptvBuroApplication : Application(), SingletonImageLoader.Factory {
+class IptvBuroApplication : Application(), SingletonImageLoader.Factory, Configuration.Provider {
+    /**
+     * Lets WorkManager build a worker that has dependencies injected.
+     *
+     * Without this the reminder worker is constructed by the default factory, which knows nothing
+     * about the repository it needs, and every scheduled run fails before it starts — silently,
+     * because a worker that cannot be instantiated is not something the user ever sees.
+     */
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
+
     @OptIn(markerClass = [UnstableApi::class])
     override fun onCreate() {
         super.onCreate()

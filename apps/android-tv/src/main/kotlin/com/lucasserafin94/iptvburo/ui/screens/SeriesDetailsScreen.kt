@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -102,6 +104,10 @@ internal fun SeriesDetailsScreen(
     isFavorite: Boolean = false,
     /** Null only where there is no series to favourite, which keeps the button honest. */
     onToggleFavorite: (() -> Unit)? = null,
+    /** Whether this series is already marked for a reminder. */
+    hasReminder: Boolean = false,
+    /** Marks or unmarks this series for a reminder. Null hides the button entirely. */
+    onToggleReminder: (() -> Unit)? = null,
     /** Sends this series to the system share sheet. Null hides the button entirely. */
     onShare: (() -> Unit)? = null,
     /** Opens the sheet that sends this title to a screen on the same network. Null hides it. */
@@ -279,6 +285,38 @@ internal fun SeriesDetailsScreen(
                                         maxLines = 1,
                                     )
                                 }
+                            }
+                        }
+                        // The reminder, beside Favoritar and on the same terms. Always drawn
+                        // rather than wrapped in a null check, so the row keeps the same shape on
+                        // every series — the reflow that made these buttons "behave differently on
+                        // each title" came from exactly that kind of conditional slot.
+                        BuroButton(
+                            onClick = { onToggleReminder?.invoke() },
+                            enabled = onToggleReminder != null,
+                            style = BuroButtonStyle.Secondary,
+                        ) {
+                            Icon(
+                                if (hasReminder) {
+                                    Icons.Default.Notifications
+                                } else {
+                                    Icons.Default.NotificationsNone
+                                },
+                                contentDescription = null,
+                                tint = if (hasReminder) BuroAccent else BuroTextPrimary,
+                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = stringResource(R.string.reminder_added),
+                                    color = Color.Transparent,
+                                    maxLines = 1,
+                                )
+                                Text(
+                                    stringResource(
+                                        if (hasReminder) R.string.reminder_added else R.string.reminder_add,
+                                    ),
+                                    maxLines = 1,
+                                )
                             }
                         }
                         // Always drawn, disabled when the provider gave no trailer id. The

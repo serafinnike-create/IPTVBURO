@@ -344,6 +344,7 @@ private fun IptvBuroRoot(
                 onSearch = viewModel::search,
                 onPlayMovie = viewModel::playSelectedMovie,
                 onToggleMovieFavorite = viewModel::toggleSelectedMovieFavorite,
+                onToggleReminder = viewModel::toggleReminder,
                 onShareTitle = { request ->
                     shareTitle(
                         activity = activity,

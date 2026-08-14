@@ -205,6 +205,11 @@ dependencies {
     // debug build, and every APK shared directly — has nobody to do that. Without this dependency
     // the generated profile ships in the APK and is never used.
     implementation(libs.androidx.profileinstaller)
+    // The daily reminder notification: scheduled work that outlives the process and survives a
+    // reboot, which an in-app timer cannot do.
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     // Where the profile comes from. Declaring it here is what lets the plugin wire up
     // `generateBaselineProfile` and fold the result into the release build.

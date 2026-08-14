@@ -29,6 +29,16 @@
     -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
+    <!--
+        The daily reminder notification.
+
+        A runtime permission since Android 13, and asked for only when the user first marks a
+        reminder — asking on first launch, before there is anything to be reminded about, is how an
+        app gets refused permanently. Refusing it costs the notification and nothing else: the
+        reminders still appear on the home screen and in the reminders page.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <uses-feature
         android:name="android.software.leanback"
         android:required="false" />

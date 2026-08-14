@@ -23,6 +23,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
@@ -80,6 +82,10 @@ internal fun MovieDetailsScreen(
     onPlay: () -> Unit,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
+    /** Whether this title is already marked for a reminder. */
+    hasReminder: Boolean = false,
+    /** Marks or unmarks this title for a reminder. Null hides the button entirely. */
+    onToggleReminder: (() -> Unit)? = null,
     /** Sends this title to the system share sheet. Null hides the button entirely. */
     onShare: (() -> Unit)? = null,
     /** Opens the sheet that sends this title to a screen on the same network. Null hides it. */
@@ -297,6 +303,43 @@ internal fun MovieDetailsScreen(
                                     } else {
                                         R.string.details_favorite_add
                                     },
+                                ),
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                    // The reminder, beside Favoritar and on the same terms.
+                    //
+                    // A reminder is about a title, not about a stream, so it stays available while
+                    // the full record loads and even when the source cannot resolve playback: what
+                    // is stored is the identity and the name, both of which the catalogue row
+                    // already carries.
+                    BuroButton(
+                        onClick = { onToggleReminder?.invoke() },
+                        enabled = onToggleReminder != null,
+                        style = BuroButtonStyle.Secondary,
+                    ) {
+                        Icon(
+                            if (hasReminder) {
+                                Icons.Default.Notifications
+                            } else {
+                                Icons.Default.NotificationsNone
+                            },
+                            contentDescription = null,
+                            tint = if (hasReminder) BuroAccent else BuroTextPrimary,
+                        )
+                        // Measured against the longer of the two labels, like Favoritar above: the
+                        // words differ in width, and a button that resizes on tap makes the whole
+                        // FlowRow reflow under the finger that pressed it.
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = stringResource(R.string.reminder_added),
+                                color = Color.Transparent,
+                                maxLines = 1,
+                            )
+                            Text(
+                                stringResource(
+                                    if (hasReminder) R.string.reminder_added else R.string.reminder_add,
                                 ),
                                 maxLines = 1,
                             )

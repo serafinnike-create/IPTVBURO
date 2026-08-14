@@ -12,6 +12,8 @@ import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseClient
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
+import com.lucasserafin94.iptvburo.data.reminders.ReminderScheduler
+import com.lucasserafin94.iptvburo.data.reminders.ReminderScheduling
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
 import com.lucasserafin94.iptvburo.data.repository.RoomCatalogRepository
 import com.lucasserafin94.iptvburo.data.security.AndroidKeystoreSourceConnectionStore
@@ -31,6 +33,10 @@ import javax.inject.Singleton
 abstract class DataBindingsModule {
     @Binds
     abstract fun bindAppLogger(implementation: AndroidAppLogger): AppLogger
+
+    @Binds
+    @Singleton
+    abstract fun bindReminderScheduling(implementation: ReminderScheduler): ReminderScheduling
 
     @Binds
     abstract fun bindOnboardingPreferences(

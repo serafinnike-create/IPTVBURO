@@ -275,4 +275,12 @@
     <string name="search_idle">Digite um nome para buscar no seu catálogo.</string>
     <string name="search_working">Buscando…</string>
     <string name="search_empty">Nada no seu catálogo corresponde a isso.</string>
+    <string name="reminder_channel_name">Lembretes</string>
+    <string name="reminder_channel_description">Um aviso diário sobre os títulos que você pediu para lembrar.</string>
+    <string name="reminder_line_released">%1$s já está disponível</string>
+    <plurals name="reminder_line_countdown"><item quantity="one">%1$s — falta 1 dia</item><item quantity="other">%1$s — faltam %2$d dias</item></plurals>
+    <plurals name="reminder_title_released"><item quantity="one">1 título foi lançado</item><item quantity="other">%1$d títulos foram lançados</item></plurals>
+    <plurals name="reminder_title_waiting"><item quantity="one">Você tem 1 lembrete</item><item quantity="other">Você tem %1$d lembretes</item></plurals>
+    <string name="reminder_add">Lembrete</string>
+    <string name="reminder_added">Lembrete ativo</string>
 </resources>

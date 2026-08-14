@@ -37,8 +37,10 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.AlertDialog
@@ -171,7 +173,7 @@ fun DesktopApp(
     var externalOpenResult by remember { mutableStateOf<ExternalOpenResult?>(null) }
     var activePlayback by remember { mutableStateOf<DesktopPlaybackRequest?>(null) }
     var showXtreamLogin by remember { mutableStateOf(false) }
-    var parentalOpen by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(false) }
 
     /** Whether the TMDb key walkthrough is showing, over the settings window. */
     var tmdbGuideOpen by remember { mutableStateOf(false) }
@@ -314,6 +316,9 @@ fun DesktopApp(
                         onCancelDownload = appState::cancelDownload,
                         onHome = appState::openHome,
                         onSearch = appState::openSearch,
+                        onProfiles = { showProfileGate = true },
+                        onSettings = { settingsOpen = true },
+                        activeProfileName = appState.activeProfile?.name,
                         onMovies = {
                             scope.launch { appState.openCatalog(XtreamContentType.MOVIE) }
                         },
@@ -366,7 +371,7 @@ fun DesktopApp(
                             onMetadataApiKeyChange = appState::updateMetadataApiKey,
                             streamingRegion = appState.streamingRegion,
                             onSelectRegion = appState::changeStreamingRegion,
-                            onOpenParental = { parentalOpen = true },
+                            onOpenParental = { settingsOpen = true },
                             uses24HourClock = appState.uses24HourClock,
                             licenseStatus = appState.licenseStatus,
                             onOpenPurchase = { showLicenseDetails = true },
@@ -902,10 +907,10 @@ fun DesktopApp(
                 )
             }
 
-            if (parentalOpen) {
+            if (settingsOpen) {
                 SettingsDialog(
                     appState = appState,
-                    onDismiss = { parentalOpen = false },
+                    onDismiss = { settingsOpen = false },
                     updateBusy = updateBusy,
                     onUpdate = ::checkAndDownloadUpdate,
                     sessionActive = appState.isXtreamSelected,
@@ -995,6 +1000,11 @@ private fun SourceSidebar(
     onCancelDownload: (String) -> Unit,
     onHome: () -> Unit,
     onSearch: () -> Unit,
+    /** Opens the profile picker, which is otherwise only reachable at launch. */
+    onProfiles: () -> Unit,
+    onSettings: () -> Unit,
+    /** The active profile's name, shown on the item instead of a generic word. */
+    activeProfileName: String?,
     onMovies: () -> Unit,
     onSeries: () -> Unit,
     onLive: () -> Unit,
@@ -1128,6 +1138,27 @@ private fun SourceSidebar(
                 onClick = onSubscriptions,
             )
         }
+
+        // Account and settings, after the content destinations and separated from them.
+        //
+        // Someone walking this list is looking for something to watch; who they are signed in as
+        // and how the app behaves are a different kind of question, so they sit at the end rather
+        // than among the shelves.
+        Spacer(Modifier.height(18.dp))
+        NavigationItem(
+            // Shows the active profile's name rather than the word "Profile", because the thing
+            // people check before deciding to switch is *which* profile is current.
+            label = activeProfileName ?: text.whoIsWatching,
+            icon = Icons.Default.Person,
+            selected = false,
+            onClick = onProfiles,
+        )
+        NavigationItem(
+            label = text.settings,
+            icon = Icons.Default.Settings,
+            selected = false,
+            onClick = onSettings,
+        )
 
         // The source list used to own the whole remaining column even with one source. It is a
         // rarely-used switch, so it now takes only the height it needs and the section disappears

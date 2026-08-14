@@ -188,6 +188,8 @@ fun AppShellScreen(
     onSearch: (String) -> Unit,
     onPlayMovie: () -> Unit,
     onToggleMovieFavorite: () -> Unit,
+    /** Marks or unmarks whichever details page is open. */
+    onToggleReminder: () -> Unit,
     /** Sends the open title to the system share sheet. */
     onShareTitle: (ShareRequestUi) -> Unit,
     /** Opens the sheet that sends the open title to a screen on the same network. */
@@ -315,6 +317,16 @@ fun AppShellScreen(
                     // to file, and a button that silently does nothing is worse than no button.
                     onToggleFavorite =
                         onToggleMovieFavorite.takeIf { content.channelId.isNotBlank() },
+                    // Offered even for a series with no catalogue row, unlike favouriting above: a
+                    // reminder is stored against the identity, which is built from the title, so
+                    // there is something to file either way.
+                    hasReminder =
+                        reminderKeyOf(
+                            ContentKind.SERIES,
+                            seriesTitle,
+                            state.seriesDetails?.releaseDate,
+                        ) in state.reminderKeys,
+                    onToggleReminder = onToggleReminder,
                     onCast = onCastTitle,
                     onShare = {
                         onShareTitle(
@@ -354,6 +366,13 @@ fun AppShellScreen(
                     onPlay = onPlayMovie,
                     isFavorite = content.channelId in state.favoriteIds,
                     onToggleFavorite = onToggleMovieFavorite,
+                    hasReminder =
+                        reminderKeyOf(
+                            ContentKind.MOVIE,
+                            state.movieDetails?.title ?: content.fallbackTitle,
+                            state.movieDetails?.releaseDate,
+                        ) in state.reminderKeys,
+                    onToggleReminder = onToggleReminder,
                     onCast = onCastTitle,
                     onShare = {
                         val movieTitle = state.movieDetails?.title ?: content.fallbackTitle
@@ -4028,3 +4047,20 @@ internal fun yearFromReleaseDate(releaseDate: String): Int? =
     releaseDate.trim().take(4).toIntOrNull()?.takeIf { it in PLAUSIBLE_RELEASE_YEARS }
 
 private val PLAUSIBLE_RELEASE_YEARS = 1_888..2_100
+
+/**
+ * The key a reminder for this title would be stored under.
+ *
+ * Built the same way the view model builds it when marking, so the button reads its own state back
+ * rather than being told: the two must agree, and deriving both from [ContentIdentity] is what
+ * keeps them agreeing when the title or the year changes as the full record loads.
+ */
+private fun reminderKeyOf(
+    kind: ContentKind,
+    title: String,
+    releaseDate: String?,
+): String {
+    val year = releaseDate?.let(::yearFromReleaseDate)
+        ?: if (kind == ContentKind.MOVIE) ContentIdentity.yearFromTitle(title) else null
+    return ContentIdentity.of(kind, title, year).key
+}

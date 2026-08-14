@@ -22,6 +22,8 @@ import com.lucasserafin94.iptvburo.data.repository.LiveProgram
 import com.lucasserafin94.iptvburo.data.repository.CatalogCursor
 import com.lucasserafin94.iptvburo.data.repository.BuroProfile
 import com.lucasserafin94.iptvburo.data.repository.ProfileType
+import com.lucasserafin94.iptvburo.data.reminders.ReminderScheduling
+import com.lucasserafin94.iptvburo.data.repository.ReminderRepository
 import com.lucasserafin94.iptvburo.data.repository.UserLibraryRepository
 import com.lucasserafin94.iptvburo.data.repository.toProfile
 import com.lucasserafin94.iptvburo.data.repository.StalkerImportRequest
@@ -95,6 +97,8 @@ class MainViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
     private val onboardingPreferences: OnboardingPreferences,
     private val userLibraryRepository: UserLibraryRepository,
+    private val reminderRepository: ReminderRepository,
+    private val reminderScheduler: ReminderScheduling,
     private val downloadManager: AndroidDownloadManager,
     private val licenseService: AndroidLicenseService,
     private val metadataKeyStore: MetadataKeyStore,
@@ -172,6 +176,19 @@ class MainViewModel @Inject constructor(
         observeSources()
         observeCatalogueGuard()
         observeSubtitles()
+        // Re-applied on every launch, not only when a reminder is marked.
+        //
+        // Scheduled work does not always survive: a force stop cancels it until the app is opened
+        // again, and a phone restored from a backup arrives with the reminders but none of the
+        // work that announces them. Without this, such a device stays silent until the user
+        // happens to mark something new — which reads as the feature simply not working.
+        //
+        // Cheap to repeat: unique work with UPDATE replaces the existing schedule rather than
+        // adding a second one.
+        viewModelScope.launch {
+            runCatching { reminderScheduler.sync() }
+                .onFailure { error -> logger.error(TAG, "Could not schedule reminders", error) }
+        }
     }
 
     /**
@@ -2947,6 +2964,7 @@ class MainViewModel @Inject constructor(
                         )
                     }
                     observeFavorites(active?.id)
+                    observeReminders(active?.id)
                     loadContinueWatching(active?.id)
                     // Rebuild the home for whoever is now watching. The stage was set to CATALOGUE
                     // just above, and `loadHomeItems` is what carries it to READY — but it is
@@ -3046,6 +3064,132 @@ class MainViewModel @Inject constructor(
             }
         }
     }
+
+    private var remindersJob: Job? = null
+
+    /**
+     * Watches what the active profile asked to be reminded about.
+     *
+     * Mirrors the favourites observer, including the swallow-and-log on failure: a reminder list
+     * that cannot be read is a reason to show none, never a reason to take the screen down.
+     */
+    private fun observeReminders(profileId: String?) {
+        remindersJob?.cancel()
+        if (profileId == null) {
+            mutableState.update { it.copy(reminders = emptyList(), reminderKeys = emptySet()) }
+            return
+        }
+        remindersJob =
+            viewModelScope.launch {
+                reminderRepository
+                    .observe(profileId)
+                    .catch { error ->
+                        logger.error(TAG, "Could not observe reminders", error)
+                        emit(emptyList())
+                    }.collect { reminders ->
+                        // Guarded because the profile can be switched while this collect is live:
+                        // the old flow emits once more before its job is cancelled, and without the
+                        // check one profile's reminders land in the other's state.
+                        if (mutableState.value.activeProfile?.id != profileId) return@collect
+                        mutableState.update {
+                            it.copy(
+                                reminders = reminders,
+                                // Derived here rather than at each read site: the button asks "is
+                                // this one marked" on every recomposition, and scanning the list
+                                // for it would be a linear search inside layout.
+                                reminderKeys = reminders.mapTo(mutableSetOf()) { r -> r.identity.key },
+                            )
+                        }
+                    }
+            }
+    }
+
+    /**
+     * Marks or unmarks whichever details page is open.
+     *
+     * The identity is built the same way sharing and casting build theirs, so a reminder made today
+     * still names the same title after the playlist is replaced — which is the whole reason
+     * reminders are keyed by identity rather than by a catalogue row.
+     *
+     * The release date is carried when the catalogue knows one: that is what turns "remind me about
+     * this" into "tell me when it comes out".
+     */
+    fun toggleReminder() {
+        val profileId = mutableState.value.activeProfile?.id ?: return
+        val state = mutableState.value
+        val (identity, title, artwork, releaseDate) =
+            when (val content = state.content) {
+                is AppContent.MovieDetails -> {
+                    val name = state.movieDetails?.title ?: content.fallbackTitle
+                    val year =
+                        state.movieDetails?.releaseDate?.let(::yearFromReleaseDate)
+                            ?: ContentIdentity.yearFromTitle(name)
+                    ReminderTarget(
+                        ContentIdentity.of(ContentKind.MOVIE, name, year),
+                        name,
+                        state.movieDetails?.artworkUrl,
+                        state.movieDetails?.releaseDate?.let(::parseReleaseDate),
+                    )
+                }
+
+                is AppContent.SeriesDetails -> {
+                    val name = state.seriesDetails?.title ?: content.fallbackTitle
+                    val year = state.seriesDetails?.releaseDate?.let(::yearFromReleaseDate)
+                    ReminderTarget(
+                        ContentIdentity.of(ContentKind.SERIES, name, year),
+                        name,
+                        state.seriesDetails?.artworkUrl,
+                        state.seriesDetails?.releaseDate?.let(::parseReleaseDate),
+                    )
+                }
+
+                else -> return
+            }
+
+        viewModelScope.launch {
+            runCatching {
+                reminderRepository.toggle(
+                    profileId = profileId,
+                    identity = identity,
+                    title = title,
+                    artworkUrl = artwork,
+                    releaseDate = releaseDate,
+                )
+            }.onFailure { error -> logger.error(TAG, "Could not toggle the reminder", error) }
+            // Re-applied on every toggle rather than only on the first. The daily digest is unique
+            // periodic work, so this replaces the existing schedule rather than adding a second —
+            // and it means a phone whose scheduled work was cleared, by a force stop or by being
+            // restored onto a new device, starts notifying again as soon as anything is marked.
+            reminderScheduler.sync()
+        }
+    }
+
+    /** Removes one reminder from the reminders page, without needing its details screen open. */
+    fun removeReminder(identity: ContentIdentity) {
+        val profileId = mutableState.value.activeProfile?.id ?: return
+        viewModelScope.launch {
+            runCatching { reminderRepository.remove(profileId, identity) }
+                .onFailure { error -> logger.error(TAG, "Could not remove the reminder", error) }
+        }
+    }
+
+    /** What a details page contributes to a reminder, gathered in one place per kind. */
+    private data class ReminderTarget(
+        val identity: ContentIdentity,
+        val title: String,
+        val artworkUrl: String?,
+        val releaseDate: java.time.LocalDate?,
+    )
+
+    /**
+     * Reads a provider's release date, or null when it is not a date.
+     *
+     * Providers send this field as anything from `2026-08-06` to an empty string to a year on its
+     * own. A wrong date is worse than none — it would announce a release that has not happened — so
+     * anything that does not parse is treated as "no date known".
+     */
+    private fun parseReleaseDate(value: String): java.time.LocalDate? =
+        runCatching { java.time.LocalDate.parse(value.trim().take(10)) }.getOrNull()
 
     private fun observeFavorites(profileId: String?) {
         favoritesJob?.cancel()

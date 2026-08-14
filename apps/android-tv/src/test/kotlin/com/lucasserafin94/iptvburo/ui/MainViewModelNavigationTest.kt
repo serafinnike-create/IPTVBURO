@@ -20,6 +20,10 @@ import com.lucasserafin94.iptvburo.data.local.entity.FavoriteEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ProfileEntity
 import com.lucasserafin94.iptvburo.data.preferences.CatalogueGuard
 import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
+import com.lucasserafin94.iptvburo.data.local.dao.ReminderDao
+import com.lucasserafin94.iptvburo.data.local.entity.ReminderEntity
+import com.lucasserafin94.iptvburo.data.reminders.ReminderScheduling
+import com.lucasserafin94.iptvburo.data.repository.ReminderRepository
 import com.lucasserafin94.iptvburo.data.repository.UserLibraryRepository
 import com.lucasserafin94.iptvburo.data.repository.CatalogPage
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
@@ -53,6 +57,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -646,6 +651,10 @@ class MainViewModelNavigationTest {
             catalogRepository = repository,
             onboardingPreferences = FakeOnboardingPreferences,
             userLibraryRepository = UserLibraryRepository(FakeProfileDao(), FakeFavoriteDao(), dispatcher),
+            reminderRepository = ReminderRepository(FakeReminderDao(), dispatcher),
+            // Records nothing: these assertions are about navigation, and the real scheduler would
+            // need an initialised WorkManager to answer at all.
+            reminderScheduler = NoReminderScheduling,
             // The manager resolves storage lazily, so these navigation assertions never touch it.
             downloadManager = AndroidDownloadManager(contextProvider, OkHttpClient(), dispatcher),
             licenseService = licenseService,
@@ -958,4 +967,41 @@ private class RecordingLogger : AppLogger {
     ) {
         errorCount += 1
     }
+}
+
+/** In-memory reminders, enough for the view model to observe and toggle against. */
+private class FakeReminderDao : ReminderDao {
+    private val rows = MutableStateFlow<List<ReminderEntity>>(emptyList())
+
+    override fun observeForProfile(profileId: String): Flow<List<ReminderEntity>> =
+        rows.map { all -> all.filter { it.profileId == profileId } }
+
+    override suspend fun forProfile(profileId: String): List<ReminderEntity> =
+        rows.value.filter { it.profileId == profileId }
+
+    override suspend fun upsert(reminder: ReminderEntity) {
+        rows.value =
+            rows.value.filterNot {
+                it.profileId == reminder.profileId && it.contentKey == reminder.contentKey
+            } + reminder
+    }
+
+    override suspend fun remove(profileId: String, contentKey: String) {
+        rows.value =
+            rows.value.filterNot { it.profileId == profileId && it.contentKey == contentKey }
+    }
+
+    override suspend fun isMarked(profileId: String, contentKey: String): Boolean =
+        rows.value.any { it.profileId == profileId && it.contentKey == contentKey }
+
+    override suspend fun all(): List<ReminderEntity> = rows.value
+}
+
+/** Accepts every scheduling call and does nothing, so no WorkManager is needed. */
+private data object NoReminderScheduling : ReminderScheduling {
+    override suspend fun sync() = Unit
+
+    override suspend fun setTime(hour: Int, minute: Int) = Unit
+
+    override suspend fun setNotify(notify: Boolean) = Unit
 }
