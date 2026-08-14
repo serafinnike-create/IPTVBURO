@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Search
@@ -128,6 +129,8 @@ import com.lucasserafin94.iptvburo.desktop.download.formatRate
 import com.lucasserafin94.iptvburo.desktop.platform.openStreamingOfferExternally
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
+import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
+import com.lucasserafin94.iptvburo.domain.model.ContentKind
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
 import com.lucasserafin94.iptvburo.domain.model.OfferType
 import com.lucasserafin94.iptvburo.domain.model.ProviderDeepLinks
@@ -285,9 +288,25 @@ fun DesktopApp(
                 Modifier
                     .fillMaxSize()
                     .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+                        // Full screen outside the player, which previously only the player offered.
+                        //
+                        // F11 toggles, as it does in a browser. Esc only leaves, never enters, so
+                        // whoever turns it on always has a key that gets them back — full screen
+                        // removes the title bar along with the frame, and without this the way out
+                        // would be Alt+F4.
+                        if (event.key == Key.F11) {
+                            onToggleFullScreen()
+                            return@onPreviewKeyEvent true
+                        }
+                        if (event.key == Key.Escape && isFullScreen) {
+                            onToggleFullScreen()
+                            return@onPreviewKeyEvent true
+                        }
+
                         if (
                             !appState.isXtreamSelected ||
-                            event.type != KeyEventType.KeyDown ||
                             !event.isCtrlPressed
                         ) {
                             return@onPreviewKeyEvent false
@@ -329,6 +348,7 @@ fun DesktopApp(
                             scope.launch { appState.openCatalog(XtreamContentType.LIVE) }
                         },
                         onFavorites = { scope.launch { appState.setFavoritesOnly(true) } },
+                        onReminders = appState::openReminders,
                         onContinueWatching = appState::openContinueWatching,
                         onHistory = appState::openHistory,
                         onDownloads = appState::openDownloads,
@@ -371,7 +391,6 @@ fun DesktopApp(
                             onMetadataApiKeyChange = appState::updateMetadataApiKey,
                             streamingRegion = appState.streamingRegion,
                             onSelectRegion = appState::changeStreamingRegion,
-                            onOpenParental = { settingsOpen = true },
                             uses24HourClock = appState.uses24HourClock,
                             licenseStatus = appState.licenseStatus,
                             onOpenPurchase = { showLicenseDetails = true },
@@ -433,7 +452,28 @@ fun DesktopApp(
                                 keyRejected = appState.streamingKeyRejected,
                                 onRetry = { appState.loadStreamingShelves(force = true) },
                                 page = appState.streamingPage,
+                                // A title is open when one has been selected, which is not the same
+                                // as it having somewhere to watch — an upcoming film has nowhere by
+                                // definition, and inferring one from the other kept its page shut.
+                                titleOpen = appState.selectedStreamingTitle != null,
                                 onOpenTrailerExternally = { id -> appState.openPublicTrailer(id) },
+                                // An upcoming film has no catalogue row, so it is named the only
+                                // way it can be: by what it is. The same identity the film will
+                                // have once it actually turns up in a playlist.
+                                hasReminderFor = { title, year ->
+                                    appState.hasReminder(
+                                        ContentIdentity.of(ContentKind.MOVIE, title, year),
+                                    )
+                                },
+                                onToggleReminder = { title, year, poster ->
+                                    appState.toggleReminder(
+                                        identity = ContentIdentity.of(ContentKind.MOVIE, title, year),
+                                        // TMDb's own title, which is already the clean one.
+                                        title = title,
+                                        year = year,
+                                        artworkUrl = poster,
+                                    )
+                                },
                                 // Clearing the ranking is what returns the screen to its shelves,
                                 // which is exactly what opening the area already does.
                                 onBackToShelves = { appState.openSubscriptions() },
@@ -507,6 +547,24 @@ fun DesktopApp(
                                 },
                                 onForget = appState::forgetHistoryEntry,
                                 onClearAll = appState::clearHistory,
+                            )
+                        } else if (visibleDestination == DesktopDestination.REMINDERS) {
+                            RemindersGallery(
+                                reminders = appState.reminders,
+                                // Resolved once per entry: an upcoming film has no catalogue row,
+                                // and the row is what makes an entry openable at all.
+                                onOpen = { reminder ->
+                                    appState.catalogItemForReminder(reminder)?.let { item ->
+                                        { appState.openReminder(item) }
+                                    }
+                                },
+                                onRemove = appState::removeReminder,
+                                announced = appState.remindersAnnounced,
+                                onAnnouncedChange = appState::announceReminders,
+                                hour = appState.reminderHour,
+                                onHourChange = appState::chooseReminderHour,
+                                notice = appState.reminderNotice,
+                                onDismissNotice = appState::dismissReminderNotice,
                             )
                         } else if (visibleDestination == DesktopDestination.DOWNLOADS) {
                             DownloadsWorkspace(
@@ -1009,6 +1067,7 @@ private fun SourceSidebar(
     onSeries: () -> Unit,
     onLive: () -> Unit,
     onFavorites: () -> Unit,
+    onReminders: () -> Unit,
     onContinueWatching: () -> Unit,
     onHistory: () -> Unit,
     onDownloads: () -> Unit,
@@ -1105,10 +1164,19 @@ private fun SourceSidebar(
             onClick = onHistory,
         )
         NavigationItem(
-            label = text.favorites,
+            label = text.savedForLater.favorites,
             icon = Icons.Default.Favorite,
             selected = destination == DesktopDestination.FAVORITES,
             onClick = onFavorites,
+        )
+        // Straight after Favoritos, the other list of titles marked for later. Always present
+        // rather than hidden while empty: a destination that appears only once you have used it
+        // cannot be found by someone looking for where their marks went.
+        NavigationItem(
+            label = text.savedForLater.remindersTitle,
+            icon = Icons.Default.Notifications,
+            selected = destination == DesktopDestination.REMINDERS,
+            onClick = onReminders,
         )
         if (hasOffline) {
             NavigationItem(
@@ -1146,9 +1214,11 @@ private fun SourceSidebar(
         // than among the shelves.
         Spacer(Modifier.height(18.dp))
         NavigationItem(
-            // Shows the active profile's name rather than the word "Profile", because the thing
-            // people check before deciding to switch is *which* profile is current.
-            label = activeProfileName ?: text.whoIsWatching,
+            // Named for where it goes, like every other row in this list, and nothing else. The
+            // active profile's name was shown here — first as the label, then as a subtitle — and
+            // both read as the row belonging to that person rather than leading to the profiles.
+            // Who is watching is answered by the profile screen this opens.
+            label = text.profile,
             icon = Icons.Default.Person,
             selected = false,
             onClick = onProfiles,
@@ -1405,7 +1475,6 @@ private fun TopBar(
     onMetadataApiKeyChange: (String) -> Unit,
     streamingRegion: String,
     onSelectRegion: (String) -> Unit,
-    onOpenParental: () -> Unit,
     uses24HourClock: Boolean,
     /** Null while the first check is still in flight, which is when there is nothing to say. */
     licenseStatus: LicenseStatus?,
@@ -1506,11 +1575,11 @@ private fun TopBar(
                 )
                 Spacer(Modifier.width(BuroSpacing.Md))
             }
-            // Profile first, then a single settings entry. Four loose language buttons plus an
-            // update button plus two status pills made the header read as a debug toolbar; the
-            // language belongs inside settings, where a user looks for it once and never again.
-            // Before the profile chip: the eye lands on the right of a header looking for status,
-            // and the time is the thing most often wanted there.
+            // The clock, then who is watching, and nothing else. Four loose language buttons plus
+            // an update button plus two status pills once made this read as a debug toolbar; what
+            // is left is the two things worth glancing at, with every destination in the sidebar.
+            // Clock before the profile chip: the eye lands on the right of a header looking for
+            // status, and the time is the thing most often wanted there.
             HeaderClock(uses24Hour = uses24HourClock, languageTag = language.tag)
             Spacer(Modifier.width(BuroSpacing.Md))
             if (showProfile) {
@@ -1520,26 +1589,10 @@ private fun TopBar(
                     photo = activeProfilePhoto,
                     onClick = onChangeProfile,
                 )
-                Spacer(Modifier.width(BuroSpacing.Sm))
             }
-            // Opens the settings dialog directly. There used to be a DropdownMenu here holding
-            // half the settings, with the other half behind an item inside it — and a
-            // DropdownMenu scrolls its content without ever drawing a scrollbar, so everything
-            // below its fold was reported as missing. One screen, one scrollbar.
-            BuroInteractiveRow(
-                onClick = onOpenParental,
-                selected = false,
-                shape = CircleShape,
-                contentDescription = text.settings,
-            ) {
-                Box(modifier = Modifier.size(38.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "⚙",
-                        color = BuroColors.TextMuted,
-                        style = MaterialTheme.typography.headlineSmall,
-                    )
-                }
-            }
+            // No gear here any more. Settings moved into the sidebar as a named row, and this
+            // header button opened the very same dialog — two affordances for one destination,
+            // one of them an unlabelled glyph sitting where the window controls are.
         }
     }
 }

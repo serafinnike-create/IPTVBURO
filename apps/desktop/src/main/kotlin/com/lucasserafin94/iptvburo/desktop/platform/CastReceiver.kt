@@ -6,7 +6,11 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.NetworkInterface
 import java.net.ServerSocket
+import java.net.StandardProtocolFamily
+import java.net.StandardSocketOptions
+import java.nio.channels.DatagramChannel
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.random.Random
@@ -25,12 +29,17 @@ import kotlin.random.Random
  * ## Why this is off unless the user turns it on
  *
  * Everything else this app does reaches outwards. This listens, which is a different kind of risk,
- * so it is not running by default: the user opens the receiver, sees a four-digit code, and types
- * that code once into the phone. Without the code a message is discarded before anything is looked
- * up, and the code changes every time the receiver is started.
+ * so the user sees a four-digit code and types it once into the phone. Without the code a message
+ * is discarded before anything is looked up.
  *
- * The code is what makes "someone else's wifi" safe — a shared building, a hotel, a café. It is not
- * a secret worth protecting for long, which is why it is short and regenerated rather than stored.
+ * The code is what makes "someone else's wifi" safe — a shared building, a hotel, a café. Being on
+ * the same network is not a permission: on a shared one, everybody is.
+ *
+ * It is kept per machine rather than minted each session. Rotating it meant the number on screen
+ * was new on every launch and had to be retyped every time, and a pairing step repeated daily is
+ * one people escape by switching the feature off — which protects nothing at all. A stored code
+ * still stops a stranger reaching this screen; what it gives up is only defence against someone who
+ * saw the code once and came back later. `regenerateCastPairingCode` is the way to revoke one.
  */
 class CastReceiver(
     /** How this machine introduces itself in the device list on the phone. */
@@ -60,6 +69,16 @@ class CastReceiver(
     var listeningPort: Int? = null
         private set
 
+    /**
+     * The address the discovery socket is bound to, or null when stopped.
+     *
+     * Published for the same reason [listeningPort] is: the family this lands on decides whether a
+     * broadcast can arrive at all, and it has been wrong. Asserting it directly beats asserting it
+     * through a datagram on a CI runner with no dependable broadcast loopback.
+     */
+    val discoveryBindAddress: java.net.InetAddress?
+        get() = udpSocket.get()?.localAddress
+
     @Volatile
     private var onMessage: ((CastMessage) -> Unit)? = null
 
@@ -68,29 +87,52 @@ class CastReceiver(
      *
      * Null is a real outcome rather than an exception: a firewall refusing the bind is a reason for
      * the feature to be unavailable, not a reason for the app to fail.
+     *
+     * [existingCode] is this machine's kept code. Passing null mints a fresh one, which is what a
+     * first run and an explicit "new code" both want.
      */
-    fun start(onMessage: (CastMessage) -> Unit): String? {
+    fun start(
+        existingCode: String? = null,
+        onMessage: (CastMessage) -> Unit,
+    ): String? {
         stop()
         return runCatching {
-            // A fresh code per session. It is a proof of being in the room, not a password, and
-            // regenerating it means a code glimpsed once does not work tomorrow.
-            val code = (1..CastMessage.PAIRING_CODE_LENGTH)
-                .map { Random.nextInt(0, 10) }
-                .joinToString("")
+            // The machine's own code, reused across sessions.
+            //
+            // This used to mint a new one on every start, so the code on screen was different each
+            // time the app opened and the phone had to be told again — every session, for a feature
+            // whose entire appeal is not having to think about it. Reusing it means it is typed
+            // once. What the code defends against is a stranger on a shared network reaching this
+            // screen, and it defends against that just as well when it stays the same.
+            val code =
+                existingCode?.takeIf(::isWellFormedCode)
+                    ?: (1..CastMessage.PAIRING_CODE_LENGTH)
+                        .map { Random.nextInt(0, 10) }
+                        .joinToString("")
 
             val tcp = ServerSocket(0, TCP_BACKLOG)
-            // Bound with address reuse rather than by the convenience constructor.
+            // Opened through a channel forced to INET, with address reuse set explicitly.
             //
-            // The discovery port is fixed, so a socket left in TIME_WAIT by the previous session
-            // makes the next bind fail — and `start` reports that failure as "the feature is
-            // unavailable", which is a poor answer to "I turned it off and on again". Reuse is the
-            // ordinary setting for a server that expects to be restarted on the same port, and it
-            // is what makes stopping and starting the receiver dependable.
-            val udp =
-                DatagramSocket(null).apply {
-                    reuseAddress = true
-                    bind(InetSocketAddress(DISCOVERY_PORT))
+            // Reuse first: the discovery port is fixed, so a socket left in TIME_WAIT by the
+            // previous session makes the next bind fail — and `start` reports that failure as "the
+            // feature is unavailable", a poor answer to "I turned it off and on again".
+            //
+            //
+            // A plain DatagramSocket binds the family the JVM prefers, and on Windows that is IPv6:
+            // `netstat` showed this on `::`, and asking it for 0.0.0.0 was not enough either, since
+            // a dual-stack socket maps the request straight back onto the IPv6 wildcard. Discovery
+            // is an IPv4 *broadcast*, and an IPv4 broadcast is never delivered to an IPv6-bound
+            // socket — so the receiver listened on a port no sender could reach. The phone was on
+            // the same network with the app open and the desktop still said no screens were found.
+            //
+            // StandardProtocolFamily.INET is the one way to say "IPv4, really": it opens a socket
+            // that has no IPv6 form to fall back to.
+            val channel =
+                DatagramChannel.open(StandardProtocolFamily.INET).apply {
+                    setOption(StandardSocketOptions.SO_REUSEADDR, true)
+                    bind(InetSocketAddress(InetAddress.getByName("0.0.0.0"), DISCOVERY_PORT))
                 }
+            val udp = channel.socket()
 
             this.onMessage = onMessage
             pairingCode = code
@@ -254,6 +296,16 @@ class CastReceiver(
         const val DISCOVERY_REPLY = "buro-cast-here-1"
 
         /**
+         * Whether a stored code is still usable as one.
+         *
+         * A preferences value is a file on disk that anything can edit. A blank or truncated one
+         * would otherwise become the code the receiver checks against, and an empty string matching
+         * an empty string is a receiver that accepts anybody.
+         */
+        internal fun isWellFormedCode(candidate: String): Boolean =
+            candidate.length == CastMessage.PAIRING_CODE_LENGTH && candidate.all(Char::isDigit)
+
+        /**
          * How long a wrong pairing code costs, given how many have arrived in a row.
          *
          * Exposed so the rule can be asserted directly. Timing it from the outside measures the
@@ -298,17 +350,39 @@ class CastReceiver(
         /** Finds receivers on this network, for the sender's device list. */
         fun discover(timeoutMillis: Int = 1_200): List<CastTarget> =
             runCatching {
-                DatagramSocket().use { socket ->
+                // Forced to IPv4 for the reason the receiver is: an unqualified socket may open on
+                // IPv6, and an IPv6 socket cannot send an IPv4 broadcast at all — every send below
+                // would be refused and the search would come back empty with nothing to show.
+                DatagramChannel
+                    .open(StandardProtocolFamily.INET)
+                    .socket()
+                    .use { socket ->
                     socket.broadcast = true
                     socket.soTimeout = timeoutMillis
                     val probe = DISCOVERY_PROBE.toByteArray(Charsets.UTF_8)
-                    socket.send(
-                        DatagramPacket(
-                            probe,
-                            probe.size,
-                            InetSocketAddress(InetAddress.getByName("255.255.255.255"), DISCOVERY_PORT),
-                        ),
-                    )
+
+                    // Every interface's own broadcast address, not just 255.255.255.255.
+                    //
+                    // A limited broadcast leaves by whichever single interface the routing table
+                    // picks, and this machine has five: Wi-Fi plus Bluetooth and three link-local
+                    // stubs sitting on 169.254/16. The probe left by one of those and the phone on
+                    // the Wi-Fi never heard it — the app reported "no screens found" while both
+                    // devices were on the same network, which is indistinguishable from the feature
+                    // being broken. Sending to 192.168.1.255 *and* the global address covers both
+                    // the ordinary case and the stacks that only honour one of them.
+                    (broadcastAddresses() + InetAddress.getByName("255.255.255.255")).forEach { address ->
+                        // Per address: one interface refusing the send — a disconnected adapter,
+                        // a stack that rejects the global address — must not stop the others.
+                        runCatching {
+                            socket.send(
+                                DatagramPacket(
+                                    probe,
+                                    probe.size,
+                                    InetSocketAddress(address, DISCOVERY_PORT),
+                                ),
+                            )
+                        }
+                    }
 
                     val found = LinkedHashMap<String, CastTarget>()
                     val buffer = ByteArray(DISCOVERY_BUFFER_BYTES)
@@ -320,6 +394,15 @@ class CastReceiver(
                             String(packet.data, 0, packet.length, Charsets.UTF_8).split('\u001F')
                         if (parts.size != 3 || parts[0] != DISCOVERY_REPLY) continue
                         val port = parts[1].toIntOrNull()?.takeIf { it in 1..65_535 } ?: continue
+                        // This machine's own reply, discarded.
+                        //
+                        // The receiver now starts with the app, so a probe sent to the broadcast
+                        // address comes straight back to the socket that sent it and the machine
+                        // lists *itself* as a screen to send to. Choosing it asks for a pairing
+                        // code that is on this very screen, which reads as the phone having been
+                        // found when the phone was never involved — and sending would deliver a
+                        // title to the app it was sent from.
+                        if (packet.address.hostAddress in localAddresses()) continue
                         val name = displayNameFrom(parts[2], packet.address.hostAddress)
                         // Keyed by address, so a machine answering twice appears once.
                         //
@@ -331,6 +414,45 @@ class CastReceiver(
                     found.values.toList()
                 }
             }.getOrDefault(emptyList())
+
+        /**
+         * The broadcast address of every interface that is actually carrying traffic.
+         *
+         * Loopback and interfaces that are down are skipped, as is any interface with no broadcast
+         * address of its own — a point-to-point link has none, and IPv6 has no broadcast at all.
+         *
+         * Link-local stubs (169.254/16) are kept rather than filtered: an adapter that failed DHCP
+         * is a poor bet, but two machines on a cable with no router talk over exactly that range,
+         * and one extra datagram costs nothing.
+         */
+        internal fun broadcastAddresses(): List<InetAddress> =
+            runCatching {
+                NetworkInterface
+                    .getNetworkInterfaces()
+                    .toList()
+                    .filter { candidate ->
+                        runCatching { candidate.isUp && !candidate.isLoopback }.getOrDefault(false)
+                    }.flatMap { candidate -> candidate.interfaceAddresses }
+                    .mapNotNull { address -> address.broadcast }
+                    .distinct()
+            }.getOrDefault(emptyList())
+
+        /**
+         * Every address this machine answers on, for recognising its own reply.
+         *
+         * Loopback included, and interfaces that are down as well: the cost of listing an address
+         * this machine no longer uses is nothing, while missing one puts the machine back in its
+         * own list of screens. Compared as text because that is the form the reply arrives in.
+         */
+        internal fun localAddresses(): Set<String> =
+            runCatching {
+                NetworkInterface
+                    .getNetworkInterfaces()
+                    .toList()
+                    .flatMap { candidate -> candidate.inetAddresses.toList() }
+                    .mapNotNull { address -> address.hostAddress }
+                    .toSet()
+            }.getOrDefault(emptySet())
 
         /**
          * The name a discovered screen is allowed to show, or the address when it offers none.

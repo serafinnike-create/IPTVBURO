@@ -130,6 +130,28 @@ fun SubscriptionsWorkspace(
     page: TmdbTitleDetails? = null,
     /** Opens the trailer in the browser when the embedded engine cannot start. */
     onOpenTrailerExternally: (String) -> Unit = {},
+    /**
+     * Whether this profile asked to be reminded about the title whose page is showing.
+     *
+     * Takes the title and year rather than an id because that is what a reminder is keyed by — see
+     * ContentIdentity — and an upcoming film has no catalogue row to name it with.
+     */
+    hasReminderFor: (String, Int?) -> Boolean = { _, _ -> false },
+    /**
+     * Marks or unmarks that title, with its poster so the reminders list can show a cover.
+     *
+     * Null hides the button, which is what a test gets by default.
+     */
+    onToggleReminder: ((String, Int?, String?) -> Unit)? = null,
+    /**
+     * Whether a title is open, as opposed to the shelves being browsed.
+     *
+     * This used to be inferred from the offers being non-empty, which quietly meant "a title is
+     * open *and* somebody knows where to watch it". An upcoming film has no offers by definition —
+     * that is exactly what the Em breve shelf says about itself — so opening one fell straight back
+     * to the shelves, and its release date and reminder button could not be reached at all.
+     */
+    titleOpen: Boolean = !ranking.isEmpty,
 ) {
     val text = strings
 
@@ -147,7 +169,7 @@ fun SubscriptionsWorkspace(
         SubscriptionsHeader(
             text = text,
             capability = capability,
-            showingOffers = !ranking.isEmpty,
+            showingOffers = titleOpen,
             kind = kind,
             onSelectKind = onSelectKind,
             onBack = onBackToShelves,
@@ -157,7 +179,7 @@ fun SubscriptionsWorkspace(
         // height, so a scrollable one lays its whole content out past the bottom of the window and
         // never becomes scrollable at all. This screen has shipped that way before.
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (ranking.isEmpty) {
+            if (!titleOpen) {
                 ProviderShelves(
                     shelves = shelves,
                     showDemoBadge = capability.requiresDemoLabel,
@@ -177,6 +199,8 @@ fun SubscriptionsWorkspace(
                     onOpenOffer = onOpenOffer,
                     page = page,
                     onPlayTrailer = { trailerId -> openTrailerId = trailerId },
+                    hasReminderFor = hasReminderFor,
+                    onToggleReminder = onToggleReminder,
                 )
             }
         }
@@ -413,6 +437,10 @@ private fun TitleFacts(
     details: TmdbTitleDetails,
     text: DesktopStrings,
     onPlayTrailer: (String) -> Unit,
+    /** Whether this profile already asked to be reminded about this title. */
+    hasReminder: Boolean = false,
+    /** Marks or unmarks the title. Null hides the button. */
+    onToggleReminder: (() -> Unit)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
         Text(
@@ -441,20 +469,67 @@ private fun TitleFacts(
             )
         }
 
-        details.youtubeTrailerId?.let { trailerId ->
+        // Trailer and reminder on one line. Both are things to do with a film you cannot watch
+        // yet, which is exactly what this page is about.
+        if (details.youtubeTrailerId != null || onToggleReminder != null) {
             Spacer(Modifier.height(BuroSpacing.Xxs))
-            BuroInteractiveRow(
-                onClick = { onPlayTrailer(trailerId) },
-                selected = false,
-                shape = BuroRadius.Pill,
-                contentDescription = text.subscriptionsWatchTrailer,
-            ) { state ->
+            Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
+                details.youtubeTrailerId?.let { trailerId ->
+                    BuroInteractiveRow(
+                        onClick = { onPlayTrailer(trailerId) },
+                        selected = false,
+                        shape = BuroRadius.Pill,
+                        contentDescription = text.subscriptionsWatchTrailer,
+                    ) { state ->
+                        Text(
+                            text = text.subscriptionsWatchTrailer,
+                            modifier =
+                                Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs),
+                            color = if (state.active) BuroColors.Primary else BuroColors.Text,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+                // The reason this screen needed the button most: an upcoming film has no catalogue
+                // row to open, so marking it here is the only way to say "tell me when this lands".
+                onToggleReminder?.let { toggle ->
+                    val label =
+                        if (hasReminder) {
+                            "◉  ${text.savedForLater.reminderActive}"
+                        } else {
+                            "○  ${text.savedForLater.reminderAdd}"
+                        }
+                    BuroInteractiveRow(
+                        onClick = toggle,
+                        selected = hasReminder,
+                        shape = BuroRadius.Pill,
+                        contentDescription = label,
+                    ) { state ->
+                        Text(
+                            text = label,
+                            modifier =
+                                Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs),
+                            color =
+                                when {
+                                    hasReminder -> BuroColors.Primary
+                                    state.active -> BuroColors.Primary
+                                    else -> BuroColors.Text
+                                },
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
+            // Said once the mark exists, for the same reason it is said on the film page: the app
+            // stores this but does not yet announce it, and a promise it cannot keep is worse than
+            // a plainly stated limit.
+            if (hasReminder) {
                 Text(
-                    text = text.subscriptionsWatchTrailer,
-                    modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs),
-                    color = if (state.active) BuroColors.Primary else BuroColors.Text,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    text = text.savedForLater.reminderNoNotice,
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
@@ -552,6 +627,10 @@ private fun OfferList(
     /** The film's own page. Null draws only the provider rows, as this screen did before. */
     page: TmdbTitleDetails? = null,
     onPlayTrailer: (String) -> Unit = {},
+    /** Whether the profile asked to be reminded about this title. Keyed by title and year. */
+    hasReminderFor: (String, Int?) -> Boolean = { _, _ -> false },
+    /** Marks or unmarks it, carrying the poster. Null hides the button. */
+    onToggleReminder: ((String, Int?, String?) -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
 
@@ -585,9 +664,28 @@ private fun OfferList(
                         verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
                     ) {
                         page?.let { details ->
-                            TitleFacts(details = details, text = text, onPlayTrailer = onPlayTrailer)
+                            TitleFacts(
+                                details = details,
+                                text = text,
+                                onPlayTrailer = onPlayTrailer,
+                                hasReminder = hasReminderFor(details.title, details.year),
+                                onToggleReminder =
+                                    onToggleReminder?.let { toggle ->
+                                        { toggle(details.title, details.year, details.posterUrl) }
+                                    },
+                            )
                         }
                         SectionHeading(text.subscriptionsAvailableOn)
+                        // An upcoming film reaches this page with nothing to list. Saying so is
+                        // the point of opening it: the heading alone over a blank space reads as a
+                        // panel that failed to load rather than as an answer.
+                        if (ranking.isEmpty) {
+                            Text(
+                                text = text.subscriptionsUpcomingNote,
+                                color = BuroColors.TextSubtle,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                         ranking.all.forEach { ranked ->
                             OfferRow(
                                 ranked = ranked,

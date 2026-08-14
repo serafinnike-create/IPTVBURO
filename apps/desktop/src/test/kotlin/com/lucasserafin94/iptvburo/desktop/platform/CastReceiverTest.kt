@@ -47,6 +47,77 @@ class CastReceiverTest {
     }
 
     /**
+     * The machine's code is reused, so the phone is told it once rather than every session.
+     *
+     * It used to be minted on every start, which meant the number on screen was different each time
+     * the app opened and had to be retyped — for a feature whose whole appeal is not thinking about
+     * it. Reuse is the difference between typing it once and typing it daily.
+     */
+    @Test
+    fun `a kept code is reused rather than replaced on every start`() {
+        val first = receiver.start(existingCode = "2275") { }
+        receiver.stop()
+        val second = receiver.start(existingCode = "2275") { }
+
+        assertEquals("2275", first)
+        assertEquals("2275", second, "the code changed between sessions and would need retyping")
+    }
+
+    /** No stored code is a first run, and it has to produce a usable one rather than nothing. */
+    @Test
+    fun `a first run mints a code of its own`() {
+        val minted = assertNotNull(receiver.start(existingCode = null) { })
+
+        assertEquals(4, minted.length)
+        assertTrue(minted.all(Char::isDigit), "minted a code that is not four digits: $minted")
+    }
+
+    /**
+     * A damaged stored code must never become the code that is checked against.
+     *
+     * Preferences are a file anything can edit. An empty string surviving into the receiver would
+     * be compared against the empty code a sender can trivially send — a receiver that accepts
+     * anybody, arrived at by way of a corrupted setting rather than any decision.
+     */
+    @Test
+    fun `a malformed stored code is discarded rather than trusted`() {
+        listOf("", "12", "abcd", "12345").forEach { damaged ->
+            val used = assertNotNull(receiver.start(existingCode = damaged) { })
+            receiver.stop()
+
+            assertTrue(
+                used.length == 4 && used.all(Char::isDigit),
+                "the receiver accepted '$damaged' as its code",
+            )
+        }
+    }
+
+    /**
+     * The discovery socket must be an IPv4 one, or nothing can ever reach it.
+     *
+     * `InetSocketAddress(port)` binds the wildcard of whichever family the JVM prefers, and on
+     * Windows that is IPv6: `netstat` showed this socket on `::`. Discovery is an IPv4 *broadcast*,
+     * and an IPv4 broadcast is never delivered to a socket bound to the IPv6 wildcard — so the
+     * receiver sat there listening on a port no sender could reach. The phone was on the same
+     * network with the app open, and the desktop still said no screens were found.
+     *
+     * Asserted on the bound address rather than by sending a packet: a CI runner has no dependable
+     * broadcast loopback, so a delivery test there would measure the runner's network instead of
+     * this class.
+     */
+    @Test
+    fun `the discovery socket binds IPv4 so a broadcast can reach it`() {
+        assertNotNull(receiver.start { }, "the receiver did not start")
+
+        val bound = receiver.discoveryBindAddress
+        assertNotNull(bound, "the receiver reported no discovery address")
+        assertTrue(
+            bound is java.net.Inet4Address,
+            "discovery bound to $bound, which an IPv4 broadcast cannot reach",
+        )
+    }
+
+    /**
      * Guessing the code has to get slower, or four digits protect nothing.
      *
      * The code is the whole security model of this feature: the listener binds every interface, so

@@ -35,6 +35,7 @@ import com.lucasserafin94.iptvburo.desktop.license.LicenseClient
 import com.lucasserafin94.iptvburo.desktop.license.LicenseStatus
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.RememberedScroll
+import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
 import com.lucasserafin94.iptvburo.desktop.user.MusicCorrection
 import com.lucasserafin94.iptvburo.desktop.user.MusicCorrectionStore
 import com.lucasserafin94.iptvburo.desktop.user.CategoryPreferenceIdentity
@@ -45,6 +46,7 @@ import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
 import com.lucasserafin94.iptvburo.desktop.user.StoredParentalLock
+import com.lucasserafin94.iptvburo.desktop.user.StoredReminder
 import com.lucasserafin94.iptvburo.desktop.user.ListeningHistoryStore
 import com.lucasserafin94.iptvburo.desktop.user.MusicPlayCountStore
 import com.lucasserafin94.iptvburo.desktop.user.MusicPlaylistStore
@@ -61,6 +63,9 @@ import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.data.migrateFavoriteKeys
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
+import com.lucasserafin94.iptvburo.domain.model.Reminder
+import com.lucasserafin94.iptvburo.domain.model.ReminderDigest
+import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
 import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
 import com.lucasserafin94.iptvburo.domain.model.ListeningHistoryEntry
@@ -124,7 +129,10 @@ import java.nio.file.AccessDeniedException
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
+import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
 import java.util.Arrays
 import java.util.Locale
 import java.util.UUID
@@ -448,6 +456,20 @@ class DesktopAppState(
     var favoritesOnly by mutableStateOf(false)
         private set
 
+    /**
+     * Titles this profile asked to be reminded about, newest concerns first as stored.
+     *
+     * Read from the store rather than the boot snapshot, which predates reminders and would have to
+     * grow a field — and every caller that builds one would have to be found and changed — to carry
+     * something only this screen reads.
+     */
+    var reminders by mutableStateOf(userStore.remindersForProfile(initialUserSnapshot.activeProfileId))
+        private set
+
+    /** The identity keys alone, which is what "is this one marked" asks. */
+    private val reminderKeys: Set<String>
+        get() = reminders.mapTo(LinkedHashSet(), StoredReminder::identityKey)
+
     val activeProfile: DesktopProfile?
         get() = profiles.firstOrNull { it.id == activeProfileId }
     var catalogs by mutableStateOf<List<ImportedCatalog>>(emptyList())
@@ -557,6 +579,9 @@ class DesktopAppState(
         activeProfileId = nextProfileId
         userStore.setActiveProfile(activeProfileId)
         favoriteKeys = userStore.favoritesForProfile(activeProfileId)
+        // Alongside favourites: a reminder belongs to whoever asked for it, so the new profile must
+        // not inherit the previous one's marked titles.
+        reminders = userStore.remindersForProfile(activeProfileId)
         reloadCatalogLayouts()
         xtreamCategories = visibleXtreamCategories(xtreamContentType)
         if (selectedXtreamCategoryId !in xtreamCategories.map(XtreamCategory::providerId)) {
@@ -694,6 +719,7 @@ class DesktopAppState(
         profiles = remaining
         userStore.saveProfiles(remaining)
         userStore.setFavorites(profileId, emptySet())
+        userStore.setReminders(profileId, emptyList())
         photoStore.remove(profileId)
         photoRevision += 1
         // Switching away from a deleted profile, rather than leaving the app pointing at one that
@@ -711,6 +737,7 @@ class DesktopAppState(
     fun resetEverything() {
         userStore.resetAll()
         favoriteKeys = emptySet()
+        reminders = emptyList()
         downloads = emptyMap()
         profiles = emptyList()
         activeProfileId = null
@@ -962,6 +989,221 @@ class DesktopAppState(
                     totalMatches = (xtreamPage.totalMatches - 1).coerceAtLeast(0),
                 )
         }
+    }
+
+    /** Whether this profile asked to be reminded about [item]. */
+    fun hasReminder(item: XtreamCatalogItem): Boolean = hasReminder(item.contentIdentity())
+
+    /**
+     * The same question for a title that is not in the library.
+     *
+     * An upcoming film on the Assinaturas shelf has no catalogue row — that is the whole point of
+     * it — so it can only be named by identity. [ContentIdentity] is derived from the title and
+     * year, so the mark made here is the one found later when the film does arrive in a playlist.
+     */
+    fun hasReminder(identity: ContentIdentity): Boolean = identity.key in reminderKeys
+
+    /** Marks or unmarks [item] as something to be reminded about. */
+    fun toggleReminder(item: XtreamCatalogItem) =
+        toggleReminder(
+            identity = item.contentIdentity(),
+            // The editorial title, not the provider's decorated one: the reminders list would
+            // otherwise read "Filme 4K [DV] [HDR]" where the film's name should be.
+            title = item.name.editorialTitle(),
+            year = ContentIdentity.yearFromTitle(item.name),
+            artworkUrl = item.artworkUrl,
+        )
+
+    /**
+     * Marks or unmarks a title, named by identity so an upcoming release can be marked too.
+     *
+     * Storage only. Windows has no scheduler behind this yet — the phone's daily notification is
+     * Android's, and nothing here posts one — so what this earns the viewer today is a durable,
+     * per-profile list rather than an alert. Marking a title, seeing it in Lembretes and finding it
+     * still there next launch is the honest half of the feature; announcing it is the half to come.
+     */
+    fun toggleReminder(
+        identity: ContentIdentity,
+        title: String,
+        year: Int? = null,
+        artworkUrl: String? = null,
+    ) {
+        val profileId = activeProfileId ?: return
+        val key = identity.key
+        reminders =
+            if (key in reminderKeys) {
+                reminders.filterNot { reminder -> reminder.identityKey == key }
+            } else {
+                reminders +
+                    StoredReminder(
+                        identityKey = key,
+                        title = title,
+                        year = year,
+                        artworkUrl = artworkUrl,
+                    )
+            }
+        userStore.setReminders(profileId, reminders)
+    }
+
+    /**
+     * Fills in the name and poster of entries stored before those were kept.
+     *
+     * The first version wrote only the identity key, so those rows show `movie:enola-holmes-3:2026`
+     * where a title belongs. The catalogue can answer what that film is actually called, so the
+     * entry is repaired the moment the library is able to — once, and written back, so the ugly
+     * name is not merely hidden on screen while remaining on disk.
+     *
+     * Silent when the catalogue has no row: an upcoming film legitimately has none, and its record
+     * is left exactly as it is rather than being blamed for a lookup that could never succeed.
+     */
+    fun healStoredReminders() {
+        val profileId = activeProfileId ?: return
+        if (reminders.none { reminder -> reminder.titleIsPlaceholder || reminder.artworkUrl == null }) {
+            return
+        }
+
+        val healed =
+            reminders.map { reminder ->
+                if (!reminder.titleIsPlaceholder && reminder.artworkUrl != null) return@map reminder
+                val item = catalogItemForReminder(reminder) ?: return@map reminder
+                reminder.copy(
+                    title = if (reminder.titleIsPlaceholder) item.name.editorialTitle() else reminder.title,
+                    year = reminder.year ?: item.year,
+                    artworkUrl = reminder.artworkUrl ?: item.artworkUrl,
+                )
+            }
+        if (healed == reminders) return
+        reminders = healed
+        userStore.setReminders(profileId, healed)
+    }
+
+    /** The hour of day the viewer chose for the reminder notice, 0–23. */
+    var reminderHour by mutableStateOf(userStore.reminderHour())
+        private set
+
+    /** Whether the notice is wanted at all. */
+    var remindersAnnounced by mutableStateOf(userStore.remindersAnnounced())
+        private set
+
+    /** Named `choose`/`announce` rather than `set`, which would clash with the property's setter. */
+    fun chooseReminderHour(hour: Int) {
+        reminderHour = hour.coerceIn(0, 23)
+        userStore.setReminderHour(reminderHour)
+        // The slot may now be in the past for today, which makes the notice due. Re-checked rather
+        // than left until the next navigation, so choosing an earlier hour shows it immediately.
+        refreshReminderNotice()
+    }
+
+    fun announceReminders(announced: Boolean) {
+        remindersAnnounced = announced
+        userStore.setRemindersAnnounced(announced)
+        if (!announced) reminderNotice = null else refreshReminderNotice()
+    }
+
+    /**
+     * The digest waiting to be shown in the app, or null when there is nothing to say.
+     *
+     * In-app rather than a system notification: this process only runs while the app is open, so a
+     * desktop toast would fire when the user is already looking at the app and never when they are
+     * not. Announcing it where they are is the honest version of the feature.
+     */
+    var reminderNotice by mutableStateOf<ReminderDigest.Daily?>(null)
+        private set
+
+    /**
+     * Works out whether today's notice is due, and what it says.
+     *
+     * Three things must hold: the notice is wanted, the chosen hour has passed, and it has not
+     * already been shown today. The last is what stops a banner reappearing on every navigation.
+     */
+    fun refreshReminderNotice() {
+        if (!remindersAnnounced || reminders.isEmpty()) {
+            reminderNotice = null
+            return
+        }
+
+        val zone = ZoneId.systemDefault()
+        val now = Instant.now()
+        val today = LocalDate.ofInstant(now, zone)
+        if (userStore.reminderLastShownOn() == today.toString()) {
+            reminderNotice = null
+            return
+        }
+        // Before the chosen hour there is nothing to announce yet — that is what choosing an hour
+        // means. nextNotificationAt returns tomorrow's slot once today's has passed, so today's
+        // being in the future is exactly the test for "not yet".
+        if (LocalDate.ofInstant(
+                ReminderPolicy.nextNotificationAt(LocalTime.of(reminderHour, 0), now, zone),
+                zone,
+            ) == today
+        ) {
+            reminderNotice = null
+            return
+        }
+
+        val digest =
+            ReminderPolicy.digestFor(
+                reminders = reminders.map { held ->
+                    Reminder(
+                        identity = ContentIdentity(held.identityKey),
+                        title = held.title,
+                        artworkUrl = held.artworkUrl,
+                        // No release date is stored yet, so every entry is "waiting" rather than a
+                        // countdown. The policy handles that case; inventing a date would not.
+                        releaseDate = null,
+                    )
+                },
+                now = now,
+                zone = zone,
+            )
+        reminderNotice = digest as? ReminderDigest.Daily
+    }
+
+    /** Marks today's notice as seen, so it does not return until tomorrow's slot. */
+    fun dismissReminderNotice() {
+        userStore.setReminderLastShownOn(LocalDate.now().toString())
+        reminderNotice = null
+    }
+
+    /** Forgets one marked title. */
+    fun removeReminder(reminder: StoredReminder) {
+        val profileId = activeProfileId ?: return
+        reminders = reminders.filterNot { held -> held.identityKey == reminder.identityKey }
+        userStore.setReminders(profileId, reminders)
+    }
+
+    /** Opens the reminders section. */
+    fun openReminders() {
+        favoritesOnly = false
+        destination = DesktopDestination.REMINDERS
+        // Here rather than at startup: the catalogue is what supplies the missing names, and on a
+        // cold launch it has not loaded yet. By the time someone opens this screen it has.
+        healStoredReminders()
+        refreshReminderNotice()
+    }
+
+    /**
+     * The catalogue row for a marked title, when the library happens to hold one.
+     *
+     * Null is the ordinary case for an upcoming film and is not a failure: the row is what makes
+     * the entry openable, so its absence means the entry is shown but not clickable.
+     */
+    fun catalogItemForReminder(reminder: StoredReminder): XtreamCatalogItem? =
+        xtreamRepository.itemByContentKey(XtreamContentType.MOVIE, reminder.identityKey)
+            ?: xtreamRepository.itemByContentKey(XtreamContentType.SERIES, reminder.identityKey)
+
+    /**
+     * Opens a marked title's page in the catalogue.
+     *
+     * Deliberately the same route [openInLibrary] takes, including [selectDailyItem] and
+     * [pendingDetailsRequest]: selecting an id alone resolves against the visible page of eighty,
+     * so a title from anywhere else in a large catalogue opened whatever happened to be first.
+     */
+    fun openReminder(item: XtreamCatalogItem) {
+        selectDailyItem(item)
+        xtreamContentType = item.contentType
+        destination = DesktopDestination.CATALOG
+        pendingDetailsRequest = item.providerId
     }
 
     suspend fun setFavoritesOnly(enabled: Boolean) {
@@ -3098,11 +3340,39 @@ class DesktopAppState(
         private set
 
     /**
-     * Starts or stops listening for a phone.
+     * Whether the receiver comes up with the app.
      *
-     * Off by default and never started implicitly. Everything else this app does reaches outwards;
-     * this listens, and a feature that opens a socket should be one the user asked for rather than
-     * one they discover they have been running.
+     * On by default. This is a change from the original behaviour, which never started the receiver
+     * implicitly on the grounds that a socket should be opened only on request — the owner asked
+     * for the opposite, because a receiver that has to be switched on by hand every session is
+     * never on at the moment somebody reaches for their phone.
+     *
+     * What still guards it is the pairing code: a sender has to type four digits shown on this
+     * screen, and they change every time the receiver starts. The setting below turns the whole
+     * thing off for anyone who would rather open the socket deliberately.
+     */
+    var castReceiverAutoStart by mutableStateOf(userStore.castReceiverAutoStart())
+        private set
+
+    fun changeCastReceiverAutoStart(enabled: Boolean) {
+        castReceiverAutoStart = enabled
+        userStore.setCastReceiverAutoStart(enabled)
+        // Applied at once rather than at the next launch: a switch that says "off" while the socket
+        // is still open would be describing something that is not true.
+        if (enabled && castPairingCode == null) {
+            startCastReceiver()
+        } else if (!enabled && castPairingCode != null) {
+            castReceiver.stop()
+            castPairingCode = null
+        }
+    }
+
+    /**
+     * Starts or stops listening for a phone, for the button that does it by hand.
+     *
+     * Kept separate from [changeCastReceiverAutoStart]: turning the receiver off for this session is
+     * not the same as saying it should never come up again, and collapsing the two would make
+     * closing the socket once silently change the setting for every future launch.
      */
     fun toggleCastReceiver() {
         if (castPairingCode != null) {
@@ -3110,8 +3380,18 @@ class DesktopAppState(
             castPairingCode = null
             return
         }
+        startCastReceiver()
+    }
+
+    /**
+     * Starts listening, reusing this machine's kept code.
+     *
+     * The code that comes back is written down so the next session offers the same one. Typing it
+     * into the phone is therefore a one-time job rather than something to redo on every launch.
+     */
+    private fun startCastReceiver() {
         castPairingCode =
-            castReceiver.start { message ->
+            castReceiver.start(existingCode = userStore.castPairingCode()) { message ->
                 // Resolved through the same path a shared link takes: both name a title rather than
                 // a stream, and both have to find it in *this* machine's catalogue.
                 //
@@ -3130,6 +3410,24 @@ class DesktopAppState(
                     ),
                 )
             }
+        // Written down whether it was reused or freshly minted, so the next launch offers the same
+        // one. Without this the code would still change every session and nothing would improve.
+        castPairingCode?.let(userStore::setCastPairingCode)
+    }
+
+    /**
+     * Throws this machine's code away and starts again with a new one.
+     *
+     * The way back when a code has been seen by someone it should not have been. Every phone that
+     * knew the old one has to be told the new one, which is the point: that is what revoking is.
+     */
+    fun regenerateCastPairingCode() {
+        userStore.clearCastPairingCode()
+        if (castPairingCode != null) {
+            castReceiver.stop()
+            castPairingCode = null
+        }
+        startCastReceiver()
     }
 
     /** How this machine introduces itself to a phone looking for screens. */
@@ -4833,6 +5131,10 @@ class DesktopAppState(
         profileMetadataApiKey = userStore.profileMetadataApiKey(activeProfileId).orEmpty()
         // And the clients, which were built from the shared key alone before the profile was known.
         if (profileMetadataApiKey.isNotBlank()) rebuildMetadataClients()
+        // Listening from the moment the app opens, unless this machine has been told not to. The
+        // failure it fixes is mundane: the phone searches, finds nothing, and reports an empty
+        // network — when the only thing missing was a switch on this side nobody had flipped.
+        if (castReceiverAutoStart) startCastReceiver()
     }
 
     private fun Throwable.rethrowIfCancellation() {
@@ -4984,6 +5286,8 @@ enum class DesktopDestination {
     MUSIC,
     SUBSCRIPTIONS,
     HISTORY,
+    /** Titles the viewer marked to come back to, including ones not in the catalogue yet. */
+    REMINDERS,
 }
 
 /**

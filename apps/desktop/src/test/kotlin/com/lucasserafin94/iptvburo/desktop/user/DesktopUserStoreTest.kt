@@ -29,6 +29,102 @@ class DesktopUserStoreTest {
     }
 
     /**
+     * Reminders belong to whoever asked for them, exactly as favourites do.
+     *
+     * The two are stored under separate keys, so this also proves marking a reminder does not write
+     * into the favourites list — a title would otherwise appear in Favoritos without being liked.
+     */
+    @Test
+    fun `reminders remain isolated between profiles and from favourites`() {
+        withStore { store ->
+            val adult = DesktopProfile("adult", "Adulto", false)
+            val kids = DesktopProfile("kids", "Kids", true)
+            store.saveProfiles(listOf(adult, kids))
+
+            store.setFavorites(adult.id, setOf("movie:liked"))
+            store.setReminders(adult.id, listOf(StoredReminder("movie:remind-me", "Remind Me", 2025)))
+            store.setReminders(kids.id, listOf(StoredReminder("series:kids-one", "Kids One")))
+
+            assertEquals(
+                listOf(StoredReminder("movie:remind-me", "Remind Me", 2025)),
+                store.remindersForProfile(adult.id),
+            )
+            assertEquals(
+                listOf(StoredReminder("series:kids-one", "Kids One")),
+                store.remindersForProfile(kids.id),
+            )
+            // The two lists stay apart: a reminder is not a favourite.
+            assertEquals(setOf("movie:liked"), store.favoritesForProfile(adult.id))
+            assertTrue(store.remindersForProfile(null).isEmpty())
+        }
+    }
+
+    /** A marked title is still marked after a restart, which is the whole point of storing it. */
+    @Test
+    fun `a reminder survives a new store over the same node`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            DesktopUserStore(node).setReminders(
+                "lucas",
+                listOf(StoredReminder("movie:astroworld:2025", "Desastre Total", 2025)),
+            )
+
+            // A second store over the same node is what the next launch does.
+            assertEquals(
+                listOf(StoredReminder("movie:astroworld:2025", "Desastre Total", 2025)),
+                DesktopUserStore(node).remindersForProfile("lucas"),
+            )
+        } finally {
+            node.removeNode()
+        }
+    }
+
+    /**
+     * A title whose name carries the separators the format uses.
+     *
+     * The record and field separators are `;` and `|`, and a film called "Girl; Interrupted | 4K"
+     * would split into nonsense if the title were written raw. It is Base64-encoded for exactly
+     * this reason, and that is worth a test rather than a comment.
+     */
+    @Test
+    fun `a title containing the separators survives a round trip`() {
+        withStore { store ->
+            val awkward = StoredReminder("movie:awkward:1999", "Girl; Interrupted | 4K", 1999)
+
+            store.setReminders("lucas", listOf(awkward))
+
+            assertEquals(listOf(awkward), store.remindersForProfile("lucas"))
+        }
+    }
+
+    /**
+     * Records written before titles were stored are kept, not discarded.
+     *
+     * The first version of this wrote bare identity keys separated by commas. A user who marked
+     * titles then is entitled to still have them; showing the slug is a poor name but losing the
+     * reminder is a worse outcome than an ugly one.
+     */
+    @Test
+    fun `a reminder stored before titles existed is still read back`() {
+        val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
+        try {
+            // Written straight onto the node, because this is the shape the *old* code wrote and
+            // the current API can no longer produce it.
+            node.put("reminders.lucas", "movie:old-one:2001")
+
+            val read = DesktopUserStore(node).remindersForProfile("lucas")
+
+            assertEquals(1, read.size)
+            assertEquals("movie:old-one:2001", read.single().identityKey)
+            // Falls back to the key, so the row has something to print rather than a blank line.
+            assertEquals("movie:old-one:2001", read.single().title)
+            assertNull(read.single().year)
+        } finally {
+            node.removeNode()
+        }
+    }
+
+    /**
      * A profile with no key of its own uses the shared one.
      *
      * This is the default and the common case: a household has one TMDb key and no reason for two,

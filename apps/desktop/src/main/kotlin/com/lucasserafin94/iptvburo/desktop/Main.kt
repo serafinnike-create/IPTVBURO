@@ -184,6 +184,13 @@ fun main(args: Array<String>) {
         var restoreSize by remember { mutableStateOf(windowState.size) }
         var restorePosition by remember { mutableStateOf(windowState.position) }
         var compactMode by remember { mutableStateOf(false) }
+
+        // Opens maximised, not borderless full screen.
+        //
+        // The window already covers the screen through WindowPlacement.Maximized above; going
+        // further and removing the frame takes the title bar and the taskbar with it, which is a
+        // player's behaviour rather than the app's. F11 and Esc still reach full screen for anyone
+        // who wants it during a session.
         var fullScreen by remember { mutableStateOf(false) }
 
         // Hoisted out of the Window so closing it can dispose the state. It used to be created
@@ -290,7 +297,18 @@ fun main(args: Array<String>) {
             // True full screen: the frame is removed and the window covers the monitor. Compose's
             // Fullscreen placement only maximises a decorated window, so a border and the taskbar
             // stayed on top of the video.
+            //
+            // Skipped on the very first composition, which is not a no-op: leaving full screen
+            // restores the window from its borderless state, and on a window that was never in one
+            // that restore *undoes the maximise* — the app opened at half the screen and had to be
+            // maximised by hand every launch. Nothing needs applying until the user asks for it.
+            var fullScreenApplied by remember { mutableStateOf(false) }
             LaunchedEffect(fullScreen) {
+                if (!fullScreen && !fullScreenApplied) {
+                    fullScreenApplied = true
+                    return@LaunchedEffect
+                }
+                fullScreenApplied = true
                 WindowChrome.setBorderlessFullScreen(window, fullScreen)
                 if (!fullScreen) WindowChrome.applyDarkTitleBar(window)
             }

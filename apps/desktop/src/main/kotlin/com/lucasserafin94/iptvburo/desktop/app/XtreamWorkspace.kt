@@ -1314,6 +1314,8 @@ internal fun XtreamInternalDetailsPage(
                 onOpenPerson = onOpenPerson,
                 isFavorite = appState.isFavorite(item),
                 onToggleFavorite = { appState.toggleFavorite(item) },
+                hasReminder = appState.hasReminder(item),
+                onToggleReminder = { appState.toggleReminder(item) },
                 onShare = {
                     // Built here rather than in the dialog, because this is where the loaded
                     // details are. The poster deliberately comes from the *details* rather than
@@ -1439,6 +1441,10 @@ internal fun XtreamItemDetail(
     onRequestCastPhoto: suspend (String) -> Unit = {},
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
+    /** Whether this profile asked to be reminded about the title. */
+    hasReminder: Boolean = false,
+    /** Marks or unmarks the title as one to be reminded about. Null hides the button. */
+    onToggleReminder: (() -> Unit)? = null,
     /**
      * Opens the share sheet. Null where sharing makes no sense — a live channel is a schedule
      * rather than a title, and the recipient's own list would have nothing to resolve it to.
@@ -1575,6 +1581,8 @@ internal fun XtreamItemDetail(
                     seriesTitle = item.name,
                     isFavorite = isFavorite,
                     onToggleFavorite = onToggleFavorite,
+                    hasReminder = hasReminder,
+                    onToggleReminder = onToggleReminder,
                     onShare = onShare,
                     onLoadSeries = onLoadSeries,
                     onOpenTrailer = onOpenTrailer,
@@ -1678,6 +1686,34 @@ internal fun XtreamItemDetail(
                                 fontWeight = FontWeight.SemiBold,
                             )
                         }
+                        // Beside Favourites, which is the action it most resembles: both mark a
+                        // title for later rather than doing anything to it now. A favourite says
+                        // "I like this", a reminder says "come back to this one".
+                        onToggleReminder?.let { toggle ->
+                            OutlinedButton(
+                                onClick = toggle,
+                                modifier = Modifier.height(48.dp),
+                                shape = BuroRadius.Small,
+                                colors =
+                                    ButtonDefaults.outlinedButtonColors(
+                                        contentColor =
+                                            if (hasReminder) BuroColors.Primary else BuroColors.Text,
+                                    ),
+                            ) {
+                                Text(
+                                    // Outline when unmarked, filled once marked — the same pair
+                                    // Favoritos uses beside it. Text glyphs rather than an emoji
+                                    // bell: Windows renders emoji in colour at their own width,
+                                    // which would make this the one loud button in a row of five.
+                                    if (hasReminder) {
+                                        "◉  ${text.savedForLater.reminderActive}"
+                                    } else {
+                                        "○  ${text.savedForLater.reminderAdd}"
+                                    },
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
                         // Beside Favourites: both are things you do *about* a film rather than
                         // with it, and they belong together after the play actions.
                         onShare?.let { share ->
@@ -1769,6 +1805,17 @@ internal fun XtreamItemDetail(
                             )
                         }
                     }
+                }
+                // Only once marked, and only here — saying it before the button is pressed would
+                // argue against pressing it. Said at all because Windows stores the reminder but
+                // has nothing that announces one, and a bell that never rings is a broken promise.
+                if (hasReminder && onToggleReminder != null) {
+                    Spacer(Modifier.height(BuroSpacing.Xs))
+                    Text(
+                        text = text.savedForLater.reminderNoNotice,
+                        color = BuroColors.TextSubtle,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
                 Spacer(Modifier.height(BuroSpacing.Lg))
                 if (item.contentType == XtreamContentType.LIVE) {
@@ -2284,6 +2331,10 @@ private fun SeriesDetailContent(
     seriesTitle: String,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
+    /** Whether this profile asked to be reminded about the series. */
+    hasReminder: Boolean = false,
+    /** Marks or unmarks the series as one to be reminded about. Null hides the button. */
+    onToggleReminder: (() -> Unit)? = null,
     /** Null when the page has no share target; see the parameter of the same name on the detail. */
     onShare: (() -> Unit)?,
     /** Opens the sheet that sends this title to another screen on the network. Null hides it. */
@@ -2436,6 +2487,28 @@ private fun SeriesDetailContent(
                         if (isFavorite) "♥  Nos favoritos" else "♡  Favoritos",
                         fontWeight = FontWeight.SemiBold,
                     )
+                }
+                // Beside Favoritos, as on the film page. A series is the case that wants this most:
+                // waiting for the next season is exactly "come back to this one later".
+                onToggleReminder?.let { toggle ->
+                    OutlinedButton(
+                        onClick = toggle,
+                        modifier = Modifier.height(48.dp),
+                        shape = BuroRadius.Small,
+                        colors =
+                            ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (hasReminder) BuroColors.Primary else BuroColors.Text,
+                            ),
+                    ) {
+                        Text(
+                            if (hasReminder) {
+                                "◉  ${text.savedForLater.reminderActive}"
+                            } else {
+                                "○  ${text.savedForLater.reminderAdd}"
+                            },
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
                 onShare?.let { share ->
                     OutlinedButton(

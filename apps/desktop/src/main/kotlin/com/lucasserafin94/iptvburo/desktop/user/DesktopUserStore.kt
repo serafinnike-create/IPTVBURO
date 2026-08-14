@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.UUID
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
+import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
 import java.util.prefs.Preferences
 
 /**
@@ -108,6 +109,40 @@ data class DesktopUserSnapshot(
     val favoriteKeys: Set<String>,
 )
 
+/**
+ * A title the viewer asked to be reminded about, as it is written to disk.
+ *
+ * Deliberately not the domain's `Reminder`: that one carries an artwork URL and a release date the
+ * desktop has nowhere to get yet, and storing fields no writer fills would suggest they mean
+ * something. [title] is display text, kept because [identityKey] is a slug that cannot be read back
+ * into a name.
+ */
+data class StoredReminder(
+    val identityKey: String,
+    val title: String,
+    val year: Int? = null,
+    /**
+     * The film's own poster, when one was known at the moment it was marked.
+     *
+     * Null is ordinary and must draw as a designed fallback rather than a broken image: an upcoming
+     * title often has no artwork yet, and a provider poster may simply be missing.
+     *
+     * Safe to write to disk: a provider artwork URL has already been through
+     * `sanitizeArtworkUrl`, which rejects any URL carrying credentials — userinfo, a query string,
+     * or the username or password as a path segment. A TMDb poster is a public image address.
+     */
+    val artworkUrl: String? = null,
+) {
+    /**
+     * Whether the stored title is really just the identity key.
+     *
+     * The first version of this stored no title, so those records fall back to showing the slug —
+     * `movie:enola-holmes-3:2026` where a name belongs. The screen uses this to know it should look
+     * for a better name rather than printing that at the user.
+     */
+    val titleIsPlaceholder: Boolean get() = title == identityKey
+}
+
 /** Where this app's user preferences live under the user root. */
 private const val USER_NODE_PATH = "com/lucasserafin94/iptvburo/user-v1"
 
@@ -202,6 +237,42 @@ class DesktopUserStore(
      * belongs to the machine, and a second profile on a set-up machine starts fast.
      */
     fun hasCompletedFirstStartup(): Boolean = preferences.getBoolean(KEY_FIRST_STARTUP_DONE, false)
+
+    /**
+     * Whether this machine listens for a phone as soon as the app opens.
+     *
+     * On by default, at the owner's request: the pairing code is what actually guards the feature,
+     * and a receiver that has to be switched on by hand every session is one that is never on when
+     * somebody reaches for their phone.
+     *
+     * Per install rather than per profile, matching the thing it controls: one machine opens one
+     * socket, whoever happens to be signed in.
+     */
+    fun castReceiverAutoStart(): Boolean = preferences.getBoolean(KEY_CAST_AUTO_START, true)
+
+    fun setCastReceiverAutoStart(enabled: Boolean) {
+        preferences.putBoolean(KEY_CAST_AUTO_START, enabled)
+    }
+
+    /**
+     * This machine's pairing code, kept between sessions.
+     *
+     * It used to be regenerated on every start, which meant the code on screen was new each time
+     * the app opened and the phone had to be told it again — every session, for a feature whose
+     * whole appeal is not having to think about it. Kept, so it is typed once and the sender can
+     * remember it; [clearCastPairingCode] is what makes a new one when the user wants one.
+     *
+     * Still four digits and still checked on every message. What it stops is a stranger on a shared
+     * network reaching this screen, and it goes on stopping that whether or not it changes daily —
+     * a code that rotates is only stronger against someone who saw it once and came back later,
+     * which is a far smaller risk than the user simply switching the feature off in irritation.
+     */
+    fun castPairingCode(): String? =
+        preferences.get(KEY_CAST_PAIRING_CODE, "").takeIf(String::isNotBlank)
+
+    fun setCastPairingCode(code: String) = preferences.put(KEY_CAST_PAIRING_CODE, code)
+
+    fun clearCastPairingCode() = preferences.remove(KEY_CAST_PAIRING_CODE)
 
     /**
      * How the window was left, or null on a machine that has never resized it.
@@ -600,6 +671,109 @@ class DesktopUserStore(
 
     private fun favoritesKey(profileId: String): String = "favorites.$profileId"
 
+    /**
+     * The titles this profile asked to be reminded about.
+     *
+     * Per profile like favourites, and for the same reason: a reminder is one person's interest in
+     * a title, not a property of the machine. Identity keys rather than row ids so a replaced
+     * playlist does not silently move a reminder onto an unrelated film — see [favoritesKey].
+     *
+     * The display title is stored alongside the key rather than being looked up. An identity key is
+     * a slug — `movie:festival-astroworld:2025` — which cannot be turned back into the name anyone
+     * would recognise, and the reminders that need naming most are for films that are *not in the
+     * catalogue yet*, so there is nothing to look the title up in.
+     */
+    fun remindersForProfile(profileId: String?): List<StoredReminder> =
+        profileId
+            ?.let { preferences.get(remindersKey(it), "") }
+            ?.split(RECORD_SEPARATOR)
+            ?.filter(String::isNotBlank)
+            ?.mapNotNull(::decodeReminder)
+            .orEmpty()
+
+    fun setReminders(profileId: String, reminders: List<StoredReminder>) =
+        preferences.put(
+            remindersKey(profileId),
+            reminders
+                .sortedBy { reminder -> reminder.identityKey }
+                .joinToString(RECORD_SEPARATOR.toString(), transform = ::encodeReminder),
+        )
+
+    /**
+     * One record: key, title and year, with the title encoded so its punctuation cannot break the
+     * format. Written as three fields even when the year is unknown, so a reader never has to guess
+     * whether a two-field record is missing the year or the title.
+     */
+    private fun encodeReminder(reminder: StoredReminder): String =
+        listOf(
+            reminder.identityKey,
+            encode(reminder.title),
+            reminder.year?.toString().orEmpty(),
+            reminder.artworkUrl?.let(::encode).orEmpty(),
+        ).joinToString(FIELD_SEPARATOR.toString())
+
+    private fun decodeReminder(raw: String): StoredReminder? {
+        val parts = raw.split(FIELD_SEPARATOR)
+        val key = parts.firstOrNull()?.takeIf(String::isNotBlank) ?: return null
+        // A bare key is what the first version of this wrote, before titles were stored. Those
+        // records are kept and shown under the slug rather than discarded: a reminder the user set
+        // is theirs, and dropping it silently to tidy up a format would be the worse failure.
+        val title =
+            parts
+                .getOrNull(1)
+                ?.takeIf(String::isNotBlank)
+                ?.let { stored -> runCatching { decode(stored) }.getOrNull() }
+                ?: key
+        return StoredReminder(
+            identityKey = key,
+            title = title,
+            year = parts.getOrNull(2)?.toIntOrNull(),
+            artworkUrl =
+                parts
+                    .getOrNull(3)
+                    ?.takeIf(String::isNotBlank)
+                    ?.let { stored -> runCatching { decode(stored) }.getOrNull() },
+        )
+    }
+
+    private fun remindersKey(profileId: String): String = "reminders.$profileId"
+
+    /**
+     * The hour of day the viewer wants their reminder digest, 0–23.
+     *
+     * Not per profile: this is when *this machine* is allowed to interrupt whoever is using it, in
+     * the way a notification setting belongs to the device rather than to an account on it.
+     *
+     * Defaults to [ReminderPolicy.DEFAULT_HOUR] rather than to a stored zero, which would otherwise
+     * mean a fresh install announced everything at midnight.
+     */
+    fun reminderHour(): Int =
+        preferences
+            .getInt(KEY_REMINDER_HOUR, ReminderPolicy.DEFAULT_HOUR)
+            .takeIf { hour -> hour in 0..23 }
+            ?: ReminderPolicy.DEFAULT_HOUR
+
+    fun setReminderHour(hour: Int) =
+        preferences.putInt(KEY_REMINDER_HOUR, hour.coerceIn(0, 23))
+
+    /** Whether the in-app reminder notice is wanted at all. On by default, and switchable off. */
+    fun remindersAnnounced(): Boolean = preferences.getBoolean(KEY_REMINDERS_ANNOUNCED, true)
+
+    fun setRemindersAnnounced(announced: Boolean) =
+        preferences.putBoolean(KEY_REMINDERS_ANNOUNCED, announced)
+
+    /**
+     * The day the digest was last shown, as an ISO date, or null when it never has been.
+     *
+     * Stored so the notice appears once a day rather than on every navigation back to the home
+     * screen — a banner that reappears all day is one the user learns to dismiss without reading.
+     */
+    fun reminderLastShownOn(): String? =
+        preferences.get(KEY_REMINDER_LAST_SHOWN, "").takeIf(String::isNotBlank)
+
+    fun setReminderLastShownOn(isoDate: String) =
+        preferences.put(KEY_REMINDER_LAST_SHOWN, isoDate)
+
     private fun decodeProfiles(raw: String): List<DesktopProfile> =
         raw.split(';').mapNotNull { encoded ->
             val parts = encoded.split(':')
@@ -640,6 +814,8 @@ class DesktopUserStore(
         const val KEY_ACTIVE_PROFILE = "active_profile"
         const val KEY_LANGUAGE = "language"
         const val KEY_FIRST_STARTUP_DONE = "first-startup-done"
+        const val KEY_CAST_AUTO_START = "cast-receiver-auto-start"
+        const val KEY_CAST_PAIRING_CODE = "cast-pairing-code"
         const val KEY_WINDOW_GEOMETRY = "window-geometry"
         const val KEY_BACKDROP_POSTERS = "backdrop-posters"
 
@@ -650,6 +826,18 @@ class DesktopUserStore(
         const val KEY_ACTIVATION_KEY = "activation-key"
         const val KEY_AUDIO_OUTPUT = "audio-output"
         const val KEY_LEGACY_FAVORITES = "favorites"
+
+        /**
+         * Separators for the reminder list.
+         *
+         * Neither can occur in the data: an identity key is a slug of `[a-z0-9-]` plus colons, and
+         * the title is Base64. A comma would have been ambiguous the moment a title contained one.
+         */
+        const val RECORD_SEPARATOR = ';'
+        const val FIELD_SEPARATOR = '|'
+        const val KEY_REMINDER_HOUR = "reminder-hour"
+        const val KEY_REMINDERS_ANNOUNCED = "reminders-announced"
+        const val KEY_REMINDER_LAST_SHOWN = "reminder-last-shown"
         const val KEY_CLOCK_24H = "clock-24h"
         const val KEY_SUBTITLE_SIZE = "subtitle-size"
         const val KEY_SUBTITLE_COLOUR = "subtitle-colour"

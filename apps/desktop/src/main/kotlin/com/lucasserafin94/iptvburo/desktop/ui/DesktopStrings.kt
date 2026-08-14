@@ -238,7 +238,6 @@ data class DesktopStrings(
     val live: String,
     val movies: String,
     val series: String,
-    val favorites: String,
     /**
      * Sharing a title. Grouped rather than flat, and not only for tidiness: this class is a
      * constructor with one parameter per string, and the JVM caps a method signature at 255 slots.
@@ -248,6 +247,7 @@ data class DesktopStrings(
      */
     val shareStrings: ShareStrings,
     val downloadStrings: DownloadStrings,
+    val savedForLater: SavedForLaterStrings,
     val search: String,
     val sources: String,
     val profile: String,
@@ -540,7 +540,6 @@ data class DesktopStrings(
                 live = "En vivo",
                 movies = "Películas",
                 series = "Series",
-                favorites = "Favoritos",
                 downloadStrings =
                     DownloadStrings(
                         downloadSeries = "Descargar serie",
@@ -549,6 +548,28 @@ data class DesktopStrings(
                         downloadSeasonConfirmTitle = "¿Descargar la temporada %d?",
                         downloadConfirmBody = "Se descargarán %d episodios. Esto puede usar mucho espacio y datos.",
                         downloadConfirmAction = "Descargar",
+                    ),
+                savedForLater =
+                    SavedForLaterStrings(
+                        favorites = "Favoritos",
+                        reminderAdd = "Recordatorio",
+                        reminderActive = "Recordatorio activo",
+                        reminderNoNotice = "Guardado en este equipo. El aviso aparece aquí en la app.",
+                        reminderAnnounce = "Avisarme de mis recordatorios",
+                        reminderHourLabel = "Avisar a las",
+                        reminderInAppOnly =
+                            "El aviso aparece dentro de la app, la primera vez que la abras " +
+                                "después de la hora elegida. Con la app cerrada no envía " +
+                                "notificaciones de Windows.",
+                        reminderNoticeBody = "Tienes %d título(s) marcado(s) para ver.",
+                        reminderNoticeDismiss = "Entendido",
+                        remindersTitle = "Recordatorios",
+                        remindersEmpty =
+                            "Todavía no has marcado nada. Usa el botón Recordatorio en una " +
+                                "película, una serie o un estreno en Suscripciones.",
+                        reminderOpen = "Abrir",
+                        reminderRemove = "Quitar",
+                        reminderNotInLibrary = "Aún no está en tu lista",
                     ),
                 shareStrings =
                     ShareStrings(
@@ -1032,7 +1053,6 @@ data class DesktopStrings(
                 live = "Ao vivo",
                 movies = "Filmes",
                 series = "Séries",
-                favorites = "Favoritos",
                 downloadStrings =
                     DownloadStrings(
                         downloadSeries = "Baixar série",
@@ -1041,6 +1061,28 @@ data class DesktopStrings(
                         downloadSeasonConfirmTitle = "Baixar a temporada %d?",
                         downloadConfirmBody = "%d episódios serão baixados. Isso pode usar bastante espaço e dados.",
                         downloadConfirmAction = "Baixar",
+                    ),
+                savedForLater =
+                    SavedForLaterStrings(
+                        favorites = "Favoritos",
+                        reminderAdd = "Lembrete",
+                        reminderActive = "Lembrete ativo",
+                        reminderNoNotice = "Salvo neste computador. O aviso aparece aqui no app.",
+                        reminderAnnounce = "Avisar sobre os lembretes",
+                        reminderHourLabel = "Avisar às",
+                        reminderInAppOnly =
+                            "O aviso aparece dentro do app, na primeira vez que você abrir depois " +
+                                "do horário escolhido. O app não envia notificação do Windows " +
+                                "enquanto está fechado.",
+                        reminderNoticeBody = "Você tem %d título(s) marcado(s) para assistir.",
+                        reminderNoticeDismiss = "Entendi",
+                        remindersTitle = "Lembretes",
+                        remindersEmpty =
+                            "Você ainda não marcou nenhum título. Use o botão Lembrete na página " +
+                                "de um filme, de uma série ou de um lançamento em Assinaturas.",
+                        reminderOpen = "Abrir",
+                        reminderRemove = "Remover",
+                        reminderNotInLibrary = "Ainda não está na sua lista",
                     ),
                 shareStrings =
                     ShareStrings(
@@ -1524,7 +1566,6 @@ data class DesktopStrings(
                 live = "Live TV",
                 movies = "Movies",
                 series = "Series",
-                favorites = "Favorites",
                 downloadStrings =
                     DownloadStrings(
                         downloadSeries = "Download series",
@@ -1533,6 +1574,28 @@ data class DesktopStrings(
                         downloadSeasonConfirmTitle = "Download season %d?",
                         downloadConfirmBody = "%d episodes will be downloaded. This can use a lot of storage and data.",
                         downloadConfirmAction = "Download",
+                    ),
+                savedForLater =
+                    SavedForLaterStrings(
+                        favorites = "Favorites",
+                        reminderAdd = "Remind me",
+                        reminderActive = "Reminder set",
+                        reminderNoNotice = "Saved on this computer. The notice appears here in the app.",
+                        reminderAnnounce = "Tell me about my reminders",
+                        reminderHourLabel = "Tell me at",
+                        reminderInAppOnly =
+                            "The notice appears inside the app, the first time you open it after " +
+                                "the hour you chose. The app does not send Windows notifications " +
+                                "while it is closed.",
+                        reminderNoticeBody = "You have %d title(s) marked to watch.",
+                        reminderNoticeDismiss = "Got it",
+                        remindersTitle = "Reminders",
+                        remindersEmpty =
+                            "You have not marked anything yet. Use the Remind me button on a " +
+                                "film, a series, or an upcoming release under Subscriptions.",
+                        reminderOpen = "Open",
+                        reminderRemove = "Remove",
+                        reminderNotInLibrary = "Not in your list yet",
                     ),
                 shareStrings =
                     ShareStrings(
@@ -2014,7 +2077,6 @@ data class DesktopStrings(
                 live = "Live-TV",
                 movies = "Filme",
                 series = "Serien",
-                favorites = "Favoriten",
                 downloadStrings =
                     DownloadStrings(
                         downloadSeries = "Serie herunterladen",
@@ -2023,6 +2085,29 @@ data class DesktopStrings(
                         downloadSeasonConfirmTitle = "Staffel %d herunterladen?",
                         downloadConfirmBody = "%d Folgen werden heruntergeladen. Das kann viel Speicher und Daten verbrauchen.",
                         downloadConfirmAction = "Herunterladen",
+                    ),
+                savedForLater =
+                    SavedForLaterStrings(
+                        favorites = "Favoriten",
+                        reminderAdd = "Erinnerung",
+                        reminderActive = "Erinnerung aktiv",
+                        reminderNoNotice = "Auf diesem Computer gespeichert. Der Hinweis erscheint hier in der App.",
+                        reminderAnnounce = "An Erinnerungen erinnern",
+                        reminderHourLabel = "Hinweis um",
+                        reminderInAppOnly =
+                            "Der Hinweis erscheint in der App, beim ersten Öffnen nach der " +
+                                "gewählten Uhrzeit. Solange die App geschlossen ist, sendet sie " +
+                                "keine Windows-Benachrichtigung.",
+                        reminderNoticeBody = "Sie haben %d Titel vorgemerkt.",
+                        reminderNoticeDismiss = "Verstanden",
+                        remindersTitle = "Erinnerungen",
+                        remindersEmpty =
+                            "Sie haben noch nichts markiert. Nutzen Sie die Schaltfläche " +
+                                "Erinnerung bei einem Film, einer Serie oder einem kommenden " +
+                                "Titel unter Abos.",
+                        reminderOpen = "Öffnen",
+                        reminderRemove = "Entfernen",
+                        reminderNotInLibrary = "Noch nicht in Ihrer Liste",
                     ),
                 shareStrings =
                     ShareStrings(
@@ -2511,7 +2596,6 @@ data class DesktopStrings(
                 live = "TV in diretta",
                 movies = "Film",
                 series = "Serie",
-                favorites = "Preferiti",
                 downloadStrings =
                     DownloadStrings(
                         downloadSeries = "Scarica serie",
@@ -2520,6 +2604,27 @@ data class DesktopStrings(
                         downloadSeasonConfirmTitle = "Scaricare la stagione %d?",
                         downloadConfirmBody = "Verranno scaricati %d episodi. Può occupare molto spazio e traffico.",
                         downloadConfirmAction = "Scarica",
+                    ),
+                savedForLater =
+                    SavedForLaterStrings(
+                        favorites = "Preferiti",
+                        reminderAdd = "Promemoria",
+                        reminderActive = "Promemoria attivo",
+                        reminderNoNotice = "Salvato su questo computer. L’avviso appare qui nell’app.",
+                        reminderAnnounce = "Avvisami dei promemoria",
+                        reminderHourLabel = "Avvisami alle",
+                        reminderInAppOnly =
+                            "L’avviso appare nell’app, la prima volta che la apri dopo l’ora " +
+                                "scelta. Ad app chiusa non invia notifiche di Windows.",
+                        reminderNoticeBody = "Hai %d titolo/i da guardare.",
+                        reminderNoticeDismiss = "Ho capito",
+                        remindersTitle = "Promemoria",
+                        remindersEmpty =
+                            "Non hai ancora segnato nulla. Usa il pulsante Promemoria su un film, " +
+                                "una serie o un titolo in arrivo in Abbonamenti.",
+                        reminderOpen = "Apri",
+                        reminderRemove = "Rimuovi",
+                        reminderNotInLibrary = "Non è ancora nel tuo elenco",
                     ),
                 shareStrings =
                     ShareStrings(
@@ -3061,6 +3166,56 @@ data class CastStrings(
     /** Takes the screen's name. */
     val castFailed: String,
     val castChooseAnother: String,
+)
+
+/**
+ * Marking a title for later: liking it, and asking to be reminded about it.
+ *
+ * Grouped for the reason [DownloadStrings] and [CastStrings] are — [DesktopStrings] sits at the
+ * ceiling StringsConstructorLimitTest enforces, and this file has crossed the real JVM limit once
+ * and shipped an app that would not start. [favorites] moved down here from the top level to pay
+ * for the reminder strings, which is the regrouping that test exists to force.
+ */
+data class SavedForLaterStrings(
+    /** The sidebar destination, and the detail-page button when the title is not yet liked. */
+    val favorites: String,
+    /** The button on the detail page, before it is marked. */
+    val reminderAdd: String,
+    /** The same button once the title is marked, which is also how it is unmarked. */
+    val reminderActive: String,
+    /**
+     * Said plainly under the button once a title is marked.
+     *
+     * Windows stores reminders but has nothing that announces one — the daily notification is the
+     * phone's. Without this line the button would imply an alert that is never going to arrive,
+     * which is the kind of promise that makes someone distrust the rest of the app.
+     */
+    val reminderNoNotice: String,
+    /** The sidebar destination, and the heading of the screen it opens. */
+    val remindersTitle: String,
+    /** Shown when nothing has been marked, in place of an empty list. */
+    val remindersEmpty: String,
+    /** On an entry the library has a row for. */
+    val reminderOpen: String,
+    /** Forgets one entry. */
+    val reminderRemove: String,
+    /**
+     * Said on an entry the library cannot open.
+     *
+     * The ordinary case for an upcoming film, and not a fault: without this the row would simply
+     * fail to respond and read as broken.
+     */
+    val reminderNotInLibrary: String,
+    /** The switch that turns the in-app notice on and off. */
+    val reminderAnnounce: String,
+    /** Labels the hour picker. */
+    val reminderHourLabel: String,
+    /** Explains that the notice appears in the app, since nothing arrives while it is closed. */
+    val reminderInAppOnly: String,
+    /** The notice itself. Takes the number of marked titles. */
+    val reminderNoticeBody: String,
+    /** Dismisses the notice for the rest of the day. */
+    val reminderNoticeDismiss: String,
 )
 
 data class DownloadStrings(

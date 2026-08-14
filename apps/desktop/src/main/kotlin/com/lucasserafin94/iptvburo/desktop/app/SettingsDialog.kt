@@ -28,6 +28,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -306,19 +308,26 @@ fun SettingsDialog(
                         SettingsSection(
                             label = "Receber do celular",
                             hint =
-                                "Deixe ligado para enviar filmes do celular para este computador. " +
-                                    "Digite o código abaixo no celular, uma vez.",
+                                "Deixa o celular encontrar este computador e enviar um título " +
+                                    "para cá. Os dois precisam estar na mesma rede. Digite o " +
+                                    "código abaixo no celular, uma vez.",
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
-                                SettingsPill(
-                                    label =
-                                        if (appState.castPairingCode != null) {
-                                            "Ligado — desligar"
-                                        } else {
-                                            "Desligado — ligar"
-                                        },
-                                    selected = appState.castPairingCode != null,
-                                    onClick = appState::toggleCastReceiver,
+                                // Switches rather than pills. A pill reading "Ligado — desligar"
+                                // makes the reader work out whether the words are the state or the
+                                // action, and it says both at once; a switch's position *is* the
+                                // state, and there is nothing to decode.
+                                SettingsSwitch(
+                                    label = "Receber agora",
+                                    checked = appState.castPairingCode != null,
+                                    onCheckedChange = { appState.toggleCastReceiver() },
+                                )
+                                // Separate from the switch above: that one closes the socket for
+                                // this session, this one decides whether it opens again tomorrow.
+                                SettingsSwitch(
+                                    label = "Ligar sozinho ao abrir o app",
+                                    checked = appState.castReceiverAutoStart,
+                                    onCheckedChange = appState::changeCastReceiverAutoStart,
                                 )
                                 appState.castPairingCode?.let { code ->
                                     Text(
@@ -329,10 +338,18 @@ fun SettingsDialog(
                                     )
                                     Text(
                                         text =
-                                            "O código muda toda vez que você liga. " +
-                                                "Só quem digitar este número pode enviar para cá.",
+                                            "Este código é sempre o mesmo neste computador. " +
+                                                "Digite uma vez no celular e ele não pede de novo. " +
+                                                "Só quem tem este número pode enviar para cá.",
                                         color = BuroColors.TextSubtle,
                                         style = MaterialTheme.typography.labelSmall,
+                                    )
+                                    // The way to revoke: every phone that knew the old code has to
+                                    // be told again, which is exactly what revoking means.
+                                    SettingsPill(
+                                        label = "Gerar um código novo",
+                                        selected = false,
+                                        onClick = appState::regenerateCastPairingCode,
                                     )
                                 }
                             }
@@ -644,6 +661,49 @@ private fun SettingsPill(
         style = MaterialTheme.typography.labelLarge,
         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
     )
+}
+
+/**
+ * A setting that is simply on or off.
+ *
+ * A switch rather than a pill, because a pill has to *say* which state it is in and ends up saying
+ * both — "Ligado — desligar" leaves the reader working out whether the words describe the state or
+ * the button. A switch's position is the state, and the label only has to name the thing.
+ */
+@Composable
+private fun SettingsSwitch(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                // The whole row toggles, not just the switch: a 40dp target at the far edge of a
+                // dialog is a poor thing to ask anyone to hit.
+                .clip(BuroRadius.Small)
+                .clickable { onCheckedChange(!checked) }
+                .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            color = if (checked) BuroColors.Text else BuroColors.TextMuted,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal,
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors =
+                SwitchDefaults.colors(
+                    checkedThumbColor = BuroColors.OnPrimary,
+                    checkedTrackColor = BuroColors.Primary,
+                ),
+        )
+    }
 }
 
 /**
