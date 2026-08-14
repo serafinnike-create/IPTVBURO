@@ -2349,24 +2349,81 @@ class DesktopAppState(
      * A category the user has already unlocked is absent, which is the whole point of unlocking:
      * once the PIN has been given, its titles behave like any other.
      */
+    /**
+     * The answer from the last call, keyed by everything that can change it.
+     *
+     * This function reads the preferences store and then walks every category the provider
+     * publishes — several hundred on a real list — and it is called from the hot paths rather than
+     * the cold ones: twice per read of `historyEntries`, which itself resolves up to two hundred
+     * titles and is read on every keystroke in the history search box, and again for each of the
+     * three content types when the home screen is built.
+     *
+     * The key is a plain data class rather than a timestamp: it holds the profile, the content
+     * type, the two revisions that already signal a parental or category change, and the unlocked
+     * set itself. Every one of those is bumped or mutated by the code that can alter the answer, so
+     * a stale entry cannot outlive what it was computed from — and a cache that can go stale on a
+     * *parental* control would be far worse than the work it saves.
+     *
+     * The unlocked set is copied in full rather than counted. Every mutation of it today happens to
+     * change its size, so a count would work — but it would work by accident, and the first future
+     * edit that swaps one unlocked category for another would silently keep showing the locked one.
+     * A handful of category ids is nothing to copy next to the several hundred this function walks.
+     */
+    private data class LockedCategoriesKey(
+        val profileId: String?,
+        val contentType: XtreamContentType,
+        val parentalRevision: Int,
+        val hiddenRevision: Int,
+        val unlocked: Set<String>,
+    )
+
+    private var lockedCategoriesKey: LockedCategoriesKey? = null
+    private var lockedCategoriesValue: Set<String> = emptySet()
+
     fun lockedCategoryIdsForBrowsing(
         contentType: XtreamContentType = xtreamContentType,
     ): Set<String> {
+        val key =
+            LockedCategoriesKey(
+                profileId = activeProfileId,
+                contentType = contentType,
+                parentalRevision = parentalRevision,
+                hiddenRevision = hiddenCategoriesRevision,
+                unlocked = unlockedCategories.toSet(),
+            )
+        if (key == lockedCategoriesKey) return lockedCategoriesValue
+
         // Read once, not once per category. `hasParentalPin` and `parentalLock` each hit the Java
         // Preferences store and re-parse a packed string, and this runs on every page of the
         // catalogue — with a provider's several hundred categories that was several hundred
         // preference reads per keystroke in the search box.
         val stored = userStore.parentalLock(activeProfileId)
-        if (!stored.hasPin) return emptySet()
-        val lock = ParentalLock(lockAdultCategories = stored.lockAdultCategories)
-        return xtreamRepository.categories(contentType)
-            .filter { category ->
-                val identity = CategoryPreferenceIdentity.scoped(contentType, category.providerId)
-                identity !in unlockedCategories &&
-                    (CategoryPreferenceIdentity.matches(stored.lockedCategoryIds, contentType, category.providerId) ||
-                        lock.requiresPin(null, category.name))
-            }.map(XtreamCategory::providerId)
-            .toSet()
+        val computed =
+            if (!stored.hasPin) {
+                emptySet()
+            } else {
+                val lock = ParentalLock(lockAdultCategories = stored.lockAdultCategories)
+                xtreamRepository
+                    .categories(contentType)
+                    .filter { category ->
+                        val identity = CategoryPreferenceIdentity.scoped(contentType, category.providerId)
+                        identity !in unlockedCategories &&
+                            (
+                                CategoryPreferenceIdentity.matches(
+                                    stored.lockedCategoryIds,
+                                    contentType,
+                                    category.providerId,
+                                ) || lock.requiresPin(null, category.name)
+                            )
+                    }.map(XtreamCategory::providerId)
+                    .toSet()
+            }
+
+        // Stored after the work, including the empty answer: "this profile has no PIN" is as
+        // expensive to establish as any other result and just as worth keeping.
+        lockedCategoriesKey = key
+        lockedCategoriesValue = computed
+        return computed
     }
 
     private fun explicitCategoryIds(

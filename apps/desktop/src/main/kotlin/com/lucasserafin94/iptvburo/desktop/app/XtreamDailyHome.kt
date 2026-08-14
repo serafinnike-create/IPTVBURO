@@ -338,10 +338,15 @@ fun XtreamDailyHome(
                             },
                         )
                     }
-                    if (appState.continueWatchingEntries.isNotEmpty()) {
+                    // Read once. This is a computed property that resolves every entry against the
+                    // catalogue and applies the parental policy to each, so asking twice — once to
+                    // decide whether to draw the row and once to fill it — did all of that work
+                    // twice on every recomposition of the home screen.
+                    val resumable = appState.continueWatchingEntries
+                    if (resumable.isNotEmpty()) {
                         item(key = "continue-watching") {
                             ContinueWatchingRow(
-                                entries = appState.continueWatchingEntries,
+                                entries = resumable,
                                 metrics = metrics,
                                 text = text,
                             ) { entry -> openDetails(entry.item) }
