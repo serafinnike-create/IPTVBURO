@@ -112,24 +112,38 @@ class CancelledLoaderResetTest {
     }
 
     /**
-     * Every guard has a matching reset.
+     * Every guarded status has at least one reset.
      *
      * Guards and resets are written with the same condition — `if (status is X.Loading)` — so a
-     * loader that guards without resetting shows up as an odd count. This is a cheap structural
-     * check on top of the positional one above: it catches a guard added in a new loader whose
-     * error path was written without the reset at all.
+     * status that is guarded but never put back shows up as a guard with no reset. This is a cheap
+     * structural check on top of the positional one above: it catches a guard added in a new loader
+     * whose error path was written without the reset at all.
+     *
+     * Grouped by status rather than counted in total. A one-for-one count was the first shape of
+     * this test, and it failed the moment a loader needed *two* resets — the film details loader
+     * has one on its failure path and another for an answer that arrives after the selection has
+     * moved on, which was its own "fica carregando" report. Both are correct, and a rule that
+     * forbids the second would push someone into removing a reset to make the suite green.
      */
     @Test
-    fun `each in-flight guard is paired with a reset`() {
+    fun `each guarded status has a reset`() {
         val conditions = source.lines().filter { line -> GUARD.containsMatchIn(line) }
-        val resets = conditions.count { line -> RESTING_STATE.containsMatchIn(line) }
-        val guards = conditions.size - resets
+        val guardedStatuses =
+            conditions
+                .mapNotNull { line -> STATUS_NAME.find(line)?.groupValues?.get(1) }
+                .distinct()
+        val statusesWithReset =
+            conditions
+                .filter { line -> RESTING_STATE.containsMatchIn(line) }
+                .mapNotNull { line -> STATUS_NAME.find(line)?.groupValues?.get(1) }
+                .toSet()
+        val unpaired = guardedStatuses.filterNot { status -> status in statusesWithReset }
 
         assertTrue(
-            guards >= EXPECTED_GUARDS && guards == resets,
-            "Found $guards in-flight guards and $resets resets; they must pair up, and at least " +
-                "$EXPECTED_GUARDS guards are expected. A guard with no reset strands its screen " +
-                "on a spinner; a guard removed altogether should be a deliberate change.\n" +
+            guardedStatuses.size >= EXPECTED_GUARDS && unpaired.isEmpty(),
+            "Guarded statuses without a reset: $unpaired. At least $EXPECTED_GUARDS guarded " +
+                "statuses are expected — a guard with no reset strands its screen on a spinner, " +
+                "and a guard removed altogether should be a deliberate change.\n" +
                 conditions.joinToString("\n") { line -> "  ${line.trim()}" },
         )
     }
@@ -154,6 +168,14 @@ class CancelledLoaderResetTest {
          * since the app could then connect to nothing at all.
          */
         val GUARD = Regex("""if \(\w+ is \w+\.(Loading|Connecting)\)""")
+
+        /**
+         * The status property a guard or reset line is about, e.g. `movieDetailsStatus`.
+         *
+         * Pairing is per status rather than by total count: one loader may legitimately reset the
+         * same status from more than one path.
+         */
+        val STATUS_NAME = Regex("""if \((\w+) is \w+\.(?:Loading|Connecting)\)""")
 
         /**
          * A status being put back to rest.

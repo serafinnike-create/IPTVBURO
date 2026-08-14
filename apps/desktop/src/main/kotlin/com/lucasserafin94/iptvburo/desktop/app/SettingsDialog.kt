@@ -306,11 +306,8 @@ fun SettingsDialog(
                         // something the user turns on rather than something they discover has been
                         // running — and the code is what keeps a shared network safe.
                         SettingsSection(
-                            label = "Receber do celular",
-                            hint =
-                                "Deixa o celular encontrar este computador e enviar um título " +
-                                    "para cá. Os dois precisam estar na mesma rede. Digite o " +
-                                    "código abaixo no celular, uma vez.",
+                            label = text.shareStrings.receiver.title,
+                            hint = text.shareStrings.receiver.hint,
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
                                 // Switches rather than pills. A pill reading "Ligado — desligar"
@@ -318,36 +315,33 @@ fun SettingsDialog(
                                 // action, and it says both at once; a switch's position *is* the
                                 // state, and there is nothing to decode.
                                 SettingsSwitch(
-                                    label = "Receber agora",
+                                    label = text.shareStrings.receiver.receiveNow,
                                     checked = appState.castPairingCode != null,
                                     onCheckedChange = { appState.toggleCastReceiver() },
                                 )
                                 // Separate from the switch above: that one closes the socket for
                                 // this session, this one decides whether it opens again tomorrow.
                                 SettingsSwitch(
-                                    label = "Ligar sozinho ao abrir o app",
+                                    label = text.shareStrings.receiver.autoStart,
                                     checked = appState.castReceiverAutoStart,
                                     onCheckedChange = appState::changeCastReceiverAutoStart,
                                 )
                                 appState.castPairingCode?.let { code ->
                                     Text(
-                                        text = "Código: $code",
+                                        text = "${text.shareStrings.receiver.codeLabel}: $code",
                                         color = BuroColors.Primary,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                     )
                                     Text(
-                                        text =
-                                            "Este código é sempre o mesmo neste computador. " +
-                                                "Digite uma vez no celular e ele não pede de novo. " +
-                                                "Só quem tem este número pode enviar para cá.",
+                                        text = text.shareStrings.receiver.codeExplanation,
                                         color = BuroColors.TextSubtle,
                                         style = MaterialTheme.typography.labelSmall,
                                     )
                                     // The way to revoke: every phone that knew the old code has to
                                     // be told again, which is exactly what revoking means.
                                     SettingsPill(
-                                        label = "Gerar um código novo",
+                                        label = text.shareStrings.receiver.regenerate,
                                         selected = false,
                                         onClick = appState::regenerateCastPairingCode,
                                     )

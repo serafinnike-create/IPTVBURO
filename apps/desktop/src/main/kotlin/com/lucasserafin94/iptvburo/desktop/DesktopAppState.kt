@@ -4221,7 +4221,18 @@ class DesktopAppState(
                 xtreamRepository.movieDetails(selected.providerId)
             }
         }.onSuccess { details ->
-            if (selectedXtreamItemId == selected.providerId) {
+            // The answer arrived for a title that is no longer the one on screen.
+            //
+            // Dropping it is right — it belongs to a different film — but the status must come back
+            // to Idle with it. Leaving it on Loading meant the guard at the top of this function
+            // refused every later attempt, so the page kept "Carregando ficha do filme…" for ever
+            // with nothing in flight and no way to recover short of restarting the app. The same
+            // reasoning as the onFailure branch below, which had already been fixed for it.
+            if (selectedXtreamItemId != selected.providerId) {
+                if (movieDetailsStatus is MovieDetailsStatus.Loading) movieDetailsStatus = MovieDetailsStatus.Idle
+                return@onSuccess
+            }
+            run {
                 movieDetailsStatus = MovieDetailsStatus.Loaded(details)
                 details.cast.castNames().forEach { person ->
                     movieAppearances
@@ -4268,6 +4279,11 @@ class DesktopAppState(
         }.onSuccess { details ->
             if (selectedXtreamItemId == selected.providerId) {
                 seriesDetailsStatus = SeriesDetailsStatus.Loaded(details)
+            } else {
+                // Same reason as the film loader: the answer belongs to a title that is no longer
+                // showing, so it is dropped — but the status has to come back with it, or the guard
+                // above refuses every later attempt and the spinner never ends.
+                if (seriesDetailsStatus is SeriesDetailsStatus.Loading) seriesDetailsStatus = SeriesDetailsStatus.Idle
             }
         }.onFailure { error ->
             // Same reason as the film loader above: a cancelled fetch must not strand the status on

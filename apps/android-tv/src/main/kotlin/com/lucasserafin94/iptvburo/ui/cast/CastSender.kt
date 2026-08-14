@@ -7,7 +7,10 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.NetworkInterface
 import java.net.Socket
+import java.net.StandardProtocolFamily
+import java.nio.channels.DatagramChannel
 
 /** A screen on this network that answered discovery. */
 data class CastTarget(
@@ -69,18 +72,33 @@ class CastSender(private val context: Context) : CastTransport {
 
     private fun probe(timeoutMillis: Int): List<CastTarget> =
         runCatching {
-            DatagramSocket().use { socket ->
+            // Forced to IPv4: an unqualified socket opens on the family the runtime prefers, which
+            // is IPv6, and an IPv6 socket cannot send an IPv4 broadcast at all — every send below
+            // would be refused and the scan would come back empty with nothing to show for it.
+            val ipv4Socket = DatagramChannel.open(StandardProtocolFamily.INET).socket()
+            ipv4Socket.use { socket ->
                 socket.broadcast = true
                 socket.soTimeout = timeoutMillis
 
                 val probe = DISCOVERY_PROBE.toByteArray(Charsets.UTF_8)
-                socket.send(
-                    DatagramPacket(
-                        probe,
-                        probe.size,
-                        InetSocketAddress(InetAddress.getByName("255.255.255.255"), DISCOVERY_PORT),
-                    ),
-                )
+                // Every interface's own broadcast address as well as the global one.
+                //
+                // A limited broadcast leaves by whichever single interface the routing table picks.
+                // A phone usually has several — Wi-Fi, mobile data, sometimes a hotspot or a VPN —
+                // and the probe going out over mobile data reaches nothing on the home network.
+                // Sending to 192.168.1.255 as well is what puts it on the wire the screens are on.
+                (broadcastAddresses() + InetAddress.getByName("255.255.255.255")).forEach { address ->
+                    // Per address: one interface refusing the send must not stop the others.
+                    runCatching {
+                        socket.send(
+                            DatagramPacket(
+                                probe,
+                                probe.size,
+                                InetSocketAddress(address, DISCOVERY_PORT),
+                            ),
+                        )
+                    }
+                }
 
                 // Keyed by address so a machine that answers twice appears once, and ordered so the
                 // list does not reshuffle between scans while somebody is reaching for it.
@@ -128,7 +146,10 @@ class CastSender(private val context: Context) : CastTransport {
             true
         }.getOrDefault(false)
 
-    private companion object {
+    // Internal rather than private so the receiver's suite can assert the two halves agree: the
+    // port and the probe words exist in three places, and discovery goes quiet with nothing to show
+    // for it if any one of them drifts.
+    internal companion object {
         /** Must match the desktop receiver. */
         const val DISCOVERY_PORT = 45_517
         const val DISCOVERY_PROBE = "buro-cast-discover-1"
@@ -140,5 +161,27 @@ class CastSender(private val context: Context) : CastTransport {
         const val CONNECT_TIMEOUT_MILLIS = 2_500
         const val MAX_NAME_LENGTH = 60
         const val MULTICAST_LOCK_TAG = "iptvburo-cast-discovery"
+
+        /**
+         * The broadcast address of every interface actually carrying traffic.
+         *
+         * Loopback and interfaces that are down are skipped, as is any interface with no broadcast
+         * address of its own — a point-to-point link has none, and IPv6 has no broadcast at all.
+         *
+         * A phone usually has more than one: Wi-Fi, mobile data, sometimes a hotspot or a VPN. A
+         * probe sent only to 255.255.255.255 leaves by whichever one the routing table picks, and
+         * over mobile data it reaches nothing on the home network.
+         */
+        internal fun broadcastAddresses(): List<InetAddress> =
+            runCatching {
+                NetworkInterface
+                    .getNetworkInterfaces()
+                    .toList()
+                    .filter { candidate ->
+                        runCatching { candidate.isUp && !candidate.isLoopback }.getOrDefault(false)
+                    }.flatMap { candidate -> candidate.interfaceAddresses }
+                    .mapNotNull { address -> address.broadcast }
+                    .distinct()
+            }.getOrDefault(emptyList())
     }
 }

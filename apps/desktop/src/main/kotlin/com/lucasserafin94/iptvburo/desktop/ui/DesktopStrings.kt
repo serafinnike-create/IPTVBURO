@@ -589,6 +589,22 @@ data class DesktopStrings(
                                             castFailed = "No se pudo contactar con %s.",
                                             castChooseAnother = "Elegir otra pantalla",
                             ),
+                    receiver =
+                        CastReceiverStrings(
+                            title = "Recibir del celular",
+                            hint =
+                                "Permite que el celular encuentre este equipo y le envíe un " +
+                                    "título. Los dos tienen que estar en la misma red. Escribe " +
+                                    "el código de abajo en el celular, una sola vez.",
+                            receiveNow = "Recibir ahora",
+                            autoStart = "Activar al abrir la app",
+                            codeLabel = "Código",
+                            codeExplanation =
+                                "Este código es siempre el mismo en este equipo. Escríbelo una " +
+                                    "vez en el celular y no volverá a pedirlo. Solo quien tenga " +
+                                    "este número puede enviar aquí.",
+                            regenerate = "Generar un código nuevo",
+                        ),
                     share = "Compartir",
                     shareTitle = "Compartir título",
                     shareSubtitle = "Envía una recomendación, no tu lista.",
@@ -1102,6 +1118,22 @@ data class DesktopStrings(
                                             castFailed = "Não foi possível alcançar %s.",
                                             castChooseAnother = "Escolher outra tela",
                             ),
+                    receiver =
+                        CastReceiverStrings(
+                            title = "Receber do celular",
+                            hint =
+                                "Deixa o celular encontrar este computador e enviar um título " +
+                                    "para cá. Os dois precisam estar na mesma rede. Digite o " +
+                                    "código abaixo no celular, uma vez.",
+                            receiveNow = "Receber agora",
+                            autoStart = "Ligar sozinho ao abrir o app",
+                            codeLabel = "Código",
+                            codeExplanation =
+                                "Este código é sempre o mesmo neste computador. Digite uma vez " +
+                                    "no celular e ele não pede de novo. Só quem tem este número " +
+                                    "pode enviar para cá.",
+                            regenerate = "Gerar um código novo",
+                        ),
                     share = "Compartilhar",
                     shareTitle = "Compartilhar título",
                     shareSubtitle = "Envie uma recomendação, não a sua lista.",
@@ -1615,6 +1647,22 @@ data class DesktopStrings(
                                             castFailed = "Could not reach %s.",
                                             castChooseAnother = "Choose another screen",
                             ),
+                    receiver =
+                        CastReceiverStrings(
+                            title = "Receive from your phone",
+                            hint =
+                                "Lets your phone find this computer and send it a title. Both " +
+                                    "have to be on the same network. Type the code below into " +
+                                    "your phone, once.",
+                            receiveNow = "Receive now",
+                            autoStart = "Turn on when the app opens",
+                            codeLabel = "Code",
+                            codeExplanation =
+                                "This code stays the same on this computer. Type it into your " +
+                                    "phone once and it will not ask again. Only someone with " +
+                                    "this number can send here.",
+                            regenerate = "Generate a new code",
+                        ),
                     share = "Share",
                     shareTitle = "Share title",
                     shareSubtitle = "Send a recommendation, not your list.",
@@ -2127,6 +2175,22 @@ data class DesktopStrings(
                                             castFailed = "%s war nicht erreichbar.",
                                             castChooseAnother = "Anderen Bildschirm wählen",
                             ),
+                    receiver =
+                        CastReceiverStrings(
+                            title = "Vom Telefon empfangen",
+                            hint =
+                                "Lässt das Telefon diesen Computer finden und ihm einen Titel " +
+                                    "schicken. Beide müssen im selben Netzwerk sein. Geben Sie " +
+                                    "den Code unten einmal am Telefon ein.",
+                            receiveNow = "Jetzt empfangen",
+                            autoStart = "Beim Öffnen der App einschalten",
+                            codeLabel = "Code",
+                            codeExplanation =
+                                "Dieser Code bleibt auf diesem Computer immer derselbe. Einmal " +
+                                    "am Telefon eingeben, dann fragt es nicht mehr. Nur wer " +
+                                    "diese Nummer hat, kann hierher senden.",
+                            regenerate = "Neuen Code erzeugen",
+                        ),
                     share = "Teilen",
                     shareTitle = "Titel teilen",
                     shareSubtitle = "Sende eine Empfehlung, nicht deine Liste.",
@@ -2644,6 +2708,22 @@ data class DesktopStrings(
                                             castFailed = "Impossibile raggiungere %s.",
                                             castChooseAnother = "Scegli un altro schermo",
                             ),
+                    receiver =
+                        CastReceiverStrings(
+                            title = "Ricevi dal telefono",
+                            hint =
+                                "Permette al telefono di trovare questo computer e inviargli un " +
+                                    "titolo. Devono essere sulla stessa rete. Digita il codice " +
+                                    "qui sotto sul telefono, una volta sola.",
+                            receiveNow = "Ricevi ora",
+                            autoStart = "Attiva all’avvio dell’app",
+                            codeLabel = "Codice",
+                            codeExplanation =
+                                "Questo codice resta sempre lo stesso su questo computer. " +
+                                    "Digitalo una volta sul telefono e non te lo chiederà più. " +
+                                    "Solo chi ha questo numero può inviare qui.",
+                            regenerate = "Genera un nuovo codice",
+                        ),
                     share = "Condividi",
                     shareTitle = "Condividi titolo",
                     shareSubtitle = "Invia un consiglio, non la tua lista.",
@@ -3176,6 +3256,31 @@ data class CastStrings(
  * and shipped an app that would not start. [favorites] moved down here from the top level to pay
  * for the reminder strings, which is the regrouping that test exists to force.
  */
+/**
+ * Letting a phone on the network send this machine a title.
+ *
+ * These were written straight into SettingsDialog in Portuguese, so anyone running the app in
+ * English, German, Italian or Spanish met a wall of Portuguese in the middle of their settings.
+ * Grouped rather than added to [DesktopStrings] for the usual reason — see the note there on the
+ * JVM's constructor ceiling, which this file has crossed once already.
+ */
+data class CastReceiverStrings(
+    /** The section's own heading. */
+    val title: String,
+    /** What the feature does, and the one condition it needs. */
+    val hint: String,
+    /** Listening right now, this session. */
+    val receiveNow: String,
+    /** Whether it starts listening again next time the app opens. */
+    val autoStart: String,
+    /** Takes the four-digit code. */
+    val codeLabel: String,
+    /** That the code stays the same, so it is typed once. */
+    val codeExplanation: String,
+    /** Throws the code away and mints another, for when it has been seen by the wrong person. */
+    val regenerate: String,
+)
+
 data class SavedForLaterStrings(
     /** The sidebar destination, and the detail-page button when the title is not yet liked. */
     val favorites: String,
@@ -3238,6 +3343,13 @@ data class ShareStrings(
      * sharing with a different destination, so this is where it belongs anyway.
      */
     val cast: CastStrings,
+    /**
+     * The other end of casting: this machine receiving instead of sending.
+     *
+     * Beside [cast] because it is the same feature seen from the other side, and nested here for
+     * the same ceiling reason.
+     */
+    val receiver: CastReceiverStrings,
     /** The button on the title page, beside Favourites. */
     val share: String,
     val shareTitle: String,
