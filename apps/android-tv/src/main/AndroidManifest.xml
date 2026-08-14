@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
 
@@ -120,6 +121,26 @@
                     android:host="title" />
             </intent-filter>
         </activity>
+
+        <!--
+            WorkManager is initialised on demand, by the Application implementing
+            Configuration.Provider, so its automatic initialiser has to go.
+
+            Not cosmetic: whichever runs first wins, and the automatic one builds WorkManager with
+            the default worker factory — which cannot construct a worker that has injected
+            dependencies. The daily reminder would then fail on every scheduled run, while the app
+            itself looked entirely healthy.
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
 
     </application>
 

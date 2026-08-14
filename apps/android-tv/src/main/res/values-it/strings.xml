@@ -278,9 +278,21 @@
     <string name="reminder_channel_name">Promemoria</string>
     <string name="reminder_channel_description">Un avviso quotidiano sui titoli che hai chiesto di ricordare.</string>
     <string name="reminder_line_released">%1$s è ora disponibile</string>
-    <plurals name="reminder_line_countdown"><item quantity="one">%1$s — manca 1 giorno</item><item quantity="many">%1$s — mancano %2$d giorni</item><item quantity="other">%1$s — mancano %2$d giorni</item></plurals>
-    <plurals name="reminder_title_released"><item quantity="one">1 titolo è uscito</item><item quantity="many">%1$d titoli sono usciti</item><item quantity="other">%1$d titoli sono usciti</item></plurals>
-    <plurals name="reminder_title_waiting"><item quantity="one">Hai 1 promemoria</item><item quantity="many">Hai %1$d promemoria</item><item quantity="other">Hai %1$d promemoria</item></plurals>
+    <plurals name="reminder_line_countdown">
+        <item quantity="one">%1$s — manca 1 giorno</item>
+        <item quantity="many">%1$s — mancano %2$d giorni</item>
+        <item quantity="other">%1$s — mancano %2$d giorni</item>
+    </plurals>
+    <plurals name="reminder_title_released">
+        <item quantity="one">1 titolo è uscito</item>
+        <item quantity="many">%1$d titoli sono usciti</item>
+        <item quantity="other">%1$d titoli sono usciti</item>
+    </plurals>
+    <plurals name="reminder_title_waiting">
+        <item quantity="one">Hai 1 promemoria</item>
+        <item quantity="many">Hai %1$d promemoria</item>
+        <item quantity="other">Hai %1$d promemoria</item>
+    </plurals>
     <string name="reminder_add">Promemoria</string>
     <string name="reminder_added">Promemoria attivo</string>
 </resources>

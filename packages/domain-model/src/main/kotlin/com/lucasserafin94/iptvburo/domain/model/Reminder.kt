@@ -77,6 +77,15 @@ object ReminderPolicy {
      */
     const val COUNTDOWN_HORIZON_DAYS = 30L
 
+    /**
+     * The hour the daily reminder arrives when the viewer has not chosen one.
+     *
+     * Early evening: late enough that the phone is unlikely to be asleep in a pocket all day, early
+     * enough that a title released today can still be watched today. A morning default would
+     * announce a release nine hours before anyone could act on it.
+     */
+    const val DEFAULT_HOUR = 19
+
     fun digestFor(
         reminders: List<Reminder>,
         now: Instant,

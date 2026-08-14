@@ -106,7 +106,21 @@ class ReminderNotifier @Inject constructor(
                     .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                     .build()
 
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+            // Caught rather than only guarded by canNotify() above.
+            //
+            // The permission can be revoked between the check and this line — the worker runs
+            // while the app is closed, and a user can withdraw it from Settings at any moment. An
+            // uncaught SecurityException here fails the worker, and a failed periodic worker stops
+            // being rescheduled: one revocation would end reminders permanently, silently.
+            val manager = NotificationManagerCompat.from(context)
+            // Checked here as well as in canNotify(), which is not redundant: the permission can be
+            // withdrawn between the two, since the worker runs while the app is closed and Settings
+            // is always reachable. The catch is what matters — an uncaught SecurityException fails
+            // the worker, and a failed periodic worker stops being rescheduled, so a single
+            // revocation would end reminders permanently and silently.
+            if (manager.areNotificationsEnabled()) {
+                runCatching { manager.notify(NOTIFICATION_ID, notification) }
+            }
         }
     }
 
