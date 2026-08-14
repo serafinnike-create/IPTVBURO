@@ -4494,6 +4494,68 @@ class DesktopAppState(
         selectedChannelId = visibleChannels.firstOrNull()?.id
     }
 
+    // -----------------------------------------------------------------------------------------
+    // The search tab
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * What is typed into the search tab.
+     *
+     * Separate from [searchQuery], which narrows whatever catalogue is currently open. These answer
+     * different questions and sharing one field would make each screen change the other: typing in
+     * the search tab would silently filter the catalogue behind it.
+     */
+    var globalSearchQuery by mutableStateOf("")
+        private set
+
+    /** What the search found. Empty until two characters are typed, and while nothing matches. */
+    var globalSearchResults by mutableStateOf<List<XtreamCatalogItem>>(emptyList())
+        private set
+
+    private var globalSearchJob: Job? = null
+
+    /**
+     * Opens the search tab, leaving whatever was typed before.
+     *
+     * Coming back to a search that is still on screen is the ordinary case — someone opens a
+     * result, decides it is the wrong film, and returns to the list they already built.
+     */
+    fun openSearch() {
+        favoritesOnly = false
+        destination = DesktopDestination.SEARCH
+    }
+
+    /**
+     * Runs a search over everything loaded, off the UI thread.
+     *
+     * Debounced by cancelling the previous job rather than by a timer: a catalogue walk of forty
+     * thousand items is fast but not free, and a fast typist would otherwise start one per
+     * keystroke and leave them all running.
+     */
+    fun updateGlobalSearch(query: String) {
+        globalSearchQuery = query.take(MAX_SEARCH_LENGTH)
+        val needle = globalSearchQuery.trim()
+        globalSearchJob?.cancel()
+
+        if (needle.length < MIN_GLOBAL_SEARCH_QUERY) {
+            globalSearchResults = emptyList()
+            return
+        }
+
+        globalSearchJob =
+            downloadScope.launch {
+                val found = withContext(Dispatchers.IO) { xtreamRepository.search(needle) }
+                // Ignore an answer for a query the user has already moved on from.
+                if (globalSearchQuery.trim() == needle) globalSearchResults = found
+            }
+    }
+
+    fun clearGlobalSearch() {
+        globalSearchJob?.cancel()
+        globalSearchQuery = ""
+        globalSearchResults = emptyList()
+    }
+
     fun forgetSelectedSource() {
         if (isXtreamSelected) {
             disconnectXtream()
@@ -4790,6 +4852,9 @@ class DesktopAppState(
     private companion object {
         const val MAX_SEARCH_LENGTH = 120
 
+        /** Shortest query worth walking a catalogue for; one letter matches most of it. */
+        const val MIN_GLOBAL_SEARCH_QUERY = 2
+
         /** Enough to fill a filmography page without a long sweep. */
         const val MAX_FILMOGRAPHY_ITEMS = 24
 
@@ -4908,7 +4973,18 @@ enum class CatalogLayout(val id: String) {
     }
 }
 
-enum class DesktopDestination { HOME, CATALOG, FAVORITES, DOWNLOADS, CONTINUE, MUSIC, SUBSCRIPTIONS, HISTORY }
+enum class DesktopDestination {
+    HOME,
+    /** The search tab: one box that reaches films, series and live channels at once. */
+    SEARCH,
+    CATALOG,
+    FAVORITES,
+    DOWNLOADS,
+    CONTINUE,
+    MUSIC,
+    SUBSCRIPTIONS,
+    HISTORY,
+}
 
 /**
  * What became of a shared link that this app was asked to open.

@@ -44,7 +44,7 @@ o servidor) continua aguardando o log do usuário.
 
 ## TAREFA-030 — Guia Pesquisar no Windows, e ícones na navegação
 
-**Status:** pedido registrado — **não implementado**
+**Status:** ✅ IMPLEMENTADO em 2026-08-13 — **falta ver na tela**
 **Pedido em:** 2026-08-13
 **Relato:** "no app do celular tenho uma guia pesquisar de fácil acesso para
 pesquisar filmes, série, canal ao vivo rápido. Adicione essa guia pesquisar

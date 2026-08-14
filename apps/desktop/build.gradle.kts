@@ -307,6 +307,10 @@ dependencies {
 
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
+    // The sidebar's icons, and the same set Android already draws from, so the two platforms
+    // cannot end up with different marks for the same destination.
+    @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+    implementation(compose.materialIconsExtended)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)

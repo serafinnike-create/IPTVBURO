@@ -29,9 +29,22 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Subscriptions
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -58,6 +71,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -299,6 +313,7 @@ fun DesktopApp(
                         downloads = if (capabilities.offlineSupported) appState.downloadEntries else emptyList(),
                         onCancelDownload = appState::cancelDownload,
                         onHome = appState::openHome,
+                        onSearch = appState::openSearch,
                         onMovies = {
                             scope.launch { appState.openCatalog(XtreamContentType.MOVIE) }
                         },
@@ -460,6 +475,16 @@ fun DesktopApp(
                                         )
                                 },
                                 onForget = appState::forgetProgress,
+                            )
+                        } else if (visibleDestination == DesktopDestination.SEARCH) {
+                            SearchWorkspace(
+                                query = appState.globalSearchQuery,
+                                results = appState.globalSearchResults,
+                                onQueryChange = appState::updateGlobalSearch,
+                                onOpenItem = { item ->
+                                    appState.selectDailyItem(item)
+                                },
+                                text = strings,
                             )
                         } else if (visibleDestination == DesktopDestination.HISTORY) {
                             // Covers rather than the Continue watching rows. History answers "have
@@ -969,6 +994,7 @@ private fun SourceSidebar(
     downloads: List<DownloadEntry>,
     onCancelDownload: (String) -> Unit,
     onHome: () -> Unit,
+    onSearch: () -> Unit,
     onMovies: () -> Unit,
     onSeries: () -> Unit,
     onLive: () -> Unit,
@@ -1019,11 +1045,22 @@ private fun SourceSidebar(
         Spacer(Modifier.height(10.dp))
         NavigationItem(
             label = text.home,
+            icon = Icons.Default.Home,
             selected = destination == DesktopDestination.HOME,
             onClick = onHome,
         )
+        // Directly under Início, where the phone has it: search is how someone who already knows
+        // the title's name gets to it, so it belongs before the browsing destinations rather than
+        // buried among them.
+        NavigationItem(
+            label = text.search,
+            icon = Icons.Default.Search,
+            selected = destination == DesktopDestination.SEARCH,
+            onClick = onSearch,
+        )
         NavigationItem(
             label = text.movies,
+            icon = Icons.Default.Movie,
             selected =
                 destination == DesktopDestination.CATALOG &&
                     catalogType == XtreamContentType.MOVIE,
@@ -1031,6 +1068,7 @@ private fun SourceSidebar(
         )
         NavigationItem(
             label = text.series,
+            icon = Icons.Default.VideoLibrary,
             selected =
                 destination == DesktopDestination.CATALOG &&
                     catalogType == XtreamContentType.SERIES,
@@ -1038,6 +1076,7 @@ private fun SourceSidebar(
         )
         NavigationItem(
             label = text.live,
+            icon = Icons.Default.LiveTv,
             selected =
                 destination == DesktopDestination.CATALOG &&
                     catalogType == XtreamContentType.LIVE,
@@ -1045,22 +1084,26 @@ private fun SourceSidebar(
         )
         NavigationItem(
             label = text.continueWatching,
+            icon = Icons.Default.PlayCircle,
             selected = destination == DesktopDestination.CONTINUE,
             onClick = onContinueWatching,
         )
         NavigationItem(
             label = text.settingsText.historyTitle,
+            icon = Icons.Default.History,
             selected = destination == DesktopDestination.HISTORY,
             onClick = onHistory,
         )
         NavigationItem(
             label = text.favorites,
+            icon = Icons.Default.Favorite,
             selected = destination == DesktopDestination.FAVORITES,
             onClick = onFavorites,
         )
         if (hasOffline) {
             NavigationItem(
                 label = text.downloads,
+                icon = Icons.Default.Folder,
                 selected = destination == DesktopDestination.DOWNLOADS,
                 onClick = onDownloads,
             )
@@ -1070,6 +1113,7 @@ private fun SourceSidebar(
         if (hasMusic) {
             NavigationItem(
                 label = text.music,
+                icon = Icons.Default.LibraryMusic,
                 selected = destination == DesktopDestination.MUSIC,
                 onClick = onMusic,
             )
@@ -1079,6 +1123,7 @@ private fun SourceSidebar(
         if (hasSubscriptions) {
             NavigationItem(
                 label = text.subscriptions,
+                icon = Icons.Default.Subscriptions,
                 selected = destination == DesktopDestination.SUBSCRIPTIONS,
                 onClick = onSubscriptions,
             )
@@ -1210,6 +1255,13 @@ private fun NavigationItem(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    /**
+     * The destination's own mark.
+     *
+     * Null keeps the plain dot this row used to draw for everything, which is what any caller that
+     * has no icon to offer should get rather than a gap where one would sit.
+     */
+    icon: ImageVector? = null,
 ) {
     BuroInteractiveRow(
         onClick = onClick,
@@ -1221,18 +1273,28 @@ private fun NavigationItem(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(
-                        when {
-                            selected -> BuroColors.Primary
-                            state.active -> BuroColors.TextMuted
-                            else -> BuroColors.TextSubtle
-                        },
-                    ),
-            )
+            // The colour is the whole effect, and it is the same rule the label follows: the mark
+            // is dim while the row is idle and lights up when it is selected or hovered. A
+            // monochrome icon tinted this way gives the sidebar its rhythm without any artwork —
+            // which is exactly how the phone's bar reads.
+            val markColour =
+                when {
+                    selected -> BuroColors.Primary
+                    state.active -> BuroColors.TextMuted
+                    else -> BuroColors.TextSubtle
+                }
+            if (icon == null) {
+                Box(Modifier.size(7.dp).clip(CircleShape).background(markColour))
+            } else {
+                Icon(
+                    imageVector = icon,
+                    // Null: the row already carries the label as its content description, and a
+                    // screen reader announcing the same name twice is noise.
+                    contentDescription = null,
+                    tint = markColour,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
             Spacer(Modifier.width(12.dp))
             Text(
                 text = label,

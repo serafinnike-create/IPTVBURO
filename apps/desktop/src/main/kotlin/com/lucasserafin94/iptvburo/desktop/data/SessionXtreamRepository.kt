@@ -8,6 +8,7 @@ import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
 import com.lucasserafin94.iptvburo.domain.model.LibraryCandidate
 import com.lucasserafin94.iptvburo.domain.model.MatchKind
+import com.lucasserafin94.iptvburo.domain.model.normalisedForMatching
 import com.lucasserafin94.iptvburo.domain.model.shelfDeduplicationKey
 import com.lucasserafin94.iptvburo.xtream.XtreamAccount
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
@@ -397,6 +398,49 @@ class SessionXtreamRepository(
         withCredentials { credentials ->
             client.seriesDetails(credentials, seriesId)
         }
+
+    /**
+     * Everything in the loaded catalogues whose name matches [query], across all three kinds.
+     *
+     * The point of a search tab: one box that finds a film, a series or a live channel without the
+     * user first choosing which of the three they are in. The per-screen filters cannot do that —
+     * they narrow whatever catalogue is already open, so looking for a film while browsing live
+     * channels finds nothing.
+     *
+     * Films and series come before live channels because someone typing a name almost always wants
+     * a title, and a provider carrying three hundred channels with a matching word would otherwise
+     * bury the one film they meant. Within a kind the catalogue's own order is kept, which is the
+     * order they see everywhere else in the app.
+     *
+     * Reads only what is already in memory — no request leaves the machine, so this works while
+     * offline and cannot leak the query to the provider.
+     */
+    fun search(
+        query: String,
+        limit: Int = DEFAULT_SEARCH_LIMIT,
+    ): List<XtreamCatalogItem> {
+        // Normalised, not raw. `contains` compares code points, so on a Portuguese catalogue
+        // "chefao" found nothing while "Chefão" sat right there. The same normaliser the library
+        // matcher uses strips accents and provider decoration alike, which also means "duna 4k"
+        // finds "Duna".
+        val needle = query.trim().normalisedForMatching()
+        // Two characters is the shortest search worth running. One letter matches most of a
+        // catalogue, which is slow to walk and useless to read.
+        if (needle.length < MIN_SEARCH_QUERY) return emptyList()
+
+        val matches = ArrayList<XtreamCatalogItem>(limit)
+        // The order of this list is the order of the results.
+        for (contentType in SEARCH_ORDER) {
+            if (matches.size >= limit) break
+            val catalog = synchronized(lock) { catalogs[contentType] } ?: continue
+            for (index in 0 until catalog.size) {
+                if (matches.size >= limit) break
+                val item = catalog.itemAt(index)
+                if (item.name.normalisedForMatching().contains(needle)) matches += item
+            }
+        }
+        return matches
+    }
 
     /**
      * Films whose cast includes [personName].
@@ -800,6 +844,24 @@ class SessionXtreamRepository(
     private companion object {
         /** Bounds a cast sweep so a filmography cannot take minutes or flood the provider. */
         const val MAX_CAST_LOOKUPS = 400
+
+        /**
+         * How many results a search returns.
+         *
+         * Enough to be sure the right title is in there, few enough that the screen is readable and
+         * the walk stops early on a catalogue of forty thousand.
+         */
+        const val DEFAULT_SEARCH_LIMIT = 200
+
+        /** Shortest query worth walking a catalogue for. */
+        const val MIN_SEARCH_QUERY = 2
+
+        /**
+         * Titles first, channels last — see [search]. Declared here so the order that decides the
+         * results is one list rather than a sort spread through the loop.
+         */
+        val SEARCH_ORDER =
+            listOf(XtreamContentType.MOVIE, XtreamContentType.SERIES, XtreamContentType.LIVE)
 
         const val DEFAULT_PAGE_SIZE = 80
         const val MAX_PAGE_SIZE = 200
