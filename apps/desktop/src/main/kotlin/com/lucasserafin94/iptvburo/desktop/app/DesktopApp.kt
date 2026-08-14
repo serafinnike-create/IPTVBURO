@@ -106,7 +106,6 @@ import com.lucasserafin94.iptvburo.desktop.platform.ExternalOpenResult
 import com.lucasserafin94.iptvburo.desktop.platform.DesktopPlatformCapabilities
 import com.lucasserafin94.iptvburo.desktop.platform.chooseLocalPlaylist
 import com.lucasserafin94.iptvburo.desktop.platform.chooseM3uFile
-import com.lucasserafin94.iptvburo.desktop.platform.openChannelExternally
 import com.lucasserafin94.iptvburo.desktop.license.LicenseStatus
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackRequest
 import com.lucasserafin94.iptvburo.desktop.playback.MultiviewOverlay

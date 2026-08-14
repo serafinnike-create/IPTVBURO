@@ -52,6 +52,22 @@ class CastReceiver(
     /** Wrong pairing codes seen in a row, which is what the guessing brake counts. */
     private val consecutiveFailures = java.util.concurrent.atomic.AtomicInteger(0)
 
+    /**
+     * Wrong codes per sender address, and the lockout that follows from them.
+     *
+     * The growing delay below is applied on the connection's own thread, so it slows each attempt
+     * without serialising them: a guesser opening fifty sockets at once gets fifty waits running
+     * side by side, and four digits is ten thousand possibilities. That was survivable while the
+     * code was minted afresh every session — an interrupted attack lost its progress — and stopped
+     * being so when the code became per machine, because attempts now accumulate across days
+     * against a target that never moves.
+     *
+     * Counted per address so a lockout falls on the guesser rather than on the household. The
+     * address is the socket's own peer, not anything the sender claims, so it cannot be spoofed
+     * without also giving up the replies.
+     */
+    private val failuresByAddress = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
+
     /** The code the user reads off this screen and types into the sender. Null when stopped. */
     @Volatile
     var pairingCode: String? = null
@@ -151,6 +167,9 @@ class CastReceiver(
 
     fun stop() {
         consecutiveFailures.set(0)
+        // Cleared with the sockets: restarting the receiver is the way back for anyone who locked
+        // themselves out, and it also stops the map holding addresses for a listener that is gone.
+        failuresByAddress.clear()
         pairingCode = null
         listeningPort = null
         onMessage = null
@@ -180,6 +199,17 @@ class CastReceiver(
                 Thread {
                     runCatching {
                     client.use { connection ->
+                        // Refused outright once this address has spent its attempts.
+                        //
+                        // Closing beats sleeping here: a wait still lets the guesser run the next
+                        // attempt on another socket in parallel, which is what made the delay alone
+                        // insufficient. A closed connection costs them a full round trip and gives
+                        // back nothing, and the count is per address so the household is unaffected
+                        // by somebody else's guessing.
+                        val peer = connection.inetAddress?.hostAddress.orEmpty()
+                        val spent = failuresByAddress[peer]?.get() ?: 0
+                        if (spent >= MAX_FAILURES_PER_ADDRESS) return@use
+
                         connection.soTimeout = READ_TIMEOUT_MILLIS
                         val line = readBoundedLine(connection.getInputStream().bufferedReader(Charsets.UTF_8))
                         // Decoded, not trusted. The pairing code is checked inside decode, and a
@@ -203,10 +233,16 @@ class CastReceiver(
                             // Held on the handler thread rather than the accept loop, so the queue
                             // keeps draining and the owner's correct code still gets through.
                             // Capped, and reset by any message that decodes.
+                            failuresByAddress
+                                .computeIfAbsent(peer) { java.util.concurrent.atomic.AtomicInteger(0) }
+                                .incrementAndGet()
                             val penalty = guessPenaltyMillis(consecutiveFailures.incrementAndGet())
                             if (penalty > 0) runCatching { Thread.sleep(penalty) }
                         } else {
                             consecutiveFailures.set(0)
+                            // The right code clears this address, so a person who mistyped a few
+                            // times and then got it right is not locked out of their own screen.
+                            failuresByAddress.remove(peer)
                             received.set(message)
                             runCatching { onMessage?.invoke(message) }
                         }
@@ -332,6 +368,18 @@ class CastReceiver(
          * through ten thousand possibilities does not.
          */
         private const val FAILURES_BEFORE_DELAY = 3
+
+        /**
+         * Wrong codes one address may spend before it is refused outright.
+         *
+         * Generous for a person — nobody mistypes four digits twenty times — and decisive against a
+         * machine: twenty of ten thousand possibilities is a fifth of a percent, so the whole space
+         * can no longer be walked from one address however many sockets are opened at once. Cleared
+         * for that address the moment a correct code arrives, and for every address when the
+         * receiver is restarted, which is the way back for anyone who genuinely locked themselves
+         * out.
+         */
+        internal const val MAX_FAILURES_PER_ADDRESS = 20
 
         /** Added per wrong code beyond the free ones, so guessing gets slower the longer it runs. */
         private const val FAILURE_DELAY_MILLIS = 500L

@@ -47,6 +47,61 @@ class CastReceiverTest {
     }
 
     /**
+     * An address that has spent its attempts is refused, however many sockets it opens.
+     *
+     * The growing delay alone was not enough, and the reason is where it is applied: on the
+     * connection's own thread. Fifty sockets at once get fifty waits running side by side, so the
+     * brake slows each attempt without bounding the total — and four digits is ten thousand
+     * possibilities. It was survivable while the code was minted per session, since an interrupted
+     * attack lost its progress; it stopped being so when the code became per machine and attempts
+     * began accumulating against a target that never moves.
+     *
+     * Asserted by spending the budget and then sending the *correct* code from the same address:
+     * accepting it would mean the lockout is not really closing connections.
+     */
+    @Test
+    fun `an address that exhausts its attempts is refused even with the right code`() {
+        val delivered = CountDownLatch(1)
+        val code = assertNotNull(receiver.start { delivered.countDown() })
+        val wrong = if (code == "0000") "1111" else "0000"
+
+        repeat(CastReceiver.MAX_FAILURES_PER_ADDRESS) {
+            runCatching { send(listeningPort(), CastMessage(WRONG_IDENTITY, "Tentativa", 0, wrong).encode()) }
+        }
+
+        // The budget is spent, so even the owner's own code gets nowhere from this address until
+        // the receiver is restarted. That is the cost of the lockout, and it is deliberate: the
+        // address doing the guessing is the one that loses access.
+        val identity = ContentIdentity.of(ContentKind.MOVIE, "Depois do Bloqueio", 2024)
+        runCatching { send(listeningPort(), CastMessage(identity, "Depois do Bloqueio", 0, code).encode()) }
+
+        assertFalse(
+            delivered.await(1_500, TimeUnit.MILLISECONDS),
+            "a locked-out address was still able to hand over a title",
+        )
+    }
+
+    /** Getting it right clears the count, so a few mistypes do not cost the owner their screen. */
+    @Test
+    fun `a correct code clears the attempts spent by that address`() {
+        val delivered = CountDownLatch(1)
+        var received: CastMessage? = null
+        val code = assertNotNull(receiver.start { message -> received = message; delivered.countDown() })
+        val wrong = if (code == "0000") "1111" else "0000"
+
+        // Under the budget, then right, then under it again: without the reset the second run would
+        // cross the limit and the owner would be locked out of their own machine by typos.
+        repeat(CastReceiver.MAX_FAILURES_PER_ADDRESS - 1) {
+            runCatching { send(listeningPort(), CastMessage(WRONG_IDENTITY, "Tentativa", 0, wrong).encode()) }
+        }
+        val identity = ContentIdentity.of(ContentKind.MOVIE, "Aceito", 2024)
+        send(listeningPort(), CastMessage(identity, "Aceito", 0, code).encode())
+
+        assertTrue(delivered.await(5, TimeUnit.SECONDS), "the correct code was refused")
+        assertEquals(identity, received?.identity)
+    }
+
+    /**
      * The machine's code is reused, so the phone is told it once rather than every session.
      *
      * It used to be minted on every start, which meant the number on screen was different each time
@@ -394,5 +449,8 @@ class CastReceiverTest {
          * loaded runner.
          */
         const val DISCOVERY_TIMEOUT_MILLIS = 2_000
+
+        /** Any well-formed identity; these messages are rejected on the code, never read further. */
+        val WRONG_IDENTITY: ContentIdentity = ContentIdentity.of(ContentKind.MOVIE, "Tentativa", 2024)
     }
 }

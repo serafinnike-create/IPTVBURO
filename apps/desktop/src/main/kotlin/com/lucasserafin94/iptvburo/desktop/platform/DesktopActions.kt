@@ -1,6 +1,5 @@
 package com.lucasserafin94.iptvburo.desktop.platform
 
-import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.domain.model.ExternalContentLauncher
 import com.lucasserafin94.iptvburo.domain.model.ExternalLaunchTarget
 import com.lucasserafin94.iptvburo.domain.model.LaunchDecision
@@ -78,12 +77,13 @@ fun chooseM3uDestination(
     return Path.of(directory, withExtension)
 }
 
-fun openChannelExternally(channel: Channel): ExternalOpenResult {
-    val uri =
-        runCatching { URI(channel.streamUri) }
-            .getOrElse { return ExternalOpenResult.Failed }
-    return openUriExternally(uri)
-}
+// openChannelExternally used to sit here: it took a Channel and handed channel.streamUri straight
+// to Desktop.browse() with no check on the scheme, unlike openStreamingOfferExternally beside it,
+// which routes every address through ExternalContentLauncher.decide(). A stream URI comes from an
+// M3U — a file the app did not write — and on Windows browse() with a file: URI opens the target in
+// whatever application is registered for it. Nothing called the function, so nothing was exploitable
+// through it; it was removed rather than left as a loaded trap for the next caller, who would have
+// had no reason to suspect the asymmetry with the function next to it.
 
 /**
  * Uses the registered desktop URI handler without constructing a command line.
