@@ -8,6 +8,7 @@ import com.lucasserafin94.iptvburo.data.local.dao.CategoryDao
 import com.lucasserafin94.iptvburo.data.local.dao.ChannelDao
 import com.lucasserafin94.iptvburo.data.local.dao.FavoriteDao
 import com.lucasserafin94.iptvburo.data.local.dao.ProfileDao
+import com.lucasserafin94.iptvburo.data.local.dao.ReminderDao
 import com.lucasserafin94.iptvburo.data.local.dao.PlaybackProgressDao
 import com.lucasserafin94.iptvburo.data.local.dao.SourceDao
 import com.lucasserafin94.iptvburo.data.local.entity.CategoryEntity
@@ -15,6 +16,7 @@ import com.lucasserafin94.iptvburo.data.local.entity.ChannelEntity
 import com.lucasserafin94.iptvburo.data.local.dao.LibraryEntryDao
 import com.lucasserafin94.iptvburo.data.local.entity.FavoriteEntity
 import com.lucasserafin94.iptvburo.data.local.entity.LibraryEntryEntity
+import com.lucasserafin94.iptvburo.data.local.entity.ReminderEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ProfileEntity
 import com.lucasserafin94.iptvburo.data.local.entity.PlaybackProgressEntity
 import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
@@ -28,8 +30,9 @@ import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
         FavoriteEntity::class,
         PlaybackProgressEntity::class,
         LibraryEntryEntity::class,
+        ReminderEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class IptvBuroDatabase : RoomDatabase() {
@@ -40,6 +43,8 @@ abstract class IptvBuroDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
 
     abstract fun profileDao(): ProfileDao
+
+    abstract fun reminderDao(): ReminderDao
 
     abstract fun favoriteDao(): FavoriteDao
 
@@ -201,6 +206,36 @@ abstract class IptvBuroDatabase : RoomDatabase() {
          * exactly as before — null means "no preference", which is what a household with a single
          * playlist should never have to think about.
          */
+        /**
+         * Reminders.
+         *
+         * No foreign key to `channels`, deliberately: an upcoming title has no catalogue row to
+         * point at, and the cascade favourites carry would delete every reminder on the next
+         * playlist import — losing exactly the titles the feature exists to watch for.
+         */
+        val MIGRATION_8_9: Migration =
+            object : Migration(8, 9) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS reminders (
+                            profile_id TEXT NOT NULL,
+                            content_key TEXT NOT NULL,
+                            title TEXT NOT NULL,
+                            artwork_url TEXT,
+                            release_date TEXT,
+                            created_at_epoch_millis INTEGER NOT NULL,
+                            PRIMARY KEY(profile_id, content_key),
+                            FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_reminders_profile_id ON reminders(profile_id)",
+                    )
+                }
+            }
+
         val MIGRATION_7_8: Migration =
             object : Migration(7, 8) {
                 override fun migrate(db: SupportSQLiteDatabase) {
