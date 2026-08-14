@@ -47,6 +47,19 @@ data class CastTarget(
 interface CastTransport {
     fun discover(timeoutMillis: Int = 1_200): List<CastTarget>
 
+    /**
+     * Asks one address directly, for a network where the broadcast search finds nothing.
+     *
+     * Plenty of home routers drop broadcast between clients — that is what "client isolation"
+     * does — and on such a network [discover] returns an empty list while both devices are sitting
+     * on the same wifi, listening. A unicast probe is not affected by that rule, so typing the
+     * address in reaches a screen the search could not.
+     *
+     * The reply still carries the name and the ephemeral TCP port, so nothing downstream has to
+     * know a target was found this way. Null when nothing answers.
+     */
+    fun probeAddress(address: String, timeoutMillis: Int = 1_500): CastTarget?
+
     fun send(target: CastTarget, message: CastMessage): Boolean
 }
 
@@ -114,6 +127,41 @@ class CastSender(private val context: Context) : CastTransport {
             }
         }.getOrDefault(emptyList())
 
+    override fun probeAddress(address: String, timeoutMillis: Int): CastTarget? {
+        val clean = address.trim()
+        if (!isPlausibleHost(clean)) return null
+        val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        // The lock is held for the same reason discovery holds one. A unicast reply is addressed to
+        // this device and would arrive without it, but the lock costs nothing over a second and a
+        // half and removes one way for this to fail differently from the search beside it.
+        val lock = wifi?.createMulticastLock(MULTICAST_LOCK_TAG)?.apply { setReferenceCounted(true) }
+        return try {
+            runCatching { lock?.acquire() }
+            runCatching {
+                DatagramChannel
+                    .open(StandardProtocolFamily.INET)
+                    .socket()
+                    .use { socket ->
+                        socket.soTimeout = timeoutMillis
+                        val probe = DISCOVERY_PROBE.toByteArray(Charsets.UTF_8)
+                        socket.send(
+                            DatagramPacket(
+                                probe,
+                                probe.size,
+                                InetSocketAddress(InetAddress.getByName(clean), DISCOVERY_PORT),
+                            ),
+                        )
+                        val buffer = ByteArray(DISCOVERY_BUFFER_BYTES)
+                        val packet = DatagramPacket(buffer, buffer.size)
+                        socket.receive(packet)
+                        parseReply(packet)
+                    }
+            }.getOrNull()
+        } finally {
+            runCatching { if (lock?.isHeld == true) lock.release() }
+        }
+    }
+
     /** Null for anything that is not a reply from this protocol. */
     private fun parseReply(packet: DatagramPacket): CastTarget? {
         val parts = String(packet.data, 0, packet.length, Charsets.UTF_8).split(FIELD_SEPARATOR.toString())
@@ -150,6 +198,39 @@ class CastSender(private val context: Context) : CastTransport {
     // port and the probe words exist in three places, and discovery goes quiet with nothing to show
     // for it if any one of them drifts.
     internal companion object {
+        /**
+         * Whether a typed address is worth sending a packet to.
+         *
+         * Deliberately narrow: an IPv4 address on a private range, which is what a screen on the
+         * same home network has. This is a field the user types, and a probe is an outbound packet
+         * to whatever they typed — accepting a hostname would let a typo send it to a name that
+         * resolves on the internet, and accepting a public address would make this a way to poke an
+         * arbitrary host from inside their network. Neither is what the field is for.
+         *
+         * Checked without touching DNS so it can be asserted in a plain JVM test, and so a wrong
+         * entry is refused instantly rather than after a lookup times out.
+         */
+        internal fun isPlausibleHost(candidate: String): Boolean {
+            val parts = candidate.split('.')
+            if (parts.size != 4) return false
+            val octets = parts.map { part -> part.toIntOrNull() ?: return false }
+            if (octets.any { octet -> octet !in 0..255 }) return false
+            // Leading zeros are rejected rather than normalised: "192.168.01.1" is parsed as octal
+            // by some stacks and as decimal by others, so the two ends could disagree about which
+            // machine was meant.
+            if (parts.any { part -> part.length > 1 && part.startsWith("0") }) return false
+            val (first, second) = octets
+            return when {
+                first == 10 -> true
+                first == 172 && second in 16..31 -> true
+                first == 192 && second == 168 -> true
+                // 169.254/16 — two machines on a cable with no router, which is a real setup and
+                // the one case where there is no DHCP to hand out anything else.
+                first == 169 && second == 254 -> true
+                else -> false
+            }
+        }
+
         /** Must match the desktop receiver. */
         const val DISCOVERY_PORT = 45_517
         const val DISCOVERY_PROBE = "buro-cast-discover-1"

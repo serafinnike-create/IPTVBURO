@@ -76,6 +76,24 @@ class CastController(
         state = CastUiState.NeedsCode(target)
     }
 
+    /**
+     * Reaches a screen by its address, for a network where the search comes back empty.
+     *
+     * Goes straight to the pairing step on success, exactly as choosing a found row does: the reply
+     * carries the same name and port, so from here on nothing behaves differently.
+     *
+     * A failure returns to the list rather than to an error state — the address is still on screen
+     * to correct, and the empty list is where the field lives.
+     */
+    suspend fun connectTo(address: String): Boolean {
+        val target = withContext(io) { sender.probeAddress(address) } ?: return false
+        // Remembered like a found one, so "escolher outra tela" comes back to a list holding it
+        // rather than to the empty result the search produced.
+        lastFound = (lastFound + target).distinctBy(CastTarget::address)
+        state = CastUiState.NeedsCode(target)
+        return true
+    }
+
     /** Back to the list, so a wrong choice does not need the sheet closed and reopened. */
     fun back() {
         state = CastUiState.Found(lastFound)
