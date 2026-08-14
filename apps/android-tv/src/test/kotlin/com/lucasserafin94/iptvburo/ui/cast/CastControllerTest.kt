@@ -6,6 +6,7 @@ import com.lucasserafin94.iptvburo.domain.model.ContentKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -19,14 +20,22 @@ class CastControllerTest {
     private class FakeSender(
         private val targets: List<CastTarget>,
         private val deliver: Boolean = true,
+        /** What a typed address resolves to, for the network-blocks-broadcast case. */
+        private val atAddress: Map<String, CastTarget> = emptyMap(),
     ) : CastTransport {
         var sent: CastMessage? = null
         var sentTo: CastTarget? = null
         var searches = 0
+        var probedAddresses = mutableListOf<String>()
 
         override fun discover(timeoutMillis: Int): List<CastTarget> {
             searches += 1
             return targets
+        }
+
+        override fun probeAddress(address: String, timeoutMillis: Int): CastTarget? {
+            probedAddresses += address
+            return atAddress[address]
         }
 
         override fun send(target: CastTarget, message: CastMessage): Boolean {
@@ -151,5 +160,48 @@ class CastControllerTest {
         control.send("1234", identity, "Duna", positionMillis = -5_000)
 
         assertEquals(0L, sender.sent?.positionMillis)
+    }
+
+    /**
+     * The way out of a network whose router drops the broadcast search.
+     *
+     * Found on a real device: both machines on the same wifi, both listening, and discovery
+     * returning nothing at all — a unicast probe to the same address answered immediately. Without
+     * this the feature is simply unavailable to that household.
+     */
+    @Test
+    fun `a typed address reaches a screen the search could not find`() = runTest {
+        val sender = FakeSender(targets = emptyList(), atAddress = mapOf(notebook.address to notebook))
+        val control = controller(sender)
+        control.search()
+
+        assertTrue((control.state as CastUiState.Found).targets.isEmpty())
+        assertTrue(control.connectTo(notebook.address))
+        assertEquals(notebook, (control.state as CastUiState.NeedsCode).target)
+    }
+
+    @Test
+    fun `an address nothing answers on leaves the sheet where it was`() = runTest {
+        val sender = FakeSender(targets = emptyList())
+        val control = controller(sender)
+        control.search()
+
+        assertFalse(control.connectTo("192.168.0.99"))
+        // Still the empty list, which is where the address field lives: the text is on screen to
+        // correct, and moving to an error state would take it away.
+        assertTrue((control.state as CastUiState.Found).targets.isEmpty())
+    }
+
+    @Test
+    fun `a screen reached by address is remembered like a found one`() = runTest {
+        val sender = FakeSender(targets = emptyList(), atAddress = mapOf(notebook.address to notebook))
+        val control = controller(sender)
+        control.search()
+        control.connectTo(notebook.address)
+
+        // "Escolher outra tela" must come back to a list holding it rather than to the empty
+        // result the search produced, which would look like it had been lost.
+        control.back()
+        assertEquals(listOf(notebook), (control.state as CastUiState.Found).targets)
     }
 }

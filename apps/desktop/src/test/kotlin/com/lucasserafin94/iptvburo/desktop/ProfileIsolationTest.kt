@@ -122,12 +122,24 @@ class ProfileIsolationTest {
             // switch having discarded anything.
             val built = state.dailyHomeStatus
             assertTrue(built is DailyHomeStatus.Loaded, "the home never loaded, so this proves nothing: $built")
+            val before = built.snapshot
 
             state.selectProfile(SECOND_PROFILE.id)
 
-            assertFalse(
-                state.dailyHomeStatus is DailyHomeStatus.Loaded,
-                "the previous profile's home survived the switch: ${state.dailyHomeStatus}",
+            // The snapshot must not be the one built for the previous viewer — identity, not
+            // status.
+            //
+            // The first version of this asserted that the status was no longer Loaded, and that was
+            // a race rather than a property: selectProfile discards the home *and starts building
+            // the new one*, so whether the status has settled back to Loaded by the time this line
+            // runs depends on how fast the machine is. It passed on Windows and failed on the CI
+            // runner, which is the worst way for a test to be wrong — it looked like a real
+            // regression in a release build. Discarding and rebuilding is what the app should do;
+            // what actually matters is that the object on screen is not the previous profile's.
+            val after = (state.dailyHomeStatus as? DailyHomeStatus.Loaded)?.snapshot
+            assertTrue(
+                after == null || after !== before,
+                "the previous profile's home survived the switch",
             )
         }
 
