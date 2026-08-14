@@ -3392,6 +3392,11 @@ class DesktopAppState(
     private fun startCastReceiver() {
         castPairingCode =
             castReceiver.start(existingCode = userStore.castPairingCode()) { message ->
+                // Logged on arrival, because everything after this point can decline silently and
+                // the user is left with "I pressed send and nothing happened". A message that gets
+                // here has already passed the pairing code, so the line separates "the phone never
+                // reached us" from "it did, and the title was not in this list".
+                println("[cast] recebido: ${message.identity.key}")
                 // Resolved through the same path a shared link takes: both name a title rather than
                 // a stream, and both have to find it in *this* machine's catalogue.
                 //
@@ -3437,9 +3442,16 @@ class DesktopAppState(
             ?.takeIf(String::isNotBlank)
             ?: "IPTV BURO"
 
+    /**
+     * Records a shared or cast title, to be resolved against this machine's catalogue.
+     *
+     * Only records it. Resolving is left to the effect in Main that watches [pendingShareLink],
+     * which used to mean the work happened twice: this function resolved on the caller's thread —
+     * for a cast, the socket thread — and the effect then woke on the state change and resolved the
+     * same link again, so one send produced two "not in your list" dialogs. One writer, one reader.
+     */
     fun submitShareLink(link: TitleShareLink) {
         pendingShareLink = link
-        resolvePendingShareLink()
     }
 
     fun clearShareLinkOutcome() {
@@ -3460,7 +3472,14 @@ class DesktopAppState(
     fun resolvePendingShareLink() {
         val link = pendingShareLink ?: return
         // Nothing to search yet. The link stays pending for the caller that runs after loading.
-        if (xtreamSummary == null) return
+        //
+        // Logged, because this is a silent hold rather than an answer: a title that arrives from a
+        // phone before the catalogue is ready simply waits here, and from the sofa that is
+        // indistinguishable from the send having failed.
+        if (xtreamSummary == null) {
+            println("[cast] catálogo ainda não carregado; ${link.identity.key} fica pendente")
+            return
+        }
 
         // Both kinds are searched rather than just the one the key names. The identity's kind comes
         // from how the *sender's* provider classified the title, and providers disagree — a
@@ -3473,9 +3492,11 @@ class DesktopAppState(
 
         pendingShareLink = null
         if (resolved == null) {
+            println("[cast] '${link.title}' não está nesta lista (${link.identity.key})")
             shareLinkOutcome = ShareLinkOutcome.NotInYourList(link.title)
             return
         }
+        println("[cast] abrindo '${resolved.name}'")
         destination = DesktopDestination.CATALOG
         favoritesOnly = false
         selectDailyItem(resolved)
