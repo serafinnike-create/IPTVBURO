@@ -85,10 +85,11 @@ class CastSender(private val context: Context) : CastTransport {
 
     private fun probe(timeoutMillis: Int): List<CastTarget> =
         runCatching {
-            // Forced to IPv4: an unqualified socket opens on the family the runtime prefers, which
-            // is IPv6, and an IPv6 socket cannot send an IPv4 broadcast at all — every send below
-            // would be refused and the scan would come back empty with nothing to show for it.
-            val ipv4Socket = DatagramChannel.open(StandardProtocolFamily.INET).socket()
+            // Forced to IPv4 where the runtime allows it to be said: an unqualified socket opens on
+            // the family the runtime prefers, which is IPv6, and an IPv6 socket cannot send an IPv4
+            // broadcast at all — every send below would be refused and the scan would come back
+            // empty with nothing to show for it. See Ipv4Sockets for the API-23 fallback.
+            val ipv4Socket = Ipv4Sockets.openSender()
             ipv4Socket.use { socket ->
                 socket.broadcast = true
                 socket.soTimeout = timeoutMillis
@@ -138,9 +139,8 @@ class CastSender(private val context: Context) : CastTransport {
         return try {
             runCatching { lock?.acquire() }
             runCatching {
-                DatagramChannel
-                    .open(StandardProtocolFamily.INET)
-                    .socket()
+                Ipv4Sockets
+                    .openSender()
                     .use { socket ->
                         socket.soTimeout = timeoutMillis
                         val probe = DISCOVERY_PROBE.toByteArray(Charsets.UTF_8)

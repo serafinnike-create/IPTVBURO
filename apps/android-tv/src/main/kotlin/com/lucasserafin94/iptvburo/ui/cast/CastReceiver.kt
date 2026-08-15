@@ -123,14 +123,9 @@ class CastReceiver(
             // reported while both devices sat on the same network with both apps open. Asking for
             // 0.0.0.0 is not enough either — a dual-stack socket maps that back onto the IPv6
             // wildcard — so the family is stated outright. Fixed first on the desktop receiver.
-            val udp =
-                DatagramChannel
-                    .open(StandardProtocolFamily.INET)
-                    .apply {
-                        setOption(StandardSocketOptions.SO_REUSEADDR, true)
-                        bind(InetSocketAddress(InetAddress.getByName("0.0.0.0"), DISCOVERY_PORT))
-                    }.socket()
-
+            // See Ipv4Sockets for why the family has to be stated and why there are two ways of
+            // doing it: the call that says "IPv4, really" needs API 24 and this app supports 23.
+            val udp = Ipv4Sockets.openListener(DISCOVERY_PORT)
             this.onMessage = onMessage
             pairingCode = code
             listeningPort = tcp.localPort
