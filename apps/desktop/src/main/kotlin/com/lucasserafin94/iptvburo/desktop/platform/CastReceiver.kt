@@ -68,6 +68,17 @@ class CastReceiver(
      */
     private val failuresByAddress = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
 
+    /**
+     * Wrong codes counted against [address] so far.
+     *
+     * Published for the reason [listeningPort] and [discoveryBindAddress] are: sending is
+     * fire-and-forget, so a test that writes twenty wrong codes and moves on is asserting against a
+     * count that may not have been reached yet. Reading the count directly makes the assertion
+     * independent of how fast the machine drains its queue, which is the difference between a test
+     * that fails on a loaded runner and one that means something.
+     */
+    fun failuresFor(address: String): Int = failuresByAddress[address]?.get() ?: 0
+
     /** The code the user reads off this screen and types into the sender. Null when stopped. */
     @Volatile
     var pairingCode: String? = null
@@ -394,6 +405,83 @@ class CastReceiver(
          */
         private const val MAX_FAILURE_DELAY_MILLIS = 5_000L
         private const val DISCOVERY_BUFFER_BYTES = 256
+
+        /**
+         * Asks one address directly, for a network where the broadcast search finds nothing.
+         *
+         * Many home routers drop broadcast between clients — "client isolation" — so [discover]
+         * returns an empty list while both machines sit on the same wifi with both apps listening.
+         * A unicast probe is not subject to that rule, so typing the address in reaches a screen the
+         * search could not. Verified on a real network: the broadcast went unanswered and the same
+         * probe sent straight to the phone's address replied at once.
+         *
+         * The reply carries the name and the ephemeral TCP port exactly as a found one does, so
+         * nothing downstream has to know a target arrived this way. Null when nothing answers.
+         */
+        fun probeAddress(address: String, timeoutMillis: Int = 1_500): CastTarget? {
+            val clean = address.trim()
+            if (!isPlausibleHost(clean)) return null
+            return runCatching {
+                DatagramChannel
+                    .open(StandardProtocolFamily.INET)
+                    .socket()
+                    .use { socket ->
+                        socket.soTimeout = timeoutMillis
+                        val probe = DISCOVERY_PROBE.toByteArray(Charsets.UTF_8)
+                        socket.send(
+                            DatagramPacket(
+                                probe,
+                                probe.size,
+                                InetSocketAddress(InetAddress.getByName(clean), DISCOVERY_PORT),
+                            ),
+                        )
+                        val buffer = ByteArray(DISCOVERY_BUFFER_BYTES)
+                        val packet = DatagramPacket(buffer, buffer.size)
+                        socket.receive(packet)
+                        // This machine's own reply is refused here too: typing your own address
+                        // would otherwise pair the app with itself.
+                        if (packet.address.hostAddress in localAddresses()) return@use null
+                        val parts = String(packet.data, 0, packet.length, Charsets.UTF_8).split('\u001F')
+                        if (parts.size != 3 || parts[0] != DISCOVERY_REPLY) return@use null
+                        val port = parts[1].toIntOrNull()?.takeIf { it in 1..65_535 } ?: return@use null
+                        val name = displayNameFrom(parts[2], packet.address.hostAddress)
+                        // The packet's own source, never the address that was typed: a responder
+                        // must only ever be able to offer itself.
+                        CastTarget(packet.address.hostAddress, port, name)
+                    }
+            }.getOrNull()
+        }
+
+        /**
+         * Whether a typed address is worth sending a packet to.
+         *
+         * Deliberately narrow: an IPv4 address on a private range, which is what a screen on the
+         * same network has. This is a field the user types and a probe is an outbound packet to
+         * whatever they typed — accepting a hostname would let a typo send it to a name that
+         * resolves on the internet, and accepting a public address would make this a way to poke an
+         * arbitrary host from inside their network.
+         *
+         * Checked without touching DNS, so a wrong entry is refused instantly rather than after a
+         * lookup times out, and so the rule can be asserted in a plain test.
+         */
+        internal fun isPlausibleHost(candidate: String): Boolean {
+            val parts = candidate.split('.')
+            if (parts.size != 4) return false
+            val octets = parts.map { part -> part.toIntOrNull() ?: return false }
+            if (octets.any { octet -> octet !in 0..255 }) return false
+            // Leading zeros are rejected rather than normalised: "192.168.01.1" is octal to some
+            // stacks and decimal to others, so the two ends could disagree about which machine.
+            if (parts.any { part -> part.length > 1 && part.startsWith("0") }) return false
+            val (first, second) = octets
+            return when {
+                first == 10 -> true
+                first == 172 && second in 16..31 -> true
+                first == 192 && second == 168 -> true
+                // Two machines on a cable with no router: no DHCP, so this range is all they have.
+                first == 169 && second == 254 -> true
+                else -> false
+            }
+        }
 
         /** Finds receivers on this network, for the sender's device list. */
         fun discover(timeoutMillis: Int = 1_200): List<CastTarget> =

@@ -65,9 +65,14 @@ class CastReceiverTest {
         val code = assertNotNull(receiver.start { delivered.countDown() })
         val wrong = if (code == "0000") "1111" else "0000"
 
-        repeat(CastReceiver.MAX_FAILURES_PER_ADDRESS) {
-            runCatching { send(listeningPort(), CastMessage(WRONG_IDENTITY, "Tentativa", 0, wrong).encode()) }
-        }
+        // Waited for rather than merely sent.
+        //
+        // Sending is fire-and-forget: the socket closes as soon as the bytes are written, long
+        // before the receiver has read the line and counted the failure. Firing twenty and moving
+        // straight on assumed the count had reached the limit, and on a loaded CI runner it had
+        // not — the correct code then arrived while attempts were still free and was accepted,
+        // failing a test about a lockout that was working exactly as intended.
+        awaitLockout(wrong)
 
         // The budget is spent, so even the owner's own code gets nowhere from this address until
         // the receiver is restarted. That is the cost of the lockout, and it is deliberate: the
@@ -79,6 +84,25 @@ class CastReceiverTest {
             delivered.await(1_500, TimeUnit.MILLISECONDS),
             "a locked-out address was still able to hand over a title",
         )
+    }
+
+    /**
+     * Spends this address's budget and does not return until the receiver has actually refused one.
+     *
+     * A refused connection is closed before the line is read, so writing to it fails — that failure
+     * is the observable signal that the lockout has engaged, and waiting for it makes the test
+     * independent of how fast the machine drains the queue.
+     */
+    private fun awaitLockout(wrongCode: String) {
+        val payload = CastMessage(WRONG_IDENTITY, "Tentativa", 0, wrongCode).encode()
+        val loopback = InetAddress.getLoopbackAddress().hostAddress
+        val deadline = System.currentTimeMillis() + LOCKOUT_TIMEOUT_MILLIS
+        while (System.currentTimeMillis() < deadline) {
+            if (receiver.failuresFor(loopback) >= CastReceiver.MAX_FAILURES_PER_ADDRESS) return
+            runCatching { send(listeningPort(), payload) }
+            Thread.sleep(20)
+        }
+        error("the receiver never locked this address out")
     }
 
     /** Getting it right clears the count, so a few mistypes do not cost the owner their screen. */
@@ -238,12 +262,30 @@ class CastReceiverTest {
     }
 
     private fun send(port: Int, payload: String) {
-        Socket().use { socket ->
-            socket.connect(java.net.InetSocketAddress(InetAddress.getLoopbackAddress(), port), 2_000)
-            socket.getOutputStream().use { output ->
-                output.write("$payload\n".toByteArray(Charsets.UTF_8))
-                output.flush()
-            }
+        // Retried on a refused connection, which is not a failure of the receiver.
+        //
+        // The listen backlog is two — deliberately small, since one message per connection needs no
+        // queue — so a burst of connections can be refused by the OS before the accept loop drains
+        // them. That is invisible on a quiet laptop and reliable on a loaded CI runner, where this
+        // surfaced as a ConnectException in a test about the receiver surviving junk. A real sender
+        // would try again; so does this.
+        var attempt = 0
+        while (true) {
+            val sent =
+                runCatching {
+                    Socket().use { socket ->
+                        socket.connect(
+                            java.net.InetSocketAddress(InetAddress.getLoopbackAddress(), port),
+                            2_000,
+                        )
+                        socket.getOutputStream().use { output ->
+                            output.write("$payload\n".toByteArray(Charsets.UTF_8))
+                            output.flush()
+                        }
+                    }
+                }.isSuccess
+            if (sent || ++attempt >= SEND_ATTEMPTS) return
+            Thread.sleep(SEND_RETRY_MILLIS)
         }
     }
 
@@ -452,5 +494,18 @@ class CastReceiverTest {
 
         /** Any well-formed identity; these messages are rejected on the code, never read further. */
         val WRONG_IDENTITY: ContentIdentity = ContentIdentity.of(ContentKind.MOVIE, "Tentativa", 2024)
+
+        /**
+         * How long to keep spending wrong codes before giving up on the lockout engaging.
+         *
+         * Generous, because the brake deliberately slows each attempt: twenty failures with a
+         * growing penalty take real time, and a tight bound here would fail on a loaded runner for
+         * the very reason the brake exists.
+         */
+        const val LOCKOUT_TIMEOUT_MILLIS = 60_000L
+
+        /** Tries per message, so a backlog refusal on a busy runner is not read as a failure. */
+        const val SEND_ATTEMPTS = 5
+        const val SEND_RETRY_MILLIS = 50L
     }
 }
