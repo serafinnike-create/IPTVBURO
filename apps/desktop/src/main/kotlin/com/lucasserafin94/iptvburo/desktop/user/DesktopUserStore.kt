@@ -5,6 +5,7 @@ import java.util.Base64
 import java.util.UUID
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
+import com.lucasserafin94.iptvburo.domain.model.SeriesWatermark
 import java.util.prefs.Preferences
 
 /**
@@ -806,6 +807,50 @@ class DesktopUserStore(
     }
 
     private fun notificationsKey(profileId: String): String = "notifications.$profileId"
+
+    /**
+     * What each followed series looked like when it was last counted.
+     *
+     * Providers do not say what changed, so the only way to answer "is there a new episode" is to
+     * remember what was there before. Stored as `identity|season|episode|count` records, per
+     * profile, because following a series is one person's business.
+     */
+    fun seriesWatermarks(profileId: String?): Map<String, SeriesWatermark> =
+        profileId
+            ?.let { preferences.get(watermarksKey(it), "") }
+            ?.split(RECORD_SEPARATOR)
+            ?.filter(String::isNotBlank)
+            ?.mapNotNull(::decodeWatermark)
+            ?.associateBy { mark -> mark.identityKey }
+            .orEmpty()
+
+    fun setSeriesWatermarks(profileId: String, marks: Collection<SeriesWatermark>) =
+        preferences.put(
+            watermarksKey(profileId),
+            marks.joinToString(RECORD_SEPARATOR.toString()) { mark ->
+                listOf(
+                    encode(mark.identityKey),
+                    mark.latestSeason.toString(),
+                    mark.latestEpisode.toString(),
+                    mark.episodeCount.toString(),
+                ).joinToString(FIELD_SEPARATOR.toString())
+            },
+        )
+
+    private fun decodeWatermark(raw: String): SeriesWatermark? {
+        val parts = raw.split(FIELD_SEPARATOR)
+        if (parts.size < 4) return null
+        val key =
+            runCatching { decode(parts[0]) }.getOrNull()?.takeIf(String::isNotBlank) ?: return null
+        return SeriesWatermark(
+            identityKey = key,
+            latestSeason = parts[1].toIntOrNull() ?: return null,
+            latestEpisode = parts[2].toIntOrNull() ?: return null,
+            episodeCount = parts[3].toIntOrNull() ?: return null,
+        )
+    }
+
+    private fun watermarksKey(profileId: String): String = "series-watermarks.$profileId"
 
     /**
      * The hour of day the viewer wants their reminder digest, 0–23.

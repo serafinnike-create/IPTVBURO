@@ -68,6 +68,8 @@ import com.lucasserafin94.iptvburo.domain.model.AppNotification
 import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
 import com.lucasserafin94.iptvburo.domain.model.NotificationKind
 import com.lucasserafin94.iptvburo.domain.model.Reminder
+import com.lucasserafin94.iptvburo.domain.model.SeriesChange
+import com.lucasserafin94.iptvburo.domain.model.SeriesWatchPolicy
 import com.lucasserafin94.iptvburo.domain.model.ReminderDigest
 import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
 import com.lucasserafin94.iptvburo.domain.model.Channel
@@ -1257,6 +1259,112 @@ class DesktopAppState(
         persistNotifications()
     }
 
+    /**
+     * Looks for new episodes and seasons of the series this profile has favourited.
+     *
+     * Only favourites, and that is the permission the whole feature rests on: announcing every
+     * series a provider adds an episode to would be a stream of noise about programmes nobody is
+     * watching. Marking a series as a favourite is the viewer saying "I am following this".
+     *
+     * Each series costs one request, because the episode list is not part of the catalogue — so
+     * this runs off the main thread, at most [FOLLOWED_SERIES_LIMIT] series at a time, and only
+     * when the screen asks. A household with forty favourite series would otherwise spend forty
+     * round trips before the app had drawn anything.
+     */
+    fun checkFollowedSeries() {
+        val profileId = activeProfileId ?: return
+        if (xtreamSummary == null) return
+        if (followedSeriesChecking) return
+        followedSeriesChecking = true
+
+        streamingScope.launch {
+            runCatching { withContext(Dispatchers.IO) { checkFollowedSeriesBlocking(profileId) } }
+            followedSeriesChecking = false
+        }
+    }
+
+    private var followedSeriesChecking = false
+
+    private fun checkFollowedSeriesBlocking(profileId: String) {
+        val marks = userStore.seriesWatermarks(profileId).toMutableMap()
+        var changed = false
+
+        // Never-checked series first, so a newly favourited one gets its mark on the next pass
+        // rather than waiting behind twenty that already have theirs.
+        //
+        // This is priority, not rotation: somebody following more than the ceiling still has the
+        // overflow checked only once the earlier ones stop being new, which for a stable list means
+        // the same set each time. Worth fixing when anyone actually follows more than twenty
+        // series; not worth a scheduler before then.
+        val ordered =
+            favoriteKeys
+                .sortedBy { key -> if (marks.containsKey(key)) 1 else 0 }
+                .take(FOLLOWED_SERIES_LIMIT)
+
+        ordered.forEach { key ->
+            val series = xtreamRepository.itemByContentKey(XtreamContentType.SERIES, key) ?: return@forEach
+            // One request per series, and a failure is skipped rather than fatal: a provider that
+            // refuses one series must not stop the rest from being checked.
+            val details = runCatching { xtreamRepository.seriesDetails(series.providerId) }.getOrNull()
+                ?: return@forEach
+            if (details.episodes.isEmpty()) return@forEach
+
+            val seasons = details.episodes.map { episode -> episode.seasonNumber }
+            val latestSeason = seasons.maxOrNull() ?: return@forEach
+            val episodesInLatest =
+                details.episodes
+                    .filter { episode -> episode.seasonNumber == latestSeason }
+                    .mapNotNull { episode -> episode.episodeNumber }
+
+            val change =
+                SeriesWatchPolicy.changeSince(
+                    previous = marks[key],
+                    seasons = seasons,
+                    episodesInLatestSeason = episodesInLatest,
+                    totalEpisodes = details.episodes.size,
+                )
+
+            val text = DesktopStrings.of(language).savedForLater
+            val title = series.name.editorialTitle()
+            when (change) {
+                is SeriesChange.NewSeason ->
+                    postNotification(
+                        AppNotification(
+                            id = NotificationCentre.seasonId(key, change.season),
+                            kind = NotificationKind.NEW_SEASON,
+                            title = title,
+                            body = text.newSeasonBody.format(change.season),
+                            createdAt = System.currentTimeMillis(),
+                        ),
+                    )
+
+                is SeriesChange.NewEpisode ->
+                    postNotification(
+                        AppNotification(
+                            id = NotificationCentre.episodeId(key, change.season, change.episode),
+                            kind = NotificationKind.NEW_EPISODE,
+                            title = title,
+                            body = text.newEpisodeBody.format(change.season, change.episode),
+                            createdAt = System.currentTimeMillis(),
+                        ),
+                    )
+
+                SeriesChange.None -> Unit
+            }
+
+            // The mark moves whatever the answer was, including "nothing new": storing it only on a
+            // change would re-announce the same episode on every launch after a shrink.
+            val next =
+                SeriesWatchPolicy.watermarkFor(key, seasons, episodesInLatest, details.episodes.size)
+            if (marks[key] != next) {
+                marks[key] = next
+                changed = true
+            }
+        }
+
+        if (changed) userStore.setSeriesWatermarks(profileId, marks.values)
+    }
+
     /** Marks today's notice as seen, so it does not return until tomorrow's slot. */
     fun dismissReminderNotice() {
         userStore.setReminderLastShownOn(LocalDate.now().toString())
@@ -1278,6 +1386,10 @@ class DesktopAppState(
         // cold launch it has not loaded yet. By the time someone opens this screen it has.
         healStoredReminders()
         refreshReminderNotice()
+        // Here rather than at startup: it costs one request per followed series, and spending that
+        // before the app has drawn anything would make every launch slower for news that can just
+        // as well arrive a moment later.
+        checkFollowedSeries()
     }
 
     /**
@@ -5579,6 +5691,15 @@ data class ExpandedService(
     val titles: List<ExternalTitle>,
     val complete: Boolean,
 )
+
+/**
+ * How many followed series are checked for new episodes in one pass.
+ *
+ * Each costs a request, so this is a ceiling on what opening the app is allowed to spend. Twenty is
+ * more series than most people follow at once, and the ones past it are checked on a later pass
+ * rather than never — the list is stable, so the same twenty are not re-checked for ever.
+ */
+private const val FOLLOWED_SERIES_LIMIT = 20
 
 enum class DesktopDestination {
     HOME,

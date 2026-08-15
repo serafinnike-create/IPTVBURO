@@ -570,6 +570,8 @@ data class DesktopStrings(
                         reminderOpen = "Abrir",
                         reminderRemove = "Quitar",
                         reminderNotInLibrary = "Aún no está en tu lista",
+                        newEpisodeBody = "Nuevo episodio: T%1${'$'}d E%2${'$'}d",
+                        newSeasonBody = "Nueva temporada: T%1${'$'}d",
                     ),
                 shareStrings =
                     ShareStrings(
@@ -1117,6 +1119,8 @@ data class DesktopStrings(
                         reminderOpen = "Abrir",
                         reminderRemove = "Remover",
                         reminderNotInLibrary = "Ainda não está na sua lista",
+                        newEpisodeBody = "Novo episódio: T%1${'$'}d E%2${'$'}d",
+                        newSeasonBody = "Nova temporada: T%1${'$'}d",
                     ),
                 shareStrings =
                     ShareStrings(
@@ -1664,6 +1668,8 @@ data class DesktopStrings(
                         reminderOpen = "Open",
                         reminderRemove = "Remove",
                         reminderNotInLibrary = "Not in your list yet",
+                        newEpisodeBody = "New episode: S%1${'$'}d E%2${'$'}d",
+                        newSeasonBody = "New season: S%1${'$'}d",
                     ),
                 shareStrings =
                     ShareStrings(
@@ -2210,6 +2216,8 @@ data class DesktopStrings(
                         reminderOpen = "Öffnen",
                         reminderRemove = "Entfernen",
                         reminderNotInLibrary = "Noch nicht in Ihrer Liste",
+                        newEpisodeBody = "Neue Folge: S%1${'$'}d E%2${'$'}d",
+                        newSeasonBody = "Neue Staffel: S%1${'$'}d",
                     ),
                 shareStrings =
                     ShareStrings(
@@ -2761,6 +2769,8 @@ data class DesktopStrings(
                         reminderOpen = "Apri",
                         reminderRemove = "Rimuovi",
                         reminderNotInLibrary = "Non è ancora nel tuo elenco",
+                        newEpisodeBody = "Nuovo episodio: S%1${'$'}d E%2${'$'}d",
+                        newSeasonBody = "Nuova stagione: S%1${'$'}d",
                     ),
                 shareStrings =
                     ShareStrings(
@@ -3443,6 +3453,10 @@ data class SavedForLaterStrings(
      * fail to respond and read as broken.
      */
     val reminderNotInLibrary: String,
+    /** Body of a new-episode notice. Takes the season and the episode number. */
+    val newEpisodeBody: String,
+    /** Body of a new-season notice. Takes the season number. */
+    val newSeasonBody: String,
     /** The switch that turns the in-app notice on and off. */
     val reminderAnnounce: String,
     /** Labels the hour picker. */
