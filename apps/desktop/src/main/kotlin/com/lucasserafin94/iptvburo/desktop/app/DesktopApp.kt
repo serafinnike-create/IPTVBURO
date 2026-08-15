@@ -132,6 +132,7 @@ import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.ContentKind
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
 import com.lucasserafin94.iptvburo.domain.model.OfferType
+import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
 import com.lucasserafin94.iptvburo.domain.model.ProviderDeepLinks
 import com.lucasserafin94.iptvburo.domain.model.StreamingOffer
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
@@ -391,6 +392,10 @@ fun DesktopApp(
                             streamingRegion = appState.streamingRegion,
                             onSelectRegion = appState::changeStreamingRegion,
                             uses24HourClock = appState.uses24HourClock,
+                            notifications = appState.notifications,
+                            onNotificationsOpened = appState::markNotificationsRead,
+                            onDismissNotification = appState::removeNotification,
+                            onClearNotifications = appState::clearNotifications,
                             licenseStatus = appState.licenseStatus,
                             onOpenPurchase = { showLicenseDetails = true },
                             onUpdate = ::checkAndDownloadUpdate,
@@ -455,6 +460,16 @@ fun DesktopApp(
                                 // as it having somewhere to watch — an upcoming film has nowhere by
                                 // definition, and inferring one from the other kept its page shut.
                                 titleOpen = appState.selectedStreamingTitle != null,
+                                // The screen knows the provider; the state needs the shelf, because
+                                // only that carries the TMDb id the wider list is fetched by.
+                                onSeeMore = { provider ->
+                                    appState.streamingShelves
+                                        .firstOrNull { shelf -> shelf.provider.id == provider.id }
+                                        ?.let(appState::openServiceCatalogue)
+                                },
+                                expandedService = appState.expandedService,
+                                expandedLoading = appState.expandedServiceLoading,
+                                onCloseExpanded = appState::closeServiceCatalogue,
                                 onOpenTrailerExternally = { id -> appState.openPublicTrailer(id) },
                                 // An upcoming film has no catalogue row, so it is named the only
                                 // way it can be: by what it is. The same identity the film will
@@ -1475,6 +1490,11 @@ private fun TopBar(
     streamingRegion: String,
     onSelectRegion: (String) -> Unit,
     uses24HourClock: Boolean,
+    /** What the bell holds for the profile that is watching. */
+    notifications: NotificationCentre,
+    onNotificationsOpened: () -> Unit,
+    onDismissNotification: (String) -> Unit,
+    onClearNotifications: () -> Unit,
     /** Null while the first check is still in flight, which is when there is nothing to say. */
     licenseStatus: LicenseStatus?,
     onOpenPurchase: () -> Unit,
@@ -1587,6 +1607,16 @@ private fun TopBar(
                     avatarIndex = activeProfile?.avatarIndex ?: 0,
                     photo = activeProfilePhoto,
                     onClick = onChangeProfile,
+                )
+                Spacer(Modifier.width(BuroSpacing.Xs))
+                // To the right of the profile, where a notice about *this* viewer belongs: the bell
+                // holds one profile's news, so it reads as part of who is watching rather than as a
+                // property of the window.
+                NotificationBell(
+                    centre = notifications,
+                    onOpened = onNotificationsOpened,
+                    onDismiss = onDismissNotification,
+                    onClearAll = onClearNotifications,
                 )
             }
             // No gear here any more. Settings moved into the sidebar as a named row, and this

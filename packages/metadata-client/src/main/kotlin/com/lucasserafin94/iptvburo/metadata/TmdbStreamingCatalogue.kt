@@ -72,6 +72,36 @@ class TmdbStreamingCatalogue(
         }
     }
 
+    /**
+     * Everything one service carries, for the "Ver mais" page behind a shelf.
+     *
+     * A shelf shows [titlesPerService] titles because that is what fits on a rail, and reaching its
+     * end is where the question "what else is on Netflix?" gets asked. This answers it by walking
+     * the pages after the first rather than by widening every shelf, which would make the whole
+     * screen slower to fill for a question most visits never ask.
+     *
+     * Stops early on an empty page: TMDb answers a page past the end with no results, and there is
+     * no total to compare against without asking for it separately.
+     */
+    fun allTitlesOnService(
+        tmdbProviderId: Int,
+        kind: TmdbDiscoverKind = TmdbDiscoverKind.MOVIES,
+        maxTitles: Int = DEFAULT_EXPANDED_TITLES,
+    ): List<ExternalTitle> {
+        val collected = mutableListOf<TmdbDiscoveredTitle>()
+        var page = 1
+        while (collected.size < maxTitles && page <= MAX_EXPANDED_PAGES) {
+            val batch = client.titlesOnProvider(tmdbProviderId, region, PAGE_SIZE, kind, page)
+            if (batch.isEmpty()) break
+            collected += batch
+            page += 1
+        }
+        return collected
+            .distinctBy { discovered -> discovered.id }
+            .take(maxTitles)
+            .map { discovered -> discovered.toExternalTitle() }
+    }
+
     private fun buildShelves(kind: TmdbDiscoverKind): List<TmdbServiceShelf> {
         // "Coming soon" cannot be grouped by service, because the answer is the set of films no
         // service carries yet. Handled separately rather than forced into the per-provider shape.
@@ -188,6 +218,21 @@ class TmdbStreamingCatalogue(
 
         const val DEFAULT_TITLES_PER_SERVICE: Int = 20
 
+        /** One TMDb discover page. Asking for less would waste the rest of a page already fetched. */
+        const val PAGE_SIZE: Int = 20
+
+        /**
+         * How many titles the expanded view of one service holds.
+         *
+         * A grid of a hundred is a real catalogue to browse and still one screenful of requests —
+         * five pages. Beyond this the page becomes a scroll nobody finishes, and each extra page is
+         * another round trip the viewer waits through.
+         */
+        const val DEFAULT_EXPANDED_TITLES: Int = 100
+
+        /** Bounds the walk, so an endpoint that never returns an empty page cannot loop for ever. */
+        const val MAX_EXPANDED_PAGES: Int = 8
+
         /**
          * How many recent releases to test for availability when building "coming soon".
          *
@@ -233,6 +278,7 @@ private fun TmdbDiscoveredTitle.toExternalTitle(): ExternalTitle =
         title = title,
         kind = if (isSeries) ExternalTitleKind.SERIES else ExternalTitleKind.MOVIE,
         year = year,
+        releaseDate = releaseDate,
         posterUrl = posterUrl,
         isDemo = false,
     )

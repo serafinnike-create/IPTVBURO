@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.lucasserafin94.iptvburo.desktop.ExpandedService
 import com.lucasserafin94.iptvburo.desktop.platform.openStreamingOfferExternally
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroMark
@@ -64,6 +65,7 @@ import com.lucasserafin94.iptvburo.domain.model.OfferRanking
 import com.lucasserafin94.iptvburo.domain.model.OfferType
 import com.lucasserafin94.iptvburo.metadata.WATCH_PROVIDER_ATTRIBUTION
 import com.lucasserafin94.iptvburo.domain.model.ProviderShelf
+import com.lucasserafin94.iptvburo.domain.model.StreamingProvider
 import com.lucasserafin94.iptvburo.domain.model.RankedOffer
 import com.lucasserafin94.iptvburo.domain.model.StreamingDiscoveryCapability
 import com.lucasserafin94.iptvburo.domain.model.streamingShelves
@@ -152,6 +154,17 @@ fun SubscriptionsWorkspace(
      * to the shelves, and its release date and reminder button could not be reached at all.
      */
     titleOpen: Boolean = !ranking.isEmpty,
+    /**
+     * Opens one service's full catalogue, from the card that ends its shelf.
+     *
+     * Null leaves the shelves as they were, which is what a test gets by default and what the
+     * Em breve tab gets deliberately.
+     */
+    onSeeMore: ((StreamingProvider) -> Unit)? = null,
+    /** The service whose full catalogue is open, or null while the shelves are showing. */
+    expandedService: ExpandedService? = null,
+    expandedLoading: Boolean = false,
+    onCloseExpanded: () -> Unit = {},
 ) {
     val text = strings
 
@@ -169,7 +182,9 @@ fun SubscriptionsWorkspace(
         SubscriptionsHeader(
             text = text,
             capability = capability,
-            showingOffers = titleOpen,
+            // The expanded catalogue carries its own heading and its own way back, so the shelf
+            // filters above it would be two sets of controls arguing about where the user is.
+            showingOffers = titleOpen || expandedService != null,
             kind = kind,
             onSelectKind = onSelectKind,
             onBack = onBackToShelves,
@@ -179,11 +194,32 @@ fun SubscriptionsWorkspace(
         // height, so a scrollable one lays its whole content out past the bottom of the window and
         // never becomes scrollable at all. This screen has shipped that way before.
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (!titleOpen) {
+            // Order matters, and getting it wrong is what shipped a grid whose posters could not be
+            // opened: an expanded service stays open behind a chosen title — that is how "back"
+            // returns to it — so testing the grid first kept it on screen over the very page the
+            // click had just asked for. A title, when one is open, wins.
+            val expanded = expandedService?.takeIf { !titleOpen }
+            if (expanded != null) {
+                ServiceCatalogueGrid(
+                    service = expanded,
+                    loading = expandedLoading,
+                    // Wrapped with no offers on purpose: the caller looks the title up and fetches
+                    // where it can be watched, exactly as choosing from a shelf does. Handing it a
+                    // pre-built empty ranking would open a page whose availability panel is blank
+                    // and never fills, which is what this screen did when it first shipped.
+                    onSelectTitle = { title ->
+                        onSelectTitle(ExternalTitleDetails(title = title, offers = emptyList()))
+                    },
+                    onBack = onCloseExpanded,
+                )
+            } else if (!titleOpen) {
                 ProviderShelves(
                     shelves = shelves,
                     showDemoBadge = capability.requiresDemoLabel,
                     onSelectTitle = onSelectTitle,
+                    // Not offered on Em breve: those films belong to no service yet, so there is no
+                    // fuller catalogue behind them to open.
+                    onSeeMore = onSeeMore?.takeIf { kind != TmdbDiscoverKind.UPCOMING },
                     emptyMessage = text.subscriptionsNoShelves,
                     loadFailed = loadFailed,
                     failureMessage =
@@ -347,6 +383,8 @@ private fun ProviderShelves(
     failureMessage: String,
     retryLabel: String,
     onRetry: () -> Unit,
+    /** Opens one service's full catalogue. Null while there is no wider list to open. */
+    onSeeMore: ((StreamingProvider) -> Unit)? = null,
 ) {
     if (shelves.isEmpty()) {
         if (loadFailed) {
@@ -379,6 +417,9 @@ private fun ProviderShelves(
                     shelf = shelf,
                     showDemoBadge = showDemoBadge,
                     onSelectTitle = onSelectTitle,
+                    // Null where there is nothing wider to open. The caller decides: "Em breve" is
+                    // not a service, so it has no fuller catalogue and gets no card.
+                    onSeeMore = onSeeMore?.let { open -> { open(shelf.provider) } },
                 )
             }
         }

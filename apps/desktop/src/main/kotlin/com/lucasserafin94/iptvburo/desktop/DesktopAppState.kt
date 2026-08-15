@@ -46,6 +46,7 @@ import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
 import com.lucasserafin94.iptvburo.desktop.user.StoredParentalLock
+import com.lucasserafin94.iptvburo.desktop.user.StoredNotification
 import com.lucasserafin94.iptvburo.desktop.user.StoredReminder
 import com.lucasserafin94.iptvburo.desktop.user.ListeningHistoryStore
 import com.lucasserafin94.iptvburo.desktop.user.MusicPlayCountStore
@@ -63,6 +64,9 @@ import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.data.migrateFavoriteKeys
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
+import com.lucasserafin94.iptvburo.domain.model.AppNotification
+import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
+import com.lucasserafin94.iptvburo.domain.model.NotificationKind
 import com.lucasserafin94.iptvburo.domain.model.Reminder
 import com.lucasserafin94.iptvburo.domain.model.ReminderDigest
 import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
@@ -108,6 +112,7 @@ import com.lucasserafin94.iptvburo.domain.model.OfferRanking
 import com.lucasserafin94.iptvburo.domain.model.SeasonalCollection
 import com.lucasserafin94.iptvburo.domain.model.SeasonalCollections
 import com.lucasserafin94.iptvburo.domain.model.StreamingDiscoveryCapability
+import com.lucasserafin94.iptvburo.domain.model.StreamingProvider
 import com.lucasserafin94.iptvburo.domain.model.StreamingDiscoveryProvider
 import com.lucasserafin94.iptvburo.domain.model.UserStreamingPreference
 import com.lucasserafin94.iptvburo.metadata.TmdbServiceShelf
@@ -582,6 +587,9 @@ class DesktopAppState(
         // Alongside favourites: a reminder belongs to whoever asked for it, so the new profile must
         // not inherit the previous one's marked titles.
         reminders = userStore.remindersForProfile(activeProfileId)
+        // The bell belongs to whoever it is announcing to: one person's news must not appear under
+        // another's name, and a Kids profile must not inherit an adult's.
+        notifications = loadNotifications(activeProfileId)
         reloadCatalogLayouts()
         xtreamCategories = visibleXtreamCategories(xtreamContentType)
         if (selectedXtreamCategoryId !in xtreamCategories.map(XtreamCategory::providerId)) {
@@ -1157,6 +1165,96 @@ class DesktopAppState(
                 zone = zone,
             )
         reminderNotice = digest as? ReminderDigest.Daily
+        // Also posted to the bell, so it survives being dismissed on the Lembretes screen and can
+        // be found again later. Keyed on the day, so a rebuild adds nothing and the badge does not
+        // come back for news the viewer has already read.
+        (digest as? ReminderDigest.Daily)?.let { daily ->
+            // Worded in the viewer's language at the moment it is posted, and kept as text. The
+            // alternative — storing the count and formatting it when drawn — would re-word old
+            // news in a language the viewer has since switched to, which is worse: the notice is a
+            // record of what was said, not a template to re-render.
+            val text = DesktopStrings.of(language).savedForLater
+            postNotification(
+                AppNotification(
+                    id = NotificationCentre.reminderDigestId(today.toString()),
+                    kind = NotificationKind.REMINDER,
+                    title = text.remindersTitle,
+                    body = text.reminderNoticeBody.format(daily.total),
+                    createdAt = now.toEpochMilli(),
+                ),
+            )
+        }
+    }
+
+    /**
+     * The bell beside the profile: what is waiting, and how much of it is unread.
+     *
+     * Loaded per profile and written back on every change. The alternative — holding notices only
+     * in memory — would mean closing the app was the same as dismissing everything, and a reminder
+     * that vanishes when you close the window is not a reminder.
+     */
+    var notifications by mutableStateOf(loadNotifications(initialUserSnapshot.activeProfileId))
+        private set
+
+    private fun loadNotifications(profileId: String?): NotificationCentre =
+        NotificationCentre(
+            userStore.notificationsForProfile(profileId).map { stored ->
+                AppNotification(
+                    id = stored.id,
+                    // An unrecognised kind becomes REMINDER rather than throwing: a record written
+                    // by a newer build must not stop this one from reading the rest of the list.
+                    kind =
+                        runCatching { NotificationKind.valueOf(stored.kind) }
+                            .getOrDefault(NotificationKind.REMINDER),
+                    title = stored.title,
+                    body = stored.body,
+                    createdAt = stored.createdAt,
+                    read = stored.read,
+                )
+            },
+        )
+
+    private fun persistNotifications() {
+        val profileId = activeProfileId ?: return
+        userStore.setNotifications(
+            profileId,
+            notifications.notifications.map { notification ->
+                StoredNotification(
+                    id = notification.id,
+                    kind = notification.kind.name,
+                    read = notification.read,
+                    createdAt = notification.createdAt,
+                    title = notification.title,
+                    body = notification.body,
+                )
+            },
+        )
+    }
+
+    /** Adds a notice, unless the bell already holds one with the same id. */
+    fun postNotification(notification: AppNotification) {
+        val before = notifications
+        notifications = notifications.add(notification).trimmed()
+        // Only written when something actually changed: a rebuilt digest that adds nothing should
+        // not rewrite the file on every launch.
+        if (notifications != before) persistNotifications()
+    }
+
+    fun markNotificationsRead() {
+        if (notifications.unreadCount == 0) return
+        notifications = notifications.markAllRead()
+        persistNotifications()
+    }
+
+    fun removeNotification(id: String) {
+        notifications = notifications.remove(id)
+        persistNotifications()
+    }
+
+    fun clearNotifications() {
+        if (notifications.notifications.isEmpty()) return
+        notifications = notifications.clear()
+        persistNotifications()
     }
 
     /** Marks today's notice as seen, so it does not return until tomorrow's slot. */
@@ -1960,6 +2058,71 @@ class DesktopAppState(
 
     var streamingLoading by mutableStateOf(false)
         private set
+
+    /**
+     * The service whose full catalogue is open, or null while the shelves are showing.
+     *
+     * A shelf holds twenty titles because that is what fits on a rail, and reaching its end is
+     * exactly where somebody wonders what else the service carries. This is the answer to that: one
+     * service, a gridful of titles, reached from the end of its own shelf.
+     */
+    var expandedService by mutableStateOf<ExpandedService?>(null)
+        private set
+
+    var expandedServiceLoading by mutableStateOf(false)
+        private set
+
+    /**
+     * Opens the full catalogue for one service.
+     *
+     * The shelf's own titles are shown at once and replaced when the wider list arrives, so the
+     * grid is never empty while the request runs — the viewer has just been looking at those very
+     * posters, and blanking them to fetch more of the same reads as the button having lost them.
+     */
+    fun openServiceCatalogue(shelf: TmdbServiceShelf) {
+        val providerId = shelf.tmdbProviderId
+        val catalogue = streamingCatalogue
+        expandedService =
+            ExpandedService(
+                provider = shelf.provider,
+                titles = shelf.titles,
+                // Only a real service can be expanded. "Em breve" is a set of films no provider
+                // carries yet, so it has no id and no wider list to ask for — the caller does not
+                // offer the button there, and this is the second line of that defence.
+                complete = providerId == null || catalogue == null,
+            )
+        if (providerId == null || catalogue == null) return
+
+        expandedServiceLoading = true
+        streamingScope.launch {
+            val wider =
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        catalogue.allTitlesOnService(providerId, streamingKind)
+                    }
+                }.getOrDefault(emptyList())
+            // Checked against what is on screen now: the viewer may have gone back to the shelves
+            // or opened another service while this was in flight, and replacing a different
+            // service's grid with these titles would be worse than dropping them.
+            if (expandedService?.provider?.id == shelf.provider.id) {
+                expandedService =
+                    ExpandedService(
+                        provider = shelf.provider,
+                        // An empty answer keeps the shelf's own titles rather than emptying the
+                        // grid: a failed request is not the same as a service with nothing on it.
+                        titles = wider.ifEmpty { shelf.titles },
+                        complete = true,
+                    )
+            }
+            expandedServiceLoading = false
+        }
+    }
+
+    /** Returns from the expanded catalogue to the shelves. */
+    fun closeServiceCatalogue() {
+        expandedService = null
+        expandedServiceLoading = false
+    }
 
     /**
      * Which kind is being fetched, or null when nothing is.
@@ -3328,6 +3491,42 @@ class DesktopAppState(
 
     fun chooseCastTarget(target: CastTarget) {
         castSendState = CastSendState.NeedsCode(target)
+    }
+
+    /**
+     * Reaches a screen by its address, for a network where the search comes back empty.
+     *
+     * Many home routers drop broadcast between clients, so discovery finds nothing while both
+     * devices sit on the same wifi listening — confirmed on a real network here. Without this the
+     * feature is simply unavailable to that household, with the dialog offering only a search that
+     * will keep failing.
+     *
+     * Goes straight to the pairing step on success, exactly as choosing a found row does. A failure
+     * leaves the dialog where it was, with the typed address still on screen to correct.
+     */
+    fun connectToCastAddress(address: String) {
+        castSendJob?.cancel()
+        castSendJob =
+            downloadScope.launch {
+                val target = withContext(Dispatchers.IO) { CastReceiver.probeAddress(address) }
+                if (target == null) {
+                    castManualAddressFailed = true
+                    return@launch
+                }
+                castManualAddressFailed = false
+                // Remembered like a found one, so "escolher outra tela" comes back to a list holding
+                // it rather than to the empty result the search produced.
+                lastCastTargets = (lastCastTargets + target).distinctBy(CastTarget::address)
+                castSendState = CastSendState.NeedsCode(target)
+            }
+    }
+
+    /** Whether the last typed address reached nothing, so the field can say so. */
+    var castManualAddressFailed by mutableStateOf(false)
+        private set
+
+    fun clearCastManualAddressFailure() {
+        castManualAddressFailed = false
     }
 
     /**
@@ -5368,6 +5567,18 @@ enum class CatalogLayout(val id: String) {
         fun fromId(id: String?): CatalogLayout = entries.firstOrNull { it.id == id } ?: POSTER
     }
 }
+
+/**
+ * One service's full catalogue, as the expanded view behind a shelf shows it.
+ *
+ * [complete] says whether this is the wider list or still the shelf's own twenty titles waiting to
+ * be replaced. The screen uses it to decide whether "these are all of them" is a claim it can make.
+ */
+data class ExpandedService(
+    val provider: StreamingProvider,
+    val titles: List<ExternalTitle>,
+    val complete: Boolean,
+)
 
 enum class DesktopDestination {
     HOME,

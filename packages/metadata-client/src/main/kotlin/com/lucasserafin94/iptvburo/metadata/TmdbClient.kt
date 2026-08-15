@@ -448,6 +448,15 @@ class TmdbClient(
         region: String,
         limit: Int = 20,
         kind: TmdbDiscoverKind = TmdbDiscoverKind.MOVIES,
+        /**
+         * Which page of results to ask for, one-based.
+         *
+         * A TMDb discover page holds twenty titles, which is exactly a shelf, so the shelves have
+         * never needed this. "Ver mais" does: it asks for the pages after the first to build the
+         * full list for one service, and without a page number every request would return the same
+         * twenty titles the shelf is already showing.
+         */
+        page: Int = 1,
     ): List<TmdbDiscoveredTitle> {
         val key = apiKey?.takeIf(String::isNotBlank) ?: return emptyList()
         if (region.isBlank()) return emptyList()
@@ -466,6 +475,9 @@ class TmdbClient(
                 // Required alongside with_watch_providers; TMDb ignores the filter without it.
                 .addQueryParameter("watch_region", region.trim().uppercase())
                 .addQueryParameter("include_adult", "false")
+                // Coerced rather than trusted: TMDb rejects a page below 1 and caps at 500, and a
+                // caller computing this from a scroll position can easily produce either.
+                .addQueryParameter("page", page.coerceIn(1, MAX_DISCOVER_PAGE).toString())
                 .apply {
                     when (kind) {
                         TmdbDiscoverKind.MOVIES -> {
@@ -723,6 +735,9 @@ class TmdbClient(
 
         /** Enough cast to fill a strip. TMDb returns the whole billed and unbilled list. */
         const val MAX_CAST = 12
+
+        /** TMDb refuses a discover page beyond this, so asking for one is a wasted request. */
+        const val MAX_DISCOVER_PAGE = 500
     }
 }
 

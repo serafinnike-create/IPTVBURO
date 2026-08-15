@@ -76,6 +76,13 @@ fun ProviderShelfRow(
      */
     showDemoBadge: Boolean,
     onSelectTitle: (ExternalTitleDetails) -> Unit,
+    /**
+     * Opens this service's full catalogue, or null when there is no wider list to open.
+     *
+     * Null for "Em breve", which is not a service at all — it is the set of films no provider
+     * carries yet, so there is nothing further to show and the card must not appear.
+     */
+    onSeeMore: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val text = strings
@@ -138,6 +145,17 @@ fun ProviderShelfRow(
                     text = text,
                     onClick = { onSelectTitle(details) },
                 )
+            }
+            // At the end of the rail, where the question is actually asked.
+            //
+            // A shelf holds twenty titles because that is what fits, and scrolling to the end of
+            // Netflix and finding it simply stop is where somebody wonders what else is there. The
+            // card is the answer in the place the question occurs, rather than a link in a header
+            // nobody was looking at.
+            onSeeMore?.let { seeMore ->
+                item(key = "see-more") {
+                    SeeMoreCard(label = text.shareStrings.serviceCatalogue.seeMore, onClick = seeMore)
+                }
             }
         }
 
@@ -381,6 +399,59 @@ private val POSTER_TINTS =
     )
 
 /** Poster proportions, matching the catalogue grid's VOD card. */
+/**
+ * The card that ends a rail: "Ver mais".
+ *
+ * Shaped like a poster rather than drawn as a button, so it takes its place in the row instead of
+ * interrupting it — the eye reaches the end of the shelf and finds one more card, which happens to
+ * be the way onward.
+ */
+@Composable
+private fun SeeMoreCard(
+    label: String,
+    onClick: () -> Unit,
+) {
+    BuroInteractiveSurface(
+        onClick = onClick,
+        modifier = Modifier.width(CARD_WIDTH),
+        shape = BuroRadius.Medium,
+        compact = true,
+        contentDescription = label,
+    ) { state ->
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(POSTER_RATIO)
+                        .clip(BuroRadius.Medium)
+                        .background(BuroColors.SurfaceRaised)
+                        .border(
+                            width = 1.dp,
+                            color = if (state.active) BuroColors.Primary else BuroColors.BorderSoft,
+                            shape = BuroRadius.Medium,
+                        ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "→",
+                    color = if (state.active) BuroColors.Primary else BuroColors.TextMuted,
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+            }
+            Spacer(Modifier.height(BuroSpacing.Xs))
+            Text(
+                text = label,
+                color = if (state.active) BuroColors.Text else BuroColors.TextMuted,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
 private const val POSTER_RATIO = 2f / 3f
 
 /** Just enough darkening behind the DEMO badge to guarantee contrast on a bright poster. */

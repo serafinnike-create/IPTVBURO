@@ -579,6 +579,11 @@ data class DesktopStrings(
                                             castTitle = "Enviar a una pantalla",
                                             castSearching = "Buscando pantallas en esta red…",
                                             castNoneFound = "No se encontró ninguna pantalla. Abre el IPTV BURO en el otro equipo, activa «Recibir» y comprueba que ambos estén en la misma red.",
+                                            castManualTitle = "O escribe la dirección",
+                                            castManualHint = "Algunos routers bloquean la búsqueda entre dispositivos. La otra pantalla muestra su dirección en «Recibir».",
+                                            castManualLabel = "Dirección en esta red",
+                                            castManualConnect = "Conectar",
+                                            castManualInvalid = "Eso no parece una dirección de esta red.",
                                             castSearchAgain = "Buscar de nuevo",
                                             castCodePrompt = "Enviar a %s",
                                             castCodeHint = "Escribe los cuatro dígitos que aparecen en esa pantalla.",
@@ -589,6 +594,19 @@ data class DesktopStrings(
                                             castFailed = "No se pudo contactar con %s.",
                                             castChooseAnother = "Elegir otra pantalla",
                             ),
+                    notifications =
+                        NotificationStrings(
+                            title = "Avisos",
+                            empty = "Nada por aqui.",
+                            clearAll = "Borrar todo",
+                            dismiss = "Descartar",
+                        ),
+                    serviceCatalogue =
+                        ServiceCatalogueStrings(
+                            seeMore = "Ver mas",
+                            allFrom = "Todo de %s",
+                            backToShelves = "Volver a los servicios",
+                        ),
                     receiver =
                         CastReceiverStrings(
                             title = "Recibir del celular",
@@ -1108,6 +1126,11 @@ data class DesktopStrings(
                                             castTitle = "Enviar para uma tela",
                                             castSearching = "Procurando telas nesta rede…",
                                             castNoneFound = "Nenhuma tela encontrada. Abra o IPTV BURO no outro aparelho, ligue “Receber” e confirme que os dois estão na mesma rede.",
+                                            castManualTitle = "Ou digite o endereço",
+                                            castManualHint = "Alguns roteadores bloqueiam a busca entre aparelhos. A outra tela mostra o endereço dela em “Receber”.",
+                                            castManualLabel = "Endereço nesta rede",
+                                            castManualConnect = "Conectar",
+                                            castManualInvalid = "Isso não parece um endereço desta rede.",
                                             castSearchAgain = "Procurar de novo",
                                             castCodePrompt = "Enviar para %s",
                                             castCodeHint = "Digite os quatro dígitos que aparecem naquela tela.",
@@ -1118,6 +1141,19 @@ data class DesktopStrings(
                                             castFailed = "Não foi possível alcançar %s.",
                                             castChooseAnother = "Escolher outra tela",
                             ),
+                    notifications =
+                        NotificationStrings(
+                            title = "Avisos",
+                            empty = "Nada por aqui.",
+                            clearAll = "Limpar tudo",
+                            dismiss = "Descartar",
+                        ),
+                    serviceCatalogue =
+                        ServiceCatalogueStrings(
+                            seeMore = "Ver mais",
+                            allFrom = "Tudo de %s",
+                            backToShelves = "Voltar aos servicos",
+                        ),
                     receiver =
                         CastReceiverStrings(
                             title = "Receber do celular",
@@ -1637,6 +1673,11 @@ data class DesktopStrings(
                                             castTitle = "Send to a screen",
                                             castSearching = "Looking for screens on this network…",
                                             castNoneFound = "No screen found. Open IPTV BURO on the other device, turn on “Receive”, and make sure both are on the same network.",
+                                            castManualTitle = "Or enter the address",
+                                            castManualHint = "Some routers block the search between devices. The other screen shows its address under “Receive”.",
+                                            castManualLabel = "Address on this network",
+                                            castManualConnect = "Connect",
+                                            castManualInvalid = "That does not look like an address on this network.",
                                             castSearchAgain = "Search again",
                                             castCodePrompt = "Send to %s",
                                             castCodeHint = "Type the four digits shown on that screen.",
@@ -1647,6 +1688,19 @@ data class DesktopStrings(
                                             castFailed = "Could not reach %s.",
                                             castChooseAnother = "Choose another screen",
                             ),
+                    notifications =
+                        NotificationStrings(
+                            title = "Notifications",
+                            empty = "Nothing here.",
+                            clearAll = "Clear all",
+                            dismiss = "Dismiss",
+                        ),
+                    serviceCatalogue =
+                        ServiceCatalogueStrings(
+                            seeMore = "See more",
+                            allFrom = "All from %s",
+                            backToShelves = "Back to services",
+                        ),
                     receiver =
                         CastReceiverStrings(
                             title = "Receive from your phone",
@@ -2165,6 +2219,11 @@ data class DesktopStrings(
                                             castTitle = "An einen Bildschirm senden",
                                             castSearching = "Bildschirme in diesem Netzwerk werden gesucht …",
                                             castNoneFound = "Kein Bildschirm gefunden. Öffnen Sie IPTV BURO auf dem anderen Gerät, schalten Sie „Empfangen“ ein und prüfen Sie, ob beide im selben Netzwerk sind.",
+                                            castManualTitle = "Oder Adresse eingeben",
+                                            castManualHint = "Manche Router blockieren die Suche zwischen Geräten. Der andere Bildschirm zeigt seine Adresse unter „Empfangen“.",
+                                            castManualLabel = "Adresse in diesem Netzwerk",
+                                            castManualConnect = "Verbinden",
+                                            castManualInvalid = "Das sieht nicht nach einer Adresse in diesem Netzwerk aus.",
                                             castSearchAgain = "Erneut suchen",
                                             castCodePrompt = "An %s senden",
                                             castCodeHint = "Geben Sie die vier Ziffern ein, die auf diesem Bildschirm stehen.",
@@ -2175,6 +2234,19 @@ data class DesktopStrings(
                                             castFailed = "%s war nicht erreichbar.",
                                             castChooseAnother = "Anderen Bildschirm wählen",
                             ),
+                    notifications =
+                        NotificationStrings(
+                            title = "Hinweise",
+                            empty = "Nichts hier.",
+                            clearAll = "Alles loeschen",
+                            dismiss = "Verwerfen",
+                        ),
+                    serviceCatalogue =
+                        ServiceCatalogueStrings(
+                            seeMore = "Mehr anzeigen",
+                            allFrom = "Alles von %s",
+                            backToShelves = "Zuruck zu den Diensten",
+                        ),
                     receiver =
                         CastReceiverStrings(
                             title = "Vom Telefon empfangen",
@@ -2698,6 +2770,11 @@ data class DesktopStrings(
                                             castTitle = "Invia a uno schermo",
                                             castSearching = "Ricerca di schermi in questa rete…",
                                             castNoneFound = "Nessuno schermo trovato. Apri IPTV BURO sull’altro dispositivo, attiva “Ricevi” e verifica che siano sulla stessa rete.",
+                                            castManualTitle = "Oppure digita l’indirizzo",
+                                            castManualHint = "Alcuni router bloccano la ricerca tra dispositivi. L’altro schermo mostra il suo indirizzo sotto “Ricevi”.",
+                                            castManualLabel = "Indirizzo su questa rete",
+                                            castManualConnect = "Collega",
+                                            castManualInvalid = "Non sembra un indirizzo di questa rete.",
                                             castSearchAgain = "Cerca di nuovo",
                                             castCodePrompt = "Invia a %s",
                                             castCodeHint = "Digita le quattro cifre mostrate su quello schermo.",
@@ -2708,6 +2785,19 @@ data class DesktopStrings(
                                             castFailed = "Impossibile raggiungere %s.",
                                             castChooseAnother = "Scegli un altro schermo",
                             ),
+                    notifications =
+                        NotificationStrings(
+                            title = "Avvisi",
+                            empty = "Niente qui.",
+                            clearAll = "Cancella tutto",
+                            dismiss = "Ignora",
+                        ),
+                    serviceCatalogue =
+                        ServiceCatalogueStrings(
+                            seeMore = "Vedi altro",
+                            allFrom = "Tutto di %s",
+                            backToShelves = "Torna ai servizi",
+                        ),
                     receiver =
                         CastReceiverStrings(
                             title = "Ricevi dal telefono",
@@ -3233,6 +3323,12 @@ data class CastStrings(
     val castTitle: String,
     val castSearching: String,
     val castNoneFound: String,
+    /** The typed-address fallback, offered only when the search found nothing. */
+    val castManualTitle: String,
+    val castManualHint: String,
+    val castManualLabel: String,
+    val castManualConnect: String,
+    val castManualInvalid: String,
     val castSearchAgain: String,
     /** Takes the screen's name. */
     val castCodePrompt: String,
@@ -3279,6 +3375,42 @@ data class CastReceiverStrings(
     val codeExplanation: String,
     /** Throws the code away and mints another, for when it has been seen by the wrong person. */
     val regenerate: String,
+)
+
+/**
+ * The Assinaturas area's expanded view: one service's whole catalogue.
+ *
+ * A group of its own, and a small one, because [DesktopStrings] is at the ceiling
+ * StringsConstructorLimitTest defends — thirty subscription strings already sit at the top level
+ * and the next area to grow should come down here rather than push that number up. Nested inside
+ * [ShareStrings] for the same reason [CastStrings] is: somewhere is needed, and a new top-level
+ * field is the one thing that cannot be afforded.
+ */
+/**
+ * The bell beside the profile, and the panel behind it.
+ *
+ * Grouped for the reason every recent group is: [DesktopStrings] sits at the ceiling
+ * StringsConstructorLimitTest defends, and a new top-level field is the one thing that cannot be
+ * afforded.
+ */
+data class NotificationStrings(
+    /** The bell's own name, for a screen reader and the tooltip. */
+    val title: String,
+    /** Shown in place of the list when the bell is empty. */
+    val empty: String,
+    /** Forgets everything in the bell. */
+    val clearAll: String,
+    /** Forgets one notice. */
+    val dismiss: String,
+)
+
+data class ServiceCatalogueStrings(
+    /** Ends a service's rail and opens that service's full catalogue. */
+    val seeMore: String,
+    /** The heading of that catalogue. Takes the service's name. */
+    val allFrom: String,
+    /** Returns from the full catalogue to the shelves. */
+    val backToShelves: String,
 )
 
 data class SavedForLaterStrings(
@@ -3350,6 +3482,10 @@ data class ShareStrings(
      * the same ceiling reason.
      */
     val receiver: CastReceiverStrings,
+    /** One service's whole catalogue, reached from the end of its shelf. */
+    val serviceCatalogue: ServiceCatalogueStrings,
+    /** The bell beside the profile. */
+    val notifications: NotificationStrings,
     /** The button on the title page, beside Favourites. */
     val share: String,
     val shareTitle: String,

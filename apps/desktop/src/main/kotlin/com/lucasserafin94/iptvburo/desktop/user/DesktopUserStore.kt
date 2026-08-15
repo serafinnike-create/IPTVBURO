@@ -143,6 +143,22 @@ data class StoredReminder(
     val titleIsPlaceholder: Boolean get() = title == identityKey
 }
 
+/**
+ * One notice as it is written to disk.
+ *
+ * Deliberately not the domain's `AppNotification`: the kind is a string here rather than an enum,
+ * so a record written by a newer build that knows a kind this one does not can be read back and
+ * kept instead of throwing. The screen decides what to do with a kind it cannot draw.
+ */
+data class StoredNotification(
+    val id: String,
+    val kind: String,
+    val read: Boolean,
+    val createdAt: Long,
+    val title: String,
+    val body: String? = null,
+)
+
 /** Where this app's user preferences live under the user root. */
 private const val USER_NODE_PATH = "com/lucasserafin94/iptvburo/user-v1"
 
@@ -737,6 +753,59 @@ class DesktopUserStore(
     }
 
     private fun remindersKey(profileId: String): String = "reminders.$profileId"
+
+    /**
+     * The bell's contents for a profile, as `id|kind|read|createdAt|title|body` records.
+     *
+     * Per profile, like everything the bell announces: a reminder belongs to whoever marked it, and
+     * one person's news has no business appearing under another's name.
+     *
+     * Read state is stored rather than derived. Without it every launch would rebuild the digest
+     * and mark it unread again, so the badge would come back however many times the viewer had
+     * already looked — which is the fastest way to teach somebody to ignore a badge.
+     */
+    fun notificationsForProfile(profileId: String?): List<StoredNotification> =
+        profileId
+            ?.let { preferences.get(notificationsKey(it), "") }
+            ?.split(RECORD_SEPARATOR)
+            ?.filter(String::isNotBlank)
+            ?.mapNotNull(::decodeNotification)
+            .orEmpty()
+
+    fun setNotifications(profileId: String, notifications: List<StoredNotification>) =
+        preferences.put(
+            notificationsKey(profileId),
+            notifications.joinToString(RECORD_SEPARATOR.toString(), transform = ::encodeNotification),
+        )
+
+    private fun encodeNotification(notification: StoredNotification): String =
+        listOf(
+            encode(notification.id),
+            notification.kind,
+            if (notification.read) "1" else "0",
+            notification.createdAt.toString(),
+            encode(notification.title),
+            notification.body?.let(::encode).orEmpty(),
+        ).joinToString(FIELD_SEPARATOR.toString())
+
+    private fun decodeNotification(raw: String): StoredNotification? {
+        val parts = raw.split(FIELD_SEPARATOR)
+        if (parts.size < 5) return null
+        val id = runCatching { decode(parts[0]) }.getOrNull()?.takeIf(String::isNotBlank) ?: return null
+        val title = runCatching { decode(parts[4]) }.getOrNull()?.takeIf(String::isNotBlank) ?: return null
+        return StoredNotification(
+            id = id,
+            kind = parts[1].takeIf(String::isNotBlank) ?: return null,
+            read = parts[2] == "1",
+            createdAt = parts[3].toLongOrNull() ?: 0L,
+            title = title,
+            body = parts.getOrNull(5)?.takeIf(String::isNotBlank)?.let { stored ->
+                runCatching { decode(stored) }.getOrNull()
+            },
+        )
+    }
+
+    private fun notificationsKey(profileId: String): String = "notifications.$profileId"
 
     /**
      * The hour of day the viewer wants their reminder digest, 0–23.
