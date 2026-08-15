@@ -305,6 +305,29 @@ fun SettingsDialog(
                         // listening. This is the one feature that opens a socket, so it is
                         // something the user turns on rather than something they discover has been
                         // running — and the code is what keeps a shared network safe.
+                        // The same panel the first run offers, so the explanation cannot drift
+                        // apart from the setting it explains.
+                        SettingsSection(
+                            label = text.shareStrings.cache.title,
+                            // The panel carries its own explanation, so the section adds only the
+                            // heading — repeating it here would say the same thing twice.
+                            hint = "",
+                        ) {
+                            CacheChoicePanel(
+                                budget = appState.cacheBudget,
+                                onChoose = appState::chooseCacheBudget,
+                                estimate = null,
+                                progress = appState.cacheProgress,
+                                bytesUsed = appState.cacheBytesUsed,
+                                onStartFill = appState::startCacheFill,
+                                onPauseFill = appState::pauseCacheFill,
+                                onResumeFill = appState::resumeCacheFill,
+                                onCancelFill = appState::cancelCacheFill,
+                                onClear = appState::clearArtworkCache,
+                                showTitle = false,
+                            )
+                        }
+
                         SettingsSection(
                             label = text.shareStrings.receiver.title,
                             hint = text.shareStrings.receiver.hint,

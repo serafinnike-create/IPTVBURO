@@ -17,6 +17,7 @@ import androidx.compose.ui.window.rememberWindowState
 import java.awt.GraphicsEnvironment
 import com.lucasserafin94.iptvburo.desktop.app.DesktopApp
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
+import com.lucasserafin94.iptvburo.desktop.data.PlatformContextHolder
 import com.lucasserafin94.iptvburo.desktop.data.SessionXtreamRepository
 import com.lucasserafin94.iptvburo.desktop.platform.ProtocolRegistration
 import com.lucasserafin94.iptvburo.desktop.platform.SingleInstance
@@ -26,7 +27,10 @@ import com.lucasserafin94.iptvburo.desktop.playback.VlcPluginCache
 import com.lucasserafin94.iptvburo.desktop.security.RememberedXtreamStore
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
+import coil3.disk.DiskCache
+import coil3.disk.directory
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import com.lucasserafin94.iptvburo.domain.model.CacheBudget
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
 import com.lucasserafin94.iptvburo.desktop.user.StoredWindowGeometry
 
@@ -125,7 +129,26 @@ fun main(args: Array<String>) {
             priority = Thread.MIN_PRIORITY
         }.start()
 
-    // Coil's network fetcher, registered by hand rather than discovered.
+    val localRepository = InMemoryCatalogRepository()
+    val xtreamRepository = SessionXtreamRepository()
+    val rememberedXtreamStore = RememberedXtreamStore()
+    val userStore = DesktopUserStore()
+
+    // The artwork cache, sized by the viewer.
+    //
+    // Without one, every poster is fetched again on every launch and again on every scroll back up
+    // a list — which is what made a large library fill in row by row instead of appearing. Coil
+    // keeps a memory cache by default and no disk cache at all, so the moment the app closes the
+    // work is thrown away.
+    //
+    // The size is the viewer's choice because the cost is theirs: a full library of artwork runs to
+    // gigabytes, and somebody on a small drive has every right to say no. Zero is a real answer and
+    // gives exactly the behaviour the app had before this existed — nothing stored, everything
+    // fetched. Read here rather than watched, because Coil's singleton is built once for the
+    // process; changing the setting takes effect on the next launch, which the settings screen
+    // says.
+    val budget = CacheBudget.ofGigabytes(userStore.cacheBudgetGigabytes() ?: CacheBudget.DEFAULT_GIGABYTES)
+    // The network fetcher is registered by hand rather than discovered.
     //
     // coil-network-okhttp announces itself through META-INF/services, and a ServiceLoader finds it
     // only if it looks at the class loader that owns the jar. Under `gradle run` that is the
@@ -133,19 +156,22 @@ fun main(args: Array<String>) {
     // ends up with no way to fetch an http(s) URL at all — every remote poster falls back to its
     // placeholder letter while the URL itself is perfectly good. Verified: the same URLs return
     // 200 image/jpeg through the very OkHttp client Coil would have used.
-    //
-    // Setting the loader explicitly removes the discovery step, so this cannot depend on how the
-    // runtime was assembled.
     SingletonImageLoader.setSafe { context ->
+        // Kept so the cache can build requests of its own when warming artwork ahead of a draw.
+        PlatformContextHolder.context = context
         ImageLoader.Builder(context)
             .components { add(OkHttpNetworkFetcherFactory()) }
-            .build()
+            .apply {
+                if (budget.isEnabled) {
+                    diskCache {
+                        DiskCache.Builder()
+                            .directory(artworkCacheDirectory())
+                            .maxSizeBytes(budget.bytes)
+                            .build()
+                    }
+                }
+            }.build()
     }
-
-    val localRepository = InMemoryCatalogRepository()
-    val xtreamRepository = SessionXtreamRepository()
-    val rememberedXtreamStore = RememberedXtreamStore()
-    val userStore = DesktopUserStore()
 
     application {
         // Fitted to the screen rather than fixed. A 1380x860 default is taller than a 1536x864
@@ -351,3 +377,14 @@ fun main(args: Array<String>) {
         }
     }
 }
+
+/**
+ * Where the artwork cache lives.
+ *
+ * Beside the catalogue cache under the user's home, so everything this app keeps on disk is in one
+ * place somebody can find, inspect and delete without needing the app's help.
+ */
+private fun artworkCacheDirectory(): java.io.File =
+    java.nio.file.Path
+        .of(System.getProperty("user.home"), ".iptvburo", "artwork-cache")
+        .toFile()

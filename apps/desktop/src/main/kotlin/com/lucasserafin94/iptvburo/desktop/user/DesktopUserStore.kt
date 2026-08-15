@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.UUID
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
+import com.lucasserafin94.iptvburo.domain.model.CacheBudget
 import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
 import com.lucasserafin94.iptvburo.domain.model.SeriesWatermark
 import java.util.prefs.Preferences
@@ -853,6 +854,21 @@ class DesktopUserStore(
     private fun watermarksKey(profileId: String): String = "series-watermarks.$profileId"
 
     /**
+     * How many gigabytes of artwork this machine may keep, 0–64.
+     *
+     * Per install rather than per profile: it is a claim on one disk, and two people sharing a
+     * computer share the drive whether or not they share a profile.
+     *
+     * Absent means the viewer has not been asked yet, which the first-run screen uses to decide
+     * whether to offer the choice — distinct from having been asked and answered zero.
+     */
+    fun cacheBudgetGigabytes(): Int? =
+        preferences.getInt(KEY_CACHE_BUDGET_GB, -1).takeIf { value -> value >= 0 }
+
+    fun setCacheBudgetGigabytes(gigabytes: Int) =
+        preferences.putInt(KEY_CACHE_BUDGET_GB, gigabytes.coerceIn(0, CacheBudget.MAX_GIGABYTES))
+
+    /**
      * The hour of day the viewer wants their reminder digest, 0–23.
      *
      * Not per profile: this is when *this machine* is allowed to interrupt whoever is using it, in
@@ -930,6 +946,7 @@ class DesktopUserStore(
         const val KEY_FIRST_STARTUP_DONE = "first-startup-done"
         const val KEY_CAST_AUTO_START = "cast-receiver-auto-start"
         const val KEY_CAST_PAIRING_CODE = "cast-pairing-code"
+        const val KEY_CACHE_BUDGET_GB = "cache-budget-gb"
         const val KEY_WINDOW_GEOMETRY = "window-geometry"
         const val KEY_BACKDROP_POSTERS = "backdrop-posters"
 

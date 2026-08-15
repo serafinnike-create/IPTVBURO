@@ -603,6 +603,27 @@ data class DesktopStrings(
                             clearAll = "Borrar todo",
                             dismiss = "Descartar",
                         ),
+                    cache =
+                        CacheStrings(
+                            title = "Guardar capas neste computador",
+                            explanation = "O app guarda as capas e imagens no seu computador para que a lista abra na hora, sem baixar tudo de novo a cada vez.",
+                            firstTimeWarning = "Na primeira vez pode demorar: depende do tamanho da sua lista. O download acontece em segundo plano e você pode usar o app normalmente.",
+                            sizeLabel = "Espaço reservado",
+                            gigabytes = "%d GB",
+                            disabled = "Não guardar",
+                            estimate = "Sua lista precisa de aproximadamente %s.",
+                            start = "Começar",
+                            skip = "Agora nao",
+                            filling = "Guardando capas",
+                            progress = "%1${'$'}d de %2${'$'}d",
+                            pause = "Pausar",
+                            resume = "Continuar",
+                            cancel = "Cancelar",
+                            complete = "Tudo guardado.",
+                            used = "Em uso: %s",
+                            clear = "Limpar cache",
+                            restartNote = "Mudar o tamanho vale a partir da próxima vez que você abrir o app.",
+                        ),
                     serviceCatalogue =
                         ServiceCatalogueStrings(
                             seeMore = "Ver mas",
@@ -1151,6 +1172,27 @@ data class DesktopStrings(
                             empty = "Nada por aqui.",
                             clearAll = "Limpar tudo",
                             dismiss = "Descartar",
+                        ),
+                    cache =
+                        CacheStrings(
+                            title = "Guardar capas neste computador",
+                            explanation = "O app guarda as capas e imagens no seu computador para que a lista abra na hora, sem baixar tudo de novo a cada vez.",
+                            firstTimeWarning = "Na primeira vez pode demorar: depende do tamanho da sua lista. O download acontece em segundo plano e você pode usar o app normalmente.",
+                            sizeLabel = "Espaço reservado",
+                            gigabytes = "%d GB",
+                            disabled = "Não guardar",
+                            estimate = "Sua lista precisa de aproximadamente %s.",
+                            start = "Começar",
+                            skip = "Agora nao",
+                            filling = "Guardando capas",
+                            progress = "%1${'$'}d de %2${'$'}d",
+                            pause = "Pausar",
+                            resume = "Continuar",
+                            cancel = "Cancelar",
+                            complete = "Tudo guardado.",
+                            used = "Em uso: %s",
+                            clear = "Limpar cache",
+                            restartNote = "Mudar o tamanho vale a partir da próxima vez que você abrir o app.",
                         ),
                     serviceCatalogue =
                         ServiceCatalogueStrings(
@@ -1701,6 +1743,27 @@ data class DesktopStrings(
                             clearAll = "Clear all",
                             dismiss = "Dismiss",
                         ),
+                    cache =
+                        CacheStrings(
+                            title = "Keep artwork on this computer",
+                            explanation = "The app keeps posters and images on your computer so the library opens at once, instead of fetching everything again each time.",
+                            firstTimeWarning = "The first fill can take a while: it depends on how large your list is. It runs in the background and you can use the app normally.",
+                            sizeLabel = "Space reserved",
+                            gigabytes = "%d GB",
+                            disabled = "Do not keep",
+                            estimate = "Your library needs about %s.",
+                            start = "Start",
+                            skip = "Not now",
+                            filling = "Keeping artwork",
+                            progress = "%1${'$'}d of %2${'$'}d",
+                            pause = "Pause",
+                            resume = "Resume",
+                            cancel = "Cancel",
+                            complete = "Everything is stored.",
+                            used = "In use: %s",
+                            clear = "Clear cache",
+                            restartNote = "A change of size takes effect the next time you open the app.",
+                        ),
                     serviceCatalogue =
                         ServiceCatalogueStrings(
                             seeMore = "See more",
@@ -2248,6 +2311,27 @@ data class DesktopStrings(
                             empty = "Nichts hier.",
                             clearAll = "Alles loeschen",
                             dismiss = "Verwerfen",
+                        ),
+                    cache =
+                        CacheStrings(
+                            title = "Bilder auf diesem Computer behalten",
+                            explanation = "Die App bewahrt Poster und Bilder auf Ihrem Computer auf, damit die Liste sofort erscheint, statt alles jedes Mal neu zu laden.",
+                            firstTimeWarning = "Das erste Mal kann dauern: je nach Groesse Ihrer Liste. Es laeuft im Hintergrund und Sie koennen die App normal nutzen.",
+                            sizeLabel = "Reservierter Platz",
+                            gigabytes = "%d GB",
+                            disabled = "Nicht behalten",
+                            estimate = "Ihre Liste braucht etwa %s.",
+                            start = "Starten",
+                            skip = "Jetzt nicht",
+                            filling = "Bilder werden gespeichert",
+                            progress = "%1${'$'}d von %2${'$'}d",
+                            pause = "Pause",
+                            resume = "Fortsetzen",
+                            cancel = "Abbrechen",
+                            complete = "Alles gespeichert.",
+                            used = "Belegt: %s",
+                            clear = "Cache leeren",
+                            restartNote = "Eine Groessenaenderung gilt ab dem naechsten Start der App.",
                         ),
                     serviceCatalogue =
                         ServiceCatalogueStrings(
@@ -2801,6 +2885,27 @@ data class DesktopStrings(
                             empty = "Niente qui.",
                             clearAll = "Cancella tutto",
                             dismiss = "Ignora",
+                        ),
+                    cache =
+                        CacheStrings(
+                            title = "Conserva le copertine su questo computer",
+                            explanation = "L'app conserva copertine e immagini sul tuo computer perche' la lista si apra subito, invece di scaricare tutto ogni volta.",
+                            firstTimeWarning = "La prima volta puo' richiedere tempo: dipende da quanto e' grande la tua lista. Avviene in secondo piano e puoi usare l'app normalmente.",
+                            sizeLabel = "Spazio riservato",
+                            gigabytes = "%d GB",
+                            disabled = "Non conservare",
+                            estimate = "La tua lista richiede circa %s.",
+                            start = "Inizia",
+                            skip = "Non ora",
+                            filling = "Salvataggio copertine",
+                            progress = "%1${'$'}d di %2${'$'}d",
+                            pause = "Pausa",
+                            resume = "Riprendi",
+                            cancel = "Annulla",
+                            complete = "Tutto salvato.",
+                            used = "In uso: %s",
+                            clear = "Svuota cache",
+                            restartNote = "Il cambio di dimensione vale dalla prossima apertura dell'app.",
                         ),
                     serviceCatalogue =
                         ServiceCatalogueStrings(
@@ -3414,6 +3519,49 @@ data class NotificationStrings(
     val dismiss: String,
 )
 
+/**
+ * The artwork cache: what it buys, what it costs, and how far along it is.
+ *
+ * Grouped for the reason every recent group is — [DesktopStrings] sits at the ceiling
+ * StringsConstructorLimitTest defends, and a new top-level field is the one thing that cannot be
+ * afforded.
+ */
+data class CacheStrings(
+    /** The setting's name, in the first-run panel and in settings. */
+    val title: String,
+    /** What keeping artwork on disk actually buys. */
+    val explanation: String,
+    /** The honest warning about the first fill. */
+    val firstTimeWarning: String,
+    /** Labels the size chooser. */
+    val sizeLabel: String,
+    /** Takes the number of gigabytes. */
+    val gigabytes: String,
+    /** The zero option, worded as a choice rather than as an absence. */
+    val disabled: String,
+    /** Roughly how much this library would need. Takes a formatted size such as "4 GB". */
+    val estimate: String,
+    /** Accepts the choice on the first-run panel. */
+    val start: String,
+    /** Declines it, without implying the app is worse for it. */
+    val skip: String,
+    /** Heading over the progress bar. */
+    val filling: String,
+    /** Takes done and total. */
+    val progress: String,
+    val pause: String,
+    val resume: String,
+    val cancel: String,
+    /** Everything the budget allows is stored. */
+    val complete: String,
+    /** How much is currently held. Takes a formatted size. */
+    val used: String,
+    /** Empties the cache. */
+    val clear: String,
+    /** That a size change waits for the next launch, because Coil is built once per process. */
+    val restartNote: String,
+)
+
 data class ServiceCatalogueStrings(
     /** Ends a service's rail and opens that service's full catalogue. */
     val seeMore: String,
@@ -3498,6 +3646,8 @@ data class ShareStrings(
     val receiver: CastReceiverStrings,
     /** One service's whole catalogue, reached from the end of its shelf. */
     val serviceCatalogue: ServiceCatalogueStrings,
+    /** The artwork cache setting and its progress. */
+    val cache: CacheStrings,
     /** The bell beside the profile. */
     val notifications: NotificationStrings,
     /** The button on the title page, beside Favourites. */

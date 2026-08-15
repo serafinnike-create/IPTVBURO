@@ -594,6 +594,16 @@ fun DesktopApp(
                                 onCancel = appState::cancelDownload,
                                 onDelete = appState::deleteDownload,
                             )
+                        } else if (appState.cacheChoicePending && appState.isXtreamSelected &&
+                            visibleDestination == DesktopDestination.HOME
+                        ) {
+                            // Offered here rather than in the setup steps, because the estimate
+                            // needs a loaded catalogue to be worth anything: "about 4 GB" is only
+                            // useful once the app knows how large this library actually is.
+                            //
+                            // Shown once. Choosing — including choosing zero — answers the question,
+                            // and a panel that returned after being answered would be nagging.
+                            CacheFirstRunPanel(appState = appState)
                         } else if (appState.isXtreamSelected && visibleDestination == DesktopDestination.HOME) {
                             XtreamDailyHome(
                                 appState = appState,

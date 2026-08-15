@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.MusicLibraryLoader
+import com.lucasserafin94.iptvburo.desktop.data.ArtworkCache
 import com.lucasserafin94.iptvburo.desktop.data.SessionXtreamRepository
 import com.lucasserafin94.iptvburo.desktop.data.StreamingShelfDiskCache
 import com.lucasserafin94.iptvburo.metadata.TMDB_SERIES_NAMESPACE
@@ -65,6 +66,9 @@ import com.lucasserafin94.iptvburo.desktop.data.migrateFavoriteKeys
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.AppNotification
+import com.lucasserafin94.iptvburo.domain.model.CacheBudget
+import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
+import com.lucasserafin94.iptvburo.domain.model.CacheFillState
 import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
 import com.lucasserafin94.iptvburo.domain.model.NotificationKind
 import com.lucasserafin94.iptvburo.domain.model.Reminder
@@ -1363,6 +1367,174 @@ class DesktopAppState(
         }
 
         if (changed) userStore.setSeriesWatermarks(profileId, marks.values)
+    }
+
+    /**
+     * How much artwork this machine may keep, and whether the viewer has been asked yet.
+     *
+     * Null in [storedCacheBudget] means never asked, which is what the first-run panel tests — a
+     * viewer who answered zero has made a choice and must not be asked again.
+     */
+    private val storedCacheBudget: Int? = userStore.cacheBudgetGigabytes()
+
+    var cacheBudget by mutableStateOf(
+        CacheBudget.ofGigabytes(storedCacheBudget ?: CacheBudget.DEFAULT_GIGABYTES),
+    )
+        private set
+
+    /** Whether the first-run panel should offer the choice. */
+    var cacheChoicePending by mutableStateOf(storedCacheBudget == null)
+        private set
+
+    var cacheProgress by mutableStateOf(CacheFillProgress())
+        private set
+
+    /**
+     * How much the cache currently holds, in bytes.
+     *
+     * Measured from the directory rather than counted as it fills: Coil evicts on its own once the
+     * budget is reached, so a running total kept here would drift away from what is actually on
+     * disk and report a number the viewer could disprove with Explorer.
+     */
+    var cacheBytesUsed by mutableStateOf(0L)
+        private set
+
+    fun chooseCacheBudget(gigabytes: Int) {
+        cacheBudget = CacheBudget.ofGigabytes(gigabytes)
+        userStore.setCacheBudgetGigabytes(cacheBudget.gigabytes)
+        cacheChoicePending = false
+        // Lowering it has to free space now rather than at some later eviction: somebody who
+        // reduces the setting to reclaim a disk and finds nothing reclaimed has been ignored.
+        if (!cacheBudget.isEnabled) clearArtworkCache() else refreshCacheUsage()
+    }
+
+    /** Records that the viewer declined the offer, so it is not made again. */
+    fun declineCacheChoice() {
+        chooseCacheBudget(0)
+    }
+
+    /**
+     * How many items the library holds, for the cache estimate.
+     *
+     * Everything loaded, including live channels — which overstates the size a little, because a
+     * channel logo is far smaller than a poster. The estimate is presented as approximate and it is
+     * better for it to err high: somebody who reserves more than they need loses nothing, while
+     * somebody who reserves too little watches the cache fill and stop short of the library.
+     */
+    val libraryTitleCount: Int
+        get() = xtreamSummary?.loadedItemCount ?: 0
+
+    fun refreshCacheUsage() {
+        cacheBytesUsed = runCatching { ArtworkCache.bytesUsed() }.getOrDefault(0L)
+    }
+
+    fun clearArtworkCache() {
+        runCatching { ArtworkCache.clear() }
+        cacheBytesUsed = 0
+        cacheProgress = CacheFillProgress()
+    }
+
+    /**
+     * Fetches the artwork of everything in the library, so the list is ready before it is opened.
+     *
+     * Runs in the background and never blocks the app: the whole point of a cache is that the
+     * product is usable while it fills, and a progress bar that holds the door shut for twenty
+     * minutes would be worse than no cache at all.
+     *
+     * What it warms is the same Coil cache the screens read, so a poster fetched here is one the
+     * grid does not fetch later. Nothing else is stored: this is the ordinary image pipeline run
+     * ahead of time.
+     */
+    fun startCacheFill() {
+        if (!cacheBudget.isEnabled) return
+        if (cacheProgress.isRunning) return
+
+        val urls = artworkUrlsForCaching()
+        if (urls.isEmpty()) {
+            cacheProgress = CacheFillProgress(state = CacheFillState.COMPLETE)
+            return
+        }
+
+        cacheProgress = CacheFillProgress(done = 0, total = urls.size, state = CacheFillState.RUNNING)
+        cacheFillJob =
+            streamingScope.launch {
+                var done = 0
+                for (url in urls) {
+                    // Checked every item rather than only between batches, so Pausar and Cancelar
+                    // stop within a poster rather than within a hundred.
+                    if (cacheProgress.state != CacheFillState.RUNNING) break
+                    runCatching { withContext(Dispatchers.IO) { ArtworkCache.warm(url) } }
+                    done += 1
+                    // Reported every few items: setting Compose state forty thousand times would
+                    // spend more on recomposition than on the download it is describing.
+                    if (done % CACHE_PROGRESS_STEP == 0 || done == urls.size) {
+                        cacheProgress = cacheProgress.copy(done = done)
+                    }
+                }
+                val finished = cacheProgress.state != CacheFillState.RUNNING
+                cacheProgress =
+                    cacheProgress.copy(
+                        done = done,
+                        state = if (finished) cacheProgress.state else CacheFillState.COMPLETE,
+                    )
+                refreshCacheUsage()
+            }
+    }
+
+    private var cacheFillJob: Job? = null
+
+    fun pauseCacheFill() {
+        if (cacheProgress.isRunning) cacheProgress = cacheProgress.copy(state = CacheFillState.PAUSED)
+    }
+
+    fun resumeCacheFill() {
+        if (cacheProgress.state == CacheFillState.PAUSED) startCacheFill()
+    }
+
+    fun cancelCacheFill() {
+        cacheFillJob?.cancel()
+        cacheFillJob = null
+        cacheProgress = CacheFillProgress(state = CacheFillState.IDLE)
+    }
+
+    /**
+     * Every artwork URL worth warming, newest first.
+     *
+     * Ordered so the first thing cached is the first thing seen: somebody who starts the fill and
+     * opens the catalogue a minute later finds the top of the list already drawn, rather than
+     * waiting for an alphabetical walk to reach it.
+     */
+    private fun artworkUrlsForCaching(): List<String> {
+        val kidsMode = activeProfile?.isKids == true
+        return buildList {
+            listOf(XtreamContentType.MOVIE, XtreamContentType.SERIES, XtreamContentType.LIVE)
+                .forEach { contentType ->
+                    // Walked through `page` rather than a flat list, which does two things: it
+                    // avoids materialising forty thousand items at once, and it applies the same
+                    // parental filter the catalogue screen does — a Kids profile must not cause the
+                    // app to go and fetch the artwork of everything it is not allowed to see.
+                    val locked = lockedCategoryIdsForBrowsing(contentType)
+                    var pageIndex = 0
+                    while (pageIndex < MAX_CACHE_PAGES) {
+                        val page =
+                            runCatching {
+                                xtreamRepository.page(
+                                    contentType = contentType,
+                                    categoryId = null,
+                                    query = "",
+                                    requestedPage = pageIndex,
+                                    kidsMode = kidsMode,
+                                    lockedCategoryIds = locked,
+                                )
+                            }.getOrNull() ?: break
+                        if (page.items.isEmpty()) break
+                        page.items.forEach { item ->
+                            item.artworkUrl?.takeIf(String::isNotBlank)?.let(::add)
+                        }
+                        pageIndex += 1
+                    }
+                }
+        }.distinct()
     }
 
     /** Marks today's notice as seen, so it does not return until tomorrow's slot. */
@@ -5700,6 +5872,12 @@ data class ExpandedService(
  * rather than never — the list is stable, so the same twenty are not re-checked for ever.
  */
 private const val FOLLOWED_SERIES_LIMIT = 20
+
+/** How often the fill reports progress. Setting Compose state per poster costs more than the download. */
+private const val CACHE_PROGRESS_STEP = 25
+
+/** A bound on the walk, so a repository that never returns an empty page cannot loop for ever. */
+private const val MAX_CACHE_PAGES = 600
 
 enum class DesktopDestination {
     HOME,
