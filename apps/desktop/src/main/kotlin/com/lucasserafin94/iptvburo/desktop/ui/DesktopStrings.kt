@@ -603,6 +603,19 @@ data class DesktopStrings(
                             clearAll = "Borrar todo",
                             dismiss = "Descartar",
                         ),
+                    remoteSource =
+                        RemoteSourceStrings(
+                            title = "Servidor propio (NAS)",
+                            hint = "Lee una lista M3U guardada en tu servidor por WebDAV o FTP.",
+                            addressLabel = "Dirección",
+                            addressPlaceholder = "webdav://nas.local/media/lista.m3u",
+                            userLabel = "Usuario (opcional)",
+                            passwordLabel = "Contraseña (opcional)",
+                            credentialsNotice = "Las credenciales se usan solo para esta lectura y no se guardan.",
+                            connect = "Conectar",
+                            cancel = "Cancelar",
+                            unsupportedAddress = "Dirección no compatible. Usa webdav://, http:// o ftp://",
+                        ),
                     ratings =
                         RatingStrings(
                             title = "Evaluaciones",
@@ -1197,6 +1210,19 @@ data class DesktopStrings(
                             empty = "Nada por aqui.",
                             clearAll = "Limpar tudo",
                             dismiss = "Descartar",
+                        ),
+                    remoteSource =
+                        RemoteSourceStrings(
+                            title = "Servidor próprio (NAS)",
+                            hint = "Lê uma lista M3U guardada no seu servidor por WebDAV ou FTP.",
+                            addressLabel = "Endereço",
+                            addressPlaceholder = "webdav://nas.local/media/lista.m3u",
+                            userLabel = "Usuário (opcional)",
+                            passwordLabel = "Senha (opcional)",
+                            credentialsNotice = "As credenciais são usadas só para esta leitura e não ficam salvas.",
+                            connect = "Conectar",
+                            cancel = "Cancelar",
+                            unsupportedAddress = "Endereço não suportado. Use webdav://, http:// ou ftp://",
                         ),
                     ratings =
                         RatingStrings(
@@ -1793,6 +1819,19 @@ data class DesktopStrings(
                             clearAll = "Clear all",
                             dismiss = "Dismiss",
                         ),
+                    remoteSource =
+                        RemoteSourceStrings(
+                            title = "Your own server (NAS)",
+                            hint = "Reads an M3U playlist kept on your server over WebDAV or FTP.",
+                            addressLabel = "Address",
+                            addressPlaceholder = "webdav://nas.local/media/list.m3u",
+                            userLabel = "Username (optional)",
+                            passwordLabel = "Password (optional)",
+                            credentialsNotice = "Credentials are used for this read only and are not stored.",
+                            connect = "Connect",
+                            cancel = "Cancel",
+                            unsupportedAddress = "Unsupported address. Use webdav://, http:// or ftp://",
+                        ),
                     ratings =
                         RatingStrings(
                             title = "Ratings",
@@ -2386,6 +2425,19 @@ data class DesktopStrings(
                             empty = "Nichts hier.",
                             clearAll = "Alles loeschen",
                             dismiss = "Verwerfen",
+                        ),
+                    remoteSource =
+                        RemoteSourceStrings(
+                            title = "Eigener Server (NAS)",
+                            hint = "Liest eine M3U-Liste von Ihrem Server über WebDAV oder FTP.",
+                            addressLabel = "Adresse",
+                            addressPlaceholder = "webdav://nas.local/media/liste.m3u",
+                            userLabel = "Benutzername (optional)",
+                            passwordLabel = "Passwort (optional)",
+                            credentialsNotice = "Zugangsdaten werden nur für diesen Abruf genutzt und nicht gespeichert.",
+                            connect = "Verbinden",
+                            cancel = "Abbrechen",
+                            unsupportedAddress = "Adresse nicht unterstützt. Nutzen Sie webdav://, http:// oder ftp://",
                         ),
                     ratings =
                         RatingStrings(
@@ -2985,6 +3037,19 @@ data class DesktopStrings(
                             empty = "Niente qui.",
                             clearAll = "Cancella tutto",
                             dismiss = "Ignora",
+                        ),
+                    remoteSource =
+                        RemoteSourceStrings(
+                            title = "Server personale (NAS)",
+                            hint = "Legge una lista M3U salvata sul tuo server via WebDAV o FTP.",
+                            addressLabel = "Indirizzo",
+                            addressPlaceholder = "webdav://nas.local/media/lista.m3u",
+                            userLabel = "Utente (facoltativo)",
+                            passwordLabel = "Password (facoltativa)",
+                            credentialsNotice = "Le credenziali servono solo per questa lettura e non vengono salvate.",
+                            connect = "Connetti",
+                            cancel = "Annulla",
+                            unsupportedAddress = "Indirizzo non supportato. Usa webdav://, http:// o ftp://",
                         ),
                     ratings =
                         RatingStrings(
@@ -3691,6 +3756,36 @@ data class RatingStrings(
     val criticKeyAbsent: String,
 )
 
+/**
+ * Adding a playlist that lives on the user's own server.
+ *
+ * One address field and two optional credential fields. The protocol is read from the address
+ * rather than chosen from a menu: people paste what their NAS's own interface showed them, and
+ * being asked to classify it first is a question they should not have to answer.
+ */
+data class RemoteSourceStrings(
+    /** The button that opens this, and the dialog's heading. */
+    val title: String,
+    /** What this is for, said once above the field. */
+    val hint: String,
+    /** The address field's label. */
+    val addressLabel: String,
+    /** Shown in the empty address field: an example, so the expected shape is obvious. */
+    val addressPlaceholder: String,
+    /** The username field, which is optional. */
+    val userLabel: String,
+    /** The password field, also optional. */
+    val passwordLabel: String,
+    /** Says the credentials are not written to disk, before the user types one. */
+    val credentialsNotice: String,
+    /** Starts the import. */
+    val connect: String,
+    /** Closes without importing. */
+    val cancel: String,
+    /** Shown when the address names a protocol this app cannot read. */
+    val unsupportedAddress: String,
+)
+
 data class DiscoveryStrings(
     /** The sidebar destination and the screen's heading. */
     val title: String,
@@ -3840,6 +3935,8 @@ data class ShareStrings(
     val discovery: DiscoveryStrings,
     /** The ratings block on a title page. */
     val ratings: RatingStrings,
+    /** Importing a playlist the user keeps on their own server. */
+    val remoteSource: RemoteSourceStrings,
     /** The bell beside the profile. */
     val notifications: NotificationStrings,
     /** The button on the title page, beside Favourites. */

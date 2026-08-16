@@ -14,6 +14,10 @@ import com.lucasserafin94.iptvburo.metadata.TMDB_SERIES_NAMESPACE
 import com.lucasserafin94.iptvburo.metadata.TMDB_NAMESPACE
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitleKind
 import com.lucasserafin94.iptvburo.domain.model.ExternalContentId
+import com.lucasserafin94.iptvburo.desktop.data.FtpPlaylistReader
+import com.lucasserafin94.iptvburo.desktop.data.RemotePlaylistProtocol
+import com.lucasserafin94.iptvburo.desktop.data.RemotePlaylistSource
+import com.lucasserafin94.iptvburo.desktop.data.WebDavPlaylistReader
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceKind
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceSummary
 import com.lucasserafin94.iptvburo.desktop.model.ImportedCatalog
@@ -4635,6 +4639,86 @@ class DesktopAppState(
             importStatus = ImportStatus.Error(error.toSafeImportMessage())
         }
     }
+
+    /**
+     * Imports a playlist kept on the user's own server.
+     *
+     * The address decides the protocol, so the user pastes what their NAS showed them rather than
+     * choosing from a menu first. An address this app cannot read fails before any request is made,
+     * which is the difference between "that is not an address I understand" and a connection error
+     * blamed on their server.
+     *
+     * The credentials are used for the fetch and then dropped: the imported catalogue lives in
+     * memory under the host's name, and nothing about the password reaches disk. Re-importing after
+     * a restart means entering it again, which is the deliberate trade — see the source library's
+     * note on why remembered credentials are a separate, explicit decision.
+     */
+    suspend fun importRemotePlaylist(
+        url: String,
+        username: String?,
+        password: String?,
+    ) {
+        if (importStatus is ImportStatus.Loading) return
+        val address = url.trim()
+        val protocol = RemotePlaylistProtocol.of(address)
+        if (address.isBlank() || protocol == null) {
+            importStatus = ImportStatus.Error(DesktopStrings.of(language).shareStrings.remoteSource.unsupportedAddress)
+            return
+        }
+
+        importStatus = ImportStatus.Loading
+        runCatching {
+            val source = remotePlaylistSource(protocol, address, username, password)
+            withContext(Dispatchers.IO) {
+                localRepository.importRemote(source = source, sourceLabel = source.displayName)
+            }
+        }.onSuccess { catalog ->
+            catalogs = catalogs + catalog
+            selectedSourceId = catalog.source.id
+            selectedCategoryId = null
+            selectedChannelId = catalog.channels.firstOrNull()?.id
+            searchQuery = ""
+            importStatus =
+                ImportStatus.Success(
+                    channelCount = catalog.source.channelCount,
+                    warningCount = catalog.warnings.size,
+                )
+        }.onFailure { error ->
+            // The same reset the local import does: a cancelled import otherwise leaves the guard
+            // above refusing every later attempt.
+            if (importStatus is ImportStatus.Loading) importStatus = ImportStatus.Idle
+            error.rethrowIfCancellation()
+            importStatus = ImportStatus.Error(error.toSafeImportMessage())
+        }
+    }
+
+    /**
+     * Builds the reader for [address].
+     *
+     * FTP is split into host, port and path here rather than inside the reader, because the reader
+     * is what re-assembles them with the credentials embedded — and keeping that assembly in one
+     * place is what stops a password-bearing URL from being built anywhere else.
+     */
+    private fun remotePlaylistSource(
+        protocol: RemotePlaylistProtocol,
+        address: String,
+        username: String?,
+        password: String?,
+    ): RemotePlaylistSource =
+        when (protocol) {
+            RemotePlaylistProtocol.WEBDAV ->
+                WebDavPlaylistReader(url = address, username = username, password = password)
+            RemotePlaylistProtocol.FTP -> {
+                val uri = URI(address)
+                FtpPlaylistReader(
+                    host = uri.host ?: throw IllegalArgumentException("The address names no server."),
+                    path = uri.path.orEmpty().ifBlank { "/" },
+                    username = username,
+                    password = password,
+                    port = uri.port.takeIf { value -> value > 0 },
+                )
+            }
+        }
 
     suspend fun connectXtream(
         input: XtreamLoginInput,

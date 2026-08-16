@@ -8,6 +8,7 @@ import com.lucasserafin94.iptvburo.domain.model.Source
 import com.lucasserafin94.iptvburo.domain.model.SourceType
 import com.lucasserafin94.iptvburo.playlist.M3uParser
 import com.lucasserafin94.iptvburo.playlist.ParsedChannel
+import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Locale
@@ -29,41 +30,66 @@ class InMemoryCatalogRepository(
         sourceLabel: String,
     ): ImportedCatalog {
         require(Files.isRegularFile(path)) { "The selected source is not a regular file." }
+        return Files.newInputStream(path).use { input ->
+            importStream(input = input, sourceLabel = sourceLabel, sourceType = SourceType.LOCAL_M3U)
+        }
+    }
 
+    /**
+     * Imports a playlist the user keeps on their own server.
+     *
+     * The stream is all this needs: a remote list and a local one are the same bytes through the
+     * same parser, and giving the remote case its own copy of the import would be a second place
+     * for the two to drift apart.
+     *
+     * [RemotePlaylistSource] holds the credentials and this does not: nothing about the address or
+     * the password reaches the catalogue, which is stored in memory and named after the host.
+     */
+    fun importRemote(
+        source: RemotePlaylistSource,
+        sourceLabel: String,
+    ): ImportedCatalog =
+        source.open().use { input ->
+            importStream(input = input, sourceLabel = sourceLabel, sourceType = SourceType.REMOTE_M3U)
+        }
+
+    private fun importStream(
+        input: InputStream,
+        sourceLabel: String,
+        sourceType: SourceType,
+    ): ImportedCatalog {
         val sourceId = UUID.randomUUID().toString()
         val categoriesByName = linkedMapOf<String, Category>()
         val channels = mutableListOf<Channel>()
 
         val summary =
-            Files.newInputStream(path).use { input ->
-                parserFactory().parseStreaming(input) { parsed ->
-                    val category =
-                        parsed.groupTitle
-                            ?.trim()
-                            ?.takeIf(String::isNotEmpty)
-                            ?.let { categoryName ->
-                                categoriesByName.getOrPut(categoryName.normalizedKey()) {
-                                    Category(
-                                        id = UUID.randomUUID().toString(),
-                                        sourceId = sourceId,
-                                        name = categoryName.take(MAX_CATEGORY_NAME_LENGTH),
-                                        sortOrder = categoriesByName.size,
-                                    )
-                                }
+            parserFactory().parseStreaming(input) { parsed ->
+                val category =
+                    parsed.groupTitle
+                        ?.trim()
+                        ?.takeIf(String::isNotEmpty)
+                        ?.let { categoryName ->
+                            categoriesByName.getOrPut(categoryName.normalizedKey()) {
+                                Category(
+                                    id = UUID.randomUUID().toString(),
+                                    sourceId = sourceId,
+                                    name = categoryName.take(MAX_CATEGORY_NAME_LENGTH),
+                                    sortOrder = categoriesByName.size,
+                                )
                             }
-                    channels +=
-                        parsed.toDomainChannel(
-                            sourceId = sourceId,
-                            categoryId = category?.id,
-                        )
-                }
+                        }
+                channels +=
+                    parsed.toDomainChannel(
+                        sourceId = sourceId,
+                        categoryId = category?.id,
+                    )
             }
 
         val source =
             Source(
                 id = sourceId,
                 name = sourceLabel.take(MAX_SOURCE_NAME_LENGTH),
-                type = SourceType.LOCAL_M3U,
+                type = sourceType,
                 createdAtEpochMillis = System.currentTimeMillis(),
                 channelCount = channels.size,
             )

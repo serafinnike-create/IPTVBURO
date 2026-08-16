@@ -30,7 +30,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
@@ -191,6 +194,7 @@ fun DesktopApp(
     var externalOpenResult by remember { mutableStateOf<ExternalOpenResult?>(null) }
     var activePlayback by remember { mutableStateOf<DesktopPlaybackRequest?>(null) }
     var showXtreamLogin by remember { mutableStateOf(false) }
+    var showRemoteSource by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
 
     /** Whether the TMDb key walkthrough is showing, over the settings window. */
@@ -365,6 +369,13 @@ fun DesktopApp(
                         onFavorites = { scope.launch { appState.setFavoritesOnly(true) } },
                         onReminders = appState::openReminders,
                         onDiscover = appState::openDiscovery,
+                        onConnectXtream = { showXtreamLogin = true },
+                        onImportM3u = {
+                            chooseLocalPlaylist(ownerWindow)?.let { path ->
+                                scope.launch { appState.importLocalPlaylist(path) }
+                            }
+                        },
+                        onAddRemoteSource = { showRemoteSource = true },
                         onContinueWatching = appState::openContinueWatching,
                         onHistory = appState::openHistory,
                         onDownloads = appState::openDownloads,
@@ -1038,6 +1049,14 @@ fun DesktopApp(
                 }
             }
 
+            if (showRemoteSource) {
+                RemoteSourceDialog(
+                    onDismiss = { showRemoteSource = false },
+                    onConnect = { url, user, password ->
+                        scope.launch { appState.importRemotePlaylist(url, user, password) }
+                    },
+                )
+            }
             if (showXtreamLogin) {
                 XtreamLoginDialog(
                     onDismiss = { showXtreamLogin = false },
@@ -1151,6 +1170,11 @@ private fun SourceSidebar(
     onFavorites: () -> Unit,
     onReminders: () -> Unit,
     onDiscover: () -> Unit,
+    /** Connects an Xtream account. */
+    onConnectXtream: () -> Unit,
+    /** Imports an M3U playlist from a file. */
+    onImportM3u: () -> Unit,
+    onAddRemoteSource: () -> Unit,
     onContinueWatching: () -> Unit,
     onHistory: () -> Unit,
     onDownloads: () -> Unit,
@@ -1325,21 +1349,27 @@ private fun SourceSidebar(
         // The source list used to own the whole remaining column even with one source. It is a
         // rarely-used switch, so it now takes only the height it needs and the section disappears
         // entirely when there is nothing to switch between.
+        // Always here, even with one source — and that is the fix rather than a preference.
+        //
+        // The section used to appear only with two or more, on the reasoning that switching between
+        // one thing is pointless. True, but it took the way to *add* a second with it: somebody
+        // with a single playlist had nowhere in the app to connect another, because the buttons
+        // that do it live on the empty-library screen they will never see again.
+        Spacer(Modifier.height(28.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            SectionLabel(text.sources)
+            Text(
+                text = sources.size.toString(),
+                color = BuroColors.TextSubtle,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
         if (sources.size > 1) {
-            Spacer(Modifier.height(28.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                SectionLabel(text.sources)
-                Text(
-                    text = sources.size.toString(),
-                    color = BuroColors.TextSubtle,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
             LazyColumn(
                 modifier = Modifier.heightIn(max = 220.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -1352,7 +1382,30 @@ private fun SourceSidebar(
                     )
                 }
             }
+            Spacer(Modifier.height(6.dp))
         }
+        // Both ways in, named for what they are rather than hidden behind one "+" that would make
+        // somebody guess which kind of account they are about to add.
+        NavigationItem(
+            label = text.connectXtream,
+            icon = Icons.Default.AddCircle,
+            selected = false,
+            onClick = onConnectXtream,
+        )
+        NavigationItem(
+            label = text.importM3u,
+            icon = Icons.Default.PlaylistAdd,
+            selected = false,
+            onClick = onImportM3u,
+        )
+        // The third way in: the same M3U, but read off the box that holds the media rather than
+        // copied to this machine first.
+        NavigationItem(
+            label = text.shareStrings.remoteSource.title,
+            icon = Icons.Default.Dns,
+            selected = false,
+            onClick = onAddRemoteSource,
+        )
 
         Spacer(Modifier.weight(1f))
     }
