@@ -58,6 +58,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableList
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableVertically
+import com.lucasserafin94.iptvburo.desktop.ui.SettingsTabStrings
 import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 
@@ -95,8 +96,14 @@ fun SettingsDialog(
     onOpenTmdbGuide: () -> Unit = {},
 ) {
     val text = strings
+    var tab by remember { mutableStateOf(SettingsTab.GENERAL) }
     val listState = rememberLazyListState()
     var categoriesExpanded by remember { mutableStateOf(false) }
+
+    // Back to the top when the group changes. One state is reused across tabs — a keyed
+    // rememberLazyListState would be recreated mid-composition and lose the scrollbar's adapter —
+    // so the position is reset explicitly instead.
+    LaunchedEffect(tab) { listState.scrollToItem(0) }
 
     // Measured when the dialog opens, not only after a fill.
     //
@@ -172,19 +179,28 @@ fun SettingsDialog(
             // Weighted, never fillMaxSize: an unweighted Column child is measured against unbounded
             // height, so a scrollable one lays its whole content out past the bottom and never
             // scrolls at all. This app has shipped that mistake more than once.
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                LazyColumn(
-                    state = listState,
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .arrowScrollableList(listState)
-                            .edgeScrollableVertically(listState),
-                    verticalArrangement = Arrangement.spacedBy(BuroSpacing.Lg),
-                    // Room for the scrollbar, so it never sits on top of a pill.
-                    contentPadding = PaddingValues(end = BuroSpacing.Md),
-                ) {
-                    item(key = "language") {
+            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                SettingsTabColumn(
+                    selected = tab,
+                    onSelect = { chosen -> tab = chosen },
+                    text = text.shareStrings.settingsTabs,
+                )
+                Spacer(Modifier.width(BuroSpacing.Md))
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    LazyColumn(
+                        // Keyed on the tab so switching starts at the top of the new group rather
+                        // than at whatever offset the previous one was scrolled to.
+                        state = listState,
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .arrowScrollableList(listState)
+                                .edgeScrollableVertically(listState),
+                        verticalArrangement = Arrangement.spacedBy(BuroSpacing.Lg),
+                        // Room for the scrollbar, so it never sits on top of a pill.
+                        contentPadding = PaddingValues(end = BuroSpacing.Md),
+                    ) {
+                    if (tab == SettingsTab.GENERAL) item(key = "language") {
                         SettingsSection(text.languageLabel, text.languageHint) {
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
@@ -201,7 +217,7 @@ fun SettingsDialog(
                         }
                     }
 
-                    item(key = "region") {
+                    if (tab == SettingsTab.GENERAL) item(key = "region") {
                         SettingsSection(text.subscriptionsRegion, text.regionHint) {
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
@@ -220,8 +236,7 @@ fun SettingsDialog(
 
                     // The TMDb key, moved here from the dropdown. It sits under the region because
                     // both govern the same thing: what the app can say about a title.
-                    item(key = "metadata-key") {
-                        HorizontalDivider(color = BuroColors.BorderSoft)
+                    if (tab == SettingsTab.DATA) item(key = "metadata-key") {
                         SettingsSection(text.metadataKeyLabel, text.metadataKeyUses) {
                             Column {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -292,7 +307,7 @@ fun SettingsDialog(
                     // The critics' scores, under the TMDb key because it is the same kind of
                     // setting: a key the user supplies that widens what the app can say about a
                     // title. Separate from TMDb's because it is a different service's account.
-                    item(key = "critic-key") {
+                    if (tab == SettingsTab.DATA) item(key = "critic-key") {
                         val ratings = text.shareStrings.ratings
                         HorizontalDivider(color = BuroColors.BorderSoft)
                         SettingsSection(ratings.criticKeyLabel, ratings.criticKeyHint) {
@@ -339,7 +354,7 @@ fun SettingsDialog(
                         }
                     }
 
-                    item(key = "clock") {
+                    if (tab == SettingsTab.GENERAL) item(key = "clock") {
                         HorizontalDivider(color = BuroColors.BorderSoft)
                         SettingsSection(text.settingsText.clockLabel, text.settingsText.clockHint) {
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
@@ -357,13 +372,12 @@ fun SettingsDialog(
                         }
                     }
 
-                    item(key = "subtitles") {
-                        // Receiving a title from a phone on the same network.
-                        //
-                        // Off until switched on, and the code is only on screen while it is
-                        // listening. This is the one feature that opens a socket, so it is
-                        // something the user turns on rather than something they discover has been
-                        // running — and the code is what keeps a shared network safe.
+                    // The cache belongs with the keys: both are about what the app fetches and what
+                    // it keeps. It used to sit inside the subtitles item, along with the cast
+                    // receiver — three unrelated settings under one key, which is a good part of
+                    // why this screen was hard to read.
+                    if (tab == SettingsTab.DATA) item(key = "cache") {
+                        HorizontalDivider(color = BuroColors.BorderSoft)
                         // The same panel the first run offers, so the explanation cannot drift
                         // apart from the setting it explains.
                         SettingsSection(
@@ -387,7 +401,16 @@ fun SettingsDialog(
                                 showTitle = false,
                             )
                         }
+                    }
 
+                    // Receiving a title from a phone on the same network.
+                    //
+                    // Off until switched on, and the code is only on screen while it is listening.
+                    // This is the one feature that opens a socket, so it is something the user
+                    // turns on rather than something they discover has been running — and the code
+                    // is what keeps a shared network safe.
+                    if (tab == SettingsTab.GENERAL) item(key = "receiver") {
+                        HorizontalDivider(color = BuroColors.BorderSoft)
                         SettingsSection(
                             label = text.shareStrings.receiver.title,
                             hint = text.shareStrings.receiver.hint,
@@ -432,6 +455,9 @@ fun SettingsDialog(
                             }
                         }
 
+                    }
+
+                    if (tab == SettingsTab.SUBTITLES) item(key = "subtitles") {
                         SettingsSection(text.settingsText.subtitlesLabel, text.settingsText.subtitlesHint) {
                             Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
@@ -475,8 +501,7 @@ fun SettingsDialog(
                         }
                     }
 
-                    item(key = "parental") {
-                        HorizontalDivider(color = BuroColors.BorderSoft)
+                    if (tab == SettingsTab.CONTENT) item(key = "parental") {
                         ParentalControlPanel(appState)
                     }
 
@@ -510,7 +535,7 @@ fun SettingsDialog(
                         type to appState.lockedCategoryIdsForSettings(type)
                     }
                     if (categories.isNotEmpty()) {
-                        item(key = "categories-header") {
+                        if (tab == SettingsTab.CONTENT) item(key = "categories-header") {
                             HorizontalDivider(color = BuroColors.BorderSoft)
                             Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
                                 Row(
@@ -580,8 +605,7 @@ fun SettingsDialog(
                     // Maintenance, last: the update button, the version and the session controls,
                     // all moved here from the dropdown menu. They are the least-used settings and
                     // the most consequential, which is exactly the order they belong in.
-                    item(key = "maintenance") {
-                        HorizontalDivider(color = BuroColors.BorderSoft)
+                    if (tab == SettingsTab.MAINTENANCE) item(key = "maintenance") {
                         Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
                             SettingsActionRow(
                                 label = if (updateBusy) "…" else text.checkUpdate,
@@ -613,15 +637,16 @@ fun SettingsDialog(
                     }
                 }
 
-                VerticalScrollbar(
-                    adapter = rememberScrollbarAdapter(listState),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                    style =
-                        LocalScrollbarStyle.current.copy(
-                            unhoverColor = BuroColors.BorderSoft,
-                            hoverColor = BuroColors.Primary,
-                        ),
-                )
+                    VerticalScrollbar(
+                        adapter = rememberScrollbarAdapter(listState),
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                        style =
+                            LocalScrollbarStyle.current.copy(
+                                unhoverColor = BuroColors.BorderSoft,
+                                hoverColor = BuroColors.Primary,
+                            ),
+                    )
+                }
             }
         }
     }
@@ -695,6 +720,87 @@ private fun SettingsActionRow(
         )
     }
 }
+
+/**
+ * Which group of settings is on screen.
+ *
+ * The screen had grown to eleven sections in one scrolling column, all with the same weight, so
+ * finding one meant reading past the ten that were not wanted — and each new setting made every
+ * other one harder to find. Five groups of two or three, named for where somebody would look.
+ */
+private enum class SettingsTab {
+    GENERAL,
+    CONTENT,
+    SUBTITLES,
+    DATA,
+    MAINTENANCE,
+}
+
+/**
+ * The groups, down the left.
+ *
+ * A column rather than a row of tabs across the top: the names are words rather than icons, five of
+ * them do not fit across a 520 dp panel without truncating, and a vertical list leaves the settings
+ * themselves the full height of the dialog.
+ */
+@Composable
+private fun SettingsTabColumn(
+    selected: SettingsTab,
+    onSelect: (SettingsTab) -> Unit,
+    text: SettingsTabStrings,
+) {
+    val labels =
+        listOf(
+            SettingsTab.GENERAL to text.general,
+            SettingsTab.CONTENT to text.content,
+            SettingsTab.SUBTITLES to text.subtitles,
+            SettingsTab.DATA to text.data,
+            SettingsTab.MAINTENANCE to text.maintenance,
+        )
+
+    Column(
+        modifier = Modifier.width(TAB_COLUMN_WIDTH).fillMaxHeight(),
+        verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+    ) {
+        labels.forEach { (value, label) ->
+            val active = value == selected
+            BuroInteractiveRow(
+                onClick = { onSelect(value) },
+                selected = active,
+                shape = BuroRadius.Small,
+                contentDescription = label,
+                modifier = Modifier.fillMaxWidth(),
+            ) { state ->
+                Text(
+                    text = label,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = BuroSpacing.Sm, vertical = BuroSpacing.Sm),
+                    color =
+                        when {
+                            active -> BuroColors.Primary
+                            state.active -> BuroColors.Text
+                            else -> BuroColors.TextMuted
+                        },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Sized for the longest label in any of the five languages.
+ *
+ * That is Spanish "Mantenimiento" at thirteen characters, followed by Italian "Manutenzione" and
+ * "Sottotitoli". Measured against the widest rather than the Portuguese the app is usually read in,
+ * because a truncated navigation label is how somebody fails to find a whole group of settings.
+ */
+private val TAB_COLUMN_WIDTH = 152.dp
 
 /** A titled block, with the line that says what the setting governs. */
 @Composable

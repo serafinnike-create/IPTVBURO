@@ -639,6 +639,14 @@ data class DesktopStrings(
                             loading = "Creando tu selección…",
                             kept = "Guardado en favoritos",
                         ),
+                    settingsTabs =
+                        SettingsTabStrings(
+                            general = "General",
+                            content = "Contenido",
+                            subtitles = "Subtítulos",
+                            data = "Datos",
+                            maintenance = "Mantenimiento",
+                        ),
                     cache =
                         CacheStrings(
                             title = "Guardar capas neste computador",
@@ -1246,6 +1254,14 @@ data class DesktopStrings(
                             another = "Buscar mais",
                             loading = "Montando sua seleção...",
                             kept = "Guardado nos favoritos",
+                        ),
+                    settingsTabs =
+                        SettingsTabStrings(
+                            general = "Geral",
+                            content = "Conteúdo",
+                            subtitles = "Legendas",
+                            data = "Dados",
+                            maintenance = "Manutenção",
                         ),
                     cache =
                         CacheStrings(
@@ -1855,6 +1871,14 @@ data class DesktopStrings(
                             loading = "Building your selection...",
                             kept = "Saved to favourites",
                         ),
+                    settingsTabs =
+                        SettingsTabStrings(
+                            general = "General",
+                            content = "Content",
+                            subtitles = "Subtitles",
+                            data = "Data",
+                            maintenance = "Maintenance",
+                        ),
                     cache =
                         CacheStrings(
                             title = "Keep artwork on this computer",
@@ -2461,6 +2485,14 @@ data class DesktopStrings(
                             another = "Mehr finden",
                             loading = "Auswahl wird erstellt…",
                             kept = "Zu Favoriten hinzugefügt",
+                        ),
+                    settingsTabs =
+                        SettingsTabStrings(
+                            general = "Allgemein",
+                            content = "Inhalt",
+                            subtitles = "Untertitel",
+                            data = "Daten",
+                            maintenance = "Wartung",
                         ),
                     cache =
                         CacheStrings(
@@ -3073,6 +3105,14 @@ data class DesktopStrings(
                             another = "Trova altri",
                             loading = "Creazione della selezione...",
                             kept = "Aggiunto ai preferiti",
+                        ),
+                    settingsTabs =
+                        SettingsTabStrings(
+                            general = "Generale",
+                            content = "Contenuti",
+                            subtitles = "Sottotitoli",
+                            data = "Dati",
+                            maintenance = "Manutenzione",
                         ),
                     cache =
                         CacheStrings(
@@ -3786,6 +3826,26 @@ data class RemoteSourceStrings(
     val unsupportedAddress: String,
 )
 
+/**
+ * The settings screen's tabs.
+ *
+ * Eleven sections in one scrolling column meant every setting was found by reading past the ten
+ * that were not wanted. Grouped, each tab holds two or three related things, and the group names
+ * answer "where would this live" without opening them.
+ */
+data class SettingsTabStrings(
+    /** Language, region, clock: what the app is, before what it shows. */
+    val general: String,
+    /** What appears in the catalogue: categories and the parental lock. */
+    val content: String,
+    /** Subtitles, which are numerous enough to be their own group. */
+    val subtitles: String,
+    /** Keys and cached artwork: what the app fetches and what it keeps. */
+    val data: String,
+    /** Updates, refresh, ending the session, and the version. */
+    val maintenance: String,
+)
+
 data class DiscoveryStrings(
     /** The sidebar destination and the screen's heading. */
     val title: String,
@@ -3931,6 +3991,8 @@ data class ShareStrings(
     val serviceCatalogue: ServiceCatalogueStrings,
     /** The artwork cache setting and its progress. */
     val cache: CacheStrings,
+    /** The settings screen's own navigation. */
+    val settingsTabs: SettingsTabStrings,
     /** The Descobrir screen. */
     val discovery: DiscoveryStrings,
     /** The ratings block on a title page. */
