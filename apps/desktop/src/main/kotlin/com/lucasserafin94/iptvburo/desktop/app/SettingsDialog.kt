@@ -289,6 +289,56 @@ fun SettingsDialog(
                         }
                     }
 
+                    // The critics' scores, under the TMDb key because it is the same kind of
+                    // setting: a key the user supplies that widens what the app can say about a
+                    // title. Separate from TMDb's because it is a different service's account.
+                    item(key = "critic-key") {
+                        val ratings = text.shareStrings.ratings
+                        HorizontalDivider(color = BuroColors.BorderSoft)
+                        SettingsSection(ratings.criticKeyLabel, ratings.criticKeyHint) {
+                            Column {
+                                OutlinedTextField(
+                                    value = appState.criticScoresApiKey,
+                                    onValueChange = appState::updateCriticScoresApiKey,
+                                    singleLine = true,
+                                    placeholder = {
+                                        Text(ratings.criticKeyPlaceholder, color = BuroColors.TextSubtle)
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = BuroRadius.Small,
+                                    colors =
+                                        TextFieldDefaults.colors(
+                                            focusedTextColor = BuroColors.Text,
+                                            unfocusedTextColor = BuroColors.Text,
+                                            focusedContainerColor = BuroColors.Surface,
+                                            unfocusedContainerColor = BuroColors.Surface,
+                                            focusedIndicatorColor = BuroColors.Primary,
+                                            unfocusedIndicatorColor = BuroColors.BorderSoft,
+                                            cursorColor = BuroColors.Primary,
+                                        ),
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    // Same reasoning as the TMDb field above: the key applies as it
+                                    // is typed, so silence would read as the paste not having taken.
+                                    text =
+                                        if (appState.criticScoresApiKey.isNotBlank()) {
+                                            ratings.criticKeySaved
+                                        } else {
+                                            ratings.criticKeyAbsent
+                                        },
+                                    color =
+                                        if (appState.criticScoresApiKey.isNotBlank()) {
+                                            BuroColors.Success
+                                        } else {
+                                            BuroColors.TextSubtle
+                                        },
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                    }
+
                     item(key = "clock") {
                         HorizontalDivider(color = BuroColors.BorderSoft)
                         SettingsSection(text.settingsText.clockLabel, text.settingsText.clockHint) {

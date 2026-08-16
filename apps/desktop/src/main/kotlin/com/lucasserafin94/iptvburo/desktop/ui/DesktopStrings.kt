@@ -608,6 +608,12 @@ data class DesktopStrings(
                             title = "Evaluaciones",
                             source = "Puntuación TMDb",
                             votes = "%s votos",
+                            critics = "Críticos",
+                            criticKeyLabel = "Clave OMDb (opcional)",
+                            criticKeyHint = "Añade Tomatometer, Metascore y IMDb. Consíguela en omdbapi.com",
+                            criticKeyPlaceholder = "Clave de la API",
+                            criticKeySaved = "Clave guardada: se muestran las notas de la crítica.",
+                            criticKeyAbsent = "Sin clave: solo se muestra la puntuación del público de TMDb.",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -1197,6 +1203,12 @@ data class DesktopStrings(
                             title = "Avaliações",
                             source = "Nota TMDb",
                             votes = "%s votos",
+                            critics = "Críticos",
+                            criticKeyLabel = "Chave OMDb (opcional)",
+                            criticKeyHint = "Adiciona Tomatometer, Metascore e IMDb. Pegue a sua em omdbapi.com",
+                            criticKeyPlaceholder = "Chave da API",
+                            criticKeySaved = "Chave salva: as notas da crítica aparecem.",
+                            criticKeyAbsent = "Sem chave: aparece só a nota do público do TMDb.",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -1786,6 +1798,12 @@ data class DesktopStrings(
                             title = "Ratings",
                             source = "TMDb score",
                             votes = "%s votes",
+                            critics = "Critics",
+                            criticKeyLabel = "OMDb key (optional)",
+                            criticKeyHint = "Adds Tomatometer, Metascore and IMDb. Get one at omdbapi.com",
+                            criticKeyPlaceholder = "API key",
+                            criticKeySaved = "Key saved: the critics' scores are shown.",
+                            criticKeyAbsent = "Without a key only TMDb's audience score is shown.",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -2374,6 +2392,12 @@ data class DesktopStrings(
                             title = "Bewertungen",
                             source = "TMDb-Wertung",
                             votes = "%s Stimmen",
+                            critics = "Kritiker",
+                            criticKeyLabel = "OMDb-Schlüssel (optional)",
+                            criticKeyHint = "Ergänzt Tomatometer, Metascore und IMDb. Erhältlich auf omdbapi.com",
+                            criticKeyPlaceholder = "API-Schlüssel",
+                            criticKeySaved = "Schlüssel gespeichert: Kritikerwertungen werden angezeigt.",
+                            criticKeyAbsent = "Ohne Schlüssel wird nur die TMDb-Publikumswertung angezeigt.",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -2967,6 +2991,12 @@ data class DesktopStrings(
                             title = "Valutazioni",
                             source = "Punteggio TMDb",
                             votes = "%s voti",
+                            critics = "Critica",
+                            criticKeyLabel = "Chiave OMDb (facoltativa)",
+                            criticKeyHint = "Aggiunge Tomatometer, Metascore e IMDb. Ottienila su omdbapi.com",
+                            criticKeyPlaceholder = "Chiave API",
+                            criticKeySaved = "Chiave salvata: i voti della critica sono visibili.",
+                            criticKeyAbsent = "Senza chiave viene mostrato solo il punteggio del pubblico di TMDb.",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -3641,6 +3671,24 @@ data class RatingStrings(
     val source: String,
     /** How many people voted. Takes a formatted count. */
     val votes: String,
+    /**
+     * The label under the critics' row, separating it from the audience score above.
+     *
+     * The score names themselves — Tomatometer, Metascore, IMDb — are not translated. They are the
+     * companies' own names for their own measures, and a translated "Tomatômetro" would be a name
+     * Rotten Tomatoes does not use.
+     */
+    val critics: String,
+    /** The settings section where the OMDb key is pasted. */
+    val criticKeyLabel: String,
+    /** What setting the key buys, said before the field rather than after it. */
+    val criticKeyHint: String,
+    /** Empty-field placeholder. */
+    val criticKeyPlaceholder: String,
+    /** Confirms a pasted key took effect — there is no Save button here either. */
+    val criticKeySaved: String,
+    /** What the app does without one: the audience score alone, which is the default. */
+    val criticKeyAbsent: String,
 )
 
 data class DiscoveryStrings(

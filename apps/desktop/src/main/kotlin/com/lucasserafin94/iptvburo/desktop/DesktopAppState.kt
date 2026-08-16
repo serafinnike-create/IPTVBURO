@@ -53,6 +53,8 @@ import com.lucasserafin94.iptvburo.desktop.user.ListeningHistoryStore
 import com.lucasserafin94.iptvburo.desktop.user.MusicPlayCountStore
 import com.lucasserafin94.iptvburo.desktop.user.MusicPlaylistStore
 import com.lucasserafin94.iptvburo.desktop.user.ProfilePhotoStore
+import com.lucasserafin94.iptvburo.metadata.CriticScores
+import com.lucasserafin94.iptvburo.metadata.CriticScoresClient
 import com.lucasserafin94.iptvburo.metadata.TmdbAudienceScore
 import com.lucasserafin94.iptvburo.metadata.TmdbClient
 import com.lucasserafin94.iptvburo.desktop.build.BUNDLED_TMDB_KEY
@@ -242,6 +244,31 @@ class DesktopAppState(
 
     var metadataApiKey by mutableStateOf(userStore.metadataApiKey().orEmpty())
         private set
+
+    /**
+     * The critics' scores, keyed by the user's own OMDb key.
+     *
+     * No bundled fallback, unlike TMDb: OMDb's free tier is a thousand requests a day against one
+     * account, and shipping a shared key would exhaust one person's allowance on everyone else's
+     * browsing. Without a key the details screen shows the audience score alone.
+     */
+    private var criticScoresClient: CriticScoresClient? =
+        userStore.criticScoresApiKey()?.let { key -> CriticScoresClient(key) }
+
+    var criticScoresApiKey by mutableStateOf(userStore.criticScoresApiKey().orEmpty())
+        private set
+
+    /**
+     * Stores the OMDb key and rebuilds the client, so pasting one takes effect without a restart.
+     */
+    fun updateCriticScoresApiKey(value: String) {
+        val clean = value.trim()
+        userStore.setCriticScoresApiKey(clean)
+        criticScoresApiKey = clean
+        criticScoresClient = clean.takeIf(String::isNotBlank)?.let { key -> CriticScoresClient(key) }
+        // Anything already on screen came from the old key, or from none at all.
+        criticScores = null
+    }
 
     /**
      * The key actually used for requests: this profile's own, then the shared one, then the
@@ -1590,11 +1617,52 @@ class DesktopAppState(
             // Checked against what is on screen now: the viewer may have opened another title while
             // this was in flight, and showing this score under that film's name would be worse than
             // showing none.
-            if (audienceScoreFor == requested) audienceScore = found
+            if (audienceScoreFor == requested) {
+                audienceScore = found
+                loadCriticScores(requested, found?.tmdbId)
+            }
         }
     }
 
     private var audienceScoreFor: String? = null
+
+    /**
+     * What the critics said about the title on screen, when OMDb has an answer.
+     *
+     * Kept apart from [audienceScore] because they are different claims by different people: TMDb's
+     * is the audience voting, and these are the Tomatometer, the Metascore and IMDb. The details
+     * screen labels each with its own source for exactly that reason.
+     */
+    var criticScores by mutableStateOf<CriticScores?>(null)
+        private set
+
+    /**
+     * Fetches the critics' scores for the title whose audience score has just arrived.
+     *
+     * Chained onto that lookup rather than started alongside it, because the join key is an IMDb id
+     * and only TMDb can supply it: the search resolves a name to a TMDb id, the details call turns
+     * that into an IMDb id, and OMDb is keyed by the latter. Matching OMDb on title and year
+     * instead would eventually put another film's Tomatometer on this page.
+     */
+    private fun loadCriticScores(requested: String, tmdbId: Int?) {
+        criticScores = null
+        val client = criticScoresClient ?: return
+        if (!client.isConfigured || tmdbId == null) return
+
+        streamingScope.launch {
+            val found =
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        metadataClient.titleDetails(tmdbId)
+                            ?.imdbId
+                            ?.let { imdbId -> client.scoresFor(imdbId) }
+                    }
+                }.getOrNull()
+            // The same guard the audience score uses: the viewer may have moved on, and a score
+            // drawn under another film's name is worse than no score at all.
+            if (audienceScoreFor == requested) criticScores = found
+        }
+    }
 
     // --- Descobrir -----------------------------------------------------------------------------
 

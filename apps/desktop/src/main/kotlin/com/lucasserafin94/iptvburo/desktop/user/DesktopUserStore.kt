@@ -616,6 +616,20 @@ class DesktopUserStore(
     }
 
     /**
+     * The OMDb key, which is what the critics' scores are fetched with.
+     *
+     * A second key rather than a second use of the TMDb one: they are different services with
+     * different accounts. Absent by default, and absent means the details screen shows TMDb's
+     * audience score alone — which is what it showed before this existed.
+     */
+    fun criticScoresApiKey(): String? = preferences.get(KEY_CRITIC_KEY, null)?.takeIf(String::isNotBlank)
+
+    fun setCriticScoresApiKey(value: String?) {
+        val clean = value?.trim().orEmpty()
+        if (clean.isBlank()) preferences.remove(KEY_CRITIC_KEY) else preferences.put(KEY_CRITIC_KEY, clean)
+    }
+
+    /**
      * A profile's own TMDb key, when it has one.
      *
      * Null means "use the shared one", which is the default and the common case: a household
@@ -986,6 +1000,7 @@ class DesktopUserStore(
         const val MAX_BACKDROP_POSTERS = 18
         const val KEY_TERMS_ACCEPTED = "terms-accepted"
         const val KEY_METADATA_KEY = "metadata-api-key"
+        const val KEY_CRITIC_KEY = "critic-scores-api-key"
         const val KEY_ACTIVATION_KEY = "activation-key"
         const val KEY_AUDIO_OUTPUT = "audio-output"
         const val KEY_LEGACY_FAVORITES = "favorites"

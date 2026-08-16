@@ -675,7 +675,10 @@ class TmdbClient(
                 .addPathSegments(if (isSeries) "tv/$tmdbId" else "movie/$tmdbId")
                 .addQueryParameter("api_key", key)
                 .addQueryParameter("language", language)
-                .addQueryParameter("append_to_response", "credits,videos")
+                // external_ids carries the IMDb id, which is how the critics' scores are looked up
+                // afterwards. Appended rather than fetched separately because it costs nothing
+                // here: a series does not carry imdb_id at the top level the way a film does.
+                .addQueryParameter("append_to_response", "credits,videos,external_ids")
                 .build()
 
         val root = get(url) ?: return null
@@ -728,6 +731,12 @@ class TmdbClient(
                     .orEmpty(),
             cast = cast,
             youtubeTrailerId = trailerKey,
+            // A film reports it at the top level; a series only inside external_ids. Both are read
+            // rather than branching on isSeries, since TMDb has been inconsistent about this before
+            // and an absent id simply means no critics' scores are shown.
+            imdbId =
+                root.string("imdb_id")
+                    ?: root.getAsJsonObject("external_ids")?.string("imdb_id"),
         )
     }
 
@@ -878,6 +887,14 @@ data class TmdbTitleDetails(
     val genres: List<String> = emptyList(),
     val cast: List<TmdbCastMember> = emptyList(),
     val youtubeTrailerId: String? = null,
+    /**
+     * The IMDb id, when TMDb knows one.
+     *
+     * The join key to the critics' scores. IMDb ids are stable and unambiguous, which matching by
+     * title and year is not: two films share a name and a year often enough that a title match
+     * would eventually put another film's Tomatometer on this page.
+     */
+    val imdbId: String? = null,
 )
 
 /**

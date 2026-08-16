@@ -119,6 +119,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableVertically
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollable
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableGrid
 import com.lucasserafin94.iptvburo.desktop.ui.categoryBadgeFor
+import com.lucasserafin94.iptvburo.metadata.CriticScores
 import com.lucasserafin94.iptvburo.metadata.TmdbAudienceScore
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.CastStrings
@@ -1320,6 +1321,7 @@ internal fun XtreamInternalDetailsPage(
                 hasReminder = appState.hasReminder(item),
                 onToggleReminder = { appState.toggleReminder(item) },
                 audienceScore = appState.audienceScore,
+                criticScores = appState.criticScores,
                 onShare = {
                     // Built here rather than in the dialog, because this is where the loaded
                     // details are. The poster deliberately comes from the *details* rather than
@@ -1454,6 +1456,8 @@ internal fun XtreamItemDetail(
     onToggleReminder: (() -> Unit)? = null,
     /** The audience score for this title, once TMDb has answered. Null draws no ratings block. */
     audienceScore: TmdbAudienceScore? = null,
+    /** The critics' scores, when an OMDb key is set and that service knew the title. */
+    criticScores: CriticScores? = null,
     /**
      * Opens the share sheet. Null where sharing makes no sense — a live channel is a schedule
      * rather than a title, and the recipient's own list would have nothing to resolve it to.
@@ -1835,6 +1839,7 @@ internal fun XtreamItemDetail(
                     MovieDetailContent(
                         status = movieStatus,
                         audienceScore = audienceScore,
+                        criticScores = criticScores,
                         onRetry = onLoadMovie,
                         onOpenTrailer = onOpenTrailer,
                         onOpenPerson = onOpenPerson,
@@ -1965,6 +1970,8 @@ private fun MovieDetailContent(
     status: MovieDetailsStatus,
     /** The audience score, once TMDb has answered. Null draws no ratings block at all. */
     audienceScore: TmdbAudienceScore? = null,
+    /** The critics' scores, which appear under the audience one when they exist. */
+    criticScores: CriticScores? = null,
     onRetry: () -> Unit,
     onOpenTrailer: (String) -> Unit,
     onOpenPerson: (String) -> Unit,
@@ -2006,7 +2013,7 @@ private fun MovieDetailContent(
                 Text(it, color = BuroColors.Text, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(14.dp))
             }
-            RatingsBlock(score = audienceScore)
+            RatingsBlock(score = audienceScore, critics = criticScores)
             details.director?.let { DetailLine("Direção", it) }
             details.cast?.let {
                 CastButtons(
@@ -3588,7 +3595,10 @@ private fun CastManualAddressField(
  * nobody rated, and "0%" reads as a verdict rather than as the absence of one.
  */
 @Composable
-private fun RatingsBlock(score: TmdbAudienceScore?) {
+private fun RatingsBlock(
+    score: TmdbAudienceScore?,
+    critics: CriticScores? = null,
+) {
     val text = strings.shareStrings.ratings
     val average = score?.average?.takeIf { value -> value > 0.0 } ?: return
     val votes = score.voteCount
@@ -3643,8 +3653,85 @@ private fun RatingsBlock(score: TmdbAudienceScore?) {
                 )
             }
         }
+
+        // Absent unless an OMDb key is configured and that service had something to say, so the
+        // panel is exactly as it was before for everyone who has not set one up.
+        if (critics != null && critics.hasAny) {
+            Spacer(Modifier.height(BuroSpacing.Md))
+            Text(
+                text = text.critics,
+                color = BuroColors.TextMuted,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Lg)) {
+                critics.tomatometer?.let { percent ->
+                    CriticScore("$percent%", CRITIC_TOMATO, "Tomatometer")
+                }
+                critics.metascore?.let { percent ->
+                    CriticScore("$percent%", CRITIC_METACRITIC, "Metascore")
+                }
+                critics.imdbRating?.let { rating ->
+                    CriticScore("%.1f".format(rating), CRITIC_IMDB, "IMDb")
+                }
+            }
+        }
     }
 }
+
+/**
+ * One critic's verdict, under the name of whoever reached it.
+ *
+ * The colour is the identifying mark rather than a logo. Rotten Tomatoes' tomato and Metacritic's
+ * shield are licensed images with no public address to fetch them from — unlike TMDb's, which the
+ * block above uses — and copying either into this repository is the thing the project does not do.
+ * A coloured chip carries no one's artwork while still letting the eye find the tomato score
+ * without reading, and the name says plainly whose number it is.
+ */
+@Composable
+private fun CriticScore(
+    value: String,
+    accent: Color,
+    source: String,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier =
+                Modifier
+                    .size(CRITIC_CHIP_SIZE)
+                    .clip(CircleShape)
+                    .background(accent),
+        )
+        Spacer(Modifier.width(BuroSpacing.Sm))
+        Column {
+            Text(
+                text = value,
+                color = BuroColors.Text,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                // Never translated: these are the companies' own names for their own measures.
+                text = source,
+                color = BuroColors.TextSubtle,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+}
+
+/** Rotten Tomatoes' red. Their colour, not their tomato — the mark itself is never copied here. */
+private val CRITIC_TOMATO = Color(0xFFFA320A)
+
+/** Metacritic's green, the one they use for a favourable Metascore. */
+private val CRITIC_METACRITIC = Color(0xFF00CE7A)
+
+/** IMDb's yellow. */
+private val CRITIC_IMDB = Color(0xFFF5C518)
+
+/** Small enough to read as a bullet identifying the source, not as a button to press. */
+private val CRITIC_CHIP_SIZE = 12.dp
 
 /**
  * TMDb's own mark, served from the same image CDN as every poster in the app.
