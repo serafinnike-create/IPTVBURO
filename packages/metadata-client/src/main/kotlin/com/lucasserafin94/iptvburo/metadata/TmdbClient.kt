@@ -230,6 +230,54 @@ class TmdbClient(
         return trailerFor(movieId, key, language) ?: trailerFor(movieId, key, null)
     }
 
+    /**
+     * The audience score for a film, found by the same search the trailer lookup runs.
+     *
+     * Two figures rather than one, because a score without a count is not a claim anybody can weigh:
+     * 8.0 from twelve viewers and 8.0 from ninety thousand look identical and mean different things.
+     * The details screen shows both.
+     *
+     * Deliberately a separate call from [findTrailer] rather than a widened return type: most
+     * screens want one or the other, and a title with no trailer still has a score worth showing.
+     */
+    fun findAudienceScore(title: String, year: Int?): TmdbAudienceScore? {
+        val key = apiKey?.takeIf(String::isNotBlank) ?: return null
+        if (title.isBlank()) return null
+
+        val searchUrl =
+            baseUrl.newBuilder()
+                .addPathSegments("search/movie")
+                .addQueryParameter("api_key", key)
+                .addQueryParameter("query", title.trim())
+                .addQueryParameter("language", language)
+                .addQueryParameter("include_adult", "false")
+                .apply { year?.let { addQueryParameter("year", it.toString()) } }
+                .build()
+
+        val match =
+            get(searchUrl)
+                ?.getAsJsonArray("results")
+                ?.firstOrNull()
+                ?.takeIf { it.isJsonObject }
+                ?.asJsonObject
+                ?: return null
+
+        val average = match.double("vote_average") ?: return null
+        // A score nobody voted on is not a score. TMDb returns 0.0 with a count of zero for titles
+        // it holds but nobody has rated, and showing "0%" would read as a verdict rather than as
+        // an absence of one.
+        val votes = match.int("vote_count") ?: 0
+        if (votes <= 0) return null
+
+        // The id travels with the score so a caller wanting the platform logos does not have to
+        // run the same search again to find it.
+        return TmdbAudienceScore(
+            average = average,
+            voteCount = votes,
+            tmdbId = match.int("id"),
+        )
+    }
+
     private fun trailerFor(movieId: Int, key: String, forLanguage: String?): String? {
         val url =
             baseUrl.newBuilder()
@@ -326,9 +374,14 @@ class TmdbClient(
                 ?.mapNotNull { entry ->
                     val id = entry.int("provider_id") ?: return@mapNotNull null
                     val name = entry.string("provider_name")?.takeIf(String::isNotBlank) ?: return@mapNotNull null
-                    // logo_path is deliberately not read. TMDb serving those bytes is not a licence
-                    // to redistribute another company's mark, so providers stay text-only.
-                    TmdbWatchProvider(providerId = id, name = name)
+                    TmdbWatchProvider(
+                        providerId = id,
+                        name = name,
+                        // w92 is the smallest ladder TMDb publishes for these and is more than a
+                        // row of marks needs; asking for a larger one would download several times
+                        // the bytes to draw the same twenty pixels.
+                        logoUrl = entry.string("logo_path")?.let { path -> "$imageBaseUrl/w92$path" },
+                    )
                 }.orEmpty()
         }
 
@@ -593,7 +646,13 @@ class TmdbClient(
             ?.mapNotNull { entry ->
                 val id = entry.int("provider_id") ?: return@mapNotNull null
                 val name = entry.string("provider_name") ?: return@mapNotNull null
-                TmdbWatchProvider(providerId = id, name = name)
+                TmdbWatchProvider(
+                    providerId = id,
+                    name = name,
+                    // The directory carries marks just as the per-title listings do. Dropping it
+                    // here left every shelf heading without one while the film page had it.
+                    logoUrl = entry.string("logo_path")?.let { path -> "$imageBaseUrl/w92$path" },
+                )
             }.orEmpty()
     }
 
@@ -655,6 +714,7 @@ class TmdbClient(
             posterUrl = root.string("poster_path")?.let { path -> "$imageBaseUrl/w342$path" },
             year = root.string(if (isSeries) "first_air_date" else "release_date")?.take(4)?.toIntOrNull(),
             rating = root.double("vote_average"),
+            voteCount = root.int("vote_count"),
             runtimeMinutes =
                 if (isSeries) {
                     root.getAsJsonArray("episode_run_time")?.firstOrNull()?.asInt
@@ -785,6 +845,20 @@ data class TmdbCastMember(
  * when everything was present would show nothing for a great many real films. Each piece is drawn
  * when it exists and omitted when it does not.
  */
+/**
+ * What an audience thought of a title, as TMDb reports it.
+ *
+ * The count travels with the average because it is what makes the average mean something; a screen
+ * that showed one without the other would be presenting a dozen opinions as though they were a
+ * consensus.
+ */
+data class TmdbAudienceScore(
+    val average: Double,
+    val voteCount: Int,
+    /** TMDb's own id for the matched title, for follow-up lookups such as the watch providers. */
+    val tmdbId: Int? = null,
+)
+
 data class TmdbTitleDetails(
     val title: String,
     val overview: String?,
@@ -792,6 +866,14 @@ data class TmdbTitleDetails(
     val posterUrl: String?,
     val year: Int?,
     val rating: Double?,
+    /**
+     * How many people voted for [rating], which is what makes the score mean anything.
+     *
+     * An 8.0 from twelve viewers and an 8.0 from ninety thousand are different claims, and the
+     * details screen shows both figures rather than presenting the first as though it were the
+     * second.
+     */
+    val voteCount: Int? = null,
     val runtimeMinutes: Int?,
     val genres: List<String> = emptyList(),
     val cast: List<TmdbCastMember> = emptyList(),
@@ -842,13 +924,18 @@ enum class TmdbDiscoverKind {
 /**
  * One service that carries a title.
  *
- * There is no logo field, deliberately. TMDb serves a `logo_path` for each of these, but serving
- * the bytes is not a licence to redistribute another company's mark — those belong to the services
- * themselves. Text-only is both the safe reading and what the product's own rules require.
+ * [logoUrl] carries the service's own mark, at the product owner's explicit instruction — the rule
+ * that kept these text-only was reversed deliberately, not overlooked, and GDD 9 section 10 was
+ * updated to match rather than left contradicting the app. The marks belong to the services; this
+ * shows them to identify where a title can be watched and nothing more.
+ *
+ * Null when TMDb has no image, which is ordinary: the name still identifies the service, so a
+ * missing logo costs nothing.
  */
 data class TmdbWatchProvider(
     val providerId: Int,
     val name: String,
+    val logoUrl: String? = null,
 )
 
 /**

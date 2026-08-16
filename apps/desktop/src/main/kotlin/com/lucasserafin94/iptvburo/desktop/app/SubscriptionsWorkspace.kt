@@ -889,15 +889,35 @@ private fun OfferRow(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // The one mark this app may show: its own. Every other provider stays text —
-                    // GDD 9 section 10 forbids copying brand logos, and those belong to their
-                    // companies. This one is ours, and it makes the row the user cares about most
-                    // findable at a glance.
+                    // This app's own mark on its own row, so the entry the viewer cares about most
+                    // is findable at a glance.
                     if (ranked.offer.type == OfferType.USER_LIBRARY) {
                         BuroMark(size = 24.dp)
+                    } else {
+                        // The service's mark, shown at the product owner's explicit instruction —
+                        // the rule that kept these text-only was reversed deliberately, and the
+                        // marks belong to the services themselves.
+                        //
+                        // Always beside the name rather than instead of it: a logo that fails to
+                        // load, or a service TMDb has no image for, then degrades to exactly the
+                        // previous behaviour instead of to a nameless gap.
+                        ranked.provider.logoUrl?.let { logo ->
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(24.dp)
+                                        .clip(BuroRadius.Small)
+                                        .background(BuroColors.SurfaceRaised),
+                            ) {
+                                BuroRemoteArtwork(
+                                    artworkUrl = logo,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Fit,
+                                ) {}
+                            }
+                        }
                     }
-                    // The provider's name as text. GDD 9 section 10 forbids copying brand logos, so
-                    // there is deliberately no artwork here.
                     Text(
                         text = ranked.provider.displayName,
                         color = BuroColors.Text,

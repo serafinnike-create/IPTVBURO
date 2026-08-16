@@ -73,6 +73,7 @@ internal class StreamingShelfDiskCache(
                 (0 until shelfCount).map {
                     val providerId = input.readUTF()
                     val providerName = input.readUTF()
+                    val providerLogo = input.readUTF()
                     val tmdbProviderId = input.readInt().takeIf { id -> id != NO_VALUE }
 
                     val titleCount = input.readInt()
@@ -97,7 +98,12 @@ internal class StreamingShelfDiskCache(
                         }
 
                     TmdbServiceShelf(
-                        provider = StreamingProvider(id = providerId, displayName = providerName),
+                        provider =
+                            StreamingProvider(
+                                id = providerId,
+                                displayName = providerName,
+                                logoUrl = providerLogo.takeIf(String::isNotEmpty),
+                            ),
                         tmdbProviderId = tmdbProviderId,
                         titles = titles,
                     )
@@ -135,6 +141,8 @@ internal class StreamingShelfDiskCache(
                 shelves.forEach { shelf ->
                     output.writeUTF(shelf.provider.id)
                     output.writeUTF(shelf.provider.displayName)
+                    // Empty for a service TMDb lists no mark for, which reads back as null.
+                    output.writeUTF(shelf.provider.logoUrl.orEmpty())
                     // NO_VALUE for the "coming to streaming" shelf, which belongs to no service and
                     // therefore has no provider id — the same sentinel the fields below already use.
                     output.writeInt(shelf.tmdbProviderId ?: NO_VALUE)
@@ -180,7 +188,9 @@ internal class StreamingShelfDiskCache(
         // 2: the provider id became nullable, so NO_VALUE now has a meaning in that field too. A
         // version 1 file would be read with its provider id taken literally, which is the exact
         // misreading the comment above describes.
-        private const val FORMAT_VERSION = 2
+        // 3 added the provider logo. A file written by an older build is discarded rather than
+        // parsed, so a cached shelf never comes back missing the mark the live fetch would carry.
+        private const val FORMAT_VERSION = 3
 
         /**
          * Written for "no year", and for a shelf with no provider id.

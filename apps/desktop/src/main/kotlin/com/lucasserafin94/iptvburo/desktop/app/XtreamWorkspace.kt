@@ -3575,10 +3575,14 @@ private fun CastManualAddressField(
 /**
  * What people thought of the title, when enough of them said so.
  *
- * One score, named for where it came from. The obvious model is the phone app's row of a tomato and
- * a bucket of popcorn, and those are Rotten Tomatoes' licensed marks with no free API behind them —
- * drawing a tomato beside a number that came from TMDb would be inventing an endorsement, which is
- * the one thing a ratings panel must not do.
+ * One score, shown with the mark of the service that produced it.
+ *
+ * The model is the phone app's row of a tomato and a bucket of popcorn. The tomato is deliberately
+ * not used here: those are Rotten Tomatoes' Tomatometer and Popcornmeter, computed from critics'
+ * reviews and sold through a paid Fandango licence, and this number is TMDb's own users voting. The
+ * two disagree routinely — the same film can be 80% on one and 68% on the other — so a tomato drawn
+ * beside a TMDb figure would not be a decoration, it would be a score attributed to a company that
+ * never gave it. The mark shown is therefore TMDb's, which is whose score this is.
  *
  * Absent when nobody has voted. TMDb answers with 0.0 and a count of zero for titles it holds but
  * nobody rated, and "0%" reads as a verdict rather than as the absence of one.
@@ -3599,6 +3603,23 @@ private fun RatingsBlock(score: TmdbAudienceScore?) {
         )
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Fetched like every other image rather than bundled, so no company's mark is committed
+            // to this repository. It sits on a light tile because the mark is drawn for one.
+            Box(
+                modifier =
+                    Modifier
+                        .size(SCORE_MARK_SIZE)
+                        .clip(BuroRadius.Small)
+                        .background(BuroColors.Canvas),
+            ) {
+                BuroRemoteArtwork(
+                    artworkUrl = TMDB_MARK_URL,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().padding(3.dp),
+                    contentScale = ContentScale.Fit,
+                ) {}
+            }
+            Spacer(Modifier.width(BuroSpacing.Sm))
             // As a percentage, which is how people read a score at a glance — TMDb publishes out of
             // ten, and "76%" lands faster than "7,6".
             Text(
@@ -3624,6 +3645,17 @@ private fun RatingsBlock(score: TmdbAudienceScore?) {
         }
     }
 }
+
+/**
+ * TMDb's own mark, served from the same image CDN as every poster in the app.
+ *
+ * A URL rather than a bundled asset: nothing is committed here, it travels the artwork cache like
+ * the rest, and it is the file TMDb itself publishes rather than a copy that could drift from it.
+ */
+private const val TMDB_MARK_URL = "https://image.tmdb.org/t/p/w92/wwemzKWzjKYJFfCeiB57q3r4Bcm.png"
+
+/** Matched to the score's cap height, so the mark reads as a label on it rather than as a button. */
+private val SCORE_MARK_SIZE = 30.dp
 
 /** Thousands as "1,2 mil": an exact five-digit count is noise beside the score it qualifies. */
 private fun formatVotes(votes: Int): String =

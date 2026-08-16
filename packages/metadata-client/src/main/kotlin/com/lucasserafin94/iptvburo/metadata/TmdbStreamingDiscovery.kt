@@ -56,7 +56,7 @@ object TmdbStreamingDiscovery {
         title: String,
         fallbackUrl: String?,
     ): StreamingOffer {
-        val provider = StreamingProvider.of(slugFor(entry.name), entry.name)
+        val provider = StreamingProvider.of(slugFor(entry.name), entry.name, entry.logoUrl)
         return StreamingOffer(
             provider = provider,
             type = type,

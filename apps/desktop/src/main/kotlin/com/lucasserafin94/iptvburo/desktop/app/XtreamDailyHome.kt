@@ -5,8 +5,12 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalScrollbarStyle
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,6 +29,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -43,41 +49,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import com.lucasserafin94.iptvburo.desktop.DailyHomeStatus
-import com.lucasserafin94.iptvburo.desktop.CreditDestination
-import com.lucasserafin94.iptvburo.desktop.DesktopAppState
-import com.lucasserafin94.iptvburo.desktop.DesktopContinueWatchingEntry
-import com.lucasserafin94.iptvburo.metadata.TmdbServiceShelf
-import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
-import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
-import com.lucasserafin94.iptvburo.domain.model.ExternalTitle
-import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
-import com.lucasserafin94.iptvburo.metadata.WATCH_PROVIDER_ATTRIBUTION
-import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
-import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
-import com.lucasserafin94.iptvburo.desktop.ui.BuroMotion
-import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
-import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
-import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
-import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
-import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollable
-import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollable
-import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableVertically
-import androidx.compose.foundation.VerticalScrollbar
-import androidx.compose.foundation.LocalScrollbarStyle
-import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -85,10 +60,37 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.lucasserafin94.iptvburo.desktop.CreditDestination
+import com.lucasserafin94.iptvburo.desktop.DailyHomeStatus
+import com.lucasserafin94.iptvburo.desktop.DesktopAppState
+import com.lucasserafin94.iptvburo.desktop.DesktopContinueWatchingEntry
+import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
+import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
+import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
+import com.lucasserafin94.iptvburo.desktop.ui.BuroMotion
+import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
+import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
+import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
+import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollable
+import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollable
+import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableVertically
 import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
 import com.lucasserafin94.iptvburo.desktop.ui.strings
+import com.lucasserafin94.iptvburo.domain.model.ExternalTitle
+import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
+import com.lucasserafin94.iptvburo.domain.model.OfferType
+import com.lucasserafin94.iptvburo.domain.model.StreamingOffer
+import com.lucasserafin94.iptvburo.metadata.TmdbServiceShelf
+import com.lucasserafin94.iptvburo.metadata.WATCH_PROVIDER_ATTRIBUTION
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import java.time.LocalDate
@@ -622,8 +624,8 @@ private fun DailyRow(
  * lead somewhere different: these titles are not in the user's library and cannot be played here.
  * Selecting one opens the Assinaturas area, which says where it can actually be watched.
  *
- * The service name is the heading, in text. Its logo is that company's mark and is never fetched —
- * the posters are the films' own artwork, which is a different thing entirely.
+ * The heading carries the service's name and, when TMDb lists one, its mark — the same pairing the
+ * Assinaturas shelves use, so a service looks the same on both screens.
  */
 @Composable
 private fun StreamingServiceRow(
@@ -634,7 +636,12 @@ private fun StreamingServiceRow(
 ) {
     if (shelf.titles.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm)) {
-        RailHeader(shelf.provider.displayName, WATCH_PROVIDER_ATTRIBUTION, metrics)
+        RailHeader(
+            shelf.provider.displayName,
+            WATCH_PROVIDER_ATTRIBUTION,
+            metrics,
+            logoUrl = shelf.provider.logoUrl,
+        )
         val railState = rememberLazyListState()
         LazyRow(
             state = railState,
@@ -644,10 +651,20 @@ private fun StreamingServiceRow(
         ) {
             items(shelf.titles, key = { title -> title.id.key }) { title ->
                 // The same card the Assinaturas shelves use, so a title looks identical wherever it
-                // appears. It takes details rather than a bare title; the offers are not read for
-                // the card itself, and the real ones are fetched when the title is opened.
+                // appears. The offer names this rail's service, which is what puts the mark in the
+                // poster's corner; the full listings are fetched when the title is opened.
                 ProviderShelfCard(
-                    details = ExternalTitleDetails(title = title),
+                    details =
+                        ExternalTitleDetails(
+                            title = title,
+                            offers =
+                                listOf(
+                                    StreamingOffer(
+                                        provider = shelf.provider,
+                                        type = OfferType.SUBSCRIPTION,
+                                    ),
+                                ),
+                        ),
                     // Real listings, so no DEMO badge — it would say invented about genuine data.
                     showDemoBadge = title.isDemo,
                     text = text,
@@ -691,16 +708,39 @@ private fun SeasonalRow(
     }
 }
 
+/** Big enough for a wordmark beside a headline, small enough to stay subordinate to it. */
+private val RAIL_LOGO_SIZE = 24.dp
+
 @Composable
 private fun RailHeader(
     title: String,
     trailing: String?,
     metrics: HomeMetrics,
+    logoUrl: String? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = metrics.gutter),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
     ) {
+        // Only the streaming rails pass one. A mark is laid on a light tile because most are drawn
+        // for white backgrounds and would disappear into this one.
+        logoUrl?.let { logo ->
+            Box(
+                modifier =
+                    Modifier
+                        .size(RAIL_LOGO_SIZE)
+                        .clip(BuroRadius.Small)
+                        .background(BuroColors.Canvas),
+            ) {
+                BuroRemoteArtwork(
+                    artworkUrl = logo,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().padding(2.dp),
+                    contentScale = ContentScale.Fit,
+                ) {}
+            }
+        }
         Text(
             text = title,
             color = BuroColors.Text,

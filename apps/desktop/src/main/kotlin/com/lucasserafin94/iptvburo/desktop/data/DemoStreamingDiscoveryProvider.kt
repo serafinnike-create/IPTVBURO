@@ -26,7 +26,9 @@ import com.lucasserafin94.iptvburo.domain.model.USER_LIBRARY_PROVIDER_ID
  * that reaches users showing these names *without* the marking would be asserting availability that
  * was never checked, about companies that never agreed to it.
  *
- * No logos. GDD 9 section 10 forbids copying brand artwork, so providers are text only, and the
+ * No logos here, and for a different reason than the rule that once covered every screen: these
+ * providers are invented, so there is no real service whose mark would even be correct. Text only,
+ * and the
  * destinations are the services' ordinary public homepages — no deep links, because a made-up deep
  * link to a real service would 404 in the user's browser.
  *

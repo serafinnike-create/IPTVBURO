@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -54,10 +55,10 @@ import com.lucasserafin94.iptvburo.domain.model.ProviderShelf
  *
  * The shape follows the music and video rails: a heading, then a horizontally scrolling row of
  * poster cards, so the shelves read like a rental shop's wall rather than a list of file names.
- * The artwork is the *film's own* poster, which discovery catalogues serve for display. What is
- * still deliberately absent is brand artwork: GDD 9 section 10 forbids copying a service's marks,
- * so a provider remains its [com.lucasserafin94.iptvburo.domain.model.StreamingProvider.displayName]
- * in text and no logo is ever fetched.
+ * The artwork is the *film's own* poster, which discovery catalogues serve for display. The
+ * service's own mark sits beside its name in the heading, shown at the product owner's explicit
+ * instruction — the rule that kept these text-only was reversed deliberately. The name is always
+ * there too, so a service TMDb has no image for reads exactly as it did before.
  *
  * Scrolling is the part this screen has historically got wrong, so it is spelled out: the rail is a
  * [LazyRow] with keyboard arrows via [arrowScrollable], pointer-edge travel via [edgeScrollable],
@@ -94,8 +95,23 @@ fun ProviderShelfRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
         ) {
-            // The provider's name as text, and only as text. No logo, no brand colour.
-            //
+            // The service's mark, when TMDb has one. Beside the name, never instead of it.
+            shelf.provider.logoUrl?.let { logo ->
+                Box(
+                    modifier =
+                        Modifier
+                            .size(22.dp)
+                            .clip(BuroRadius.Small)
+                            .background(BuroColors.SurfaceRaised),
+                ) {
+                    BuroRemoteArtwork(
+                        artworkUrl = logo,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    ) {}
+                }
+            }
             // The "coming to streaming" rail is not a service, so it carries a slug rather than a
             // company name and must not print it raw.
             Text(
@@ -226,6 +242,34 @@ internal fun ProviderShelfCard(
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     PosterFallback(title = title, text = text)
+                }
+
+                // The service's mark in the corner of the poster.
+                //
+                // On its own shelf this repeats the heading, which is the point: a card seen out of
+                // context — in a search result, in a screenshot, halfway through a scroll — carries
+                // where the film can be watched without the viewer having to look up at the rail it
+                // came from.
+                //
+                // Backed by a small opaque tile, because these marks are drawn for light and dark
+                // backgrounds both and a poster is neither reliably.
+                details.offers.firstNotNullOfOrNull { offer -> offer.provider.logoUrl }?.let { logo ->
+                    Box(
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(BuroSpacing.Xs)
+                                .size(CARD_LOGO_SIZE)
+                                .clip(BuroRadius.Small)
+                                .background(BuroColors.Canvas),
+                    ) {
+                        BuroRemoteArtwork(
+                            artworkUrl = logo,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize().padding(2.dp),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                        ) {}
+                    }
                 }
 
                 // A scrim under the badge only, and only as tall as the badge needs. Without it the
@@ -462,6 +506,9 @@ private const val FOOTER_SCRIM_FRACTION = 0.3f
 
 /** Matches the catalogue grid's poster column width, so the two views scan alike. */
 private val CARD_WIDTH = 168.dp
+
+/** Big enough to recognise a mark, small enough not to cover the poster it sits on. */
+private val CARD_LOGO_SIZE = 26.dp
 
 /**
  * The empty state for the shelves view.

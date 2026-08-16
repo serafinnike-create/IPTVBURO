@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.desktop.app
 
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -24,6 +26,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,10 +35,13 @@ import com.lucasserafin94.iptvburo.desktop.ExpandedService
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
+import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitle
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
+import com.lucasserafin94.iptvburo.domain.model.OfferType
+import com.lucasserafin94.iptvburo.domain.model.StreamingOffer
 
 /**
  * One service's whole catalogue, reached from the card that ends its shelf.
@@ -78,9 +85,27 @@ fun ServiceCatalogueGrid(
                 )
             }
 
+            // The service's own mark, when TMDb carries one, beside its name — the same pairing
+            // used on the shelf this page was opened from, so the heading confirms the viewer
+            // landed where the button pointed.
+            service.provider.logoUrl?.let { logo ->
+                Box(
+                    modifier =
+                        Modifier
+                            .size(HEADING_LOGO_SIZE)
+                            .clip(BuroRadius.Small)
+                            .background(BuroColors.Canvas),
+                ) {
+                    BuroRemoteArtwork(
+                        artworkUrl = logo,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().padding(2.dp),
+                        contentScale = ContentScale.Fit,
+                    ) {}
+                }
+            }
+
             Text(
-                // The service names itself in text, never as a logo: a provider's marks are its own
-                // and are deliberately never fetched — see the note on ProviderShelfRow.
                 text = text.shareStrings.serviceCatalogue.allFrom.format(service.provider.displayName),
                 color = BuroColors.Text,
                 style = MaterialTheme.typography.titleLarge,
@@ -124,9 +149,21 @@ fun ServiceCatalogueGrid(
             ) {
                 items(service.titles, key = { title -> title.id.key }) { title ->
                     ProviderShelfCard(
-                        // Wrapped with no offers: this grid is a catalogue of one service, so
-                        // "where can I watch this" is already answered by the heading above it.
-                        details = ExternalTitleDetails(title = title, offers = emptyList()),
+                        // One synthetic offer naming this service, so each card carries its mark
+                        // like every other card in the app. The grid's heading already says which
+                        // service this is; the corner logo is what keeps a card recognisable when
+                        // it is looked at on its own rather than as part of this page.
+                        details =
+                            ExternalTitleDetails(
+                                title = title,
+                                offers =
+                                    listOf(
+                                        StreamingOffer(
+                                            provider = service.provider,
+                                            type = OfferType.SUBSCRIPTION,
+                                        ),
+                                    ),
+                            ),
                         showDemoBadge = title.isDemo,
                         text = text,
                         onClick = { onSelectTitle(title) },
@@ -148,6 +185,9 @@ fun ServiceCatalogueGrid(
         Spacer(Modifier.height(BuroSpacing.Xs))
     }
 }
+
+/** Large enough to read a wordmark at a glance, small enough not to compete with the heading. */
+private val HEADING_LOGO_SIZE = 26.dp
 
 /** Wide enough for a poster and its title, narrow enough that a 1080p window fits six. */
 private val CARD_MIN_WIDTH = 168.dp

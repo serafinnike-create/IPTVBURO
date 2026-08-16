@@ -120,7 +120,12 @@ class TmdbStreamingCatalogue(
                 null
             } else {
                 TmdbServiceShelf(
-                    provider = StreamingProvider.of(TmdbStreamingDiscovery.slugFor(service.name), service.name),
+                    provider =
+                        StreamingProvider.of(
+                            TmdbStreamingDiscovery.slugFor(service.name),
+                            service.name,
+                            service.logoUrl,
+                        ),
                     tmdbProviderId = service.providerId,
                     titles = titles.map { discovered -> discovered.toExternalTitle() },
                 )

@@ -36,8 +36,14 @@ class StreamingShelfDiskCacheTest {
     private fun shelf(
         providerId: String = "netflix",
         titleCount: Int = 3,
+        logoUrl: String? = "https://image.test/$providerId-logo.png",
     ) = TmdbServiceShelf(
-        provider = StreamingProvider(id = providerId, displayName = providerId.uppercase()),
+        provider =
+            StreamingProvider(
+                id = providerId,
+                displayName = providerId.uppercase(),
+                logoUrl = logoUrl,
+            ),
         tmdbProviderId = 8,
         titles =
             (1..titleCount).map { index ->
@@ -60,6 +66,22 @@ class StreamingShelfDiskCacheTest {
         val read = cache.read(TmdbDiscoverKind.MOVIES, "BR")
 
         assertEquals(written, read, "a restored shelf must be the one that was stored")
+    }
+
+    /**
+     * A service with no mark in TMDb's directory, and the "coming to streaming" rail, which belongs
+     * to no company at all. An absent logo is stored as an empty string, and has to read back as
+     * null: a blank URL is not "no logo" to the artwork loader, it is an address to go and fetch.
+     */
+    @Test
+    fun `a shelf with no logo round trips as null`() {
+        val cache = StreamingShelfDiskCache(directory = directory)
+        val written = listOf(shelf("coming-soon", logoUrl = null))
+
+        cache.write(TmdbDiscoverKind.MOVIES, "BR", written)
+        val read = cache.read(TmdbDiscoverKind.MOVIES, "BR")
+
+        assertNull(read?.single()?.provider?.logoUrl, "an absent mark must not come back as a blank URL")
     }
 
     /**
