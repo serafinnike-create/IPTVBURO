@@ -988,8 +988,26 @@ fun DesktopApp(
                                 appState.xtreamStatus is XtreamStatus.LoadingCatalog
                         )
                 if (preparingFirstCatalogue) {
+                    // Names what is being fetched rather than saying "carregando" and nothing else.
+                    //
+                    // A catalogue of forty thousand titles takes long enough that a bare spinner
+                    // reads as a hang; "Carregando filmes…" is the same wait with the app visibly
+                    // working through something. The stage message wins when the loader has one,
+                    // since it is more specific still.
+                    val loadingWhat =
+                        (appState.xtreamStatus as? XtreamStatus.LoadingCatalog)?.let { loading ->
+                            when (loading.contentType) {
+                                XtreamContentType.MOVIE -> text.movies
+                                XtreamContentType.SERIES -> text.series
+                                XtreamContentType.LIVE -> text.live
+                            }
+                        }
                     SplashScreen(
-                        message = appState.startupMessage.ifBlank { text.loadingCatalog },
+                        message =
+                            appState.startupMessage.ifBlank {
+                                loadingWhat?.let { what -> "${text.loadingCatalog.trimEnd('…', '.')} · $what" }
+                                    ?: text.loadingCatalog
+                            },
                         progress = appState.startupProgress,
                         backdropPosters = appState.backdropPosters,
                         isFirstRun = true,
