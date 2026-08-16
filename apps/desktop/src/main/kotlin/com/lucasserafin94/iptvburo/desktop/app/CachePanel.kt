@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.desktop.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -335,36 +336,30 @@ fun CacheFirstRunPanel(appState: com.lucasserafin94.iptvburo.desktop.DesktopAppS
 }
 
 /**
- * The fill, as a strip under the header that stays put while it runs.
+ * The fill, drawn on the header's own summary line.
  *
- * The panel in settings shows the same progress, but only while somebody is looking at settings —
- * which is precisely when they are not watching the download. This is the answer to "how far along
- * is it": always in the same place, readable at a glance, and carrying the two controls that matter
- * without making anybody go and find them.
+ * A separate strip across the top pushed the whole app down and read as an interruption; this takes
+ * the line the counts already occupy, so the header keeps its height and the progress sits where
+ * somebody is already looking.
  *
- * Absent when nothing is happening. A permanent strip reading 100% is furniture, and furniture is
- * what people stop seeing.
+ * Compact on purpose: a label, a short bar, the percentage, and one control. Everything else about
+ * the cache lives in settings, which is where somebody goes when they want to change it rather than
+ * watch it.
  */
 @Composable
-fun CacheProgressStrip(
+fun HeaderCacheProgress(
     progress: CacheFillProgress,
     onPause: () -> Unit,
     onResume: () -> Unit,
-    onRefresh: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val text = strings.shareStrings.cache
-    if (progress.state == CacheFillState.IDLE) return
 
-    // A finished fill says so and then goes away on its own.
+    // A finished fill says so and then gets out of the way, giving the line back to the counts.
     //
-    // Without this the strip sat at "Tudo guardado. 100%" for the rest of the session, because
-    // COMPLETE is a state nothing moves out of — the ✕ was the only way, which turns a piece of
-    // good news into a chore. Reporting completion is worth a few seconds of the screen; keeping it
-    // there afterwards is just a bar in the way of the app.
-    //
-    // Keyed on the state and the count, so a Refresh that finds new artwork brings the strip back
-    // rather than being swallowed by a dismissal that already happened.
+    // Without this the header sat at "Tudo guardado. 100%" for the rest of the session, because
+    // COMPLETE is a state nothing moves out of. Reporting completion is worth a few seconds of the
+    // line; keeping it there afterwards costs the viewer the information it displaced.
     var completionDismissed by remember(progress.state, progress.total) { mutableStateOf(false) }
     LaunchedEffect(progress.state, progress.total) {
         if (progress.state == CacheFillState.COMPLETE) {
@@ -375,22 +370,18 @@ fun CacheProgressStrip(
     if (progress.state == CacheFillState.COMPLETE && completionDismissed) return
 
     Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(BuroColors.Surface)
-                .padding(horizontal = BuroSpacing.Lg, vertical = BuroSpacing.Xs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Md),
+        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
     ) {
         Text(
             text = if (progress.state == CacheFillState.COMPLETE) text.complete else text.filling,
-            color = BuroColors.TextMuted,
-            style = MaterialTheme.typography.labelLarge,
+            color = BuroColors.TextSubtle,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
         )
 
         val fraction = progress.fraction
-        Box(modifier = Modifier.weight(1f).height(6.dp).clip(BuroRadius.Pill)) {
+        Box(modifier = Modifier.width(HEADER_BAR_WIDTH).height(4.dp).clip(BuroRadius.Pill)) {
             if (fraction == null) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
@@ -407,33 +398,43 @@ fun CacheProgressStrip(
             }
         }
 
-        // The percentage, which is the number people actually read off a progress bar. Absent while
-        // the length is unknown, because a percentage of an unknown total would be invented.
-        // The model's own figure, not a percentage computed here: it rounds down, so 999 of 1000
-        // stays at 99 rather than claiming 100 while images are still arriving.
+        // The model's own figure, not one computed here: it rounds down, so 999 of 1000 stays at 99
+        // rather than claiming 100 while images are still arriving.
         progress.percent?.let { value ->
             Text(
                 text = text.percent.format(value),
                 color = BuroColors.Text,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
             )
         }
         Text(
             text = text.progress.format(progress.done, progress.total),
             color = BuroColors.TextSubtle,
             style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
         )
 
-        if (progress.state == CacheFillState.COMPLETE) {
-            // A finished fill is only finished until the list grows. Refresh is how somebody asks
-            // for the artwork of whatever has arrived since, without emptying what is already held.
-            TextButton(onClick = onRefresh) { Text(text.refresh, color = BuroColors.Text) }
-        } else {
-            TextButton(onClick = if (progress.isRunning) onPause else onResume) {
-                Text(if (progress.isRunning) text.pause else text.resume, color = BuroColors.Text)
+        if (progress.state != CacheFillState.COMPLETE) {
+            TextButton(
+                onClick = if (progress.isRunning) onPause else onResume,
+                contentPadding = PaddingValues(horizontal = BuroSpacing.Xs, vertical = 0.dp),
+            ) {
+                Text(
+                    if (progress.isRunning) text.pause else text.resume,
+                    color = BuroColors.Text,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            TextButton(
+                onClick = onCancel,
+                contentPadding = PaddingValues(horizontal = BuroSpacing.Xs, vertical = 0.dp),
+            ) {
+                Text("✕", color = BuroColors.TextSubtle, style = MaterialTheme.typography.labelMedium)
             }
         }
-        TextButton(onClick = onCancel) { Text("✕", color = BuroColors.TextSubtle) }
     }
 }
+
+/** Short enough to sit on a header line beside the text it shares with. */
+private val HEADER_BAR_WIDTH = 160.dp

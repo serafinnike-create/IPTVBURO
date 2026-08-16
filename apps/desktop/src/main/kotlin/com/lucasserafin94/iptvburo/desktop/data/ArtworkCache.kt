@@ -22,14 +22,15 @@ internal object ArtworkCache {
      * `enqueue` rather than `execute`: nothing is waiting for the bitmap, and decoding it into
      * memory only to discard it would cost more than the download. Coil writes the bytes to disk on
      * the way past, which is the whole point.
+     *
+     * Returns false when there is no context yet, which is not a failure worth reporting — it means
+     * nothing has drawn an image, so nothing can be warmed either.
      */
-    fun warm(url: String) {
-        val loader = SingletonImageLoader.get(PlatformContextHolder.context ?: return)
-        loader.enqueue(
-            ImageRequest.Builder(PlatformContextHolder.context ?: return)
-                .data(url)
-                .build(),
-        )
+    fun warm(url: String): Boolean {
+        val context = PlatformContextHolder.context ?: return false
+        val loader = SingletonImageLoader.get(context)
+        loader.enqueue(ImageRequest.Builder(context).data(url).build())
+        return true
     }
 
     /**

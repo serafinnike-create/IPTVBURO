@@ -13,7 +13,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
-import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.size.Scale
 import com.lucasserafin94.iptvburo.metadata.TmdbImageSizes
@@ -63,7 +62,15 @@ fun BuroRemoteArtwork(
                 ?.let { url ->
                     ImageRequest.Builder(context)
                         .data(TmdbImageSizes.resizedForWidth(url, widthPx, isBackdrop))
-                        .diskCachePolicy(CachePolicy.DISABLED)
+                        // The disk cache used to be disabled here unconditionally, from before the
+                        // loader had one to disable — and it was the reason the artwork cache
+                        // stored nothing at all: every poster was fetched, drawn and thrown away,
+                        // so the directory was never so much as created while the setting happily
+                        // reported 16 GB reserved.
+                        //
+                        // It now follows the loader: when no disk cache is configured the request
+                        // has nothing to write to anyway, and when one is, this is precisely the
+                        // traffic it exists to save.
                         .apply {
                             // Decode straight to the size being drawn rather than to the image's
                             // own. Sharper on a dense display and smaller in memory on every one.

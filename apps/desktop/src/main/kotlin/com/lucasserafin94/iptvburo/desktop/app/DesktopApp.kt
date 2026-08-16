@@ -102,6 +102,8 @@ import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceKind
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceSummary
 import com.lucasserafin94.iptvburo.desktop.model.PlaybackReadiness
 import com.lucasserafin94.iptvburo.desktop.model.playbackReadiness
+import coil3.compose.LocalPlatformContext
+import com.lucasserafin94.iptvburo.desktop.data.PlatformContextHolder
 import com.lucasserafin94.iptvburo.desktop.platform.ExternalOpenResult
 import com.lucasserafin94.iptvburo.desktop.platform.DesktopPlatformCapabilities
 import com.lucasserafin94.iptvburo.desktop.platform.chooseLocalPlaylist
@@ -132,6 +134,8 @@ import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.ContentKind
 import com.lucasserafin94.iptvburo.domain.model.ExternalTitleDetails
 import com.lucasserafin94.iptvburo.domain.model.OfferType
+import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
+import com.lucasserafin94.iptvburo.domain.model.CacheFillState
 import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
 import com.lucasserafin94.iptvburo.domain.model.ProviderDeepLinks
 import com.lucasserafin94.iptvburo.domain.model.StreamingOffer
@@ -173,6 +177,16 @@ fun DesktopApp(
             else -> appState.destination
         }
     var pendingExternalChannel by remember { mutableStateOf<Channel?>(null) }
+    // Coil's context, published for the cache to build its own requests with.
+    //
+    // Set here rather than inside SingletonImageLoader.setSafe, and the difference is the whole
+    // reason the cache stored nothing: setSafe takes a *lazy* factory, so its body does not run
+    // until something asks for the loader. Warming an image asked for the context first, found it
+    // null, and returned — so a fill of twenty-nine thousand posters "completed" without a single
+    // byte being fetched, and the directory was never even created. Composition happens before any
+    // of that, and this is the same context Coil itself is handed.
+    PlatformContextHolder.context = LocalPlatformContext.current
+
     var externalOpenResult by remember { mutableStateOf<ExternalOpenResult?>(null) }
     var activePlayback by remember { mutableStateOf<DesktopPlaybackRequest?>(null) }
     var showXtreamLogin by remember { mutableStateOf(false) }
@@ -392,6 +406,10 @@ fun DesktopApp(
                             streamingRegion = appState.streamingRegion,
                             onSelectRegion = appState::changeStreamingRegion,
                             uses24HourClock = appState.uses24HourClock,
+                            cacheProgress = appState.cacheProgress,
+                            onPauseCacheFill = appState::pauseCacheFill,
+                            onResumeCacheFill = appState::resumeCacheFill,
+                            onCancelCacheFill = appState::cancelCacheFill,
                             notifications = appState.notifications,
                             onNotificationsOpened = appState::markNotificationsRead,
                             onDismissNotification = appState::removeNotification,
@@ -401,19 +419,6 @@ fun DesktopApp(
                             onUpdate = ::checkAndDownloadUpdate,
                         )
 
-                        // Directly under the header, across the width of the app.
-                        //
-                        // The same progress is in settings, but only while somebody is looking at
-                        // settings — which is exactly when they are not watching the download. This
-                        // is where "how far along is it" gets answered at a glance, and it draws
-                        // nothing at all while no fill is running.
-                        CacheProgressStrip(
-                            progress = appState.cacheProgress,
-                            onPause = appState::pauseCacheFill,
-                            onResume = appState::resumeCacheFill,
-                            onRefresh = appState::refreshCacheFill,
-                            onCancel = appState::cancelCacheFill,
-                        )
                         HorizontalDivider(color = BuroColors.BorderSoft)
                         // The content screen must be weighted. A Column measures an unweighted
                         // child with unbounded height, so the Home's LazyColumn believed it had
@@ -1514,6 +1519,11 @@ private fun TopBar(
     streamingRegion: String,
     onSelectRegion: (String) -> Unit,
     uses24HourClock: Boolean,
+    /** The artwork fill, drawn in place of the counts while it runs. */
+    cacheProgress: CacheFillProgress,
+    onPauseCacheFill: () -> Unit,
+    onResumeCacheFill: () -> Unit,
+    onCancelCacheFill: () -> Unit,
     /** What the bell holds for the profile that is watching. */
     notifications: NotificationCentre,
     onNotificationsOpened: () -> Unit,
@@ -1594,15 +1604,30 @@ private fun TopBar(
                 // Version and counts share one quiet line so the header carries a single strong
                 // element instead of five competing pills. The full version is shown, including the
                 // pre-release suffix: "v0.2.0" for a 0.2.0-alpha.5 build made bug reports ambiguous.
-                Text(
-                    updateMessage
-                        ?: "$sourceCount ${text.sourcesCount}  ·  $channelCount ${text.items}  ·  " +
-                        "IPTV BURO v$DESKTOP_VERSION",
-                    color = BuroColors.TextSubtle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                // While artwork is downloading, that line becomes the progress: same row, same
+                // height, no second bar pushing the app down.
+                //
+                // It replaces the counts rather than joining them because the two say the same kind
+                // of thing about the same library, and the one that changes is the one worth
+                // reading. The counts come back the moment it finishes.
+                if (cacheProgress.state != CacheFillState.IDLE) {
+                    HeaderCacheProgress(
+                        progress = cacheProgress,
+                        onPause = onPauseCacheFill,
+                        onResume = onResumeCacheFill,
+                        onCancel = onCancelCacheFill,
+                    )
+                } else {
+                    Text(
+                        updateMessage
+                            ?: "$sourceCount ${text.sourcesCount}  ·  $channelCount ${text.items}  ·  " +
+                            "IPTV BURO v$DESKTOP_VERSION",
+                        color = BuroColors.TextSubtle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             // How long is left, and how to buy.
             //
