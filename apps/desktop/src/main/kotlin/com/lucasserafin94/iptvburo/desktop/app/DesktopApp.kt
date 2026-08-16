@@ -871,6 +871,16 @@ fun DesktopApp(
                         message = step.message,
                         onRetry = appState::retrySetup,
                     )
+                } else if (appState.activeProfile == null && appState.profiles.size == 1) {
+                    // One profile is not a question worth asking.
+                    //
+                    // "Quem está assistindo?" earns its place in a household — it is how a Kids
+                    // profile stays separate from an adult's — and is pure ceremony for somebody
+                    // who lives alone: a screen with one face on it, in the way of the app, every
+                    // single launch. With two or more the gate appears as before, and it is always
+                    // reachable from the sidebar for anyone who wants to switch.
+                    val only = appState.profiles.first().id
+                    LaunchedEffect(only) { appState.selectProfileAndRefresh(only) }
                 } else if (appState.activeProfile == null || showProfileGate) {
                     DesktopProfileGate(
                         profiles = appState.profiles,
