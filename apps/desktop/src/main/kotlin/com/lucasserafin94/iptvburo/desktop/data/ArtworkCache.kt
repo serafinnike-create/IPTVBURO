@@ -52,8 +52,24 @@ internal object ArtworkCache {
         }.getOrDefault(0L)
     }
 
-    /** Deletes everything held. The next draw fetches again, which is the cost of asking for this. */
+    /**
+     * Empties the cache through Coil rather than by deleting the directory.
+     *
+     * Coil keeps a journal alongside the files, and its own documentation is explicit that two
+     * things writing to one cache directory corrupts it. Walking the folder and unlinking
+     * everything did exactly that — it removed the entries while the running loader still believed
+     * they were there, so the next launch would read a journal describing files that no longer
+     * exist. `clear()` takes the same lock the loader uses.
+     *
+     * Falls back to deleting the directory only when there is no loader to ask, which is the case
+     * before anything has drawn an image and the cache is empty anyway.
+     */
     fun clear() {
+        val context = PlatformContextHolder.context
+        if (context != null) {
+            runCatching { SingletonImageLoader.get(context).diskCache?.clear() }
+            return
+        }
         val directory = directory()
         if (!Files.isDirectory(directory)) return
         runCatching {

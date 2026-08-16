@@ -33,6 +33,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,6 +97,14 @@ fun SettingsDialog(
     val text = strings
     val listState = rememberLazyListState()
     var categoriesExpanded by remember { mutableStateOf(false) }
+
+    // Measured when the dialog opens, not only after a fill.
+    //
+    // The figure comes from walking the cache directory, and the ordinary way it grows is by
+    // drawing posters — which happens all the time and nowhere near this screen. Without this the
+    // panel reported whatever the last fill left behind, so somebody with megabytes on disk was
+    // shown "Em uso: 0 B" and had no reason to believe anything was being kept.
+    LaunchedEffect(Unit) { appState.refreshCacheUsage() }
 
     Box(
         modifier =
