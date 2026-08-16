@@ -53,6 +53,7 @@ import com.lucasserafin94.iptvburo.desktop.user.ListeningHistoryStore
 import com.lucasserafin94.iptvburo.desktop.user.MusicPlayCountStore
 import com.lucasserafin94.iptvburo.desktop.user.MusicPlaylistStore
 import com.lucasserafin94.iptvburo.desktop.user.ProfilePhotoStore
+import com.lucasserafin94.iptvburo.metadata.TmdbAudienceScore
 import com.lucasserafin94.iptvburo.metadata.TmdbClient
 import com.lucasserafin94.iptvburo.desktop.build.BUNDLED_TMDB_KEY
 import com.lucasserafin94.iptvburo.desktop.download.DesktopDownloadManager
@@ -1555,6 +1556,45 @@ class DesktopAppState(
                 }
         }.distinct()
     }
+
+    /**
+     * The audience score for the title whose page is open, once TMDb has answered.
+     *
+     * From TMDb rather than from the provider, and the reason is the vote count: a provider sends a
+     * rating with nothing to say how many people it represents, so a 10.0 from two viewers is
+     * indistinguishable from one earned by thousands. TMDb sends both, and the screen refuses to
+     * print a score that too few people gave.
+     */
+    var audienceScore by mutableStateOf<TmdbAudienceScore?>(null)
+        private set
+
+    /**
+     * Looks the score up for [title], unless it is already the one on screen.
+     *
+     * Cleared first, so a page never shows the previous film's score while this one is in flight —
+     * which is the kind of error nobody notices and everybody is misled by.
+     */
+    fun loadAudienceScore(title: String, year: Int?) {
+        if (!metadataClient.isConfigured) return
+        val requested = title.trim()
+        if (requested.isBlank()) return
+        if (audienceScoreFor == requested) return
+
+        audienceScoreFor = requested
+        audienceScore = null
+        streamingScope.launch {
+            val found =
+                runCatching {
+                    withContext(Dispatchers.IO) { metadataClient.findAudienceScore(requested, year) }
+                }.getOrNull()
+            // Checked against what is on screen now: the viewer may have opened another title while
+            // this was in flight, and showing this score under that film's name would be worse than
+            // showing none.
+            if (audienceScoreFor == requested) audienceScore = found
+        }
+    }
+
+    private var audienceScoreFor: String? = null
 
     // --- Descobrir -----------------------------------------------------------------------------
 
@@ -4972,6 +5012,10 @@ class DesktopAppState(
             }
             run {
                 movieDetailsStatus = MovieDetailsStatus.Loaded(details)
+                // Asked for alongside the details rather than with them: the score is a separate
+                // TMDb lookup, and a page that waited for it would be slower for something that is
+                // an ornament next to the synopsis and the cast.
+                loadAudienceScore(selected.name.editorialTitle(), selected.year)
                 details.cast.castNames().forEach { person ->
                     movieAppearances
                         .getOrPut(person.lowercase(Locale.ROOT), ::LinkedHashMap)[selected.providerId] = selected

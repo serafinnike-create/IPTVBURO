@@ -101,6 +101,7 @@ import com.lucasserafin94.iptvburo.desktop.DownloadState
 import com.lucasserafin94.iptvburo.desktop.MovieDetailsStatus
 import com.lucasserafin94.iptvburo.desktop.LiveEpgStatus
 import com.lucasserafin94.iptvburo.desktop.PersonFilmography
+import com.lucasserafin94.iptvburo.desktop.platform.CastReceiver
 import com.lucasserafin94.iptvburo.desktop.platform.CastTarget
 import com.lucasserafin94.iptvburo.domain.model.CastMessage
 import com.lucasserafin94.iptvburo.desktop.CastSendState
@@ -118,7 +119,9 @@ import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableVertically
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollable
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableGrid
 import com.lucasserafin94.iptvburo.desktop.ui.categoryBadgeFor
+import com.lucasserafin94.iptvburo.metadata.TmdbAudienceScore
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.desktop.ui.CastStrings
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
@@ -1316,6 +1319,7 @@ internal fun XtreamInternalDetailsPage(
                 onToggleFavorite = { appState.toggleFavorite(item) },
                 hasReminder = appState.hasReminder(item),
                 onToggleReminder = { appState.toggleReminder(item) },
+                audienceScore = appState.audienceScore,
                 onShare = {
                     // Built here rather than in the dialog, because this is where the loaded
                     // details are. The poster deliberately comes from the *details* rather than
@@ -1422,6 +1426,9 @@ internal fun XtreamInternalDetailsPage(
             onSend = appState::sendToCastTarget,
             onClose = appState::closeCastSend,
             text = strings,
+            onConnectToAddress = appState::connectToCastAddress,
+            onManualAddressFailed = appState.castManualAddressFailed,
+            onClearManualFailure = appState::clearCastManualAddressFailure,
         )
     }
 }
@@ -1445,6 +1452,8 @@ internal fun XtreamItemDetail(
     hasReminder: Boolean = false,
     /** Marks or unmarks the title as one to be reminded about. Null hides the button. */
     onToggleReminder: (() -> Unit)? = null,
+    /** The audience score for this title, once TMDb has answered. Null draws no ratings block. */
+    audienceScore: TmdbAudienceScore? = null,
     /**
      * Opens the share sheet. Null where sharing makes no sense — a live channel is a schedule
      * rather than a title, and the recipient's own list would have nothing to resolve it to.
@@ -1825,6 +1834,7 @@ internal fun XtreamItemDetail(
                 if (item.contentType == XtreamContentType.MOVIE) {
                     MovieDetailContent(
                         status = movieStatus,
+                        audienceScore = audienceScore,
                         onRetry = onLoadMovie,
                         onOpenTrailer = onOpenTrailer,
                         onOpenPerson = onOpenPerson,
@@ -1953,6 +1963,8 @@ private fun LiveEpgContent(status: LiveEpgStatus) {
 @Composable
 private fun MovieDetailContent(
     status: MovieDetailsStatus,
+    /** The audience score, once TMDb has answered. Null draws no ratings block at all. */
+    audienceScore: TmdbAudienceScore? = null,
     onRetry: () -> Unit,
     onOpenTrailer: (String) -> Unit,
     onOpenPerson: (String) -> Unit,
@@ -1994,6 +2006,7 @@ private fun MovieDetailContent(
                 Text(it, color = BuroColors.Text, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(14.dp))
             }
+            RatingsBlock(score = audienceScore)
             details.director?.let { DetailLine("Direção", it) }
             details.cast?.let {
                 CastButtons(
@@ -2761,6 +2774,11 @@ internal fun CastSendDialog(
     onSend: (String) -> Unit,
     onClose: () -> Unit,
     text: DesktopStrings,
+    /** Reaches a screen by typed address, offered only when the search found nothing. */
+    onConnectToAddress: (String) -> Unit = {},
+    /** Whether the last typed address reached nothing, so the field can say so. */
+    onManualAddressFailed: Boolean = false,
+    onClearManualFailure: () -> Unit = {},
 ) {
     if (state == CastSendState.Idle) return
     val strings = text.shareStrings.cast
@@ -2788,7 +2806,23 @@ internal fun CastSendDialog(
                         // An empty result is ordinary rather than broken: plenty of home routers
                         // keep wifi and ethernet apart and drop the broadcast. Saying so is more
                         // useful than an error, because the fix is on the router and not here.
-                        Text(strings.castNoneFound, color = BuroColors.TextMuted)
+                        //
+                        // But saying so was *all* this did, which left the household with a dialog
+                        // offering only a search that would keep failing. Confirmed on a real
+                        // network: the broadcast went unanswered while the phone sat on the same
+                        // wifi listening, and a probe straight to its address replied at once. The
+                        // field below is the way through, and it is offered only here — typing an
+                        // address is a fallback, not how this is meant to be used.
+                        Column {
+                            Text(strings.castNoneFound, color = BuroColors.TextMuted)
+                            Spacer(Modifier.height(BuroSpacing.Md))
+                            CastManualAddressField(
+                                strings = strings,
+                                failed = onManualAddressFailed,
+                                onConnect = onConnectToAddress,
+                                onEdited = onClearManualFailure,
+                            )
+                        }
                     } else {
                         Column {
                             state.targets.forEach { target ->
@@ -3475,3 +3509,130 @@ private fun RatingPicker(
         }
     }
 }
+
+/**
+ * Typing a screen's address, for a network where the search finds nothing.
+ *
+ * Refused before any packet leaves when the text is not a private IPv4 address — see
+ * `CastReceiver.isPlausibleHost`. Checking here as well as there means a typo is answered at once
+ * rather than after a probe times out, and the message says what is wrong instead of "nothing
+ * answered", which would send somebody looking at their router for a mistyped digit.
+ */
+@Composable
+private fun CastManualAddressField(
+    strings: CastStrings,
+    failed: Boolean,
+    onConnect: (String) -> Unit,
+    onEdited: () -> Unit,
+) {
+    var address by remember { mutableStateOf("") }
+    val plausible = remember(address) { CastReceiver.isPlausibleHost(address.trim()) }
+
+    Text(strings.castManualTitle, color = BuroColors.Text, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(BuroSpacing.Xs))
+    Text(
+        strings.castManualHint,
+        color = BuroColors.TextMuted,
+        style = MaterialTheme.typography.labelSmall,
+    )
+    Spacer(Modifier.height(BuroSpacing.Sm))
+    OutlinedTextField(
+        value = address,
+        onValueChange = { typed ->
+            // Trimmed as it is typed: an address pasted from the other screen commonly arrives with
+            // a trailing space, and refusing it for that would look like the address is wrong.
+            address = typed.trim().take(15)
+            onEdited()
+        },
+        label = { Text(strings.castManualLabel) },
+        singleLine = true,
+        isError = failed,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    if (failed) {
+        Spacer(Modifier.height(BuroSpacing.Xs))
+        Text(
+            strings.castManualInvalid,
+            color = BuroColors.TextMuted,
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+    Spacer(Modifier.height(BuroSpacing.Sm))
+    BuroInteractiveRow(
+        onClick = { onConnect(address.trim()) },
+        selected = false,
+        enabled = plausible,
+        shape = BuroRadius.Small,
+    ) { _ ->
+        Text(
+            strings.castManualConnect,
+            color = if (plausible) BuroColors.Text else BuroColors.TextMuted,
+            modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Sm),
+        )
+    }
+}
+
+/**
+ * What people thought of the title, when enough of them said so.
+ *
+ * One score, named for where it came from. The obvious model is the phone app's row of a tomato and
+ * a bucket of popcorn, and those are Rotten Tomatoes' licensed marks with no free API behind them —
+ * drawing a tomato beside a number that came from TMDb would be inventing an endorsement, which is
+ * the one thing a ratings panel must not do.
+ *
+ * Absent when nobody has voted. TMDb answers with 0.0 and a count of zero for titles it holds but
+ * nobody rated, and "0%" reads as a verdict rather than as the absence of one.
+ */
+@Composable
+private fun RatingsBlock(score: TmdbAudienceScore?) {
+    val text = strings.shareStrings.ratings
+    val average = score?.average?.takeIf { value -> value > 0.0 } ?: return
+    val votes = score.voteCount
+    if (votes < MINIMUM_VOTES) return
+
+    Column(modifier = Modifier.padding(bottom = 14.dp)) {
+        Text(
+            text = text.title,
+            color = BuroColors.TextMuted,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // As a percentage, which is how people read a score at a glance — TMDb publishes out of
+            // ten, and "76%" lands faster than "7,6".
+            Text(
+                text = "${(average * 10).toInt()}%",
+                color = BuroColors.Primary,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.width(BuroSpacing.Sm))
+            Column {
+                Text(
+                    text = text.source,
+                    color = BuroColors.Text,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    // The count is what separates a score worth reading from one three people gave.
+                    text = text.votes.format(formatVotes(votes)),
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
+    }
+}
+
+/** Thousands as "1,2 mil": an exact five-digit count is noise beside the score it qualifies. */
+private fun formatVotes(votes: Int): String =
+    if (votes >= 1_000) "%.1f mil".format(votes / 1_000.0) else votes.toString()
+
+/**
+ * Below this a score is one opinion rather than a verdict.
+ *
+ * TMDb will happily report 10.0 from two votes, and a page announcing 100% on that basis is worse
+ * than one saying nothing.
+ */
+private const val MINIMUM_VOTES = 20

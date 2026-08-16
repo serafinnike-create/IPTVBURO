@@ -603,6 +603,12 @@ data class DesktopStrings(
                             clearAll = "Borrar todo",
                             dismiss = "Descartar",
                         ),
+                    ratings =
+                        RatingStrings(
+                            title = "Evaluaciones",
+                            source = "Puntuación TMDb",
+                            votes = "%s votos",
+                        ),
                     discovery =
                         DiscoveryStrings(
                             title = "Descubrir",
@@ -1185,6 +1191,12 @@ data class DesktopStrings(
                             empty = "Nada por aqui.",
                             clearAll = "Limpar tudo",
                             dismiss = "Descartar",
+                        ),
+                    ratings =
+                        RatingStrings(
+                            title = "Avaliações",
+                            source = "Nota TMDb",
+                            votes = "%s votos",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -1769,6 +1781,12 @@ data class DesktopStrings(
                             clearAll = "Clear all",
                             dismiss = "Dismiss",
                         ),
+                    ratings =
+                        RatingStrings(
+                            title = "Ratings",
+                            source = "TMDb score",
+                            votes = "%s votes",
+                        ),
                     discovery =
                         DiscoveryStrings(
                             title = "Discover",
@@ -2350,6 +2368,12 @@ data class DesktopStrings(
                             empty = "Nichts hier.",
                             clearAll = "Alles loeschen",
                             dismiss = "Verwerfen",
+                        ),
+                    ratings =
+                        RatingStrings(
+                            title = "Bewertungen",
+                            source = "TMDb-Wertung",
+                            votes = "%s Stimmen",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -2937,6 +2961,12 @@ data class DesktopStrings(
                             empty = "Niente qui.",
                             clearAll = "Cancella tutto",
                             dismiss = "Ignora",
+                        ),
+                    ratings =
+                        RatingStrings(
+                            title = "Valutazioni",
+                            source = "Punteggio TMDb",
+                            votes = "%s voti",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -3597,6 +3627,22 @@ data class NotificationStrings(
  * Grouped for the usual reason — [DesktopStrings] sits at the ceiling StringsConstructorLimitTest
  * defends, and a new top-level field is the one thing that cannot be afforded.
  */
+/**
+ * The ratings block on a title's page.
+ *
+ * Named for the source rather than dressed as somebody else's brand. Rotten Tomatoes' Tomatometer
+ * and IMDb's score are licensed marks with no free API — showing a tomato beside a number that came
+ * from TMDb would be inventing an endorsement, which is the one thing a ratings panel must not do.
+ */
+data class RatingStrings(
+    /** The section heading. */
+    val title: String,
+    /** Who the score came from, said plainly. */
+    val source: String,
+    /** How many people voted. Takes a formatted count. */
+    val votes: String,
+)
+
 data class DiscoveryStrings(
     /** The sidebar destination and the screen's heading. */
     val title: String,
@@ -3744,6 +3790,8 @@ data class ShareStrings(
     val cache: CacheStrings,
     /** The Descobrir screen. */
     val discovery: DiscoveryStrings,
+    /** The ratings block on a title page. */
+    val ratings: RatingStrings,
     /** The bell beside the profile. */
     val notifications: NotificationStrings,
     /** The button on the title page, beside Favourites. */
