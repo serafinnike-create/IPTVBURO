@@ -306,3 +306,87 @@ fun CacheFirstRunPanel(appState: com.lucasserafin94.iptvburo.desktop.DesktopAppS
         }
     }
 }
+
+/**
+ * The fill, as a strip under the header that stays put while it runs.
+ *
+ * The panel in settings shows the same progress, but only while somebody is looking at settings —
+ * which is precisely when they are not watching the download. This is the answer to "how far along
+ * is it": always in the same place, readable at a glance, and carrying the two controls that matter
+ * without making anybody go and find them.
+ *
+ * Absent when nothing is happening. A permanent strip reading 100% is furniture, and furniture is
+ * what people stop seeing.
+ */
+@Composable
+fun CacheProgressStrip(
+    progress: CacheFillProgress,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onRefresh: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val text = strings.shareStrings.cache
+    if (progress.state == CacheFillState.IDLE) return
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(BuroColors.Surface)
+                .padding(horizontal = BuroSpacing.Lg, vertical = BuroSpacing.Xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Md),
+    ) {
+        Text(
+            text = if (progress.state == CacheFillState.COMPLETE) text.complete else text.filling,
+            color = BuroColors.TextMuted,
+            style = MaterialTheme.typography.labelLarge,
+        )
+
+        val fraction = progress.fraction
+        Box(modifier = Modifier.weight(1f).height(6.dp).clip(BuroRadius.Pill)) {
+            if (fraction == null) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = BuroColors.Primary,
+                    trackColor = BuroColors.SurfaceRaised,
+                )
+            } else {
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = BuroColors.Primary,
+                    trackColor = BuroColors.SurfaceRaised,
+                )
+            }
+        }
+
+        // The percentage, which is the number people actually read off a progress bar. Absent while
+        // the length is unknown, because a percentage of an unknown total would be invented.
+        fraction?.let { value ->
+            Text(
+                text = text.percent.format((value * 100).toInt()),
+                color = BuroColors.Text,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Text(
+            text = text.progress.format(progress.done, progress.total),
+            color = BuroColors.TextSubtle,
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        if (progress.state == CacheFillState.COMPLETE) {
+            // A finished fill is only finished until the list grows. Refresh is how somebody asks
+            // for the artwork of whatever has arrived since, without emptying what is already held.
+            TextButton(onClick = onRefresh) { Text(text.refresh, color = BuroColors.Text) }
+        } else {
+            TextButton(onClick = if (progress.isRunning) onPause else onResume) {
+                Text(if (progress.isRunning) text.pause else text.resume, color = BuroColors.Text)
+            }
+        }
+        TextButton(onClick = onCancel) { Text("✕", color = BuroColors.TextSubtle) }
+    }
+}

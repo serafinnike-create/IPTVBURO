@@ -623,6 +623,8 @@ data class DesktopStrings(
                             used = "Em uso: %s",
                             clear = "Limpar cache",
                             restartNote = "Mudar o tamanho vale a partir da próxima vez que você abrir o app.",
+                            percent = "%d%%",
+                            refresh = "Actualizar",
                         ),
                     serviceCatalogue =
                         ServiceCatalogueStrings(
@@ -1193,6 +1195,8 @@ data class DesktopStrings(
                             used = "Em uso: %s",
                             clear = "Limpar cache",
                             restartNote = "Mudar o tamanho vale a partir da próxima vez que você abrir o app.",
+                            percent = "%d%%",
+                            refresh = "Atualizar",
                         ),
                     serviceCatalogue =
                         ServiceCatalogueStrings(
@@ -1763,6 +1767,8 @@ data class DesktopStrings(
                             used = "In use: %s",
                             clear = "Clear cache",
                             restartNote = "A change of size takes effect the next time you open the app.",
+                            percent = "%d%%",
+                            refresh = "Refresh",
                         ),
                     serviceCatalogue =
                         ServiceCatalogueStrings(
@@ -2332,6 +2338,8 @@ data class DesktopStrings(
                             used = "Belegt: %s",
                             clear = "Cache leeren",
                             restartNote = "Eine Groessenaenderung gilt ab dem naechsten Start der App.",
+                            percent = "%d%%",
+                            refresh = "Aktualisieren",
                         ),
                     serviceCatalogue =
                         ServiceCatalogueStrings(
@@ -2906,6 +2914,8 @@ data class DesktopStrings(
                             used = "In uso: %s",
                             clear = "Svuota cache",
                             restartNote = "Il cambio di dimensione vale dalla prossima apertura dell'app.",
+                            percent = "%d%%",
+                            refresh = "Aggiorna",
                         ),
                     serviceCatalogue =
                         ServiceCatalogueStrings(
@@ -3560,6 +3570,10 @@ data class CacheStrings(
     val clear: String,
     /** That a size change waits for the next launch, because Coil is built once per process. */
     val restartNote: String,
+    /** Percentage on the always-visible bar. Takes a whole number. */
+    val percent: String,
+    /** Fetches artwork the library has gained since the last fill. */
+    val refresh: String,
 )
 
 data class ServiceCatalogueStrings(

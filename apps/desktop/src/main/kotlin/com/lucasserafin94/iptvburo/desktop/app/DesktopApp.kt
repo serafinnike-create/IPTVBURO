@@ -400,6 +400,20 @@ fun DesktopApp(
                             onOpenPurchase = { showLicenseDetails = true },
                             onUpdate = ::checkAndDownloadUpdate,
                         )
+
+                        // Directly under the header, across the width of the app.
+                        //
+                        // The same progress is in settings, but only while somebody is looking at
+                        // settings — which is exactly when they are not watching the download. This
+                        // is where "how far along is it" gets answered at a glance, and it draws
+                        // nothing at all while no fill is running.
+                        CacheProgressStrip(
+                            progress = appState.cacheProgress,
+                            onPause = appState::pauseCacheFill,
+                            onResume = appState::resumeCacheFill,
+                            onRefresh = appState::refreshCacheFill,
+                            onCancel = appState::cancelCacheFill,
+                        )
                         HorizontalDivider(color = BuroColors.BorderSoft)
                         // The content screen must be weighted. A Column measures an unweighted
                         // child with unbounded height, so the Home's LazyColumn believed it had

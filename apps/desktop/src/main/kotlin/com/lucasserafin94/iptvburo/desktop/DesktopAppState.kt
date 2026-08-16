@@ -1491,6 +1491,20 @@ class DesktopAppState(
         if (cacheProgress.state == CacheFillState.PAUSED) startCacheFill()
     }
 
+    /**
+     * Fetches artwork the library has gained since the last fill.
+     *
+     * Distinct from starting over: what is already on disk stays, and Coil skips anything it
+     * already holds, so this costs a request only for what is genuinely new. The reason it exists
+     * is that a finished fill is only finished until the provider adds titles — without it, "Tudo
+     * guardado" would slowly stop being true and nothing would say so.
+     */
+    fun refreshCacheFill() {
+        if (!cacheBudget.isEnabled) return
+        cacheProgress = CacheFillProgress(state = CacheFillState.IDLE)
+        startCacheFill()
+    }
+
     fun cancelCacheFill() {
         cacheFillJob?.cancel()
         cacheFillJob = null
