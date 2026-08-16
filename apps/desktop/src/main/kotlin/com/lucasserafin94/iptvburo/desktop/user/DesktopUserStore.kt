@@ -854,6 +854,35 @@ class DesktopUserStore(
     private fun watermarksKey(profileId: String): String = "series-watermarks.$profileId"
 
     /**
+     * Titles this profile has already decided about in Descobrir.
+     *
+     * Per profile, because a swipe is one person saying what they think of a film. Kept so a card
+     * somebody dismissed never comes back — the rule people notice immediately when it breaks,
+     * since a returning card reads as the app ignoring them.
+     */
+    fun discoverySeen(profileId: String?): Set<String> =
+        profileId
+            ?.let { preferences.get(discoverySeenKey(it), "") }
+            ?.split(RECORD_SEPARATOR)
+            ?.filter(String::isNotBlank)
+            ?.mapNotNull { stored -> runCatching { decode(stored) }.getOrNull() }
+            ?.toSet()
+            .orEmpty()
+
+    fun setDiscoverySeen(profileId: String, ids: Collection<String>) =
+        preferences.put(
+            discoverySeenKey(profileId),
+            // Bounded, and the newest kept: preferences cap a value at 8 KB, and a viewer who has
+            // swiped through thousands would otherwise silently lose the whole list to a failed
+            // write. The oldest decisions are the ones least likely to be offered again anyway.
+            ids.toList()
+                .takeLast(MAX_DISCOVERY_SEEN)
+                .joinToString(RECORD_SEPARATOR.toString(), transform = ::encode),
+        )
+
+    private fun discoverySeenKey(profileId: String): String = "discovery-seen.$profileId"
+
+    /**
      * How many gigabytes of artwork this machine may keep, 0–64.
      *
      * Per install rather than per profile: it is a claim on one disk, and two people sharing a
@@ -947,6 +976,9 @@ class DesktopUserStore(
         const val KEY_CAST_AUTO_START = "cast-receiver-auto-start"
         const val KEY_CAST_PAIRING_CODE = "cast-pairing-code"
         const val KEY_CACHE_BUDGET_GB = "cache-budget-gb"
+
+        /** Room for a long history of swipes without risking the 8 KB ceiling on one value. */
+        const val MAX_DISCOVERY_SEEN = 400
         const val KEY_WINDOW_GEOMETRY = "window-geometry"
         const val KEY_BACKDROP_POSTERS = "backdrop-posters"
 

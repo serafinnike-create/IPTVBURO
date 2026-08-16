@@ -603,6 +603,17 @@ data class DesktopStrings(
                             clearAll = "Borrar todo",
                             dismiss = "Descartar",
                         ),
+                    discovery =
+                        DiscoveryStrings(
+                            title = "Descubrir",
+                            hint = "Desliza o usa los botones: guardar lo añade a favoritos.",
+                            keep = "Guardar",
+                            skip = "Saltar",
+                            exhausted = "Has visto todo por ahora.",
+                            another = "Buscar más",
+                            loading = "Creando tu selección…",
+                            kept = "Guardado en favoritos",
+                        ),
                     cache =
                         CacheStrings(
                             title = "Guardar capas neste computador",
@@ -1174,6 +1185,17 @@ data class DesktopStrings(
                             empty = "Nada por aqui.",
                             clearAll = "Limpar tudo",
                             dismiss = "Descartar",
+                        ),
+                    discovery =
+                        DiscoveryStrings(
+                            title = "Descobrir",
+                            hint = "Deslize ou use os botões: guardar vai para os favoritos.",
+                            keep = "Guardar",
+                            skip = "Pular",
+                            exhausted = "Você viu tudo por enquanto.",
+                            another = "Buscar mais",
+                            loading = "Montando sua seleção...",
+                            kept = "Guardado nos favoritos",
                         ),
                     cache =
                         CacheStrings(
@@ -1747,6 +1769,17 @@ data class DesktopStrings(
                             clearAll = "Clear all",
                             dismiss = "Dismiss",
                         ),
+                    discovery =
+                        DiscoveryStrings(
+                            title = "Discover",
+                            hint = "Swipe or use the buttons: keeping adds it to favourites.",
+                            keep = "Keep",
+                            skip = "Skip",
+                            exhausted = "You have seen everything for now.",
+                            another = "Find more",
+                            loading = "Building your selection...",
+                            kept = "Saved to favourites",
+                        ),
                     cache =
                         CacheStrings(
                             title = "Keep artwork on this computer",
@@ -2317,6 +2350,17 @@ data class DesktopStrings(
                             empty = "Nichts hier.",
                             clearAll = "Alles loeschen",
                             dismiss = "Verwerfen",
+                        ),
+                    discovery =
+                        DiscoveryStrings(
+                            title = "Entdecken",
+                            hint = "Wischen oder Tasten nutzen: Behalten legt den Titel zu den Favoriten.",
+                            keep = "Behalten",
+                            skip = "Überspringen",
+                            exhausted = "Sie haben vorerst alles gesehen.",
+                            another = "Mehr finden",
+                            loading = "Auswahl wird erstellt…",
+                            kept = "Zu Favoriten hinzugefügt",
                         ),
                     cache =
                         CacheStrings(
@@ -2893,6 +2937,17 @@ data class DesktopStrings(
                             empty = "Niente qui.",
                             clearAll = "Cancella tutto",
                             dismiss = "Ignora",
+                        ),
+                    discovery =
+                        DiscoveryStrings(
+                            title = "Scopri",
+                            hint = "Scorri o usa i pulsanti: tenere lo aggiunge ai preferiti.",
+                            keep = "Tieni",
+                            skip = "Salta",
+                            exhausted = "Hai visto tutto per ora.",
+                            another = "Trova altri",
+                            loading = "Creazione della selezione...",
+                            kept = "Aggiunto ai preferiti",
                         ),
                     cache =
                         CacheStrings(
@@ -3536,6 +3591,31 @@ data class NotificationStrings(
  * StringsConstructorLimitTest defends, and a new top-level field is the one thing that cannot be
  * afforded.
  */
+/**
+ * Descobrir: one card at a time, kept or passed over.
+ *
+ * Grouped for the usual reason — [DesktopStrings] sits at the ceiling StringsConstructorLimitTest
+ * defends, and a new top-level field is the one thing that cannot be afforded.
+ */
+data class DiscoveryStrings(
+    /** The sidebar destination and the screen's heading. */
+    val title: String,
+    /** What the screen is for, said once above the first card. */
+    val hint: String,
+    /** Keeps the title: it goes to favourites. */
+    val keep: String,
+    /** Passes over it. */
+    val skip: String,
+    /** Shown when the deck runs out. */
+    val exhausted: String,
+    /** Builds another deck. */
+    val another: String,
+    /** While the first deck is being gathered. */
+    val loading: String,
+    /** Confirms what keeping did, since the card leaves immediately. */
+    val kept: String,
+)
+
 data class CacheStrings(
     /** The setting's name, in the first-run panel and in settings. */
     val title: String,
@@ -3662,6 +3742,8 @@ data class ShareStrings(
     val serviceCatalogue: ServiceCatalogueStrings,
     /** The artwork cache setting and its progress. */
     val cache: CacheStrings,
+    /** The Descobrir screen. */
+    val discovery: DiscoveryStrings,
     /** The bell beside the profile. */
     val notifications: NotificationStrings,
     /** The button on the title page, beside Favourites. */

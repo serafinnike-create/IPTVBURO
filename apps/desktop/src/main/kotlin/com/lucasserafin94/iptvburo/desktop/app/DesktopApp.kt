@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
@@ -363,6 +364,7 @@ fun DesktopApp(
                         },
                         onFavorites = { scope.launch { appState.setFavoritesOnly(true) } },
                         onReminders = appState::openReminders,
+                        onDiscover = appState::openDiscovery,
                         onContinueWatching = appState::openContinueWatching,
                         onHistory = appState::openHistory,
                         onDownloads = appState::openDownloads,
@@ -580,6 +582,15 @@ fun DesktopApp(
                                 },
                                 onForget = appState::forgetHistoryEntry,
                                 onClearAll = appState::clearHistory,
+                            )
+                        } else if (visibleDestination == DesktopDestination.DISCOVER) {
+                            DiscoveryScreen(
+                                deck = appState.discoveryDeck,
+                                loading = appState.discoveryLoading,
+                                synopsisFor = appState::discoverySynopsis,
+                                genresFor = appState::discoveryGenres,
+                                onDecide = appState::decideDiscovery,
+                                onAnother = appState::loadDiscoveryDeck,
                             )
                         } else if (visibleDestination == DesktopDestination.REMINDERS) {
                             RemindersGallery(
@@ -1111,6 +1122,7 @@ private fun SourceSidebar(
     onLive: () -> Unit,
     onFavorites: () -> Unit,
     onReminders: () -> Unit,
+    onDiscover: () -> Unit,
     onContinueWatching: () -> Unit,
     onHistory: () -> Unit,
     onDownloads: () -> Unit,
@@ -1169,6 +1181,15 @@ private fun SourceSidebar(
             icon = Icons.Default.Search,
             selected = destination == DesktopDestination.SEARCH,
             onClick = onSearch,
+        )
+        // After Pesquisa and before the browsing destinations: search is for somebody who knows
+        // what they want, Descobrir is for somebody who does not — the two belong together at the
+        // top, ahead of the shelves you browse when you already have an idea.
+        NavigationItem(
+            label = text.shareStrings.discovery.title,
+            icon = Icons.Default.Explore,
+            selected = destination == DesktopDestination.DISCOVER,
+            onClick = onDiscover,
         )
         NavigationItem(
             label = text.movies,

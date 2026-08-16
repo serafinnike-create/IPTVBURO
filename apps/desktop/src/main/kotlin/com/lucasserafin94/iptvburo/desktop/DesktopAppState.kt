@@ -67,6 +67,11 @@ import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.AppNotification
 import com.lucasserafin94.iptvburo.domain.model.CacheBudget
+import com.lucasserafin94.iptvburo.domain.model.DiscoveryCandidate
+import com.lucasserafin94.iptvburo.domain.model.DiscoveryDeck
+import com.lucasserafin94.iptvburo.domain.model.DiscoveryVerdict
+import com.lucasserafin94.iptvburo.domain.model.SessionTaste
+import com.lucasserafin94.iptvburo.domain.model.TasteProfile
 import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
 import com.lucasserafin94.iptvburo.domain.model.CacheFillState
 import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
@@ -1549,6 +1554,164 @@ class DesktopAppState(
                     }
                 }
         }.distinct()
+    }
+
+    // --- Descobrir -----------------------------------------------------------------------------
+
+    /**
+     * The cards on offer, and the catalogue rows behind them.
+     *
+     * The deck is decided in the domain, which knows about taste and nothing about posters; the
+     * items are kept alongside so the screen can draw artwork and a synopsis without the domain
+     * having to carry them.
+     */
+    var discoveryDeck by mutableStateOf<List<XtreamCatalogItem>>(emptyList())
+        private set
+
+    var discoveryLoading by mutableStateOf(false)
+        private set
+
+    private var discoverySession = SessionTaste()
+    private var discoverySeen: Set<String> = emptySet()
+
+    /** The card on top, or null when the deck is spent. */
+    val discoveryTop: XtreamCatalogItem?
+        get() = discoveryDeck.firstOrNull()
+
+    /**
+     * Builds a deck for this profile.
+     *
+     * The taste comes from what the viewer has actually done — the genres of their favourites and
+     * of what they have watched — rather than from a questionnaire, because what people say they
+     * like and what they watch are different lists.
+     */
+    fun loadDiscoveryDeck() {
+        val profileId = activeProfileId ?: return
+        if (discoveryLoading) return
+        if (xtreamSummary == null) return
+        discoveryLoading = true
+
+        streamingScope.launch {
+            val built =
+                runCatching {
+                    withContext(Dispatchers.IO) { buildDiscoveryDeck(profileId) }
+                }.getOrDefault(emptyList())
+            discoveryDeck = built
+            discoveryLoading = false
+        }
+    }
+
+    private fun buildDiscoveryDeck(profileId: String): List<XtreamCatalogItem> {
+        discoverySeen = userStore.discoverySeen(profileId)
+
+        // Everything the catalogue holds, through the same paged walk the cache fill uses — which
+        // applies the parental filter, so a Kids profile is never offered a card it may not open.
+        val kidsMode = activeProfile?.isKids == true
+        val items = mutableListOf<XtreamCatalogItem>()
+        listOf(XtreamContentType.MOVIE, XtreamContentType.SERIES).forEach { contentType ->
+            val locked = lockedCategoryIdsForBrowsing(contentType)
+            var pageIndex = 0
+            while (pageIndex < MAX_DISCOVERY_PAGES) {
+                val page =
+                    runCatching {
+                        xtreamRepository.page(
+                            contentType = contentType,
+                            categoryId = null,
+                            query = "",
+                            requestedPage = pageIndex,
+                            kidsMode = kidsMode,
+                            lockedCategoryIds = locked,
+                        )
+                    }.getOrNull() ?: break
+                if (page.items.isEmpty()) break
+                items += page.items
+                pageIndex += 1
+            }
+        }
+        if (items.isEmpty()) return emptyList()
+
+        val byId = items.associateBy { item -> item.contentIdentity().key }
+        val taste =
+            TasteProfile(
+                favouriteGenres = genresOf(favoriteKeys.mapNotNull { key -> byId[key] }),
+                // Repeats on purpose: a genre watched six times counts six times, which is what
+                // makes it outweigh one watched once.
+                watchedGenres = genresOf(historyEntries.map { entry -> entry.item }),
+                seenIds = discoverySeen + favoriteKeys,
+            )
+
+        val candidates =
+            items.map { item ->
+                DiscoveryCandidate(
+                    id = item.contentIdentity().key,
+                    title = item.name.editorialTitle(),
+                    genres = item.categoryIds,
+                    year = item.year,
+                    rating = item.rating,
+                    isSeries = item.contentType == XtreamContentType.SERIES,
+                )
+            }
+
+        return DiscoveryDeck
+            .build(candidates = candidates, taste = taste, session = discoverySession)
+            .mapNotNull { candidate -> byId[candidate.id] }
+    }
+
+    /** The categories of a set of titles, as the taste profile consumes them. */
+    private fun genresOf(items: List<XtreamCatalogItem>): List<String> =
+        items.flatMap { item -> item.categoryIds }
+
+    /**
+     * Records a decision and moves to the next card.
+     *
+     * Accepting adds the title to favourites, which is what the product asked for and also what
+     * makes the choice worth something: a swipe that only advanced a deck would teach the app about
+     * the viewer and give the viewer nothing.
+     */
+    fun decideDiscovery(
+        item: XtreamCatalogItem,
+        verdict: DiscoveryVerdict,
+    ) {
+        val profileId = activeProfileId ?: return
+        val key = item.contentIdentity().key
+
+        if (verdict == DiscoveryVerdict.KEPT && key !in favoriteKeys) toggleFavorite(item)
+
+        discoverySession = discoverySession.after(item.categoryIds, verdict)
+        discoverySeen = discoverySeen + key
+        userStore.setDiscoverySeen(profileId, discoverySeen)
+        discoveryDeck = discoveryDeck.filterNot { held -> held.contentIdentity().key == key }
+    }
+
+    /**
+     * What the card says the film is about.
+     *
+     * From the details already fetched for this title, when there are any — the card is worth
+     * reading without it, so nothing is requested on its behalf. A network call per card would turn
+     * a game somebody plays in bursts into a screen that waits.
+     */
+    fun discoverySynopsis(item: XtreamCatalogItem): String? =
+        (movieDetailsStatus as? MovieDetailsStatus.Loaded)
+            ?.details
+            ?.takeIf { details -> details.title == item.name }
+            ?.plot
+
+    /**
+     * The genres to print under the title.
+     *
+     * Category names rather than ids: the ids are the provider's numbering and mean nothing to
+     * anybody reading a card.
+     */
+    fun discoveryGenres(item: XtreamCatalogItem): List<String> {
+        val names = xtreamRepository.categories(item.contentType).associateBy(XtreamCategory::providerId)
+        return item.categoryIds.mapNotNull { id -> names[id]?.name }
+    }
+
+    /** Opens Descobrir, building a deck if there is not one already. */
+    fun openDiscovery() {
+        favoritesOnly = false
+        destination = DesktopDestination.DISCOVER
+        if (discoveryDeck.isEmpty()) loadDiscoveryDeck()
     }
 
     /** Marks today's notice as seen, so it does not return until tomorrow's slot. */
@@ -5893,6 +6056,9 @@ private const val CACHE_PROGRESS_STEP = 25
 /** A bound on the walk, so a repository that never returns an empty page cannot loop for ever. */
 private const val MAX_CACHE_PAGES = 600
 
+/** Bounds the walk that gathers candidates, for the same reason the cache fill is bounded. */
+private const val MAX_DISCOVERY_PAGES = 400
+
 enum class DesktopDestination {
     HOME,
     /** The search tab: one box that reaches films, series and live channels at once. */
@@ -5904,6 +6070,8 @@ enum class DesktopDestination {
     MUSIC,
     SUBSCRIPTIONS,
     HISTORY,
+    /** Cards to keep or pass over, one at a time. */
+    DISCOVER,
     /** Titles the viewer marked to come back to, including ones not in the catalogue yet. */
     REMINDERS,
 }
