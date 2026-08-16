@@ -323,6 +323,7 @@ fun SettingsDialog(
                                 onPauseFill = appState::pauseCacheFill,
                                 onResumeFill = appState::resumeCacheFill,
                                 onCancelFill = appState::cancelCacheFill,
+                                onRefresh = appState::refreshCacheFill,
                                 onClear = appState::clearArtworkCache,
                                 showTitle = false,
                             )

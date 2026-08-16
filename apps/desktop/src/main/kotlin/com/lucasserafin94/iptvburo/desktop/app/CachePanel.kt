@@ -15,6 +15,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +45,14 @@ import com.lucasserafin94.iptvburo.domain.model.CacheFillState
 private val OFFERED_SIZES = listOf(0, 2, 8, 16, 32, 64)
 
 /**
+ * How long the strip stays up after saying the fill is finished.
+ *
+ * Long enough to be read by somebody who was not watching the moment it changed, short enough that
+ * it is not still there the next time they look up.
+ */
+private const val COMPLETION_VISIBLE_MILLIS = 6_000L
+
+/**
  * The cache choice, offered on first run and again in settings.
  *
  * Shown as one component in both places so the explanation cannot drift apart from the setting it
@@ -58,6 +71,14 @@ fun CacheChoicePanel(
     onPauseFill: () -> Unit,
     onResumeFill: () -> Unit,
     onCancelFill: () -> Unit,
+    /**
+     * Fetches artwork the library has gained since the last fill.
+     *
+     * Offered here as well as on the strip, because the strip goes away once it has said it is
+     * finished — and a control that only exists on a transient surface is one nobody can find when
+     * they want it.
+     */
+    onRefresh: () -> Unit,
     onClear: () -> Unit,
     /** Shown on the first-run panel, which needs an accept and a decline. Null in settings. */
     onDecline: (() -> Unit)? = null,
@@ -152,6 +173,11 @@ fun CacheChoicePanel(
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.weight(1f),
                 )
+                if (budget.isEnabled) {
+                    TextButton(onClick = onRefresh) {
+                        Text(text.refresh, color = BuroColors.Text)
+                    }
+                }
                 TextButton(onClick = onClear) {
                     Text(text.clear, color = BuroColors.TextSubtle)
                 }
@@ -300,6 +326,7 @@ fun CacheFirstRunPanel(appState: com.lucasserafin94.iptvburo.desktop.DesktopAppS
                 onPauseFill = appState::pauseCacheFill,
                 onResumeFill = appState::resumeCacheFill,
                 onCancelFill = appState::cancelCacheFill,
+                onRefresh = appState::refreshCacheFill,
                 onClear = appState::clearArtworkCache,
                 onDecline = appState::declineCacheChoice,
             )
@@ -328,6 +355,24 @@ fun CacheProgressStrip(
 ) {
     val text = strings.shareStrings.cache
     if (progress.state == CacheFillState.IDLE) return
+
+    // A finished fill says so and then goes away on its own.
+    //
+    // Without this the strip sat at "Tudo guardado. 100%" for the rest of the session, because
+    // COMPLETE is a state nothing moves out of — the ✕ was the only way, which turns a piece of
+    // good news into a chore. Reporting completion is worth a few seconds of the screen; keeping it
+    // there afterwards is just a bar in the way of the app.
+    //
+    // Keyed on the state and the count, so a Refresh that finds new artwork brings the strip back
+    // rather than being swallowed by a dismissal that already happened.
+    var completionDismissed by remember(progress.state, progress.total) { mutableStateOf(false) }
+    LaunchedEffect(progress.state, progress.total) {
+        if (progress.state == CacheFillState.COMPLETE) {
+            delay(COMPLETION_VISIBLE_MILLIS)
+            completionDismissed = true
+        }
+    }
+    if (progress.state == CacheFillState.COMPLETE && completionDismissed) return
 
     Row(
         modifier =
@@ -364,9 +409,11 @@ fun CacheProgressStrip(
 
         // The percentage, which is the number people actually read off a progress bar. Absent while
         // the length is unknown, because a percentage of an unknown total would be invented.
-        fraction?.let { value ->
+        // The model's own figure, not a percentage computed here: it rounds down, so 999 of 1000
+        // stays at 99 rather than claiming 100 while images are still arriving.
+        progress.percent?.let { value ->
             Text(
-                text = text.percent.format((value * 100).toInt()),
+                text = text.percent.format(value),
                 color = BuroColors.Text,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,

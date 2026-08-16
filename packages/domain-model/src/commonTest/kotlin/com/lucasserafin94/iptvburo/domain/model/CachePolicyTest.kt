@@ -117,4 +117,33 @@ class CachePolicyTest {
         assertEquals(0, CachePolicy.estimatedBytesFor(0))
         assertEquals(0, CachePolicy.estimatedBytesFor(-10))
     }
+
+    /**
+     * The figure the viewer reads while it downloads.
+     *
+     * Rounded down on purpose: a bar that says 100% with images still arriving is the one reading
+     * that would be a lie, so 999 of 1000 has to stay at 99.
+     */
+    @Test
+    fun `the percentage reports how far the fill has got`() {
+        assertEquals(0, CacheFillProgress(done = 0, total = 1_000).percent)
+        assertEquals(50, CacheFillProgress(done = 500, total = 1_000).percent)
+        assertEquals(99, CacheFillProgress(done = 999, total = 1_000).percent)
+        assertEquals(100, CacheFillProgress(done = 1_000, total = 1_000).percent)
+    }
+
+    /** Nothing to measure yet reads as unknown, not as zero: the two look identical and are not. */
+    @Test
+    fun `the percentage is absent until a total is known`() {
+        assertNull(CacheFillProgress(done = 0, total = 0).percent)
+    }
+
+    @Test
+    fun `a paused fill with work left is resumable`() {
+        val paused = CacheFillProgress(done = 20, total = 100, state = CacheFillState.PAUSED)
+        assertTrue(paused.isResumable)
+
+        val finished = CacheFillProgress(done = 100, total = 100, state = CacheFillState.COMPLETE)
+        assertFalse(finished.isResumable)
+    }
 }

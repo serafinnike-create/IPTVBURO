@@ -78,7 +78,20 @@ data class CacheFillProgress(
     val fraction: Float?
         get() = if (total <= 0) null else (done.toFloat() / total).coerceIn(0f, 1f)
 
+    /**
+     * The same position as a whole percentage, or null while there is nothing to measure.
+     *
+     * Rounded down rather than to nearest, so the bar never reads "100%" while images are still
+     * being fetched — finishing is what [CacheFillState.COMPLETE] says, and a percentage that
+     * arrives there early is the one thing a progress figure must not do.
+     */
+    val percent: Int?
+        get() = fraction?.let { value -> (value * 100).toInt().coerceIn(0, 100) }
+
     val isRunning: Boolean get() = state == CacheFillState.RUNNING
+
+    /** Whether the fill stopped part-way and has something left to do. */
+    val isResumable: Boolean get() = state == CacheFillState.PAUSED && (total <= 0 || done < total)
 }
 
 enum class CacheFillState {
