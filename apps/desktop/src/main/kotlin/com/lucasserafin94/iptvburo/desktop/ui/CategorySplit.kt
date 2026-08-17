@@ -59,6 +59,23 @@ data class CategorySplit(
         val wanted = id ?: return false
         return providers.any { choice -> choice.id == wanted }
     }
+
+    /**
+     * The same split with each service's official mark attached.
+     *
+     * Applied here rather than inside [splitCategories] so the split stays a pure function of the
+     * playlist: the logos arrive asynchronously from TMDb, and a split that reached for them would
+     * be rebuilt on a schedule it does not control.
+     */
+    fun withLogos(logos: Map<String, String>): CategorySplit {
+        if (logos.isEmpty() || providers.isEmpty()) return this
+        return copy(
+            providers =
+                providers.map { choice ->
+                    choice.copy(provider = choice.provider?.withLogoFrom(logos))
+                },
+        )
+    }
 }
 
 /**

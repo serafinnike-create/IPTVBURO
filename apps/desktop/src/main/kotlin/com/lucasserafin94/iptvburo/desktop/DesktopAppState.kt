@@ -39,6 +39,7 @@ import com.lucasserafin94.iptvburo.desktop.security.XtreamSourceLibrary
 import com.lucasserafin94.iptvburo.desktop.license.LicenseClient
 import com.lucasserafin94.iptvburo.desktop.license.LicenseStatus
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.providerIdentityFor
 import com.lucasserafin94.iptvburo.desktop.ui.RememberedScroll
 import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
 import com.lucasserafin94.iptvburo.desktop.user.MusicCorrection
@@ -1870,7 +1871,28 @@ class DesktopAppState(
      * [pendingDetailsRequest]: selecting an id alone resolves against the visible page of eighty,
      * so a title from anywhere else in a large catalogue opened whatever happened to be first.
      */
-    fun openReminder(item: XtreamCatalogItem) {
+    fun openReminder(item: XtreamCatalogItem) = openTitle(item)
+
+    /**
+     * Opens a title's page from anywhere in the app.
+     *
+     * Four things have to happen together, and every caller that did them by hand got it wrong:
+     *
+     * 1. [selectDailyItem], not `selectedXtreamItemId` alone — the id resolves against the visible
+     *    page of eighty, so a title from elsewhere in a 40,000-item catalogue fell through to
+     *    `firstOrNull()` and opened whatever happened to be first.
+     * 2. The content type, or the page loads the wrong catalogue.
+     * 3. `destination = CATALOG`. The loaders that fetch details live in `XtreamWorkspace`, which
+     *    composes for CATALOG and nothing else — leaving the destination on SEARCH or HOME meant the
+     *    page opened on "Carregando ficha do filme…" with no request in flight and no way to
+     *    recover. That was reported from the search results, and it is the failure this function
+     *    exists to make unrepeatable.
+     * 4. [pendingDetailsRequest], which is what actually asks for the details once the workspace is
+     *    on screen.
+     *
+     * Search, Lembretes and "já está na sua lista" all route through here now.
+     */
+    fun openTitle(item: XtreamCatalogItem) {
         selectDailyItem(item)
         xtreamContentType = item.contentType
         destination = DesktopDestination.CATALOG
@@ -2482,6 +2504,68 @@ class DesktopAppState(
     /** The service shelves, once loaded. Empty while loading and when nothing is available. */
     var streamingShelves by mutableStateOf<List<TmdbServiceShelf>>(emptyList())
         private set
+
+    /**
+     * The streaming services' own logos, by the label this app recognises them as.
+     *
+     * TMDb publishes the whole directory for a region in one request — every service with its mark —
+     * and licenses those marks for exactly this use, with attribution. That is what makes a genuine
+     * Netflix or Prime badge legitimate where an imitation would not be.
+     *
+     * The Serviço selector shipped drawing two-letter monograms, and the reply was that "AP" is not
+     * the Prime Video logo — which is fair, since recognising a mark faster than reading a name is
+     * the entire point of that selector.
+     *
+     * Empty until loaded, and empty forever without a key. A missing logo falls back to the monogram
+     * on the service's colour: a worse badge, never a broken screen.
+     */
+    var providerLogos by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
+
+    /** The key the logo directory was built with, so a changed key refetches it. */
+    private var providerLogosKey: String? = null
+
+    /**
+     * Fills [providerLogos] unless it already holds the answer for this key and region.
+     *
+     * Both directories are read: films and series list different services — TMDb's film directory
+     * for Brazil leads with transactional shops that carry no series at all — and a household
+     * browsing either should see the right marks.
+     *
+     * Failure is silence, by design. This decorates a selector that works without it.
+     */
+    suspend fun ensureProviderLogos() {
+        val key = effectiveMetadataKey()?.takeIf(String::isNotBlank) ?: return
+        val region = streamingRegion
+        val cacheKey = "$key@$region"
+        if (providerLogosKey == cacheKey && providerLogos.isNotEmpty()) return
+
+        val loaded =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val client = TmdbClient(key)
+                    // Series first, then films: where the two disagree about a service's mark the
+                    // film directory wins, since it is the larger catalogue. Neither actually
+                    // differs in practice — the logo belongs to the service, not to the medium.
+                    val directory =
+                        client.watchProviderDirectory(region, forSeries = true) +
+                            client.watchProviderDirectory(region, forSeries = false)
+                    directory.mapNotNull { entry ->
+                        val logo = entry.logoUrl ?: return@mapNotNull null
+                        // Matched through the same name rules the rest of the app uses. TMDb says
+                        // "Amazon Prime Video" where a playlist says "Prime Video", and "HBO Max"
+                        // where it says "Max", so a literal key would miss most of them.
+                        val identity = providerIdentityFor(entry.name) ?: return@mapNotNull null
+                        identity.label to logo
+                    }.toMap()
+                }.getOrDefault(emptyMap())
+            }
+
+        if (loaded.isNotEmpty()) {
+            providerLogos = loaded
+            providerLogosKey = cacheKey
+        }
+    }
 
     /**
      * True when the current shelf request failed *because TMDb rejected the key*.
@@ -4458,6 +4542,14 @@ class DesktopAppState(
                             18,
                             kidsMode,
                             lockedCategoriesByType.getValue(XtreamContentType.MOVIE),
+                            // Rotated per day, like every other shelf on this screen. Without it the
+                            // shelf showed the year's best-rated eighteen and nothing else, ever —
+                            // reported as the releases never changing, with every card reading ★5.0.
+                            //
+                            // Multipliers differ from the ones the daily pages use so films and
+                            // series do not advance in lockstep with each other or with the picks
+                            // below them.
+                            rotation = date.dayOfYear * 11 + date.year,
                         ),
                     seriesThisYear =
                         xtreamRepository.releasesForYear(
@@ -4466,6 +4558,7 @@ class DesktopAppState(
                             18,
                             kidsMode,
                             lockedCategoriesByType.getValue(XtreamContentType.SERIES),
+                            rotation = date.dayOfYear * 19 + date.year,
                         ),
                     movies = movies,
                     series = series,
@@ -5872,6 +5965,8 @@ class DesktopAppState(
         // calling thread for exactly that reason.
         val lockedCategories = lockedCategoryIdsForBrowsing()
         val kidsMode = activeProfile?.isKids == true
+        // Captured on the calling thread with every other input, for the reason above.
+        val collapse = collapsesDuplicateTitles
         val page =
             withContext(Dispatchers.Default) {
                 xtreamRepository.page(
@@ -5884,6 +5979,9 @@ class DesktopAppState(
                     allowedIdentities = allowedIdentities,
                     kidsMode = kidsMode,
                     lockedCategoryIds = lockedCategories,
+                    // One card per film unless the user asked for every copy. A provider carries the
+                    // same title several times over and the grid listed all of them.
+                    collapseDuplicates = collapse,
                 )
             }
         if (requestGeneration == xtreamPageRequestGeneration) {
@@ -5977,6 +6075,23 @@ class DesktopAppState(
     fun changeClockFormat(use24Hour: Boolean) {
         uses24HourClock = use24Hour
         userStore.setUses24HourClock(use24Hour)
+    }
+
+    /**
+     * Whether the catalogue collapses a provider's repeated copies of one film.
+     *
+     * On by default — see the note on the store's `collapsesDuplicateTitles`. Reported as duplicate
+     * films filling the Filmes grid.
+     */
+    var collapsesDuplicateTitles by mutableStateOf(userStore.collapsesDuplicateTitles())
+        private set
+
+    suspend fun changeCollapsesDuplicateTitles(value: Boolean) {
+        collapsesDuplicateTitles = value
+        userStore.setCollapsesDuplicateTitles(value)
+        // The grid is already drawn from a page that was built under the old setting, so it has to be
+        // fetched again for the change to be visible at all.
+        if (isXtreamSelected) refreshXtreamPage(pageIndex = 0)
     }
 
     /**

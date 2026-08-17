@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -94,19 +95,38 @@ fun NotificationBell(
                 // Only while something is unread, and never as a "0": a badge that is always there
                 // stops being a signal and becomes part of the furniture.
                 if (unread > 0) {
-                    Text(
-                        text = if (unread > MAX_BADGE) "$MAX_BADGE+" else unread.toString(),
-                        color = BuroColors.OnPrimary,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
+                    // Inside the bell's bounds, not nudged past them.
+                    //
+                    // The badge used to sit at TopEnd with `offset(x = 2.dp, y = -2.dp)`, which put
+                    // part of it outside this 38dp box — and `BuroInteractiveRow` clips to its own
+                    // shape, so the overhang was cut off and the count came out shaved down its top
+                    // and right edges. Reported as the number being cut.
+                    //
+                    // A circle sized to the text also cannot hold two digits: `CircleShape` on a
+                    // wider-than-tall box clips the ends of the number. The badge is therefore a
+                    // pill with a floor on its width, which is a circle when the content is one
+                    // digit and grows sideways when it is not.
+                    Box(
                         modifier =
                             Modifier
                                 .align(Alignment.TopEnd)
-                                .offset(x = 2.dp, y = (-2).dp)
-                                .clip(CircleShape)
+                                .defaultMinSize(minWidth = BADGE_MIN_SIZE, minHeight = BADGE_MIN_SIZE)
+                                .clip(BuroRadius.Pill)
                                 .background(BuroColors.Primary)
-                                .padding(horizontal = 5.dp, vertical = 1.dp),
-                    )
+                                .padding(horizontal = 4.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = if (unread > MAX_BADGE) "$MAX_BADGE+" else unread.toString(),
+                            color = BuroColors.OnPrimary,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            // A count is one token. Wrapped or ellipsised it stops being a number,
+                            // which is the whole failure this comment sits above.
+                            softWrap = false,
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
         }
@@ -228,5 +248,19 @@ private val PANEL_WIDTH = 320.dp
 /** Roughly six rows. Past that the list scrolls rather than the panel growing. */
 private val PANEL_MAX_HEIGHT = 320.dp
 
-/** Beyond this the exact number stops mattering and the badge stops fitting. */
-private const val MAX_BADGE = 9
+/**
+ * Beyond this the exact number stops mattering.
+ *
+ * Raised from 9 now that the badge is a pill rather than a text-sized circle: "12" fits, and a
+ * reminder count in the teens is ordinary for somebody following a few series. Past 99 the digits
+ * would start to crowd the bell itself.
+ */
+private const val MAX_BADGE = 99
+
+/**
+ * The badge's floor, so a single digit is a circle rather than a narrow sliver.
+ *
+ * Small enough to stay clear of the 38dp bell it sits on, since anything larger would overlap the
+ * icon instead of decorating its corner.
+ */
+private val BADGE_MIN_SIZE = 16.dp

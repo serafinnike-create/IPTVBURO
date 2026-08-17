@@ -87,6 +87,8 @@ internal fun MovieDetailsScreen(
     categoryName: String?,
     /** What the critics said, from OMDb. Null when no key is set. */
     criticScores: CriticScores? = null,
+    /** The service TMDb says this title streams on, when the category names none. */
+    providerName: String? = null,
     /** The service's official logo from TMDb, when the lookup found one. */
     providerLogoUrl: String? = null,
     details: MovieDetailsUi?,
@@ -235,8 +237,13 @@ internal fun MovieDetailsScreen(
                         )
                     }
 
+                    // The category first, then what TMDb says.
+                    //
+                    // Most playlists file films by genre, so the category names no service and the
+                    // badge would be missing on exactly the titles people ask about. TMDb knows
+                    // where a title streams, and that answer already arrives with the logo.
                     val provider =
-                        providerIdentityFor(categoryName)
+                        (providerIdentityFor(categoryName) ?: providerIdentityFor(providerName))
                             ?.copy(logoUrl = providerLogoUrl)
                     if (details?.rating != null || provider != null) {
                         Spacer(Modifier.height(if (portrait) 12.dp else 14.dp))

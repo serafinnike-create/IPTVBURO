@@ -118,6 +118,7 @@ import com.lucasserafin94.iptvburo.desktop.license.LicenseStatus
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackRequest
 import com.lucasserafin94.iptvburo.desktop.playback.MultiviewOverlay
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlayerOverlay
+import com.lucasserafin94.iptvburo.desktop.ui.LocalProviderLogos
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroMark
 import com.lucasserafin94.iptvburo.desktop.ui.BuroDesktopTheme
@@ -237,9 +238,17 @@ fun DesktopApp(
         appState.checkLicense()
     }
 
+    // The services' own marks, fetched once and read by every badge below through a
+    // CompositionLocal. Off the main thread, failure-silent, and never blocking: the selectors work
+    // with monograms until it lands.
+    LaunchedEffect(appState.metadataApiKey, appState.streamingRegion) {
+        appState.ensureProviderLogos()
+    }
+
     BuroDesktopTheme {
         CompositionLocalProvider(
             LocalDesktopStrings provides DesktopStrings.of(appState.language),
+            LocalProviderLogos provides appState.providerLogos,
         ) {
         // The licence check, inside the theme and the strings so the blocking screen is styled and
         // translated, and before everything else so a blocked app never composes a catalogue it is
@@ -576,7 +585,19 @@ fun DesktopApp(
                                 results = appState.globalSearchResults,
                                 onQueryChange = appState::updateGlobalSearch,
                                 onOpenItem = { item ->
-                                    appState.selectDailyItem(item)
+                                    // The whole route, not just the selection.
+                                    //
+                                    // This called `selectDailyItem` alone, which sets the title but
+                                    // leaves the destination on SEARCH — and the loaders that fetch a
+                                    // film's details live in XtreamWorkspace, which only composes for
+                                    // CATALOG. So the page opened, showed "Carregando ficha do
+                                    // filme…", and nothing ever ran: no request in flight, no error,
+                                    // no way back except leaving the screen.
+                                    //
+                                    // `openTitle` is the same route Lembretes and "já está na sua
+                                    // lista" take, and it exists because this is the third caller to
+                                    // get the sequence wrong by hand.
+                                    appState.openTitle(item)
                                 },
                                 text = strings,
                             )
@@ -604,6 +625,9 @@ fun DesktopApp(
                                 synopsisFor = appState::discoverySynopsis,
                                 genresFor = appState::discoveryGenres,
                                 onDecide = appState::decideDiscovery,
+                                // The same route every other "open this title" takes, so the details
+                                // loaders actually run — see openTitle.
+                                onOpenDetails = appState::openTitle,
                                 onAnother = appState::loadDiscoveryDeck,
                             )
                         } else if (visibleDestination == DesktopDestination.REMINDERS) {

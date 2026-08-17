@@ -560,6 +560,20 @@ class DesktopUserStore(
 
     fun setUses24HourClock(value: Boolean) = preferences.putBoolean(KEY_CLOCK_24H, value)
 
+    /**
+     * Whether the catalogue shows one card per film instead of every copy a provider carries.
+     *
+     * On by default. A list routinely holds the same film three or four times over — one per
+     * quality, per dubbing, per channel prefix — and the catalogue showed all of them, which was
+     * reported as duplicate films. Those copies are a choice of quality in principle, but four cards
+     * with nothing to tell them apart is not a choice anybody can make, so the tidy view is the
+     * default and this setting is for whoever wants the raw list back.
+     */
+    fun collapsesDuplicateTitles(): Boolean = preferences.getBoolean(KEY_COLLAPSE_DUPLICATES, true)
+
+    fun setCollapsesDuplicateTitles(value: Boolean) =
+        preferences.putBoolean(KEY_COLLAPSE_DUPLICATES, value)
+
     fun hasAcceptedTerms(): Boolean = preferences.getBoolean(KEY_TERMS_ACCEPTED, false)
 
     fun setAcceptedTerms() = preferences.putBoolean(KEY_TERMS_ACCEPTED, true)
@@ -1017,6 +1031,7 @@ class DesktopUserStore(
         const val KEY_REMINDERS_ANNOUNCED = "reminders-announced"
         const val KEY_REMINDER_LAST_SHOWN = "reminder-last-shown"
         const val KEY_CLOCK_24H = "clock-24h"
+        const val KEY_COLLAPSE_DUPLICATES = "collapse-duplicate-titles"
         const val KEY_SUBTITLE_SIZE = "subtitle-size"
         const val KEY_SUBTITLE_COLOUR = "subtitle-colour"
         const val KEY_SUBTITLE_BACKGROUND = "subtitle-background"

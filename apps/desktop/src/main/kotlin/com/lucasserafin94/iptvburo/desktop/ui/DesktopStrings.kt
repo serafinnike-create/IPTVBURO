@@ -658,6 +658,7 @@ data class DesktopStrings(
                             hint = "Desliza o usa los botones: guardar lo añade a favoritos.",
                             keep = "Guardar",
                             skip = "Saltar",
+                            details = "Detalles",
                             exhausted = "Has visto todo por ahora.",
                             another = "Buscar más",
                             loading = "Creando tu selección…",
@@ -703,6 +704,10 @@ data class DesktopStrings(
                             serviceSelector = "Servicio",
                             allGenres = "Todos los géneros",
                             allServices = "Todos los servicios",
+                            servicesUnavailable = "no indicado en tu lista",
+                            duplicatesLabel = "Copias repetidas",
+                            duplicatesHint = "Las listas suelen traer la misma película varias veces, una por calidad o doblaje.",
+                            duplicatesToggle = "Mostrar una sola tarjeta por película",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -1302,6 +1307,7 @@ data class DesktopStrings(
                             hint = "Deslize ou use os botões: guardar vai para os favoritos.",
                             keep = "Guardar",
                             skip = "Pular",
+                            details = "Detalhes",
                             exhausted = "Você viu tudo por enquanto.",
                             another = "Buscar mais",
                             loading = "Montando sua seleção...",
@@ -1347,6 +1353,10 @@ data class DesktopStrings(
                             serviceSelector = "Serviço",
                             allGenres = "Todos os gêneros",
                             allServices = "Todos os serviços",
+                            servicesUnavailable = "não informado na sua lista",
+                            duplicatesLabel = "Cópias repetidas",
+                            duplicatesHint = "As listas costumam trazer o mesmo filme várias vezes, uma por qualidade ou dublagem.",
+                            duplicatesToggle = "Mostrar só um card por filme",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -1946,6 +1956,7 @@ data class DesktopStrings(
                             hint = "Swipe or use the buttons: keeping adds it to favourites.",
                             keep = "Keep",
                             skip = "Skip",
+                            details = "Details",
                             exhausted = "You have seen everything for now.",
                             another = "Find more",
                             loading = "Building your selection...",
@@ -1991,6 +2002,10 @@ data class DesktopStrings(
                             serviceSelector = "Service",
                             allGenres = "All genres",
                             allServices = "All services",
+                            servicesUnavailable = "not recorded in your list",
+                            duplicatesLabel = "Repeated copies",
+                            duplicatesHint = "Lists usually carry the same film several times over, one per quality or dubbing.",
+                            duplicatesToggle = "Show one card per film",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -2589,6 +2604,7 @@ data class DesktopStrings(
                             hint = "Wischen oder Tasten nutzen: Behalten legt den Titel zu den Favoriten.",
                             keep = "Behalten",
                             skip = "Überspringen",
+                            details = "Details",
                             exhausted = "Sie haben vorerst alles gesehen.",
                             another = "Mehr finden",
                             loading = "Auswahl wird erstellt…",
@@ -2634,6 +2650,10 @@ data class DesktopStrings(
                             serviceSelector = "Dienst",
                             allGenres = "Alle Genres",
                             allServices = "Alle Dienste",
+                            servicesUnavailable = "in Ihrer Liste nicht angegeben",
+                            duplicatesLabel = "Mehrfache Kopien",
+                            duplicatesHint = "Listen enthalten denselben Film oft mehrfach, je nach Qualität oder Synchronisation.",
+                            duplicatesToggle = "Nur eine Karte pro Film zeigen",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -3237,6 +3257,7 @@ data class DesktopStrings(
                             hint = "Scorri o usa i pulsanti: tenere lo aggiunge ai preferiti.",
                             keep = "Tieni",
                             skip = "Salta",
+                            details = "Dettagli",
                             exhausted = "Hai visto tutto per ora.",
                             another = "Trova altri",
                             loading = "Creazione della selezione...",
@@ -3282,6 +3303,10 @@ data class DesktopStrings(
                             serviceSelector = "Servizio",
                             allGenres = "Tutti i generi",
                             allServices = "Tutti i servizi",
+                            servicesUnavailable = "non indicato nella tua lista",
+                            duplicatesLabel = "Copie ripetute",
+                            duplicatesHint = "Le liste portano spesso lo stesso film più volte, una per qualità o doppiaggio.",
+                            duplicatesToggle = "Mostra una sola scheda per film",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -4021,6 +4046,13 @@ data class DiscoveryStrings(
     val keep: String,
     /** Passes over it. */
     val skip: String,
+    /**
+     * Opens the full page instead of deciding.
+     *
+     * The card holds a poster, a year, a genre and — only once TMDb answers — a synopsis, so on
+     * most cards there was nothing to judge but the artwork.
+     */
+    val details: String,
     /** Shown when the deck runs out. */
     val exhausted: String,
     /** Builds another deck. */
@@ -4090,6 +4122,24 @@ data class ServiceCatalogueStrings(
     /** The "no filter" option in each: every genre, or every service. */
     val allGenres: String,
     val allServices: String,
+    /**
+     * Shown in place of the Serviço selector when the playlist files nothing by service.
+     *
+     * The selector used to be hidden in that case, which is why it was missing from Filmes on a list
+     * that organises films by genre — and a control that appears on one tab and not another reads as
+     * a fault. Naming the reason is more use than silence.
+     */
+    val servicesUnavailable: String,
+    /**
+     * The setting that collapses a provider's repeated copies of one film.
+     *
+     * Added after the Filmes grid was reported as showing duplicate films: a list carries the same
+     * title three or four times over, one per quality or dubbing, and the catalogue listed all of
+     * them.
+     */
+    val duplicatesLabel: String,
+    val duplicatesHint: String,
+    val duplicatesToggle: String,
 )
 
 data class SavedForLaterStrings(

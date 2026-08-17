@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.metadata.TmdbStreamingCatalogue
 import com.lucasserafin94.iptvburo.desktop.playback.SubtitleColour
@@ -100,6 +102,7 @@ fun SettingsDialog(
     onOpenOmdbGuide: () -> Unit = {},
 ) {
     val text = strings
+    val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(SettingsTab.GENERAL) }
     val listState = rememberLazyListState()
     var categoriesExpanded by remember { mutableStateOf(false) }
@@ -553,7 +556,29 @@ fun SettingsDialog(
                         }
                     }
 
+                    // One card per film, or every copy the provider carries.
+                    //
+                    // Added because the grid was reported as showing duplicate films: a list holds
+                    // the same title three or four times over, one per quality or dubbing, and the
+                    // catalogue listed all of them. Collapsing is the default; this is for whoever
+                    // wants the raw list back.
+                    if (tab == SettingsTab.CONTENT) item(key = "duplicates") {
+                        SettingsSection(
+                            label = text.shareStrings.serviceCatalogue.duplicatesLabel,
+                            hint = text.shareStrings.serviceCatalogue.duplicatesHint,
+                        ) {
+                            SettingsSwitch(
+                                label = text.shareStrings.serviceCatalogue.duplicatesToggle,
+                                checked = appState.collapsesDuplicateTitles,
+                                onCheckedChange = { value ->
+                                    scope.launch { appState.changeCollapsesDuplicateTitles(value) }
+                                },
+                            )
+                        }
+                    }
+
                     if (tab == SettingsTab.CONTENT) item(key = "parental") {
+                        HorizontalDivider(color = BuroColors.BorderSoft)
                         ParentalControlPanel(appState)
                     }
 

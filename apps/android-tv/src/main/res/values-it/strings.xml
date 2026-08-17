@@ -354,4 +354,6 @@
     <string name="settings_group_account">Account</string>
     <string name="settings_group_account_hint">La tua licenza e questa versione</string>
     <string name="tmdb_settings_advanced">Avanzate: una chiave solo per questo profilo</string>
+    <string name="metadata_key_saved">Salvata</string>
+    <string name="metadata_key_absent">Non impostata</string>
 </resources>

@@ -346,4 +346,6 @@
     <string name="settings_group_account">Account</string>
     <string name="settings_group_account_hint">Your licence and this build</string>
     <string name="tmdb_settings_advanced">Advanced: a key for this profile only</string>
+    <string name="metadata_key_saved">Saved</string>
+    <string name="metadata_key_absent">Not set</string>
 </resources>

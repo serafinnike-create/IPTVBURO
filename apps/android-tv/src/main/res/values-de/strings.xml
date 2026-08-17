@@ -346,4 +346,6 @@
     <string name="settings_group_account">Konto</string>
     <string name="settings_group_account_hint">Ihre Lizenz und diese Version</string>
     <string name="tmdb_settings_advanced">Erweitert: ein Schlüssel nur für dieses Profil</string>
+    <string name="metadata_key_saved">Gespeichert</string>
+    <string name="metadata_key_absent">Nicht gesetzt</string>
 </resources>

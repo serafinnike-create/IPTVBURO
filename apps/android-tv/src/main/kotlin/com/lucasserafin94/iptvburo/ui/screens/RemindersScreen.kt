@@ -1,6 +1,7 @@
 package com.lucasserafin94.iptvburo.ui.screens
 
 import android.app.TimePickerDialog
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,6 +72,8 @@ fun RemindersScreen(
     onSetNotify: (Boolean) -> Unit,
     onSetTime: (Int, Int) -> Unit,
     onRemove: (ContentIdentity) -> Unit,
+    /** Opens the title a reminder refers to. */
+    onOpen: (Reminder) -> Unit = {},
     onBack: () -> Unit,
 ) {
     val colors = BuroTheme.colors
@@ -135,6 +138,7 @@ fun RemindersScreen(
                 ) {
                     items(ordered, key = { reminder -> reminder.identity.key }) { reminder ->
                         ReminderRow(
+                            onOpen = { onOpen(reminder) },
                             reminder = reminder,
                             today = today,
                             onRemove = { onRemove(reminder.identity) },
@@ -254,6 +258,7 @@ private fun ReminderRow(
     reminder: Reminder,
     today: LocalDate,
     onRemove: () -> Unit,
+    onOpen: () -> Unit = {},
 ) {
     val colors = BuroTheme.colors
 
@@ -263,6 +268,9 @@ private fun ReminderRow(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
                 .background(colors.surface)
+                // The row opens the title. It was inert, so a reminders page was a list of things
+                // the viewer was waiting for with no way to reach any of them.
+                .clickable(onClick = onOpen)
                 .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

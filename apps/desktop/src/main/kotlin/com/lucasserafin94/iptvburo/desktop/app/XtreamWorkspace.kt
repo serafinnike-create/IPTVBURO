@@ -113,6 +113,7 @@ import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.desktop.platform.DesktopPlatformCapabilities
 import com.lucasserafin94.iptvburo.desktop.ui.CategoryBadge
 import com.lucasserafin94.iptvburo.desktop.ui.CategoryChoice
+import com.lucasserafin94.iptvburo.desktop.ui.LocalProviderLogos
 import com.lucasserafin94.iptvburo.desktop.ui.ProviderIdentity
 import com.lucasserafin94.iptvburo.desktop.ui.splitCategories
 import com.lucasserafin94.iptvburo.desktop.ui.CriticInkDark
@@ -646,9 +647,15 @@ private fun XtreamCategorySelectors(
 ) {
     val text = strings
     val services = text.shareStrings.serviceCatalogue
+    // The services' real marks, when the directory has loaded. Read here and applied to the split so
+    // every menu row and every closed selector shows the same badge for the same service.
+    val logos = LocalProviderLogos.current
     // Recomputed only when the playlist's categories change, not on every recomposition: this walks
     // every category and runs the provider match on each, and the grid beside it has to stay smooth.
-    val split = remember(categories) { splitCategories(categories) }
+    val split =
+        remember(categories, logos) {
+            splitCategories(categories).withLogos(logos)
+        }
 
     val genreSelected = selectedCategoryId?.takeIf { id -> !split.isProvider(id) }
     val providerSelected = selectedCategoryId?.takeIf { id -> split.isProvider(id) }
@@ -668,8 +675,18 @@ private fun XtreamCategorySelectors(
             selectedId = genreSelected,
             onSelect = onSelected,
         )
-        // Absent rather than empty when the playlist files nothing by service, which is common on
-        // channel-only lists: a menu whose only entry is "All services" answers no question.
+        // Absent only when this playlist genuinely files nothing by service.
+        //
+        // The gate used to be the reason the selector was missing from Filmes: a list that organises
+        // its films by genre — "Filmes | Ação", "Filmes | Drama" — yields no provider categories at
+        // all, so the selector vanished on exactly the tab where somebody asks "what is on Netflix".
+        // It appeared under Ao vivo, where channels are filed by service, which made it look
+        // arbitrary rather than absent.
+        //
+        // Nothing better is possible from the categories alone: if the playlist never records which
+        // service a film came from, that fact is not in the data. The honest fix is to say so, which
+        // the empty state below does, instead of hiding the control and leaving the user to wonder
+        // whether the feature exists.
         if (split.hasProviders) {
             CategorySelector(
                 title = services.serviceSelector,
@@ -678,7 +695,44 @@ private fun XtreamCategorySelectors(
                 selectedId = providerSelected,
                 onSelect = onSelected,
             )
+        } else {
+            ServiceSelectorUnavailable(
+                title = services.serviceSelector,
+                explanation = services.servicesUnavailable,
+            )
         }
+    }
+}
+
+/**
+ * The Serviço selector, disabled, when this playlist files nothing by service.
+ *
+ * Shown rather than hidden. A control that appears on one tab and not another reads as a bug, and
+ * hiding it left somebody looking for "only Netflix films" with no way to tell whether the feature
+ * was missing, broken, or simply not applicable to their list. Saying why is more use than silence.
+ *
+ * Not clickable, because there is nothing behind it: the service a film came from is only knowable
+ * here if the provider recorded it in the category name.
+ */
+@Composable
+private fun ServiceSelectorUnavailable(
+    title: String,
+    explanation: String,
+) {
+    Row(
+        modifier =
+            Modifier
+                .border(1.dp, BuroColors.BorderSoft.copy(alpha = 0.5f), BuroRadius.Pill)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "$title: $explanation",
+            color = BuroColors.TextSubtle,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -738,57 +792,113 @@ private fun CategorySelector(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier =
-                Modifier
-                    .background(BuroColors.SurfaceRaised)
-                    // Long playlists carry dozens of genres, and a menu measured against the whole
-                    // list runs off the screen with nothing to say so.
-                    .heightIn(max = 420.dp),
+            modifier = Modifier.background(BuroColors.SurfaceRaised),
         ) {
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        text = anyLabel,
-                        color = if (selectedId == null) BuroColors.Primary else BuroColors.Text,
-                    )
-                },
-                onClick = {
-                    onSelect(null)
-                    expanded = false
-                },
-            )
-            choices.forEach { choice ->
-                DropdownMenuItem(
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // The service's mark, which is the whole point of the second selector:
-                            // people recognise a mark faster than they read a name.
-                            choice.provider?.let { provider ->
-                                ProviderMark(provider = provider)
-                                Spacer(Modifier.width(BuroSpacing.Sm))
-                            }
-                            Text(
-                                text = choice.label,
-                                color =
-                                    if (choice.id == selectedId) {
-                                        BuroColors.Primary
-                                    } else {
-                                        BuroColors.Text
-                                    },
-                            )
-                        }
-                    },
-                    onClick = {
-                        // Selecting from either menu replaces the single category the catalogue
-                        // filters by, which is what clears the other selector.
-                        onSelect(choice.id)
-                        expanded = false
-                    },
+            // A scrolling list with a visible bar, not the menu's own silent scroll.
+            //
+            // A DropdownMenu given more items than fit scrolls, but shows nothing to say so: on a
+            // real playlist this menu holds dozens of genres, and the ones below the fold looked as
+            // though they did not exist. Reported for this selector, and it is the third surface in
+            // the app to have had it — the settings panel and the category rail both carry the same
+            // explicit-colour scrollbar for the same reason. Compose's default is near-black on a
+            // dark surface, so it is drawn and cannot be seen.
+            //
+            // The bar is also the way to *drag* through a long list, which a scroll-only menu never
+            // offers a pointer user.
+            val listState = rememberLazyListState()
+            Box(modifier = Modifier.heightIn(max = MENU_MAX_HEIGHT)) {
+                LazyColumn(
+                    state = listState,
+                    // Room for the bar, so it sits beside the labels rather than over them.
+                    modifier = Modifier.width(MENU_WIDTH).padding(end = 10.dp),
+                ) {
+                    item(key = "any") {
+                        CategoryMenuRow(
+                            label = anyLabel,
+                            provider = null,
+                            selected = selectedId == null,
+                            onClick = {
+                                onSelect(null)
+                                expanded = false
+                            },
+                        )
+                    }
+                    items(choices, key = CategoryChoice::id) { choice ->
+                        CategoryMenuRow(
+                            label = choice.label,
+                            provider = choice.provider,
+                            selected = choice.id == selectedId,
+                            onClick = {
+                                // Selecting from either menu replaces the single category the
+                                // catalogue filters by, which is what clears the other selector.
+                                onSelect(choice.id)
+                                expanded = false
+                            },
+                        )
+                    }
+                }
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(listState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                    style =
+                        LocalScrollbarStyle.current.copy(
+                            thickness = 8.dp,
+                            unhoverColor = BuroColors.BorderSoft,
+                            hoverColor = BuroColors.Primary,
+                        ),
                 )
             }
         }
     }
 }
+
+/**
+ * One row in a category menu: the service's mark when it has one, then the name.
+ *
+ * A plain row rather than `DropdownMenuItem`, because the menu's contents are now a LazyColumn and
+ * that composable expects to be a direct child of the menu's own column.
+ */
+@Composable
+private fun CategoryMenuRow(
+    label: String,
+    provider: ProviderIdentity?,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = BuroSpacing.Md, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // The service's mark, which is the whole point of the second selector: people recognise a
+        // mark faster than they read a name.
+        provider?.let { identity ->
+            ProviderMark(provider = identity)
+            Spacer(Modifier.width(BuroSpacing.Sm))
+        }
+        Text(
+            text = label,
+            color = if (selected) BuroColors.Primary else BuroColors.Text,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** Tall enough for about nine rows, past which the list scrolls rather than the menu growing. */
+private val MENU_MAX_HEIGHT = 420.dp
+
+/**
+ * Fixed, so the scrollbar has a column to sit in.
+ *
+ * A menu that sizes itself to its widest genre also jumps in width as the list is filtered, and the
+ * bar would move with it.
+ */
+private val MENU_WIDTH = 260.dp
 
 /**
  * A service's mark: its monogram on its own colour.
@@ -799,6 +909,34 @@ private fun CategorySelector(
  */
 @Composable
 private fun ProviderMark(provider: ProviderIdentity) {
+    val logo = provider.logoUrl
+    if (logo != null) {
+        // The service's real mark, fetched like every other image in the app.
+        //
+        // TMDb distributes the providers' own logos and licenses them for this, which is what makes
+        // a genuine Netflix or Prime badge legitimate. The monogram below was what shipped first,
+        // and "AP" for Prime Video is not a logo — the point of the selector is that a mark is
+        // recognised faster than a name is read, and a two-letter chip does neither.
+        //
+        // On a light tile, because the marks are drawn for one: several are dark artwork on
+        // transparency and would vanish against this canvas.
+        Box(
+            modifier =
+                Modifier
+                    .size(width = PROVIDER_MARK_WIDTH, height = PROVIDER_MARK_HEIGHT)
+                    .clip(BuroRadius.Small)
+                    .background(PROVIDER_MARK_TILE),
+            contentAlignment = Alignment.Center,
+        ) {
+            BuroRemoteArtwork(
+                artworkUrl = logo,
+                contentDescription = provider.label,
+                modifier = Modifier.fillMaxSize().padding(1.dp),
+                contentScale = ContentScale.Fit,
+            ) {}
+        }
+        return
+    }
     Box(
         modifier =
             Modifier
@@ -817,6 +955,14 @@ private fun ProviderMark(provider: ProviderIdentity) {
         )
     }
 }
+
+/**
+ * The tile a real logo sits on.
+ *
+ * Near-white rather than the canvas: TMDb's marks are drawn for a light background, and several are
+ * dark glyphs on transparency that disappear entirely against this app's near-black surfaces.
+ */
+private val PROVIDER_MARK_TILE = Color(0xFFF2F2F2)
 
 /** Wide enough for the longest monogram ("HBO") without the mark reading as a button. */
 private val PROVIDER_MARK_WIDTH = 26.dp

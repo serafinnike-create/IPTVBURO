@@ -387,6 +387,7 @@ private fun IptvBuroRoot(
                 onStartCastReceiver = viewModel::startCastReceiver,
                 onStopCastReceiver = viewModel::stopCastReceiver,
                 onRemoveReminder = viewModel::removeReminder,
+                onOpenReminder = viewModel::openReminder,
                 onSetReminderNotify = viewModel::setReminderNotify,
                 onSetReminderTime = viewModel::setReminderTime,
                 onShareTitle = { request ->

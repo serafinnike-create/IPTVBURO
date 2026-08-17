@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lucasserafin94.iptvburo.domain.model.Reminder
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.core.logging.AppLogger
 import com.lucasserafin94.iptvburo.data.download.AndroidDownloadManager
@@ -3015,15 +3016,29 @@ class MainViewModel @Inject constructor(
                         val region = Locale.getDefault().country.takeIf { it.isNotBlank() } ?: "BR"
                         val providers =
                             client.watchProviders(tmdbId, region, isSeries) ?: return@runCatching null
-                        providers.subscription.firstOrNull()?.logoUrl
-                            ?: providers.free.firstOrNull()?.logoUrl
-                            ?: providers.withAds.firstOrNull()?.logoUrl
+                        // The service itself, not just its logo.
+                        //
+                        // Films are filed by genre on most playlists — "Filmes | Lancamentos" —
+                        // so the category names no platform and the badge had nothing to show,
+                        // even though TMDb knows perfectly well where the film streams. This is
+                        // the answer to "which service is this on", and it is the same answer the
+                        // logo came from.
+                        val best =
+                            providers.subscription.firstOrNull()
+                                ?: providers.free.firstOrNull()
+                                ?: providers.withAds.firstOrNull()
+                        best?.let { entry -> entry.name to entry.logoUrl }
                     }.getOrNull()
                 }
             // Guarded because the viewer can leave before this returns; a logo arriving after they
             // opened something else would badge the wrong title.
             if (mutableState.value.content != content) return@launch
-            mutableState.update { it.copy(openTitleProviderLogoUrl = logo) }
+            mutableState.update {
+                it.copy(
+                    openTitleProviderName = logo?.first,
+                    openTitleProviderLogoUrl = logo?.second,
+                )
+            }
         }
     }
 
@@ -4024,6 +4039,39 @@ class MainViewModel @Inject constructor(
     }
 
     /** Removes one reminder from the reminders page, without needing its details screen open. */
+    /**
+     * Opens the title a reminder refers to.
+     *
+     * Tapping a reminder did nothing at all: the row had no click handler and there was no way from
+     * a stored identity back to a catalogue row. A reminder names a title the viewer is waiting for,
+     * so opening its page is the obvious thing for a tap to do.
+     *
+     * The lookup is the one a shared link already uses — search by a fragment of the name, then let
+     * the identity decide — because the same problem applies here. A reminder keeps the name it was
+     * marked under, and the catalogue's copy may be decorated differently ("Duna 4K [L]" against
+     * "Duna"), so only the identity comparison is trustworthy.
+     */
+    fun openReminder(reminder: Reminder) {
+        viewModelScope.launch {
+            val match =
+                withContext(ioDispatcher) {
+                    runCatching {
+                        catalogRepository
+                            .findLibraryCandidates(sharedTitleSearchFragment(reminder.title))
+                            .firstOrNull { candidate -> candidate.matches(reminder.identity) }
+                    }.getOrNull()
+                }
+            if (match == null) {
+                // Ordinary for a title that has not been released yet, which is much of what a
+                // reminders page holds. Said plainly rather than silently ignored, so a tap that
+                // cannot lead anywhere does not look like a broken button.
+                mutableState.update { it.copy(sharedTitleMissing = true) }
+                return@launch
+            }
+            openChannel(match.toCatalogUi(""))
+        }
+    }
+
     fun removeReminder(identity: ContentIdentity) {
         val profileId = mutableState.value.activeProfile?.id ?: return
         viewModelScope.launch {

@@ -351,4 +351,6 @@
     <string name="settings_group_account">Conta</string>
     <string name="settings_group_account_hint">Sua licença e esta versão</string>
     <string name="tmdb_settings_advanced">Avançado: uma chave só para este perfil</string>
+    <string name="metadata_key_saved">Salva</string>
+    <string name="metadata_key_absent">Não configurada</string>
 </resources>

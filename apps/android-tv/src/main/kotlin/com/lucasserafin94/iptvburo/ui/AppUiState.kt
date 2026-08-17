@@ -650,6 +650,13 @@ data class AppUiState(
     val openTitleCriticScores: CriticScores? = null,
     /** Whether an OMDb key is stored, which is what makes the critics' row possible. */
     val criticsKeyConfigured: Boolean = false,
+    /**
+     * The service TMDb says the open title streams on, in that service's own name.
+     *
+     * The category is the first source for this, but most playlists file films by genre, so on a
+     * film page it is usually TMDb that knows. Null when neither does, and no badge is drawn.
+     */
+    val openTitleProviderName: String? = null,
     /** What the bell is holding for the active profile. */
     val notifications: NotificationCentre = NotificationCentre(),
     /**

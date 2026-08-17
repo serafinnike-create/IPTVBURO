@@ -289,6 +289,23 @@ class SessionXtreamRepository(
          * of them. A lock that only guarded the rail left every locked title one search away.
          */
         lockedCategoryIds: Set<String> = emptySet(),
+        /**
+         * Collapses a provider's repeated copies of one film into a single card.
+         *
+         * Providers carry the same title several times over — one per quality, per dubbing, per
+         * channel prefix — and the catalogue listed every one. Reported plainly: "em filmes todos,
+         * aparece vários filmes duplicados". On a real list that is most of a screen spent on three
+         * copies of the same film.
+         *
+         * This was deliberate once, on the reasoning that the copies *are* the choice of quality and
+         * collapsing them takes that choice away. True, but the choice was never presented as one —
+         * it was four identical-looking cards with no indication of what distinguished them, which
+         * is not a choice a user can make. The setting lets somebody who wants every copy have them.
+         *
+         * Dedup keeps the first copy of each title, and the catalogue's own order decides which that
+         * is, so the result is stable from one page turn to the next.
+         */
+        collapseDuplicates: Boolean = false,
     ): XtreamCatalogPage {
         require(pageSize in 1..MAX_PAGE_SIZE) { "Invalid page size." }
         val catalogItems =
@@ -308,6 +325,15 @@ class SessionXtreamRepository(
          * stays empty and costs nothing when the identity filter is not in play.
          */
         val seenIdentities = HashSet<ContentIdentity>()
+        /**
+         * Shelf keys already listed, when duplicate copies are being collapsed.
+         *
+         * Separate from [seenIdentities], which is keyed on kind/title/year for the favourites
+         * screen. This one uses the shelf key, which also strips the channel prefixes, bracketed
+         * language tags and quality words a provider uses to distinguish its copies — the decorations
+         * that made four cards out of one film.
+         */
+        val seenShelfKeys = if (collapseDuplicates) HashSet<String>() else null
         val categoryNames = synchronized(lock) { categories[contentType].orEmpty().associate { it.providerId to it.name } }
 
         repeat(catalogItems.size) { index ->
@@ -351,6 +377,13 @@ class SessionXtreamRepository(
                 if (allowedIdentities != null && !seenIdentities.add(catalogItems.identityAt(index))) {
                     return@repeat
                 }
+                // One card per film, when the setting asks for it.
+                //
+                // Read from the name column rather than from a built item: this runs for every row
+                // of a 41,698-item catalogue, and `itemAt` allocates.
+                if (seenShelfKeys != null && !seenShelfKeys.add(catalogItems.nameAt(index).shelfDeduplicationKey())) {
+                    return@repeat
+                }
 
                 // Built only for the rows that actually appear on this page — eighty of them,
                 // not every match in the catalogue.
@@ -384,6 +417,9 @@ class SessionXtreamRepository(
                 // argument here made an out-of-range page recurse without the parental filter and
                 // return a locked title from the provider's unfiltered last page.
                 lockedCategoryIds = lockedCategoryIds,
+                // For the same reason as the two above: a clamped page that forgot this would list
+                // the duplicate copies the user had asked to collapse.
+                collapseDuplicates = collapseDuplicates,
             )
         }
         return XtreamCatalogPage(
@@ -501,6 +537,22 @@ class SessionXtreamRepository(
         limit: Int,
         kidsMode: Boolean,
         lockedCategoryIds: Set<String> = emptySet(),
+        /**
+         * Which day's selection to show, as a rotation offset.
+         *
+         * Reported as the shelf being frozen: "faz 4 dias que os lançamentos são sempre o mesmo".
+         * It was — the shelf sorted by rating and took the first eighteen, with nothing tied to the
+         * date, so the best-rated releases of the year were the answer every single day. Every card
+         * read ★5.0, which is the symptom: those really were the top of the list.
+         *
+         * The rest of the Home already rotates on a date-derived seed. This brings the shelf into
+         * line without giving up the curation: the pool stays ordered by rating, and the day picks
+         * a window into it, so a good film further down the list eventually gets its turn on screen.
+         *
+         * Zero keeps the old behaviour, which is what callers that want a stable "best of the year"
+         * list — a full catalogue view rather than a Home shelf — should pass.
+         */
+        rotation: Int = 0,
     ): List<XtreamCatalogItem> {
         if (synchronized(lock) { catalogs[type] } == null) {
             runCatching { loadCatalog(type) }
@@ -524,14 +576,30 @@ class SessionXtreamRepository(
 
         // Best first within the year: a provider's newest entries arrive unordered, and rating is
         // the only signal available for what is worth surfacing.
-        return matches
-            .sortedByDescending { item -> item.rating ?: 0.0 }
-            // The shelf key, not the matching one. Stripping quality words was not enough: the
-            // copies that still reached the screen differed by a channel prefix, a pipe-separated
-            // tag, a bracketed language marker or a trailing single letter — none of which the
-            // conservative matcher removes, and all of which are the same film.
-            .distinctBy { item -> item.name.shelfDeduplicationKey() }
-            .take(limit)
+        val ranked =
+            matches
+                .sortedByDescending { item -> item.rating ?: 0.0 }
+                // The shelf key, not the matching one. Stripping quality words was not enough: the
+                // copies that still reached the screen differed by a channel prefix, a
+                // pipe-separated tag, a bracketed language marker or a trailing single letter —
+                // none of which the conservative matcher removes, and all of which are the same
+                // film.
+                .distinctBy { item -> item.name.shelfDeduplicationKey() }
+
+        if (rotation == 0 || ranked.size <= limit) return ranked.take(limit)
+
+        // Rotate within the well-rated part of the year rather than across all of it.
+        //
+        // The whole point of the shelf is that what it offers is worth watching, so the rotation is
+        // bounded to a pool of the best entries instead of walking down into the unrated tail. Four
+        // shelves' worth is enough that a week of viewing does not repeat, while everything shown
+        // still comes from the top of the ranking.
+        val pool = ranked.take((limit * 4).coerceAtMost(ranked.size))
+        val offset = Math.floorMod(rotation, pool.size)
+        // Wraps rather than truncating at the end of the pool: taking a window from `offset` alone
+        // would hand back a short shelf on most days, and a Home row that changes length as well as
+        // content reads as a loading fault.
+        return List(limit.coerceAtMost(pool.size)) { index -> pool[(offset + index) % pool.size] }
     }
 
     /**

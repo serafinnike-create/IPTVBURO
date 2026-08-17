@@ -130,6 +130,7 @@ import com.lucasserafin94.iptvburo.data.licensing.RedeemFailure
 import com.lucasserafin94.iptvburo.ui.LicenseUiState
 import com.lucasserafin94.iptvburo.ui.RedemptionUi
 import com.lucasserafin94.iptvburo.ui.CategoryUi
+import com.lucasserafin94.iptvburo.domain.model.Reminder
 import com.lucasserafin94.iptvburo.ui.ChannelUi
 import com.lucasserafin94.iptvburo.ui.ContinueWatchingUi
 import com.lucasserafin94.iptvburo.ui.DownloadEntryUi
@@ -212,6 +213,7 @@ fun AppShellScreen(
     onToggleReminder: () -> Unit,
     /** Drops one reminder from the reminders page, by identity rather than by row. */
     onRemoveReminder: (ContentIdentity) -> Unit,
+    onOpenReminder: (Reminder) -> Unit = {},
     /** Turns the daily notice on or off. The marks themselves are kept either way. */
     onSetReminderNotify: (Boolean) -> Unit,
     /** Moves the daily notice to another hour. */
@@ -364,6 +366,7 @@ fun AppShellScreen(
                     offlineSupported = offlineSupported,
                     fallbackTitle = content.fallbackTitle,
                     categoryName = content.categoryName,
+                    providerName = state.openTitleProviderName,
                     providerLogoUrl = state.openTitleProviderLogoUrl,
                     criticScores = state.openTitleCriticScores,
                     details = state.seriesDetails,
@@ -434,6 +437,7 @@ fun AppShellScreen(
                     fallbackTitle = content.fallbackTitle,
                     fallbackArtworkUrl = content.fallbackArtworkUrl,
                     categoryName = content.categoryName,
+                    providerName = state.openTitleProviderName,
                     providerLogoUrl = state.openTitleProviderLogoUrl,
                     criticScores = state.openTitleCriticScores,
                     details = state.movieDetails,
@@ -746,6 +750,7 @@ fun AppShellScreen(
                             onSetNotify = onSetReminderNotify,
                             onSetTime = onSetReminderTime,
                             onRemove = onRemoveReminder,
+                            onOpen = onOpenReminder,
                             onBack = onBack,
                         )
 
@@ -2005,7 +2010,11 @@ private fun CategoriesContent(
             //
             // Built from the categories rather than from a fixed list of services: a provider that
             // files nothing under Netflix should not offer a Netflix shortcut that leads nowhere.
-            // Absent entirely when the provider organises by genre, which is the common case.
+            //
+            // Expect this to be empty under Filmes on many playlists. Measured on a real 30,000
+            // title list: every film category is a genre — "Filmes | Terror", "Filmes | Acao" —
+            // while the platform catalogues are all filed under series. An empty row there is the
+            // honest answer, not a fault.
             val platforms =
                 remember(categories, providerLogos) {
                     categories
@@ -4436,13 +4445,12 @@ private fun MetadataKeyField(
                 modifier = Modifier.weight(1f),
             )
             Text(
+                // Neutral wording: this field is reused for the OMDb key, and the TMDb phrasing
+                // "configured for this profile" claimed the OMDb key belonged to a profile — which
+                // is both wrong and confusing, since it is stored for the whole device.
                 text =
                     stringResource(
-                        if (configured) {
-                            R.string.tmdb_settings_configured
-                        } else {
-                            R.string.tmdb_settings_not_configured
-                        },
+                        if (configured) R.string.metadata_key_saved else R.string.metadata_key_absent,
                     ),
                 color = if (configured) BuroAccent else BuroTextSecondary,
                 fontSize = 11.sp,

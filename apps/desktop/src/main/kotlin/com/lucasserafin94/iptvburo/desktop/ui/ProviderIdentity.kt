@@ -1,5 +1,8 @@
 package com.lucasserafin94.iptvburo.desktop.ui
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -25,6 +28,19 @@ data class ProviderIdentity(
     val label: String,
     /** The service's own colour, used for the chip so it reads at a glance. */
     val colour: Color,
+    /**
+     * The service's actual mark, when TMDb has supplied one.
+     *
+     * TMDb publishes the providers' logos through `watch/providers` and licenses them for exactly
+     * this use, with attribution — which is what makes showing a genuine Netflix or Prime mark
+     * legitimate here, where drawing a look-alike would not be.
+     *
+     * The selector shipped with monograms only, and the reply was immediate: "AP" is not the Prime
+     * Video logo, and a row of two-letter chips is not the "identificação fácil" the feature was
+     * for. Null until the directory loads, or when a service TMDb does not carry appears in a
+     * playlist, and then [monogram] on [colour] stands in.
+     */
+    val logoUrl: String? = null,
 ) {
     /**
      * Ink for [monogram] against [colour].
@@ -71,6 +87,38 @@ fun providerIdentityFor(categoryName: String?): ProviderIdentity? {
  * recomposition of a list whose whole job is to scroll smoothly.
  */
 private val MAX_PROVIDER = Regex("(^|[ |\\-])max([ |\\-]|$)")
+
+/**
+ * The services' official logos by [ProviderIdentity.label], readable by any composable.
+ *
+ * A CompositionLocal rather than a parameter because the alternative is threading one map through
+ * every selector, row and card on the way to a badge — several layers of plumbing for a value that
+ * is the same everywhere and changes once, when the directory loads.
+ *
+ * Empty by default, which is the honest starting state: every badge falls back to its monogram until
+ * the real marks arrive.
+ */
+val LocalProviderLogos = staticCompositionLocalOf<Map<String, String>> { emptyMap() }
+
+/**
+ * The identity for [categoryName], carrying the official logo when one is known.
+ *
+ * The one call a composable should make: it applies the naming rules and the logo lookup together,
+ * so a screen cannot accidentally draw a monogram while the real mark sits in the catalogue.
+ */
+@Composable
+fun rememberProviderIdentity(categoryName: String?): ProviderIdentity? {
+    val logos = LocalProviderLogos.current
+    return remember(categoryName, logos) {
+        providerIdentityFor(categoryName)?.let { identity ->
+            identity.copy(logoUrl = logos[identity.label])
+        }
+    }
+}
+
+/** Attaches the official logos to identities resolved outside composition, such as in a split. */
+fun ProviderIdentity.withLogoFrom(logos: Map<String, String>): ProviderIdentity =
+    if (logoUrl != null) this else copy(logoUrl = logos[label])
 
 private val NetflixRed = Color(0xFFE50914)
 private val PrimeBlue = Color(0xFF00A8E1)

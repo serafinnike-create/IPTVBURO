@@ -63,6 +63,14 @@ fun DiscoveryScreen(
     synopsisFor: (XtreamCatalogItem) -> String?,
     genresFor: (XtreamCatalogItem) -> List<String>,
     onDecide: (XtreamCatalogItem, DiscoveryVerdict) -> Unit,
+    /**
+     * Opens the title's full page.
+     *
+     * The card carries a synopsis only once TMDb has answered for that title, and until then there
+     * is nothing on screen but a poster, a year and a genre — which is not enough to decide on, and
+     * was reported as such. This is the way to read the rest without leaving a verdict.
+     */
+    onOpenDetails: (XtreamCatalogItem) -> Unit,
     onAnother: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -123,6 +131,7 @@ fun DiscoveryScreen(
                     synopsis = synopsisFor(top),
                     genres = genresFor(top),
                     onDecide = { verdict -> onDecide(top, verdict) },
+                    onOpenDetails = { onOpenDetails(top) },
                 )
         }
     }
@@ -134,6 +143,7 @@ private fun DiscoveryCard(
     synopsis: String?,
     genres: List<String>,
     onDecide: (DiscoveryVerdict) -> Unit,
+    onOpenDetails: () -> Unit,
 ) {
     val text = strings.shareStrings.discovery
 
@@ -257,6 +267,17 @@ private fun DiscoveryCard(
                 caption = text.keep,
                 tint = BuroColors.Primary,
                 onClick = { onDecide(DiscoveryVerdict.KEPT) },
+            )
+            // Neither a verdict nor a swipe: a way to read more before giving one.
+            //
+            // The card shows a poster, a year and a genre, and the synopsis only after TMDb answers
+            // — so on most cards there was nothing to judge but the artwork. Deciding blind is what
+            // this button exists to avoid.
+            DecisionButton(
+                label = "ℹ",
+                caption = text.details,
+                tint = BuroColors.TextMuted,
+                onClick = onOpenDetails,
             )
         }
     }
