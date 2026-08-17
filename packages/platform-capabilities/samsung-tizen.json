@@ -3,35 +3,40 @@
   "navigation": {
     "dpad": true,
     "touch": false,
-    "keyboard": false,
-    "mouse": false,
+    "keyboard": true,
+    "mouse": true,
     "voice": false
   },
   "playback": {
     "engine": "Samsung AVPlay",
     "hls": true,
     "dash": false,
-    "seek": false,
+    "seek": true,
     "pip": false,
     "multiview": false,
     "hdr": false
   },
   "offline": {
-    "supported": false
+    "supported": true,
+    "backgroundJobs": false,
+    "seasonQueue": true,
+    "smartDownloads": false
   },
   "distribution": {
     "channel": "Samsung Apps TV",
     "nativePurchase": false
   },
   "notes": [
-    "Preview inicial: nenhuma capability foi validada em TV fisica ainda.",
-    "Navegacao e exclusivamente por D-pad do controle remoto; nao ha toque nem mouse.",
-    "O shell Samsung implementa onboarding, perfis, fontes M3U e Xtream, catalogo sob demanda, detalhes, EPG curto, busca local, preferencias e resolucao tardia para AVPlay.",
+    "Preview inicial: nenhuma capability foi validada em TV fisica ainda. Os campos abaixo descrevem o que o codigo implementa, nao o que ja passou por hardware.",
+    "A navegacao e desenhada para o D-pad do controle remoto e nao ha toque: nenhuma TV Samsung suportada tem tela sensivel. Teclado e ponteiro ficam declarados porque existem no codigo, nao porque sejam o caminho principal: os campos de nome de perfil, busca, credenciais de fonte e PIN sao <input> reais que recebem texto do teclado virtual da TV ou de um teclado USB/Bluetooth, e o app liga listeners de 'click' aos elementos renderizados, que atendem o ponteiro do controle remoto. Nenhuma funcao exige teclado ou ponteiro para ser alcancada.",
+    "O shell Samsung implementa onboarding, perfis, fontes M3U por URL ou arquivo USB e Xtream, catalogo sob demanda, detalhes, EPG curto, busca local, preferencias e resolucao tardia para AVPlay.",
     "O adapter Stalker/Ministra existe e tem testes de contrato, mas a UI permanece desativada ate confirmar Cookie e identidade MAG no transporte Tizen.",
     "Controle parental local inclui categorias ocultas, perfil Kids, PIN com hash salgado e bloqueio de categorias; o PIN nao e uma fronteira de seguranca forte.",
-    "Somente HLS esta declarado nesta preview; DASH, seek, trilhas, progresso e series por episodio ainda nao passaram pelos gates Samsung.",
+    "Somente HLS esta declarado nesta preview; DASH continua fora porque nao foi exercitado contra o AVPlay.",
+    "Seek esta implementado em js/player.js: seekTo posiciona a retomada antes do play e jumpBackward/jumpForward aplicam os mesmos -10s/+30s da referencia Android, com fallback quando o firmware nao expoe os saltos. O que falta e medicao em TV fisica, nao a funcao.",
     "Codecs reais dependem do modelo e do ano da TV.",
-    "Offline permanece declarado como falso porque nao ha nenhuma garantia estatica: o armazenamento interno do app Tizen nao comporta video, e o download so existe quando ha um dispositivo USB montado.",
+    "Offline e declarado como suportado porque a funcao existe no codigo, mas este manifesto e estatico e nao pode prometer que ela estara disponivel: o armazenamento interno do app Tizen nao comporta video, entao a unica gravacao possivel e num USB removivel. Nenhuma tela deve tratar este campo como garantia — quem decide e BuroDownloads.enabled() em tempo de execucao, que exige a API, a feature flag oficial e um volume montado. Sem USB a acao simplesmente nao aparece.",
+    "seasonQueue e verdadeiro: series e temporadas inteiras podem ser enfileiradas de uma vez, ordenadas por T/E, pulando episodios ja concluidos. backgroundJobs e falso porque o manifesto declara background-support=disable e a fila so avanca com o app aberto; smartDownloads nunca foi implementado em nenhuma plataforma.",
     "O download por USB esta implementado (js/usb.js e js/downloads.js) e e habilitado em tempo de execucao por BuroDownloads.enabled(), que exige um volume removable_ montado. Sem USB a acao nao aparece na interface.",
     "Conforme ADR-008: TV ao vivo e recusada, o nome do arquivo vem da identidade de conteudo e nunca da URL, e o conteudo protegido e gravado como recebido.",
     "O download por USB nao foi validado em TV fisica nem em emulador: nenhuma das APIs tizen.download e tizen.filesystem foi exercitada contra a plataforma real.",

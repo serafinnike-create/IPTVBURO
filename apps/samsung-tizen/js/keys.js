@@ -15,7 +15,17 @@ var BuroKeys = (function () {
         DOWN: 40,
         ENTER: 13,
         // RETURN (voltar) e exclusiva da TV; nao existe em teclado de PC.
-        RETURN: 10009
+        RETURN: 10009,
+        PLAY_PAUSE: 10252,
+        PLAY: 415,
+        PAUSE: 19,
+        STOP: 413,
+        REWIND: 412,
+        FAST_FORWARD: 417,
+        RED: 403,
+        GREEN: 404,
+        YELLOW: 405,
+        BLUE: 406
     };
 
     /*
@@ -27,12 +37,11 @@ var BuroKeys = (function () {
         if (!window.tizen || !tizen.tvinputdevice) {
             return; // Navegador comum (desenvolvimento no PC).
         }
-        ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaStop'].forEach(function (key) {
+        ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaStop', 'MediaRewind', 'MediaFastForward',
+            'ColorF0Red', 'ColorF1Green', 'ColorF2Yellow', 'ColorF3Blue'].forEach(function (key) {
             try {
                 tizen.tvinputdevice.registerKey(key);
-            } catch (e) {
-                console.warn('Nao foi possivel registrar a tecla ' + key, e);
-            }
+            } catch (e) { /* A tecla pode não existir neste modelo de TV. */ }
         });
     }
 

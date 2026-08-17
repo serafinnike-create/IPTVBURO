@@ -131,6 +131,18 @@ interface MetadataKeyStore {
 
     fun readShared(): String? = read(SHARED_PROFILE_ID)
 
+    /**
+     * The OMDb key, which is what fills the critics' row.
+     *
+     * A different service with a different key, filed under its own reserved id rather than in a
+     * second store: it is the same kind of secret with the same protection needs, and one encrypted
+     * store is one thing to get right. Device-wide rather than per profile — OMDb rate-limits per
+     * key by day, and there is nothing personal about a Tomatometer.
+     */
+    fun saveCritics(apiKey: String) = save(CRITICS_PROFILE_ID, apiKey)
+
+    fun readCritics(): String? = read(CRITICS_PROFILE_ID)
+
     companion object {
         /**
          * Reserved id for the household key.
@@ -139,5 +151,8 @@ interface MetadataKeyStore {
          * `UUID.randomUUID()` and none of them looks like this.
          */
         const val SHARED_PROFILE_ID = "__shared__"
+
+        /** Reserved id for the OMDb key. Reserved on the same grounds as [SHARED_PROFILE_ID]. */
+        const val CRITICS_PROFILE_ID = "__critics__"
     }
 }

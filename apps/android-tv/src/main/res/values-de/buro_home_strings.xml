@@ -81,6 +81,8 @@
     <string name="buro_story_missing_body">Diese Kennung gehört nicht zum lokalen visuellen Katalog. Gehe zurück oder füge deine eigene autorisierte Quelle hinzu.</string>
     <string name="home_rail_continue">Weiterschauen</string>
     <string name="home_badge_continue">WEITER</string>
+    <string name="home_rail_reminders">Ihre Erinnerungen</string>
+    <string name="home_badge_reminder">ERINNERUNG</string>
     <string name="home_rail_new_classics">Neu eingetroffene Klassiker</string>
     <string name="home_badge_classic">KLASSIKER</string>
     <string name="home_rail_recently_added">Kürzlich hinzugefügt</string>

@@ -7,7 +7,9 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.lucasserafin94.iptvburo.data.preferences.NotificationCentreStore
 import com.lucasserafin94.iptvburo.data.repository.ReminderRepository
+import com.lucasserafin94.iptvburo.data.repository.SeriesWatchRepository
 import com.lucasserafin94.iptvburo.domain.model.ReminderDigest
 import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
 import dagger.assisted.Assisted
@@ -34,7 +36,9 @@ class ReminderWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val reminders: ReminderRepository,
+    private val seriesWatch: SeriesWatchRepository,
     private val notifier: ReminderNotifier,
+    private val notificationCentre: NotificationCentreStore,
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
         // Nothing to post to. Success rather than retry: a refused permission is a decision, not a
@@ -52,6 +56,29 @@ class ReminderWorker @AssistedInject constructor(
                         zone = ZoneId.systemDefault(),
                     )
                 if (digest is ReminderDigest.Daily) notifier.notify(digest)
+            }
+
+            // And the series each profile follows, which is a different question from reminders:
+            // a reminder is something the viewer marked and is waiting for, while this is something
+            // they already favourited having quietly gained an episode.
+            //
+            // Runs on the same daily schedule rather than its own worker: it needs the same
+            // permission, the same battery budget and the same once-a-day cadence, and a second
+            // periodic worker would double the wake-ups for no benefit.
+            //
+            // Failures here must not lose the reminder digest above, which has already been posted.
+            runCatching {
+                seriesWatch.checkAllProfiles().forEach { (profileId, changes) ->
+                    notifier.notifySeriesChanges(changes)
+                    // And into the bell, so the news survives the notification being swiped away.
+                    //
+                    // A system notification is gone the moment it is dismissed, and somebody who
+                    // clears their shade on the bus has no way back to what it said. The bell is
+                    // where it waits until they choose to look.
+                    changes.forEach { notice ->
+                        notificationCentre.add(profileId, notice.toAppNotification())
+                    }
+                }
             }
             Result.success()
         }.getOrElse {

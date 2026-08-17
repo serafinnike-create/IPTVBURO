@@ -13,6 +13,14 @@ import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseClient
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.data.reminders.ReminderScheduler
+import com.lucasserafin94.iptvburo.data.cache.ArtworkCache
+import com.lucasserafin94.iptvburo.data.cache.ArtworkCacheAccess
+import com.lucasserafin94.iptvburo.data.preferences.CachePreferences
+import com.lucasserafin94.iptvburo.data.preferences.CacheSettingsStore
+import com.lucasserafin94.iptvburo.data.preferences.NotificationCentrePreferences
+import com.lucasserafin94.iptvburo.data.preferences.NotificationCentreStore
+import com.lucasserafin94.iptvburo.data.preferences.PlaybackSessionPreferences
+import com.lucasserafin94.iptvburo.data.preferences.PlaybackSessionStore
 import com.lucasserafin94.iptvburo.data.reminders.ReminderScheduling
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
 import com.lucasserafin94.iptvburo.data.repository.RoomCatalogRepository
@@ -37,6 +45,30 @@ abstract class DataBindingsModule {
     @Binds
     @Singleton
     abstract fun bindReminderScheduling(implementation: ReminderScheduler): ReminderScheduling
+
+    @Binds
+    @Singleton
+    abstract fun bindArtworkCacheAccess(
+        implementation: ArtworkCache,
+    ): ArtworkCacheAccess
+
+    @Binds
+    @Singleton
+    abstract fun bindCacheSettingsStore(
+        implementation: CachePreferences,
+    ): CacheSettingsStore
+
+    @Binds
+    @Singleton
+    abstract fun bindNotificationCentreStore(
+        implementation: NotificationCentrePreferences,
+    ): NotificationCentreStore
+
+    @Binds
+    @Singleton
+    abstract fun bindPlaybackSessionStore(
+        implementation: PlaybackSessionPreferences,
+    ): PlaybackSessionStore
 
     @Binds
     abstract fun bindOnboardingPreferences(

@@ -49,6 +49,12 @@ artifacts/
 .buildResult/
 *.wgt
 
+# Tizen Studio drops one dated `tizen-build-profile-*` directory here per build attempt, each a
+# full copy of the app. They accumulate silently — 47 of them, 63 MB, by the time this line was
+# written — and every one is a stale duplicate of `apps/samsung-tizen`. Committing a copy of the
+# app under a build-number name would also make `git grep` report each hit dozens of times.
+workspace/
+
 # Chromium writes these beside the working directory when the embedded browser runs. They are a
 # SQLite store of per-device media identifiers from the developer's own machine — nothing to do
 # with the product, and not something to publish.
@@ -65,3 +71,12 @@ MediaDeviceSalts-journal
 # forgotten one impossible to commit by accident.
 token-buro.txt
 whsec.txt
+
+# Saída de `generate-keys.mjs`. The private signing keys are printed in the clear, and pasting a
+# 184-character key into an interactive prompt truncates often enough that writing it to a file
+# first is the reliable path — so these files get created, and must never be committed.
+chaves.txt
+ecdsa.txt
+ecdsa-private.txt
+ed25519-private.txt
+*-signing-key.txt

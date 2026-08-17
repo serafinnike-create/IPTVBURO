@@ -81,6 +81,8 @@
     <string name="buro_story_missing_body">This identifier does not belong to the local visual catalog. Go back or add your own authorized source.</string>
     <string name="home_rail_continue">Continue watching</string>
     <string name="home_badge_continue">CONTINUE</string>
+    <string name="home_rail_reminders">Your reminders</string>
+    <string name="home_badge_reminder">REMINDER</string>
     <string name="home_rail_new_classics">Classics that just arrived</string>
     <string name="home_badge_classic">CLASSIC</string>
     <string name="home_rail_recently_added">Recently added</string>

@@ -41,6 +41,41 @@ class RealHomeCatalogTest {
         )
     }
 
+    /**
+     * The release rails follow the calendar rather than a year written into the app.
+     *
+     * Every other test here builds its fixtures from `Calendar.getInstance()`, so all of them would
+     * still pass if the year were hard-coded — they would simply be comparing the same constant on
+     * both sides. This one asks the question directly: a catalogue holding *next* year's films must
+     * not produce a rail for them today, and the rail that does appear must be named for the year
+     * the machine is actually in. When the clock rolls over to January, the same code names the new
+     * year without anybody editing a string.
+     */
+    @Test
+    fun `release rails are named for the current year, not a fixed one`() {
+        val year = Calendar.getInstance().get(Calendar.YEAR)
+        val section =
+            RealHomeCatalog.section(
+                sources = listOf(HomeSourceSummary("source", "Fonte", 4)),
+                catalogItems =
+                    listOf(
+                        item("this-year-hero", year, "Lançamento $year", 8.2),
+                        item("this-year-row", year, "Lançamento $year", 7.9),
+                        item("last-year", year - 1, "Lançamento ${year - 1}", 7.4),
+                        // Dated a year ahead: nothing may name a year that has not arrived.
+                        item("next-year", year + 1, "Lançamento ${year + 1}", 7.1),
+                    ),
+            )
+
+        val railTitles = section.rails.map(HomeRail::title)
+        assertTrue("Lançamentos $year", railTitles.contains("Lançamentos $year"))
+        assertTrue("Lançamentos ${year - 1}", railTitles.contains("Lançamentos ${year - 1}"))
+        assertTrue(
+            "A rail must never be named for a year that has not started: $railTitles",
+            railTitles.none { title -> title == "Lançamentos ${year + 1}" },
+        )
+    }
+
     @Test
     fun `the banner offers a rotation rather than one fixed title`() {
         val year = Calendar.getInstance().get(Calendar.YEAR)
@@ -106,9 +141,9 @@ class RealHomeCatalogTest {
                 catalogItems = listOf(item("local", year, "Filme", 7.0)),
                 streamingShelves =
                     listOf(
-                        ProviderShelfUi("netflix", "Netflix", listOf(duplicated, duplicated)),
+                        ProviderShelfUi(providerId = "netflix", providerName = "Netflix", titles = listOf(duplicated, duplicated)),
                         // A repeated provider would break the section for the same reason.
-                        ProviderShelfUi("netflix", "Netflix", listOf(duplicated)),
+                        ProviderShelfUi(providerId = "netflix", providerName = "Netflix", titles = listOf(duplicated)),
                     ),
             )
 

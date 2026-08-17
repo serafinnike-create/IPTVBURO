@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.content.res.Resources
 import com.lucasserafin94.iptvburo.core.logging.AppLogger
 import com.lucasserafin94.iptvburo.data.discovery.NoShelfCache
+import com.lucasserafin94.iptvburo.data.discovery.ProviderLogoCatalogue
 import com.lucasserafin94.iptvburo.data.discovery.StreamingDiscoveryRepository
 import com.lucasserafin94.iptvburo.data.download.AndroidDownloadManager
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
@@ -14,14 +15,28 @@ import com.lucasserafin94.iptvburo.data.licensing.RedeemFailure
 import com.lucasserafin94.iptvburo.data.licensing.RedeemOutcome
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
 import com.lucasserafin94.iptvburo.data.local.dao.FavoriteDao
+import com.lucasserafin94.iptvburo.data.local.dao.PlaybackProgressDao
 import com.lucasserafin94.iptvburo.data.local.dao.ProfileDao
 import com.lucasserafin94.iptvburo.data.local.entity.ChannelEntity
 import com.lucasserafin94.iptvburo.data.local.entity.FavoriteEntity
+import com.lucasserafin94.iptvburo.data.local.entity.PlaybackProgressEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ProfileEntity
 import com.lucasserafin94.iptvburo.data.preferences.CatalogueGuard
 import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
+import com.lucasserafin94.iptvburo.data.local.dao.SeriesWatchDao
+import com.lucasserafin94.iptvburo.data.local.entity.SeriesWatchEntity
 import com.lucasserafin94.iptvburo.data.local.dao.ReminderDao
 import com.lucasserafin94.iptvburo.data.local.entity.ReminderEntity
+import com.lucasserafin94.iptvburo.data.preferences.PlaybackSession
+import com.lucasserafin94.iptvburo.data.cache.ArtworkCacheAccess
+import com.lucasserafin94.iptvburo.data.preferences.CacheFillMark
+import com.lucasserafin94.iptvburo.data.preferences.CacheSettingsStore
+import com.lucasserafin94.iptvburo.domain.model.CacheBudget
+import com.lucasserafin94.iptvburo.data.preferences.NotificationCentreStore
+import com.lucasserafin94.iptvburo.domain.model.AppNotification
+import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
+import com.lucasserafin94.iptvburo.data.preferences.PlaybackSessionStore
+import com.lucasserafin94.iptvburo.data.preferences.ReminderSchedule
 import com.lucasserafin94.iptvburo.data.reminders.ReminderScheduling
 import com.lucasserafin94.iptvburo.data.repository.ReminderRepository
 import com.lucasserafin94.iptvburo.data.repository.UserLibraryRepository
@@ -38,6 +53,7 @@ import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.domain.model.Episode
 import com.lucasserafin94.iptvburo.domain.model.MovieDetails
+import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
 import com.lucasserafin94.iptvburo.domain.model.SeriesDetails
 import com.lucasserafin94.iptvburo.domain.model.Source
 import com.lucasserafin94.iptvburo.domain.model.SourceType
@@ -50,6 +66,7 @@ import com.lucasserafin94.iptvburo.domain.model.SubtitlePresentation
 import java.io.InputStream
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalTime
 import javax.inject.Provider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -114,15 +131,18 @@ class MainViewModelNavigationTest {
      * catalogue" forever.
      *
      * The profile observation set the stage to CATALOGUE unconditionally, so with no active profile
-     * the boot screen waited on a catalogue that had nobody to load for. With no profile there is
-     * nothing left to prepare, and the picker is what should be on screen.
+     * the boot screen waited on a catalogue that had nobody to load for. With nothing left to
+     * prepare, boot has to finish so the screen behind it can be reached.
+     *
+     * This no longer asserts that the profile stays null: a lone profile is now signed in
+     * automatically, since asking "who is watching?" with one possible answer is a screen that
+     * exists only to be dismissed. What the bug was about — boot reaching READY rather than hanging
+     * — is what is asserted, and that holds either way.
      */
     @Test
-    fun `boot finishes when there is no active profile so the picker can be reached`() = runTest {
+    fun `boot finishes rather than hanging on a catalogue with nobody to load for`() = runTest {
         val viewModel = createViewModel(FakeCatalogRepository())
         runCurrent()
-
-        assertNull(viewModel.state.value.activeProfile)
         assertEquals(
             "A boot stage short of READY holds the loading screen up with nothing to wait for.",
             BootStageUi.READY,
@@ -264,6 +284,83 @@ class MainViewModelNavigationTest {
             viewModel.state.value.catalogueFilter.isActive,
         )
         assertEquals(1, viewModel.state.value.visibleChannels.size)
+    }
+
+    /**
+     * Reported from a device: filter Filmes to 2026, open a film, press back — and the year was
+     * gone and the list was back at the top, so browsing a filtered list meant choosing the year
+     * again after every title.
+     *
+     * Two causes, both asserted here. The filter was cleared because the back press ran the same
+     * "open a fresh list" path a new category uses. The scroll position was lost because that path
+     * also refetched, and it fetches only the first page — so a viewer who had paged in more items
+     * came back to a list too short to hold the place they had reached.
+     */
+    @Test
+    fun `returning from a title keeps the filtered list that was left`() = runTest {
+        val firstPage =
+            (0 until 200).map { catalogChannel("item-$it", CatalogContentType.MOVIE) }
+        val finalItem = catalogChannel("item-200", CatalogContentType.MOVIE)
+        val repository =
+            FakeCatalogRepository(
+                pageLoader = { offset, _ ->
+                    if (offset == 0) {
+                        CatalogPage(firstPage, offset = 0, totalCount = 201)
+                    } else {
+                        CatalogPage(listOf(finalItem), offset = 200, totalCount = 201)
+                    }
+                },
+                movieDetails =
+                    MovieDetails(
+                        sourceId = "source",
+                        providerMovieId = "item-0",
+                        title = "Synthetic feature",
+                        plot = "Synthetic plot",
+                        cast = "",
+                        director = "",
+                        genre = "Drama",
+                        duration = "01:40:00",
+                        releaseDate = "2026-02-12",
+                        country = "BR",
+                        rating = 8.2,
+                        artworkUri = null,
+                        backdropUris = emptyList(),
+                        youtubeTrailerId = null,
+                    ),
+            )
+        val viewModel = createViewModel(repository)
+        runCurrent()
+        viewModel.openSource(SourceUi("source", "Synthetic source", 201))
+        viewModel.openCategory(CategoryUi(null, "", 201))
+        runCurrent()
+
+        // Paged in past the first two hundred, as somebody scrolling a long list does.
+        viewModel.loadMoreChannels()
+        runCurrent()
+        assertEquals(201, viewModel.state.value.channels.size)
+
+        viewModel.setCatalogueFilter(CatalogueFilter(year = 2026))
+        assertTrue(viewModel.state.value.catalogueFilter.isActive)
+
+        viewModel.openChannel(firstPage.first().toUi())
+        runCurrent()
+        assertTrue(
+            "The test must reach a details screen; a live item would open the player instead.",
+            viewModel.state.value.content is AppContent.MovieDetails,
+        )
+
+        assertTrue(viewModel.goBack())
+        runCurrent()
+
+        assertTrue(
+            "The year was cleared, so the viewer had to choose it again after every title.",
+            viewModel.state.value.catalogueFilter.isActive,
+        )
+        assertEquals(
+            "Refetching dropped the pages already loaded, taking the scroll position with them.",
+            201,
+            viewModel.state.value.channels.size,
+        )
     }
 
     @Test
@@ -615,6 +712,31 @@ class MainViewModelNavigationTest {
         assertEquals(AppContent.Home, viewModel.state.value.content)
     }
 
+    /**
+     * One profile is not a choice.
+     *
+     * A fresh install creates a single "Meu perfil", so the picker was appearing on every launch to
+     * ask a question with one possible answer. With nobody stored as active and exactly one profile
+     * present, that profile becomes the active one and the app opens straight into the catalogue.
+     */
+    @Test
+    fun `a lone profile is signed in without showing the picker`() = runTest {
+        val repository = FakeCatalogRepository(sources = listOf(source("local", SourceType.LOCAL_M3U)))
+        val viewModel = createViewModel(repository)
+        runCurrent()
+
+        assertEquals(
+            "The default install has exactly one profile; this asserts that case.",
+            1,
+            viewModel.state.value.profiles.size,
+        )
+        assertEquals(
+            "With one profile there is nothing to choose, so it is already the active one.",
+            viewModel.state.value.profiles.single().id,
+            viewModel.state.value.activeProfile?.id,
+        )
+    }
+
     private fun TestScope.createViewModel(
         repository: FakeCatalogRepository,
         logger: AppLogger = NoOpLogger,
@@ -650,11 +772,23 @@ class MainViewModelNavigationTest {
             contextProvider = contextProvider,
             catalogRepository = repository,
             onboardingPreferences = FakeOnboardingPreferences,
-            userLibraryRepository = UserLibraryRepository(FakeProfileDao(), FakeFavoriteDao(), dispatcher),
+            userLibraryRepository =
+                UserLibraryRepository(
+                    FakeProfileDao(),
+                    FakeFavoriteDao(),
+                    FakeReminderDao(),
+                    NoPlaybackProgressDao,
+                    NoSeriesWatchDao,
+                    dispatcher,
+                ),
             reminderRepository = ReminderRepository(FakeReminderDao(), dispatcher),
             // Records nothing: these assertions are about navigation, and the real scheduler would
             // need an initialised WorkManager to answer at all.
             reminderScheduler = NoReminderScheduling,
+            playbackSessionPreferences = NoPlaybackSessionStore,
+            notificationCentrePreferences = NoNotificationCentreStore,
+            cacheSettings = NoCacheSettingsStore,
+            artworkCache = NoArtworkCache,
             // The manager resolves storage lazily, so these navigation assertions never touch it.
             downloadManager = AndroidDownloadManager(contextProvider, OkHttpClient(), dispatcher),
             licenseService = licenseService,
@@ -663,6 +797,9 @@ class MainViewModelNavigationTest {
             // no-op and these navigation assertions never reach the network.
             streamingDiscoveryRepository = StreamingDiscoveryRepository(OkHttpClient(), NoShelfCache, dispatcher),
             okHttpClient = OkHttpClient(),
+            // Never loaded in these assertions: the badge catalogue needs a TMDb key and a
+            // network, and navigation does not depend on a logo having arrived.
+            providerLogoCatalogue = ProviderLogoCatalogue(OkHttpClient()),
             playbackProgressRepository = FakePlaybackProgressRepository,
             // Empty fakes: nothing hidden and no PIN, which is what these navigation assertions
             // assume. The DataStore-backed implementations cannot start on a plain JVM context.
@@ -970,6 +1107,29 @@ private class RecordingLogger : AppLogger {
 }
 
 /** In-memory reminders, enough for the view model to observe and toggle against. */
+/**
+ * Nothing watched, ever.
+ *
+ * Only reached when the library repository checks whether the automatic first profile was used;
+ * these assertions are about navigation and never write progress.
+ */
+private data object NoPlaybackProgressDao : PlaybackProgressDao {
+    override fun find(
+        profileId: String,
+        sourceId: String,
+        contentId: String,
+        contentType: String,
+    ): PlaybackProgressEntity? = null
+
+    override fun upsert(entity: PlaybackProgressEntity) = Unit
+
+    override fun remove(profileId: String, sourceId: String, contentId: String, contentType: String) = Unit
+
+    override fun continueWatching(profileId: String, limit: Int): List<PlaybackProgressEntity> = emptyList()
+
+    override fun history(profileId: String, limit: Int): List<PlaybackProgressEntity> = emptyList()
+}
+
 private class FakeReminderDao : ReminderDao {
     private val rows = MutableStateFlow<List<ReminderEntity>>(emptyList())
 
@@ -998,10 +1158,76 @@ private class FakeReminderDao : ReminderDao {
 }
 
 /** Accepts every scheduling call and does nothing, so no WorkManager is needed. */
+/**
+ * Never has a session to restore, and records none.
+ *
+ * These assertions are about navigation, and a stored session would reopen a player on top of
+ * whatever destination each test just asserted.
+ */
+private data object NoPlaybackSessionStore : PlaybackSessionStore {
+    override suspend fun current(now: Long): PlaybackSession? = null
+
+    override suspend fun remember(channelId: String, profileId: String, now: Long) = Unit
+
+    override suspend fun clear() = Unit
+}
+
 private data object NoReminderScheduling : ReminderScheduling {
+    // The stored default, so a view model built on this fake reports the same hour the real
+    // preference store would before anything has been written to it.
+    override val schedule: Flow<ReminderSchedule> =
+        flowOf(ReminderSchedule(notify = true, time = LocalTime.of(ReminderPolicy.DEFAULT_HOUR, 0)))
+
     override suspend fun sync() = Unit
 
     override suspend fun setTime(hour: Int, minute: Int) = Unit
 
     override suspend fun setNotify(notify: Boolean) = Unit
+}
+
+/** Follows nothing: these assertions never exercise the new-episode notice. */
+private data object NoSeriesWatchDao : SeriesWatchDao {
+    override suspend fun find(profileId: String, channelId: String): SeriesWatchEntity? = null
+
+    override suspend fun upsert(state: SeriesWatchEntity) = Unit
+
+    override suspend fun all(): List<SeriesWatchEntity> = emptyList()
+
+    override suspend fun remove(profileId: String, channelId: String) = Unit
+}
+
+/** An empty bell that records nothing: these assertions never open it. */
+private data object NoNotificationCentreStore : NotificationCentreStore {
+    override fun observe(profileId: String): Flow<NotificationCentre> = flowOf(NotificationCentre())
+
+    override suspend fun add(profileId: String, notification: AppNotification) = Unit
+
+    override suspend fun markAllRead(profileId: String) = Unit
+
+    override suspend fun remove(profileId: String, id: String) = Unit
+
+    override suspend fun clear(profileId: String) = Unit
+}
+
+/** The cache turned off, which is what these navigation assertions assume: nothing pre-fetched. */
+private data object NoCacheSettingsStore : CacheSettingsStore {
+    override fun observeBudget(): Flow<CacheBudget> = flowOf(CacheBudget.DISABLED)
+
+    /** Already answered, so the first-run offer never appears over a navigation assertion. */
+    override fun observeChoicePending(): Flow<Boolean> = flowOf(false)
+
+    override suspend fun chooseBudget(gigabytes: Int) = Unit
+
+    override fun observeMark(): Flow<CacheFillMark> = flowOf(CacheFillMark())
+
+    override suspend fun rememberMark(done: Int, total: Int) = Unit
+}
+
+/** An empty cache: nothing stored, nothing fetched. */
+private data object NoArtworkCache : ArtworkCacheAccess {
+    override suspend fun warm(url: String): Boolean = false
+
+    override fun bytesUsed(): Long = 0L
+
+    override fun clear() = Unit
 }

@@ -75,6 +75,13 @@ import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 import com.lucasserafin94.iptvburo.ui.theme.IptvBuroTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import coil3.SingletonImageLoader
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.delay
 
 @AndroidEntryPoint
@@ -192,9 +199,18 @@ private fun IptvBuroRoot(
     var isShowingPosterReveal by remember { mutableStateOf(false) }
 
     // Android's mandatory system splash is only allowed to draw a solid background and one icon.
-    // Once Compose owns the window, keep our cinematic screen visible long enough to actually see
-    // the real covers. Without this short reveal a warm Room cache could move from the B icon to
-    // Home in one frame, making the intended loading background impossible to notice.
+    // Once Compose owns the window, keep our cinematic screen visible until the first screen's
+    // artwork is actually in hand.
+    //
+    // This used to be a flat 1.6 second timer, which is what made the app look like it froze on
+    // opening: the timer ran out while the covers were still being fetched, so Home arrived as a
+    // grid of empty boxes that filled in one by one under the viewer's eyes. Waiting for the images
+    // themselves means the loading screen is doing what it says it is doing.
+    //
+    // [BOOT_POSTER_REVEAL_TIMEOUT_MILLIS] still caps it. A slow or failing network must never trap
+    // somebody on a loading screen — past the ceiling the app opens anyway and fills in as it goes,
+    // which is the old behaviour and an acceptable worst case rather than the normal one.
+    val platformContext = LocalPlatformContext.current
     LaunchedEffect(state.bootBackdropUrls) {
         if (
             state.bootBackdropUrls.isNotEmpty() &&
@@ -202,7 +218,26 @@ private fun IptvBuroRoot(
             state.sources.isNotEmpty()
         ) {
             isShowingPosterReveal = true
-            delay(BOOT_POSTER_REVEAL_MILLIS)
+            withTimeoutOrNull(BOOT_POSTER_REVEAL_TIMEOUT_MILLIS) {
+                val loader = SingletonImageLoader.get(platformContext)
+                // Fetched together rather than one after another: these are the handful of images
+                // the first screen shows, and serialising them would make the wait the sum of every
+                // request instead of the slowest one.
+                coroutineScope {
+                    state.bootBackdropUrls.take(BOOT_POSTER_PREFETCH_COUNT).map { url ->
+                        async {
+                            runCatching {
+                                loader.execute(
+                                    ImageRequest.Builder(platformContext).data(url).build(),
+                                )
+                            }
+                        }
+                    }.awaitAll()
+                }
+            }
+            // A short beat after the artwork lands, so the reveal reads as a considered transition
+            // rather than a flash. Kept small because the wait above is now the real cost.
+            delay(BOOT_POSTER_SETTLE_MILLIS)
             isShowingPosterReveal = false
         }
     }
@@ -344,7 +379,16 @@ private fun IptvBuroRoot(
                 onSearch = viewModel::search,
                 onPlayMovie = viewModel::playSelectedMovie,
                 onToggleMovieFavorite = viewModel::toggleSelectedMovieFavorite,
+                onToggleChannelFavorite = viewModel::toggleChannelFavorite,
                 onToggleReminder = viewModel::toggleReminder,
+                onDiscoverKeep = viewModel::keepDiscoveryCard,
+                onDiscoverSkip = viewModel::skipDiscoveryCard,
+                onDiscoverDealAgain = viewModel::dealDiscoveryDeck,
+                onStartCastReceiver = viewModel::startCastReceiver,
+                onStopCastReceiver = viewModel::stopCastReceiver,
+                onRemoveReminder = viewModel::removeReminder,
+                onSetReminderNotify = viewModel::setReminderNotify,
+                onSetReminderTime = viewModel::setReminderTime,
                 onShareTitle = { request ->
                     shareTitle(
                         activity = activity,
@@ -356,7 +400,19 @@ private fun IptvBuroRoot(
                     )
                 },
                 onCastTitle = viewModel::openCast,
+                onSubscriptionSeeMore = viewModel::expandService,
+                onSubscriptionCloseExpanded = viewModel::closeExpandedService,
+                onMarkNotificationsRead = viewModel::markNotificationsRead,
+                onDismissNotification = viewModel::dismissNotification,
+                onClearNotifications = viewModel::clearNotifications,
+                onChooseCacheBudget = viewModel::chooseCacheBudget,
+                onDeclineCacheOffer = viewModel::declineCacheOffer,
+                onStartCacheFill = viewModel::startCacheFill,
+                onStopCacheFill = viewModel::stopCacheFill,
+                onRefreshCacheFill = viewModel::refreshCacheFill,
+                onClearCache = viewModel::clearArtworkCache,
                 onCastSearchAgain = viewModel::searchForScreens,
+                onCastConnectToAddress = viewModel::connectToScreenAt,
                 onCastChoose = viewModel::chooseCastTarget,
                 onCastBack = viewModel::backToCastTargets,
                 onCastSend = viewModel::sendToCastTarget,
@@ -389,6 +445,7 @@ private fun IptvBuroRoot(
                 },
                 onRedeemLicense = viewModel::redeemLicense,
                 onSaveSharedTmdbKey = viewModel::saveSharedTmdbKey,
+                onSaveCriticsKey = viewModel::saveCriticsKey,
                 onSelectSubscriptionKind = viewModel::selectSubscriptionKind,
                 onSelectSubscriptionRegion = viewModel::selectSubscriptionRegion,
                 onOpenSubscriptionTitle = viewModel::openSubscriptionTitle,
@@ -523,4 +580,17 @@ private fun BootStageUi.labelResource(): Int =
         BootStageUi.READY -> R.string.boot_stage_ready
     }
 
-private const val BOOT_POSTER_REVEAL_MILLIS = 1_600L
+/**
+ * The longest the loading screen will wait for artwork before opening anyway.
+ *
+ * A ceiling, not a target: on a warm cache the wait is imperceptible. It exists so a slow or
+ * failing network degrades to the old behaviour — open now, fill in as you go — instead of holding
+ * somebody on a loading screen indefinitely.
+ */
+private const val BOOT_POSTER_REVEAL_TIMEOUT_MILLIS = 6_000L
+
+/** A beat after the artwork lands, so the reveal reads as a transition rather than a flash. */
+private const val BOOT_POSTER_SETTLE_MILLIS = 220L
+
+/** How many of the first screen's images are waited for. The hero and the first row, in practice. */
+private const val BOOT_POSTER_PREFETCH_COUNT = 6

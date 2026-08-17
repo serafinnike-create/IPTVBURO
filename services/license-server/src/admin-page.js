@@ -47,6 +47,20 @@ export function adminPage() {
   .row.between { justify-content: space-between; }
   .field { display: grid; gap: 5px; min-width: 160px; }
   .field > span { color: var(--muted); font-size: 13px; }
+  /*
+    The sign-in card stacks, and does not share a wrapping row.
+
+    These four controls used to sit in a .row, which is a wrapping flexbox aligned on centre.
+    With labels of different heights that put each caption at a different vertical position and
+    dropped the narrow MFA field onto its own line, so its caption floated away from the box it
+    named — the form read as broken before anyone had typed anything. A column has none of those
+    problems and is the right shape for three fields anyway.
+  */
+  .login { max-width: 380px; margin: 48px auto; display: grid; gap: 14px; }
+  .login h1, .login .sub { margin: 0; }
+  .login button[type="submit"] { justify-self: start; padding-left: 22px; padding-right: 22px; }
+  /* Says where the code comes from, because "MFA" alone leaves people waiting for an e-mail. */
+  .field > .hint { color: var(--muted); font-size: 12px; line-height: 1.45; }
   .stats { display: grid; grid-template-columns: repeat(6, minmax(110px, 1fr)); gap: 8px; }
   /* Buttons, not captions: each figure opens the list behind it. Styled flat so the panel still
      reads as a summary rather than as a row of controls. */
@@ -108,24 +122,25 @@ export function adminPage() {
 <body>
 <div class="wrap">
 
-  <form id="login" class="panel" onsubmit="event.preventDefault(); signIn()">
+  <form id="login" class="panel login" onsubmit="event.preventDefault(); signIn()">
     <h1>IPTV <span>BURO</span></h1>
     <p class="sub">Administração</p>
-    <div class="row">
-      <label class="field" style="flex:1">
-        <span>Seu nome (fica na auditoria)</span>
-        <input id="actor" autocomplete="name" placeholder="Administrador">
-      </label>
-      <label class="field" style="flex:1">
-        <span>Token de acesso</span>
-        <input id="token" type="password" autocomplete="current-password" aria-describedby="loginError" autofocus>
-      </label>
-      <label class="field" style="width:150px">
-        <span>Código MFA</span>
-        <input id="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000">
-      </label>
-      <button type="submit">Entrar</button>
-    </div>
+    <label class="field">
+      <span>Seu nome (fica na auditoria)</span>
+      <input id="actor" autocomplete="name" placeholder="Administrador">
+    </label>
+    <label class="field">
+      <span>Token de acesso</span>
+      <input id="token" type="password" autocomplete="current-password" aria-describedby="loginError" autofocus>
+    </label>
+    <label class="field">
+      <span>Código MFA</span>
+      <input id="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000">
+      <span class="hint">Os seis dígitos do seu aplicativo autenticador — Google Authenticator,
+        Microsoft Authenticator, 1Password. O código não é enviado por e-mail nem por SMS: ele é
+        gerado no seu telefone e muda a cada trinta segundos.</span>
+    </label>
+    <button type="submit">Entrar</button>
     <p class="sub" id="loginError" role="alert" aria-live="polite" style="color:#e08585"></p>
   </form>
 

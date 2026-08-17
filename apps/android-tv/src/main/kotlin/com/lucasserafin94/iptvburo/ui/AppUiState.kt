@@ -1,6 +1,9 @@
 package com.lucasserafin94.iptvburo.ui
 
+import com.lucasserafin94.iptvburo.metadata.CriticScores
 import com.lucasserafin94.iptvburo.domain.model.BrowsableItem
+import com.lucasserafin94.iptvburo.domain.model.CacheBudget
+import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import com.lucasserafin94.iptvburo.domain.model.CatalogueFilter
 import com.lucasserafin94.iptvburo.domain.model.CatalogueLayout
@@ -11,11 +14,15 @@ import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.ContentKind
 import com.lucasserafin94.iptvburo.domain.model.OfferReason
 import com.lucasserafin94.iptvburo.domain.model.ParentalLock
+import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
 import com.lucasserafin94.iptvburo.domain.model.Reminder
+import com.lucasserafin94.iptvburo.domain.model.SessionTaste
+import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
 import com.lucasserafin94.iptvburo.domain.model.SourceType
 import com.lucasserafin94.iptvburo.domain.model.StreamingDiscoveryCapability
 import com.lucasserafin94.iptvburo.domain.model.SubtitlePresentation
 import com.lucasserafin94.iptvburo.ui.cast.CastUiState
+import java.time.LocalTime
 
 data class ProfileUi(
     val id: String,
@@ -112,6 +119,8 @@ data class MovieDetailsUi(
     val releaseDate: String?,
     val country: String?,
     val rating: Double?,
+    /** How many people voted, which is what gives [rating] its weight. */
+    val voteCount: Int? = null,
     val artworkUrl: String?,
     val backdropUrl: String?,
     val youtubeTrailerId: String?,
@@ -400,6 +409,7 @@ enum class AppSection {
     MY_BURO,
     CONTINUE_WATCHING,
     HISTORY,
+    REMINDERS,
     SUBSCRIPTIONS,
     DOWNLOADS,
     SEARCH,
@@ -439,12 +449,29 @@ sealed interface AppContent {
         val providerSeriesId: String,
         val fallbackTitle: String,
         /**
+         * The catalogue row's poster, standing in until the full record arrives.
+         *
+         * The counterpart of [fallbackTitle], and needed for the same reason: the reminder button
+         * is enabled before the record loads, so a reminder marked quickly would otherwise be
+         * stored with no artwork and stay blank on the reminders page for good.
+         */
+        val fallbackArtworkUrl: String? = null,
+        /**
          * The catalogue row this was opened from, which is what favourites are keyed by.
          *
          * Empty only for a series reached without one. The favourite button is hidden in that
          * case rather than filing a favourite that points at nothing.
          */
         val channelId: String = "",
+        /**
+         * The category this series was filed under, which names its streaming service.
+         *
+         * Carried for the same reason a film's destination carries it, and it matters more here:
+         * providers file their platform catalogues as "Series | Netflix", "Series | Max" and so on,
+         * while films are filed by genre. Leaving this off meant the platform badge was missing
+         * from precisely the titles that had a platform to name.
+         */
+        val categoryName: String? = null,
     ) : AppContent
 
     data class MovieDetails(
@@ -472,6 +499,24 @@ sealed interface AppContent {
     data object ContinueWatching : AppContent
 
     data object History : AppContent
+
+    /**
+     * The Descobrir deck, one card at a time.
+     *
+     * Carries no payload: the hand lives on [AppUiState.discoverDeck] so keeping or skipping a card
+     * updates in place, rather than the destination holding a snapshot that goes stale on the first
+     * swipe.
+     */
+    data object Discover : AppContent
+
+    /**
+     * The titles the profile asked to be reminded about, and when the daily notice arrives.
+     *
+     * Carries no payload for the same reason [Downloads] does not: the entries live on
+     * [AppUiState.reminders], which the repository observer keeps current, so the destination never
+     * holds a snapshot that goes stale the moment a reminder is marked from a details page.
+     */
+    data object Reminders : AppContent
 
     /**
      * The list of offline copies.
@@ -536,6 +581,91 @@ data class AppUiState(
     val reminderKeys: Set<String> = emptySet(),
     /** What is marked, in full, for the reminders page and the home shelf. */
     val reminders: List<Reminder> = emptyList(),
+    /**
+     * Whether the daily notice is on, and the hour it arrives.
+     *
+     * Household-wide rather than per profile, matching the store behind it: one device posts one
+     * notification at one time. Defaulted to the same hour [ReminderPolicy] falls back to, so the
+     * page shows the hour that is really in force before the stored value has been read.
+     */
+    /**
+     * The four digits a computer has to be told before it can send anything here.
+     *
+     * Kept once minted, even after listening stops, so the number does not change between sessions
+     * and have to be retyped into the computer every time.
+     */
+    val castReceiverCode: String? = null,
+    /** Whether the sockets are open. False when the sheet is closed, or when the bind failed. */
+    val isCastReceiverOn: Boolean = false,
+    /**
+     * The Descobrir hand, top card first. Empty once it has been swiped through.
+     *
+     * Rows rather than ids, so the screen can draw a card without another lookup per swipe.
+     */
+    val discoverDeck: List<ChannelUi> = emptyList(),
+    /** How many the hand started with, so the card counter can say "3 of 15". */
+    val discoverDealtCount: Int = 0,
+    val isDiscoverLoading: Boolean = false,
+    /**
+     * Titles this profile has already judged in Descobrir, kept for the session.
+     *
+     * Skipping is not stored anywhere else — a favourite is a real record, but "not this one" is
+     * only a fact about this deck. Held here so the next hand does not offer it back immediately,
+     * and deliberately forgotten when the app closes: taste changes, and a title refused once
+     * should not be hidden for good.
+     */
+    val discoverJudgedIds: Set<String> = emptySet(),
+    /**
+     * What this sitting's swipes have said, which the next hand is ranked against.
+     *
+     * Separate from the watch history on purpose: "what I just said about a poster" is a fresher
+     * statement than "what I watched last month", and a skip teaches something a watch history
+     * never can — a title that was passed over is never watched, so it would otherwise leave no
+     * trace at all. Held for the session only, like [discoverJudgedIds].
+     */
+    val discoverSessionTaste: SessionTaste = SessionTaste(),
+    /**
+     * The official logo of the service the open title streams on, from TMDb.
+     *
+     * TMDb publishes the providers' own marks through `watch/providers` and licenses them for this
+     * use with attribution, which is what makes showing a real Netflix or Prime logo legitimate
+     * where drawing an imitation would not be. Null until the lookup runs or when it finds nothing,
+     * and the badge falls back to the monogram on the service's colour.
+     */
+    val openTitleProviderLogoUrl: String? = null,
+    /**
+     * The streaming services' official logos, by service name.
+     *
+     * One fetch for the whole region rather than one per title: a grid draws dozens of cards at
+     * once, and asking TMDb about each would be hundreds of requests to paint one screen. Empty
+     * until the directory loads, and every badge falls back to its monogram until then.
+     */
+    val providerLogos: Map<String, String> = emptyMap(),
+    /**
+     * The critics' scores for the open title, from OMDb.
+     *
+     * Null until the lookup returns, when there is no OMDb key, or when the services hold nothing
+     * for this title — all three mean the same thing to the screen: draw what is there and no more.
+     */
+    val openTitleCriticScores: CriticScores? = null,
+    /** Whether an OMDb key is stored, which is what makes the critics' row possible. */
+    val criticsKeyConfigured: Boolean = false,
+    /** What the bell is holding for the active profile. */
+    val notifications: NotificationCentre = NotificationCentre(),
+    /**
+     * How much artwork this device may keep.
+     *
+     * Not per profile, unlike the bell above: the cache is a property of the device's storage, and
+     * two people sharing a tablet share the disk it fills.
+     */
+    val cacheBudget: CacheBudget = CacheBudget.DEFAULT,
+    /** Whether the first-run offer is still owed — distinct from having answered zero. */
+    val cacheChoicePending: Boolean = false,
+    val cacheProgress: CacheFillProgress = CacheFillProgress(),
+    /** Measured from the directory, so it matches what the device's storage screen reports. */
+    val cacheBytesUsed: Long = 0L,
+    val reminderNotify: Boolean = true,
+    val reminderTime: LocalTime = LocalTime.of(ReminderPolicy.DEFAULT_HOUR, 0),
     val favoriteItems: List<ChannelUi> = emptyList(),
     val section: AppSection = AppSection.HOME,
     val content: AppContent = AppContent.Home,
@@ -726,6 +856,20 @@ data class AppUiState(
  * [capability] is derived from whether a metadata key is configured, never set directly, so there is
  * no way to reveal the screen without something real behind it.
  */
+/**
+ * One service's whole catalogue, behind a shelf's "Ver mais".
+ *
+ * A shelf holds twenty titles because that is what fits on a rail, and reaching its end is exactly
+ * where "what else is on Netflix?" gets asked. [isLoading] is its own flag rather than the screen's:
+ * the shelves stay drawn underneath while this fills.
+ */
+data class ExpandedServiceUi(
+    val providerId: String,
+    val providerName: String,
+    val titles: List<SubscriptionTitleUi> = emptyList(),
+    val isLoading: Boolean = false,
+)
+
 data class SubscriptionsUi(
     val capability: StreamingDiscoveryCapability = StreamingDiscoveryCapability.UNAVAILABLE,
     val shelves: List<ProviderShelfUi> = emptyList(),
@@ -733,6 +877,14 @@ data class SubscriptionsUi(
     val region: String = "BR",
     val isLoading: Boolean = false,
     /** The title whose offers are showing. Null means the shelves are. */
+    /**
+     * The service whose full catalogue is open, from a shelf's "Ver mais".
+     *
+     * Null while the shelves are showing. Its own field rather than a destination, because it is a
+     * step *inside* Assinaturas: back returns to the shelves, and making it a destination would
+     * have turned that into a navigation special case.
+     */
+    val expandedService: ExpandedServiceUi? = null,
     val selected: SubscriptionTitleUi? = null,
     val offers: List<SubscriptionOfferUi> = emptyList(),
     val isSelectionLoading: Boolean = false,
@@ -757,6 +909,14 @@ enum class SubscriptionsKindUi {
 data class ProviderShelfUi(
     val providerId: String,
     val providerName: String,
+    /**
+     * TMDb's own numeric id for this service, which is what asking for more of it needs.
+     *
+     * Null for a shelf that is not one service — "Em breve" is the set of films no service carries
+     * yet, so there is no catalogue to expand. The screen uses that to decide whether "Ver mais"
+     * belongs on the shelf at all.
+     */
+    val tmdbProviderId: Int? = null,
     val titles: List<SubscriptionTitleUi>,
 )
 
@@ -771,6 +931,8 @@ data class SubscriptionTitleUi(
     val externalId: String,
     val title: String,
     val year: Int?,
+    /** The full release date, for the upcoming shelf that has to say the day and not just the year. */
+    val releaseDate: String? = null,
     val posterUrl: String?,
     val isSeries: Boolean,
     val isDemo: Boolean,

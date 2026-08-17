@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.data.repository
 
 import com.lucasserafin94.iptvburo.data.local.dao.ReminderDao
 import com.lucasserafin94.iptvburo.data.local.entity.ReminderEntity
+import com.lucasserafin94.iptvburo.data.cache.isStorableArtwork
 import com.lucasserafin94.iptvburo.di.IoDispatcher
 import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.Reminder
@@ -58,10 +59,7 @@ class ReminderRepository @Inject constructor(
                         profileId = profileId,
                         contentKey = identity.key,
                         title = title.trim(),
-                        // Dropped unless it is a public metadata URL. This row outlives the
-                        // playlist it came from, and a provider's artwork address commonly carries
-                        // the subscriber's credentials in its path — storing one would keep a
-                        // credential long after the source was removed.
+                        // Dropped when it carries a credential. See [isStorableArtwork].
                         artworkUrl = artworkUrl?.takeIf(::isStorableArtwork),
                         releaseDate = releaseDate?.toString(),
                         createdAtEpochMillis = now.toEpochMilli(),
@@ -100,15 +98,3 @@ private fun ReminderEntity.toDomain(): Reminder =
         releaseDate = releaseDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
         createdAt = Instant.ofEpochMilli(createdAtEpochMillis),
     )
-
-/**
- * Whether an artwork URL is safe to keep.
- *
- * The same rule the share link applies, and for the same reason: a provider-hosted image sits on
- * the subscriber's own server and frequently carries their username and password in the path. A
- * reminder outlives the playlist, so storing one would leave a credential behind after the source
- * was deleted. A local file is fine — it is the app's own copy.
- */
-private fun isStorableArtwork(url: String): Boolean =
-    com.lucasserafin94.iptvburo.domain.model.TitleShareLink.isPublicArtwork(url) ||
-        url.startsWith("file://")

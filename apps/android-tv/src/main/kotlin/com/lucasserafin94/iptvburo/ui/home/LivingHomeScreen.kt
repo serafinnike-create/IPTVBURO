@@ -60,6 +60,9 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.domain.model.Reminder
+import com.lucasserafin94.iptvburo.ui.designsystem.rememberProviderIdentity
+import com.lucasserafin94.iptvburo.ui.designsystem.ProviderMark
 import com.lucasserafin94.iptvburo.ui.ChannelUi
 import com.lucasserafin94.iptvburo.ui.ContinueWatchingUi
 import com.lucasserafin94.iptvburo.ui.ProviderShelfUi
@@ -78,6 +81,8 @@ fun LivingHomeScreen(
     sources: List<HomeSourceSummary>,
     catalogItems: List<ChannelUi> = emptyList(),
     continueWatching: List<ContinueWatchingUi> = emptyList(),
+    /** Marked titles, drawn as a rail directly under Continue assistindo. */
+    reminders: List<Reminder> = emptyList(),
     /** Service shelves, drawn after the user's own content. Empty until they have loaded. */
     streamingShelves: List<ProviderShelfUi> = emptyList(),
     /** Real synopses for banner titles, keyed by channel id. */
@@ -115,6 +120,8 @@ fun LivingHomeScreen(
             HomeLabels(
                 continueWatching = stringResource(R.string.home_rail_continue),
                 continueBadge = stringResource(R.string.home_badge_continue),
+                reminders = stringResource(R.string.home_rail_reminders),
+                reminderBadge = stringResource(R.string.home_badge_reminder),
                 newClassics = stringResource(R.string.home_rail_new_classics),
                 classicBadge = stringResource(R.string.home_badge_classic),
                 recentlyAdded = stringResource(R.string.home_rail_recently_added),
@@ -134,7 +141,15 @@ fun LivingHomeScreen(
                     if (catalogItems.isEmpty() && continueWatching.isEmpty()) {
                         DemoHomeCatalog.section(sources)
                     } else {
-                        RealHomeCatalog.section(sources, catalogItems, continueWatching, streamingShelves, synopses, labels)
+                        RealHomeCatalog.section(
+                            sources = sources,
+                            catalogItems = catalogItems,
+                            continueWatching = continueWatching,
+                            reminders = reminders,
+                            streamingShelves = streamingShelves,
+                            synopses = synopses,
+                            labels = labels,
+                        )
                     }
                 val resolvedInitialFocusedItemId =
                     section.resolveInitialFocusId(initialFocusedItemId)
@@ -294,6 +309,16 @@ private fun HomeRailRow(
                 .padding(end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // A service's shelf is headed by its own mark, beside the name.
+            //
+            // The rail title *is* the service on these shelves — "Netflix", "Disney Plus" — so the
+            // same identity that badges the cards below reads it here too, and the heading stops
+            // being the one place on the screen that names a service in plain text.
+            rememberProviderIdentity(rail.title.takeIf { rail.kind == HomeRailKind.STREAMING_SERVICE })
+                ?.let { provider ->
+                    ProviderMark(provider = provider, size = 26.dp)
+                    Spacer(Modifier.width(10.dp))
+                }
             Text(
                 text = rail.title,
                 color = BuroTextPrimary,

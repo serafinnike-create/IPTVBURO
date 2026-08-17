@@ -82,6 +82,8 @@
     <string name="buro_story_missing_body">Este identificador não pertence ao catálogo visual local. Volte ou adicione sua própria fonte autorizada.</string>
     <string name="home_rail_continue">Continue assistindo</string>
     <string name="home_badge_continue">CONTINUAR</string>
+    <string name="home_rail_reminders">Seus lembretes</string>
+    <string name="home_badge_reminder">LEMBRETE</string>
     <string name="home_rail_new_classics">Clássicos que chegaram agora</string>
     <string name="home_badge_classic">CLÁSSICO</string>
     <string name="home_rail_recently_added">Adicionados recentemente</string>

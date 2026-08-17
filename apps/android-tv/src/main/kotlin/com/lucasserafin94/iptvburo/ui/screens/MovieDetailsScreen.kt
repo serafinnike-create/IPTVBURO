@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
@@ -53,13 +54,16 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
-import coil3.request.CachePolicy
 import coil3.request.ImageRequest
+import com.lucasserafin94.iptvburo.metadata.CriticScores
 import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.ui.designsystem.providerIdentityFor
 import com.lucasserafin94.iptvburo.ui.DownloadStateUi
 import com.lucasserafin94.iptvburo.ui.MovieDetailsUi
 import com.lucasserafin94.iptvburo.ui.capabilities.AndroidPlatformCapabilities
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
+import com.lucasserafin94.iptvburo.ui.designsystem.BuroAction
+import com.lucasserafin94.iptvburo.ui.designsystem.BuroActionBar
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButtonStyle
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroErrorState
@@ -74,6 +78,17 @@ import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 internal fun MovieDetailsScreen(
     fallbackTitle: String,
     fallbackArtworkUrl: String?,
+    /**
+     * The category this title was filed under, which is the only clue to its streaming service.
+     *
+     * Null when it came from somewhere with no category — a share link, say — and the platform
+     * badge is simply left off rather than guessed at.
+     */
+    categoryName: String?,
+    /** What the critics said, from OMDb. Null when no key is set. */
+    criticScores: CriticScores? = null,
+    /** The service's official logo from TMDb, when the lookup found one. */
+    providerLogoUrl: String? = null,
     details: MovieDetailsUi?,
     isLoading: Boolean,
     hasError: Boolean,
@@ -113,7 +128,6 @@ internal fun MovieDetailsScreen(
             backdropUrl?.let { url ->
                 ImageRequest.Builder(platformContext)
                     .data(url)
-                    .diskCachePolicy(CachePolicy.DISABLED)
                     .build()
             }
         }
@@ -203,12 +217,13 @@ internal fun MovieDetailsScreen(
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    // The score has moved out of this line and into the strip below, where it is
+                    // read as a figure rather than as one more fact among four.
                     val facts =
                         listOfNotNull(
                             details?.releaseDate,
                             details?.duration,
                             details?.genre,
-                            details?.rating?.let { "★ ${"%.1f".format(it)}" },
                         )
                     if (facts.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
@@ -217,6 +232,20 @@ internal fun MovieDetailsScreen(
                             color = BuroAccent,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+
+                    val provider =
+                        providerIdentityFor(categoryName)
+                            ?.copy(logoUrl = providerLogoUrl)
+                    if (details?.rating != null || provider != null) {
+                        Spacer(Modifier.height(if (portrait) 12.dp else 14.dp))
+                        RatingStrip(
+                            rating = details?.rating,
+                            voteCount = details?.voteCount,
+                            critics = criticScores,
+                            provider = provider,
+                            compact = portrait,
                         )
                     }
                 }
@@ -260,15 +289,17 @@ internal fun MovieDetailsScreen(
             }
 
             item("actions") {
-                // FlowRow, not Row. On a phone the first two buttons consume the full width, and
-                // in a plain Row everything after them was laid out past the right edge: Baixar and
-                // Trailer existed, were reported missing, and could not be reached by any gesture
-                // because the row did not scroll either. Wrapping keeps every action on screen at
-                // any width, and still forms a single line where there is room.
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
+                // Assistir keeps its full labelled button; everything else is a glyph in the bar
+                // below it.
+                //
+                // The six secondary actions were pill buttons in a FlowRow, each carrying its own
+                // word. In portrait that filled three lines before the synopsis started, so the page
+                // opened on a wall of controls rather than on the film. They are all small, instant
+                // actions taken rarely — the shape an icon suits.
+                //
+                // Nothing moved behind a menu: hiding Compartilhar or Trailer under a "⋮" would save
+                // the same space and cost the user any clue they exist.
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     BuroButton(
                         onClick = onPlay,
                         enabled = !isLoading && !isResolvingPlayback,
@@ -276,156 +307,133 @@ internal fun MovieDetailsScreen(
                         Icon(Icons.Default.PlayArrow, contentDescription = null)
                         Text("Assistir")
                     }
-                    BuroButton(
-                        onClick = onToggleFavorite,
-                        enabled = !isLoading,
-                        style = BuroButtonStyle.Secondary,
-                    ) {
-                        Icon(
-                            if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = null,
-                            tint = if (isFavorite) Color(0xFFE46C7A) else BuroTextPrimary,
-                        )
-                        // Both labels measured, the longer one drawn invisibly underneath. The two
-                        // words differ in width ("Favoritar" / "Favoritado"), so the button
-                        // resized on every tap and the FlowRow reflowed — the button appeared to
-                        // jump to the next line at the moment it was pressed.
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = stringResource(R.string.details_favorite_added),
-                                color = Color.Transparent,
-                                maxLines = 1,
-                            )
-                            Text(
-                                stringResource(
-                                    if (isFavorite) {
-                                        R.string.details_favorite_added
-                                    } else {
-                                        R.string.details_favorite_add
-                                    },
-                                ),
-                                maxLines = 1,
-                            )
-                        }
-                    }
-                    // The reminder, beside Favoritar and on the same terms.
-                    //
-                    // A reminder is about a title, not about a stream, so it stays available while
-                    // the full record loads and even when the source cannot resolve playback: what
-                    // is stored is the identity and the name, both of which the catalogue row
-                    // already carries.
-                    BuroButton(
-                        onClick = { onToggleReminder?.invoke() },
-                        enabled = onToggleReminder != null,
-                        style = BuroButtonStyle.Secondary,
-                    ) {
-                        Icon(
-                            if (hasReminder) {
-                                Icons.Default.Notifications
-                            } else {
-                                Icons.Default.NotificationsNone
-                            },
-                            contentDescription = null,
-                            tint = if (hasReminder) BuroAccent else BuroTextPrimary,
-                        )
-                        // Measured against the longer of the two labels, like Favoritar above: the
-                        // words differ in width, and a button that resizes on tap makes the whole
-                        // FlowRow reflow under the finger that pressed it.
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = stringResource(R.string.reminder_added),
-                                color = Color.Transparent,
-                                maxLines = 1,
-                            )
-                            Text(
-                                stringResource(
-                                    if (hasReminder) R.string.reminder_added else R.string.reminder_add,
-                                ),
-                                maxLines = 1,
-                            )
-                        }
-                    }
-                    if (offlineSupported) {
-                        BuroButton(
-                            onClick =
-                                when (downloadState) {
-                                    is DownloadStateUi.Running -> onCancelDownload
-                                    DownloadStateUi.Preparing -> onCancelDownload
-                                    DownloadStateUi.Completed -> onDeleteDownload
-                                    DownloadStateUi.Idle,
-                                    DownloadStateUi.Failed,
-                                    -> onDownload
-                                },
-                            enabled = !isLoading && !isResolvingPlayback,
-                            style = BuroButtonStyle.Secondary,
-                        ) {
-                            Icon(
-                                imageVector =
-                                    when (downloadState) {
-                                        DownloadStateUi.Completed -> Icons.Default.DownloadDone
-                                        else -> Icons.Default.Download
-                                    },
-                                contentDescription = null,
-                                tint =
-                                    when (downloadState) {
-                                        DownloadStateUi.Failed -> BuroDanger
-                                        else -> BuroTextPrimary
-                                    },
-                            )
-                            Text(downloadState.label())
-                        }
-                    }
-                    // Always drawn, disabled when the provider gave no trailer id.
-                    //
-                    // Reported from a phone: the action buttons "behave differently on every
-                    // film". They did — Trailer and Baixar appeared only under their conditions,
-                    // and a FlowRow reflows everything after a missing one, so Compartilhar moved
-                    // between titles and sometimes wrapped onto a second line. Keeping the slot
-                    // and greying it out costs one dull button and buys a row that never moves.
+
                     val trailerId = details?.youtubeTrailerId
-                    BuroButton(
-                        onClick = {
-                            trailerId?.let { id ->
-                                val uri = Uri.parse("https://www.youtube.com/watch?v=$id")
-                                runCatching {
-                                    androidContext.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    BuroActionBar(
+                        actions =
+                            buildList {
+                                add(
+                                    BuroAction(
+                                        icon =
+                                            if (isFavorite) {
+                                                Icons.Default.Favorite
+                                            } else {
+                                                Icons.Default.FavoriteBorder
+                                            },
+                                        // The label follows the state, as the pill's did: the button
+                                        // says what the title *is*, not what pressing would do.
+                                        label =
+                                            stringResource(
+                                                if (isFavorite) {
+                                                    R.string.details_favorite_added
+                                                } else {
+                                                    R.string.details_favorite_add
+                                                },
+                                            ),
+                                        onClick = onToggleFavorite,
+                                        enabled = !isLoading,
+                                        active = isFavorite,
+                                        activeTint = Color(0xFFE46C7A),
+                                    ),
+                                )
+                                add(
+                                    BuroAction(
+                                        icon =
+                                            if (hasReminder) {
+                                                Icons.Default.Notifications
+                                            } else {
+                                                Icons.Default.NotificationsNone
+                                            },
+                                        label =
+                                            stringResource(
+                                                if (hasReminder) {
+                                                    R.string.reminder_added
+                                                } else {
+                                                    R.string.reminder_add
+                                                },
+                                            ),
+                                        onClick = { onToggleReminder?.invoke() },
+                                        // A reminder is about a title rather than a stream, so it
+                                        // stays available while the full record loads.
+                                        enabled = onToggleReminder != null,
+                                        active = hasReminder,
+                                        activeTint = BuroAccent,
+                                    ),
+                                )
+                                if (offlineSupported) {
+                                    add(
+                                        BuroAction(
+                                            icon =
+                                                when (downloadState) {
+                                                    DownloadStateUi.Completed -> Icons.Default.DownloadDone
+                                                    else -> Icons.Default.Download
+                                                },
+                                            label = downloadState.label(),
+                                            onClick =
+                                                when (downloadState) {
+                                                    is DownloadStateUi.Running -> onCancelDownload
+                                                    DownloadStateUi.Preparing -> onCancelDownload
+                                                    DownloadStateUi.Completed -> onDeleteDownload
+                                                    DownloadStateUi.Idle,
+                                                    DownloadStateUi.Failed,
+                                                    -> onDownload
+                                                },
+                                            enabled = !isLoading && !isResolvingPlayback,
+                                            active = downloadState == DownloadStateUi.Completed,
+                                            activeTint =
+                                                if (downloadState == DownloadStateUi.Failed) {
+                                                    BuroDanger
+                                                } else {
+                                                    null
+                                                },
+                                        ),
+                                    )
                                 }
-                            }
-                        },
-                        enabled = trailerId != null,
-                        style = BuroButtonStyle.Secondary,
-                    ) {
-                        Text(stringResource(R.string.details_trailer))
-                    }
-                    // Beside Trailer, and deliberately outside the block above: a film with no
-                    // trailer still has something to share, and nesting this inside that `let`
-                    // would hide sharing on every title the provider gave no trailer id for.
-                    //
-                    // Last in the row rather than beside Favoritar, where it was: five buttons do
-                    // not fit one line on a phone, so the FlowRow wrapped and Compartilhar landed
-                    // on a second line that reads as the button being absent.
-                    // Enabled while the full record is still loading: the title and year come
-                    // from the catalogue row, so a share is complete without it.
-                    BuroButton(
-                        onClick = { onShare?.invoke() },
-                        enabled = onShare != null,
-                        style = BuroButtonStyle.Secondary,
-                    ) {
-                        Icon(Icons.Default.Share, contentDescription = null)
-                        Text(stringResource(R.string.details_share))
-                    }
-                    // Beside Compartilhar, on the same terms: what travels is the title's
-                    // identity, which the catalogue row already provides.
-                    BuroButton(
-                        onClick = { onCast?.invoke() },
-                        enabled = onCast != null,
-                        style = BuroButtonStyle.Secondary,
-                    ) {
-                        Icon(Icons.Default.Cast, contentDescription = null)
-                        Text(stringResource(R.string.cast_action))
-                    }
+                                // Always present, disabled when the provider gave no trailer id.
+                                // Reported from a phone: the buttons "behave differently on every
+                                // film" — because a slot that appears only under its condition moves
+                                // everything after it.
+                                add(
+                                    BuroAction(
+                                        icon = Icons.Default.PlayCircle,
+                                        label = stringResource(R.string.details_trailer),
+                                        onClick = {
+                                            trailerId?.let { id ->
+                                                val uri =
+                                                    Uri.parse("https://www.youtube.com/watch?v=$id")
+                                                runCatching {
+                                                    androidContext.startActivity(
+                                                        Intent(Intent.ACTION_VIEW, uri),
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        enabled = trailerId != null,
+                                    ),
+                                )
+                                // Enabled while the full record loads: the title and year come from
+                                // the catalogue row, so a share is complete without it.
+                                add(
+                                    BuroAction(
+                                        icon = Icons.Default.Share,
+                                        label = stringResource(R.string.details_share),
+                                        onClick = { onShare?.invoke() },
+                                        enabled = onShare != null,
+                                    ),
+                                )
+                                add(
+                                    BuroAction(
+                                        icon = Icons.Default.Cast,
+                                        label = stringResource(R.string.cast_action),
+                                        onClick = { onCast?.invoke() },
+                                        enabled = onCast != null,
+                                    ),
+                                )
+                            },
+                    )
                 }
             }
+
 
             when {
                 isLoading -> item("loading") { Text("Carregando ficha completa…", color = BuroTextSecondary) }

@@ -37,6 +37,14 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.runtime.CompositionLocalProvider
+import com.lucasserafin94.iptvburo.ui.designsystem.LocalProviderLogos
+import androidx.compose.foundation.horizontalScroll
+import com.lucasserafin94.iptvburo.ui.designsystem.ProviderIdentity
+import com.lucasserafin94.iptvburo.ui.designsystem.ProviderMark
+import com.lucasserafin94.iptvburo.ui.designsystem.providerIdentityFor
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
@@ -44,6 +52,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -86,9 +95,13 @@ import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.HeartBroken
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Router
@@ -107,6 +120,7 @@ import androidx.tv.material3.Text
 import com.lucasserafin94.iptvburo.BuildConfig
 import kotlinx.coroutines.delay
 import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.ui.BootStageUi
 import com.lucasserafin94.iptvburo.ui.AppContent
 import com.lucasserafin94.iptvburo.domain.model.CatalogueFilter
 import com.lucasserafin94.iptvburo.domain.model.CatalogueLayout
@@ -134,12 +148,14 @@ import com.lucasserafin94.iptvburo.ui.localization.AppLocaleController
 import com.lucasserafin94.iptvburo.ui.SourceImportMethod
 import com.lucasserafin94.iptvburo.ui.SourceUi
 import com.lucasserafin94.iptvburo.ui.SubscriptionOfferUi
+import com.lucasserafin94.iptvburo.ui.ProviderShelfUi
 import com.lucasserafin94.iptvburo.ui.SubscriptionTitleUi
 import com.lucasserafin94.iptvburo.ui.SubscriptionsKindUi
 import com.lucasserafin94.iptvburo.ui.StalkerFailureUi
 import com.lucasserafin94.iptvburo.ui.XtreamImportStageUi
 import com.lucasserafin94.iptvburo.ui.WatchHistoryUi
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
+import com.lucasserafin94.iptvburo.ui.designsystem.BuroMarqueeText
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButtonStyle
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroEmptyState
@@ -155,12 +171,14 @@ import com.lucasserafin94.iptvburo.ui.home.LivingHomeScreen
 import com.lucasserafin94.iptvburo.ui.navigation.BuroRibbon
 import com.lucasserafin94.iptvburo.ui.capabilities.AndroidPlatformCapabilities
 import com.lucasserafin94.iptvburo.ui.security.SecureActivityWindowEffect
+import com.lucasserafin94.iptvburo.domain.model.CacheBudget
+import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
+import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
 import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.ContentKind
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
-import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
 import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
@@ -188,13 +206,46 @@ fun AppShellScreen(
     onSearch: (String) -> Unit,
     onPlayMovie: () -> Unit,
     onToggleMovieFavorite: () -> Unit,
+    /** Drops a title from the favourites list itself, without opening it first. */
+    onToggleChannelFavorite: (ChannelUi) -> Unit,
     /** Marks or unmarks whichever details page is open. */
     onToggleReminder: () -> Unit,
+    /** Drops one reminder from the reminders page, by identity rather than by row. */
+    onRemoveReminder: (ContentIdentity) -> Unit,
+    /** Turns the daily notice on or off. The marks themselves are kept either way. */
+    onSetReminderNotify: (Boolean) -> Unit,
+    /** Moves the daily notice to another hour. */
+    onSetReminderTime: (Int, Int) -> Unit,
     /** Sends the open title to the system share sheet. */
     onShareTitle: (ShareRequestUi) -> Unit,
     /** Opens the sheet that sends the open title to a screen on the same network. */
     onCastTitle: () -> Unit,
+    /** Keeps the top Descobrir card, which files it as a favourite. */
+    onDiscoverKeep: (ChannelUi) -> Unit,
+    /** Skips the top Descobrir card. Remembered for this session only. */
+    onDiscoverSkip: (ChannelUi) -> Unit,
+    /** Deals a fresh hand once the deck runs out. */
+    onDiscoverDealAgain: () -> Unit,
+    /** Starts listening for a computer, and publishes the code it must be told. */
+    onStartCastReceiver: () -> Unit,
+    onStopCastReceiver: () -> Unit,
+    /** Opens one streaming service's whole catalogue, from the end of its shelf. */
+    onSubscriptionSeeMore: (ProviderShelfUi) -> Unit,
+    onSubscriptionCloseExpanded: () -> Unit,
+    /** Opening the bell marks everything in it read. */
+    onMarkNotificationsRead: () -> Unit,
+    onDismissNotification: (String) -> Unit,
+    onClearNotifications: () -> Unit,
+    /** How much artwork this device may keep, and the download that fills it. */
+    onChooseCacheBudget: (Int) -> Unit,
+    onDeclineCacheOffer: () -> Unit,
+    onStartCacheFill: () -> Unit,
+    onStopCacheFill: () -> Unit,
+    onRefreshCacheFill: () -> Unit,
+    onClearCache: () -> Unit,
     onCastSearchAgain: () -> Unit,
+    /** Reaches a screen by typed address when the search found nothing. */
+    onCastConnectToAddress: suspend (String) -> Boolean = { false },
     onCastChoose: (CastTarget) -> Unit,
     onCastBack: () -> Unit,
     onCastSend: (String) -> Unit,
@@ -228,6 +279,8 @@ fun AppShellScreen(
     onOpenPurchase: (String) -> Unit,
     onRedeemLicense: (String) -> Unit,
     onSaveSharedTmdbKey: (String) -> Unit,
+    onSaveCriticsKey: (String) -> Unit = {},
+    criticsKeyConfigured: Boolean = false,
     onSelectSubscriptionKind: (SubscriptionsKindUi) -> Unit,
     onSelectSubscriptionRegion: (String) -> Unit,
     onOpenSubscriptionTitle: (SubscriptionTitleUi) -> Unit,
@@ -267,6 +320,25 @@ fun AppShellScreen(
         section.isRibbonDestination(offlineSupported)
     }
 
+    /**
+     * Where the catalogue list was scrolled to, kept across opening a title.
+     *
+     * Hoisted above the `when` below on purpose. `ChannelsContent` leaves composition entirely when
+     * a film's details replace it, so a `rememberLazyGridState` inside it would be thrown away —
+     * which is why returning from a title used to drop the viewer back at the top of the list after
+     * they had scrolled a long way down.
+     *
+     * Keyed by the list's identity rather than remembered once: a different category is a different
+     * list, and carrying one list's offset into another would land somebody in the middle of
+     * something they had not scrolled at all.
+     */
+    val channelsKey = (state.content as? AppContent.Channels)?.let { channels ->
+        "${channels.sourceId}:${channels.categoryId}:${channels.contentType}"
+    }
+    val rememberedChannelsGridState = rememberSaveable(channelsKey, saver = LazyGridState.Saver) {
+        LazyGridState()
+    }
+
     BackHandler(enabled = showMobileNavigation) { showMobileNavigation = false }
 
     Box(
@@ -291,6 +363,9 @@ fun AppShellScreen(
                 SeriesDetailsScreen(
                     offlineSupported = offlineSupported,
                     fallbackTitle = content.fallbackTitle,
+                    categoryName = content.categoryName,
+                    providerLogoUrl = state.openTitleProviderLogoUrl,
+                    criticScores = state.openTitleCriticScores,
                     details = state.seriesDetails,
                     isLoading = state.isSeriesLoading,
                     hasError = state.hasSeriesError,
@@ -358,6 +433,9 @@ fun AppShellScreen(
                     offlineSupported = offlineSupported,
                     fallbackTitle = content.fallbackTitle,
                     fallbackArtworkUrl = content.fallbackArtworkUrl,
+                    categoryName = content.categoryName,
+                    providerLogoUrl = state.openTitleProviderLogoUrl,
+                    criticScores = state.openTitleCriticScores,
                     details = state.movieDetails,
                     isLoading = state.isMovieLoading,
                     hasError = state.hasMovieError,
@@ -414,6 +492,12 @@ fun AppShellScreen(
                         profile = state.activeProfile,
                         onOpenMenu = { showMobileNavigation = true },
                         onOpenProfiles = { onSelectSection(AppSection.PROFILE) },
+                        // Null until there is a profile: the centre is per profile, and a bell on a
+                        // boot screen would be counting somebody else's news.
+                        notifications = state.notifications.takeIf { state.activeProfile != null },
+                        onMarkNotificationsRead = onMarkNotificationsRead,
+                        onDismissNotification = onDismissNotification,
+                        onClearNotifications = onClearNotifications,
                         // Home only. The catalogue screens carry their own refresh in the header,
                         // and a second one in the bar would be two buttons for one action.
                         onRefresh =
@@ -446,11 +530,16 @@ fun AppShellScreen(
                         .fillMaxWidth()
                         .weight(1f),
                 ) {
+                    // Provided once so every badge below — home rails, category tiles, catalogue
+                    // cards — draws the service's real mark without the map being threaded through
+                    // each composable on the way there.
+                    CompositionLocalProvider(LocalProviderLogos provides state.providerLogos) {
                     when (content) {
                         AppContent.Home -> LivingHomeScreen(
                             sources = state.sources.map(SourceUi::toHomeSummary),
                             catalogItems = state.homeItems,
                             continueWatching = state.continueWatching,
+                            reminders = state.reminders,
                             streamingShelves = state.subscriptions.shelves,
                             synopses = state.heroSynopses,
                             initialFocusedItemId =
@@ -530,6 +619,7 @@ fun AppShellScreen(
                             onRefresh = onRefreshCatalog,
                             onBack = onBack,
                             onOpenCategory = onOpenCategory,
+                            providerLogos = state.providerLogos,
                         )
 
                         is AppContent.Channels -> ChannelsContent(
@@ -573,9 +663,15 @@ fun AppShellScreen(
                             onRetry = onRetryCatalog,
                             onRefresh = onRefreshCatalog,
                             onLoadMore = onLoadMore,
+                            gridState = rememberedChannelsGridState,
+                            // Filmes, Séries and TV ao vivo each list one kind, so the cards there
+                            // drop the label the section header already carries.
+                            impliedContentType = content.contentType,
+                            providerLogos = state.providerLogos,
                         )
 
                         AppContent.Favorites -> MyBuroContent(
+                            onRemoveFavorite = onToggleChannelFavorite,
                             favorites = state.favoriteItems,
                             continueWatching = state.continueWatching,
                             history = state.watchHistory,
@@ -621,12 +717,64 @@ fun AppShellScreen(
                             onBack = onBack,
                         )
 
+                        AppContent.Discover -> DiscoverScreen(
+                            deck = state.discoverDeck,
+                            detailsFor = { channel ->
+                                DiscoverCardDetails(
+                                    // The synopsis the home rail already fetched for its banner,
+                                    // reused rather than fetched again: it is the same title, and
+                                    // one metadata call per card would be fifteen per hand.
+                                    plot = state.heroSynopses[channel.id],
+                                    genres = channel.categoryName?.let(::listOf).orEmpty(),
+                                    rating = channel.rating,
+                                    year = channel.year,
+                                )
+                            },
+                            isLoading = state.isDiscoverLoading,
+                            hasCatalogue = state.sources.isNotEmpty(),
+                            onKeep = onDiscoverKeep,
+                            onSkip = onDiscoverSkip,
+                            onDealAgain = onDiscoverDealAgain,
+                            onBack = onBack,
+                            dealtCount = state.discoverDealtCount,
+                        )
+
+                        AppContent.Reminders -> RemindersScreen(
+                            reminders = state.reminders,
+                            notify = state.reminderNotify,
+                            time = state.reminderTime,
+                            onSetNotify = onSetReminderNotify,
+                            onSetTime = onSetReminderTime,
+                            onRemove = onRemoveReminder,
+                            onBack = onBack,
+                        )
+
                         AppContent.Subscriptions -> SubscriptionsScreen(
                             state = state.subscriptions,
                             onSelectKind = onSelectSubscriptionKind,
                             onSelectTitle = onOpenSubscriptionTitle,
                             onBackToShelves = onCloseSubscriptionTitle,
                             onOpenOffer = onOpenSubscriptionOffer,
+                            onSeeMore = onSubscriptionSeeMore,
+                            onCloseExpanded = onSubscriptionCloseExpanded,
+                            onToggleReminder = onToggleReminder,
+                            // Keyed by identity like every other reminder, so a title marked here
+                            // and the same film later imported into a playlist are one mark.
+                            hasReminder =
+                                state.subscriptions.selected?.let { selected ->
+                                    // The year straight from the shelf rather than parsed out of a
+                                    // release date: this row carries it as a number already, and
+                                    // the view model marks with exactly the same one.
+                                    ContentIdentity.of(
+                                        if (selected.isSeries) {
+                                            ContentKind.SERIES
+                                        } else {
+                                            ContentKind.MOVIE
+                                        },
+                                        selected.title,
+                                        selected.year,
+                                    ).key in state.reminderKeys
+                                } == true,
                         )
 
                         AppContent.Profiles -> ProfilePickerScreen(
@@ -654,13 +802,28 @@ fun AppShellScreen(
                             redemption = state.redemption,
                             sharedTmdbKeyConfigured = state.sharedTmdbKeyConfigured,
                             onSaveSharedTmdbKey = onSaveSharedTmdbKey,
+                            onSaveCriticsKey = onSaveCriticsKey,
+                            criticsKeyConfigured = state.criticsKeyConfigured,
                             onSelectLanguage = onSelectLanguage,
                             guard = guard,
+                            castReceiverCode = state.castReceiverCode,
+                            isCastReceiverOn = state.isCastReceiverOn,
+                            onStartCastReceiver = onStartCastReceiver,
+                            onStopCastReceiver = onStopCastReceiver,
+                            cacheBudget = state.cacheBudget,
+                            cacheBytesUsed = state.cacheBytesUsed,
+                            cacheProgress = state.cacheProgress,
+                            onChooseCacheBudget = onChooseCacheBudget,
+                            onStartCacheFill = onStartCacheFill,
+                            onStopCacheFill = onStopCacheFill,
+                            onRefreshCacheFill = onRefreshCacheFill,
+                            onClearCache = onClearCache,
                         )
                         is AppContent.Player,
                         is AppContent.Story,
                         is AppContent.SeriesDetails,
                         -> Unit
+                    }
                     }
                 }
             }
@@ -685,6 +848,30 @@ fun AppShellScreen(
         }
     }
 
+    // The first-run cache offer.
+    //
+    // Held back until a profile is chosen and the catalogue is ready: asking somebody to size a
+    // download of "your list" before they have one is asking about nothing, and the estimate would
+    // be drawn from an empty library. By the time the app is browsable the question is concrete.
+    //
+    // Not dismissible by tapping away: both answers are real and are remembered, so a stray tap
+    // outside must not be recorded as a decision — the viewer has to pick one or the other.
+    if (state.cacheChoicePending && state.activeProfile != null && state.bootStage == BootStageUi.READY) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = {},
+            properties =
+                androidx.compose.ui.window.DialogProperties(
+                    dismissOnBackPress = false,
+                    dismissOnClickOutside = false,
+                ),
+        ) {
+            CacheFirstRunOffer(
+                onAccept = onChooseCacheBudget,
+                onDecline = onDeclineCacheOffer,
+            )
+        }
+    }
+
     // The cast sheet, whenever it is not Idle.
     //
     // In a Dialog rather than inline on the details page: discovery, choosing a screen and typing a
@@ -705,6 +892,7 @@ fun AppShellScreen(
                     onBack = onCastBack,
                     onSend = onCastSend,
                     onClose = onCastClose,
+                    onConnectToAddress = onCastConnectToAddress,
                 )
             }
         }
@@ -773,6 +961,7 @@ private fun AppSection.isRibbonDestination(offlineSupported: Boolean): Boolean =
         // decision, taken from the capability, so this must not re-decide it from a stale flag.
         AppSection.CONTINUE_WATCHING,
         AppSection.HISTORY,
+        AppSection.REMINDERS,
         AppSection.SUBSCRIPTIONS,
         AppSection.SOURCES,
         AppSection.SETTINGS,
@@ -785,6 +974,11 @@ private fun MobileAppBar(
     profile: ProfileUi?,
     onOpenMenu: () -> Unit,
     onOpenProfiles: () -> Unit,
+    /** What the bell holds. Null draws no bell, which is what a profile-less boot wants. */
+    notifications: NotificationCentre? = null,
+    onMarkNotificationsRead: () -> Unit = {},
+    onDismissNotification: (String) -> Unit = {},
+    onClearNotifications: () -> Unit = {},
     /** Null where the screen already carries its own refresh, so there is never one twice. */
     onRefresh: (() -> Unit)? = null,
     /** Shows a spinner in place of the icon while the rails are being rebuilt. */
@@ -873,6 +1067,16 @@ private fun MobileAppBar(
                     }
                 }
             }
+        }
+        // Beside the profile rather than in the drawer: the bell says whether there is anything to
+        // look at, and a bell nobody can see says nothing at all.
+        notifications?.let { centre ->
+            NotificationBell(
+                centre = centre,
+                onMarkAllRead = onMarkNotificationsRead,
+                onDismiss = onDismissNotification,
+                onClearAll = onClearNotifications,
+            )
         }
         profile?.let { selectedProfile ->
             FocusSurface(
@@ -1053,9 +1257,16 @@ private fun mobileDestinations(
         add(MobileDestination(AppSection.LIVE, Icons.Default.LiveTv))
         add(MobileDestination(AppSection.MOVIES, Icons.Default.Movie))
         add(MobileDestination(AppSection.SERIES, Icons.Default.VideoLibrary))
+        // Above Meu BURO rather than below: Descobrir is what fills the favourites list, so it
+        // belongs beside the catalogue it draws from rather than after the shelf it feeds.
+        add(MobileDestination(AppSection.DISCOVER, Icons.Default.Explore))
         add(MobileDestination(AppSection.MY_BURO, Icons.Default.Favorite))
         add(MobileDestination(AppSection.CONTINUE_WATCHING, Icons.Default.PlayCircle))
         add(MobileDestination(AppSection.HISTORY, Icons.Default.History))
+        // Beside Histórico rather than inside Settings: the destination answers "what did I mark",
+        // which is a library question, and the daily-notice controls ride along on that page
+        // because the only reason to open it is the same list they act on.
+        add(MobileDestination(AppSection.REMINDERS, Icons.Default.Notifications))
         // The phone drawer is the primary navigation on a small screen, so a destination missing
         // here is missing outright — this is where Assinaturas has to appear once it is real.
         if (subscriptionsVisible) {
@@ -1156,6 +1367,7 @@ private fun AppSection.ribbonLabelResource(): Int =
         AppSection.MY_BURO -> R.string.buro_nav_my_buro
         AppSection.CONTINUE_WATCHING -> R.string.nav_continue_watching
         AppSection.HISTORY -> R.string.nav_history
+        AppSection.REMINDERS -> R.string.nav_reminders
         AppSection.SUBSCRIPTIONS -> R.string.nav_subscriptions
         AppSection.DOWNLOADS -> R.string.buro_nav_downloads
         AppSection.SEARCH -> R.string.buro_nav_search
@@ -1773,6 +1985,8 @@ private fun CategoriesContent(
     onRefresh: () -> Unit,
     onBack: () -> Unit,
     onOpenCategory: (CategoryUi) -> Unit,
+    /** The services' official logos, by service name. Empty until the directory loads. */
+    providerLogos: Map<String, String> = emptyMap(),
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val compactPortrait = maxWidth < 600.dp && maxHeight >= maxWidth
@@ -1786,6 +2000,31 @@ private fun CategoriesContent(
         ) {
             ScreenHeader(title = title, onBack = onBack, onRefresh = onRefresh)
             Spacer(Modifier.height(if (compactPortrait) 18.dp else 24.dp))
+
+            // The services this list actually holds, as a row of marks to jump straight to one.
+            //
+            // Built from the categories rather than from a fixed list of services: a provider that
+            // files nothing under Netflix should not offer a Netflix shortcut that leads nowhere.
+            // Absent entirely when the provider organises by genre, which is the common case.
+            val platforms =
+                remember(categories, providerLogos) {
+                    categories
+                        .mapNotNull { category ->
+                            category.id ?: return@mapNotNull null
+                            providerIdentityFor(category.name)?.let { identity ->
+                                identity.copy(logoUrl = providerLogos[identity.label]) to category
+                            }
+                        }
+                        .distinctBy { (identity, _) -> identity.label }
+                }
+            if (platforms.isNotEmpty()) {
+                PlatformShortcuts(
+                    platforms = platforms,
+                    compact = compactPortrait,
+                    onOpenCategory = onOpenCategory,
+                )
+                Spacer(Modifier.height(if (compactPortrait) 16.dp else 22.dp))
+            }
 
             when {
                 isLoading -> CatalogLoadingState()
@@ -1880,19 +2119,18 @@ private fun CategoriesContent(
                                             )
                                         }
                                         Spacer(Modifier.weight(1f))
-                                        category.providerBadge()?.let { provider ->
-                                            Text(
-                                                text = provider.monogram,
-                                                color = BuroTextPrimary,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Black,
-                                                modifier =
-                                                    Modifier
-                                                        .clip(CircleShape)
-                                                        .background(BuroCanvas.copy(alpha = 0.68f))
-                                                        .padding(horizontal = 9.dp, vertical = 5.dp),
-                                            )
-                                        }
+                                        providerIdentityFor(category.name.takeIf { category.id != null })
+                                            ?.let { provider ->
+                                                // The service's real mark when the directory has
+                                                // one; its monogram on the brand colour until then.
+                                                ProviderMark(
+                                                    provider =
+                                                        provider.copy(
+                                                            logoUrl = providerLogos[provider.label],
+                                                        ),
+                                                    size = if (compactPortrait) 26.dp else 30.dp,
+                                                )
+                                            }
                                     }
                                     Spacer(Modifier.height(7.dp))
                                     Text(
@@ -1947,7 +2185,6 @@ private fun CategoryArtwork(
                     .data(artworkUrl)
                     // Provider artwork may contain a short-lived URL. It must not survive in a
                     // disk cache after the source is disconnected.
-                    .diskCachePolicy(CachePolicy.DISABLED)
                     .build(),
             contentDescription = null,
             modifier = modifier,
@@ -1985,34 +2222,6 @@ private fun CategoryUi.categoryArtworkTile(contentType: CatalogContentType?): Ca
     }
 }
 
-private data class ProviderBadge(
-    val monogram: String,
-    val label: String,
-)
-
-private fun CategoryUi.providerBadge(): ProviderBadge? {
-    if (id == null) return null
-    val normalized = name.lowercase()
-    return when {
-        "netflix" in normalized -> ProviderBadge("N", "Netflix")
-        "amazon" in normalized || "prime video" in normalized -> ProviderBadge("AP", "Prime Video")
-        "disney" in normalized -> ProviderBadge("D+", "Disney+")
-        "globoplay" in normalized -> ProviderBadge("G", "Globoplay")
-        "discovery" in normalized -> ProviderBadge("D", "Discovery+")
-        MAX_PROVIDER.containsMatchIn(normalized) -> ProviderBadge("M", "Max")
-        else -> null
-    }
-}
-
-/**
- * "Max" as a whole word, compiled once.
- *
- * Bounded rather than a plain `in` test so a category called "Cinemax" or "Max Series" is not
- * badged as the streaming service. It was written inline, which compiled the pattern afresh for
- * every category on every recomposition of the list — the most expensive line on a screen whose
- * whole job is to scroll smoothly.
- */
-private val MAX_PROVIDER = Regex("(^|[ |])max([ |]|$)")
 
 @Composable
 private fun ChannelsContent(
@@ -2034,6 +2243,16 @@ private fun ChannelsContent(
     /** Filter state and the pickers that change it. Absent on screens with nothing to narrow. */
     filterBar: (@Composable () -> Unit)? = null,
     layout: CatalogueLayout = CatalogueLayout.POSTER,
+    /** Hoisted by the caller so the scroll position survives opening a title. */
+    gridState: LazyGridState,
+    /**
+     * What this whole screen is a list of, when it is a list of one thing.
+     *
+     * Passed down to the cards so they can drop a label the header has already given.
+     */
+    impliedContentType: CatalogContentType? = null,
+    /** The services' official logos, by service name. */
+    providerLogos: Map<String, String> = emptyMap(),
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val compactPortrait = maxWidth < 600.dp && maxHeight >= maxWidth
@@ -2092,6 +2311,7 @@ private fun ChannelsContent(
                 )
 
                 else -> LazyVerticalGrid(
+                    state = gridState,
                     // The chosen layout decides the column width: posters are browsed, compact is
                     // scanned, and a list gives the name the room where the name is the meaning.
                     columns =
@@ -2128,6 +2348,8 @@ private fun ChannelsContent(
                             onOpenChannel = onOpenChannel,
                             enabled = !isResolvingPlayback,
                             layout = layout,
+                            impliedContentType = impliedContentType,
+                            providerLogos = providerLogos,
                         )
                     }
                     val footerState =
@@ -2190,6 +2412,8 @@ private fun ChannelsContent(
 
 @Composable
 private fun MyBuroContent(
+    /** Drops a title from favourites, from the list itself rather than from its details page. */
+    onRemoveFavorite: ((ChannelUi) -> Unit)? = null,
     favorites: List<ChannelUi>,
     continueWatching: List<ContinueWatchingUi>,
     history: List<WatchHistoryUi>,
@@ -2279,6 +2503,7 @@ private fun MyBuroContent(
                             progress = null,
                             status = movie.categoryName.orEmpty(),
                             onOpen = { onOpenChannel(movie) },
+                            onRemove = onRemoveFavorite?.let { remove -> { remove(movie) } },
                         )
                     }
                 }
@@ -2335,6 +2560,15 @@ private fun MyBuroMediaRow(
     progress: Float?,
     status: String,
     onOpen: () -> Unit,
+    /**
+     * Drops this title from favourites, offered only where that is what the list is.
+     *
+     * Null on Continue assistindo and Histórico, which describe what happened rather than what was
+     * chosen — there is nothing to undo there. Reported as missing from Favourites, where the only
+     * way to unfavourite something was to open it and find the heart: obvious once you know it,
+     * and invisible until then, on the one screen whose whole job is managing that list.
+     */
+    onRemove: (() -> Unit)? = null,
 ) {
     FocusSurface(
         onClick = onOpen,
@@ -2375,6 +2609,28 @@ private fun MyBuroMediaRow(
                     }
                 }
             }
+            onRemove?.let { remove ->
+                Spacer(Modifier.width(6.dp))
+                // Its own focus target inside the row, so a remote or a keyboard can reach it —
+                // the row itself opens the title, and a control that only a finger can hit would
+                // be missing on a television.
+                FocusSurface(
+                    onClick = remove,
+                    modifier = Modifier.size(44.dp),
+                    shape = CircleShape,
+                    backgroundColor = Color.Transparent,
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        // A broken heart rather than a bin: this removes a mark, it does not delete
+                        // the title, and a bin on a row of films suggests otherwise.
+                        imageVector = Icons.Default.HeartBroken,
+                        contentDescription = stringResource(R.string.favorites_remove),
+                        tint = BuroTextSecondary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
         }
     }
 }
@@ -2390,7 +2646,6 @@ private fun CatalogArtwork(
             model =
                 ImageRequest.Builder(LocalPlatformContext.current)
                     .data(url)
-                    .diskCachePolicy(CachePolicy.DISABLED)
                     .build(),
             contentDescription = null,
             modifier = modifier.clip(RoundedCornerShape(8.dp)),
@@ -2697,11 +2952,24 @@ private fun ChannelCard(
      * and COMPACT was indistinguishable from POSTER. The shape has to follow the choice.
      */
     layout: CatalogueLayout = CatalogueLayout.POSTER,
+    /**
+     * What the surrounding screen already says everything here is.
+     *
+     * Inside Filmes every card is a film, so stamping "FILMES" on all of them tells the viewer
+     * something the header told them already and covers a corner of artwork to do it. Null for a
+     * mixed list — search results, a source's whole catalogue — where the label is the only thing
+     * distinguishing a film from a channel.
+     */
+    impliedContentType: CatalogContentType? = null,
+    /** The services' official logos, by service name. Empty until the directory loads. */
+    providerLogos: Map<String, String> = emptyMap(),
 ) {
     val isPoster =
         channel.contentType == CatalogContentType.MOVIE ||
             channel.contentType == CatalogContentType.SERIES ||
             channel.contentType == CatalogContentType.EPISODE
+    // An episode inside a series list is still worth marking, so only an exact match is redundant.
+    val showsTypeBadge = channel.contentType != impliedContentType
     val artworkRequest =
         channel.logoUrl
             ?.takeIf(String::isNotBlank)
@@ -2709,7 +2977,6 @@ private fun ChannelCard(
                 ImageRequest.Builder(LocalPlatformContext.current)
                     .data(artworkUrl)
                     // Signed provider artwork stays in memory and is never written to Coil's disk cache.
-                    .diskCachePolicy(CachePolicy.DISABLED)
                     .build()
             }
     FocusSurface(
@@ -2782,7 +3049,17 @@ private fun ChannelCard(
             return@FocusSurface
         }
 
-        Box(modifier = Modifier.fillMaxSize()) {
+        // Artwork above, caption below, matching the home screen.
+        //
+        // The overlay version ran a gradient over the bottom half of every poster and wrote the
+        // title across it — on the grid whose whole purpose is browsing by cover. The caption has
+        // its own room now and the artwork is whole.
+        Column(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -2821,57 +3098,75 @@ private fun ChannelCard(
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(if (isPoster) 0.56f else 0.72f)
-                    .align(Alignment.BottomCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, BuroCanvas.copy(alpha = 0.96f)),
-                        ),
-                    ),
-            )
+            // The streaming service wins the corner when the category names one.
+            //
+            // Inside "Series | Netflix" every card is Netflix, so the service badge is the useful
+            // thing to show and the type label is the redundant one — the reverse of a mixed list.
+            val provider =
+                providerIdentityFor(channel.categoryName)
+                    ?.let { identity -> identity.copy(logoUrl = providerLogos[identity.label]) }
+            if (provider != null) {
+                ProviderMark(
+                    provider = provider,
+                    size = 28.dp,
+                    modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
+                )
+            } else if (showsTypeBadge) {
+                Text(
+                    text = channel.contentType.catalogLabel(),
+                    color =
+                        if (channel.contentType == CatalogContentType.LIVE) {
+                            BuroAccent
+                        } else {
+                            BuroTextPrimary
+                        },
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(12.dp)
+                        .clip(CircleShape)
+                        .background(BuroCanvas.copy(alpha = 0.74f))
+                        .padding(horizontal = 9.dp, vertical = 5.dp),
+                )
+            }
 
-            Text(
-                text = channel.contentType.catalogLabel(),
-                color = if (channel.contentType == CatalogContentType.LIVE) BuroAccent else BuroTextPrimary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(12.dp)
-                    .clip(CircleShape)
-                    .background(BuroCanvas.copy(alpha = 0.74f))
-                    .padding(horizontal = 9.dp, vertical = 5.dp),
-            )
+        }
 
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .padding(if (isPoster) 16.dp else 14.dp),
+                    .padding(top = 7.dp, start = 2.dp, end = 2.dp, bottom = 2.dp),
             ) {
-                Text(
+                // One line, which scrolls itself while this card is focused or pressed.
+                //
+                // The caption has fixed room, so a two-line title would push the category out. A
+                // long name is held to one line and reveals the rest by scrolling — "Desastre
+                // Total: Festival Astrow…" is how a grid of covers stops being tellable apart.
+                BuroMarqueeText(
                     text = channel.name,
+                    active = isFocused,
                     color = BuroTextPrimary,
-                    fontSize = if (isPoster) 17.sp else 15.sp,
-                    lineHeight = if (isPoster) 21.sp else 18.sp,
+                    fontSize = if (isPoster) 15.sp else 14.sp,
+                    lineHeight = if (isPoster) 18.sp else 17.sp,
                     fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
-                channel.categoryName?.let {
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        text = it,
-                        color = BuroTextSecondary,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                // Dropped when it merely repeats the name, which some providers do: a category
+                // line identical to the title was invisible over the artwork and reads as a fault
+                // once the two sit one under the other.
+                channel.categoryName
+                    ?.takeIf { category -> !category.equals(channel.name, ignoreCase = true) }
+                    ?.let {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = it,
+                            color = BuroTextSecondary,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
             }
         }
     }
@@ -2920,8 +3215,10 @@ private fun CatalogLoadingState() {
     }
 }
 
+// Internal rather than private so the reminders page can use the same header: every full-screen
+// destination in this package wears one, and a second copy would drift from this one.
 @Composable
-private fun ScreenHeader(
+internal fun ScreenHeader(
     title: String,
     subtitle: String? = null,
     onBack: () -> Unit,
@@ -3004,9 +3301,27 @@ private fun SettingsContent(
     /** Outcome of the last key attempt, so the licence card can report it. */
     redemption: RedemptionUi,
     sharedTmdbKeyConfigured: Boolean,
+    /** Whether an OMDb key is stored, which is what makes the critics' row possible. */
+    criticsKeyConfigured: Boolean = false,
+    onSaveCriticsKey: (String) -> Unit = {},
     onSaveSharedTmdbKey: (String) -> Unit,
     onSelectLanguage: (String) -> Unit,
     guard: CatalogueGuardUi,
+    /** This device's pairing code, once one has been minted. */
+    castReceiverCode: String?,
+    /** Whether the sockets are open right now. */
+    isCastReceiverOn: Boolean,
+    onStartCastReceiver: () -> Unit,
+    onStopCastReceiver: () -> Unit,
+    /** How much artwork this device keeps, and what the fill is doing about it. */
+    cacheBudget: CacheBudget,
+    cacheBytesUsed: Long,
+    cacheProgress: CacheFillProgress,
+    onChooseCacheBudget: (Int) -> Unit,
+    onStartCacheFill: () -> Unit,
+    onStopCacheFill: () -> Unit,
+    onRefreshCacheFill: () -> Unit,
+    onClearCache: () -> Unit,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val compact = maxHeight < 520.dp || maxWidth < 600.dp
@@ -3027,43 +3342,112 @@ private fun SettingsContent(
             )
             Spacer(Modifier.height(if (compact) 16.dp else 28.dp))
 
-            SettingsRow(
-                title = stringResource(
-                    R.string.settings_version,
-                    BuildConfig.VERSION_NAME,
-                ),
-                body = stringResource(R.string.settings_legal),
+            val groupGap = if (compact) 26.dp else 34.dp
+            val cardGap = if (compact) 10.dp else 14.dp
+
+            // Grouped rather than listed. The screen was one column of unlabelled cards and finding
+            // a setting meant reading every one of them; the headings let the eye skip a whole
+            // group at once. The order follows how often a setting is touched: what changes
+            // playback first, then keys, then other devices, then the things set once.
+            SettingsGroup(
+                title = stringResource(R.string.settings_group_playback),
+                subtitle = stringResource(R.string.settings_group_playback_hint),
                 compact = compact,
-            )
-            Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
-            DeviceLicenceCard(
-                onOpenPurchase = onOpenPurchase,
-                onRedeemKey = onRedeemLicense,
-                deviceId = deviceId,
-                license = license,
-                redemption = redemption,
+            ) {
+                Column {
+                    // Subtitles, the channel lock and the category list, matching Windows.
+                    CatalogueGuardSections(guard = guard, compact = compact)
+                    Spacer(Modifier.height(cardGap))
+                    CacheSettingsCard(
+                        budget = cacheBudget,
+                        bytesUsed = cacheBytesUsed,
+                        progress = cacheProgress,
+                        onChooseBudget = onChooseCacheBudget,
+                        onStartFill = onStartCacheFill,
+                        onStopFill = onStopCacheFill,
+                        onRefreshFill = onRefreshCacheFill,
+                        onClearCache = onClearCache,
+                        compact = compact,
+                    )
+                }
+            }
+            Spacer(Modifier.height(groupGap))
+
+            SettingsGroup(
+                title = stringResource(R.string.settings_group_metadata),
+                subtitle = stringResource(R.string.settings_group_metadata_hint),
                 compact = compact,
-            )
-            Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
-            TmdbSettingsCard(
-                profileId = activeProfile?.id,
-                configured = tmdbKeyConfigured,
-                profileName = activeProfile?.name,
-                sharedConfigured = sharedTmdbKeyConfigured,
+            ) {
+                Column {
+                    TmdbSettingsCard(
+                        profileId = activeProfile?.id,
+                        configured = tmdbKeyConfigured,
+                        profileName = activeProfile?.name,
+                        sharedConfigured = sharedTmdbKeyConfigured,
+                        compact = compact,
+                        onSave = onSaveTmdbKey,
+                        onSaveSharedKey = onSaveSharedTmdbKey,
+                        onChooseProfile = onChangeProfile,
+                    )
+                    Spacer(Modifier.height(cardGap))
+                    CriticsSettingsCard(
+                        configured = criticsKeyConfigured,
+                        compact = compact,
+                        onSave = onSaveCriticsKey,
+                    )
+                }
+            }
+            Spacer(Modifier.height(groupGap))
+
+            SettingsGroup(
+                title = stringResource(R.string.settings_group_devices),
+                subtitle = stringResource(R.string.settings_group_devices_hint),
                 compact = compact,
-                onSave = onSaveTmdbKey,
-                onSaveSharedKey = onSaveSharedTmdbKey,
-                onChooseProfile = onChangeProfile,
-            )
-            Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
-            // Subtitles, the channel lock and the category list, matching what Windows offers.
-            CatalogueGuardSections(guard = guard, compact = compact)
-            Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
+            ) {
+                CastReceiveCard(
+                    code = castReceiverCode,
+                    listening = isCastReceiverOn,
+                    onStart = onStartCastReceiver,
+                    onStop = onStopCastReceiver,
+                    compact = compact,
+                )
+            }
+            Spacer(Modifier.height(groupGap))
+
+            SettingsGroup(
+                title = stringResource(R.string.settings_group_account),
+                subtitle = stringResource(R.string.settings_group_account_hint),
+                compact = compact,
+            ) {
+                Column {
+                    DeviceLicenceCard(
+                        onOpenPurchase = onOpenPurchase,
+                        onRedeemKey = onRedeemLicense,
+                        deviceId = deviceId,
+                        license = license,
+                        redemption = redemption,
+                        compact = compact,
+                    )
+                    Spacer(Modifier.height(cardGap))
+                    SettingsRow(
+                        title =
+                            stringResource(
+                                R.string.settings_version,
+                                BuildConfig.VERSION_NAME,
+                            ),
+                        body = stringResource(R.string.settings_legal),
+                        compact = compact,
+                    )
+                }
+            }
+            Spacer(Modifier.height(groupGap))
+
             Text(
-                text = stringResource(R.string.settings_language_title),
-                color = BuroTextPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
+                text = stringResource(R.string.settings_language_title).uppercase(),
+                color = BuroGold,
+                fontSize = if (compact) 12.sp else 13.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.2.sp,
             )
             Text(
                 text = stringResource(R.string.settings_language),
@@ -3145,6 +3529,87 @@ private fun SettingsRow(
             color = BuroTextSecondary,
             fontSize = if (compact) 13.sp else 14.sp,
         )
+    }
+}
+
+/**
+ * Receiving a title from a computer on the same network.
+ *
+ * The other half of "Enviar à tela", which until now only worked one way: the phone could find a
+ * computer and send to it, but nothing here ever answered, so a computer searching found an empty
+ * network and the person holding the phone had no code to type.
+ *
+ * Started from this card rather than automatically, and stopped when the screen closes — a phone
+ * that listened in the background would need a foreground service and its permanent notification,
+ * to receive something whose only effect is opening a page in an app that has to be brought
+ * forward anyway.
+ */
+@Composable
+private fun CastReceiveCard(
+    code: String?,
+    listening: Boolean,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    compact: Boolean,
+) {
+    // Stopped when the card leaves composition, so the socket never outlives the screen showing
+    // its code — including on a back press, which runs no explicit handler.
+    DisposableEffect(Unit) { onDispose { onStop() } }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(BuroSurface)
+            .padding(if (compact) 16.dp else 24.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.cast_receive_title),
+            color = BuroTextPrimary,
+            fontSize = if (compact) 17.sp else 19.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(if (compact) 4.dp else 6.dp))
+        Text(
+            text = stringResource(R.string.cast_receive_hint),
+            color = BuroTextSecondary,
+            fontSize = if (compact) 13.sp else 14.sp,
+        )
+        Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
+
+        if (listening && code != null) {
+            Text(
+                text = stringResource(R.string.cast_receive_code, code),
+                color = BuroGold,
+                fontSize = if (compact) 26.sp else 30.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.cast_receive_waiting),
+                color = BuroTextSecondary,
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
+            BuroButton(onClick = onStop, style = BuroButtonStyle.Ghost) {
+                Text(stringResource(R.string.cast_receive_stop))
+            }
+        } else {
+            // Listening asked for and refused: a bind can fail on a network that forbids it, and
+            // saying so beats a button that looks pressed and does nothing.
+            if (listening) {
+                Text(
+                    text = stringResource(R.string.cast_receive_failed),
+                    color = BuroTextSecondary,
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            BuroButton(onClick = onStart, style = BuroButtonStyle.Ghost) {
+                Icon(Icons.Default.Cast, contentDescription = null)
+                Text(stringResource(R.string.cast_receive_action))
+            }
+        }
     }
 }
 
@@ -3231,10 +3696,17 @@ private fun TmdbSettingsCard(
         )
         Spacer(Modifier.height(12.dp))
 
-        // Two levels, stated plainly. The household key is what every profile falls back to; the
-        // per-profile key exists because TMDb rate-limits per key, so a heavy viewer has a reason
-        // to use their own. Showing only one field made the second impossible to reach and the
-        // whole arrangement confusing.
+        // One field, not two.
+        //
+        // There were two: a household key and a per-profile one. They take the same TMDb key and
+        // most people need exactly one, so the card asked the same question twice and the answer
+        // to "where do I paste it?" was genuinely unclear. The household key is the one that
+        // works for everybody, so that is the one on show.
+        //
+        // The per-profile key is still reachable below, because it has a real use — TMDb
+        // rate-limits per key, so a heavy viewer may want their own quota — but it is an answer
+        // to a question almost nobody asks, and it now sits behind a disclosure rather than in
+        // front of everyone.
         MetadataKeyField(
             label = stringResource(R.string.tmdb_settings_shared_label),
             hint = stringResource(R.string.tmdb_settings_shared_hint),
@@ -3243,39 +3715,46 @@ private fun TmdbSettingsCard(
             onSave = onSaveSharedKey,
         )
 
-        Spacer(Modifier.height(16.dp))
-
-        if (profileId == null) {
-            // Without an active profile there is nowhere to put a per-profile key: it is encrypted
-            // under that profile's id. The household field above still works, so this is a note
-            // rather than a dead end.
-            Text(
-                text = stringResource(R.string.tmdb_settings_needs_profile),
-                color = BuroTextSecondary,
-                fontSize = 13.sp,
-                lineHeight = 19.sp,
-            )
-            Spacer(Modifier.height(10.dp))
+        if (profileId != null) {
+            Spacer(Modifier.height(12.dp))
+            var showProfileKey by remember(profileId) { mutableStateOf(configured) }
             FocusSurface(
-                onClick = onChooseProfile,
-                modifier = Modifier.fillMaxWidth().height(if (compact) 46.dp else 52.dp),
-                contentAlignment = Alignment.Center,
+                onClick = { showProfileKey = !showProfileKey },
+                modifier = Modifier.fillMaxWidth().height(if (compact) 44.dp else 48.dp),
             ) {
-                Text(
-                    text = stringResource(R.string.tmdb_settings_choose_profile),
-                    color = BuroTextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.tmdb_settings_advanced),
+                        color = BuroTextSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = if (showProfileKey) "\u2212" else "+",
+                        color = BuroTextSecondary,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Black,
+                    )
+                }
+            }
+            if (showProfileKey) {
+                Spacer(Modifier.height(12.dp))
+                MetadataKeyField(
+                    label =
+                        stringResource(
+                            R.string.tmdb_settings_profile_label,
+                            profileName.orEmpty(),
+                        ),
+                    hint = stringResource(R.string.tmdb_settings_profile_hint),
+                    configured = configured,
+                    compact = compact,
+                    onSave = onSave,
                 )
             }
-        } else {
-            MetadataKeyField(
-                label = stringResource(R.string.tmdb_settings_profile_label, profileName.orEmpty()),
-                hint = stringResource(R.string.tmdb_settings_profile_hint),
-                configured = configured,
-                compact = compact,
-                onSave = onSave,
-            )
         }
 
         Spacer(Modifier.height(10.dp))
@@ -4063,4 +4542,103 @@ private fun reminderKeyOf(
     val year = releaseDate?.let(::yearFromReleaseDate)
         ?: if (kind == ContentKind.MOVIE) ContentIdentity.yearFromTitle(title) else null
     return ContentIdentity.of(kind, title, year).key
+}
+
+/**
+ * The OMDb key, which is what fills the critics' row on a title's page.
+ *
+ * Its own card rather than a second field on the TMDb one: they are different services with
+ * different keys and different limits, and somebody who has pasted one should not have to wonder
+ * whether they have pasted the other.
+ *
+ * Optional throughout. Without a key the app behaves exactly as it did — the TMDb score and the
+ * audience count still show — and the Tomatometer, IMDb and Metascore meters are simply absent
+ * rather than empty.
+ */
+@Composable
+private fun CriticsSettingsCard(
+    configured: Boolean,
+    compact: Boolean,
+    onSave: (String) -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(BuroSurface)
+                .padding(if (compact) 16.dp else 22.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.critics_settings_title),
+            color = BuroTextPrimary,
+            fontSize = if (compact) 17.sp else 19.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text =
+                stringResource(
+                    if (configured) {
+                        R.string.critics_settings_configured
+                    } else {
+                        R.string.critics_settings_absent
+                    },
+                ),
+            color = if (configured) BuroAccent else BuroTextSecondary,
+            fontSize = if (compact) 13.sp else 14.sp,
+        )
+        Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
+        MetadataKeyField(
+            label = stringResource(R.string.critics_settings_field),
+            hint = stringResource(R.string.critics_settings_hint),
+            configured = configured,
+            compact = compact,
+            onSave = onSave,
+        )
+    }
+}
+
+/**
+ * A row of streaming services, each opening that service's own list.
+ *
+ * The categories already hold this — "Series | Netflix", "Series | Max" — but they sit among
+ * dozens of genre folders, so finding one meant scrolling past everything else. This lifts them to
+ * the top as marks, which is how somebody looking for "what is on Netflix" actually thinks.
+ *
+ * Scrolls sideways rather than wrapping: the number of services depends on the playlist, and a
+ * wrapping row would push the catalogue itself off the screen on a provider that carries many.
+ */
+@Composable
+private fun PlatformShortcuts(
+    platforms: List<Pair<ProviderIdentity, CategoryUi>>,
+    compact: Boolean,
+    onOpenCategory: (CategoryUi) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        platforms.forEach { (identity, category) ->
+            FocusSurface(
+                onClick = { onOpenCategory(category) },
+                modifier = Modifier.height(if (compact) 54.dp else 60.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxHeight().padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ProviderMark(provider = identity, size = if (compact) 28.dp else 32.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = identity.label,
+                        color = BuroTextPrimary,
+                        fontSize = if (compact) 13.sp else 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
 }

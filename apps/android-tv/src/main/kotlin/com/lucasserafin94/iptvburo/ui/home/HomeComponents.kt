@@ -51,9 +51,12 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
-import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.ui.designsystem.ProviderMark
+import com.lucasserafin94.iptvburo.ui.designsystem.rememberProviderIdentity
+import com.lucasserafin94.iptvburo.ui.designsystem.providerIdentityFor
+import com.lucasserafin94.iptvburo.ui.designsystem.BuroMarqueeText
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
 import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
@@ -228,7 +231,13 @@ fun BuroPosterCard(
         onOpenItem = onOpenItem,
         modifier = modifier
             .width(width)
-            .aspectRatio(2f / 3f),
+            // The poster's own ratio plus the caption beneath it, rather than the ratio alone.
+            //
+            // FocusSurface propagates its minimum constraints to the content, so a card sized only
+            // by its artwork gives the Column inside exactly the artwork's height — and the caption
+            // is laid out past the bottom edge, where it is clipped. That is precisely what
+            // happened on the first attempt at this: clean posters, no captions anywhere.
+            .height(width * 3f / 2f + POSTER_CAPTION_HEIGHT),
         requestFocus = requestFocus,
         compactTitle = false,
     )
@@ -252,7 +261,7 @@ fun BuroLandscapeCard(
         onOpenItem = onOpenItem,
         modifier = modifier
             .width(width)
-            .aspectRatio(16f / 9f),
+            .height(width * 9f / 16f + LANDSCAPE_CAPTION_HEIGHT),
         requestFocus = requestFocus,
         compactTitle = true,
     )
@@ -357,9 +366,18 @@ private fun ArtworkFallback(
 ) {
     val palette = item.palette.colors()
     val artworkResource = item.artwork.drawableResource()
+    // Artwork above, caption below, rather than text laid across the poster.
+    //
+    // The overlay version ran a gradient over the bottom half of every card — 54% of a poster, 66%
+    // of a landscape one — and put the title, subtitle and metadata on top of it. On a home screen
+    // built out of cover art, that is most of the art covered by writing. The caption sits under
+    // the image now: the poster is whole, and the words are still right beside it.
+    Column(modifier = Modifier.fillMaxWidth()) {
     Box(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
+            .aspectRatio(if (compactTitle) 16f / 9f else 2f / 3f)
+            .clip(RoundedCornerShape(if (compactTitle) 18.dp else 20.dp))
             .background(
                 Brush.linearGradient(
                     colors = listOf(
@@ -419,27 +437,35 @@ private fun ArtworkFallback(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(if (compactTitle) 0.66f else 0.54f)
-                .align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, BuroCanvas.copy(alpha = 0.97f)),
-                    ),
-                ),
-        )
+        // The streaming service, in its own colour, on the artwork it belongs to.
+        //
+        // Only where the category names one — providers file platform catalogues as
+        // "Series | Netflix" and everything else by genre, so most rails show nothing here.
+        rememberProviderIdentity(item.categoryName)?.let { provider ->
+            ProviderMark(
+                provider = provider,
+                size = 26.dp,
+                modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+            )
+        }
+
+        // Progress stays on the artwork: it describes the image it sits on, and a bar under the
+        // caption would read as belonging to the text.
+        item.progress?.let { progress ->
+            BuroHomeProgress(
+                progress = progress,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+            )
+        }
+        }
 
         Column(
             modifier = Modifier
-                .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(
-                    start = if (compactTitle) 16.dp else 18.dp,
-                    end = if (compactTitle) 16.dp else 18.dp,
-                    bottom = if (compactTitle) 14.dp else 18.dp,
-                ),
+                .padding(top = 8.dp, start = 2.dp, end = 2.dp),
         ) {
             Text(
                 text = item.badge,
@@ -450,28 +476,47 @@ private fun ArtworkFallback(
                 maxLines = 1,
             )
             Spacer(Modifier.height(4.dp))
-            Text(
+            // One line, which scrolls itself while this card is the one being looked at.
+            //
+            // Two lines were fine when the caption floated over the artwork and could take the room
+            // it needed. In a fixed-height caption a two-line title pushes the subtitle and
+            // metadata past the bottom — so the title is held to one line, and the part that would
+            // have been lost to an ellipsis is revealed by scrolling instead.
+            BuroMarqueeText(
                 text = item.title,
+                active = isFocused,
                 color = BuroTextPrimary,
                 fontSize = if (compactTitle) 17.sp else 19.sp,
                 lineHeight = if (compactTitle) 20.sp else 22.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = if (compactTitle) 1 else 2,
-                overflow = TextOverflow.Ellipsis,
             )
             if (!compactTitle) {
+                // The caption lines, with repeats dropped.
+                //
+                // A card's badge, subtitle and metadata are built from whatever the catalogue
+                // supplied, and for some rails two of them land on the same value — a reminder with
+                // no release date showed "LEMBRETE" three times in a column, and a film with only a
+                // year showed "2026" twice. Invisible while the caption sat over the artwork and
+                // plainly wrong once the lines are stacked in the open.
+                val extraLines =
+                    listOf(item.subtitle, item.metadata)
+                        .map(String::trim)
+                        .filter { line -> line.isNotBlank() && !line.equals(item.badge, ignoreCase = true) }
+                        .distinctBy { line -> line.lowercase() }
+                extraLines.firstOrNull()?.let { subtitle ->
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    text = item.subtitle,
+                    text = subtitle,
                     color = BuroTextSecondary,
                     fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (item.metadata.isNotBlank()) {
+                }
+                extraLines.getOrNull(1)?.let { metadata ->
                     Spacer(Modifier.height(3.dp))
                     Text(
-                        text = item.metadata,
+                        text = metadata,
                         color = BuroTextPrimary.copy(alpha = 0.82f),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -479,13 +524,6 @@ private fun ArtworkFallback(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-            }
-            item.progress?.let { progress ->
-                Spacer(Modifier.height(9.dp))
-                BuroHomeProgress(
-                    progress = progress,
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
         }
     }
@@ -503,7 +541,6 @@ private fun RemoteHomeArtwork(
         remember(url, context) {
             ImageRequest.Builder(context)
                 .data(url)
-                .diskCachePolicy(CachePolicy.DISABLED)
                 .build()
         }
     AsyncImage(
@@ -531,6 +568,13 @@ private fun HeroAction(
 
     // Gold, not ivory. The Windows primary button is gold, and a product whose main call to action
     // changes brand colour between platforms does not read as one product.
+    //
+    // Translucent at rest, though, and solid the moment it is focused or pressed. A filled gold
+    // slab sits on top of the banner's own artwork and hides the part of the poster directly behind
+    // it — on a phone, where the banner is most of the screen, that is a sizeable bite out of the
+    // one image the home page is built around. At this alpha the brand colour still reads as a
+    // button while the picture shows through; focus restores the full fill, so the control is at
+    // its most legible exactly when somebody is aiming at it.
     FocusSurface(
         onClick = onClick,
         modifier = modifier
@@ -539,7 +583,8 @@ private fun HeroAction(
             .onFocusChanged { focusState ->
                 if (focusState.isFocused) onFocused()
             },
-        backgroundColor = if (primary) BuroGold else BuroSurface.copy(alpha = 0.88f),
+        backgroundColor =
+            if (primary) BuroGold.copy(alpha = HERO_ACTION_REST_ALPHA) else BuroSurface.copy(alpha = 0.88f),
         focusedBackgroundColor = if (primary) BuroGold else BuroSurface,
         selectedBackgroundColor = if (primary) BuroGold else BuroSurface,
     ) {
@@ -604,3 +649,25 @@ private fun HomeArtwork?.drawableResource(): Int? =
         HomeArtwork.FOREST_SIGNAL -> R.drawable.buro_forest_signal
         null -> null
     }
+
+/**
+ * How solid the banner's call to action is when nothing is focused.
+ *
+ * High enough that the dark label on top keeps its contrast — the text is canvas-coloured, so a
+ * thin wash of gold over a bright poster would leave it unreadable — and low enough that the
+ * artwork behind the button is still visible rather than covered by a slab. Focus and press paint
+ * the full colour, so the control is at its most legible when it is being aimed at.
+ */
+private const val HERO_ACTION_REST_ALPHA = 0.72f
+
+/**
+ * Height reserved under a poster for its caption.
+ *
+ * Fixed rather than measured, so every card in a rail is the same height whatever its title runs
+ * to — a row where each card ended at a different point would read as broken rather than as
+ * variable. Enough for the badge, two lines of title, the subtitle and the metadata line.
+ */
+private val POSTER_CAPTION_HEIGHT = 94.dp
+
+/** The same, for a landscape card: badge and one line of title, so it needs less. */
+private val LANDSCAPE_CAPTION_HEIGHT = 52.dp

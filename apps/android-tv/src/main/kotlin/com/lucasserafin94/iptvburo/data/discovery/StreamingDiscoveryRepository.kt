@@ -102,6 +102,31 @@ class StreamingDiscoveryRepository
         }
 
         /**
+         * Everything one service carries, for the page behind a shelf's "Ver mais".
+         *
+         * Not cached, unlike [shelves]. The shelves are drawn on every visit to Assinaturas and on
+         * the home screen, so a day's cache saves a network round trip people would otherwise wait
+         * for constantly; this is opened deliberately, occasionally, and by somebody who has just
+         * asked for *more* than what they were shown — serving them yesterday's answer is the one
+         * outcome that would make the button feel broken.
+         *
+         * Empty covers both "this service carries nothing" and "the request failed", which the
+         * screen renders the same way: there is nothing to show and a way back.
+         */
+        suspend fun allTitlesOnService(
+            apiKey: String?,
+            region: String,
+            tmdbProviderId: Int,
+            kind: TmdbDiscoverKind = TmdbDiscoverKind.MOVIES,
+        ): List<ExternalTitle> {
+            val catalogue = catalogueFor(apiKey, region) ?: return emptyList()
+            return withContext(ioDispatcher) {
+                runCatching { catalogue.allTitlesOnService(tmdbProviderId, kind) }
+                    .getOrDefault(emptyList())
+            }
+        }
+
+        /**
          * Everywhere [title] can be watched, or null when TMDb has nothing to say.
          *
          * Null is "we cannot say", never "not available anywhere". Callers must not render it as the

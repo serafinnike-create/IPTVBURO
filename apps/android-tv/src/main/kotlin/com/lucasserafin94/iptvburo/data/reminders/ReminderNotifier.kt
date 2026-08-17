@@ -12,7 +12,11 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.domain.model.AppNotification
+import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
+import com.lucasserafin94.iptvburo.domain.model.NotificationKind
 import com.lucasserafin94.iptvburo.domain.model.ReminderDigest
+import com.lucasserafin94.iptvburo.domain.model.SeriesChange
 import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -125,6 +129,67 @@ class ReminderNotifier @Inject constructor(
     }
 
     /**
+     * Tells the viewer that a series they follow has grown.
+     *
+     * Its own notification rather than a line inside the daily digest, and its own id so the two do
+     * not replace each other: a reminder is about something the viewer marked and is waiting for,
+     * while this is about something they already follow having quietly changed. They arrive for
+     * different reasons and are acted on differently.
+     *
+     * Silent when [changes] is empty, which is the ordinary day. An app that posts "nothing new"
+     * is one whose notifications get switched off.
+     */
+    fun notifySeriesChanges(changes: List<SeriesSeriesNotice>) {
+        if (changes.isEmpty() || !canNotify()) return
+
+        runCatching {
+            ensureChannel()
+
+            val lines =
+                changes.mapNotNull { notice ->
+                    when (val change = notice.change) {
+                        is SeriesChange.NewSeason ->
+                            context.getString(
+                                R.string.series_new_season_line,
+                                notice.title,
+                                change.season,
+                            )
+
+                        // One episode per notice: the policy reports the episode that leads, not a
+                        // count, so the singular wording is the only one that can be honest here.
+                        is SeriesChange.NewEpisode ->
+                            context.getString(R.string.series_new_episode_line, notice.title)
+
+                        SeriesChange.None -> null
+                    }
+                }
+            if (lines.isEmpty()) return@runCatching
+
+            val notification =
+                NotificationCompat.Builder(context, CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_launcher)
+                    .setContentTitle(context.getString(R.string.series_new_episode_title))
+                    .setContentText(lines.first())
+                    .setStyle(
+                        NotificationCompat.InboxStyle().also { style ->
+                            lines.take(MAX_LINES).forEach(style::addLine)
+                        },
+                    )
+                    .setAutoCancel(true)
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .build()
+
+            // Guarded and caught for the same reason the digest is: the permission can be withdrawn
+            // between the check and this line, and an uncaught SecurityException fails the worker —
+            // which then stops being rescheduled, ending both notices permanently and silently.
+            val manager = NotificationManagerCompat.from(context)
+            if (manager.areNotificationsEnabled()) {
+                runCatching { manager.notify(SERIES_NOTIFICATION_ID, notification) }
+            }
+        }
+    }
+
+    /**
      * Where tapping the notification goes.
      *
      * Straight to the title when exactly one thing released today — that is the whole reason the
@@ -175,6 +240,64 @@ class ReminderNotifier @Inject constructor(
         /** Fixed, so today's digest replaces yesterday's rather than stacking up. */
         const val NOTIFICATION_ID = 4_517
 
+        /**
+         * The series notice's own id, so it does not replace the daily digest.
+         *
+         * Sharing an id would have whichever arrived second silently erase the first, and the
+         * two say different things: one is about a title being waited for, the other about a
+         * series already being followed.
+         */
+        const val SERIES_NOTIFICATION_ID = 4_518
+
         const val MAX_LINES = 6
     }
 }
+
+/**
+ * A series change with the name to announce it under.
+ *
+ * [SeriesChange] deliberately carries no title: it lives in the domain, where a series is an
+ * identity rather than a display name, and the same change is worded differently in five languages.
+ * The name is added here, at the edge that actually writes the notification.
+ */
+data class SeriesSeriesNotice(
+    val title: String,
+    val change: SeriesChange,
+)
+
+/**
+ * The same notice, as the bell holds it.
+ *
+ * The id is derived from what the notice is *about* rather than from when it was made, which is what
+ * stops the bell filling with copies: the daily check runs every day, and a series that has not
+ * changed since yesterday produces the same id and is ignored by `NotificationCentre.add`.
+ */
+fun SeriesSeriesNotice.toAppNotification(
+    seriesKey: String = title,
+    now: Long = System.currentTimeMillis(),
+): AppNotification =
+    when (val outcome = change) {
+        is SeriesChange.NewSeason ->
+            AppNotification(
+                id = NotificationCentre.seasonId(seriesKey, outcome.season),
+                kind = NotificationKind.NEW_SEASON,
+                title = title,
+                createdAt = now,
+            )
+
+        is SeriesChange.NewEpisode ->
+            AppNotification(
+                id = NotificationCentre.episodeId(seriesKey, outcome.season, outcome.episode),
+                kind = NotificationKind.NEW_EPISODE,
+                title = title,
+                createdAt = now,
+            )
+
+        SeriesChange.None ->
+            AppNotification(
+                id = "none:$seriesKey",
+                kind = NotificationKind.NEW_EPISODE,
+                title = title,
+                createdAt = now,
+            )
+    }

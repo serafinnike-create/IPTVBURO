@@ -1,6 +1,7 @@
 package com.lucasserafin94.iptvburo.ui.home
 
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
+import com.lucasserafin94.iptvburo.domain.model.Reminder
 import com.lucasserafin94.iptvburo.domain.model.SeasonalCollection
 import com.lucasserafin94.iptvburo.domain.model.SeasonalCollections
 import com.lucasserafin94.iptvburo.ui.ChannelUi
@@ -24,6 +25,8 @@ import java.util.Locale
 data class HomeLabels(
     val continueWatching: String,
     val continueBadge: String,
+    val reminders: String,
+    val reminderBadge: String,
     val newClassics: String,
     val classicBadge: String,
     val recentlyAdded: String,
@@ -49,6 +52,8 @@ data class HomeLabels(
             HomeLabels(
                 continueWatching = "Continue assistindo",
                 continueBadge = "CONTINUAR",
+                reminders = "Seus lembretes",
+                reminderBadge = "LEMBRETE",
                 newClassics = "Clássicos que chegaram agora",
                 classicBadge = "CLÁSSICO",
                 recentlyAdded = "Adicionados recentemente",
@@ -70,6 +75,14 @@ object RealHomeCatalog {
         sources: List<HomeSourceSummary>,
         catalogItems: List<ChannelUi>,
         continueWatching: List<ContinueWatchingUi> = emptyList(),
+        /**
+         * What the profile asked to be reminded about, drawn straight after Continue assistindo.
+         *
+         * There rather than further down because the two rails answer neighbouring questions —
+         * "what was I in the middle of" and "what was I waiting for" — and a reminder that only
+         * surfaces in a daily notification is easy to forget having made.
+         */
+        reminders: List<Reminder> = emptyList(),
         /**
          * Service shelves from the discovery catalogue, drawn after the user's own content.
          *
@@ -179,6 +192,22 @@ object RealHomeCatalog {
                                     .toHomeItem(HomeCardFormat.LANDSCAPE, labels.continueBadge)
                                     .copy(progress = entry.progress)
                             },
+                        isDemonstration = false,
+                    ),
+                )
+            }
+            // Straight after Continue assistindo, and built from the reminders themselves rather
+            // than from catalogue rows: the whole point of an upcoming title is that it is not in
+            // the catalogue yet, so matching these against `distinct` would drop exactly the
+            // reminders worth showing.
+            reminders.takeIf(List<Reminder>::isNotEmpty)?.let { marked ->
+                add(
+                    HomeRail(
+                        id = "real:rail:reminders",
+                        title = labels.reminders,
+                        kind = HomeRailKind.REMINDERS,
+                        cardFormat = HomeCardFormat.POSTER,
+                        items = marked.map { reminder -> reminder.toHomeItem(labels.reminderBadge) },
                         isDemonstration = false,
                     ),
                 )
@@ -297,6 +326,11 @@ object RealHomeCatalog {
                                         cardFormat = HomeCardFormat.POSTER,
                                         palette = HomeArtworkPalette.AURORA,
                                         remoteArtworkUrl = title.posterUrl,
+                                        // Left null on purpose: the rail heading above already
+                                        // carries this service's mark, so badging every card with
+                                        // the same logo would repeat it a dozen times across one
+                                        // shelf and cover a corner of each poster to do it.
+                                        categoryName = null,
                                         isDemonstration = false,
                                     )
                                 },
@@ -331,6 +365,39 @@ object RealHomeCatalog {
             )
         }
 
+    /**
+     * The prefix a reminder card carries in place of a catalogue row id.
+     *
+     * Read back by the view model to route a press to the reminders page, so it must stay equal to
+     * `MainViewModel.REMINDER_ITEM_PREFIX` — the same pairing `streaming:` already relies on. A
+     * marked title may have no row at all, which is the normal case for something not released yet,
+     * so the id has to say what the card is rather than point at something that can be opened.
+     */
+    const val REMINDER_ITEM_PREFIX = "reminder:"
+
+    private fun Reminder.toHomeItem(badge: String): HomeItem =
+        HomeItem(
+            id = REMINDER_ITEM_PREFIX + identity.key,
+            title = title,
+            // The release date, or the badge only when there is none.
+            //
+            // This repeated the badge, which was invisible while the caption sat over the artwork
+            // and reads as a mistake now that both lines are on screen together: "LEMBRETE" twice,
+            // one under the other.
+            subtitle = releaseDate?.toString() ?: badge,
+            synopsis = "",
+            // The release date when the provider gave one, so a card says what it is waiting for.
+            // Never a countdown computed here: this object is pure and has no clock, and a number
+            // baked in at build time would be wrong by the next day.
+            metadata = releaseDate?.toString() ?: badge,
+            badge = badge,
+            kind = HomeItemKind.CATALOG,
+            cardFormat = HomeCardFormat.POSTER,
+            palette = HomeArtworkPalette.AURORA,
+            remoteArtworkUrl = artworkUrl,
+            isDemonstration = false,
+        )
+
     private fun ChannelUi.toHomeItem(
         format: HomeCardFormat,
         badge: String,
@@ -357,6 +424,8 @@ object RealHomeCatalog {
             cardFormat = format,
             palette = HomeArtworkPalette.AURORA,
             remoteArtworkUrl = logoUrl,
+            // Carried so the card can badge its streaming service, the way the catalogue grid does.
+            categoryName = categoryName,
             isDemonstration = false,
         )
 

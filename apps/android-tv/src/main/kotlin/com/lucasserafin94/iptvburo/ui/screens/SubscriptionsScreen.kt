@@ -18,16 +18,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -41,6 +51,7 @@ import coil3.compose.AsyncImage
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.domain.model.OfferReason
 import com.lucasserafin94.iptvburo.metadata.WATCH_PROVIDER_ATTRIBUTION
+import com.lucasserafin94.iptvburo.ui.ExpandedServiceUi
 import com.lucasserafin94.iptvburo.ui.ProviderShelfUi
 import com.lucasserafin94.iptvburo.ui.SubscriptionOfferUi
 import com.lucasserafin94.iptvburo.ui.SubscriptionTitleUi
@@ -54,6 +65,9 @@ import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
 import com.lucasserafin94.iptvburo.ui.theme.BuroSurfaceRaised
 import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
 import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 /**
  * Assinaturas on Android — GDD 9, the counterpart of the Windows screen.
@@ -76,6 +90,14 @@ fun SubscriptionsScreen(
     onSelectTitle: (SubscriptionTitleUi) -> Unit,
     onBackToShelves: () -> Unit,
     onOpenOffer: (SubscriptionOfferUi) -> Unit,
+    /** Marks or unmarks the open title. Null hides the button, as on the details screens. */
+    onToggleReminder: (() -> Unit)? = null,
+    /** Whether the open title is already marked. */
+    hasReminder: Boolean = false,
+    /** Opens one service's whole catalogue, from the end of its shelf. */
+    onSeeMore: (ProviderShelfUi) -> Unit = {},
+    /** Returns from that catalogue to the shelves. */
+    onCloseExpanded: () -> Unit = {},
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val compact = maxWidth < 600.dp
@@ -83,10 +105,12 @@ fun SubscriptionsScreen(
 
         Column(modifier = Modifier.fillMaxSize()) {
             SubscriptionsHeader(
-                showingOffers = state.selected != null,
+                showingOffers = state.selected != null || state.expandedService != null,
                 kind = state.kind,
                 onSelectKind = onSelectKind,
-                onBack = onBackToShelves,
+                // Back leaves the expanded catalogue first: it is the layer on top, and
+                // skipping to the shelves would discard a step the viewer took.
+                onBack = { if (state.expandedService != null) onCloseExpanded() else onBackToShelves() },
                 gutter = gutter,
             )
 
@@ -102,6 +126,15 @@ fun SubscriptionsScreen(
                             unknown = state.selectionUnknown,
                             gutter = gutter,
                             onOpenOffer = onOpenOffer,
+                            onToggleReminder = onToggleReminder,
+                            hasReminder = hasReminder,
+                        )
+
+                    state.expandedService != null ->
+                        ExpandedServiceGrid(
+                            expanded = state.expandedService,
+                            gutter = gutter,
+                            onSelectTitle = onSelectTitle,
                         )
 
                     state.isLoading -> LoadingBody()
@@ -117,6 +150,7 @@ fun SubscriptionsScreen(
                             shelves = state.shelves,
                             gutter = gutter,
                             onSelectTitle = onSelectTitle,
+                            onSeeMore = onSeeMore,
                         )
                 }
             }
@@ -235,6 +269,7 @@ private fun ProviderShelves(
     shelves: List<ProviderShelfUi>,
     gutter: androidx.compose.ui.unit.Dp,
     onSelectTitle: (SubscriptionTitleUi) -> Unit,
+    onSeeMore: (ProviderShelfUi) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -256,6 +291,16 @@ private fun ProviderShelves(
                 ) {
                     items(shelf.titles, key = { title -> "${shelf.providerId}:${title.externalId}" }) { title ->
                         PosterCard(title = title, onClick = { onSelectTitle(title) })
+                    }
+                    // The end of the rail is where "what else is on here?" gets asked, so the
+                    // answer sits exactly there rather than in a heading nobody reads.
+                    //
+                    // Only for a shelf that is really one service: "Em breve" is the set of films
+                    // no service carries yet, so there is no catalogue behind it to open.
+                    shelf.tmdbProviderId?.let {
+                        item(key = "${shelf.providerId}:see-more") {
+                            SeeMoreCard(onClick = { onSeeMore(shelf) })
+                        }
                     }
                 }
             }
@@ -332,6 +377,9 @@ private fun OfferList(
     unknown: Boolean,
     gutter: androidx.compose.ui.unit.Dp,
     onOpenOffer: (SubscriptionOfferUi) -> Unit,
+    /** Marks or unmarks this title. Null hides the button, as on the details screens. */
+    onToggleReminder: (() -> Unit)? = null,
+    hasReminder: Boolean = false,
 ) {
     val androidContext = LocalContext.current
     LazyColumn(
@@ -365,7 +413,10 @@ private fun OfferList(
                     // Each fact dropped when absent, so the line never reads "· · ·" around gaps.
                     val facts =
                         listOfNotNull(
-                            title.year?.toString(),
+                            // The full date in place of the bare year where the catalogue supplied
+                            // one: on a coming-soon title "2026" is the one thing a viewer cannot
+                            // act on, and the day is what tells them whether to wait or forget it.
+                            title.releaseDate?.toDisplayDate() ?: title.year?.toString(),
                             title.rating?.takeIf { it > 0.0 }?.let { rating -> "★ %.1f".format(rating) },
                             title.runtimeMinutes?.takeIf { it > 0 }?.let { minutes -> "$minutes min" },
                             title.genres.take(3).joinToString(", ").takeIf(String::isNotBlank),
@@ -378,25 +429,63 @@ private fun OfferList(
             }
         }
 
-        // The trailer id was already being fetched with the page and simply never drawn, so the one
-        // screen whose whole job is deciding whether to watch something offered no way to look.
-        title.youtubeTrailerId?.let { trailerId ->
-            item(key = "trailer") {
-                Spacer(Modifier.height(10.dp))
-                BuroButton(
-                    onClick = {
-                        runCatching {
-                            androidContext.startActivity(
-                                Intent(
-                                    Intent.ACTION_VIEW,
-                                    Uri.parse("https://www.youtube.com/watch?v=$trailerId"),
+        // Trailer and reminder together. The trailer id was already being fetched with the page and
+        // simply never drawn, so the one screen whose whole job is deciding whether to watch
+        // something offered no way to look.
+        item(key = "actions") {
+            Spacer(Modifier.height(10.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                title.youtubeTrailerId?.let { trailerId ->
+                    BuroButton(
+                        onClick = {
+                            runCatching {
+                                androidContext.startActivity(
+                                    Intent(
+                                        Intent.ACTION_VIEW,
+                                        Uri.parse("https://www.youtube.com/watch?v=$trailerId"),
+                                    ),
+                                )
+                            }
+                        },
+                        style = BuroButtonStyle.Ghost,
+                    ) {
+                        Text(stringResource(R.string.details_trailer))
+                    }
+                }
+                // The reminder this page most needed and did not have. A title on the upcoming
+                // shelf is precisely the case reminders were built for — it is not in anyone's
+                // catalogue yet, so there is no details page to mark it from, and the release date
+                // that arrives with it is what turns the mark into "tell me when it is out".
+                onToggleReminder?.let { toggle ->
+                    BuroButton(onClick = toggle, style = BuroButtonStyle.Ghost) {
+                        Icon(
+                            if (hasReminder) {
+                                Icons.Default.Notifications
+                            } else {
+                                Icons.Default.NotificationsNone
+                            },
+                            contentDescription = null,
+                            tint = if (hasReminder) BuroAccent else BuroTextPrimary,
+                        )
+                        // Measured against the longer label, as the film screen does: the two words
+                        // differ in width, and a button that resizes on tap reflows the row.
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = stringResource(R.string.reminder_added),
+                                color = Color.Transparent,
+                                maxLines = 1,
+                            )
+                            Text(
+                                stringResource(
+                                    if (hasReminder) R.string.reminder_added else R.string.reminder_add,
                                 ),
+                                maxLines = 1,
                             )
                         }
-                    },
-                    style = BuroButtonStyle.Secondary,
-                ) {
-                    Text(stringResource(R.string.details_trailer))
+                    }
                 }
             }
         }
@@ -516,7 +605,8 @@ private fun OfferRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                // The provider's name as text. GDD 9 section 10 forbids copying brand logos, so
+                // The provider's name as text. Windows now draws the service's mark beside the
+                // name; this screen has not been changed to match, so it stays text-only and
                 // there is deliberately no artwork here.
                 Text(
                     text = offer.providerName,
@@ -584,6 +674,113 @@ private fun EmptyBody(
             modifier = Modifier.clip(RoundedCornerShape(18.dp)).background(BuroSurface).padding(20.dp),
         ) {
             Text(text = message, color = BuroTextSecondary, fontSize = 14.sp, lineHeight = 20.sp)
+        }
+    }
+}
+
+/**
+ * An ISO release date as the viewer's own locale writes it.
+ *
+ * Falls back to the raw string when the catalogue supplies something that is not a full date — TMDb
+ * occasionally returns an empty string or a year alone, and showing that unchanged is better than
+ * showing nothing or crashing a shelf over a malformed field.
+ */
+private fun String.toDisplayDate(): String? {
+    val trimmed = trim()
+    if (trimmed.isEmpty()) return null
+    return runCatching {
+        LocalDate.parse(trimmed).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
+    }.getOrDefault(trimmed)
+}
+
+/**
+ * The card at the end of a rail that opens the whole service.
+ *
+ * Shaped like a poster rather than styled as a button: it sits in a row of posters, and a control
+ * of a different size would break the rhythm of the rail and read as something having gone wrong.
+ */
+@Composable
+private fun SeeMoreCard(onClick: () -> Unit) {
+    FocusSurface(
+        onClick = onClick,
+        modifier = Modifier.width(120.dp),
+        shape = RoundedCornerShape(12.dp),
+        backgroundColor = BuroSurfaceRaised,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = BuroAccent,
+                modifier = Modifier.size(28.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.subscriptions_see_more),
+                color = BuroTextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+/**
+ * One service's whole catalogue, as a grid.
+ *
+ * A grid rather than a longer rail: this is for browsing hundreds of titles, and a horizontal row
+ * that long is a scroll nobody finishes. The shelf's own twenty are already on screen when it opens,
+ * so the page is useful while the rest of the pages arrive.
+ */
+@Composable
+private fun ExpandedServiceGrid(
+    expanded: ExpandedServiceUi,
+    gutter: androidx.compose.ui.unit.Dp,
+    onSelectTitle: (SubscriptionTitleUi) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = stringResource(R.string.subscriptions_all_on, expanded.providerName),
+            color = BuroTextPrimary,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = gutter, vertical = 10.dp),
+        )
+        if (expanded.isLoading) {
+            // Under the heading rather than over the grid: the first twenty titles are already
+            // there and worth reading while the rest load.
+            Row(
+                modifier = Modifier.padding(horizontal = gutter).padding(bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    color = BuroAccent,
+                    strokeWidth = 2.dp,
+                )
+                Text(
+                    text = stringResource(R.string.subscriptions_loading),
+                    color = BuroTextSecondary,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+        }
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 108.dp),
+            contentPadding = PaddingValues(start = gutter, end = gutter, bottom = 28.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            items(expanded.titles, key = { title -> title.externalId }) { title ->
+                PosterCard(title = title, onClick = { onSelectTitle(title) })
+            }
         }
     }
 }

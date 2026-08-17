@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,14 +63,17 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
-import coil3.request.CachePolicy
 import coil3.request.ImageRequest
+import com.lucasserafin94.iptvburo.metadata.CriticScores
 import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.ui.designsystem.providerIdentityFor
 import com.lucasserafin94.iptvburo.ui.DownloadStateUi
 import com.lucasserafin94.iptvburo.ui.EpisodeUi
 import com.lucasserafin94.iptvburo.ui.SeriesDetailsUi
 import com.lucasserafin94.iptvburo.ui.capabilities.AndroidPlatformCapabilities
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
+import com.lucasserafin94.iptvburo.ui.designsystem.BuroAction
+import com.lucasserafin94.iptvburo.ui.designsystem.BuroActionBar
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroErrorState
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButtonStyle
@@ -84,6 +88,12 @@ import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 @Composable
 internal fun SeriesDetailsScreen(
     fallbackTitle: String,
+    /** The category this series was filed under, which names its streaming service. */
+    categoryName: String? = null,
+    /** What the critics said, from OMDb. Null when no key is set. */
+    criticScores: CriticScores? = null,
+    /** The service's official logo from TMDb, when the lookup found one. */
+    providerLogoUrl: String? = null,
     details: SeriesDetailsUi?,
     isLoading: Boolean,
     hasError: Boolean,
@@ -145,7 +155,6 @@ internal fun SeriesDetailsScreen(
                 heroUrl?.let { url ->
                     ImageRequest.Builder(platformContext)
                         .data(url)
-                        .diskCachePolicy(CachePolicy.DISABLED)
                         .build()
                 }
             }
@@ -229,12 +238,8 @@ internal fun SeriesDetailsScreen(
                     Spacer(Modifier.height(if (portrait) 100.dp else 130.dp))
                 }
                 item(key = "series:facts") {
-                    val facts =
-                        listOfNotNull(
-                            details.releaseDate,
-                            details.genre,
-                            details.rating?.let { "★ ${"%.1f".format(it)}" },
-                        )
+                    // The score has moved into the strip below, as on a film's page.
+                    val facts = listOfNotNull(details.releaseDate, details.genre)
                     if (facts.isNotEmpty()) {
                         Text(
                             text = facts.joinToString("  •  "),
@@ -243,146 +248,134 @@ internal fun SeriesDetailsScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
+                    val provider =
+                        providerIdentityFor(categoryName)
+                            ?.copy(logoUrl = providerLogoUrl)
+                    if (details.rating != null || provider != null) {
+                        Spacer(Modifier.height(if (portrait) 12.dp else 14.dp))
+                        RatingStrip(
+                            rating = details.rating,
+                            critics = criticScores,
+                            provider = provider,
+                            compact = portrait,
+                        )
+                    }
                 }
                 // Favourite and trailer together, the same pair a film gets. A series was the only
                 // kind of title with no way to favourite it from its own page, which meant the one
                 // thing people return to weekly was the one thing they could not mark.
                 item(key = "series:actions") {
-                    // FlowRow for the same reason the film screen uses one: in a plain Row the
-                    // second button is laid out past the right edge on a phone and cannot be
-                    // reached by any gesture.
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        onToggleFavorite?.let { toggle ->
-                            BuroButton(onClick = toggle, style = BuroButtonStyle.Secondary) {
-                                Icon(
-                                    if (isFavorite) {
-                                        Icons.Default.Favorite
-                                    } else {
-                                        Icons.Default.FavoriteBorder
-                                    },
-                                    contentDescription = null,
-                                    tint = if (isFavorite) Color(0xFFE46C7A) else BuroTextPrimary,
-                                )
-                                // The longer label drawn invisibly underneath, so toggling does not
-                                // resize the button and reflow the row it sits in.
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = stringResource(R.string.details_favorite_added),
-                                        color = Color.Transparent,
-                                        maxLines = 1,
-                                    )
-                                    Text(
-                                        stringResource(
+                    // One compact bar of glyphs, matching the film screen.
+                    //
+                    // These were six labelled pills in a FlowRow, which on a phone in portrait ate
+                    // several lines before the episode list began. Every action is small, instant
+                    // and taken rarely — the shape an icon suits — and none of them moved behind a
+                    // menu, so nothing became harder to find than it was.
+                    val trailerId = details.youtubeTrailerId
+                    val anythingLeftToDownload =
+                        details.episodes.any { episode ->
+                            downloadStateOf(episode) != DownloadStateUi.Completed
+                        }
+                    BuroActionBar(
+                        actions =
+                            buildList {
+                                // Always present, disabled when there is no toggle: a slot that
+                                // appears only under its condition moves every action after it, and
+                                // that is what made the row differ from one series to the next.
+                                add(
+                                    BuroAction(
+                                        icon =
                                             if (isFavorite) {
-                                                R.string.details_favorite_added
+                                                Icons.Default.Favorite
                                             } else {
-                                                R.string.details_favorite_add
+                                                Icons.Default.FavoriteBorder
                                             },
-                                        ),
-                                        maxLines = 1,
-                                    )
-                                }
-                            }
-                        }
-                        // The reminder, beside Favoritar and on the same terms. Always drawn
-                        // rather than wrapped in a null check, so the row keeps the same shape on
-                        // every series — the reflow that made these buttons "behave differently on
-                        // each title" came from exactly that kind of conditional slot.
-                        BuroButton(
-                            onClick = { onToggleReminder?.invoke() },
-                            enabled = onToggleReminder != null,
-                            style = BuroButtonStyle.Secondary,
-                        ) {
-                            Icon(
-                                if (hasReminder) {
-                                    Icons.Default.Notifications
-                                } else {
-                                    Icons.Default.NotificationsNone
-                                },
-                                contentDescription = null,
-                                tint = if (hasReminder) BuroAccent else BuroTextPrimary,
-                            )
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = stringResource(R.string.reminder_added),
-                                    color = Color.Transparent,
-                                    maxLines = 1,
-                                )
-                                Text(
-                                    stringResource(
-                                        if (hasReminder) R.string.reminder_added else R.string.reminder_add,
-                                    ),
-                                    maxLines = 1,
-                                )
-                            }
-                        }
-                        // Always drawn, disabled when the provider gave no trailer id. The
-                        // same reason as on the film screen: a button that appears only under its
-                        // condition reflows every button after it, so the row was laid out
-                        // differently on each title.
-                        val trailerId = details.youtubeTrailerId
-                        BuroButton(
-                            onClick = {
-                                trailerId?.let { id ->
-                                    runCatching {
-                                        androidContext.startActivity(
-                                            Intent(
-                                                Intent.ACTION_VIEW,
-                                                Uri.parse("https://www.youtube.com/watch?v=$id"),
+                                        label =
+                                            stringResource(
+                                                if (isFavorite) {
+                                                    R.string.details_favorite_added
+                                                } else {
+                                                    R.string.details_favorite_add
+                                                },
                                             ),
-                                        )
-                                    }
-                                }
+                                        onClick = { onToggleFavorite?.invoke() },
+                                        enabled = onToggleFavorite != null,
+                                        active = isFavorite,
+                                        activeTint = Color(0xFFE46C7A),
+                                    ),
+                                )
+                                add(
+                                    BuroAction(
+                                        icon =
+                                            if (hasReminder) {
+                                                Icons.Default.Notifications
+                                            } else {
+                                                Icons.Default.NotificationsNone
+                                            },
+                                        label =
+                                            stringResource(
+                                                if (hasReminder) {
+                                                    R.string.reminder_added
+                                                } else {
+                                                    R.string.reminder_add
+                                                },
+                                            ),
+                                        onClick = { onToggleReminder?.invoke() },
+                                        enabled = onToggleReminder != null,
+                                        active = hasReminder,
+                                        activeTint = BuroAccent,
+                                    ),
+                                )
+                                // Downloading the lot stays confirmed rather than immediate: this is
+                                // the one action here that can start eighty transfers and fill a
+                                // phone, and it now sits among glyphs that do something small.
+                                add(
+                                    BuroAction(
+                                        icon = Icons.Default.Download,
+                                        label = stringResource(R.string.series_download_all),
+                                        onClick = { pendingBulkDownload = BulkDownload.WholeSeries },
+                                        enabled = onDownloadSeries != null && anythingLeftToDownload,
+                                    ),
+                                )
+                                add(
+                                    BuroAction(
+                                        icon = Icons.Default.PlayCircle,
+                                        label = stringResource(R.string.details_trailer),
+                                        onClick = {
+                                            trailerId?.let { id ->
+                                                runCatching {
+                                                    androidContext.startActivity(
+                                                        Intent(
+                                                            Intent.ACTION_VIEW,
+                                                            Uri.parse(
+                                                                "https://www.youtube.com/watch?v=$id",
+                                                            ),
+                                                        ),
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        enabled = trailerId != null,
+                                    ),
+                                )
+                                add(
+                                    BuroAction(
+                                        icon = Icons.Default.Share,
+                                        label = stringResource(R.string.details_share),
+                                        onClick = { onShare?.invoke() },
+                                        enabled = onShare != null,
+                                    ),
+                                )
+                                add(
+                                    BuroAction(
+                                        icon = Icons.Default.Cast,
+                                        label = stringResource(R.string.cast_action),
+                                        onClick = { onCast?.invoke() },
+                                        enabled = onCast != null,
+                                    ),
+                                )
                             },
-                            enabled = trailerId != null,
-                            style = BuroButtonStyle.Secondary,
-                        ) {
-                            Text(stringResource(R.string.details_trailer))
-                        }
-                        BuroButton(
-                            onClick = { onShare?.invoke() },
-                            enabled = onShare != null,
-                            style = BuroButtonStyle.Secondary,
-                        ) {
-                            Icon(Icons.Default.Share, contentDescription = null)
-                            Text(stringResource(R.string.details_share))
-                        }
-                        // Beside Compartilhar: what travels is the identity of the title, which
-                        // the catalogue row already provides.
-                        BuroButton(
-                            onClick = { onCast?.invoke() },
-                            enabled = onCast != null,
-                            style = BuroButtonStyle.Secondary,
-                        ) {
-                            Icon(Icons.Default.Cast, contentDescription = null)
-                            Text(stringResource(R.string.cast_action))
-                        }
-                        // Downloading the lot. Confirmed rather than immediate: this is the one
-                        // button on the screen that can start eighty transfers and fill a phone,
-                        // and it sits next to buttons that do something small and instant.
-                        // Hidden once every episode is stored, rather than left to open a dialog
-                        // that would promise zero transfers. "Already downloaded" is a state the
-                        // episode rows show individually; a button offering to fetch nothing is not
-                        // a useful thing to press.
-                        // Disabled rather than hidden once every episode is stored. A button that
-                        // vanishes on completion moves the whole row, and "everything is already
-                        // downloaded" is worth saying plainly — the greyed button says it.
-                        val anythingLeftToDownload =
-                            details.episodes.any { episode ->
-                                downloadStateOf(episode) != DownloadStateUi.Completed
-                            }
-                        BuroButton(
-                            onClick = { pendingBulkDownload = BulkDownload.WholeSeries },
-                            enabled = onDownloadSeries != null && anythingLeftToDownload,
-                            style = BuroButtonStyle.Secondary,
-                        ) {
-                            Icon(Icons.Default.Download, contentDescription = null)
-                            Text(stringResource(R.string.series_download_all))
-                        }
-                    }
+                    )
                 }
             }
 
@@ -744,7 +737,7 @@ private fun EpisodeCard(
             ) {
                 episode.artworkUrl?.let { artwork ->
                     AsyncImage(
-                        model = ImageRequest.Builder(LocalPlatformContext.current).data(artwork).diskCachePolicy(CachePolicy.DISABLED).build(),
+                        model = ImageRequest.Builder(LocalPlatformContext.current).data(artwork).build(),
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,

@@ -13,6 +13,30 @@ interface ChannelDao {
      * One stable, non-empty image per category. `MIN` is intentional: it keeps the result
      * deterministic without loading every catalogue row merely to decorate the category grid.
      */
+    /**
+     * Every distinct artwork address in the library, for the cache fill to warm.
+     *
+     * Only the one column, and `DISTINCT`: the fill needs addresses, not catalogue rows, and
+     * loading forty thousand fully-formed entities to read one field from each would cost more
+     * memory than the images it is about to fetch. Providers also reuse a placeholder across many
+     * titles, so the distinct set is materially smaller than the row count.
+     *
+     * Ordered by `sort_order` so the first thing cached is the first thing seen: somebody who
+     * starts the fill and opens the catalogue a minute later finds the top of the list already
+     * drawn, rather than waiting for an arbitrary walk to reach it.
+     */
+    @Query(
+        """
+        SELECT DISTINCT logo_url
+        FROM channels
+        WHERE logo_url IS NOT NULL
+          AND TRIM(logo_url) != ''
+        ORDER BY sort_order
+        LIMIT :limit
+        """,
+    )
+    suspend fun artworkUrlsForCaching(limit: Int): List<String>
+
     @Query(
         """
         SELECT category_id AS categoryId, MIN(logo_url) AS artworkUrl

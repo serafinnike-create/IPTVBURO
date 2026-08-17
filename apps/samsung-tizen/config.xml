@@ -2,7 +2,7 @@
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
         id="http://iptvburo.com/tizen"
-        version="0.1.0"
+        version="0.3.0"
         viewmodes="maximized">
     <name>IPTV BURO</name>
     <description>Player e organizador de midia para fontes autorizadas pelo usuario.</description>
@@ -21,6 +21,18 @@
     <!-- AVPlay e a engine de video nativa da Samsung. -->
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+
+    <!--
+      Download para armazenamento USB.
+
+      O armazenamento interno do app e pequeno demais para video, entao o
+      download so e oferecido quando ha um pendrive ou HD montado. Sem estes
+      tres privilegios a API nem sequer aparece no runtime.
+    -->
+    <tizen:privilege name="http://tizen.org/privilege/download"/>
+    <tizen:privilege name="http://tizen.org/privilege/filesystem.read"/>
+    <tizen:privilege name="http://tizen.org/privilege/filesystem.write"/>
 
     <!-- Teclas do controle remoto que o app precisa receber. -->
     <tizen:setting screen-orientation="landscape"

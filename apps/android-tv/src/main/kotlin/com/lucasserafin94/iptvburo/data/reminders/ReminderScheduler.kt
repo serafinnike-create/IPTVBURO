@@ -2,10 +2,12 @@ package com.lucasserafin94.iptvburo.data.reminders
 
 import android.content.Context
 import com.lucasserafin94.iptvburo.data.preferences.ReminderPreferences
+import com.lucasserafin94.iptvburo.data.preferences.ReminderSchedule
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.LocalTime
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.Flow
 
 /**
  * The part of scheduling the view model depends on.
@@ -15,6 +17,15 @@ import javax.inject.Singleton
  * only wants to assert what a button does would otherwise have to stand up WorkManager to do it.
  */
 interface ReminderScheduling {
+    /**
+     * The setting as it stands, for the page that shows and edits it.
+     *
+     * A flow rather than a one-shot read so the reminders page reflects a change made anywhere
+     * else — the same store is written by [setTime] and [setNotify], and a page holding a snapshot
+     * would keep showing the old hour after one of those ran.
+     */
+    val schedule: Flow<ReminderSchedule>
+
     suspend fun sync()
 
     suspend fun setTime(hour: Int, minute: Int)
@@ -39,6 +50,8 @@ class ReminderScheduler
         @ApplicationContext private val context: Context,
         private val preferences: ReminderPreferences,
     ) : ReminderScheduling {
+        override val schedule: Flow<ReminderSchedule> get() = preferences.schedule
+
         /**
          * Applies whatever the setting currently says.
          *

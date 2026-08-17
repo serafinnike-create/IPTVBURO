@@ -9,6 +9,7 @@ import com.lucasserafin94.iptvburo.data.local.dao.ChannelDao
 import com.lucasserafin94.iptvburo.data.local.dao.FavoriteDao
 import com.lucasserafin94.iptvburo.data.local.dao.ProfileDao
 import com.lucasserafin94.iptvburo.data.local.dao.ReminderDao
+import com.lucasserafin94.iptvburo.data.local.dao.SeriesWatchDao
 import com.lucasserafin94.iptvburo.data.local.dao.PlaybackProgressDao
 import com.lucasserafin94.iptvburo.data.local.dao.SourceDao
 import com.lucasserafin94.iptvburo.data.local.entity.CategoryEntity
@@ -17,6 +18,7 @@ import com.lucasserafin94.iptvburo.data.local.dao.LibraryEntryDao
 import com.lucasserafin94.iptvburo.data.local.entity.FavoriteEntity
 import com.lucasserafin94.iptvburo.data.local.entity.LibraryEntryEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ReminderEntity
+import com.lucasserafin94.iptvburo.data.local.entity.SeriesWatchEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ProfileEntity
 import com.lucasserafin94.iptvburo.data.local.entity.PlaybackProgressEntity
 import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
@@ -31,8 +33,9 @@ import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
         PlaybackProgressEntity::class,
         LibraryEntryEntity::class,
         ReminderEntity::class,
+        SeriesWatchEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class IptvBuroDatabase : RoomDatabase() {
@@ -45,6 +48,8 @@ abstract class IptvBuroDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
 
     abstract fun reminderDao(): ReminderDao
+
+    abstract fun seriesWatchDao(): SeriesWatchDao
 
     abstract fun favoriteDao(): FavoriteDao
 
@@ -213,6 +218,38 @@ abstract class IptvBuroDatabase : RoomDatabase() {
          * point at, and the cascade favourites carry would delete every reminder on the next
          * playlist import — losing exactly the titles the feature exists to watch for.
          */
+        /**
+         * How large each favourited series was at the last count, for the new-episode notice.
+         *
+         * Additive: a table that did not exist before, so nothing already stored is read, rewritten
+         * or at risk. An install upgrading through this keeps every favourite, reminder and resume
+         * point exactly as it was, and simply starts counting series from the next check — which is
+         * also why the first count of any series announces nothing.
+         */
+        val MIGRATION_9_10: Migration =
+            object : Migration(9, 10) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS series_watch (
+                            profile_id TEXT NOT NULL,
+                            channel_id TEXT NOT NULL,
+                            title TEXT NOT NULL,
+                            episode_count INTEGER NOT NULL,
+                            season_count INTEGER NOT NULL,
+                            latest_season INTEGER NOT NULL,
+                            checked_at_epoch_millis INTEGER NOT NULL,
+                            PRIMARY KEY(profile_id, channel_id),
+                            FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_series_watch_profile_id ON series_watch(profile_id)",
+                    )
+                }
+            }
+
         val MIGRATION_8_9: Migration =
             object : Migration(8, 9) {
                 override fun migrate(db: SupportSQLiteDatabase) {

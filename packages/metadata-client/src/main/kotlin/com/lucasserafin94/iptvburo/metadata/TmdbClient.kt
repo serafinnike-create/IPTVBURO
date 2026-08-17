@@ -240,18 +240,31 @@ class TmdbClient(
      * Deliberately a separate call from [findTrailer] rather than a widened return type: most
      * screens want one or the other, and a title with no trailer still has a score worth showing.
      */
-    fun findAudienceScore(title: String, year: Int?): TmdbAudienceScore? {
+    fun findAudienceScore(
+        title: String,
+        year: Int?,
+        isSeries: Boolean = false,
+    ): TmdbAudienceScore? {
         val key = apiKey?.takeIf(String::isNotBlank) ?: return null
         if (title.isBlank()) return null
 
         val searchUrl =
             baseUrl.newBuilder()
-                .addPathSegments("search/movie")
+                .addPathSegments(if (isSeries) "search/tv" else "search/movie")
                 .addQueryParameter("api_key", key)
                 .addQueryParameter("query", title.trim())
                 .addQueryParameter("language", language)
                 .addQueryParameter("include_adult", "false")
-                .apply { year?.let { addQueryParameter("year", it.toString()) } }
+                .apply {
+                    // The two endpoints name the same filter differently: a film is matched on its
+                    // release year, a series on the year it first aired.
+                    year?.let {
+                        addQueryParameter(
+                            if (isSeries) "first_air_date_year" else "year",
+                            it.toString(),
+                        )
+                    }
+                }
                 .build()
 
         val match =

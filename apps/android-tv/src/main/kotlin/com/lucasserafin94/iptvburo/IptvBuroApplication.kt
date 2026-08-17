@@ -14,8 +14,16 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.intercept.Interceptor
+import coil3.request.CachePolicy
 import coil3.request.crossfade
+import com.lucasserafin94.iptvburo.data.cache.ArtworkCache
+import com.lucasserafin94.iptvburo.data.cache.isStorableArtwork
+import com.lucasserafin94.iptvburo.data.preferences.CacheSettingsStore
+import com.lucasserafin94.iptvburo.domain.model.CacheBudget
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 @HiltAndroidApp
 class IptvBuroApplication : Application(), SingletonImageLoader.Factory, Configuration.Provider {
@@ -28,6 +36,10 @@ class IptvBuroApplication : Application(), SingletonImageLoader.Factory, Configu
      */
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
+
+    /** The viewer's cache budget, needed while the image loader is being built. */
+    @Inject
+    lateinit var cacheSettings: CacheSettingsStore
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
@@ -54,7 +66,33 @@ class IptvBuroApplication : Application(), SingletonImageLoader.Factory, Configu
      */
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
-            .components { add(OkHttpNetworkFetcherFactory()) }
+            .components {
+                add(OkHttpNetworkFetcherFactory())
+                // The credential gate, applied to every request the app makes.
+                //
+                // The disk cache was previously switched off at every call site because a
+                // provider's authenticated artwork address carries the subscriber's username and
+                // password in its path, and writing it to disk would leave that credential behind
+                // long after the source was deleted. Turning the cache back on needs the danger
+                // removed, not the flag flipped: an address that carries a credential is still
+                // fetched and drawn, but only from memory, while an ordinary static poster is kept.
+                //
+                // Here rather than at the call sites so a screen added later cannot forget it.
+                add(
+                    Interceptor { chain ->
+                        val model = chain.request.data
+                        val request =
+                            if (model is String && !isStorableArtwork(model)) {
+                                chain.request.newBuilder()
+                                    .diskCachePolicy(CachePolicy.DISABLED)
+                                    .build()
+                            } else {
+                                chain.request
+                            }
+                        chain.withRequest(request).proceed()
+                    },
+                )
+            }
             .memoryCache {
                 MemoryCache.Builder()
                     // A share of what this process is actually allowed, not a fixed figure: the
@@ -64,8 +102,11 @@ class IptvBuroApplication : Application(), SingletonImageLoader.Factory, Configu
             }
             .diskCache {
                 DiskCache.Builder()
-                    .directory(cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(DISK_CACHE_BYTES)
+                    .directory(cacheDir.resolve(ArtworkCache.DIRECTORY_NAME))
+                    // The viewer's own figure, read once at construction. Coil builds its loader
+                    // once per process, so a budget changed in Settings takes effect on the next
+                    // launch; the setting screen says so rather than pretending otherwise.
+                    .maxSizeBytes(configuredDiskCacheBytes())
                     .build()
             }
             // Artwork arrives while a row is already on screen; fading it in reads as loading
@@ -73,8 +114,31 @@ class IptvBuroApplication : Application(), SingletonImageLoader.Factory, Configu
             .crossfade(true)
             .build()
 
+    /**
+     * The chosen budget in bytes, or the default for somebody who has not been asked yet.
+     *
+     * Read inside `diskCache { }`, which Coil evaluates lazily off the main thread the first time
+     * an image is fetched. That laziness is what makes the blocking read acceptable *here* and
+     * nowhere else: an earlier version called this while building the loader, which put a DataStore
+     * read on whatever thread drew the first poster and helped freeze the app on launch.
+     *
+     * Falls back to the default rather than throwing: a cache is an optimisation, and failing to
+     * read a preference is not a reason to leave the app with no artwork at all.
+     */
+    private fun configuredDiskCacheBytes(): Long =
+        runCatching {
+            runBlocking { cacheSettings.observeBudget().first() }
+        }.getOrDefault(CacheBudget.DEFAULT).bytes.coerceAtLeast(MINIMUM_DISK_CACHE_BYTES)
+
     private companion object {
-        /** Enough for a browsing session's artwork without taking over the device's storage. */
-        const val DISK_CACHE_BYTES = 128L * 1024L * 1024L
+        /**
+         * What the cache falls back to when the viewer has chosen zero.
+         *
+         * Not actually zero: Coil rejects a cache of no size, and a browsing session still needs the
+         * poster it drew a second ago. Zero in the setting means "do not pre-fill the library", which
+         * is the expensive part; this is a working set, not a library, and it is cleared when the
+         * viewer turns the feature off.
+         */
+        const val MINIMUM_DISK_CACHE_BYTES = 32L * 1024L * 1024L
     }
 }

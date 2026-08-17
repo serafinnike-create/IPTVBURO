@@ -1,7 +1,10 @@
 package com.lucasserafin94.iptvburo.data.repository
 
 import com.lucasserafin94.iptvburo.data.local.dao.FavoriteDao
+import com.lucasserafin94.iptvburo.data.local.dao.PlaybackProgressDao
 import com.lucasserafin94.iptvburo.data.local.dao.ProfileDao
+import com.lucasserafin94.iptvburo.data.local.dao.SeriesWatchDao
+import com.lucasserafin94.iptvburo.data.local.dao.ReminderDao
 import com.lucasserafin94.iptvburo.data.local.entity.FavoriteEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ProfileEntity
 import com.lucasserafin94.iptvburo.data.mapper.toDomain
@@ -12,6 +15,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 data class BuroProfile(
@@ -34,6 +38,13 @@ enum class ProfileType { ADULT, KIDS, GUEST }
 class UserLibraryRepository @Inject constructor(
     private val profileDao: ProfileDao,
     private val favoriteDao: FavoriteDao,
+    // Read only to tell whether the automatic first profile was ever used, which is what decides
+    // if it can be tidied away. Nothing here writes to either.
+    private val reminderDao: ReminderDao,
+    private val playbackProgressDao: PlaybackProgressDao,
+    // Cleared when a favourite is removed, so re-adding a series later starts a fresh
+    // baseline rather than comparing against a stale count.
+    private val seriesWatchDao: SeriesWatchDao,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     fun observeProfiles(): Flow<List<ProfileEntity>> = profileDao.observeAll()
@@ -69,6 +80,49 @@ class UserLibraryRepository @Inject constructor(
             )
         }
     }
+
+    /**
+     * Drops the automatic first profile once the household has made one of its own.
+     *
+     * [ensureDefaultProfile] creates "Meu perfil" on a fresh install so there is somewhere to file
+     * favourites and progress before anyone has been asked anything — without it, every one of
+     * those writes would find no profile and silently do nothing. It is scaffolding, and it was
+     * never taken down: somebody who then created their own profile was left choosing between their
+     * name and a stranger's on every launch.
+     *
+     * Removed only when all of this holds, so nothing anyone did is thrown away:
+     *
+     * - **another profile exists**, and it is not this one. The app has no meaningful state with no
+     *   profile at all, which is the same rule [deleteProfile] enforces.
+     * - **it is untouched** — no favourites, no reminders, no playback progress. A household that
+     *   used the default before naming a second profile has real data under it, and deleting that
+     *   to tidy a list would be destroying the thing the list is for.
+     * - **it still has its given name.** Renaming it is how somebody adopts it as their own, and an
+     *   adopted profile is not scaffolding any more whatever it is called now.
+     *
+     * Returns whether anything was removed, which is only of interest to tests.
+     */
+    suspend fun removeUnusedDefaultProfile(defaultName: String): Boolean =
+        withContext(ioDispatcher) {
+            if (profileDao.count() <= 1) return@withContext false
+            val candidate =
+                profileDao.observeAll().first()
+                    .filter { entity -> entity.name.trim().equals(defaultName.trim(), ignoreCase = true) }
+                    // Only ever the automatic one, which is created first and is therefore the
+                    // earliest: a household that deliberately named a profile "Meu perfil" later
+                    // keeps it, because this only considers the one the app made itself.
+                    .minByOrNull { entity -> entity.createdAtEpochMillis }
+                    ?: return@withContext false
+            if (candidate.sortOrder != 0) return@withContext false
+            val untouched =
+                favoriteDao.observeIds(candidate.id).first().isEmpty() &&
+                    reminderDao.forProfile(candidate.id).isEmpty() &&
+                    playbackProgressDao.history(candidate.id, 1).isEmpty() &&
+                    playbackProgressDao.continueWatching(candidate.id, 1).isEmpty()
+            if (!untouched) return@withContext false
+            profileDao.delete(candidate.id)
+            true
+        }
 
     suspend fun createProfile(name: String, type: ProfileType, languageTag: String): BuroProfile =
         withContext(ioDispatcher) {
@@ -180,6 +234,10 @@ class UserLibraryRepository @Inject constructor(
         withContext(ioDispatcher) {
             if (currentlyFavorite) {
                 favoriteDao.remove(profileId, channelId)
+                // Stop following it too. Leaving the stored episode count behind would have the
+                // daily check comparing against a months-old number if the series were ever
+                // favourited again — and announcing every episode released in between as new.
+                runCatching { seriesWatchDao.remove(profileId, channelId) }
             } else {
                 favoriteDao.add(FavoriteEntity(profileId, channelId, System.currentTimeMillis()))
             }

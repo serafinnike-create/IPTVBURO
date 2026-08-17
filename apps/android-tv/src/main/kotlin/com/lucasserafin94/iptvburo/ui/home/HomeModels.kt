@@ -101,6 +101,13 @@ data class HomeItem(
     val artwork: HomeArtwork? = null,
     val remoteArtworkUrl: String? = null,
     val progress: Float? = null,
+    /**
+     * The catalogue category this came from, which is what names its streaming service.
+     *
+     * Carried only so the card can draw a platform badge; null for demonstration content and for
+     * rails built from something other than a category, where there is no service to name.
+     */
+    val categoryName: String? = null,
     val isDemonstration: Boolean,
 ) {
     init {
@@ -123,6 +130,14 @@ data class HomeItem(
 enum class HomeRailKind {
     SOURCES,
     CONTINUE_WATCHING,
+
+    /**
+     * Titles the profile marked to be reminded about.
+     *
+     * Its own kind rather than EDITORIAL because these are not catalogue rows: an upcoming title
+     * has no row to open, so pressing one leads to the reminders page instead of to playback.
+     */
+    REMINDERS,
     LIVE_NOW,
     EDITORIAL,
 

@@ -37,6 +37,7 @@ internal fun TmdbServiceShelf.toUi(): ProviderShelfUi =
     ProviderShelfUi(
         providerId = provider.id,
         providerName = provider.displayName,
+        tmdbProviderId = tmdbProviderId,
         titles = titles.map(ExternalTitle::toUi),
     )
 
@@ -46,6 +47,7 @@ internal fun ExternalTitle.toUi(): SubscriptionTitleUi =
         externalId = id.value,
         title = title,
         year = year,
+        releaseDate = releaseDate,
         posterUrl = posterUrl,
         isSeries = kind == ExternalTitleKind.SERIES,
         isDemo = isDemo,
@@ -62,6 +64,7 @@ internal fun SubscriptionTitleUi.toExternalTitle(): ExternalTitle =
         title = title,
         kind = if (isSeries) ExternalTitleKind.SERIES else ExternalTitleKind.MOVIE,
         year = year,
+        releaseDate = releaseDate,
         posterUrl = posterUrl,
         isDemo = isDemo,
     )

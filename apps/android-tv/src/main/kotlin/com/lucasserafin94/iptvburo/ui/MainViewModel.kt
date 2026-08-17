@@ -10,9 +10,19 @@ import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.core.logging.AppLogger
 import com.lucasserafin94.iptvburo.data.download.AndroidDownloadManager
 import com.lucasserafin94.iptvburo.data.download.DownloadResult
+import com.lucasserafin94.iptvburo.data.discovery.ProviderLogoCatalogue
 import com.lucasserafin94.iptvburo.data.discovery.StreamingDiscoveryRepository
 import com.lucasserafin94.iptvburo.data.preferences.CatalogueGuard
+import com.lucasserafin94.iptvburo.data.preferences.NotificationCentreStore
+import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
+import com.lucasserafin94.iptvburo.data.cache.ArtworkCacheAccess
+import com.lucasserafin94.iptvburo.data.cache.CacheFillWorker
+import com.lucasserafin94.iptvburo.data.preferences.CacheFillMark
+import com.lucasserafin94.iptvburo.data.preferences.CacheSettingsStore
+import com.lucasserafin94.iptvburo.domain.model.CacheBudget
+import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
+import com.lucasserafin94.iptvburo.data.preferences.PlaybackSessionStore
 import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.data.licensing.RedeemOutcome
@@ -36,6 +46,7 @@ import com.lucasserafin94.iptvburo.ui.capabilities.AndroidPlatformCapabilities
 import com.lucasserafin94.iptvburo.ui.screens.playbackProgressIdentity
 import com.lucasserafin94.iptvburo.ui.screens.yearFromReleaseDate
 import com.lucasserafin94.iptvburo.ui.cast.CastController
+import com.lucasserafin94.iptvburo.ui.cast.CastReceiver
 import com.lucasserafin94.iptvburo.ui.cast.CastSender
 import com.lucasserafin94.iptvburo.ui.cast.CastTarget
 import com.lucasserafin94.iptvburo.ui.cast.CastUiState
@@ -45,6 +56,11 @@ import com.lucasserafin94.iptvburo.domain.model.CatalogueFilter
 import com.lucasserafin94.iptvburo.domain.model.CatalogueLayout
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
+import com.lucasserafin94.iptvburo.domain.model.DiscoveryVerdict
+import com.lucasserafin94.iptvburo.domain.model.SessionTaste
+import com.lucasserafin94.iptvburo.domain.model.DiscoveryCandidate
+import com.lucasserafin94.iptvburo.domain.model.DiscoveryDeck
+import com.lucasserafin94.iptvburo.domain.model.TasteProfile
 import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.ContentKind
 import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
@@ -64,6 +80,8 @@ import com.lucasserafin94.iptvburo.domain.model.SubtitlePresentation
 import com.lucasserafin94.iptvburo.metadata.TmdbServiceShelf
 import com.lucasserafin94.iptvburo.domain.model.Source
 import com.lucasserafin94.iptvburo.domain.model.SourceType
+import com.lucasserafin94.iptvburo.metadata.CriticScores
+import com.lucasserafin94.iptvburo.metadata.CriticScoresClient
 import com.lucasserafin94.iptvburo.metadata.TmdbClient
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -83,8 +101,12 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -99,11 +121,16 @@ class MainViewModel @Inject constructor(
     private val userLibraryRepository: UserLibraryRepository,
     private val reminderRepository: ReminderRepository,
     private val reminderScheduler: ReminderScheduling,
+    private val playbackSessionPreferences: PlaybackSessionStore,
+    private val notificationCentrePreferences: NotificationCentreStore,
+    private val cacheSettings: CacheSettingsStore,
+    private val artworkCache: ArtworkCacheAccess,
     private val downloadManager: AndroidDownloadManager,
     private val licenseService: AndroidLicenseService,
     private val metadataKeyStore: MetadataKeyStore,
     private val streamingDiscoveryRepository: StreamingDiscoveryRepository,
     private val okHttpClient: OkHttpClient,
+    private val providerLogoCatalogue: ProviderLogoCatalogue,
     private val playbackProgressRepository: PlaybackProgressRepository,
     private val catalogueGuardPreferences: CatalogueGuard,
     private val subtitlePreferences: SubtitleSettings,
@@ -176,6 +203,10 @@ class MainViewModel @Inject constructor(
         observeSources()
         observeCatalogueGuard()
         observeSubtitles()
+        // Device-wide, like the notification hour below and unlike the bell: the cache is a
+        // property of this machine's storage, not of whoever happens to be signed in.
+        observeCacheSettings()
+        observeProviderLogos()
         // Re-applied on every launch, not only when a reminder is marked.
         //
         // Scheduled work does not always survive: a force stop cancels it until the app is opened
@@ -188,6 +219,21 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { reminderScheduler.sync() }
                 .onFailure { error -> logger.error(TAG, "Could not schedule reminders", error) }
+        }
+
+        // Household-wide, so it is collected once here rather than per profile: unlike the reminder
+        // list, switching profile does not change which hour the phone notifies at.
+        viewModelScope.launch {
+            reminderScheduler.schedule
+                .catch { error -> logger.error(TAG, "Could not read the reminder schedule", error) }
+                .collect { schedule ->
+                    mutableState.update {
+                        it.copy(
+                            reminderNotify = schedule.notify,
+                            reminderTime = schedule.time,
+                        )
+                    }
+                }
         }
     }
 
@@ -582,11 +628,21 @@ class MainViewModel @Inject constructor(
                 loadContinueWatching(mutableState.value.activeProfile?.id)
             }
 
+            // Nothing to load on the way in: the reminder observer is already running for the
+            // active profile, started when that profile was selected, so the list is current before
+            // the destination opens.
+            AppSection.REMINDERS -> updateDestination(section, AppContent.Reminders)
+
             AppSection.PROFILE -> updateDestination(section, AppContent.Profiles)
 
-            AppSection.DISCOVER,
-            AppSection.SEARCH,
-            -> updateDestination(section, AppContent.SectionPlaceholder(section))
+            AppSection.DISCOVER -> {
+                updateDestination(section, AppContent.Discover)
+                // Dealt on the way in rather than kept: the deck is built from favourites and
+                // watch history, and both change while the app is open.
+                dealDiscoveryDeck()
+            }
+
+            AppSection.SEARCH -> updateDestination(section, AppContent.SectionPlaceholder(section))
         }
     }
 
@@ -653,6 +709,24 @@ class MainViewModel @Inject constructor(
      * Separate from [saveTmdbKey], which writes this profile's own: the two are different scopes
      * and collapsing them into one call would make it impossible to tell which the user meant.
      */
+    /**
+     * Stores the OMDb key, which is what fills the critics' row.
+     *
+     * A blank value clears it, which is how the setting is switched off: with no key the lookup
+     * never runs and the row falls back to the scores the app already had.
+     */
+    fun saveCriticsKey(apiKey: String) {
+        viewModelScope.launch {
+            runCatching {
+                withContext(ioDispatcher) { metadataKeyStore.saveCritics(apiKey) }
+            }.onSuccess {
+                mutableState.update { it.copy(criticsKeyConfigured = apiKey.isNotBlank()) }
+            }.onFailure { error ->
+                logger.error(TAG, "Could not update the critics key", error)
+            }
+        }
+    }
+
     fun saveSharedTmdbKey(apiKey: String) {
         viewModelScope.launch {
             runCatching {
@@ -886,6 +960,56 @@ class MainViewModel @Inject constructor(
         resolvePendingSharedTitle()
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Receiving a title from a computer on the same network
+    // ---------------------------------------------------------------------------------------
+
+    private val castReceiver by lazy {
+        CastReceiver(
+            context = contextProvider.get(),
+            displayName = mutableState.value.activeProfile?.name.orEmpty(),
+        )
+    }
+
+    /**
+     * Starts listening and publishes the code to type into the sender.
+     *
+     * Called when the receive sheet opens and stopped when it closes, so the socket exists only
+     * while somebody is looking at the code — see [CastReceiver] for why a phone does not listen in
+     * the background.
+     */
+    fun startCastReceiver() {
+        val code =
+            castReceiver.start(existingCode = mutableState.value.castReceiverCode) { message ->
+                // The same path a shared link takes, because both name a title rather than a
+                // stream: the identity is resolved against *this* device's catalogue, so the
+                // sender's row ids never travel and each side opens its own copy.
+                openSharedLink(
+                    TitleShareLink(
+                        identity = message.identity,
+                        title = message.title,
+                        year = null,
+                        artworkUrl = null,
+                        description = null,
+                    ).appUri(),
+                )
+            }
+        mutableState.update { it.copy(castReceiverCode = code, isCastReceiverOn = code != null) }
+    }
+
+    fun stopCastReceiver() {
+        castReceiver.stop()
+        // The code itself is kept: it is this device's, reused next time so it does not have to be
+        // retyped into the computer on every session. Only the listening state goes false.
+        mutableState.update { it.copy(isCastReceiverOn = false) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // The socket must not outlive the screen that showed its code.
+        runCatching { castReceiver.stop() }
+    }
+
     /**
      * Resolves a link that is waiting on the catalogue, if there is one.
      *
@@ -938,6 +1062,81 @@ class MainViewModel @Inject constructor(
         mutableState.update { it.copy(sharedTitleMissing = false) }
     }
 
+    private var expandedServiceJob: Job? = null
+
+    /**
+     * Opens one service's whole catalogue, from the "Ver mais" at the end of its shelf.
+     *
+     * The shelf holds twenty titles because that is what fits on a rail, and reaching its end is
+     * where somebody asks what else is there. This walks the pages after the first rather than
+     * widening every shelf, which would make the whole screen slower to fill for a question most
+     * visits never ask.
+     */
+    fun expandService(shelf: ProviderShelfUi) {
+        val providerId = shelf.tmdbProviderId ?: return
+        expandedServiceJob?.cancel()
+        // The shelf's own titles are shown immediately rather than a spinner over an empty page:
+        // they are the first twenty of exactly the list being fetched, so the screen is useful
+        // while the rest arrives.
+        mutableState.update {
+            it.copy(
+                subscriptions =
+                    it.subscriptions.copy(
+                        expandedService =
+                            ExpandedServiceUi(
+                                providerId = shelf.providerId,
+                                providerName = shelf.providerName,
+                                titles = shelf.titles,
+                                isLoading = true,
+                            ),
+                    ),
+            )
+        }
+        expandedServiceJob =
+            viewModelScope.launch {
+                val state = mutableState.value
+                val titles =
+                    runCatching {
+                        streamingDiscoveryRepository.allTitlesOnService(
+                            apiKey = activeMetadataKey(),
+                            region = state.subscriptions.region,
+                            tmdbProviderId = providerId,
+                            kind = state.subscriptions.kind.toDiscoverKind(),
+                        )
+                    }.onFailure { error ->
+                        logger.error(TAG, "Could not expand a service catalogue", error)
+                    }.getOrDefault(emptyList())
+
+                mutableState.update { current ->
+                    // Guarded: the viewer can close this or open another service while the pages
+                    // are still arriving, and a late answer must not reopen what they left.
+                    val open = current.subscriptions.expandedService ?: return@update current
+                    if (open.providerId != shelf.providerId) return@update current
+                    current.copy(
+                        subscriptions =
+                            current.subscriptions.copy(
+                                expandedService =
+                                    open.copy(
+                                        // Falls back to the shelf's own titles when the request
+                                        // came back empty, so a failure shows twenty titles rather
+                                        // than an empty page under a service's name.
+                                        titles = titles.map { title -> title.toUi() }.ifEmpty { open.titles },
+                                        isLoading = false,
+                                    ),
+                            ),
+                    )
+                }
+            }
+    }
+
+    /** Returns from a service's full catalogue to the shelves. */
+    fun closeExpandedService() {
+        expandedServiceJob?.cancel()
+        mutableState.update {
+            it.copy(subscriptions = it.subscriptions.copy(expandedService = null))
+        }
+    }
+
     /** Returns from a title's offers to the shelves. */
     fun closeSubscriptionTitle() {
         subscriptionSelectionJob?.cancel()
@@ -986,6 +1185,16 @@ class MainViewModel @Inject constructor(
                 if (sourceId != null) {
                     userLibraryRepository.setProfileSource(created.id, sourceId)
                 }
+                // The moment the automatic first profile stops being needed: the household now has
+                // one it named itself, so the scaffolding can come down. Only removed when it was
+                // never used — see `removeUnusedDefaultProfile` for what that means.
+                //
+                // After creation rather than before, so a failure above leaves the default in place
+                // rather than a picker with nothing in it.
+                userLibraryRepository.removeUnusedDefaultProfile(
+                    runCatching { context.getString(R.string.profile_default_name) }
+                        .getOrDefault("Buro"),
+                )
                 created
             }.onFailure { error ->
                 logger.error(TAG, "Could not create a family profile", error)
@@ -1071,6 +1280,13 @@ class MainViewModel @Inject constructor(
             .firstOrNull { it.id == itemId }
             ?.let { item ->
             openChannel(item)
+            return
+        }
+        // A marked title. Opening the card leads to the reminders page rather than to playback:
+        // the rail exists to show what is coming, and an upcoming title has nothing to play yet.
+        // Films already in the catalogue matched the lookup above and never reach this.
+        if (itemId.startsWith(REMINDER_ITEM_PREFIX)) {
+            selectSection(AppSection.REMINDERS)
             return
         }
         // A title from a service shelf. Its id is not a catalogue row, so the lookup above never
@@ -1609,6 +1825,19 @@ class MainViewModel @Inject constructor(
                 publishCastState()
             }
         publishCastState()
+    }
+
+    /**
+     * Reaches a screen by its typed address, for a network where the search finds nothing.
+     *
+     * Suspends rather than launching into [castJob]: the field waits on the answer to say whether
+     * the address worked, and a fire-and-forget call would leave it unable to tell "nothing there"
+     * from "still trying".
+     */
+    suspend fun connectToScreenAt(address: String): Boolean {
+        val connected = castController.connectTo(address)
+        publishCastState()
+        return connected
     }
 
     fun chooseCastTarget(target: CastTarget) {
@@ -2164,7 +2393,16 @@ class MainViewModel @Inject constructor(
             return false
         }
 
+        // Saved across the cancellation below, which clears it along with the in-flight jobs.
+        //
+        // Without this, returning to a kept list left it unable to page any further: the rows were
+        // on screen but the cursor that fetches the next two hundred had been thrown away, so
+        // scrolling to the bottom simply stopped.
+        val cursorBeforeCancel = nextChannelCursor
         cancelCatalogWork()
+        if (previous is AppContent.Channels && mutableState.value.channels.isNotEmpty()) {
+            nextChannelCursor = cursorBeforeCancel
+        }
         if (current is AppContent.SeriesDetails || current is AppContent.MovieDetails) {
             clearEphemeralSeries()
         }
@@ -2185,7 +2423,18 @@ class MainViewModel @Inject constructor(
 
         when (previous) {
             is AppContent.Categories -> observeCategories(previous)
-            is AppContent.Channels -> loadInitialChannels(previous)
+            is AppContent.Channels -> {
+                // Reloaded only when there is nothing to come back to.
+                //
+                // The list the viewer left is still in state, so refetching it threw away work and
+                // took the screen with it: the filter was cleared, and — because only the first
+                // page is fetched — somebody who had scrolled past two hundred items came back to
+                // a list too short to hold their position. Keeping what is already loaded restores
+                // the screen they left, which is what a back press means.
+                if (mutableState.value.channels.isEmpty()) {
+                    loadInitialChannels(previous, keepFilter = true)
+                }
+            }
             is AppContent.MovieDetails -> Unit
             is AppContent.SeriesDetails -> Unit
             else -> cancelCatalogWork()
@@ -2515,7 +2764,12 @@ class MainViewModel @Inject constructor(
                 sourceId = channel.sourceId,
                 providerSeriesId = providerSeriesId,
                 fallbackTitle = channel.name,
+                fallbackArtworkUrl = channel.logoUrl,
                 channelId = channel.id,
+                // Carried so the details page can name the streaming service. Providers file their
+                // platform catalogues under series — "Series | Netflix", "Series | Max" — so this
+                // is where the badge has the most to say.
+                categoryName = channel.categoryName,
             )
         navigate(content)
         loadSeriesDetails(content)
@@ -2562,33 +2816,54 @@ class MainViewModel @Inject constructor(
                         providerMovieId = content.providerMovieId,
                     )
                     val metadataKey = activeMetadataKey()
-                    if (
-                        providerDetails.youtubeTrailerId.isNullOrBlank() &&
-                        !metadataKey.isNullOrBlank()
-                    ) {
-                        val trailer =
-                            withContext(ioDispatcher) {
-                                val client =
-                                    TmdbClient(
-                                        apiKey = metadataKey,
-                                        client = okHttpClient,
-                                        language = Locale.getDefault().toLanguageTag(),
-                                    )
-                                val year = providerDetails.releaseDate?.take(4)?.toIntOrNull()
-                                // Provider titles carry release tags — "[L]", "4K", "DUAL" — that
-                                // TMDb has never heard of, so an exact search on the raw name found
-                                // nothing and the Trailer button silently disappeared. Try the
-                                // cleaned name first, then the original in case the cleaning was
-                                // the thing that broke the match.
-                                val cleaned = providerDetails.title.compatibilityTitlePrefix()
-                                client.findTrailer(title = cleaned, year = year)
-                                    ?: client.findTrailer(title = providerDetails.title, year = year)
-                                    // Without the year as a last resort: a provider's year is often
-                                    // the upload year rather than the release year, and a wrong one
-                                    // excludes the correct film from the results entirely.
-                                    ?: year?.let { client.findTrailer(title = cleaned, year = null) }
-                            }
-                        providerDetails.copy(youtubeTrailerId = trailer)
+                    // The audience score is worth fetching whether or not a trailer is needed: a
+                    // provider sends a bare `rating` with no vote count, so the count — the thing
+                    // that makes a score mean anything — can only come from here.
+                    val needsTrailer = providerDetails.youtubeTrailerId.isNullOrBlank()
+                    if (!metadataKey.isNullOrBlank()) {
+                        withContext(ioDispatcher) {
+                            val client =
+                                TmdbClient(
+                                    apiKey = metadataKey,
+                                    client = okHttpClient,
+                                    language = Locale.getDefault().toLanguageTag(),
+                                )
+                            val year = providerDetails.releaseDate?.take(4)?.toIntOrNull()
+                            // Provider titles carry release tags — "[L]", "4K", "DUAL" — that
+                            // TMDb has never heard of, so an exact search on the raw name found
+                            // nothing and the Trailer button silently disappeared. Try the
+                            // cleaned name first, then the original in case the cleaning was
+                            // the thing that broke the match.
+                            val cleaned = providerDetails.title.compatibilityTitlePrefix()
+                            val trailer =
+                                if (needsTrailer) {
+                                    client.findTrailer(title = cleaned, year = year)
+                                        ?: client.findTrailer(
+                                            title = providerDetails.title,
+                                            year = year,
+                                        )
+                                        // Without the year as a last resort: a provider's year is
+                                        // often the upload year rather than the release year, and a
+                                        // wrong one excludes the correct film from the results.
+                                        ?: year?.let {
+                                            client.findTrailer(title = cleaned, year = null)
+                                        }
+                                } else {
+                                    providerDetails.youtubeTrailerId
+                                }
+                            val score =
+                                client.findAudienceScore(title = cleaned, year = year)
+                                    ?: year?.let {
+                                        client.findAudienceScore(title = cleaned, year = null)
+                                    }
+                            providerDetails.copy(
+                                youtubeTrailerId = trailer,
+                                // The provider's own figure stands when TMDb has nothing: it is
+                                // still a score, just one without a count to qualify it.
+                                rating = score?.average ?: providerDetails.rating,
+                                voteCount = score?.voteCount,
+                            )
+                        }
                     } else {
                         providerDetails
                     }
@@ -2597,10 +2872,25 @@ class MainViewModel @Inject constructor(
                     mutableState.update {
                         it.copy(
                             movieDetails = details.toUi(),
+                            // Cleared so the previous title's badge and scores never linger here.
+                            openTitleProviderLogoUrl = null,
+                            openTitleCriticScores = null,
                             isMovieLoading = false,
                             hasMovieError = false,
                         )
                     }
+                    loadProviderLogo(
+                        content = content,
+                        title = details.title,
+                        releaseDate = details.releaseDate,
+                        isSeries = false,
+                    )
+                    loadCriticScores(
+                        content = content,
+                        title = details.title,
+                        releaseDate = details.releaseDate,
+                        isSeries = false,
+                    )
                     hydrateDownloadStates(listOf(movieDownloadKey(details.title)))
                     loadOpenTitleProgress(knownMovieChannels[content.channelId])
                     details.cast
@@ -2627,6 +2917,114 @@ class MainViewModel @Inject constructor(
                     }
                 }
             }
+    }
+
+    /**
+     * Fetches the streaming service's official mark for the open title.
+     *
+     * TMDb publishes the providers' own logos through `watch/providers` and licenses them for this
+     * use with attribution, which is what makes showing a real Netflix or Prime mark legitimate
+     * where an imitation would not be.
+     *
+     * Runs after the page is drawn and never blocks it: a logo is decoration, and a title whose
+     * episode list waited on a second network round trip would be a worse page, not a better one.
+     * Failure is silence — the badge falls back to the monogram on the service's colour.
+     */
+    /**
+     * The critics' scores for the open title, from OMDb.
+     *
+     * Separate from the platform logo despite both starting with the same TMDb search, because they
+     * fail independently: OMDb needs its own key, has its own daily limit, and a household that has
+     * not pasted one should still see the logo. Silence on failure — the row simply shows what it
+     * has, and shows nothing when it has nothing.
+     */
+    private fun loadCriticScores(
+        content: AppContent,
+        title: String,
+        releaseDate: String?,
+        isSeries: Boolean,
+    ) {
+        viewModelScope.launch {
+            val criticsKey =
+                withContext(ioDispatcher) {
+                    runCatching { metadataKeyStore.readCritics() }.getOrNull()
+                }
+            if (criticsKey.isNullOrBlank()) return@launch
+            val metadataKey = activeMetadataKey()
+            if (metadataKey.isNullOrBlank()) return@launch
+
+            val scores =
+                withContext(ioDispatcher) {
+                    runCatching {
+                        val tmdb =
+                            TmdbClient(
+                                apiKey = metadataKey,
+                                client = okHttpClient,
+                                language = Locale.getDefault().toLanguageTag(),
+                            )
+                        val year = releaseDate?.take(4)?.toIntOrNull()
+                        val cleaned = title.compatibilityTitlePrefix()
+                        // OMDb is keyed by IMDb id, and the playlist has no idea what that is — so
+                        // TMDb is asked to identify the title first, exactly as the logo lookup does.
+                        val tmdbId =
+                            tmdb.findAudienceScore(cleaned, year, isSeries)?.tmdbId
+                                ?: tmdb.findAudienceScore(cleaned, null, isSeries)?.tmdbId
+                                ?: return@runCatching null
+                        val imdbId =
+                            tmdb.titleDetails(tmdbId, isSeries)?.imdbId ?: return@runCatching null
+                        CriticScoresClient(apiKey = criticsKey, client = okHttpClient)
+                            .scoresFor(imdbId)
+                            ?.takeIf(CriticScores::hasAny)
+                    }.getOrNull()
+                }
+            // Guarded because the viewer can leave before this returns; scores arriving after they
+            // opened something else would be attached to the wrong title.
+            if (mutableState.value.content != content) return@launch
+            mutableState.update { it.copy(openTitleCriticScores = scores) }
+        }
+    }
+
+    private fun loadProviderLogo(
+        content: AppContent,
+        title: String,
+        releaseDate: String?,
+        isSeries: Boolean,
+    ) {
+        viewModelScope.launch {
+            val metadataKey = activeMetadataKey()
+            if (metadataKey.isNullOrBlank()) return@launch
+            val logo =
+                withContext(ioDispatcher) {
+                    runCatching {
+                        val client =
+                            TmdbClient(
+                                apiKey = metadataKey,
+                                client = okHttpClient,
+                                language = Locale.getDefault().toLanguageTag(),
+                            )
+                        val year = releaseDate?.take(4)?.toIntOrNull()
+                        // Provider titles carry release tags — "[L]", "4K", "DUAL" — that TMDb has
+                        // never heard of, so the cleaned name is tried first.
+                        val cleaned = title.compatibilityTitlePrefix()
+                        val tmdbId =
+                            client.findAudienceScore(cleaned, year, isSeries)?.tmdbId
+                                ?: client.findAudienceScore(cleaned, null, isSeries)?.tmdbId
+                                ?: return@runCatching null
+                        // Region matters: what a title streams on in Brazil is not what it streams
+                        // on elsewhere, and the wrong region names the wrong service.
+                        val region = Locale.getDefault().country.takeIf { it.isNotBlank() } ?: "BR"
+                        val providers =
+                            client.watchProviders(tmdbId, region, isSeries) ?: return@runCatching null
+                        providers.subscription.firstOrNull()?.logoUrl
+                            ?: providers.free.firstOrNull()?.logoUrl
+                            ?: providers.withAds.firstOrNull()?.logoUrl
+                    }.getOrNull()
+                }
+            // Guarded because the viewer can leave before this returns; a logo arriving after they
+            // opened something else would badge the wrong title.
+            if (mutableState.value.content != content) return@launch
+            mutableState.update { it.copy(openTitleProviderLogoUrl = logo) }
+        }
     }
 
     private fun loadSeriesDetails(content: AppContent.SeriesDetails) {
@@ -2666,6 +3064,13 @@ class MainViewModel @Inject constructor(
                         },
                     )
                     loadEpisodeProgress(content, details.episodes)
+                    // The service's official mark, fetched after the page is already on screen.
+                    //
+                    // Deliberately not part of the load above: a logo is decoration, and making the
+                    // episode list wait on a second network round trip would trade something the
+                    // viewer came for against something they merely notice.
+                    loadProviderLogo(content, seriesUi.title, seriesUi.releaseDate, isSeries = true)
+                    loadCriticScores(content, seriesUi.title, seriesUi.releaseDate, isSeries = true)
                 }.onFailure { error ->
                     if (error is CancellationException) return@onFailure
                     logger.error(TAG, "Could not load series details", error)
@@ -2774,7 +3179,20 @@ class MainViewModel @Inject constructor(
             }
     }
 
-    private fun loadInitialChannels(content: AppContent.Channels) {
+    /**
+     * Opens a catalogue list from scratch.
+     *
+     * [keepFilter] exists for the back press. Coming *back* to a list is not the same as opening a
+     * new one: the viewer filtered to 2026, opened a film, and returning has to show them the list
+     * they left rather than the unfiltered one. Clearing it meant choosing the year again on every
+     * return, which made browsing a filtered list impractical.
+     *
+     * It stays false everywhere else, which is the case the clearing was written for — see below.
+     */
+    private fun loadInitialChannels(
+        content: AppContent.Channels,
+        keepFilter: Boolean = false,
+    ) {
         catalogJob?.cancel()
         pageJob?.cancel()
         nextChannelCursor = null
@@ -2785,7 +3203,10 @@ class MainViewModel @Inject constructor(
                 // still in force in the next, and a genre that category does not have narrowed it
                 // to nothing — so "Series | Netflix · 1716 itens" opened onto "this source has no
                 // compatible channels" while the count on the card stayed right.
-                catalogueFilter = CatalogueFilter(),
+                //
+                // That reasoning is about moving *between* lists, so it does not apply to a back
+                // press returning to the one list the filter was chosen for.
+                catalogueFilter = if (keepFilter) it.catalogueFilter else CatalogueFilter(),
                 isCatalogLoading = true,
                 isLoadingMore = false,
                 hasMoreChannels = false,
@@ -2864,6 +3285,11 @@ class MainViewModel @Inject constructor(
         // A link tapped from a cold start has been waiting for rows to search. This is the first
         // moment there are any, so it is the first moment the lookup can honestly say "not found".
         resolvePendingSharedTitle()
+        // And the same is true of a player that was open when Android killed the app: the row it
+        // named has to be read back from the catalogue, so this is the earliest it can be reopened.
+        // Ordered after the shared link deliberately — somebody who just tapped a link asked for
+        // that title now, and it must not be pushed aside by what they were watching before.
+        restorePlaybackSession()
     }
 
     private fun observeOnboarding() {
@@ -2887,14 +3313,20 @@ class MainViewModel @Inject constructor(
 
     private fun observeProfiles() {
         viewModelScope.launch {
-            userLibraryRepository.ensureDefaultProfile(
-                languageTag = Locale.getDefault().toLanguageTag(),
+            val defaultProfileName =
                 // The repository's own fallback covers a context that cannot resolve resources,
                 // which is what the unit tests run against.
-                defaultName =
-                    runCatching { context.getString(R.string.profile_default_name) }
-                        .getOrDefault("Buro"),
+                runCatching { context.getString(R.string.profile_default_name) }
+                    .getOrDefault("Buro")
+            userLibraryRepository.ensureDefaultProfile(
+                languageTag = Locale.getDefault().toLanguageTag(),
+                defaultName = defaultProfileName,
             )
+            // Also on the way in, not only when a profile is created: a device that named its own
+            // profile before this existed is already carrying the leftover, and it would otherwise
+            // sit in the picker for good. Does nothing on a fresh install, where the default is the
+            // only profile there is.
+            userLibraryRepository.removeUnusedDefaultProfile(defaultProfileName)
             combine(
                 userLibraryRepository.observeProfiles(),
                 onboardingPreferences.activeProfileId,
@@ -2905,7 +3337,24 @@ class MainViewModel @Inject constructor(
                 }
                 .collect { (entities, activeId) ->
                     val profiles = entities.map { it.toProfile().toUi() }
-                    val active = profiles.firstOrNull { it.id == activeId }
+                    var active = profiles.firstOrNull { it.id == activeId }
+
+                    // One profile means there is nothing to choose.
+                    //
+                    // Asking "who is watching?" when the answer can only be one person is a screen
+                    // that exists to be dismissed. With two or more the picker still appears, which
+                    // is the case it was built for.
+                    //
+                    // Deliberately not applied to a Kids profile: that one is a boundary somebody
+                    // set on purpose, and walking into it without the picker having been shown
+                    // would make a household's only child profile the silent default.
+                    if (active == null && profiles.size == 1) {
+                        val only = profiles.first()
+                        if (!only.isKids) {
+                            runCatching { onboardingPreferences.selectProfile(only.id) }
+                            active = only
+                        }
+                    }
                     // The profile's own key, or the one baked into the build. Reading it through
                     // the repository is what lets a build that shipped with a key work out of the
                     // box: asking the key store alone reported "not configured" and switched
@@ -2920,8 +3369,21 @@ class MainViewModel @Inject constructor(
                         withContext(ioDispatcher) {
                             runCatching { metadataKeyStore.readShared() }.getOrNull()
                         }
-                    val metadataConfigured =
-                        streamingDiscoveryRepository.effectiveKey(profileKey, sharedKey) != null
+                    val effectiveKey =
+                        streamingDiscoveryRepository.effectiveKey(profileKey, sharedKey)
+                    val criticsConfigured =
+                        withContext(ioDispatcher) {
+                            runCatching { metadataKeyStore.readCritics() }.getOrNull()
+                        }?.isNotBlank() == true
+                    val metadataConfigured = effectiveKey != null
+                    // One request for the whole region's services, so every badge in the app can
+                    // draw a real mark without asking TMDb about each title it belongs to.
+                    launch {
+                        runCatching { providerLogoCatalogue.ensureLoaded(effectiveKey) }
+                            .onFailure { error ->
+                                logger.error(TAG, "Could not load the provider logos", error)
+                            }
+                    }
                     mutableState.update {
                         it.copy(
                             isProfilesLoading = false,
@@ -2937,6 +3399,7 @@ class MainViewModel @Inject constructor(
                                     emptyList()
                                 },
                             tmdbKeyConfigured = metadataConfigured,
+                            criticsKeyConfigured = criticsConfigured,
                             sharedTmdbKeyConfigured = !sharedKey.isNullOrBlank(),
                             favoriteIds = if (active?.id == it.activeProfile?.id) it.favoriteIds else emptySet(),
                             favoriteItems = if (active?.id == it.activeProfile?.id) it.favoriteItems else emptyList(),
@@ -2965,6 +3428,7 @@ class MainViewModel @Inject constructor(
                     }
                     observeFavorites(active?.id)
                     observeReminders(active?.id)
+                    observeNotifications(active?.id)
                     loadContinueWatching(active?.id)
                     // Rebuild the home for whoever is now watching. The stage was set to CATALOGUE
                     // just above, and `loadHomeItems` is what carries it to READY — but it is
@@ -3127,7 +3591,12 @@ class MainViewModel @Inject constructor(
                     ReminderTarget(
                         ContentIdentity.of(ContentKind.MOVIE, name, year),
                         name,
-                        state.movieDetails?.artworkUrl,
+                        // The catalogue row's poster when the full record has not arrived, the same
+                        // way the title falls back to `fallbackTitle` two lines up. The button is
+                        // deliberately enabled while the record loads, so marking a title quickly
+                        // used to store a reminder with no artwork at all — and the reminders page
+                        // and home rail then had nothing to draw for it, permanently.
+                        state.movieDetails?.artworkUrl ?: content.fallbackArtworkUrl,
                         state.movieDetails?.releaseDate?.let(::parseReleaseDate),
                     )
                 }
@@ -3138,8 +3607,26 @@ class MainViewModel @Inject constructor(
                     ReminderTarget(
                         ContentIdentity.of(ContentKind.SERIES, name, year),
                         name,
-                        state.seriesDetails?.artworkUrl,
+                        state.seriesDetails?.artworkUrl ?: content.fallbackArtworkUrl,
                         state.seriesDetails?.releaseDate?.let(::parseReleaseDate),
+                    )
+                }
+
+                // A title on the "where to watch" page, which is the one place an unreleased film
+                // can be reached at all: it is in nobody's playlist, so it has no details page to
+                // mark it from. TMDB's poster is a public URL, so unlike a provider's artwork it
+                // survives the repository's credential filter and the reminder keeps its cover.
+                AppContent.Subscriptions -> {
+                    val selected = state.subscriptions.selected ?: return
+                    ReminderTarget(
+                        ContentIdentity.of(
+                            if (selected.isSeries) ContentKind.SERIES else ContentKind.MOVIE,
+                            selected.title,
+                            selected.year,
+                        ),
+                        selected.title,
+                        selected.posterUrl,
+                        selected.releaseDate?.let(::parseReleaseDate),
                     )
                 }
 
@@ -3162,6 +3649,378 @@ class MainViewModel @Inject constructor(
             // restored onto a new device, starts notifying again as soon as anything is marked.
             reminderScheduler.sync()
         }
+    }
+
+    /**
+     * Turns the daily notice on or off, from the reminders page.
+     *
+     * The marks themselves are left alone: switching the notification off is "stop telling me",
+     * not "forget what I marked", and deleting the list here would lose it for good.
+     */
+    fun setReminderNotify(notify: Boolean) {
+        viewModelScope.launch {
+            runCatching { reminderScheduler.setNotify(notify) }
+                .onFailure { error -> logger.error(TAG, "Could not change the reminder notice", error) }
+        }
+    }
+
+    /** Moves the daily notice to another hour. */
+    fun setReminderTime(hour: Int, minute: Int) {
+        viewModelScope.launch {
+            runCatching { reminderScheduler.setTime(hour, minute) }
+                .onFailure { error -> logger.error(TAG, "Could not change the reminder hour", error) }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Descobrir
+    // ---------------------------------------------------------------------------------------
+
+    private var discoverJob: Job? = null
+
+    /**
+     * Builds a hand from what this profile already keeps and watches.
+     *
+     * The taste is gathered from real behaviour rather than asked for: favourites, and the genres of
+     * everything in the watch history. A profile that has done neither gets the best-rated titles
+     * the catalogue has, which is a better opening hand than a random one.
+     *
+     * Reads a bounded slice of the catalogue rather than all of it — see [DISCOVER_POOL] — because a
+     * playlist can hold tens of thousands of rows and the deck is fifteen.
+     */
+    fun dealDiscoveryDeck() {
+        val profileId = mutableState.value.activeProfile?.id ?: return
+        val sourceId =
+            mutableState.value.sources.firstOrNull { it.type == SourceType.XTREAM }?.id
+                ?: mutableState.value.sources.firstOrNull()?.id
+        if (sourceId == null) {
+            mutableState.update { it.copy(discoverDeck = emptyList(), isDiscoverLoading = false) }
+            return
+        }
+
+        discoverJob?.cancel()
+        mutableState.update { it.copy(isDiscoverLoading = true) }
+        discoverJob =
+            viewModelScope.launch {
+                val state = mutableState.value
+                val pool =
+                    withContext(ioDispatcher) {
+                        runCatching {
+                            // Films and series only. A live channel has no synopsis, no genre and
+                            // nothing to decide about at leisure, so it is not what this is for.
+                            listOf(CatalogContentType.MOVIE, CatalogContentType.SERIES)
+                                .flatMap { kind ->
+                                    catalogRepository
+                                        .loadChannelsPage(
+                                            sourceId = sourceId,
+                                            contentType = kind,
+                                            limit = DISCOVER_POOL,
+                                        ).items
+                                }
+                        }.onFailure { error ->
+                            logger.error(TAG, "Could not read the catalogue for Descobrir", error)
+                        }.getOrDefault(emptyList())
+                    }
+
+                // Category names, resolved once. A row carries only the id, and the genre is the
+                // one signal this whole feature runs on.
+                val categoryNames =
+                    state.categories.mapNotNull { category ->
+                        category.id?.let { id -> id to category.name }
+                    }.toMap()
+                val cards = pool.map { channel -> channel.toCatalogUi(channel.categoryId?.let(categoryNames::get).orEmpty()) }
+                val byId = cards.associateBy { card -> card.id }
+                // Genres come from the catalogue row's category, which is what a playlist actually
+                // carries — a per-title genre would need one metadata call each, for fifteen cards.
+                val favouriteGenres =
+                    state.favoriteIds.mapNotNull { id -> byId[id]?.categoryName }
+                val watchedGenres =
+                    (state.watchHistory.map { it.channel } + state.continueWatching.map { it.channel })
+                        .mapNotNull { channel -> channel.categoryName }
+                val taste =
+                    TasteProfile(
+                        favouriteGenres = favouriteGenres,
+                        watchedGenres = watchedGenres,
+                        // Never offer what they already keep, already watched, or judged this
+                        // session: a card they dismissed coming back reads as being ignored.
+                        seenIds =
+                            state.favoriteIds +
+                                state.discoverJudgedIds +
+                                state.watchHistory.map { it.channel.id } +
+                                state.continueWatching.map { it.channel.id },
+                    )
+
+                val deck =
+                    DiscoveryDeck
+                        .build(
+                            candidates = cards.map { card -> card.toDiscoveryCandidate() },
+                            taste = taste,
+                            session = state.discoverSessionTaste,
+                        ).mapNotNull { candidate -> byId[candidate.id] }
+
+                if (mutableState.value.activeProfile?.id != profileId) return@launch
+                mutableState.update {
+                    it.copy(
+                        discoverDeck = deck,
+                        discoverDealtCount = deck.size,
+                        isDiscoverLoading = false,
+                    )
+                }
+            }
+    }
+
+    /**
+     * Keeps the top card: it becomes a favourite and leaves the deck.
+     *
+     * The favourite is what the swipe is *for*, so it is filed through the same path the heart
+     * button uses — a second route to favourites would be a second thing to keep in step.
+     */
+    fun keepDiscoveryCard(channel: ChannelUi) {
+        val profileId = mutableState.value.activeProfile?.id ?: return
+        viewModelScope.launch {
+            runCatching { userLibraryRepository.toggleFavorite(profileId, channel.id, false) }
+                .onFailure { error -> logger.error(TAG, "Could not keep a Descobrir card", error) }
+        }
+        advanceDiscoveryDeck(channel, DiscoveryVerdict.KEPT)
+    }
+
+    /** Skips the top card. Remembered for this session only — see `discoverJudgedIds`. */
+    fun skipDiscoveryCard(channel: ChannelUi) {
+        advanceDiscoveryDeck(channel, DiscoveryVerdict.SKIPPED)
+    }
+
+    private fun advanceDiscoveryDeck(channel: ChannelUi, verdict: DiscoveryVerdict) {
+        mutableState.update { state ->
+            state.copy(
+                discoverDeck = state.discoverDeck.filterNot { card -> card.id == channel.id },
+                discoverJudgedIds = state.discoverJudgedIds + channel.id,
+                // Taught immediately, so the *next* hand reflects what was just said rather than
+                // waiting for the watch history to catch up — which it never would for a title
+                // that was skipped and therefore never watched.
+                discoverSessionTaste =
+                    state.discoverSessionTaste.after(
+                        channel.categoryName?.split('|', '/', ',')?.map(String::trim).orEmpty(),
+                        verdict,
+                    ),
+            )
+        }
+    }
+
+    private fun ChannelUi.toDiscoveryCandidate() =
+        DiscoveryCandidate(
+            id = id,
+            title = name,
+            // The category is the only genre a playlist row carries, and providers write it as one
+            // string — "Ação | Aventura" — so it is split rather than taken whole.
+            genres = categoryName?.split('|', '/', ',')?.map(String::trim).orEmpty(),
+            year = year,
+            rating = rating,
+            isSeries = contentType == CatalogContentType.SERIES,
+        )
+
+
+    // ---------------------------------------------------------------------------------------
+    // The bell
+    // ---------------------------------------------------------------------------------------
+
+    private var notificationsJob: Job? = null
+
+    /**
+     * Watches what the bell holds for the active profile.
+     *
+     * Per profile, like favourites and reminders: one household member's new episode must never
+     * appear under another's bell.
+     */
+    private fun observeNotifications(profileId: String?) {
+        notificationsJob?.cancel()
+        if (profileId == null) {
+            mutableState.update { it.copy(notifications = NotificationCentre()) }
+            return
+        }
+        notificationsJob =
+            viewModelScope.launch {
+                notificationCentrePreferences
+                    .observe(profileId)
+                    .catch { error ->
+                        logger.error(TAG, "Could not read the notification centre", error)
+                        emit(NotificationCentre())
+                    }.collect { centre ->
+                        // Guarded because the profile can be switched while this collect is live:
+                        // the old flow emits once more before its job is cancelled.
+                        if (mutableState.value.activeProfile?.id != profileId) return@collect
+                        mutableState.update { it.copy(notifications = centre) }
+                    }
+            }
+    }
+
+    /**
+     * Watches the cache setting and the fill, for the settings card and the first-run offer.
+     *
+     * Started once at construction rather than per profile: the budget belongs to the device, not
+     * to whoever is signed in.
+     */
+    /**
+     * Publishes the services' official logos as they arrive.
+     *
+     * Started once at construction: the directory belongs to the device's region, not to whoever is
+     * signed in, and every screen that draws a badge reads the same map.
+     */
+    private fun observeProviderLogos() {
+        viewModelScope.launch {
+            providerLogoCatalogue.logosByLabel
+                .catch { emit(emptyMap()) }
+                .collect { logos ->
+                    mutableState.update { it.copy(providerLogos = logos) }
+                }
+        }
+    }
+
+    private fun observeCacheSettings() {
+        viewModelScope.launch {
+            cacheSettings.observeBudget()
+                .catch { error ->
+                    logger.error(TAG, "Could not read the cache budget", error)
+                    emit(CacheBudget.DEFAULT)
+                }.collect { budget ->
+                    mutableState.update { it.copy(cacheBudget = budget) }
+                }
+        }
+        viewModelScope.launch {
+            cacheSettings.observeChoicePending()
+                .catch { emit(false) }
+                .collect { pending ->
+                    mutableState.update { it.copy(cacheChoicePending = pending) }
+                }
+        }
+        viewModelScope.launch {
+            // Combined with the stored mark because WorkManager throws a cancelled worker's
+            // progress away: without the mark, pressing Pausar would empty the bar and read as the
+            // download having been discarded rather than held.
+            combine(
+                cacheFillProgress().catch { emit(CacheFillProgress()) },
+                cacheSettings.observeMark().catch { emit(CacheFillMark()) },
+            ) { progress, mark ->
+                if (progress.total > 0) progress
+                else progress.copy(done = mark.done, total = mark.total)
+            }.collect { progress ->
+                mutableState.update { it.copy(cacheProgress = progress) }
+                // Re-measured when the fill settles rather than on every tick: walking the
+                // directory is far dearer than the progress update that prompted it.
+                if (!progress.isRunning) refreshCacheUsage()
+            }
+        }
+        refreshCacheUsage()
+    }
+
+    /**
+     * What the fill is doing, read from WorkManager so a reopened screen sees the real position.
+     *
+     * Built inside a `flow { }` rather than returned directly so touching WorkManager happens when
+     * the flow is collected, not when this view model is constructed. A plain JVM test has no
+     * Android framework behind it, and reaching for WorkManager eagerly made every navigation
+     * assertion fail on a `getApplicationContext` that is not mocked. Failing quietly here is also
+     * the honest behaviour: a cache is an optimisation, and the app works without its progress bar.
+     */
+    private fun cacheFillProgress(): Flow<CacheFillProgress> =
+        flow {
+            val progress =
+                runCatching { CacheFillWorker.observeProgress(context) }.getOrNull()
+                    ?: flowOf(CacheFillProgress())
+            emitAll(progress)
+        }
+
+    private fun startCacheFillWork() {
+        runCatching { CacheFillWorker.start(context) }
+            .onFailure { error -> logger.error(TAG, "Could not start the cache fill", error) }
+    }
+
+    private fun stopCacheFillWork() {
+        runCatching { CacheFillWorker.stop(context) }
+            .onFailure { error -> logger.error(TAG, "Could not stop the cache fill", error) }
+    }
+
+    fun refreshCacheUsage() {
+        viewModelScope.launch {
+            val used = withContext(ioDispatcher) { artworkCache.bytesUsed() }
+            mutableState.update { it.copy(cacheBytesUsed = used) }
+        }
+    }
+
+    /**
+     * Records the viewer's chosen size.
+     *
+     * Choosing zero clears what is held: somebody who turns the cache off to reclaim storage and
+     * finds nothing reclaimed has been ignored. Choosing a size starts the fill, because that is
+     * what the setting is for — asking again with a second button would be asking twice.
+     */
+    fun chooseCacheBudget(gigabytes: Int) {
+        viewModelScope.launch {
+            cacheSettings.chooseBudget(gigabytes)
+            if (gigabytes <= 0) {
+                stopCacheFill()
+                clearArtworkCache()
+            } else {
+                startCacheFill()
+            }
+        }
+    }
+
+    /** Records that the viewer declined the first-run offer, so it is not made again. */
+    fun declineCacheOffer() {
+        chooseCacheBudget(0)
+    }
+
+    fun startCacheFill() {
+        if (!mutableState.value.cacheBudget.isEnabled) return
+        startCacheFillWork()
+    }
+
+    fun stopCacheFill() {
+        stopCacheFillWork()
+    }
+
+    /**
+     * Starts a fresh pass over the whole list.
+     *
+     * Distinct from [startCacheFill], which continues where a paused download left off. This is for
+     * a list that has gained titles since the last full pass: the counter goes back to zero so the
+     * bar describes the new pass rather than the old one, and what is already on disk is kept — the
+     * fill skips it in moments, so re-checking is cheap and re-downloading would not be.
+     */
+    fun refreshCacheFill() {
+        if (!mutableState.value.cacheBudget.isEnabled) return
+        viewModelScope.launch {
+            cacheSettings.rememberMark(done = 0, total = 0)
+            mutableState.update { it.copy(cacheProgress = CacheFillProgress()) }
+            runCatching { CacheFillWorker.restart(context) }
+                .onFailure { error -> logger.error(TAG, "Could not restart the cache fill", error) }
+        }
+    }
+
+    fun clearArtworkCache() {
+        viewModelScope.launch {
+            withContext(ioDispatcher) { artworkCache.clear() }
+            mutableState.update {
+                it.copy(cacheBytesUsed = 0L, cacheProgress = CacheFillProgress())
+            }
+        }
+    }
+
+    /** Opening the bell is reading it. */
+    fun markNotificationsRead() {
+        val profileId = mutableState.value.activeProfile?.id ?: return
+        viewModelScope.launch { notificationCentrePreferences.markAllRead(profileId) }
+    }
+
+    /** Forgets one notice. The viewer asked for it to go, so it goes rather than being hidden. */
+    fun dismissNotification(id: String) {
+        val profileId = mutableState.value.activeProfile?.id ?: return
+        viewModelScope.launch { notificationCentrePreferences.remove(profileId, id) }
+    }
+
+    fun clearNotifications() {
+        val profileId = mutableState.value.activeProfile?.id ?: return
+        viewModelScope.launch { notificationCentrePreferences.clear(profileId) }
     }
 
     /** Removes one reminder from the reminders page, without needing its details screen open. */
@@ -3474,10 +4333,92 @@ class MainViewModel @Inject constructor(
             backStack.addLast(current)
         }
         mutableState.update { it.copy(content = content) }
+        rememberOrForgetPlaybackSession(content)
     }
 
     private fun navigate(channel: ChannelUi) {
         navigate(AppContent.Player(channel))
+    }
+
+    /**
+     * Keeps the stored session in step with whether a player is open.
+     *
+     * Every route into and out of playback passes through here, which is the point: an explicit
+     * call at each call site is one that eventually gets forgotten at a new one, and a session left
+     * behind reopens a film the viewer deliberately closed.
+     *
+     * Written on the way in and cleared on the way out, so what survives a killed process is only
+     * ever a player that was still open when Android took the app away.
+     */
+    /**
+     * Whether the stored session has already been considered this launch.
+     *
+     * `markBootReady` runs whenever the catalogue finishes loading, which includes every profile
+     * switch and every playlist refresh — without this, changing profile mid-session would reopen
+     * the player on top of whatever the viewer was doing.
+     */
+    private var restoredPlaybackSession = false
+
+    private fun rememberOrForgetPlaybackSession(content: AppContent) {
+        val profileId = mutableState.value.activeProfile?.id
+        viewModelScope.launch {
+            runCatching {
+                if (content is AppContent.Player && profileId != null) {
+                    playbackSessionPreferences.remember(content.channel.id, profileId)
+                } else {
+                    playbackSessionPreferences.clear()
+                }
+            }.onFailure { error ->
+                // Never fatal: failing to remember costs the restore, not the playback.
+                logger.error(TAG, "Could not record the playback session", error)
+            }
+        }
+    }
+
+    /**
+     * Reopens the player when the process died with one on screen.
+     *
+     * Called once the catalogue is ready, because the channel has to be read back from it: the
+     * stored session holds a row id rather than the row, for the same reason a reminder holds an
+     * identity — a snapshot written hours ago would describe a catalogue that has since reloaded.
+     *
+     * Silent when there is nothing to restore, which is the ordinary case. A session belonging to
+     * another profile is dropped rather than opened: the phone may have been handed over, and
+     * resuming somebody else's film under the current profile would file the progress wrongly too.
+     */
+    private fun restorePlaybackSession() {
+        // Only from an untouched home screen. Anywhere else means the viewer has already gone
+        // somewhere themselves, and pulling them into a film they did not just ask for would be the
+        // app overriding them.
+        if (mutableState.value.content !is AppContent.Home) return
+        // A link tapped from a cold start is still resolving and is the more recent request, so it
+        // wins: reopening the old player would land on top of the title they actually tapped.
+        if (pendingSharedTitle != null) return
+        if (restoredPlaybackSession) return
+        restoredPlaybackSession = true
+        val profileId = mutableState.value.activeProfile?.id ?: return
+        viewModelScope.launch {
+            val session =
+                runCatching { playbackSessionPreferences.current() }
+                    .onFailure { error ->
+                        logger.error(TAG, "Could not read the playback session", error)
+                    }.getOrNull() ?: return@launch
+            if (session.profileId != profileId) {
+                playbackSessionPreferences.clear()
+                return@launch
+            }
+            val channel =
+                withContext(ioDispatcher) {
+                    runCatching { catalogRepository.getChannel(session.channelId) }.getOrNull()
+                }
+            if (channel == null) {
+                // The row is gone — a replaced playlist, a deleted source. Nothing to reopen, and
+                // the stale session must not be tried again on every launch.
+                playbackSessionPreferences.clear()
+                return@launch
+            }
+            openChannel(channel.toCatalogUi(""))
+        }
     }
 
     private fun updateDestination(
@@ -3656,6 +4597,7 @@ class MainViewModel @Inject constructor(
             releaseDate = releaseDate,
             country = country,
             rating = rating,
+            voteCount = voteCount,
             artworkUrl = artworkUri,
             backdropUrl = backdropUris.firstOrNull(),
             youtubeTrailerId = youtubeTrailerId,
@@ -3749,8 +4691,19 @@ class MainViewModel @Inject constructor(
          */
         const val HERO_SYNOPSIS_COUNT = 10
 
+        /**
+         * Catalogue rows read per kind when dealing a Descobrir hand.
+         *
+         * A playlist can hold tens of thousands and the deck is fifteen. Enough to rank
+         * meaningfully, small enough that opening the tab is not a full catalogue scan.
+         */
+        const val DISCOVER_POOL = 400
+
         /** Must match the id `RealHomeCatalog` builds for a service-shelf title. */
         const val STREAMING_ITEM_PREFIX = "streaming:"
+
+        /** Must match the id `RealHomeCatalog` builds for a reminder card. */
+        const val REMINDER_ITEM_PREFIX = "reminder:"
 
         /**
          * Stands in for "a key exists" when deriving the capability.
@@ -3783,9 +4736,18 @@ class MainViewModel @Inject constructor(
 
     private fun String.hasHighRiskVideoTag(): Boolean = HIGH_RISK_VIDEO_TAG.containsMatchIn(this)
 
+    /**
+     * A provider's title, cleaned enough for TMDb to match it.
+     *
+     * Playlists decorate names with things TMDb has never heard of — "4K", "[L]", "[DV]", and a
+     * trailing release year — and an exact search on the raw name simply finds nothing. That is
+     * not cosmetic: it is what silently cost these titles their trailer, their score and their
+     * platform logo, since every one of those needs the search to match first.
+     */
     private fun String.compatibilityTitlePrefix(): String =
         replace(HIGH_RISK_VIDEO_TAG, " ")
             .replace(BRACKETED_TAG, " ")
+            .withoutTrailingYear()
             .replace(WHITESPACE_RUN, " ")
             .trim()
 }
@@ -3825,6 +4787,21 @@ private val CAST_SEPARATOR = Regex("[,;]|\\s/\\s")
 
 /** Any bracketed tag, and a run of whitespace: both used when reducing a title to a prefix. */
 private val BRACKETED_TAG = Regex("\\[[^]]+]")
+
+/**
+ * A trailing year in brackets, as providers append it: "Minha Carreira Brilhante (2026)".
+ *
+ * Stripped before a TMDb search because TMDb matches on the title alone and treats the year as a
+ * separate filter — sent as part of the query it simply found nothing, which is why the platform
+ * logo never arrived for titles named this way. The year is not thrown away: the caller passes it
+ * as the year parameter, where it does the intended narrowing.
+ *
+ * Bounded to years a title can plausibly have been released in — 1900 to 2039 — and only at the
+ * end. A wider 20xx range stripped the "(2049)" from *Blade Runner 2049*, whose title contains a
+ * year that is not its release date; a test caught it. Anything past this decade is part of the
+ * name, not a tag somebody appended.
+ */
+private val TRAILING_YEAR = Regex("\\s*\\((?:19\\d{2}|20[0-3]\\d)\\)\\s*$")
 private val WHITESPACE_RUN = Regex("\\s+")
 
 private val TITLE_KEY_BRACKETED = Regex("\\[[^]]{1,12}]")
@@ -3901,3 +4878,15 @@ private fun ContentIdentity.withoutYear(): ContentIdentity {
         this
     }
 }
+
+/**
+ * Drops a release year a provider appended in brackets: "Minha Carreira Brilhante (2026)".
+ *
+ * Its own function so the rule can be asserted directly. TMDb matches on the title alone and takes
+ * the year as a separate filter, so a year left in the query simply found nothing — which is what
+ * left these titles with no platform logo until it was noticed on a device.
+ *
+ * The year is not discarded: the caller still passes it as the year parameter, where it does the
+ * narrowing that was intended.
+ */
+internal fun String.withoutTrailingYear(): String = replace(TRAILING_YEAR, "")
