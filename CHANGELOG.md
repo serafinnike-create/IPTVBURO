@@ -2,6 +2,37 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [3.0.0] - 2026-08-18 (Windows)
+
+Primeira versão do Windows publicada sem o rótulo de prévia. O que mudou desde
+a `2.0.0-alpha.12` são correções de uso diário, quase todas relatadas por quem
+estava usando o aplicativo de verdade.
+
+### Corrigido
+
+- **Voltar de um filme devolvia à primeira página.** Avançar para a segunda
+  página do catálogo, abrir um título e voltar levava de volta ao início, com a
+  posição de rolagem perdida. Em quarenta mil títulos, tudo além dos primeiros
+  oitenta só se alcança paginando, então essa caminhada tinha de ser refeita a
+  cada filme. Eram três causas: a busca reaplicava-se e forçava a página zero, a
+  posição guardada era lida com a chave da lista errada, e o salto para o topo
+  descartava o que tinha acabado de ser restaurado.
+- **A secção FONTES parecia não existir.** A barra lateral rolava, mas sem
+  qualquer barra visível — e rolagem que não se anuncia é, para quem usa, o
+  mesmo que não rolar. Só aparecia ao pôr a janela em ecrã inteiro.
+- **Um travamento à espera de acontecer.** A lista de fontes era uma lista
+  preguiçosa dentro de outra rolagem no mesmo eixo, o que o Compose não
+  consegue medir. Ninguém tinha esbarrado porque é preciso ligar uma segunda
+  playlist para chegar lá.
+
+### Melhorado
+
+- **Virar página ficou mais barato.** O catálogo construía um objeto completo
+  para cada linha só para ler um campo — inclusive para linhas que a categoria
+  já tinha excluído — e descodificava a lista de categorias de todas as linhas
+  quando, no caso normal, ninguém a lê. Uma página é virada a cada tecla
+  digitada na busca, portanto é o custo mais pago do aplicativo.
+
 ## [2.0.0-alpha.12] - 2026-08-17 (Windows)
 
 ### Corrigido

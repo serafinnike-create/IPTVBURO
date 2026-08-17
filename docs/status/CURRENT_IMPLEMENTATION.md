@@ -1,13 +1,15 @@
 # Implementação atual do IPTV BURO
 
-- Data da auditoria: 17 de agosto de 2026
+- Data da auditoria: 18 de agosto de 2026
 - Branch: `codex/windows-clean-release`
 - Baseline anterior: `v0.1.0-alpha.1`
-- Tag mais recente no repositório atual: `v2.0.0-alpha.12`
-- Releases publicadas: `v2.0.0-alpha.7`, `v2.0.0-alpha.11`, `v2.0.0-alpha.12`,
-  todas como prévia
-- Windows: `v2.0.0-alpha.12` publicada; MSI sem assinatura Authenticode
-- Android/Android TV: APK de depuração publicado na mesma página
+- Tag mais recente no repositório atual: `v3.0.0`
+- Releases publicadas: `v2.0.0-alpha.7`, `v2.0.0-alpha.11`, `v2.0.0-alpha.12`
+  como prévia; `v3.0.0` como versão final do Windows
+- Windows: `v3.0.0`; MSI ainda sem assinatura Authenticode
+- Android/Android TV: `0.2.0-alpha.9`, ainda prévia. Numeração própria, atrás
+  da do Windows — o README anunciava as duas com a mesma versão, o que não era
+  verdade
 - Milestone em validação: `0.2`, Android adaptativo e Compose Desktop
 
 ## Correções de 17 de agosto de 2026
@@ -45,8 +47,6 @@ Verificação executada: `:apps:desktop:test` forçada limpa,
 `packageMsi` e `assembleDebug`.
 
 ## Estado da milestone 0.2 (auditoria de 12 de agosto de 2026)
-
-## Estado da milestone 0.2
 
 A milestone `0.2` amplia o vertical funcional publicado como prévia. Esta seção
 registra arquitetura, escopo, gates, hashes e as limitações que ainda impedem
