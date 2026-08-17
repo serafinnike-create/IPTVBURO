@@ -175,8 +175,14 @@ fun TmdbKeyGuideDialog(
     }
 }
 
-/** One numbered step: a sketch of the page, what to do there, and what to expect. */
-private data class TmdbGuideStep(
+/**
+ * One numbered step: a sketch of the page, what to do there, and what to expect.
+ *
+ * Shared with the OMDb guide, which is the same machine pointed at a different site — see
+ * [OmdbKeyGuideDialog]. Keeping one step type and one [GuideStep] renderer means a fix to the
+ * numbering, spacing or sketch style reaches both guides instead of one of them.
+ */
+internal data class KeyGuideStep(
     val title: String,
     val body: String,
     /** A rough sketch of the page in question. See the note on [TmdbKeyGuideDialog]. */
@@ -184,7 +190,7 @@ private data class TmdbGuideStep(
 )
 
 @Composable
-private fun GuideStep(number: Int, step: TmdbGuideStep) {
+internal fun GuideStep(number: Int, step: KeyGuideStep) {
     Row(
         modifier =
             Modifier
@@ -235,7 +241,7 @@ private fun GuideStep(number: Int, step: TmdbGuideStep) {
  * redesign.
  */
 @Composable
-private fun PageSketch(
+internal fun PageSketch(
     rows: List<SketchRow>,
 ) {
     Column(
@@ -278,7 +284,7 @@ private fun PageSketch(
     }
 }
 
-private sealed interface SketchRow {
+internal sealed interface SketchRow {
     data class Bar(
         val width: Float,
         val height: Int = 10,
@@ -296,9 +302,9 @@ private sealed interface SketchRow {
  * because "Developer" and "personal use" are the correct ones and are not obvious.
  */
 @Composable
-private fun tmdbGuideSteps(text: com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings): List<TmdbGuideStep> =
+private fun tmdbGuideSteps(text: com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings): List<KeyGuideStep> =
     listOf(
-        TmdbGuideStep(
+        KeyGuideStep(
             title = text.tmdbGuide.tmdbStep1Title,
             body = text.tmdbGuide.tmdbStep1Body,
             sketch = {
@@ -313,7 +319,7 @@ private fun tmdbGuideSteps(text: com.lucasserafin94.iptvburo.desktop.ui.DesktopS
                 )
             },
         ),
-        TmdbGuideStep(
+        KeyGuideStep(
             title = text.tmdbGuide.tmdbStep2Title,
             body = text.tmdbGuide.tmdbStep2Body,
             sketch = {
@@ -327,7 +333,7 @@ private fun tmdbGuideSteps(text: com.lucasserafin94.iptvburo.desktop.ui.DesktopS
                 )
             },
         ),
-        TmdbGuideStep(
+        KeyGuideStep(
             title = text.tmdbGuide.tmdbStep3Title,
             body = text.tmdbGuide.tmdbStep3Body,
             sketch = {
@@ -340,7 +346,7 @@ private fun tmdbGuideSteps(text: com.lucasserafin94.iptvburo.desktop.ui.DesktopS
                 )
             },
         ),
-        TmdbGuideStep(
+        KeyGuideStep(
             title = text.tmdbGuide.tmdbStep4Title,
             body = text.tmdbGuide.tmdbStep4Body,
             sketch = {
@@ -355,7 +361,7 @@ private fun tmdbGuideSteps(text: com.lucasserafin94.iptvburo.desktop.ui.DesktopS
                 )
             },
         ),
-        TmdbGuideStep(
+        KeyGuideStep(
             title = text.tmdbGuide.tmdbStep5Title,
             body = text.tmdbGuide.tmdbStep5Body,
             sketch = {
@@ -368,7 +374,7 @@ private fun tmdbGuideSteps(text: com.lucasserafin94.iptvburo.desktop.ui.DesktopS
                 )
             },
         ),
-        TmdbGuideStep(
+        KeyGuideStep(
             title = text.tmdbGuide.tmdbStep6Title,
             body = text.tmdbGuide.tmdbStep6Body,
             sketch = {

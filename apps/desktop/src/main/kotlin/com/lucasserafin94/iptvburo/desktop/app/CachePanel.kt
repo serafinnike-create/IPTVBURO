@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -128,7 +129,16 @@ fun CacheChoicePanel(
             color = BuroColors.TextMuted,
             style = MaterialTheme.typography.labelLarge,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
+        // FlowRow, not Row: four pills do not fit the settings panel's width, and a Row gives the
+        // early ones everything they ask for and the last one whatever is left. "16 GB" was left a
+        // few pixels and filled them by breaking itself into "1 / 6 / G / B" down the panel's edge.
+        //
+        // Wrapping moves a pill that does not fit onto a second line instead, which is what the
+        // language, region and subtitle pills on this same screen already do.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+            verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+        ) {
             OFFERED_SIZES.forEach { size ->
                 val selected = budget.gigabytes == size
                 val label = if (size == 0) text.disabled else text.gigabytes.format(size)
@@ -149,6 +159,10 @@ fun CacheChoicePanel(
                             },
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
+                        // A size is never worth breaking across lines. Even with the wrapping above,
+                        // a narrower window could squeeze the last pill again, and this is what makes
+                        // the label refuse to become a vertical letter stack.
+                        softWrap = false,
                     )
                 }
             }

@@ -112,6 +112,14 @@ import com.lucasserafin94.iptvburo.desktop.data.episodeContentKey
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.desktop.platform.DesktopPlatformCapabilities
 import com.lucasserafin94.iptvburo.desktop.ui.CategoryBadge
+import com.lucasserafin94.iptvburo.desktop.ui.CategoryChoice
+import com.lucasserafin94.iptvburo.desktop.ui.ProviderIdentity
+import com.lucasserafin94.iptvburo.desktop.ui.splitCategories
+import com.lucasserafin94.iptvburo.desktop.ui.CriticInkDark
+import com.lucasserafin94.iptvburo.desktop.ui.CriticMark
+import com.lucasserafin94.iptvburo.desktop.ui.CriticMarkImdb
+import com.lucasserafin94.iptvburo.desktop.ui.CriticMarkTomatometer
+import com.lucasserafin94.iptvburo.desktop.ui.criticMarkMetascore
 import com.lucasserafin94.iptvburo.desktop.ui.categoryLabel
 import com.lucasserafin94.iptvburo.desktop.CatalogLayout
 import com.lucasserafin94.iptvburo.desktop.PersonCredit
@@ -283,7 +291,7 @@ fun XtreamWorkspace(
         // the user's own selection across all of it. Picking a category there could only ever
         // narrow it to nothing.
         if (!appState.favoritesOnly) {
-        XtreamCategoryRail(
+        XtreamCategorySelectors(
             categories = appState.xtreamCategories,
             contentType = appState.xtreamContentType,
             selectedCategoryId = appState.selectedXtreamCategoryId,
@@ -611,146 +619,210 @@ private fun FilterChip(
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Horizontal category rail.
+ * Two selectors: what kind of title, and from which service.
  *
- * This replaced a permanent 220 dp side pane. The GDD rules out both the administrative-panel look
- * and spending fixed width on a menu, and the pane cost the same width on every screen while being
- * used momentarily. Search covers precise lookup; the rail covers browsing.
+ * This replaced a single horizontal rail. The rail held every category the playlist declares in one
+ * sideways-scrolling strip — thirty-odd chips on a real subscription, mixing "Acao" and "Aventura"
+ * with "Netflix" and "Amazon" — so both questions were answered in the same place and answering
+ * either meant scrolling past the other. Most of the strip sat off the right edge behind a scrollbar
+ * that had to be pointed out with a comment.
+ *
+ * Two closed menus take one line, name the question they answer, and put the services where somebody
+ * looking for a service will look. The provider selector draws each service's mark beside its name;
+ * see [ProviderIdentity] for why that is a monogram in the brand colour rather than the real logo.
+ *
+ * ## One at a time, deliberately
+ *
+ * Choosing a genre clears the service and vice versa, because a title belongs to exactly one
+ * category: "Filmes | Netflix" is not also filed under "Filmes | Acao", so asking for both would
+ * return an empty grid rather than a narrower one. See [splitCategories] for the longer note.
  */
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun XtreamCategoryRail(
+private fun XtreamCategorySelectors(
     categories: List<XtreamCategory>,
     contentType: XtreamContentType,
     selectedCategoryId: String?,
     onSelected: (String?) -> Unit,
 ) {
     val text = strings
-    val listState = rememberLazyListState()
-    val railFocus = remember { FocusRequester() }
-    val railScope = rememberCoroutineScope()
+    val services = text.shareStrings.serviceCatalogue
+    // Recomputed only when the playlist's categories change, not on every recomposition: this walks
+    // every category and runs the provider match on each, and the grid beside it has to stay smooth.
+    val split = remember(categories) { splitCategories(categories) }
 
-    // Jump back to the start when the content type changes, otherwise the rail keeps the scroll
-    // offset of a category list that no longer exists.
-    LaunchedEffect(contentType) { listState.scrollToItem(0) }
+    val genreSelected = selectedCategoryId?.takeIf { id -> !split.isProvider(id) }
+    val providerSelected = selectedCategoryId?.takeIf { id -> split.isProvider(id) }
 
-    // The rail scrolls sideways but showed no sign of it, so the categories past the right edge -
-    // and there are usually many - looked as though they did not exist. A scrollbar underneath is
-    // both the indication and a way to drag through them.
-    Column(modifier = Modifier.fillMaxWidth()) {
-    LazyRow(
-        state = listState,
-        // Left and right arrows move the rail, and hovering is enough: the pointer entering it
-        // takes focus, so there is no click needed before the keys do anything.
+    FlowRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .focusRequester(railFocus)
-                .focusable()
-                .edgeScrollable(listState)
-                .onPointerEvent(PointerEventType.Enter) { runCatching { railFocus.requestFocus() } }
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    val delta =
-                        when (event.key) {
-                            Key.DirectionRight -> CHIP_SCROLL_PIXELS
-                            Key.DirectionLeft -> -CHIP_SCROLL_PIXELS
-                            else -> return@onPreviewKeyEvent false
-                        }
-                    railScope.launch { listState.animateScrollBy(delta) }
-                    true
-                },
-        contentPadding =
-            PaddingValues(
-                horizontal = BuroSpacing.GutterCompact,
-                vertical = BuroSpacing.Xs,
-            ),
-        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
-        verticalAlignment = Alignment.CenterVertically,
+                .padding(horizontal = BuroSpacing.GutterCompact, vertical = BuroSpacing.Xs),
+        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+        verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
     ) {
-        item(key = "category:all") {
-            XtreamCategoryChip(
-                label = text.allCategories,
-                badge = categoryBadgeFor("", contentType),
-                selected = selectedCategoryId == null,
-                onClick = { onSelected(null) },
+        CategorySelector(
+            title = services.genreSelector,
+            anyLabel = services.allGenres,
+            choices = split.genres,
+            selectedId = genreSelected,
+            onSelect = onSelected,
+        )
+        // Absent rather than empty when the playlist files nothing by service, which is common on
+        // channel-only lists: a menu whose only entry is "All services" answers no question.
+        if (split.hasProviders) {
+            CategorySelector(
+                title = services.serviceSelector,
+                anyLabel = services.allServices,
+                choices = split.providers,
+                selectedId = providerSelected,
+                onSelect = onSelected,
             )
         }
-        items(categories, key = XtreamCategory::providerId) { category ->
-            // The section prefix is dropped from both the label and the badge lookup: with it, every
-            // category under Films matched the "filme" rule and got the same clapperboard.
-            val label = category.name.categoryLabel()
-            XtreamCategoryChip(
-                label = label,
-                badge = categoryBadgeFor(label, contentType),
-                selected = category.providerId == selectedCategoryId,
-                onClick = { onSelected(category.providerId) },
-            )
-        }
-    }
-    // Explicit colours. The default scrollbar is nearly transparent, which on this near-black
-    // surface made it invisible: the rail scrolled, but nothing on screen said so and there was
-    // no visible handle to drag, so the categories past the right edge looked unreachable.
-    HorizontalScrollbar(
-        adapter = rememberScrollbarAdapter(listState),
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = BuroSpacing.GutterCompact, vertical = 2.dp),
-        style =
-            LocalScrollbarStyle.current.copy(
-                thickness = 8.dp,
-                unhoverColor = BuroColors.BorderSoft,
-                hoverColor = BuroColors.Primary,
-            ),
-    )
     }
 }
 
+/**
+ * One closed menu: the question, the current answer, and the alternatives.
+ *
+ * The question stays on the button rather than sitting above it, so the row reads "Genero: Acao" at a
+ * glance and the two selectors cannot be mistaken for each other once something is chosen.
+ */
 @Composable
-private fun XtreamCategoryChip(
-    label: String,
-    badge: CategoryBadge,
-    selected: Boolean,
-    onClick: () -> Unit,
+private fun CategorySelector(
+    title: String,
+    anyLabel: String,
+    choices: List<CategoryChoice>,
+    selectedId: String?,
+    onSelect: (String?) -> Unit,
 ) {
-    BuroInteractiveRow(
-        onClick = onClick,
-        selected = selected,
-        shape = BuroRadius.Pill,
-        contentDescription = label,
-    ) {
-        Row(
+    var expanded by remember { mutableStateOf(false) }
+    val selected = choices.firstOrNull { choice -> choice.id == selectedId }
+    val active = selected != null
+
+    Box {
+        BuroInteractiveRow(
+            onClick = { expanded = true },
+            selected = active,
+            shape = BuroRadius.Pill,
+            contentDescription = title + ": " + (selected?.label ?: anyLabel),
+        ) {
+            Row(
+                modifier =
+                    Modifier
+                        .border(
+                            width = 1.dp,
+                            color =
+                                if (active) {
+                                    BuroColors.Primary.copy(alpha = 0.55f)
+                                } else {
+                                    BuroColors.BorderSoft
+                                },
+                            shape = BuroRadius.Pill,
+                        ).padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                selected?.provider?.let { provider ->
+                    ProviderMark(provider = provider)
+                    Spacer(Modifier.width(BuroSpacing.Xs))
+                }
+                Text(
+                    text = title + ": " + (selected?.label ?: anyLabel) + "  ▾",
+                    color = if (active) BuroColors.Text else BuroColors.TextMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
             modifier =
                 Modifier
-                    .border(
-                        width = 1.dp,
-                        color =
-                            if (selected) {
-                                BuroColors.Primary.copy(alpha = 0.55f)
-                            } else {
-                                BuroColors.BorderSoft
-                            },
-                        shape = BuroRadius.Pill,
-                        // Symmetric now that the leading badge is gone. The 4dp start against 14dp
-                        // end was room for an icon that no longer exists, so every label sat left
-                        // of centre in its pill.
-                    ).padding(horizontal = 14.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                    .background(BuroColors.SurfaceRaised)
+                    // Long playlists carry dozens of genres, and a menu measured against the whole
+                    // list runs off the screen with nothing to say so.
+                    .heightIn(max = 420.dp),
         ) {
-            // Just the name. The emoji came from the system font and clashed with everything around
-            // it; the dot that replaced them was decoration standing in for information that the
-            // word already carries.
-            Text(
-                text = label,
-                color = if (selected) BuroColors.Text else BuroColors.TextMuted,
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = anyLabel,
+                        color = if (selectedId == null) BuroColors.Primary else BuroColors.Text,
+                    )
+                },
+                onClick = {
+                    onSelect(null)
+                    expanded = false
+                },
             )
+            choices.forEach { choice ->
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // The service's mark, which is the whole point of the second selector:
+                            // people recognise a mark faster than they read a name.
+                            choice.provider?.let { provider ->
+                                ProviderMark(provider = provider)
+                                Spacer(Modifier.width(BuroSpacing.Sm))
+                            }
+                            Text(
+                                text = choice.label,
+                                color =
+                                    if (choice.id == selectedId) {
+                                        BuroColors.Primary
+                                    } else {
+                                        BuroColors.Text
+                                    },
+                            )
+                        }
+                    },
+                    onClick = {
+                        // Selecting from either menu replaces the single category the catalogue
+                        // filters by, which is what clears the other selector.
+                        onSelect(choice.id)
+                        expanded = false
+                    },
+                )
+            }
         }
     }
 }
+
+/**
+ * A service's mark: its monogram on its own colour.
+ *
+ * Not the real logo, for the reasons set out on [ProviderIdentity] — the wordmarks belong to the
+ * services, and a monogram in the brand colour identifies the service without shipping their asset
+ * or breaking when a playlist invents a category this app has never seen.
+ */
+@Composable
+private fun ProviderMark(provider: ProviderIdentity) {
+    Box(
+        modifier =
+            Modifier
+                .size(width = PROVIDER_MARK_WIDTH, height = PROVIDER_MARK_HEIGHT)
+                .clip(BuroRadius.Small)
+                .background(provider.colour),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = provider.monogram,
+            color = provider.ink,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Black,
+            softWrap = false,
+            maxLines = 1,
+        )
+    }
+}
+
+/** Wide enough for the longest monogram ("HBO") without the mark reading as a button. */
+private val PROVIDER_MARK_WIDTH = 26.dp
+
+/** Matched to the cap height of the label beside it. */
+private val PROVIDER_MARK_HEIGHT = 16.dp
 
 
 // ---------------------------------------------------------------------------------------------
@@ -3613,21 +3685,35 @@ private fun RatingsBlock(
         )
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Fetched like every other image rather than bundled, so no company's mark is committed
-            // to this repository. It sits on a light tile because the mark is drawn for one.
+            // A lettered chip, for the same reason the critics' scores below use one.
+            //
+            // This slot used to fetch a URL from TMDb's image CDN held in a constant called
+            // TMDB_MARK_URL and documented as "TMDb's own mark". It was not: that path is a *watch
+            // provider* logo, and the file behind it is Netflix's wordmark. So the panel drew the
+            // Netflix logo beside the words "Nota TMDb" — a score credited on screen to a company
+            // that had no part in producing it, which is precisely the misattribution the comment
+            // here claimed to be avoiding.
+            //
+            // TMDb's real logo is an SVG on their website behind a content-hashed path; it is not on
+            // the image CDN, this app's loader draws bitmaps, and the hash changes when they deploy.
+            // Letters in their brand colour say whose number it is and cannot silently become
+            // somebody else's.
             Box(
                 modifier =
                     Modifier
-                        .size(SCORE_MARK_SIZE)
+                        .size(width = SCORE_MARK_WIDTH, height = SCORE_MARK_HEIGHT)
                         .clip(BuroRadius.Small)
-                        .background(BuroColors.Canvas),
+                        .background(TMDB_BRAND_TEAL),
+                contentAlignment = Alignment.Center,
             ) {
-                BuroRemoteArtwork(
-                    artworkUrl = TMDB_MARK_URL,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize().padding(3.dp),
-                    contentScale = ContentScale.Fit,
-                ) {}
+                Text(
+                    text = "TMDb",
+                    color = CriticInkDark,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Black,
+                    softWrap = false,
+                    maxLines = 1,
+                )
             }
             Spacer(Modifier.width(BuroSpacing.Sm))
             // As a percentage, which is how people read a score at a glance — TMDb publishes out of
@@ -3667,13 +3753,13 @@ private fun RatingsBlock(
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Lg)) {
                 critics.tomatometer?.let { percent ->
-                    CriticScore("$percent%", CRITIC_TOMATO, "Tomatometer")
+                    CriticScore("$percent%", CriticMarkTomatometer, "Tomatometer")
                 }
                 critics.metascore?.let { percent ->
-                    CriticScore("$percent%", CRITIC_METACRITIC, "Metascore")
+                    CriticScore("$percent%", criticMarkMetascore(percent), "Metascore")
                 }
                 critics.imdbRating?.let { rating ->
-                    CriticScore("%.1f".format(rating), CRITIC_IMDB, "IMDb")
+                    CriticScore("%.1f".format(rating), CriticMarkImdb, "IMDb")
                 }
             }
         }
@@ -3683,26 +3769,43 @@ private fun RatingsBlock(
 /**
  * One critic's verdict, under the name of whoever reached it.
  *
- * The colour is the identifying mark rather than a logo. Rotten Tomatoes' tomato and Metacritic's
- * shield are licensed images with no public address to fetch them from — unlike TMDb's, which the
- * block above uses — and copying either into this repository is the thing the project does not do.
- * A coloured chip carries no one's artwork while still letting the eye find the tomato score
- * without reading, and the name says plainly whose number it is.
+ * A lettered chip in the company's colour rather than their logo. Rotten Tomatoes' tomato and
+ * Metacritic's shield are licensed images with no public address to fetch them from — unlike TMDb's,
+ * which the block above uses — and copying either into this repository is the thing the project does
+ * not do.
+ *
+ * The chip used to be a plain coloured dot, which was reported as the icons being missing: three
+ * bullets in three colours identify nothing to somebody who has not learnt the code. Two or three
+ * letters on the brand colour is as far as this can honestly go — it reads as the source at a
+ * glance, and IMDb's own mark is lettering on yellow, so that one lands almost exactly right.
  */
 @Composable
 private fun CriticScore(
     value: String,
-    accent: Color,
+    /** Which company's measure this is, and how it identifies itself. */
+    mark: CriticMark,
     source: String,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier =
                 Modifier
-                    .size(CRITIC_CHIP_SIZE)
-                    .clip(CircleShape)
-                    .background(accent),
-        )
+                    .size(width = CRITIC_CHIP_WIDTH, height = CRITIC_CHIP_HEIGHT)
+                    .clip(BuroRadius.Small)
+                    .background(mark.accent),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = mark.initials,
+                color = mark.ink,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Black,
+                // A brand's short form is never worth breaking, and the chip is deliberately tight
+                // around it.
+                softWrap = false,
+                maxLines = 1,
+            )
+        }
         Spacer(Modifier.width(BuroSpacing.Sm))
         Column {
             Text(
@@ -3721,28 +3824,23 @@ private fun CriticScore(
     }
 }
 
-/** Rotten Tomatoes' red. Their colour, not their tomato — the mark itself is never copied here. */
-private val CRITIC_TOMATO = Color(0xFFFA320A)
+// The colours and letters themselves live in `ui/CriticMark.kt`, beside the other identity rules the
+// design system owns, so the Metascore bands can be tested without standing up this whole screen.
 
-/** Metacritic's green, the one they use for a favourable Metascore. */
-private val CRITIC_METACRITIC = Color(0xFF00CE7A)
+/** Wide enough for three letters ("IMDb", "RT", "MC") without the chip becoming a button. */
+private val CRITIC_CHIP_WIDTH = 34.dp
 
-/** IMDb's yellow. */
-private val CRITIC_IMDB = Color(0xFFF5C518)
+/** Matched to the cap height of the score beside it, so the chip reads as its label. */
+private val CRITIC_CHIP_HEIGHT = 18.dp
 
-/** Small enough to read as a bullet identifying the source, not as a button to press. */
-private val CRITIC_CHIP_SIZE = 12.dp
+/** The teal of TMDb's own wordmark, which is the half of their gradient that reads on this canvas. */
+private val TMDB_BRAND_TEAL = Color(0xFF01B4E4)
 
-/**
- * TMDb's own mark, served from the same image CDN as every poster in the app.
- *
- * A URL rather than a bundled asset: nothing is committed here, it travels the artwork cache like
- * the rest, and it is the file TMDb itself publishes rather than a copy that could drift from it.
- */
-private const val TMDB_MARK_URL = "https://image.tmdb.org/t/p/w92/wwemzKWzjKYJFfCeiB57q3r4Bcm.png"
+/** Wide enough for "TMDb" without the chip reading as a button. */
+private val SCORE_MARK_WIDTH = 44.dp
 
-/** Matched to the score's cap height, so the mark reads as a label on it rather than as a button. */
-private val SCORE_MARK_SIZE = 30.dp
+/** Matched to the score's cap height, so the mark reads as a label on it. */
+private val SCORE_MARK_HEIGHT = 22.dp
 
 /** Thousands as "1,2 mil": an exact five-digit count is noise beside the score it qualifies. */
 private fun formatVotes(votes: Int): String =

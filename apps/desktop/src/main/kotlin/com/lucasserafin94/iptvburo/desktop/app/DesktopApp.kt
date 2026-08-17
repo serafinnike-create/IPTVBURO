@@ -7,6 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -199,6 +201,7 @@ fun DesktopApp(
 
     /** Whether the TMDb key walkthrough is showing, over the settings window. */
     var tmdbGuideOpen by remember { mutableStateOf(false) }
+    var omdbGuideOpen by remember { mutableStateOf(false) }
     // Not persisted: collapsing is something a user does to see more of one screen, not a standing
     // preference, and a sidebar that stayed hidden across restarts would look like a missing menu.
     var sidebarCollapsed by remember { mutableStateOf(false) }
@@ -1078,6 +1081,8 @@ fun DesktopApp(
                     onRefreshCatalog = { scope.launch { appState.refreshCatalog() } },
                     onOpenTmdbSettings = { openUriExternally(java.net.URI(TMDB_API_SETTINGS_URL)) },
                     onOpenTmdbGuide = { tmdbGuideOpen = true },
+                    onOpenOmdbSite = { openUriExternally(java.net.URI(OMDB_API_KEY_URL)) },
+                    onOpenOmdbGuide = { omdbGuideOpen = true },
                 )
             }
 
@@ -1087,6 +1092,14 @@ fun DesktopApp(
             if (tmdbGuideOpen) {
                 TmdbKeyGuideDialog(
                     onDismiss = { tmdbGuideOpen = false },
+                    onOpenSite = { url -> openUriExternally(java.net.URI(url)) },
+                )
+            }
+
+            // Same arrangement for the critics' key, for the same reason.
+            if (omdbGuideOpen) {
+                OmdbKeyGuideDialog(
+                    onDismiss = { omdbGuideOpen = false },
                     onOpenSite = { url -> openUriExternally(java.net.URI(url)) },
                 )
             }
@@ -1217,6 +1230,27 @@ private fun SourceSidebar(
             )
         }
         Spacer(Modifier.height(30.dp))
+
+        // Everything below the brand scrolls.
+        //
+        // This list is fifteen destinations plus the sources section, and it was laid out in a plain
+        // Column of fixed height: on a 1536x816 screen — an ordinary laptop, and the machine this was
+        // reported on — Assinaturas, Perfil and Configurações fall below the bottom edge with no way
+        // to reach them. Not clipped-but-scrollable: there was no scroll at all, so the settings
+        // screen was simply unreachable from the sidebar.
+        //
+        // `weight(1f)` and never `fillMaxHeight` on the scrolling child: an unweighted child is
+        // measured against unbounded height, which lays the whole list out past the window and
+        // scrolls nothing. That is the same mistake ScrollableSettingsUiTest was written for, and
+        // this is the third surface in the app to have made it.
+        val navScroll = rememberScrollState()
+        Column(
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(navScroll),
+        ) {
         SectionLabel(text.library)
         Spacer(Modifier.height(10.dp))
         NavigationItem(
@@ -1407,7 +1441,10 @@ private fun SourceSidebar(
             onClick = onAddRemoteSource,
         )
 
-        Spacer(Modifier.weight(1f))
+            // Breathing room under the last row, so it does not sit flush against the window edge
+            // when the list is scrolled to the bottom.
+            Spacer(Modifier.height(BuroSpacing.Md))
+        }
     }
 }
 

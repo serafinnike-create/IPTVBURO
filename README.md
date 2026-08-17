@@ -8,8 +8,8 @@ Transforma fontes de mídia autorizadas pelo usuário em uma biblioteca organiza
 
 ![Status](https://img.shields.io/badge/status-em%20desenvolvimento-7c3aed)
 ![GDD](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%209.0-2563eb)
-![Android TV](https://img.shields.io/badge/Android%20TV-v2.0.0--alpha.7-3ddc84)
-![Windows](https://img.shields.io/badge/Windows-v2.0.0--alpha.7-e2b458)
+![Android TV](https://img.shields.io/badge/Android%20TV-v2.0.0--alpha.12-3ddc84)
+![Windows](https://img.shields.io/badge/Windows-v2.0.0--alpha.12-e2b458)
 ![Multiplataforma](https://img.shields.io/badge/escopo-universal-0f766e)
 ![Offline Mobile](https://img.shields.io/badge/Offline%20Vault-planejado-f59e0b)
 
@@ -42,8 +42,8 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 | Entrega | Estado |
 |---|---|
 | GDDs 1.0 a 9.0 | ✅ Documentados na `main` |
-| Aplicação Android/Android TV | 🧪 Prévia `v2.0.0-alpha.7` |
-| Aplicação Windows | 🧪 Prévia `v2.0.0-alpha.7`; MSI ainda sem assinatura Authenticode |
+| Aplicação Android/Android TV | 🧪 Prévia `v2.0.0-alpha.12` |
+| Aplicação Windows | 🧪 Prévia `v2.0.0-alpha.12`; MSI ainda sem assinatura Authenticode |
 | **Onde assistir** (GDD 9) — prateleira por serviço, com capas | 🧪 Windows, dados reais do TMDb |
 | **Já está na sua lista** — o título encontrado no catálogo do usuário | 🧪 Só um casamento confiante produz a linha |
 | Redirecionamento ao serviço oficial | ✅ Nunca reproduz stream protegido; recusa endereço com token ou mídia |
@@ -106,15 +106,15 @@ O fluxo importação → categoria → canal → primeiro frame foi validado em 
 
 Prévia do Windows e do Android. **Os dois instaladores estão na mesma página:**
 
-**➜ [Página da versão v2.0.0-alpha.7](https://github.com/serafinnike-create/IPTVBURO/releases/tag/v2.0.0-alpha.7)**
+**➜ [Página da versão v2.0.0-alpha.12](https://github.com/serafinnike-create/IPTVBURO/releases/tag/v2.0.0-alpha.12)**
 · [todas as versões](https://github.com/serafinnike-create/IPTVBURO/releases)
 
 | Plataforma | Baixar |
 |---|---|
-| Windows 10/11 (64 bits) | [`IPTV-BURO-v2.0.0-alpha.7-windows-x64-unsigned.msi`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.0-alpha.7/IPTV-BURO-v2.0.0-alpha.7-windows-x64-unsigned.msi) |
-| Android / Android TV | [`IPTV-BURO-v2.0.0-alpha.7-android-debug.apk`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.0-alpha.7/IPTV-BURO-v2.0.0-alpha.7-android-debug.apk) |
+| Windows 10/11 (64 bits) | [`IPTV-BURO-v2.0.0-alpha.12-windows-x64-unsigned.msi`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.0-alpha.12/IPTV-BURO-v2.0.0-alpha.12-windows-x64-unsigned.msi) |
+| Android / Android TV | [`IPTV-BURO-v2.0.0-alpha.12-android-debug.apk`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.0-alpha.12/IPTV-BURO-v2.0.0-alpha.12-android-debug.apk) |
 
-O [`SHA256SUMS.txt`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.0-alpha.7/SHA256SUMS.txt)
+O [`SHA256SUMS.txt`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.0-alpha.12/SHA256SUMS.txt)
 da mesma página permite conferir os dois arquivos.
 
 > [!NOTE]

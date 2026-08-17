@@ -627,6 +627,30 @@ data class DesktopStrings(
                             criticKeyPlaceholder = "Clave de la API",
                             criticKeySaved = "Clave guardada: se muestran las notas de la crítica.",
                             criticKeyAbsent = "Sin clave: solo se muestra la puntuación del público de TMDb.",
+                            criticGuideButton = "¿No sabes cómo conseguirla?",
+                            criticGuideTitle = "Cómo conseguir una clave OMDb",
+                            criticGuideSubtitle = "Cuatro pasos. La clave gratuita llega por correo.",
+                            criticGuideOpenSite = "Abrir omdbapi.com",
+                            criticStep1Title = "Abre omdbapi.com",
+                            criticStep1Body =
+                                "Ve a la sección API Key del sitio. No hay cuenta que crear: solo " +
+                                    "pide una dirección de correo.",
+                            criticStep2Title = "Elige el plan gratuito",
+                            criticStep2Body =
+                                "Marca FREE, que permite 1.000 consultas al día, mucho más de lo que " +
+                                    "usa esta aplicación. El plan de pago no hace falta.",
+                            criticStep3Title = "Escribe tu correo y envía",
+                            criticStep3Body =
+                                "Usa una dirección que puedas abrir ahora mismo y describe el uso en " +
+                                    "pocas palabras; \"uso personal\" es una respuesta correcta.",
+                            criticStep4Title = "Activa la clave desde el correo",
+                            criticStep4Body =
+                                "La clave llega con un enlace de activación. Ábrelo, o la clave sigue " +
+                                    "inactiva, y luego pega la clave aquí en los ajustes.",
+                            criticSketchEmail = "Tu correo",
+                            criticSketchFree = "FREE",
+                            criticSketchSubmit = "Enviar",
+                            criticSketchInbox = "Clave + activación",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -675,6 +699,10 @@ data class DesktopStrings(
                             seeMore = "Ver mas",
                             allFrom = "Todo de %s",
                             backToShelves = "Volver a los servicios",
+                            genreSelector = "Género",
+                            serviceSelector = "Servicio",
+                            allGenres = "Todos los géneros",
+                            allServices = "Todos los servicios",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -1243,6 +1271,30 @@ data class DesktopStrings(
                             criticKeyPlaceholder = "Chave da API",
                             criticKeySaved = "Chave salva: as notas da crítica aparecem.",
                             criticKeyAbsent = "Sem chave: aparece só a nota do público do TMDb.",
+                            criticGuideButton = "Não sabe como obter?",
+                            criticGuideTitle = "Como obter uma chave OMDb",
+                            criticGuideSubtitle = "Quatro passos. A chave gratuita chega por e-mail.",
+                            criticGuideOpenSite = "Abrir omdbapi.com",
+                            criticStep1Title = "Abra omdbapi.com",
+                            criticStep1Body =
+                                "Vá até a secção API Key do site. Não há conta para criar — o site " +
+                                    "pede apenas um endereço de e-mail.",
+                            criticStep2Title = "Escolha o plano gratuito",
+                            criticStep2Body =
+                                "Marque FREE, que permite 1.000 consultas por dia — muito mais do que " +
+                                    "este aplicativo usa. O plano pago não é necessário.",
+                            criticStep3Title = "Informe o seu e-mail e envie",
+                            criticStep3Body =
+                                "Use um endereço que você possa abrir agora e descreva o uso em poucas " +
+                                    "palavras; \"uso pessoal\" é uma resposta correta.",
+                            criticStep4Title = "Ative a chave pelo e-mail",
+                            criticStep4Body =
+                                "A chave chega com um link de ativação. Abra esse link, senão a chave " +
+                                    "continua inativa, e depois cole a chave aqui nas configurações.",
+                            criticSketchEmail = "Seu e-mail",
+                            criticSketchFree = "FREE",
+                            criticSketchSubmit = "Enviar",
+                            criticSketchInbox = "Chave + ativação",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -1291,6 +1343,10 @@ data class DesktopStrings(
                             seeMore = "Ver mais",
                             allFrom = "Tudo de %s",
                             backToShelves = "Voltar aos servicos",
+                            genreSelector = "Gênero",
+                            serviceSelector = "Serviço",
+                            allGenres = "Todos os gêneros",
+                            allServices = "Todos os serviços",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -1859,6 +1915,30 @@ data class DesktopStrings(
                             criticKeyPlaceholder = "API key",
                             criticKeySaved = "Key saved: the critics' scores are shown.",
                             criticKeyAbsent = "Without a key only TMDb's audience score is shown.",
+                            criticGuideButton = "Not sure how to get one?",
+                            criticGuideTitle = "Getting an OMDb key",
+                            criticGuideSubtitle = "Four steps. The free key arrives by email.",
+                            criticGuideOpenSite = "Open omdbapi.com",
+                            criticStep1Title = "Open omdbapi.com",
+                            criticStep1Body =
+                                "Go to the site's API Key section. There is no account to create — " +
+                                    "an email address is all it asks for.",
+                            criticStep2Title = "Choose the free plan",
+                            criticStep2Body =
+                                "Pick FREE, which allows 1,000 requests a day — far more than this " +
+                                    "app uses. The paid tier is not needed.",
+                            criticStep3Title = "Enter your email and submit",
+                            criticStep3Body =
+                                "Give an address you can open right away, and describe the use briefly " +
+                                    "— \"personal use\" is an accurate answer.",
+                            criticStep4Title = "Activate the key from the email",
+                            criticStep4Body =
+                                "The key arrives with an activation link. Open it, or the key stays " +
+                                    "inactive, then paste the key here in settings.",
+                            criticSketchEmail = "Your email",
+                            criticSketchFree = "FREE",
+                            criticSketchSubmit = "Submit",
+                            criticSketchInbox = "Key + activation",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -1907,6 +1987,10 @@ data class DesktopStrings(
                             seeMore = "See more",
                             allFrom = "All from %s",
                             backToShelves = "Back to services",
+                            genreSelector = "Genre",
+                            serviceSelector = "Service",
+                            allGenres = "All genres",
+                            allServices = "All services",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -2474,6 +2558,30 @@ data class DesktopStrings(
                             criticKeyPlaceholder = "API-Schlüssel",
                             criticKeySaved = "Schlüssel gespeichert: Kritikerwertungen werden angezeigt.",
                             criticKeyAbsent = "Ohne Schlüssel wird nur die TMDb-Publikumswertung angezeigt.",
+                            criticGuideButton = "Sie wissen nicht, wie?",
+                            criticGuideTitle = "Einen OMDb-Schlüssel erhalten",
+                            criticGuideSubtitle = "Vier Schritte. Der kostenlose Schlüssel kommt per E-Mail.",
+                            criticGuideOpenSite = "omdbapi.com öffnen",
+                            criticStep1Title = "Öffnen Sie omdbapi.com",
+                            criticStep1Body =
+                                "Gehen Sie zum Bereich API Key. Ein Konto ist nicht erforderlich — " +
+                                    "eine E-Mail-Adresse genügt.",
+                            criticStep2Title = "Wählen Sie den kostenlosen Tarif",
+                            criticStep2Body =
+                                "Wählen Sie FREE mit 1.000 Anfragen pro Tag — weit mehr, als diese " +
+                                    "App benötigt. Der kostenpflichtige Tarif ist nicht nötig.",
+                            criticStep3Title = "E-Mail eingeben und absenden",
+                            criticStep3Body =
+                                "Geben Sie eine Adresse an, auf die Sie sofort zugreifen können, und " +
+                                    "beschreiben Sie den Zweck kurz, etwa \"privater Gebrauch\".",
+                            criticStep4Title = "Schlüssel per E-Mail aktivieren",
+                            criticStep4Body =
+                                "Der Schlüssel kommt mit einem Aktivierungslink. Öffnen Sie ihn, sonst " +
+                                    "bleibt der Schlüssel inaktiv, und fügen Sie ihn dann hier ein.",
+                            criticSketchEmail = "Ihre E-Mail",
+                            criticSketchFree = "FREE",
+                            criticSketchSubmit = "Absenden",
+                            criticSketchInbox = "Schlüssel + Aktivierung",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -2522,6 +2630,10 @@ data class DesktopStrings(
                             seeMore = "Mehr anzeigen",
                             allFrom = "Alles von %s",
                             backToShelves = "Zuruck zu den Diensten",
+                            genreSelector = "Genre",
+                            serviceSelector = "Dienst",
+                            allGenres = "Alle Genres",
+                            allServices = "Alle Dienste",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -3094,6 +3206,30 @@ data class DesktopStrings(
                             criticKeyPlaceholder = "Chiave API",
                             criticKeySaved = "Chiave salvata: i voti della critica sono visibili.",
                             criticKeyAbsent = "Senza chiave viene mostrato solo il punteggio del pubblico di TMDb.",
+                            criticGuideButton = "Non sai come ottenerla?",
+                            criticGuideTitle = "Ottenere una chiave OMDb",
+                            criticGuideSubtitle = "Quattro passaggi. La chiave gratuita arriva per email.",
+                            criticGuideOpenSite = "Apri omdbapi.com",
+                            criticStep1Title = "Apri omdbapi.com",
+                            criticStep1Body =
+                                "Vai alla sezione API Key del sito. Non serve creare un account: " +
+                                    "basta un indirizzo email.",
+                            criticStep2Title = "Scegli il piano gratuito",
+                            criticStep2Body =
+                                "Seleziona FREE, che consente 1.000 richieste al giorno — molto più " +
+                                    "di quanto serva a questa app. Il piano a pagamento non è necessario.",
+                            criticStep3Title = "Inserisci la tua email e invia",
+                            criticStep3Body =
+                                "Indica un indirizzo a cui puoi accedere subito e descrivi brevemente " +
+                                    "l'uso previsto, ad esempio \"uso personale\".",
+                            criticStep4Title = "Attiva la chiave dalla email",
+                            criticStep4Body =
+                                "Riceverai la chiave con un link di attivazione. Aprilo, altrimenti la " +
+                                    "chiave resta inattiva, poi incollala qui nelle impostazioni.",
+                            criticSketchEmail = "La tua email",
+                            criticSketchFree = "FREE",
+                            criticSketchSubmit = "Invia",
+                            criticSketchInbox = "Chiave + attivazione",
                         ),
                     discovery =
                         DiscoveryStrings(
@@ -3142,6 +3278,10 @@ data class DesktopStrings(
                             seeMore = "Vedi altro",
                             allFrom = "Tutto di %s",
                             backToShelves = "Torna ai servizi",
+                            genreSelector = "Genere",
+                            serviceSelector = "Servizio",
+                            allGenres = "Tutti i generi",
+                            allServices = "Tutti i servizi",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -3794,6 +3934,32 @@ data class RatingStrings(
     val criticKeySaved: String,
     /** What the app does without one: the audience score alone, which is the default. */
     val criticKeyAbsent: String,
+    /**
+     * The way in for somebody who has never registered an OMDb key.
+     *
+     * The hint named `omdbapi.com` and stopped there, which assumes the reader knows that the site
+     * wants an email address, that the free tier is the "FREE" radio button, and that the key
+     * arrives by email rather than on screen. The TMDb key beside it has had a step-by-step guide
+     * since a customer got stuck on exactly that kind of form; this is the same door.
+     */
+    val criticGuideButton: String,
+    val criticGuideTitle: String,
+    val criticGuideSubtitle: String,
+    /** Opens the page where the key is requested. */
+    val criticGuideOpenSite: String,
+    val criticStep1Title: String,
+    val criticStep1Body: String,
+    val criticStep2Title: String,
+    val criticStep2Body: String,
+    val criticStep3Title: String,
+    val criticStep3Body: String,
+    val criticStep4Title: String,
+    val criticStep4Body: String,
+    /** Labels drawn inside the page sketches, short enough to fit them. */
+    val criticSketchEmail: String,
+    val criticSketchFree: String,
+    val criticSketchSubmit: String,
+    val criticSketchInbox: String,
 )
 
 /**
@@ -3912,6 +4078,18 @@ data class ServiceCatalogueStrings(
     val allFrom: String,
     /** Returns from the full catalogue to the shelves. */
     val backToShelves: String,
+    /**
+     * The two category selectors on Films and Series.
+     *
+     * They replaced a single horizontal rail that mixed both kinds of category — "Acao" beside
+     * "Netflix" — in one strip of thirty-odd chips that scrolled sideways. Naming the two questions
+     * separately is most of what makes the catalogue navigable.
+     */
+    val genreSelector: String,
+    val serviceSelector: String,
+    /** The "no filter" option in each: every genre, or every service. */
+    val allGenres: String,
+    val allServices: String,
 )
 
 data class SavedForLaterStrings(

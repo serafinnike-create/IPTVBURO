@@ -2,6 +2,56 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [2.0.0-alpha.12] - 2026-08-17 (Windows)
+
+### Corrigido
+
+- **Um rótulo espremido quebrava uma letra por linha.** Em Configurações, um
+  `Row` entrega toda a largura ao primeiro texto e deixa o resto para o último,
+  e um texto com poucos pixels não corta com "…": ele quebra, caractere por
+  caractere, numa coluna vertical na borda do painel. Aconteceu em dois lugares
+  independentes — o link "Não sabe como obter?" ao lado da dica do TMDb, e o
+  último tamanho de cache, com "16 GB" virando `1/6/G/B`. Ambos agora usam
+  `FlowRow`, e as pilhas de opção recusam quebra na própria definição, para que
+  uma opção adicionada depois não reintroduza o problema.
+- **A nota do público era atribuída à Netflix.** O painel de avaliações buscava
+  uma imagem de uma constante chamada `TMDB_MARK_URL`, documentada como "a marca
+  da própria TMDb". Não era: aquele caminho é de logo de **serviço de streaming**
+  no CDN da TMDb, e o arquivo por trás dele é a marca da Netflix. O resultado era
+  o logo da Netflix ao lado das palavras "Nota TMDb" — uma média de usuários da
+  TMDb apresentada como veredito de uma empresa que não participou dela.
+- **As Configurações não podiam ser abertas pela barra lateral.** A coluna de
+  navegação tem quinze destinos e era um `Column` de altura fixa sem rolagem:
+  numa tela de 1536x816 — um notebook comum — Assinaturas, Perfil e
+  Configurações ficam abaixo da borda inferior, sem qualquer forma de alcançá-los.
+- **A cor do Metascore contradizia a nota.** O selo era verde fixo, então
+  anunciava "favorável" ao lado de um 32. Agora segue as faixas públicas do
+  Metacritic: verde a partir de 61, amarelo de 40 a 60, vermelho abaixo disso.
+
+### Alterado
+
+- **Filmes e Séries trocaram a fileira de categorias por dois seletores.** A
+  fileira mostrava todas as categorias da lista num único trilho horizontal —
+  trinta e tantas em uma assinatura real, misturando "Acao" e "Aventura" com
+  "Netflix" e "Amazon" — de modo que duas perguntas diferentes eram respondidas
+  no mesmo lugar e responder uma exigia rolar pela outra. Agora há **Gênero** e
+  **Serviço**, cada um nomeando a pergunta que responde, com a marca de cada
+  serviço ao lado do nome.
+- **Os selos da crítica agora trazem a sigla da fonte.** Eram três bolinhas
+  coloridas, que não identificam nada para quem não decorou o código; agora são
+  `RT`, `MC` e `IMDb` na cor de cada marca. Desenhados no aplicativo, não
+  baixados: as marcas do Rotten Tomatoes e do Metacritic são licenciadas e não
+  têm endereço público de onde buscá-las.
+
+### Adicionado
+
+- **Guia passo a passo para a chave OMDb.** A dica dizia apenas "Pegue a sua em
+  omdbapi.com", o que pressupõe saber que o site pede um e-mail em vez de uma
+  conta, que o plano gratuito é um botão "FREE" e — o passo que as pessoas de
+  fato perdem — que a chave chega por e-mail atrás de um link de ativação. Sem
+  abrir esse link a chave não funciona e nada na tela explica por quê. Mesmo
+  mecanismo do guia do TMDb, deliberadamente compartilhado com ele.
+
 ## [2.0.0] - 2026-08-07 (Windows)
 
 ### Corrigido

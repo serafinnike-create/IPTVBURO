@@ -94,6 +94,10 @@ fun SettingsDialog(
     onOpenTmdbSettings: () -> Unit = {},
     /** Opens the step-by-step guide, for a customer who has never registered a TMDb key. */
     onOpenTmdbGuide: () -> Unit = {},
+    /** Opens the page where OMDb issues its key. */
+    onOpenOmdbSite: () -> Unit = {},
+    /** And the guide for it, which exists mainly to explain the activation email. */
+    onOpenOmdbGuide: () -> Unit = {},
 ) {
     val text = strings
     var tab by remember { mutableStateOf(SettingsTab.GENERAL) }
@@ -239,14 +243,25 @@ fun SettingsDialog(
                     if (tab == SettingsTab.DATA) item(key = "metadata-key") {
                         SettingsSection(text.metadataKeyLabel, text.metadataKeyUses) {
                             Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                // FlowRow, not Row: the hint is a sentence and the guide link is a
+                                // second one beside it, and a Row hands the first child all the
+                                // width it asks for. The hint took two lines of the panel and left
+                                // the link a few pixels, which it then filled by breaking "como
+                                // obter?" one letter per line down the edge of the scrollbar.
+                                //
+                                // Wrapping puts the link on its own line when the pair does not fit
+                                // instead, which is also what the region and language pills above
+                                // do with the same width.
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+                                    verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+                                ) {
                                     Text(
                                         text = text.metadataKeyHint,
                                         color = BuroColors.Primary,
                                         style = MaterialTheme.typography.labelSmall,
                                         modifier = Modifier.clickable(onClick = onOpenTmdbSettings),
                                     )
-                                    Spacer(Modifier.width(BuroSpacing.Sm))
                                     // The way in for somebody who has never done this.
                                     //
                                     // The link beside it goes straight to the API settings page,
@@ -258,6 +273,10 @@ fun SettingsDialog(
                                         color = BuroColors.TextMuted,
                                         style = MaterialTheme.typography.labelSmall,
                                         textDecoration = TextDecoration.Underline,
+                                        // Never break this one across lines. It is two words, and
+                                        // squeezed into a narrow column it is what produced the
+                                        // vertical letter stack this layout was fixing.
+                                        softWrap = false,
                                         modifier = Modifier.clickable(onClick = onOpenTmdbGuide),
                                     )
                                 }
@@ -312,6 +331,39 @@ fun SettingsDialog(
                         HorizontalDivider(color = BuroColors.BorderSoft)
                         SettingsSection(ratings.criticKeyLabel, ratings.criticKeyHint) {
                             Column {
+                                // The same pair the TMDb key above offers: the site itself, and a
+                                // guide for somebody who has never registered a key there.
+                                //
+                                // The hint named omdbapi.com and stopped, which assumes the reader
+                                // knows the free tier is a radio button and — the step people
+                                // actually miss — that the key arrives by email behind an activation
+                                // link. Pasting the key without opening that link yields no scores
+                                // and no explanation.
+                                //
+                                // FlowRow rather than Row: see SettingsLabelWrapUiTest. A Row hands
+                                // the first label all the width and breaks the second one letter per
+                                // line, which is exactly what happened to the TMDb pair.
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+                                    verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+                                ) {
+                                    Text(
+                                        text = "omdbapi.com",
+                                        color = BuroColors.Primary,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        softWrap = false,
+                                        modifier = Modifier.clickable(onClick = onOpenOmdbSite),
+                                    )
+                                    Text(
+                                        text = ratings.criticGuideButton,
+                                        color = BuroColors.TextMuted,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        textDecoration = TextDecoration.Underline,
+                                        softWrap = false,
+                                        modifier = Modifier.clickable(onClick = onOpenOmdbGuide),
+                                    )
+                                }
+                                Spacer(Modifier.height(BuroSpacing.Xs))
                                 OutlinedTextField(
                                     value = appState.criticScoresApiKey,
                                     onValueChange = appState::updateCriticScoresApiKey,
@@ -843,6 +895,14 @@ private fun SettingsPill(
         color = if (selected) BuroColors.Primary else BuroColors.TextMuted,
         style = MaterialTheme.typography.labelLarge,
         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        // A pill is a single value — a language, a region, a size — and it is never right to break
+        // one across lines. Squeezed into whatever width was left over, "16 GB" wrapped into "1 / 6
+        // / G / B" down the edge of the panel, which is how this rule got written.
+        //
+        // Enforced here rather than at each of the dozen call sites, so a pill added later cannot
+        // reintroduce it.
+        softWrap = false,
+        maxLines = 1,
     )
 }
 
