@@ -2561,6 +2561,11 @@ class DesktopAppState(
                 }.getOrDefault(emptyMap())
             }
 
+        // Reported once, so whether the selector is showing real marks or falling back to monograms
+        // can be read from the log rather than guessed at from a screenshot. Names only — the key is
+        // never printed.
+        println("[providers] logos loaded: ${loaded.size} (${loaded.keys.sorted().joinToString(", ")})")
+
         if (loaded.isNotEmpty()) {
             providerLogos = loaded
             providerLogosKey = cacheKey
