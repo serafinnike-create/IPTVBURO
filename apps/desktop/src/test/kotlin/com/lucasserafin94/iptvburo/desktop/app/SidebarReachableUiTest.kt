@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.desktop.app
 
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -67,6 +68,50 @@ class SidebarReachableUiTest {
         assertTrue(
             source.contains("label = text.settings"),
             "The sidebar no longer offers a route to settings.",
+        )
+    }
+
+    /**
+     * And the scrolling is visible.
+     *
+     * Making the list scroll was only half the fix. Reported again afterwards: the FONTES section
+     * "só aparece quando eu clico em F11" — the rows were reachable, but with no bar on screen there
+     * was nothing to suggest so, and making the window full-screen was the only way anybody found to
+     * see them. Compose's default scrollbar is near-black on this near-black surface, so it has to
+     * be given colours explicitly.
+     */
+    @Test
+    fun `the sidebar shows a scrollbar`() {
+        assertTrue(
+            source.contains("rememberScrollbarAdapter(navScroll)"),
+            "The sidebar scrolls with no visible bar, which reads as content simply being missing.",
+        )
+        val bar = source.substringAfter("rememberScrollbarAdapter(navScroll)").substringBefore(")\n")
+        assertTrue(
+            bar.contains("unhoverColor") && bar.contains("hoverColor"),
+            "The scrollbar must set its own colours; the default is invisible here.",
+        )
+    }
+
+    /**
+     * Nothing inside the sidebar scrolls on the same axis as the sidebar.
+     *
+     * A `LazyColumn` nested in a `verticalScroll` cannot be measured and throws at runtime. The
+     * sources list was one, and it went unnoticed because the branch needs two playlists — a crash
+     * waiting for whoever connects a second one.
+     */
+    @Test
+    fun `the sources list is not a nested scrollable`() {
+        // Bounded to the scrolling column itself. Reading to the end of the file sweeps up every
+        // other composable in it, which have their own lists and are none of this test's business.
+        val sidebar =
+            source
+                .substringAfter("val navScroll = rememberScrollState()")
+                .substringBefore("private fun CollapsedSidebar")
+
+        assertFalse(
+            sidebar.contains("LazyColumn("),
+            "A LazyColumn inside the scrolling sidebar is a nested scrollable and crashes on measure.",
         )
     }
 }

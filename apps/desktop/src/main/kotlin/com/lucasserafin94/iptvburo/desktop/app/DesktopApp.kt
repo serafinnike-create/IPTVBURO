@@ -7,6 +7,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalScrollbarStyle
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -1267,13 +1270,25 @@ private fun SourceSidebar(
         // measured against unbounded height, which lays the whole list out past the window and
         // scrolls nothing. That is the same mistake ScrollableSettingsUiTest was written for, and
         // this is the third surface in the app to have made it.
+        // And it says so.
+        //
+        // Scrolling without an indicator is the same as not scrolling, from the user's side: the
+        // sources section and the buttons that add a playlist sit below the fold on a short window,
+        // and with nothing on screen to suggest there is more, they were reported as hidden — only
+        // findable by pressing F11 to make the window tall enough to show everything at once.
+        //
+        // Explicit colours because Compose's default scrollbar is near-black on this near-black
+        // surface: drawn, and invisible. The same style the settings panel and the category menu
+        // carry, for the same reason.
         val navScroll = rememberScrollState()
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
         Column(
             modifier =
                 Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(navScroll),
+                    .fillMaxSize()
+                    .verticalScroll(navScroll)
+                    // Room for the bar, so it sits beside the rows rather than over their labels.
+                    .padding(end = 8.dp),
         ) {
         SectionLabel(text.library)
         Spacer(Modifier.height(10.dp))
@@ -1428,11 +1443,16 @@ private fun SourceSidebar(
         }
         Spacer(Modifier.height(8.dp))
         if (sources.size > 1) {
-            LazyColumn(
-                modifier = Modifier.heightIn(max = 220.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(sources, key = DesktopSourceSummary::id) { source ->
+            // A plain Column, not a LazyColumn.
+            //
+            // The sidebar now scrolls as a whole, and a LazyColumn inside a `verticalScroll` is a
+            // nested scrollable on the same axis — Compose cannot measure that and throws. Nobody
+            // hit it because the branch needs two sources and most people have one, which is the
+            // worst kind of latent crash: it waits for the user who connects a second playlist.
+            //
+            // Laziness bought nothing here anyway. This is a handful of rows, not a catalogue.
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                sources.forEach { source ->
                     SourceItem(
                         source = source,
                         selected = source.id == selectedSourceId,
@@ -1468,6 +1488,17 @@ private fun SourceSidebar(
             // Breathing room under the last row, so it does not sit flush against the window edge
             // when the list is scrolled to the bottom.
             Spacer(Modifier.height(BuroSpacing.Md))
+        }
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(navScroll),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                style =
+                    LocalScrollbarStyle.current.copy(
+                        thickness = 8.dp,
+                        unhoverColor = BuroColors.BorderSoft,
+                        hoverColor = BuroColors.Primary,
+                    ),
+            )
         }
     }
 }
