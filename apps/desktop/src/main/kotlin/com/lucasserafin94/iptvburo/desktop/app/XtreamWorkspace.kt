@@ -1827,6 +1827,10 @@ internal fun XtreamItemDetail(
                 }
                 SeriesDetailContent(
                     status = seriesStatus,
+                    // The same two the film page receives. Series had neither, so the page showed
+                    // the provider's own star and nothing else.
+                    audienceScore = audienceScore,
+                    criticScores = criticScores,
                     onOpenPerson = onOpenPerson,
                     castPhotoFor = castPhotoFor,
                     onRequestCastPhoto = onRequestCastPhoto,
@@ -2584,6 +2588,10 @@ internal fun PersonFilmographyPage(
 @Composable
 private fun SeriesDetailContent(
     status: SeriesDetailsStatus,
+    /** The audience score, once TMDb has answered. Null draws no ratings block at all. */
+    audienceScore: TmdbAudienceScore? = null,
+    /** The critics' scores, which appear under the audience one when they exist. */
+    criticScores: CriticScores? = null,
     onOpenPerson: (String) -> Unit,
     castPhotoFor: (String) -> String?,
     onRequestCastPhoto: suspend (String) -> Unit,
@@ -2686,6 +2694,12 @@ private fun SeriesDetailContent(
                 Text(it, color = BuroColors.Text, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(10.dp))
             }
+            // In the same place the film page puts it: after the synopsis, before the credits.
+            //
+            // A series page showed only the provider's own star — no TMDb score, no Tomatometer or
+            // Metascore, and no mark saying whose number any of it was. The block was written once
+            // and only ever called from the film content, so half the catalogue never saw it.
+            RatingsBlock(score = audienceScore, critics = criticScores)
             details.director?.let { DetailLine("Direção", it) }
             // Portraits, the same as the film page. A series was showing its cast as one line of
             // comma-separated text, which is the raw field the provider sends rather than anything

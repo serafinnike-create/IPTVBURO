@@ -1606,7 +1606,20 @@ class DesktopAppState(
      * Cleared first, so a page never shows the previous film's score while this one is in flight —
      * which is the kind of error nobody notices and everybody is misled by.
      */
-    fun loadAudienceScore(title: String, year: Int?) {
+    fun loadAudienceScore(
+        title: String,
+        year: Int?,
+        /**
+         * Which TMDb catalogue to search.
+         *
+         * Not a detail: films and series are separate endpoints there, matched on different date
+         * fields, and asking the film catalogue for a series name finds nothing at all. This was
+         * defaulted to false and only ever called from the film loader, so a series page showed no
+         * audience score, no critics' row and no source mark — reported as the ratings simply being
+         * absent from séries.
+         */
+        isSeries: Boolean = false,
+    ) {
         if (!metadataClient.isConfigured) return
         val requested = title.trim()
         if (requested.isBlank()) return
@@ -1617,7 +1630,9 @@ class DesktopAppState(
         streamingScope.launch {
             val found =
                 runCatching {
-                    withContext(Dispatchers.IO) { metadataClient.findAudienceScore(requested, year) }
+                    withContext(Dispatchers.IO) {
+                        metadataClient.findAudienceScore(requested, year, isSeries)
+                    }
                 }.getOrNull()
             // Checked against what is on screen now: the viewer may have opened another title while
             // this was in flight, and showing this score under that film's name would be worse than
@@ -5340,6 +5355,16 @@ class DesktopAppState(
         }.onSuccess { details ->
             if (selectedXtreamItemId == selected.providerId) {
                 seriesDetailsStatus = SeriesDetailsStatus.Loaded(details)
+                // The same lookup the film loader performs, against TMDb's series catalogue.
+                //
+                // Series had no audience score, no critics' row and no source mark, because this
+                // call simply was not here — the page showed the provider's own star and nothing
+                // else. Reported as the ratings being missing from séries.
+                loadAudienceScore(
+                    title = selected.name.editorialTitle(),
+                    year = selected.year,
+                    isSeries = true,
+                )
             } else {
                 // Same reason as the film loader: the answer belongs to a title that is no longer
                 // showing, so it is dropped — but the status has to come back with it, or the guard
