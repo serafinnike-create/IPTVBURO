@@ -1,12 +1,50 @@
 # Implementação atual do IPTV BURO
 
-- Data da auditoria: 12 de agosto de 2026
+- Data da auditoria: 17 de agosto de 2026
 - Branch: `codex/windows-clean-release`
 - Baseline anterior: `v0.1.0-alpha.1`
-- Tag mais recente no repositório atual: `v0.2.0-alpha.7`
-- Releases no repositório atual: nenhuma em 12 de agosto de 2026;
-- Candidato Windows: `v2.0.0-alpha.1`, ainda não publicado;
+- Tag mais recente no repositório atual: `v2.0.0-alpha.12`
+- Releases publicadas: `v2.0.0-alpha.7`, `v2.0.0-alpha.11`, `v2.0.0-alpha.12`,
+  todas como prévia
+- Windows: `v2.0.0-alpha.12` publicada; MSI sem assinatura Authenticode
+- Android/Android TV: APK de depuração publicado na mesma página
 - Milestone em validação: `0.2`, Android adaptativo e Compose Desktop
+
+## Correções de 17 de agosto de 2026
+
+Auditoria da tela de Configurações e do catálogo no Windows, mais um defeito que
+impedia a compilação do Android.
+
+- **Atribuição de nota corrigida.** O painel de avaliações desenhava a marca da
+  Netflix ao lado das palavras "Nota TMDb". A imagem vinha de uma constante
+  chamada `TMDB_MARK_URL`, documentada como "a marca da própria TMDb", mas aquele
+  caminho é de logo de serviço de streaming no CDN da TMDb e o arquivo por trás
+  dele é da Netflix. `ScoreAttributionTest` agora falha diante de qualquer
+  caminho de CDN fixo naquele arquivo.
+- **Configurações inalcançável pela barra lateral.** A coluna de navegação era
+  uma lista de altura fixa sem rolagem, e numa área útil de 1536x816 os três
+  últimos destinos ficavam abaixo da borda. Terceira superfície do aplicativo a
+  dar altura ilimitada a um filho rolável; `SidebarReachableUiTest` fixa as duas
+  metades da correção.
+- **Rótulos quebrando uma letra por linha.** Duas ocorrências independentes em
+  Configurações, ambas causadas por `Row` distribuindo toda a largura ao primeiro
+  filho. Corrigidas com `FlowRow`, e `SettingsPill` recusa quebra na própria
+  definição.
+- **Seletores de Gênero e Serviço** substituem a fileira horizontal de
+  categorias em Filmes e Séries. Não se combinam, porque cada título pertence a
+  uma única categoria e o cruzamento devolveria grade vazia; a divisão está em
+  `packages`-independente `desktop/ui/CategorySplit.kt`, com dez casos de teste.
+- **Selos da crítica identificam a fonte** por sigla na cor da marca, e a cor do
+  Metascore segue as faixas públicas do Metacritic em vez de um verde fixo.
+- **Guia da chave OMDb**, compartilhando a máquina do guia do TMDb.
+- **Android voltou a compilar.** Um apóstrofo sem escape em três textos em inglês
+  fazia o `aapt` recusar o recurso e derrubava `mergeDebugResources`.
+
+Verificação executada: `:apps:desktop:test` forçada limpa,
+`:apps:android-tv:testDebugUnitTest`, as quatro suítes de `packages`,
+`packageMsi` e `assembleDebug`.
+
+## Estado da milestone 0.2 (auditoria de 12 de agosto de 2026)
 
 ## Estado da milestone 0.2
 
