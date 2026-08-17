@@ -118,6 +118,12 @@ class RememberedScrollTest {
      *
      * Content type, category and search each change which titles are shown. A key missing any of
      * them restores a position from a different set of results.
+     *
+     * The field names matter as much as their presence. This asserted `selectedCategoryId` and
+     * `searchQuery`, which are the **imported-M3U** catalogue's fields — and the key really did use
+     * them, so the check passed while an Xtream session, where both stay empty for ever, collapsed
+     * every category and every search onto one shared key. The Xtream names are the ones this screen
+     * browses with.
      */
     @Test
     fun `the catalogue key covers type, category and search`() {
@@ -128,8 +134,8 @@ class RememberedScrollTest {
         val key = Regex("""key = "catalog:[^"]*"""").find(source)?.value.orEmpty()
 
         assertTrue(key.contains("xtreamContentType"), "films and series must not share a position")
-        assertTrue(key.contains("selectedCategoryId"), "categories show different titles")
-        assertTrue(key.contains("searchQuery"), "a search is a different list of results")
+        assertTrue(key.contains("selectedXtreamCategoryId"), "categories show different titles")
+        assertTrue(key.contains("xtreamSearchQuery"), "a search is a different list of results")
     }
 
     @Test

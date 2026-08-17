@@ -1003,8 +1003,15 @@ private fun XtreamCatalogGrid(
     // Keyed on content type, category and search so that films, series and live each keep their own
     // place: one shared key would restore the film offset onto the series grid, which looks
     // deliberate and is worse than starting at the top.
+    // The Xtream fields, not the local-playlist ones.
+    //
+    // This read `selectedCategoryId` and `searchQuery`, which belong to the imported-M3U catalogue.
+    // In an Xtream session those stay empty for ever, so every category and every search shared one
+    // key: the position saved while browsing Ação was restored onto Terror, and a search's offset
+    // was restored onto the unfiltered grid. Restoring a position from a different list is worse
+    // than starting at the top, because it looks deliberate.
     val gridState = rememberRestoredGridState(
-        key = "catalog:${appState.xtreamContentType}:${appState.selectedCategoryId.orEmpty()}:${appState.searchQuery}",
+        key = "catalog:${appState.xtreamContentType}:${appState.selectedXtreamCategoryId.orEmpty()}:${appState.xtreamSearchQuery}",
     )
     val gridFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -1014,10 +1021,24 @@ private fun XtreamCatalogGrid(
         if (gridFocusAttached) gridFocus.requestFocus()
     }
 
-    // A new page reuses the same list; without this the grid keeps the previous scroll offset and
-    // the first row of the new page opens already scrolled past.
+    // A new page reuses the same list, so without this the grid keeps the previous offset and the
+    // first row of the new page opens already scrolled past.
+    //
+    // Only on a *change*, though. A LaunchedEffect also runs when it is first composed, and this
+    // composable is composed again every time the user returns from a title's page — so the effect
+    // fired on the way back and scrolled to the top, throwing away the position `RememberedScroll`
+    // had just restored. Remembering what was last scrolled for tells a real page turn apart from a
+    // re-entry, which the keys alone cannot.
+    var lastScrolledList by remember {
+        mutableStateOf<Triple<Int, XtreamContentType, String?>?>(null)
+    }
     LaunchedEffect(page.pageIndex, appState.xtreamContentType, appState.selectedXtreamCategoryId) {
-        gridState.scrollToItem(0)
+        val current =
+            Triple(page.pageIndex, appState.xtreamContentType, appState.selectedXtreamCategoryId)
+        if (lastScrolledList != null && lastScrolledList != current) {
+            gridState.scrollToItem(0)
+        }
+        lastScrolledList = current
     }
 
     Column(modifier = Modifier.fillMaxSize()) {

@@ -4869,6 +4869,9 @@ class DesktopAppState(
                 selectedXtreamCategoryId = null
                 selectedXtreamYear = null
                 xtreamSearchQuery = ""
+                // Forgotten with the query it described, so the next apply counts as a change and
+                // actually runs instead of being mistaken for a repeat.
+                appliedXtreamSearch = null
                 xtreamPage =
                     xtreamRepository.page(
                         XtreamContentType.LIVE,
@@ -5113,6 +5116,7 @@ class DesktopAppState(
             selectedXtreamYear = null
             selectedXtreamMinimumRating = null
             xtreamSearchQuery = ""
+            appliedXtreamSearch = null
             seriesDetailsStatus = SeriesDetailsStatus.Idle
             movieDetailsStatus = MovieDetailsStatus.Idle
             refreshXtreamPage(pageIndex = 0)
@@ -5168,7 +5172,32 @@ class DesktopAppState(
         xtreamSearchQuery = query.take(MAX_SEARCH_LENGTH)
     }
 
+    /**
+     * The query that produced the page currently on screen.
+     *
+     * Null means "no page has been built for any query yet", which is not the same as the empty
+     * string: the first apply with an empty box is still a real transition from nothing loaded to
+     * everything. Cleared by [clearXtreamUiState] and wherever the session's query is reset.
+     */
+    private var appliedXtreamSearch: String? = null
+
+    /**
+     * Runs the search, and returns to the first page only when the query actually changed.
+     *
+     * The unconditional `pageIndex = 0` that used to be here sent the catalogue home every time this
+     * ran — and it runs from a `LaunchedEffect` in `XtreamWorkspace`, which re-enters whenever that
+     * composable is composed again. Returning from a title's page does exactly that, so paging to
+     * the second page, opening a film and pressing back put the user back on page one. On a
+     * catalogue of forty thousand titles everything past the first eighty is reachable only by
+     * paging, so that walk had to be repeated after every single film.
+     *
+     * Resetting on a genuinely new query stays: results for "duna" have no page seven, and holding
+     * the old index there would show an empty grid.
+     */
     suspend fun applyXtreamSearch() {
+        val query = xtreamSearchQuery
+        if (appliedXtreamSearch == query) return
+        appliedXtreamSearch = query
         seriesDetailsStatus = SeriesDetailsStatus.Idle
         movieDetailsStatus = MovieDetailsStatus.Idle
         refreshXtreamPage(pageIndex = 0)
@@ -5999,6 +6028,7 @@ class DesktopAppState(
         selectedXtreamCategoryId = null
         selectedXtreamYear = null
         xtreamSearchQuery = ""
+        appliedXtreamSearch = null
         xtreamPage = XtreamCatalogPage.empty()
         selectedXtreamItemId = null
         seriesDetailsStatus = SeriesDetailsStatus.Idle
