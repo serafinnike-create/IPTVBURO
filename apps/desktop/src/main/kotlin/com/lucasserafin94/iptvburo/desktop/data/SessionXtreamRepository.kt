@@ -351,7 +351,16 @@ class SessionXtreamRepository(
                 // `itemAt` allocates a whole XtreamCatalogItem — decoding category ids, composing
                 // an artwork URL — and building one only to discard it, for every row of a 41,698
                 // item catalogue, is most of the cost of turning a page.
-                val rowCategoryIds = catalogItems.categoryIdsAt(index)
+                // Decoded only when something actually asks for it.
+                //
+                // `categoryIdsAt` splits the encoded column into a fresh list, and this ran for
+                // every row that survived the filters — on a 41,698-item catalogue, on every page
+                // turn, on every keystroke in the search box. Neither reader needs it in the
+                // ordinary case: most profiles are not Kids, and most sessions lock no category, so
+                // the list was built and thrown away for nearly every row.
+                val needsCategories = kidsMode || lockedCategoryIds.isNotEmpty()
+                val rowCategoryIds =
+                    if (needsCategories) catalogItems.categoryIdsAt(index) else emptyList()
                 val allowedForKids =
                     !kidsMode || FamilyContentPolicy.isAllowedForKids(
                         catalogItems.nameAt(index),

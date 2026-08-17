@@ -84,19 +84,37 @@ internal class CompactXtreamCatalog(
         allowedIdentities: Set<ContentIdentity>? = null,
     ): Boolean {
         require(index in 0 until size)
-        val matchesCategory =
-            categoryId == null ||
-                encodedCategoryIds[index]?.contains("$CATEGORY_SEPARATOR$categoryId$CATEGORY_SEPARATOR") == true
-        val matchesYear = releaseYear == null || hasYear[index] && years[index] == releaseYear
+
+        // Cheapest test first, and each one returns rather than being folded into a single
+        // expression at the end.
+        //
+        // Every test used to be computed as a `val` before any of them was consulted, so all five
+        // ran for all 41,698 rows on every page turn — including `identityAt`, which builds a whole
+        // XtreamCatalogItem to read one field off it. That is the expensive call this class was
+        // written to avoid: 31 ms against 10 ms over the catalogue, per the note on `nameAt`, and a
+        // page is turned on every keystroke in the search box. It ran even when the category test
+        // above it had already excluded the row.
+        //
+        // Ordered by cost: three array reads, then a substring scan of the name, then the object
+        // build. The last is reached only by rows that have survived everything else, and only when
+        // the favourites filter is actually in play.
+        if (categoryId != null &&
+            encodedCategoryIds[index]?.contains("$CATEGORY_SEPARATOR$categoryId$CATEGORY_SEPARATOR") != true
+        ) {
+            return false
+        }
+        if (releaseYear != null && !(hasYear[index] && years[index] == releaseYear)) return false
         // An unrated title is excluded once a minimum is asked for. Treating "no rating" as good
         // enough would fill a "4+ stars" filter with titles that were never scored at all.
-        val matchesRating =
-            minimumRating == null || (hasRating[index] && ratings[index] >= minimumRating)
+        if (minimumRating != null && !(hasRating[index] && ratings[index] >= minimumRating)) return false
+        if (normalizedQuery.isNotEmpty() &&
+            !names[index].contains(normalizedQuery, ignoreCase = true)
+        ) {
+            return false
+        }
         // Matched on content identity rather than provider id. Provider ids are per-list numbering,
         // so filtering favourites by them showed the wrong titles once the user changed list.
-        val matchesLibrary = allowedIdentities == null || identityAt(index) in allowedIdentities
-        return matchesCategory && matchesYear && matchesRating && matchesLibrary &&
-            (normalizedQuery.isEmpty() || names[index].contains(normalizedQuery, ignoreCase = true))
+        return allowedIdentities == null || identityAt(index) in allowedIdentities
     }
 
     /**
