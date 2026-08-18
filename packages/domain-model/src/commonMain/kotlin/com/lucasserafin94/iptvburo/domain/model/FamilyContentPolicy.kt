@@ -39,9 +39,21 @@ object FamilyContentPolicy {
     private fun String?.normalizedSafetyWords(): String =
         this
             ?.let { Normalizer.normalize(it, Normalizer.Form.NFD) }
-            ?.replace(Regex("\\p{M}+"), "")
+            ?.replace(COMBINING_MARKS, "")
             ?.lowercase(Locale.ROOT)
-            ?.replace(Regex("[^a-z0-9+]+"), " ")
+            ?.replace(NON_WORD_RUNS, " ")
             ?.trim()
             .orEmpty()
+
+    /**
+     * Compiled once, not per call.
+     *
+     * `isAllowedForKids` runs for the title *and* every category of every row, and the catalogue
+     * paging loop calls it for each of tens of thousands of items whenever a Kids profile browses.
+     * Compiling two patterns inside that call meant tens of thousands of Regex constructions per
+     * page turn — and a page is turned on every keystroke in the search box.
+     */
+    private val COMBINING_MARKS = Regex("""\p{M}+""")
+
+    private val NON_WORD_RUNS = Regex("[^a-z0-9+]+")
 }
