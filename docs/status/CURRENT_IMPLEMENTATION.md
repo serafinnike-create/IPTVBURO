@@ -3,13 +3,13 @@
 - Data da auditoria: 18 de agosto de 2026
 - Branch: `codex/windows-clean-release`
 - Baseline anterior: `v0.1.0-alpha.1`
-- Tag mais recente no repositório atual: `v3.0.0`
+- Tag mais recente no repositório atual: `v3.0.1`
 - Releases publicadas: `v2.0.0-alpha.7`, `v2.0.0-alpha.11`, `v2.0.0-alpha.12`
-  como prévia; `v3.0.0` como versão final do Windows
-- Windows: `v3.0.0`; MSI ainda sem assinatura Authenticode
-- Android/Android TV: `0.2.0-alpha.9`, ainda prévia. Numeração própria, atrás
-  da do Windows — o README anunciava as duas com a mesma versão, o que não era
-  verdade
+  como prévia; `v3.0.0` e `v3.0.1` como versões finais do Windows
+- Windows: `v3.0.1`; MSI ainda sem assinatura Authenticode
+- Android/Android TV: `v3.0.1`, ainda prévia. A numeração passou a ser
+  compartilhada com o Windows a partir da 3.0.1; o APK é de depuração e não é
+  versão de loja, e a numeração comum alinha as aplicações, não a maturidade
 - Milestone em validação: `0.2`, Android adaptativo e Compose Desktop
 
 ## Correções de 17 de agosto de 2026
