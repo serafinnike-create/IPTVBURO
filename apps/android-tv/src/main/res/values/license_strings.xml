@@ -63,6 +63,7 @@
     <string name="boot_stage_catalogue">Opening your catalogue…</string>
     <string name="boot_stage_artwork">Preparing artwork…</string>
     <string name="boot_stage_ready">Almost there…</string>
+    <string name="download_rate">%1$s/s</string>
     <string name="tmdb_settings_shared_label">Household key</string>
     <string name="tmdb_settings_shared_hint">Used by every profile that has not set its own.</string>
     <string name="tmdb_settings_profile_label">Key for %1$s</string>

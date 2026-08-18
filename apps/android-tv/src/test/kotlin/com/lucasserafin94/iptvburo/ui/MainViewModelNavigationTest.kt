@@ -42,6 +42,7 @@ import com.lucasserafin94.iptvburo.data.repository.ReminderRepository
 import com.lucasserafin94.iptvburo.data.repository.UserLibraryRepository
 import com.lucasserafin94.iptvburo.data.repository.CatalogPage
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
+import com.lucasserafin94.iptvburo.data.repository.DownloadRateReporter
 import com.lucasserafin94.iptvburo.data.repository.PlaylistImportResult
 import com.lucasserafin94.iptvburo.data.repository.XtreamImportRequest
 import com.lucasserafin94.iptvburo.data.repository.XtreamImportResult
@@ -771,6 +772,8 @@ class MainViewModelNavigationTest {
         return MainViewModel(
             contextProvider = contextProvider,
             catalogRepository = repository,
+            // Nothing collects a rate in these assertions; a real one is cheap and needs no setup.
+            downloadRateReporter = DownloadRateReporter(),
             onboardingPreferences = FakeOnboardingPreferences,
             userLibraryRepository =
                 UserLibraryRepository(

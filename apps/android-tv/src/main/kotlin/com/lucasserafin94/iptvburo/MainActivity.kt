@@ -53,6 +53,7 @@ import com.lucasserafin94.iptvburo.data.billing.GooglePlayBillingOutcome
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.ui.AppContent
 import com.lucasserafin94.iptvburo.ui.BootStageUi
+import com.lucasserafin94.iptvburo.ui.formatDownloadRate
 import com.lucasserafin94.iptvburo.ui.LicenseUiState
 import com.lucasserafin94.iptvburo.ui.MainViewModel
 import com.lucasserafin94.iptvburo.ui.openStreamingOffer
@@ -289,14 +290,23 @@ private fun IptvBuroRoot(
         )
 
         state.isInitializing ->
-            BuroBootScreen(R.string.boot_preparing, state.bootStage, state.bootBackdropUrls)
+            BuroBootScreen(
+                R.string.boot_preparing,
+                state.bootStage,
+                state.bootBackdropUrls,
+                state.downloadBytesPerSecond,
+            )
 
         !state.hasAcceptedLegalNotice -> LegalOnboardingScreen(
             onAccept = viewModel::acceptLegalNotice,
         )
 
         state.license is LicenseUiState.NotChecked || state.license is LicenseUiState.Checking ->
-            BuroBootScreen(R.string.license_checking, backdropPosters = state.bootBackdropUrls)
+            BuroBootScreen(
+                R.string.license_checking,
+                backdropPosters = state.bootBackdropUrls,
+                downloadBytesPerSecond = state.downloadBytesPerSecond,
+            )
 
         state.license is LicenseUiState.Blocked -> {
             val license = state.license as LicenseUiState.Blocked
@@ -311,7 +321,12 @@ private fun IptvBuroRoot(
         }
 
         state.isProfilesLoading ->
-            BuroBootScreen(R.string.boot_preparing, state.bootStage, state.bootBackdropUrls)
+            BuroBootScreen(
+                R.string.boot_preparing,
+                state.bootStage,
+                state.bootBackdropUrls,
+                state.downloadBytesPerSecond,
+            )
 
         // Held until the catalogue has actually produced something to show.
         //
@@ -322,7 +337,12 @@ private fun IptvBuroRoot(
         state.activeProfile != null &&
             state.sources.isNotEmpty() &&
             (state.bootStage != BootStageUi.READY || isShowingPosterReveal) ->
-            BuroBootScreen(R.string.boot_preparing, state.bootStage, state.bootBackdropUrls)
+            BuroBootScreen(
+                R.string.boot_preparing,
+                state.bootStage,
+                state.bootBackdropUrls,
+                state.downloadBytesPerSecond,
+            )
 
         state.activeProfile == null -> ProfilePickerScreen(
             profiles = state.profiles,
@@ -534,6 +554,7 @@ private fun BuroBootScreen(
     messageResource: Int,
     stage: BootStageUi? = null,
     backdropPosters: List<String> = emptyList(),
+    downloadBytesPerSecond: Long? = null,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().background(BuroCanvas),
@@ -571,6 +592,20 @@ private fun BuroBootScreen(
                 Text(
                     text = stringResource(current.labelResource()),
                     color = BuroGold,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            // How fast it is arriving, when anything is.
+            //
+            // A long wait with no figure cannot be told apart from a stuck one, which is the
+            // question somebody staring at this screen actually has. Omitted rather than shown as
+            // zero when there is nothing to report: a zero would answer that question wrongly.
+            formatDownloadRate(downloadBytesPerSecond)?.let { rate ->
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.download_rate, rate),
+                    color = BuroTextSecondary,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center,
                 )

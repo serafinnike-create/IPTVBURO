@@ -44,8 +44,38 @@ o servidor) continua aguardando o log do usuário.
 
 ## TAREFA-031 — Velocidade de download na tela de carregamento (celular)
 
-**Status:** 📋 NA FILA — pedido do usuário, ainda não implementado.
+**Status:** ✅ IMPLEMENTADO em 2026-08-18 — medição na camada de rede, exibida na
+tela de Fontes durante a importação e na tela de carregamento.
 **Solicitado em:** 2026-08-18
+
+### Como ficou
+
+A medição vive onde os bytes passam, não na tela: `CountingInputStream` envolve o
+corpo da resposta e alimenta `DownloadRate`, que mantém uma janela de dois
+segundos. Uma janela, não uma média do transferência inteiro — uma média é
+dominada por como o download começou e deixa de reagir ao que está acontecendo
+agora, que é exatamente o caso em que o usuário precisa ver a queda.
+
+`XtreamClient` publica a taxa no máximo quatro vezes por segundo. Publicar por
+bloco lido colocaria uma escrita de estado, e uma recomposição, atrás de cada
+32 KiB — e a tela de carregamento acabou de sair de 98% para ~13% de frames
+travados.
+
+`DownloadRateReporter` é o meio entre o cliente, que é um singleton do processo,
+e a tela, que aparece e desaparece.
+
+Ausência é honesta em todo o caminho: quando não há bytes chegando, ou quando
+o corpo é pequeno o bastante para caber numa leitura, `bytesPerSecond` é null e a
+linha não é desenhada. Um `0 KB/s` na tela leria como "parou", e isso o app não
+sabe. Coberto por teste nos dois níveis.
+
+Traduzido em PT-BR, EN, DE, IT e ES. O separador decimal é o do idioma —
+`1,4 MB/s` em português, `1.4 MB/s` em inglês.
+
+**Verificado:** 46 testes no `xtream-client` (7 da aritmética, 2 da ligação de
+ponta a ponta contra um servidor local) e 240 no `android-tv` (6 da formatação),
+sem falhas. A tela de carregamento foi vista no aparelho **sem** a linha de
+velocidade, que é o correto: ali o app abre o banco local e não baixa nada.
 
 ### O pedido
 

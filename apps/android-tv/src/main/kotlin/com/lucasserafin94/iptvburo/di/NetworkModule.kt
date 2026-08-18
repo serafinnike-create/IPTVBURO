@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.di
 
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.lucasserafin94.iptvburo.data.repository.DownloadRateReporter
 import com.lucasserafin94.iptvburo.stalker.StalkerClient
 import com.lucasserafin94.iptvburo.xtream.XtreamClient
 import dagger.Module
@@ -39,8 +40,13 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideXtreamClient(): XtreamClient =
-        XtreamClient(userAgent = XTREAM_USER_AGENT)
+    fun provideXtreamClient(downloadRateReporter: DownloadRateReporter): XtreamClient =
+        XtreamClient(
+            userAgent = XTREAM_USER_AGENT,
+            // So a screen waiting on a long catalogue can say how fast it is arriving. Reported
+            // from the thread reading the body; the reporter is what makes it safe to observe.
+            onDownloadRate = downloadRateReporter::report,
+        )
 
     /**
      * Stalker portals fingerprint the caller and reject anything that is not a set-top box, so the

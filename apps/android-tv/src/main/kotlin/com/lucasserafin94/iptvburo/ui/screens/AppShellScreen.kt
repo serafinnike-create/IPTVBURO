@@ -122,6 +122,7 @@ import kotlinx.coroutines.delay
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.ui.BootStageUi
 import com.lucasserafin94.iptvburo.ui.AppContent
+import com.lucasserafin94.iptvburo.ui.formatDownloadRate
 import com.lucasserafin94.iptvburo.domain.model.CatalogueFilter
 import com.lucasserafin94.iptvburo.domain.model.CatalogueLayout
 import com.lucasserafin94.iptvburo.ui.AppSection
@@ -334,6 +335,17 @@ fun AppShellScreen(
      * list, and carrying one list's offset into another would land somebody in the middle of
      * something they had not scrolled at all.
      */
+    // The catalogue's derived lists, computed once per change rather than once per frame.
+    //
+    // These are `get()` properties on the state, so every read recomputes them: `visibleChannels`
+    // builds a map and two list copies, and the genre and year pickers walk every loaded item and
+    // split its genre string. All three are read on each recomposition of the catalogue — which is
+    // continuous while somebody scrolls a list of thousands.
+    val visibleChannels =
+        remember(state.channels, state.catalogueFilter) { state.visibleChannels }
+    val catalogueGenres = remember(state.channels) { state.availableCatalogueGenres }
+    val catalogueYears = remember(state.channels) { state.availableCatalogueYears }
+
     val channelsKey = (state.content as? AppContent.Channels)?.let { channels ->
         "${channels.sourceId}:${channels.categoryId}:${channels.contentType}"
     }
@@ -578,6 +590,7 @@ fun AppShellScreen(
                             lastImportMethod = state.lastImportMethod,
                             stalkerFailure = state.stalkerFailure,
                             xtreamImportStage = state.xtreamImportStage,
+                            downloadBytesPerSecond = state.downloadBytesPerSecond,
                             onImportSource = onImportSource,
                             onOpenXtream = {
                                 xtreamSuccessVersionAtOpen = state.importSuccessVersion
@@ -644,14 +657,14 @@ fun AppShellScreen(
                             subtitle = content.sourceName,
                             // Filtered, not raw: the bar above says what is being shown, and the
                             // grid has to agree with it.
-                            channels = state.visibleChannels,
+                            channels = visibleChannels,
                             layout = state.catalogueLayout,
                             filterBar = {
                                 CatalogueFilterBar(
                                     filter = state.catalogueFilter,
                                     layout = state.catalogueLayout,
-                                    genres = state.availableCatalogueGenres,
-                                    years = state.availableCatalogueYears,
+                                    genres = catalogueGenres,
+                                    years = catalogueYears,
                                     onFilterChange = onCatalogueFilterChange,
                                     onLayoutChange = onCatalogueLayoutChange,
                                 )
@@ -1626,6 +1639,7 @@ private fun SourcesContent(
     lastImportMethod: SourceImportMethod?,
     stalkerFailure: StalkerFailureUi?,
     xtreamImportStage: XtreamImportStageUi?,
+    downloadBytesPerSecond: Long?,
     onImportSource: () -> Unit,
     onOpenXtream: () -> Unit,
     onOpenStalker: () -> Unit,
@@ -1657,6 +1671,7 @@ private fun SourcesContent(
                     xtreamImportStage = xtreamImportStage,
                     isImporting = isImporting,
                     compact = true,
+                    downloadBytesPerSecond = downloadBytesPerSecond,
                 )
                 Spacer(Modifier.height(14.dp))
                 SourceImportActions(
@@ -1683,6 +1698,7 @@ private fun SourcesContent(
                         xtreamImportStage = xtreamImportStage,
                         isImporting = isImporting,
                         compact = false,
+                        downloadBytesPerSecond = downloadBytesPerSecond,
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(18.dp))
@@ -1739,6 +1755,7 @@ private fun SourcesHeading(
     xtreamImportStage: XtreamImportStageUi?,
     isImporting: Boolean,
     compact: Boolean,
+    downloadBytesPerSecond: Long? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -1763,6 +1780,21 @@ private fun SourcesHeading(
                 fontSize = 14.sp,
                 modifier = Modifier.padding(top = 8.dp),
             )
+            // The speed, on its own line, while bytes are actually arriving.
+            //
+            // A catalogue of tens of thousands of titles takes long enough that the stage name
+            // alone cannot say whether it is working or stuck. Absent rather than zero when there
+            // is nothing to report, which is the case between requests and while the rows are
+            // being written to the database — that part is local work, and a network rate there
+            // would be a fiction.
+            formatDownloadRate(downloadBytesPerSecond)?.let { rate ->
+                Text(
+                    text = stringResource(R.string.download_rate, rate),
+                    color = BuroTextSecondary,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
         } else if (lastImportedChannelCount != null || hasImportError) {
             Text(
                 text =

@@ -700,6 +700,14 @@ data class AppUiState(
     val lastImportMethod: SourceImportMethod? = null,
     val stalkerFailure: StalkerFailureUi? = null,
     val xtreamImportStage: XtreamImportStageUi? = null,
+    /**
+     * How fast the catalogue is arriving, in bytes per second, or null when it cannot be said.
+     *
+     * Null rather than zero on purpose: between requests, and before enough has arrived to divide
+     * by, the app does not know the rate, and a zero on screen would read as stopped. The screens
+     * omit the line instead. See [formatDownloadRate].
+     */
+    val downloadBytesPerSecond: Long? = null,
     val importSuccessVersion: Long = 0L,
     val isCatalogLoading: Boolean = false,
     val isLoadingMore: Boolean = false,

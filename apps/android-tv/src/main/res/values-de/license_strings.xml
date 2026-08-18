@@ -63,6 +63,7 @@
     <string name="boot_stage_catalogue">Katalog wird geöffnet…</string>
     <string name="boot_stage_artwork">Bilder werden vorbereitet…</string>
     <string name="boot_stage_ready">Fast fertig…</string>
+    <string name="download_rate">%1$s/s</string>
     <string name="tmdb_settings_shared_label">Haushaltsschlüssel</string>
     <string name="tmdb_settings_shared_hint">Wird von jedem Profil ohne eigenen Schlüssel verwendet.</string>
     <string name="tmdb_settings_profile_label">Schlüssel für %1$s</string>

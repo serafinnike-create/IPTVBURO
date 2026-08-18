@@ -43,6 +43,18 @@ class XtreamClient(
     private val maximumBufferedBytes: Int = DEFAULT_MAXIMUM_BUFFERED_BYTES,
     private val maximumTransientRetries: Int = DEFAULT_MAXIMUM_TRANSIENT_RETRIES,
     private val retryDelayMillis: Long = DEFAULT_RETRY_DELAY_MILLIS,
+    /**
+     * Told how fast the catalogue is arriving, in bytes per second, or null when it cannot say.
+     *
+     * A long download with no figure on screen cannot be told apart from a stuck one, and that is
+     * the question a viewer actually has. Called as the body is read, so a caller that draws this
+     * must decide for itself how often to publish it — a screen updated per block is a screen
+     * recomposed hundreds of times a second.
+     *
+     * Off by default: existing callers keep the behaviour they had.
+     */
+    private val onDownloadRate: (Long?) -> Unit = {},
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     init {
         require(userAgent.isNotBlank()) { "userAgent cannot be blank" }
@@ -352,7 +364,7 @@ class XtreamClient(
                 )
             }
             val bytes =
-                response.body.byteStream().use { input ->
+                measuring(response.body.byteStream()).use { input ->
                     input.readAtMost(maximumBufferedBytes + 1)
                 }
             if (bytes.size > maximumBufferedBytes) {
@@ -425,7 +437,11 @@ class XtreamClient(
                     "The Xtream response exceeded the configured safety limit.",
                 )
             }
-            val bounded = MaximumBytesInputStream(response.body.byteStream(), maximumResponseBytes.toLong())
+            val bounded =
+                MaximumBytesInputStream(
+                    measuring(response.body.byteStream()),
+                    maximumResponseBytes.toLong(),
+                )
             return try {
                 consume(bounded)
             } catch (error: CatalogByteLimitExceededException) {
@@ -578,6 +594,26 @@ class XtreamClient(
 
     private fun JsonElement.primitiveContentOrNull(): String? =
         (this as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf(String::isNotEmpty)
+
+    /**
+     * Wraps a body so its bytes are counted, and reports the rate while they arrive.
+     *
+     * The rate is recomputed on every block but handed out at most once per
+     * [RATE_PUBLISH_INTERVAL_MILLIS], because the caller draws it: publishing per block would put
+     * a state write, and a recomposition, behind every thirty-two kilobytes.
+     */
+    private fun measuring(source: InputStream): InputStream {
+        val rate = DownloadRate()
+        var lastPublishedAt = 0L
+        return CountingInputStream(source, rate) {
+            val now = clock()
+            if (now - lastPublishedAt >= RATE_PUBLISH_INTERVAL_MILLIS) {
+                lastPublishedAt = now
+                onDownloadRate(rate.bytesPerSecond(now))
+            }
+            now
+        }
+    }
 
     private fun InputStream.readAtMost(maximumBytes: Int): ByteArray {
         val output = ByteArrayOutputStream(minOf(maximumBytes, READ_BUFFER_SIZE))
@@ -755,6 +791,12 @@ class XtreamClient(
         const val DEFAULT_READ_TIMEOUT_SECONDS = 60L
         const val DEFAULT_WRITE_TIMEOUT_SECONDS = 30L
         const val READ_BUFFER_SIZE = 32 * 1024
+
+        /**
+         * How often the rate reaches the caller. Four times a second reads as live without
+         * putting a UI state write behind every block read.
+         */
+        private const val RATE_PUBLISH_INTERVAL_MILLIS = 250L
         const val MAXIMUM_ARTWORK_URL_LENGTH = 8 * 1024
         const val MAXIMUM_PROVIDER_ID_LENGTH = 256
         val JSON = Json { ignoreUnknownKeys = true }

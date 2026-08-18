@@ -63,6 +63,7 @@
     <string name="boot_stage_catalogue">Abrindo seu catálogo…</string>
     <string name="boot_stage_artwork">Preparando as capas…</string>
     <string name="boot_stage_ready">Quase lá…</string>
+    <string name="download_rate">%1$s/s</string>
     <string name="tmdb_settings_shared_label">Chave da casa</string>
     <string name="tmdb_settings_shared_hint">Usada por todo perfil que não tiver a própria.</string>
     <string name="tmdb_settings_profile_label">Chave de %1$s</string>

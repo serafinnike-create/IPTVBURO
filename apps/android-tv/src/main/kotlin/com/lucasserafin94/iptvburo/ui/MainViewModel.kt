@@ -29,6 +29,7 @@ import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.data.licensing.RedeemOutcome
 import com.lucasserafin94.iptvburo.data.security.MetadataKeyStore
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
+import com.lucasserafin94.iptvburo.data.repository.DownloadRateReporter
 import com.lucasserafin94.iptvburo.data.repository.LiveProgram
 import com.lucasserafin94.iptvburo.data.repository.CatalogCursor
 import com.lucasserafin94.iptvburo.data.repository.BuroProfile
@@ -121,6 +122,7 @@ import okhttp3.OkHttpClient
 class MainViewModel @Inject constructor(
     @param:ApplicationContext private val contextProvider: Provider<Context>,
     private val catalogRepository: CatalogRepository,
+    private val downloadRateReporter: DownloadRateReporter,
     private val onboardingPreferences: OnboardingPreferences,
     private val userLibraryRepository: UserLibraryRepository,
     private val reminderRepository: ReminderRepository,
@@ -225,6 +227,7 @@ class MainViewModel @Inject constructor(
         // Runs alongside Room opening rather than after it, which is where most of a cold start
         // goes. By the time the first source list arrives the answer is usually already in hand.
         earlyBootProfileAllowed.start()
+        observeDownloadRate()
         observeOnboarding()
         observeProfiles()
         observeSources()
@@ -2482,6 +2485,7 @@ class MainViewModel @Inject constructor(
                 hasImportError = false,
                 lastImportMethod = SourceImportMethod.M3U_FILE,
                 xtreamImportStage = null,
+                downloadBytesPerSecond = null,
             )
         }
 
@@ -2576,6 +2580,7 @@ class MainViewModel @Inject constructor(
                                 lastImportedChannelCount = null,
                                 hasImportError = false,
                                 xtreamImportStage = null,
+                                downloadBytesPerSecond = null,
                             )
                         } else {
                             state
@@ -2608,6 +2613,7 @@ class MainViewModel @Inject constructor(
                 lastImportedChannelCount = null,
                 hasImportError = false,
                 xtreamImportStage = null,
+                downloadBytesPerSecond = null,
             )
         }
     }
@@ -2690,6 +2696,7 @@ class MainViewModel @Inject constructor(
                                 hasImportError = false,
                                 stalkerFailure = null,
                                 xtreamImportStage = null,
+                                downloadBytesPerSecond = null,
                             )
                         } else {
                             state
@@ -2726,6 +2733,7 @@ class MainViewModel @Inject constructor(
                 hasImportError = false,
                 stalkerFailure = null,
                 xtreamImportStage = null,
+                downloadBytesPerSecond = null,
             )
         }
     }
@@ -3331,6 +3339,21 @@ class MainViewModel @Inject constructor(
         // Ordered after the shared link deliberately — somebody who just tapped a link asked for
         // that title now, and it must not be pushed aside by what they were watching before.
         restorePlaybackSession()
+    }
+
+    /**
+     * Carries the download rate from whoever is reading bytes to whichever screen is waiting.
+     *
+     * Collected for the life of the view model rather than started and stopped around each import:
+     * the figure is published from the network layer and is null whenever nothing is arriving, so
+     * an idle collector costs a single state write that nobody draws.
+     */
+    private fun observeDownloadRate() {
+        viewModelScope.launch {
+            downloadRateReporter.bytesPerSecond.collect { rate ->
+                mutableState.update { it.copy(downloadBytesPerSecond = rate) }
+            }
+        }
     }
 
     private fun observeOnboarding() {
@@ -4440,6 +4463,7 @@ class MainViewModel @Inject constructor(
         method: SourceImportMethod,
     ) {
         backStack.clear()
+        downloadRateReporter.clear()
         mutableState.update {
             it.copy(
                 isImporting = false,
@@ -4448,6 +4472,7 @@ class MainViewModel @Inject constructor(
                 lastImportMethod = method,
                 stalkerFailure = null,
                 xtreamImportStage = null,
+                downloadBytesPerSecond = null,
                 importSuccessVersion = it.importSuccessVersion + 1,
                 section = AppSection.SOURCES,
                 content = AppContent.Sources,
@@ -4459,6 +4484,7 @@ class MainViewModel @Inject constructor(
         method: SourceImportMethod,
         stalkerFailure: StalkerFailureUi? = null,
     ) {
+        downloadRateReporter.clear()
         mutableState.update {
             it.copy(
                 isImporting = false,
@@ -4467,6 +4493,7 @@ class MainViewModel @Inject constructor(
                 lastImportMethod = method,
                 stalkerFailure = stalkerFailure,
                 xtreamImportStage = null,
+                downloadBytesPerSecond = null,
             )
         }
     }
