@@ -806,11 +806,25 @@ private fun CategorySelector(
             // The bar is also the way to *drag* through a long list, which a scroll-only menu never
             // offers a pointer user.
             val listState = rememberLazyListState()
-            Box(modifier = Modifier.heightIn(max = MENU_MAX_HEIGHT)) {
+            // A measured height, not just a ceiling.
+            //
+            // `DropdownMenu` sizes its popup by asking its content for an intrinsic measurement, and
+            // a LazyColumn cannot answer that — it is a SubcomposeLayout, and the request throws
+            // outright: "Asking for intrinsic measurements of SubcomposeLayout layouts is not
+            // supported". A `heightIn(max = …)` alone leaves the height unresolved, so the menu still
+            // asks, and the app dies the first time somebody opens the selector.
+            //
+            // The row height is known — every row is one line of text with fixed padding — so the
+            // list is given a real height computed from how many rows there are, capped at the
+            // ceiling. That is a definite size, which is what the error message asks for and what
+            // stops the question being asked at all.
+            val rowCount = choices.size + 1
+            val menuHeight = (MENU_ROW_HEIGHT * rowCount).coerceAtMost(MENU_MAX_HEIGHT)
+            Box(modifier = Modifier.height(menuHeight)) {
                 LazyColumn(
                     state = listState,
                     // Room for the bar, so it sits beside the labels rather than over them.
-                    modifier = Modifier.width(MENU_WIDTH).padding(end = 10.dp),
+                    modifier = Modifier.width(MENU_WIDTH).fillMaxHeight().padding(end = 10.dp),
                 ) {
                     item(key = "any") {
                         CategoryMenuRow(
@@ -891,6 +905,15 @@ private fun CategoryMenuRow(
 
 /** Tall enough for about nine rows, past which the list scrolls rather than the menu growing. */
 private val MENU_MAX_HEIGHT = 420.dp
+
+/**
+ * One row: a line of `bodyMedium` plus the 10dp of padding above and below it.
+ *
+ * Used to give the menu a definite height, because a LazyColumn cannot be measured intrinsically and
+ * DropdownMenu would otherwise ask it to be. Approximate on purpose — it only has to be close enough
+ * that a short list is not left with a gap under it, and any error is absorbed by the cap.
+ */
+private val MENU_ROW_HEIGHT = 44.dp
 
 /**
  * Fixed, so the scrollbar has a column to sit in.
@@ -2242,7 +2265,12 @@ private fun MovieDetailContent(
                     details.duration,
                     details.genre,
                     details.country,
-                    details.rating?.let { "★ ${"%.1f".format(it)}" },
+                    // Zero is "nobody has rated this", not a verdict of nought out of ten.
+                    //
+                    // Providers send 0 for anything unrated, and a title released days ago is
+                    // unrated by definition — so a brand-new series showed "★ 0,0" twice over,
+                    // which reads as the worst score there is rather than as the absence of one.
+                    details.rating?.takeIf { value -> value > 0.0 }?.let { "★ ${"%.1f".format(it)}" },
                 )
             if (facts.isNotEmpty()) {
                 Text(
@@ -2680,7 +2708,12 @@ private fun SeriesDetailContent(
                 listOfNotNull(
                     details.releaseDate,
                     details.genre,
-                    details.rating?.let { "★ ${"%.1f".format(it)}" },
+                    // Zero is "nobody has rated this", not a verdict of nought out of ten.
+                    //
+                    // Providers send 0 for anything unrated, and a title released days ago is
+                    // unrated by definition — so a brand-new series showed "★ 0,0" twice over,
+                    // which reads as the worst score there is rather than as the absence of one.
+                    details.rating?.takeIf { value -> value > 0.0 }?.let { "★ ${"%.1f".format(it)}" },
                 )
             if (facts.isNotEmpty()) {
                 Text(
@@ -3449,7 +3482,10 @@ private fun XtreamPaneDivider() {
 private fun itemMetadata(item: XtreamCatalogItem): String =
     buildList {
         item.year?.let { add(it.toString()) }
-        item.rating?.let { add("★ ${"%.1f".format(it)}") }
+        // Zero means unrated, not nought out of ten. Providers send 0 for anything nobody has
+        // scored, so a title released days ago carried "★ 0,0" beside its year — the worst possible
+        // verdict, printed for a series that simply has not been reviewed yet.
+        item.rating?.takeIf { value -> value > 0.0 }?.let { add("★ ${"%.1f".format(it)}") }
         item.containerExtension?.uppercase()?.let(::add)
         if (isEmpty()) {
             add(
