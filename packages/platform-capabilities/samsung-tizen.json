@@ -30,7 +30,7 @@
     "Preview inicial: nenhuma capability foi validada em TV fisica ainda. Os campos abaixo descrevem o que o codigo implementa, nao o que ja passou por hardware.",
     "A navegacao e desenhada para o D-pad do controle remoto e nao ha toque: nenhuma TV Samsung suportada tem tela sensivel. Teclado e ponteiro ficam declarados porque existem no codigo, nao porque sejam o caminho principal: os campos de nome de perfil, busca, credenciais de fonte e PIN sao <input> reais que recebem texto do teclado virtual da TV ou de um teclado USB/Bluetooth, e o app liga listeners de 'click' aos elementos renderizados, que atendem o ponteiro do controle remoto. Nenhuma funcao exige teclado ou ponteiro para ser alcancada.",
     "O shell Samsung implementa onboarding, perfis, fontes M3U por URL ou arquivo USB e Xtream, catalogo sob demanda, detalhes, EPG curto, busca local, preferencias e resolucao tardia para AVPlay.",
-    "O adapter Stalker/Ministra existe e tem testes de contrato, mas a UI permanece desativada ate confirmar Cookie e identidade MAG no transporte Tizen.",
+    "O adapter Stalker/Ministra esta ligado a interface: o cartao de fonte abre um formulario com endereco do portal e MAC, o handshake e o estado da conta rodam antes de importar, e cada falha tem mensagem propria. O token de sessao vive so em memoria. Nao foi exercitado contra um portal real nem em TV fisica: Cookie e identidade MAG viajam como o adapter os monta, e so um portal de verdade confirma que o transporte Tizen os entrega.",
     "Controle parental local inclui categorias ocultas, perfil Kids, PIN com hash salgado e bloqueio de categorias; o PIN nao e uma fronteira de seguranca forte.",
     "Somente HLS esta declarado nesta preview; DASH continua fora porque nao foi exercitado contra o AVPlay.",
     "Seek esta implementado em js/player.js: seekTo posiciona a retomada antes do play e jumpBackward/jumpForward aplicam os mesmos -10s/+30s da referencia Android, com fallback quando o firmware nao expoe os saltos. O que falta e medicao em TV fisica, nao a funcao.",
@@ -40,6 +40,10 @@
     "O download por USB esta implementado (js/usb.js e js/downloads.js) e e habilitado em tempo de execucao por BuroDownloads.enabled(), que exige um volume removable_ montado. Sem USB a acao nao aparece na interface.",
     "Conforme ADR-008: TV ao vivo e recusada, o nome do arquivo vem da identidade de conteudo e nunca da URL, e o conteudo protegido e gravado como recebido.",
     "O download por USB nao foi validado em TV fisica nem em emulador: nenhuma das APIs tizen.download e tizen.filesystem foi exercitada contra a plataforma real.",
-    "HDR e multiview seguem desligados ate medicao em hardware real."
+    "HDR e multiview seguem desligados ate medicao em hardware real.",
+    "Notas da critica (OMDb) estao implementadas em js/critics.js: a chave fica no KeyManager, o id do IMDb vem do external_ids do TMDb, e a fileira aparece nos detalhes somente quando existe numero real. Sem chave, sem rede ou com limite estourado a fileira simplesmente nao aparece e o resto da tela nao muda.",
+    "Nao existe cache de imagem em disco nesta plataforma: rememberArtwork mantem no maximo ARTWORK_MEMORY_LIMIT URLs em memoria e nenhum byte de imagem e gravado. Por isso o painel de Armazenamento mede o catalogo gravado (titulos e categorias) em vez de oferecer um orcamento em gigabytes como o Android, que ali governaria coisa nenhuma.",
+    "O sino de avisos (js/notifications.js) segue as regras do NotificationCentre compartilhado, mas a lista so e montada quando o app abre: com background-support=disable nada roda com o app fechado, e a propria tela diz isso ao usuario.",
+    "Cast (enviar/receber titulo entre aparelhos) NAO esta implementado e nao pode ser com o runtime web do Tizen: o protocolo BURO Cast exige um socket UDP na porta de descoberta e um ServerSocket TCP aceitando conexoes, e o JavaScript do Web Runtime nao expoe socket bruto nem servidor de escuta — nao ha privilegio Tizen que destrave isso para uma aplicacao web. Um receptor exigiria porte para aplicacao nativa Tizen (C/C++ ou .NET). Nenhuma tela deve oferecer Cast aqui."
   ]
 }
