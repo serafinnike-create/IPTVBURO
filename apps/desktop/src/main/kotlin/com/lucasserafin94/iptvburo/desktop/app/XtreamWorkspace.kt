@@ -237,7 +237,14 @@ fun XtreamWorkspace(
     if (detailsOpen && appState.selectedXtreamItem != null) {
         XtreamInternalDetailsPage(
             appState = appState,
-            onBack = { detailsOpen = false },
+            onBack = {
+                detailsOpen = false
+                // If this title was opened from somewhere else — Descobrir, for instance — going
+                // back means returning there, not landing in a catalogue the user was never
+                // looking at. Returns false for a title opened from the catalogue itself, where
+                // closing the page is the whole of the action.
+                appState.closeOpenedTitle()
+            },
             onOpenExternal = onOpenExternal,
             onOpenPerson = { name ->
                 personOpen = true

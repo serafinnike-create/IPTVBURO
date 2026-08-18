@@ -1909,10 +1909,43 @@ class DesktopAppState(
      * Search, Lembretes and "já está na sua lista" all route through here now.
      */
     fun openTitle(item: XtreamCatalogItem) {
+        // Where the user was, so closing the title returns there instead of somewhere plausible.
+        //
+        // Opening a title always lands on CATALOG, because that is the only screen whose composable
+        // owns the details page and its loaders. That is fine on the way in and wrong on the way
+        // out: somebody who pressed Detalhes on a Descobrir card was returned to the catalogue,
+        // which they had not been looking at. Remembering the origin costs one field and makes the
+        // back button mean what it says.
+        // Only a genuine elsewhere. Opening a title while already in the catalogue — from the grid,
+        // from search, from a reminder — has nothing to return to, and recording CATALOG here would
+        // make the back button a no-op that looks broken.
+        titleOpenedFrom = destination.takeIf { it != DesktopDestination.CATALOG }
         selectDailyItem(item)
         xtreamContentType = item.contentType
         destination = DesktopDestination.CATALOG
         pendingDetailsRequest = item.providerId
+    }
+
+    /**
+     * The screen the current title was opened from, when it was not the catalogue itself.
+     *
+     * Null once consumed, so a second visit to the catalogue's own details page does not bounce the
+     * user back to a screen they left long ago.
+     */
+    private var titleOpenedFrom: DesktopDestination? = null
+
+    /**
+     * Returns to whatever screen the open title was reached from.
+     *
+     * True when it moved somewhere, so the caller knows whether its own dismissal is still needed:
+     * closing a details page opened from the catalogue is a local matter, and closing one opened
+     * from Descobrir is a navigation.
+     */
+    fun closeOpenedTitle(): Boolean {
+        val origin = titleOpenedFrom ?: return false
+        titleOpenedFrom = null
+        destination = origin
+        return true
     }
 
     suspend fun setFavoritesOnly(enabled: Boolean) {
