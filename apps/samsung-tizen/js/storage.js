@@ -41,7 +41,11 @@ var BuroStorage = (function () {
             subtitleSize: 'medium',
             subtitleColour: 'white',
             subtitleBackground: true,
-            tmdbRegion: 'BR'
+            tmdbRegion: 'BR',
+            /* Os avisos do sino. Ficam nas preferências e não no IndexedDB
+               porque são derivados: se sumirem, a próxima abertura reconstrói o
+               digest do dia a partir dos lembretes. */
+            notifications: []
         };
     }
 
@@ -244,6 +248,20 @@ var BuroStorage = (function () {
     function take(storeName, count, success, failure) {
         requestStore(storeName, 'readonly', function (store) {
             return store.getAll(undefined, Math.max(1, Number(count) || 1));
+        }, success, failure);
+    }
+
+    /*
+      Quantos registros existem, sem materializar nenhum.
+
+      O IndexedDB conta no motor; percorrer um cursor para chegar ao mesmo número
+      custaria a leitura de dezenas de milhares de linhas, e este número aparece
+      numa tela de configurações que o usuário abre para ver o tamanho do
+      catálogo, não para esperar.
+    */
+    function count(storeName, success, failure) {
+        requestStore(storeName, 'readonly', function (store) {
+            return store.count();
         }, success, failure);
     }
 
@@ -548,6 +566,34 @@ var BuroStorage = (function () {
       existindo. Favoritos e progresso sobrevivem enquanto a identidade do
       item continuar válida.
     */
+    /*
+      Esvazia o catálogo gravado, preservando o que não pode ser buscado de novo.
+
+      Só `categories` e `items` saem. Fontes, perfis, favoritos, progresso e
+      lembretes ficam: a fonte guarda a credencial que traz o catálogo de volta,
+      e o resto é escolha do usuário, não cópia de dado remoto.
+
+      Uma transação para os dois stores, então ou os dois esvaziam ou nenhum: um
+      catálogo com categorias sem itens seria pior do que um catálogo cheio.
+    */
+    function clearCatalogue(success, failure) {
+        open(function (database) {
+            var names = ['categories', 'items'];
+            var transaction;
+            var failed = false;
+            function fail(error) {
+                if (!failed) { failed = true; failure(error || new Error('DATABASE_REQUEST_FAILED')); }
+            }
+            try {
+                transaction = database.transaction(names, 'readwrite');
+                names.forEach(function (name) { transaction.objectStore(name).clear(); });
+                transaction.oncomplete = function () { if (!failed) { success(); } };
+                transaction.onerror = function () { fail(transaction.error); };
+                transaction.onabort = function () { fail(transaction.error); };
+            } catch (error) { fail(error); }
+        }, failure);
+    }
+
     function replaceSourceCatalogue(source, categories, items, replaceAllItems, success, failure) {
         var sourceId = source && source.id;
         var categoryRows = Array.isArray(categories) ? categories : [];
@@ -751,6 +797,7 @@ var BuroStorage = (function () {
         get: get,
         all: all,
         take: take,
+        count: count,
         byIndex: byIndex,
         where: where,
         fold: fold,
@@ -758,6 +805,7 @@ var BuroStorage = (function () {
         wherePage: wherePage,
         searchPage: searchPage,
         deleteSourceData: deleteSourceData,
+        clearCatalogue: clearCatalogue,
         replaceSourceCatalogue: replaceSourceCatalogue,
         replaceCategoryItems: replaceCategoryItems,
         secureAvailable: secureAvailable,

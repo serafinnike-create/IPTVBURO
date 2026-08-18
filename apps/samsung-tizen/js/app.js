@@ -51,6 +51,7 @@ var BuroApp = (function () {
     var tmdbDetailsMemory = {};
     var tmdbDetailOrder = [];
     var tmdbTitleRequest = null;
+    var criticsRequest = null;
     var tmdbPersonRequest = null;
     var personReturnData = null;
     var subscriptionReturnData = null;
@@ -77,6 +78,14 @@ var BuroApp = (function () {
     var DOWNLOAD_SEARCH_DEBOUNCE_MILLIS = 200;
     var currentPlayback = null;
     var playbackResolveRequestId = 0;
+    /*
+      Sessões de portal Stalker, por fonte, só em memória.
+
+      O token vale dez minutos e é credencial de acesso: gravá-lo junto com o
+      catálogo o deixaria sobreviver ao app fechado sem necessidade nenhuma.
+      Quando expira, refazemos o handshake a partir do segredo guardado.
+    */
+    var stalkerSessions = {};
     var HOME_CATALOG_LIMIT = 120;
     var HOME_RAIL_LIMIT = 12;
     var HOME_HERO_LIMIT = 10;
@@ -679,7 +688,20 @@ var BuroApp = (function () {
             HTTP_ERROR: 'httpError',
             PIN_FORMAT_INVALID: 'pinFormat',
             WEB_CRYPTO_UNAVAILABLE: 'pinCryptoError',
-            SECURE_RANDOM_UNAVAILABLE: 'pinCryptoError'
+            SECURE_RANDOM_UNAVAILABLE: 'pinCryptoError',
+            /* Stalker/Ministra. Um portal que recusa o MAC e um portal
+               inalcançável pedem conselhos muito diferentes, então cada causa
+               mantém a sua própria mensagem em vez de virar "não deu certo". */
+            UNAUTHORISED: 'stalkerErrorUnauthorised',
+            PORTAL_BLOCKED: 'stalkerErrorBlocked',
+            PORTAL_URL_INVALID: 'stalkerErrorInvalid',
+            MAC_INVALID: 'stalkerErrorInvalid',
+            SESSION_EXPIRED: 'stalkerErrorExpired',
+            MALFORMED: 'stalkerErrorMalformed',
+            MALFORMED_CATEGORIES: 'stalkerErrorMalformed',
+            MALFORMED_CATALOG: 'stalkerErrorMalformed',
+            MALFORMED_PLAYBACK: 'stalkerErrorMalformed',
+            TRANSPORT_UNAVAILABLE: 'stalkerErrorNetwork'
         };
         return t(known[code] || 'sourceError');
     }
@@ -1035,7 +1057,7 @@ var BuroApp = (function () {
             attr(profileName) + '"><span class="ribbon-avatar ' + (state.activeProfile && state.activeProfile.isKids ? 'kids' : '') + '">' +
             profileAvatarContent(state.activeProfile || { name: profileName }) + '</span><strong>' + escapeHtml(profileName) + '</strong></button></nav>' +
             '<main class="main-pane" aria-labelledby="screen-title"><header class="topbar"><h1 id="screen-title">' + escapeHtml(title) +
-            '</h1><span class="platform-chip">Samsung Tizen</span></header><section class="content ' + (scrollable ? 'scrollable' : '') + '">' +
+            '</h1>' + notificationBellHtml() + '<span class="platform-chip">Samsung Tizen</span></header><section class="content ' + (scrollable ? 'scrollable' : '') + '">' +
             content + '</section><div class="bottom-hint">' + t('useArrows') + '</div></main></div>';
     }
 
@@ -1942,6 +1964,8 @@ var BuroApp = (function () {
             if ((merged[name] == null || merged[name] === '') && metadata[name] != null) { merged[name] = metadata[name]; }
         });
         merged.tmdbId = metadata.tmdbId || merged.tmdbId || null;
+        merged.imdbId = metadata.imdbId || merged.imdbId || null;
+        if (metadata.critics != null) { merged.critics = metadata.critics; }
         merged.castMembers = Array.isArray(metadata.castMembers) ? metadata.castMembers : (merged.castMembers || []);
         merged.youtubeTrailerId = BuroDomain.sanitizeYouTubeReference(merged.youtubeTrailerId) ||
             BuroDomain.sanitizeYouTubeReference(metadata.youtubeTrailerId);
@@ -1990,7 +2014,56 @@ var BuroApp = (function () {
             if (!artworkMemory[item.id]) { rememberArtwork(item.id, metadata.posterUrl); }
             if (!detailBackdropMemory[item.id]) { rememberDetailBackdrop(item.id, metadata.backdropUrl); }
             render();
+            enrichTitleFromCritics(item, metadata);
         }, function () { tmdbTitleRequest = null; });
+    }
+
+    /*
+      A fileira da crítica, depois que o TMDb já entregou o id do IMDb.
+
+      Vem em segundo lugar de propósito: a página já está desenhada com a nota do
+      provedor quando isto sai, então uma chave ausente, um limite de uso ou uma
+      TV sem rede custa a fileira e mais nada. O resultado é guardado com o
+      título em memória para que voltar à página não gaste outra requisição.
+    */
+    function enrichTitleFromCritics(item, metadata) {
+        var imdbId = metadata && metadata.imdbId;
+        if (!imdbId || !BuroCritics.configured()) { return; }
+        if (criticsRequest && criticsRequest.abort) { criticsRequest.abort(); }
+        criticsRequest = BuroCritics.scoresFor(imdbId, function (scores) {
+            var remembered = tmdbDetailsMemory[item.id];
+            criticsRequest = null;
+            if (!scores) { return; }
+            if (remembered) { remembered.critics = scores; }
+            if (!currentTitleMatches(item.id)) { return; }
+            state.screenData.details = mergeTmdbDetails(state.screenData.details, { critics: scores });
+            render();
+        });
+    }
+
+    /*
+      Cada nota traz o nome de quem a calculou. Não usamos o tomate nem a pipoca
+      da Rotten Tomatoes: as marcas são delas, e um número sem a marca continua
+      dizendo o que precisa dizer.
+    */
+    function criticsStrip(details) {
+        var scores = details && details.critics;
+        var cells = [];
+        if (!scores || !scores.hasAny) { return ''; }
+        if (scores.tomatometer != null) {
+            cells.push({ label: t('tomatometer'), value: scores.tomatometer + '%' });
+        }
+        if (scores.imdbRating != null) {
+            cells.push({ label: t('imdbScore'), value: scores.imdbRating.toFixed(1) + '/10' });
+        }
+        if (scores.metascore != null) {
+            cells.push({ label: t('metascore'), value: String(scores.metascore) });
+        }
+        return '<section class="detail-critics" aria-label="' + attr(t('criticsSection')) + '">' +
+            cells.map(function (cell) {
+                return '<div class="critic-score"><strong>' + escapeHtml(cell.value) + '</strong><small>' +
+                    escapeHtml(cell.label) + '</small></div>';
+            }).join('') + '</section>';
     }
 
     function detailFact(value, className) {
@@ -2092,7 +2165,7 @@ var BuroApp = (function () {
             '</span><h2>' + escapeHtml(details.title || item.name) + '</h2>' +
             (facts.length ? '<div class="detail-facts">' + facts.map(function (fact) {
                 return detailFact(fact, /^★/.test(fact) ? 'rating' : '');
-            }).join('') + '</div>' : '') +
+            }).join('') + '</div>' : '') + criticsStrip(details) +
             '<p>' + escapeHtml(details.plot || t('noSynopsis')) + '</p>' + detailProgress(item) +
             detailActionsHtml(item, isSeries, episodeRows, trailerId) + '</div>' +
             (supporting ? '<div class="detail-support">' + supporting + '</div>' : '') + '</div>';
@@ -2287,8 +2360,107 @@ var BuroApp = (function () {
         var message;
         if (state.reminderNoticeShown) { return; }
         state.reminderNoticeShown = true;
+        /* O mesmo digest alimenta o brinde e o sino: o brinde passa, o sino fica
+           para quem não estava olhando a tela naquele segundo. */
+        refreshNotificationDigest();
         message = reminderNoticeText();
         if (message) { showToast(t('reminderNoticeTitle') + ': ' + message, false); }
+        render();
+    }
+
+    /*
+      O sino, com a contagem do que ainda não foi lido.
+
+      Zero não desenha marcador nenhum em vez de desenhar um "0": um contador a
+      zero chama atenção para a ausência de novidade, que é o contrário do que
+      um sino serve para dizer.
+    */
+    function notificationBellHtml() {
+        var unread = BuroNotifications.unreadCount(profileNotifications());
+        return '<button class="topbar-bell focusable" data-action="notifications" aria-label="' +
+            attr(t('notificationsOpen') + (unread ? ' · ' + t('notificationsUnread').replace('{count}', unread) : '')) +
+            '"><span class="bell-glyph" aria-hidden="true">!</span>' +
+            (unread ? '<span class="bell-badge">' + escapeHtml(String(Math.min(99, unread))) + '</span>' : '') +
+            '</button>';
+    }
+
+    function profileNotifications() {
+        return BuroNotifications.sanitize(state.preferences && state.preferences.notifications);
+    }
+
+    function saveNotifications(rows) {
+        state.preferences.notifications = BuroNotifications.sanitize(rows);
+        savePreferences();
+    }
+
+    function notificationKindLabel(kind) {
+        if (kind === 'NEW_EPISODE') { return t('notificationKindEpisode'); }
+        if (kind === 'NEW_SEASON') { return t('notificationKindSeason'); }
+        return t('notificationKindReminder');
+    }
+
+    /*
+      Constrói o digest do dia a partir dos lembretes do perfil.
+
+      Roda a cada abertura porque a TV não roda nada com o app fechado — ver
+      `renderReminders`. O id é a data, então reconstruir não duplica: quem já
+      leu o aviso de hoje continua com ele lido.
+    */
+    function refreshNotificationDigest() {
+        var reminders = profileReminders();
+        var digest;
+        var isoDate;
+        var body;
+        var current;
+        if (!state.preferences) { return; }
+        digest = BuroDomain.reminderDigest(reminders);
+        if (!digest.releasedToday.length && !digest.upcoming.length) { return; }
+        isoDate = localEditorialDay();
+        body = reminderNoticeText();
+        if (!body) { return; }
+        current = BuroNotifications.add(profileNotifications(), {
+            id: BuroNotifications.reminderDigestId(isoDate),
+            kind: 'REMINDER',
+            title: t('reminderNoticeTitle'),
+            body: body,
+            createdAt: Date.now(),
+            read: false
+        });
+        if (current.length !== profileNotifications().length) { saveNotifications(current); }
+    }
+
+    function renderNotifications() {
+        var rows = BuroNotifications.newestFirst(profileNotifications());
+        var unread = BuroNotifications.unreadCount(rows);
+        var content;
+        if (!rows.length) {
+            content = emptyState('!', t('notificationsEmpty'), t('notificationsEmptyBody'), '', '');
+        } else {
+            content = '<div class="section-heading"><h2>' + t('notificationsTitle') + '</h2><p>' +
+                (unread ? escapeHtml(t('notificationsUnread').replace('{count}', unread)) : '') + '</p></div>' +
+                '<div class="notice-list">' + rows.map(function (row) {
+                    return '<div class="notice-row ' + (row.read ? 'read' : 'unread') + '">' +
+                        '<div><span class="notice-kind">' + escapeHtml(notificationKindLabel(row.kind)) +
+                        '</span><strong>' + escapeHtml(row.title) + '</strong>' +
+                        (row.body ? '<p>' + escapeHtml(row.body) + '</p>' : '') + '</div>' +
+                        '<button class="button ghost focusable" data-action="notification-remove" data-id="' +
+                        attr(row.id) + '" aria-label="' + attr(t('notificationsRemove')) + '">×</button></div>';
+                }).join('') + '</div>' +
+                (unread ? '<div class="action-row"><button class="button primary focusable" data-action="notifications-read">' +
+                    t('notificationsMarkAllRead') + '</button></div>' : '');
+        }
+        shell(content + '<p class="form-note privacy">' + escapeHtml(t('notificationsBackground')) + '</p>',
+            t('notificationsTitle'), true);
+    }
+
+    function markNotificationsRead() {
+        saveNotifications(BuroNotifications.markAllRead(profileNotifications()));
+        render();
+    }
+
+    function removeNotification(id) {
+        saveNotifications(BuroNotifications.remove(profileNotifications(), id));
+        render();
     }
 
     function transientLibraryItem(item, progressItemId) {
@@ -2592,7 +2764,7 @@ var BuroApp = (function () {
                 t('manageSource') + '</button></div>';
         }).join('');
         cards += '<button class="source-card focusable" data-action="source-add"><span class="source-kind">+</span><h3>' +
-            t('addSource') + '</h3><span class="source-count">M3U · Xtream</span></button>';
+            t('addSource') + '</h3><span class="source-count">M3U · Xtream · Stalker</span></button>';
         shell('<div class="card-row">' + cards + '</div>', t('sources'), true);
     }
 
@@ -2638,8 +2810,8 @@ var BuroApp = (function () {
             '<span class="choice-icon">X</span><h3>' + t('xtream') + '</h3></button>' +
             '<button class="choice-card focusable" data-action="source-form" data-type="REMOTE_M3U">' +
             '<span class="choice-icon">M3U</span><h3>' + t('remoteM3u') + '</h3></button>' + localM3u +
-            '<button class="choice-card focusable" data-action="unavailable"><span class="choice-icon">S</span><h3>' +
-            t('stalker') + '</h3></button></div>', t('addSource'), false);
+            '<button class="choice-card focusable" data-action="source-form" data-type="STALKER">' +
+            '<span class="choice-icon">S</span><h3>' + t('stalker') + '</h3></button></div>', t('addSource'), false);
     }
 
     function renderUsbM3uPicker() {
@@ -2679,16 +2851,39 @@ var BuroApp = (function () {
         loadUsbM3uFiles();
     }
 
+    function sourceFormTitle(type) {
+        if (type === 'XTREAM') { return t('xtream'); }
+        if (type === 'STALKER') { return t('stalker'); }
+        return t('remoteM3u');
+    }
+
     function renderSourceForm(type) {
         var fields = '<div class="field"><label>' + t('sourceName') + '</label><input id="source-name" class="focusable" maxlength="80"></div>';
+        var notes = '';
         if (type === 'XTREAM') {
             fields += '<div class="field"><label>' + t('serverUrl') + '</label><input id="source-server" class="focusable" inputmode="url"></div>' +
                 '<div class="field-row"><div class="field"><label>' + t('username') + '</label><input id="source-username" class="focusable" autocomplete="off"></div>' +
                 '<div class="field"><label>' + t('password') + '</label><input id="source-password" type="password" class="focusable" autocomplete="off"></div></div>';
+        } else if (type === 'STALKER') {
+            /* O MAC é a credencial da assinatura, então ele entra junto com o
+               portal e sai daqui mascarado — ver stalkerPrivacy. O usuário e a
+               senha ficam abaixo do aviso de "opcional" porque a maioria dos
+               portais não pede nenhum dos dois. */
+            fields += '<p class="form-note">' + escapeHtml(t('stalkerBody')) + '</p>' +
+                '<div class="field"><label>' + t('stalkerPortal') + '</label><input id="source-portal" class="focusable" inputmode="url" placeholder="' +
+                attr(t('stalkerPortalHint')) + '"></div>' +
+                '<div class="field"><label>' + t('stalkerMac') + '</label><input id="source-mac" class="focusable" autocomplete="off" maxlength="24" placeholder="' +
+                attr(t('stalkerMacHint')) + '"><small id="source-mac-hint" class="field-hint"></small></div>' +
+                '<div class="section-heading form-optional"><h3>' + t('stalkerOptional') + '</h3><p>' +
+                escapeHtml(t('stalkerOptionalBody')) + '</p></div>' +
+                '<div class="field-row"><div class="field"><label>' + t('stalkerUsername') + '</label><input id="source-username" class="focusable" autocomplete="off"></div>' +
+                '<div class="field"><label>' + t('stalkerPassword') + '</label><input id="source-password" type="password" class="focusable" autocomplete="off"></div></div>';
+            notes = '<p class="form-note privacy">' + escapeHtml(t('stalkerPrivacy')) + '</p>' +
+                '<p id="source-http-warning" class="form-note warning" hidden>' + escapeHtml(t('stalkerHttpWarning')) + '</p>';
         } else {
             fields += '<div class="field"><label>' + t('playlistUrl') + '</label><input id="source-playlist" class="focusable" inputmode="url"></div>';
         }
-        shell('<div class="form-panel"><h2>' + (type === 'XTREAM' ? t('xtream') : t('remoteM3u')) + '</h2>' + fields +
+        shell('<div class="form-panel"><h2>' + sourceFormTitle(type) + '</h2>' + fields + notes +
             '<div id="source-form-message" class="form-message"></div><div class="action-row"><button class="button primary focusable" data-action="source-connect" data-type="' +
             type + '">' + t('connect') + '</button><button class="button ghost focusable" data-action="back">' + t('cancel') +
             '</button></div></div>', t('addSource'), true);
@@ -2832,7 +3027,10 @@ var BuroApp = (function () {
             '<div class="section-heading"><h2>' + t('metadata') + '</h2></div><div class="settings-grid">' +
             '<button class="setting-card focusable ' + (tmdbConfiguration.effective ? 'on' : '') +
             '" data-action="tmdb-settings"><div><h3>' + t('tmdbTitle') + '</h3><p>' +
-            (tmdbConfiguration.effective ? t('configured') : t('notConfigured')) + '</p></div><strong>TMDb</strong></button></div>' +
+            (tmdbConfiguration.effective ? t('configured') : t('notConfigured')) + '</p></div><strong>TMDb</strong></button>' +
+            '<button class="setting-card focusable ' + (BuroCritics.configured() ? 'on' : '') +
+            '" data-action="critics-settings"><div><h3>' + t('criticsTitle') + '</h3><p>' +
+            (BuroCritics.configured() ? t('configured') : t('notConfigured')) + '</p></div><strong>OMDb</strong></button></div>' +
             '<div class="section-heading"><h2>' + t('contentProtection') + '</h2></div><div class="settings-grid">' +
             '<button class="setting-card focusable" data-action="parental-form"><div><h3>' + t('parentalPin') +
             '</h3><p>' + (state.preferences.parentalPin ? t('configured') : t('notConfigured')) + '</p></div><strong>PIN</strong></button>' +
@@ -2843,6 +3041,9 @@ var BuroApp = (function () {
             '<button class="setting-card focusable" data-action="category-settings"><div><h3>' + t('categoryControl') +
             '</h3><p>' + manageableCategories.length + '</p></div><strong>›</strong></button></div>' +
             subtitleSettings +
+            '<div class="section-heading"><h2>' + t('storageTitle') + '</h2></div><div class="settings-grid">' +
+            '<button class="setting-card focusable" data-action="storage-settings"><div><h3>' +
+            t('storageTitle') + '</h3><p>' + escapeHtml(t('storageHint')) + '</p></div><strong>›</strong></button></div>' +
             '<div class="section-heading"><h2>' + t('settings') + '</h2></div><div class="settings-grid">' +
             settingCard('reducedMotion', 'reducedMotion') + settingCard('highContrast', 'highContrast') +
             settingCard('removeTransparency', 'reducedTransparency') + '</div>' +
@@ -2881,6 +3082,169 @@ var BuroApp = (function () {
             '<button class="button primary focusable" data-action="tmdb-save" data-scope="profile">' + t('save') + '</button>' +
             (configuration.profile ? '<button class="button ghost focusable" data-action="tmdb-clear" data-scope="profile">' + t('tmdbClear') + '</button>' : '') +
             '</div></section>' + message + '<p class="tmdb-attribution">' + t('tmdbAttribution') + '</p></div>', t('tmdbTitle'), true);
+    }
+
+    /*
+      A chave do OMDb, uma só e compartilhada.
+
+      Diferente do TMDb, não há escopo por perfil: a chave não escolhe idioma nem
+      região, ela só destrava três números públicos, então um segundo escopo seria
+      complexidade sem ganho.
+    */
+    /*
+      O que esta TV guarda do catálogo.
+
+      O Android traz aqui um controle de orçamento em gigabytes, porque lá as
+      capas são gravadas em disco e ocupam espaço de verdade. Nesta TV elas não
+      são: `rememberArtwork` mantém no máximo ARTWORK_MEMORY_LIMIT URLs em
+      memória e nenhum byte de imagem é escrito. Um controle de gigabytes aqui
+      não governaria nada, então a tela mede o que existe — quantos títulos e
+      categorias estão gravados — e oferece a única ação real: apagá-los.
+
+      Vídeo baixado fica no USB e já tem a sua própria tela em Downloads.
+    */
+    function storageCounts(done) {
+        BuroStorage.count('items', function (items) {
+            BuroStorage.count('categories', function (categories) {
+                done({ items: items, categories: categories });
+            }, function () { done(null); });
+        }, function () { done(null); });
+    }
+
+    function measureStorage() {
+        var draft = state.screenData || {};
+        if (state.screen !== 'STORAGE_SETTINGS') { return; }
+        draft.measuring = true;
+        draft.counts = null;
+        state.screenData = draft;
+        render();
+        storageCounts(function (counts) {
+            if (state.screen !== 'STORAGE_SETTINGS') { return; }
+            state.screenData.measuring = false;
+            state.screenData.counts = counts;
+            render();
+        });
+    }
+
+    function storageRow(title, value, hint) {
+        return '<div class="storage-row"><div><h3>' + escapeHtml(title) + '</h3>' +
+            (hint ? '<p>' + escapeHtml(hint) + '</p>' : '') + '</div><strong>' +
+            escapeHtml(value) + '</strong></div>';
+    }
+
+    function renderStorageSettings() {
+        var draft = state.screenData || {};
+        var counts = draft.counts;
+        var catalogueValue = draft.measuring || !counts ? t('storageMeasuring') :
+            t('storageItems').replace('{count}', counts.items) + ' · ' +
+            t('storageCategories').replace('{count}', counts.categories);
+        var downloadCount = BuroDownloads.available() ? BuroDownloads.list().length : 0;
+        var message = draft.messageKey ?
+            '<p class="form-message ' + (draft.error ? 'error' : '') + '">' +
+            escapeHtml(t(draft.messageKey)) + '</p>' : '';
+        shell('<div class="form-panel tmdb-settings-panel"><h2>' + t('storageTitle') + '</h2>' +
+            '<p class="form-message">' + escapeHtml(t('storageHint')) + '</p>' +
+            '<div class="storage-list">' +
+            storageRow(t('storageCatalogue'), catalogueValue, '') +
+            storageRow(t('storageArtwork'), String(artworkOrder.length), t('storageArtworkHint')) +
+            storageRow(t('storageDownloads'), String(downloadCount), t('storageDownloadsHint')) +
+            '</div><p class="form-note privacy">' + escapeHtml(t('storageClearHint')) + '</p>' +
+            '<div class="action-row"><button class="button ghost focusable" data-action="storage-measure">' +
+            t('storageRefresh') + '</button>' +
+            '<button class="button ' + (draft.confirmClear ? 'primary' : 'ghost') +
+            ' focusable" data-action="storage-clear">' +
+            (draft.confirmClear ? t('storageClearConfirm') : t('storageClearCatalogue')) + '</button></div>' +
+            message + '</div>', t('storageTitle'), true);
+    }
+
+    /*
+      Apaga o catálogo gravado, uma fonte por vez.
+
+      Fontes, perfis e favoritos ficam: o que sai é o que pode ser buscado de
+      novo. Confirmação em dois toques, como excluir fonte e excluir perfil.
+    */
+    function clearStoredCatalogue() {
+        var draft = state.screenData || {};
+        if (!draft.confirmClear) {
+            draft.confirmClear = true;
+            state.screenData = draft;
+            render();
+            return;
+        }
+        BuroStorage.clearCatalogue(function () {
+            state.categories = [];
+            state.items = [];
+            /* Todo cache em memória é indexado por id de item, e os itens
+               acabaram de sair: deixar qualquer um deles cheio guardaria arte de
+               títulos que não existem mais. */
+            clearTmdbDetails();
+            BuroCritics.clear();
+            artworkMemory = {};
+            artworkOrder.length = 0;
+            detailBackdropMemory = {};
+            detailBackdropOrder.length = 0;
+            seriesDetailsMemory = {};
+            Object.keys(artworkRequests).forEach(function (key) { delete artworkRequests[key]; });
+            /* A sincronização em curso aponta para categorias que não existem
+               mais; cada fonte perde o seu progresso junto com o catálogo. */
+            state.sources.forEach(function (source) {
+                BuroCatalogueSync.clearSource(source.id);
+                BuroHeroEnrichment.clearSource(source.id);
+            });
+            state.screenData = { messageKey: 'storageCleared', error: false };
+            render();
+            measureStorage();
+        }, function () {
+            state.screenData = { messageKey: 'storageClearFailed', error: true };
+            render();
+        });
+    }
+
+    function renderCriticsSettings() {
+        var configured = BuroCritics.configured();
+        var draft = state.screenData || {};
+        var message = draft.messageKey ?
+            '<p class="form-message ' + (draft.error ? 'error' : '') + '">' +
+            escapeHtml(t(draft.messageKey)) + '</p>' : '';
+        shell('<div class="form-panel tmdb-settings-panel"><h2>' + t('criticsTitle') + '</h2>' +
+            '<p class="form-message">' + escapeHtml(configured ? t('criticsConfigured') : t('criticsAbsent')) +
+            '</p><div class="field"><label>' + t('criticsField') + '</label>' +
+            '<input id="critics-key" class="focusable" type="password" autocomplete="off" maxlength="64" value="' +
+            attr(draft.criticsDraft || '') + '" placeholder="' +
+            attr(configured ? t('configured') : t('criticsHint')) + '"><small class="field-hint">' +
+            escapeHtml(t('criticsHint')) + '</small></div><div class="action-row">' +
+            '<button class="button primary focusable" data-action="critics-save">' + t('criticsSave') + '</button>' +
+            (configured ? '<button class="button ghost focusable" data-action="critics-clear">' +
+                t('criticsClear') + '</button>' : '') +
+            '</div>' + message + '</div>', t('criticsTitle'), true);
+    }
+
+    function saveCriticsKey() {
+        var input = document.getElementById('critics-key');
+        var value = input && input.value;
+        if (!BuroCritics.safeKey(value)) {
+            state.screenData = { messageKey: 'criticsKeyInvalid', error: true }; render(); return;
+        }
+        BuroCritics.save(value, function () {
+            if (state.screen !== 'CRITICS_SETTINGS') { return; }
+            /* As notas guardadas com os títulos foram calculadas sem chave, então
+               saem daqui para que a próxima visita busque de verdade. */
+            clearTmdbDetails();
+            state.screenData = { messageKey: 'criticsSaved', error: false }; render();
+        }, function () {
+            if (state.screen !== 'CRITICS_SETTINGS') { return; }
+            state.screenData = { messageKey: 'tmdbSecureError', error: true }; render();
+        });
+    }
+
+    function clearCriticsKey() {
+        if (BuroCritics.remove()) {
+            clearTmdbDetails();
+            state.screenData = { messageKey: 'criticsRemoved', error: false };
+        } else {
+            state.screenData = { messageKey: 'tmdbSecureError', error: true };
+        }
+        render();
     }
 
     function tmdbGuideDiagram(kind) {
@@ -3421,6 +3785,9 @@ var BuroApp = (function () {
         else if (state.screen === 'CATEGORY_SETTINGS') { renderCategorySettings(); }
         else if (state.screen === 'LICENCE') { renderLicenceActivation(); }
         else if (state.screen === 'TMDB_SETTINGS') { renderTmdbSettings(); }
+        else if (state.screen === 'CRITICS_SETTINGS') { renderCriticsSettings(); }
+        else if (state.screen === 'STORAGE_SETTINGS') { renderStorageSettings(); }
+        else if (state.screen === 'NOTIFICATIONS') { renderNotifications(); }
         else if (state.screen === 'TMDB_GUIDE') { renderTmdbGuide(); }
         else if (state.screen === 'PERSON') { renderPerson(); }
         else if (state.screen === 'SHARE') { renderShare(); }
@@ -3432,6 +3799,7 @@ var BuroApp = (function () {
         bindClicks();
         bindSearchInput();
         bindDownloadSearchInput();
+        bindStalkerForm();
     }
 
     function focusIdentity(element) {
@@ -3618,6 +3986,43 @@ var BuroApp = (function () {
                 runSearchPage(BuroDomain.trim(query), 0);
             }, SEARCH_DEBOUNCE_MILLIS);
         });
+    }
+
+    /*
+      O formulário do portal responde enquanto se digita: o MAC é a credencial
+      da assinatura, e descobrir que ele estava errado só depois de uma ida à
+      rede é uma espera cara. A confirmação mostra o MAC já normalizado, para
+      que o usuário veja que os separadores que ele usou foram aceitos.
+
+      O aviso de HTTP aparece pelo mesmo motivo — antes de conectar, não depois.
+    */
+    function bindStalkerForm() {
+        var mac = root && root.querySelector ? root.querySelector('#source-mac') : null;
+        var portal = root && root.querySelector ? root.querySelector('#source-portal') : null;
+        var hint = root && root.querySelector ? root.querySelector('#source-mac-hint') : null;
+        if (state.screen !== 'SOURCE_FORM' || !state.screenData || state.screenData.type !== 'STALKER') { return; }
+        if (mac && hint) {
+            mac.addEventListener('input', function () {
+                var raw = BuroDomain.trim(mac.value);
+                var normalized = raw ? BuroStalker.normalizeMac(raw) : null;
+                if (!raw) { hint.textContent = ''; hint.className = 'field-hint'; return; }
+                if (normalized) {
+                    hint.textContent = t('stalkerMacRecognised').replace('{mac}', normalized);
+                    hint.className = 'field-hint ok';
+                } else {
+                    hint.textContent = t('stalkerMacInvalid');
+                    hint.className = 'field-hint error';
+                }
+            });
+        }
+        if (portal) {
+            portal.addEventListener('input', function () {
+                var warning = root && root.querySelector ? root.querySelector('#source-http-warning') : null;
+                var value = BuroDomain.trim(portal.value);
+                if (!warning) { return; }
+                warning.hidden = !/^http:\/\//i.test(value);
+            });
+        }
     }
 
     function clearDownloadSearchDebounce() {
@@ -3957,6 +4362,9 @@ var BuroApp = (function () {
         });
         BuroHeroEnrichment.clearSource(sourceId);
         BuroCatalogueSync.clearSource(sourceId);
+        /* O token e os `cmd` em memória não sobrevivem à fonte que os originou. */
+        delete stalkerSessions[sourceId];
+        BuroStalker.clearSession();
         try { BuroStorage.secureRemove(sourceId); }
         catch (error) { showToast(friendlyError(error), true); return; }
         BuroStorage.deleteSourceData(sourceId, function () {
@@ -3984,7 +4392,77 @@ var BuroApp = (function () {
         state.busy = true;
         setFormMessage(t('connecting'), false);
         if (type === 'XTREAM') { connectXtream(source); }
+        else if (type === 'STALKER') { connectStalker(source); }
         else { connectM3u(source); }
+    }
+
+    /*
+      Um portal exige handshake antes de qualquer catálogo, e o estado da conta
+      logo depois: uma assinatura bloqueada responde ao handshake normalmente e
+      só se revela em get_main_info. Descobrir isso agora evita importar um
+      catálogo inteiro que não vai reproduzir nada.
+    */
+    /*
+      "Não alcancei o servidor" é conselho pobre para um portal: o endereço tem
+      um caminho que o provedor dita (/c/, /stalker_portal/c/) e errar esse
+      caminho parece exatamente com uma queda de rede. A mensagem do portal
+      manda conferir as duas coisas.
+    */
+    function stalkerFailed(error) {
+        var code = error && (error.code || error.message);
+        /* O adapter normaliza qualquer falha de transporte para NETWORK; os
+           outros códigos podem chegar quando a falha vem antes dele. */
+        if (code === 'NETWORK' || code === 'NETWORK_ERROR' ||
+                code === 'NETWORK_TIMEOUT' || code === 'HTTP_ERROR') {
+            state.busy = false;
+            setFormMessage(t('stalkerErrorNetwork'), true);
+            return;
+        }
+        sourceFailed(error);
+    }
+
+    function connectStalker(source) {
+        var secret;
+        try {
+            secret = BuroStalker.credentials({
+                portalUrl: document.getElementById('source-portal').value,
+                macAddress: document.getElementById('source-mac').value,
+                username: document.getElementById('source-username').value,
+                password: document.getElementById('source-password').value
+            });
+        } catch (error) { stalkerFailed(error); return; }
+        setFormMessage(t('stalkerConnecting'), false);
+        BuroStalker.handshake(secret, function (session) {
+            BuroStalker.account(secret, session, function (account) {
+                if (account && account.blocked) { stalkerFailed({ code: 'PORTAL_BLOCKED' }); return; }
+                BuroStorage.secureSave(source.id, secret, function () {
+                    stalkerSessions[source.id] = session;
+                    loadStalkerCategorySets(secret, session, source, ['LIVE', 'MOVIE', 'SERIES'], []);
+                }, stalkerFailed);
+            }, stalkerFailed);
+        }, stalkerFailed);
+    }
+
+    /* O adapter já devolve categoria com sourceId e id no mesmo formato do
+       resto do app, então aqui só acumulamos os tres tipos de conteudo. */
+    function loadStalkerCategorySets(secret, session, source, remaining, collected) {
+        fetchStalkerCategorySets(secret, session, source, remaining, collected, function (categories) {
+            persistSource(source, categories, []);
+        }, stalkerFailed);
+    }
+
+    /*
+      Devolve uma sessão válida para a fonte, refazendo o handshake quando o
+      token de dez minutos já venceu. O segredo nunca sai daqui.
+    */
+    function withStalkerSession(source, secret, success, failure) {
+        var existing = stalkerSessions[source.id];
+        if (BuroStalker.sessionValid(existing)) { success(existing); return; }
+        delete stalkerSessions[source.id];
+        BuroStalker.handshake(secret, function (session) {
+            stalkerSessions[source.id] = session;
+            success(session);
+        }, failure);
     }
 
     function connectXtream(source) {
@@ -4026,6 +4504,15 @@ var BuroApp = (function () {
                 category.id = BuroDomain.id('category', source.id + ':' + contentType + ':' + category.providerCategoryId);
             });
             fetchXtreamCategorySets(secret, source, remaining, collected.concat(categories), success, failure);
+        }, failure);
+    }
+
+    function fetchStalkerCategorySets(secret, session, source, remaining, collected, success, failure) {
+        var contentType;
+        if (!remaining.length) { success(collected); return; }
+        contentType = remaining.shift();
+        BuroStalker.loadCategories(secret, session, source.id, contentType, function (categories) {
+            fetchStalkerCategorySets(secret, session, source, remaining, collected.concat(categories), success, failure);
         }, failure);
     }
 
@@ -4218,6 +4705,12 @@ var BuroApp = (function () {
                     finishSourceRefresh(requestId, source, categories, [], false, null);
                 }, failed);
             }, failed);
+        } else if (source.type === 'STALKER') {
+            withStalkerSession(source, secret, function (session) {
+                fetchStalkerCategorySets(secret, session, source, ['LIVE', 'MOVIE', 'SERIES'], [], function (categories) {
+                    finishSourceRefresh(requestId, source, categories, [], false, null);
+                }, failed);
+            }, failed);
         } else if (source.type === 'REMOTE_M3U' || source.type === 'LOCAL_M3U') {
             readM3uSource(source, secret, function (text) {
                 var snapshot;
@@ -4270,13 +4763,17 @@ var BuroApp = (function () {
         state.sources.forEach(function (candidate) { if (candidate.id === category.sourceId) { source = candidate; } });
         requestId = beginCatalogueRequest('category', category.contentType, { category: category });
         BuroStorage.byIndex('items', 'byCategory', [category.sourceId, category.id], function (cached) {
+            /* Xtream e Stalker paginam no servidor: a categoria chega vazia da
+               importação e só busca itens quando é aberta. M3U já vem inteira. */
+            var lazy = source && (source.type === 'XTREAM' || source.type === 'STALKER');
             if (!catalogueRequestCurrent(requestId)) { return; }
-            if (cached.length || !source || source.type !== 'XTREAM') {
+            if (cached.length || !lazy) {
                 mergeItems(cached);
                 state.screenData = { kind: 'category', contentType: category.contentType, category: category,
                     items: cached, cataloguePage: 0 };
                 focusIndex = 0; render(); hydrateCategoryArtwork(category); return;
             }
+            if (source.type === 'STALKER') { loadStalkerCategory(category, requestId); return; }
             if (BuroCatalogueSync.contains(category.sourceId, category.id)) { return; }
             loadXtreamCategory(category, requestId);
         }, function (error) { failCatalogueRequest(requestId, error); });
@@ -4561,16 +5058,72 @@ var BuroApp = (function () {
         }, failed);
     }
 
+    /*
+      O portal pagina no servidor, como o Xtream. Trazemos a primeira página e
+      gravamos o que der para gravar: o `cmd` de cada item fica no adapter, em
+      memória, e é reconstruído no próximo handshake se a sessão cair.
+    */
+    function loadStalkerCategory(category, requestId, cached, explicitRefresh, fallbackPage) {
+        var secret;
+        var source = null;
+        cached = cached || [];
+        state.sources.forEach(function (candidate) {
+            if (candidate.id === category.sourceId) { source = candidate; }
+        });
+        function failed(error) {
+            if (!catalogueRequestCurrent(requestId)) { return; }
+            if (!cached.length) { failCatalogueRequest(requestId, error); return; }
+            state.screenData = { kind: 'category', contentType: category.contentType, category: category,
+                items: cached, refreshError: true, cataloguePage: Number(fallbackPage) || 0 };
+            focusIndex = 0;
+            render();
+        }
+        if (!source) { failed({ code: 'SOURCE_TYPE_UNAVAILABLE' }); return; }
+        try { secret = BuroStorage.secureGet(category.sourceId); }
+        catch (error) { failed(error); return; }
+        withStalkerSession(source, secret, function (session) {
+            if (!catalogueRequestCurrent(requestId)) { return; }
+            BuroStalker.loadItems(secret, session, category.sourceId, category.contentType, category, 1, function (page) {
+                var items = page && page.items ? page.items : [];
+                if (!catalogueRequestCurrent(requestId)) { return; }
+                BuroStorage.replaceCategoryItems(category.sourceId, category.id, items, function (result) {
+                    var removed = {};
+                    var displayCurrent = catalogueRequestCurrent(requestId);
+                    (result.removedItemIds || []).forEach(function (id) {
+                        removed[id] = true;
+                        forgetUrl(artworkMemory, artworkOrder, id);
+                        forgetUrl(detailBackdropMemory, detailBackdropOrder, id);
+                        delete seriesDetailsMemory[id];
+                    });
+                    state.items = state.items.filter(function (candidate) {
+                        return !(candidate.sourceId === category.sourceId && candidate.categoryId === category.id);
+                    }).concat(items);
+                    state.favorites = state.favorites.filter(function (row) { return !removed[row.itemId]; });
+                    state.progress = state.progress.filter(function (row) { return !removed[row.itemId]; });
+                    if (!displayCurrent) { return; }
+                    state.screenData = { kind: 'category', contentType: category.contentType, category: category,
+                        items: items, cataloguePage: 0 };
+                    focusIndex = 0; render();
+                    if (explicitRefresh) { showToast(t('categoryRefreshed'), false); }
+                }, failed);
+            }, failed);
+        }, failed);
+    }
+
     function refreshOpenCategory() {
         var data = state.screenData;
         var category;
         var cached;
         var requestId;
         var sync;
+        var source = null;
         var resumeBackground = false;
         if (!data || data.kind !== 'category' || !data.category) { return; }
         category = data.category;
         cached = data.items || [];
+        state.sources.forEach(function (candidate) {
+            if (candidate.id === category.sourceId) { source = candidate; }
+        });
         sync = catalogueSyncStatus(state.activeSource);
         if (sync && sync.sourceId === category.sourceId && sync.state === 'RUNNING') {
             resumeBackground = BuroCatalogueSync.cancel();
@@ -4578,6 +5131,10 @@ var BuroApp = (function () {
         requestId = beginCatalogueRequest('category', category.contentType, {
             category: category, cataloguePage: Number(data.cataloguePage) || 0
         });
+        if (source && source.type === 'STALKER') {
+            loadStalkerCategory(category, requestId, cached, true, data.cataloguePage);
+            return;
+        }
         loadXtreamCategory(category, requestId, cached, true, data.cataloguePage, resumeBackground);
     }
 
@@ -4955,9 +5512,35 @@ var BuroApp = (function () {
         if (source.type === 'XTREAM') {
             try { BuroPlayer.play(BuroXtream.resolvePlayback(secret, playbackItem.locator), startPositionMs); }
             catch (error) { playbackFailed({ code: 'PLAYBACK_UNKNOWN' }); }
+        } else if (source.type === 'STALKER') {
+            resolveStalkerPlayback(source, secret, playbackItem, startPositionMs);
         } else if (source.type === 'REMOTE_M3U' || source.type === 'LOCAL_M3U') {
             resolveM3uPlayback(source, secret, playbackItem, startPositionMs);
         }
+    }
+
+    /*
+      O portal devolve uma URL de uso único a cada play. Ela vai direto para o
+      player e não é guardada em lugar nenhum — nem no item, nem no catálogo.
+    */
+    function resolveStalkerPlayback(source, secret, item, startPositionMs) {
+        var playback = currentPlayback;
+        withStalkerSession(source, secret, function (session) {
+            if (currentPlayback !== playback) { return; }
+            BuroStalker.resolvePlayback(secret, session, source.id, item.locator, function (url) {
+                if (currentPlayback !== playback) { url = null; return; }
+                BuroPlayer.play(url, startPositionMs);
+                url = null;
+            }, function (error) {
+                if (currentPlayback !== playback) { return; }
+                playbackFailed({ code: error && error.code === 'NETWORK_ERROR' ?
+                    'PLAYBACK_CONNECTION' : 'PLAYBACK_SOURCE_UNAVAILABLE' });
+            });
+        }, function (error) {
+            if (currentPlayback !== playback) { return; }
+            playbackFailed({ code: error && error.code === 'NETWORK_ERROR' ?
+                'PLAYBACK_CONNECTION' : 'PLAYBACK_SOURCE_UNAVAILABLE' });
+        });
     }
 
     function beginPlayback(itemId, startPositionMs) {
@@ -5635,6 +6218,15 @@ var BuroApp = (function () {
         else if (action === 'tmdb-guide-open') { openExternalOffer(TMDB_SIGNUP_URL); }
         else if (action === 'tmdb-save') { saveTmdbKey(element.getAttribute('data-scope')); }
         else if (action === 'tmdb-clear') { clearTmdbKey(element.getAttribute('data-scope')); }
+        else if (action === 'critics-settings') { pushScreen('CRITICS_SETTINGS', {}); }
+        else if (action === 'critics-save') { saveCriticsKey(); }
+        else if (action === 'critics-clear') { clearCriticsKey(); }
+        else if (action === 'storage-settings') { pushScreen('STORAGE_SETTINGS', {}); measureStorage(); }
+        else if (action === 'storage-measure') { measureStorage(); }
+        else if (action === 'storage-clear') { clearStoredCatalogue(); }
+        else if (action === 'notifications') { pushScreen('NOTIFICATIONS', {}); }
+        else if (action === 'notifications-read') { markNotificationsRead(); }
+        else if (action === 'notification-remove') { removeNotification(element.getAttribute('data-id')); }
         else if (action === 'parental-form') { pushScreen('PARENTAL_FORM'); }
         else if (action === 'parental-save') { saveParentalPin(); }
         else if (action === 'parental-clear') { clearParentalPin(); }
@@ -5866,6 +6458,7 @@ var BuroApp = (function () {
         */
         _rememberArtwork: rememberArtwork,
         _rememberDetailBackdrop: rememberDetailBackdrop,
+        _openCategory: openCategory,
         _artworkFor: function (itemId) { return artworkMemory[itemId]; },
         _cacheSizes: function () {
             return {

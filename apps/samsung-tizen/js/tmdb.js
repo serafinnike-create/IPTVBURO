@@ -149,8 +149,19 @@ var BuroTmdb = (function () {
                     photoUrl: image(member && member.profile_path, 'w185')
                 };
             }).filter(function (member) { return Boolean(member.name); }),
-            youtubeTrailerId: trailer
+            youtubeTrailerId: trailer,
+            /* O id do IMDb é a chave com que o OMDb responde as notas da
+               crítica. Vem do external_ids, e para série o TMDb devolve o id
+               da série, que é o que o OMDb também indexa. */
+            imdbId: safeImdbId(payload && payload.external_ids && payload.external_ids.imdb_id)
         };
+    }
+
+    /* `tt` mais sete dígitos ou mais. Qualquer outra coisa é descartada em vez
+       de virar uma consulta que o OMDb responderia com erro. */
+    function safeImdbId(value) {
+        var id = clean(value);
+        return /^tt\d{7,}$/.test(id) ? id : null;
     }
 
     function loadTitle(key, item, isSeries, locale, success, failure) {
@@ -167,7 +178,7 @@ var BuroTmdb = (function () {
             if (stopped) { return; }
             if (!match || !Number(match.id)) { failure({ code: 'TMDB_NOT_FOUND' }); return; }
             active = request(type + '/' + Number(match.id), key, {
-                language: language(locale), append_to_response: 'credits,videos'
+                language: language(locale), append_to_response: 'credits,videos,external_ids'
             }, function (details) {
                 if (!stopped) { success(titleDetails(details, isSeries)); }
             }, function (error) { if (!stopped) { failure(error); } });
@@ -429,7 +440,7 @@ var BuroTmdb = (function () {
     }
 
     return {
-        safeKey: safeKey, profileSecretId: profileSecretId, keyForProfile: keyForProfile,
+        safeKey: safeKey, safeImdbId: safeImdbId, profileSecretId: profileSecretId, keyForProfile: keyForProfile,
         configuration: configuration, save: save, remove: remove, validateKey: validateKey,
         loadTitle: loadTitle, loadPerson: loadPerson, image: image, safeRegion: safeRegion,
         supportedRegions: function () { return SUPPORTED_REGIONS.slice(); },

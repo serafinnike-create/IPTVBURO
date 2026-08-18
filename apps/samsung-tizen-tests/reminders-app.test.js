@@ -17,6 +17,19 @@ var JSDOM = require('jsdom').JSDOM;
 var fakeIndexedDb = require('fake-indexeddb');
 
 var APP_DIR = path.resolve(__dirname, '..', 'samsung-tizen');
+/* A ordem vem do index.html, para a suíte não quebrar quando um módulo novo
+   entra no app. Ver platform-failures.test.js. */
+var SCRIPT_FILES = (function () {
+    var html = fs.readFileSync(path.join(APP_DIR, 'index.html'), 'utf8');
+    var pattern = /<script src="([^"]+)"><\/script>/g;
+    var files = [];
+    var match = pattern.exec(html);
+    while (match) {
+        files.push(match[1]);
+        match = pattern.exec(html);
+    }
+    return files;
+}());
 var passed = 0;
 var failures = [];
 
@@ -52,10 +65,8 @@ function bootApp(factory, storedPreferences) {
     if (storedPreferences) {
         window.localStorage.setItem('iptvburo.preferences.v1', JSON.stringify(storedPreferences));
     }
-    ['keys', 'domain', 'i18n', 'guard', 'storage', 'network', 'm3u', 'xtream', 'tmdb',
-        'trailer', 'qr', 'share', 'hero-enrichment', 'catalogue-sync', 'stalker', 'player',
-        'usb', 'profile-photo', 'downloads', 'identity', 'license', 'app'].forEach(function (name) {
-        window.eval(fs.readFileSync(path.join(APP_DIR, 'js', name + '.js'), 'utf8'));
+    SCRIPT_FILES.forEach(function (file) {
+        window.eval(fs.readFileSync(path.join(APP_DIR, file), 'utf8'));
     });
     return window;
 }

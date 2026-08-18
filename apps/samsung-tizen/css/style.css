@@ -261,8 +261,37 @@ body.playing .app-root { display: none; }
     height: 92px; padding: 28px 64px 16px;
     display: flex; align-items: center; justify-content: space-between;
 }
-.topbar h1 { font-size: 34px; }
-.platform-chip { color: var(--muted); font-size: 19px; border: 1px solid #343741; border-radius: 18px; padding: 8px 16px; }
+/* O título absorve a sobra, então acrescentar o sino não reposiciona o resto.
+   Sem isto, o space-between distribuiria o espaço entre tres filhos e o chip da
+   plataforma sairia do canto onde sempre esteve. */
+.topbar h1 { flex: 1; min-width: 0; font-size: 34px; }
+.platform-chip { flex: none; color: var(--muted); font-size: 19px; border: 1px solid #343741; border-radius: 18px; padding: 8px 16px; }
+/* O sino. Sem novidade não desenha marcador nenhum, em vez de desenhar um "0". */
+.topbar-bell {
+    position: relative; flex: none; width: 60px; height: 60px; margin-right: 18px;
+    border: 1px solid #343741; border-radius: 50%; background: var(--elevated);
+    color: var(--secondary); cursor: none;
+}
+.topbar-bell.focused { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 0 3px rgba(214,169,86,.18); }
+.bell-glyph { font-size: 26px; font-weight: 700; line-height: 1; }
+.bell-badge {
+    position: absolute; top: -4px; right: -4px; min-width: 26px; height: 26px;
+    padding: 0 6px; border-radius: 13px; background: var(--error);
+    color: #fff; font-size: 16px; font-weight: 700; line-height: 26px;
+}
+/* A lista de avisos. O rótulo pode encolher, o botão de remover não. */
+.notice-list { margin-bottom: 20px; }
+.notice-row {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    padding: 18px 22px; margin-bottom: 12px;
+    border: 1px solid #30333d; border-radius: 16px; background: var(--elevated);
+}
+.notice-row.unread { border-left: 4px solid var(--gold); }
+.notice-row > div { flex: 1; min-width: 0; margin-right: 20px; }
+.notice-row strong { display: block; margin-top: 4px; color: var(--text); font-size: 23px; }
+.notice-row p { margin-top: 6px; color: var(--secondary); font-size: 19px; line-height: 1.4; }
+.notice-row > button { flex: none; }
+.notice-kind { color: var(--muted); font-size: 16px; letter-spacing: .06em; text-transform: uppercase; }
 .content { height: 896px; overflow: hidden; padding: 10px 64px 70px; }
 .content.scrollable { overflow-y: auto; }
 
@@ -399,6 +428,17 @@ body.reduced-motion .real-home-hero .hero-art img { animation: none; }
 .detail-facts { width: 980px; display: flex; flex-wrap: wrap; margin: 0 0 18px; }
 .detail-fact { margin: 0 10px 9px 0; padding: 7px 12px; border: 1px solid rgba(232,225,207,.16); border-radius: 999px; background: rgba(8,10,12,.58); color: var(--secondary); font-size: 16px; font-weight: 700; }
 .detail-fact.rating { border-color: rgba(214,169,86,.35); color: var(--gold); }
+/* A fileira da crítica. Nada aqui recebe foco: é informação que o olho pega no
+   caminho para o botão de assistir, e uma nota clicável interromperia a única
+   coisa para a qual a tela existe. */
+.detail-critics { display: flex; width: 980px; margin: 0 0 20px; }
+.critic-score {
+    margin-right: 14px; padding: 10px 18px; min-width: 128px;
+    border: 1px solid rgba(232,225,207,.16); border-radius: 14px;
+    background: rgba(8,10,12,.58);
+}
+.critic-score strong { display: block; color: var(--text); font-size: 26px; font-weight: 700; }
+.critic-score small { display: block; margin-top: 3px; color: var(--muted); font-size: 15px; letter-spacing: .04em; }
 .detail-watch-progress { width: 640px; margin-top: 20px; }
 .detail-watch-progress > div { height: 5px; overflow: hidden; border-radius: 3px; background: rgba(246,247,250,.22); }
 .detail-watch-progress i { display: block; height: 100%; background: var(--gold); }
@@ -712,6 +752,32 @@ body.reduced-motion .catalogue-sync-track span { transition: none; }
 .form-message { min-height: 32px; color: var(--muted); font-size: 20px; margin: 4px 0 20px; }
 .form-message.error { color: var(--error); }
 .form-message.success { color: var(--success); }
+/* Portal Stalker: explicação, confirmação do MAC e o aviso de HTTP aberto.
+   O aviso usa --gold porque o alto contraste já redefine esse token. */
+.form-note { color: var(--secondary); font-size: 20px; line-height: 1.45; margin: 0 0 22px; }
+.form-note.privacy { color: var(--muted); }
+.form-note.warning {
+    color: var(--gold); border-left: 4px solid var(--gold);
+    padding-left: 16px; margin-bottom: 22px;
+}
+.form-note.warning[hidden] { display: none; }
+.field-hint { display: block; min-height: 26px; font-size: 18px; color: var(--muted); margin: 8px 0 0 4px; }
+.field-hint.ok { color: var(--success); }
+.field-hint.error { color: var(--error); }
+/* O painel de armazenamento: uma linha por coisa medida. */
+.storage-list { margin: 4px 0 22px; }
+.storage-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 22px; margin-bottom: 12px;
+    border: 1px solid #30333d; border-radius: 16px; background: var(--elevated);
+}
+.storage-row > div { flex: 1; margin-right: 24px; min-width: 0; }
+.storage-row h3 { color: var(--text); font-size: 22px; }
+.storage-row p { margin-top: 6px; color: var(--muted); font-size: 18px; line-height: 1.4; }
+.storage-row strong { flex: none; color: var(--gold); font-size: 24px; font-weight: 700; text-align: right; }
+.section-heading.form-optional { margin: 6px 0 18px; }
+.section-heading.form-optional h3 { font-size: 22px; color: var(--text); }
+.section-heading.form-optional p { color: var(--muted); font-size: 19px; line-height: 1.45; margin-top: 6px; }
 .tmdb-settings-panel { width: 1100px; }
 .tmdb-guide-action { margin: 18px 0 8px; }
 .tmdb-guide-action .button { display: flex; align-items: center; min-height: 52px; font-size: 18px; }
