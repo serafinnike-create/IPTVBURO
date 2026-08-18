@@ -48,7 +48,7 @@ fun BuroCinematicBackdrop(
 ) {
     val usablePosters = posterUrls.filter(String::isNotBlank).distinct()
     val movement = rememberInfiniteTransition(label = "poster-wall")
-    val firstProgress by
+    val firstProgress =
         movement.animateFloat(
             initialValue = 0f,
             targetValue = 1f,
@@ -59,7 +59,7 @@ fun BuroCinematicBackdrop(
                 ),
             label = "poster-row-one",
         )
-    val secondProgress by
+    val secondProgress =
         movement.animateFloat(
             initialValue = 0f,
             targetValue = 1f,
@@ -70,7 +70,7 @@ fun BuroCinematicBackdrop(
                 ),
             label = "poster-row-two",
         )
-    val thirdProgress by
+    val thirdProgress =
         movement.animateFloat(
             initialValue = 0f,
             targetValue = 1f,
@@ -112,15 +112,24 @@ fun BuroCinematicBackdrop(
                     else -> thirdProgress
                 }
             val movesLeft = row % 2 == 1
-            val translation =
+            // Read where it is used rather than here.
+            //
+            // Reading an animation in the body of a composable makes every frame of it a
+            // recomposition, and this animation never ends: the wall's seven rows and their
+            // fifty-odd covers were being recomposed sixty times a second for as long as the
+            // loading screen was up. Handing the strip a function to call inside its own
+            // `graphicsLayer` keeps the value out of composition, so the animation drives the
+            // draw phase alone and the wall is composed once.
+            val offsetPixels = {
                 if (movesLeft) {
-                    -posterCyclePixels * progress
+                    -posterCyclePixels * progress.value
                 } else {
-                    -posterCyclePixels * (1f - progress)
+                    -posterCyclePixels * (1f - progress.value)
                 }
+            }
             PosterStrip(
                 cycleCount = cycleCount,
-                offsetPixels = translation,
+                offsetPixels = offsetPixels,
                 posterUrls =
                     if (usablePosters.isNotEmpty()) {
                         List(POSTERS_PER_CYCLE) { index ->
@@ -176,7 +185,7 @@ fun BuroCinematicBackdrop(
 @Composable
 private fun PosterStrip(
     cycleCount: Int,
-    offsetPixels: Float,
+    offsetPixels: () -> Float,
     posterUrls: List<String>,
     modifier: Modifier = Modifier,
 ) {
@@ -187,7 +196,7 @@ private fun PosterStrip(
     Row(
         modifier =
             modifier.graphicsLayer {
-                translationX = offsetPixels
+                translationX = offsetPixels()
                 alpha = 0.82f
             },
         horizontalArrangement = Arrangement.spacedBy(12.dp),
