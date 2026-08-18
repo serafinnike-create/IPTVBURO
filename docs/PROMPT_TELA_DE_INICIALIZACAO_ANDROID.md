@@ -111,6 +111,27 @@ O alvo de 16ms por frame ainda não é atingido em todos os frames, mas a tela d
 slideshow: a mediana está dentro ou perto do orçamento e a proporção de frames travados caiu
 por um fator de seis.
 
+### Verificado também em geometria de televisão
+
+O mesmo módulo roda em telefone e em TV, então a parede foi medida nas duas. Sem emulador de
+TV à mão, o próprio aparelho foi forçado a reportar dimensões de televisão:
+
+```bash
+adb shell wm size 1920x1080   # 1280 x 720 dp, paisagem
+adb shell wm density 240
+# ... medir ...
+adb shell wm size reset && adb shell wm density reset
+```
+
+| Geometria | Frames travados | Frame mediano |
+|---|---|---|
+| Celular, 360x820 dp | **12–16%** | 21–28ms |
+| TV, 1280x720 dp | **24,3%** | 32ms |
+
+A TV fica pior porque é 3,5x mais larga e `posterCyclesFor` pede mais ciclos — comportamento
+esperado, não regressão. Confirmado por vídeo que a parede cobre a tela inteira nessa
+proporção, sem faixas pretas nem lacunas.
+
 ### Se for preciso ir além
 
 Nada disso foi verificado, e nenhum é obviamente necessário agora:
