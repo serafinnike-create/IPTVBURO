@@ -42,6 +42,78 @@ o servidor) continua aguardando o log do usuário.
 
 ---
 
+## TAREFA-031 — Velocidade de download na tela de carregamento (celular)
+
+**Status:** 📋 NA FILA — pedido do usuário, ainda não implementado.
+**Solicitado em:** 2026-08-18
+
+### O pedido
+
+> *"velocidade de download na tela de carregamento quando está baixando também
+> ajuda o user identificar a demora"*
+
+A tela de carregamento do celular diz **o que** está acontecendo, mas não **a que
+ritmo**. Numa lista de dezenas de milhares de títulos a espera é longa, e sem uma
+taxa na tela o usuário não distingue "está baixando devagar" de "travou". Uma
+velocidade em KB/s ou MB/s responde essa pergunta sozinha, e é a informação que
+faz alguém decidir se vale esperar ou se o problema é a rede dele.
+
+Mesma queixa que originou `docs/PROMPT_TELA_DE_CARREGAMENTO.md` no Windows; esta
+entrada é o lado Android.
+
+### O que a tela mostra hoje
+
+`BootStageUi` ([AppUiState.kt](../../apps/android-tv/src/main/kotlin/com/lucasserafin94/iptvburo/ui/AppUiState.kt))
+tem quatro estágios **nomeados**, sem número nenhum:
+
+```kotlin
+enum class BootStageUi { PROFILES, CATALOGUE, ARTWORK, READY }
+```
+
+`XtreamImportStageUi` também é só nome — `AUTHENTICATING`, `CATEGORIES`, `LIVE`,
+`MOVIES`, `SERIES`, `SAVING`. Nenhum dos dois carrega bytes, contagem de itens
+nem tempo decorrido, então a tela não tem de onde tirar uma taxa.
+
+### As peças já existem
+
+`XtreamClient` já faz as duas coisas de que a medição precisa:
+
+- lê `response.body.contentLength()`, ou seja **sabe o tamanho esperado** quando o
+  servidor o declara;
+- consome por `response.body.byteStream()`, ou seja **já passa byte a byte** — é
+  onde um contador entra sem reestruturar nada.
+
+Falta somar os bytes ao longo do tempo e levar isso até a tela.
+
+### O que a tarefa deve entregar
+
+1. **Taxa real, medida, não estimada.** Bytes acumulados divididos por tempo
+   decorrido, suavizados numa janela curta para o número não piscar a cada frame.
+2. **Formatação legível.** KB/s abaixo de 1 MB/s, MB/s acima; uma casa decimal.
+   Respeitar o idioma (separador decimal), como o resto do app.
+3. **Ausência honesta.** Quando o servidor não declara `Content-Length`, ou entre
+   requisições, a tela **não** deve mostrar `0 KB/s` — deve omitir a linha. Um
+   zero mentiroso é pior que nenhuma informação.
+4. **Traduzido.** PT-BR, EN, DE e IT, como manda o `CLAUDE.md`.
+
+### Cuidados
+
+- **Nada de credencial na tela nem no log.** As URLs Xtream carregam usuário e
+  senha no caminho; a taxa é um número, e deve continuar sendo só isso.
+- **Não pagar caro pela medição.** A tela de carregamento acabou de sair de 98%
+  para ~13% de frames travados (commits `240350f`, `40cc2ac`). Um contador que
+  atualize o estado a cada bloco lido recompõe a tela sem parar e desfaz esse
+  ganho — atualizar em intervalo fixo, não por chunk.
+- **A velocidade descreve o download, não o banco.** O estágio `SAVING` é
+  trabalho local; mostrar uma taxa de rede ali seria mentira.
+
+### Onde encostar
+
+- `packages/xtream-client/.../XtreamClient.kt` — onde os bytes passam
+- `apps/android-tv/.../data/repository/CatalogRepository.kt` — `XtreamImportStage`
+- `apps/android-tv/.../ui/AppUiState.kt` — `BootStageUi`, estado da tela
+- `apps/android-tv/.../MainActivity.kt` — `BuroBootScreen`, onde o texto é desenhado
+
 ## TAREFA-030 — Guia Pesquisar no Windows, e ícones na navegação
 
 **Status:** ✅ IMPLEMENTADO em 2026-08-13 — **falta ver na tela**
