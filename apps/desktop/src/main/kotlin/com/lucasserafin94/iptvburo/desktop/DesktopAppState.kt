@@ -5429,7 +5429,14 @@ class DesktopAppState(
     }
 
     suspend fun loadSelectedMovieDetails() {
-        val selected = selectedXtreamItem ?: return
+        // Every early return here is silent, and each one leaves the screen on its initial
+        // "Carregando ficha do filme…" with nothing in flight and no way to recover. Reported from
+        // Descobrir, and diagnosing it needs the reason on the record rather than inferred.
+        val selected = selectedXtreamItem
+        if (selected == null) {
+            println("[details] sem item selecionado (destino=$destination)")
+            return
+        }
         if (selected.contentType != XtreamContentType.MOVIE) return
         if (movieDetailsStatus is MovieDetailsStatus.Loading) return
         movieDetailsStatus = MovieDetailsStatus.Loading
