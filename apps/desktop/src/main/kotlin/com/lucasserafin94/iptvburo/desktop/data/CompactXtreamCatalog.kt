@@ -144,6 +144,17 @@ internal class CompactXtreamCatalog(
         return names[index]
     }
 
+    /**
+     * The provider's own id for the row, without building the row.
+     *
+     * Same reasoning as [nameAt]: the Serviço filter tests one string per row over tens of thousands
+     * of them, and `itemAt` would allocate a whole item to read a single field.
+     */
+    fun providerIdAt(index: Int): String {
+        require(index in 0 until size)
+        return providerIds[index]
+    }
+
     fun categoryIdsAt(index: Int): List<String> {
         require(index in 0 until size)
         return encodedCategoryIds[index].decodeCategoryIds()

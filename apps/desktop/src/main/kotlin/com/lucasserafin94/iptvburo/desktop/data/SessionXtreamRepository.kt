@@ -313,6 +313,17 @@ class SessionXtreamRepository(
          * is, so the result is stable from one page turn to the next.
          */
         collapseDuplicates: Boolean = false,
+        /**
+         * Restricts the page to these `localContentId` values, or null for no restriction.
+         *
+         * Used by the Serviço filter, whose set comes from TMDb rather than from the playlist: a list
+         * that files its films by genre records nothing about which service carries them, so the only
+         * way to offer that filter is to bring the answer from outside and match on identity.
+         *
+         * Null rather than an empty set for "no filter". An empty set is a real answer — the service
+         * carries nothing this library holds — and must produce an empty page rather than everything.
+         */
+        allowedLocalIds: Set<String>? = null,
     ): XtreamCatalogPage {
         require(pageSize in 1..MAX_PAGE_SIZE) { "Invalid page size." }
         val catalogItems =
@@ -393,6 +404,16 @@ class SessionXtreamRepository(
                 if (allowedIdentities != null && !seenIdentities.add(catalogItems.identityAt(index))) {
                     return@repeat
                 }
+                // The service filter, when one is active.
+                //
+                // Composed from the type and the provider id, which is the same "MOVIE:1234" form the
+                // index was built with. Placed after the column filters and before `itemAt`, so a row
+                // excluded here still costs no object.
+                if (allowedLocalIds != null &&
+                    "$contentType:${catalogItems.providerIdAt(index)}" !in allowedLocalIds
+                ) {
+                    return@repeat
+                }
                 // One card per film, when the setting asks for it.
                 //
                 // Read from the name column rather than from a built item: this runs for every row
@@ -436,6 +457,7 @@ class SessionXtreamRepository(
                 // For the same reason as the two above: a clamped page that forgot this would list
                 // the duplicate copies the user had asked to collapse.
                 collapseDuplicates = collapseDuplicates,
+                allowedLocalIds = allowedLocalIds,
             )
         }
         return XtreamCatalogPage(

@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.lucasserafin94.iptvburo.desktop.data.CatalogLoadProgress
+import com.lucasserafin94.iptvburo.desktop.data.ServiceTitleIndex
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.MusicLibraryLoader
 import com.lucasserafin94.iptvburo.desktop.data.ArtworkCache
@@ -3142,6 +3143,129 @@ class DesktopAppState(
             )
         }.getOrDefault(emptyList())
 
+    /**
+     * Which of the user's own films each streaming service carries.
+     *
+     * Empty until built, and empty for anyone without a metadata key. The Serviço selector offers the
+     * services this knows about *in addition to* any the playlist names in its categories — a list
+     * that files films by genre has none of the latter, which is why the selector had nothing to
+     * offer and said so.
+     */
+    var serviceTitleIndex by mutableStateOf(ServiceTitleIndex.EMPTY)
+        private set
+
+    /** True while the index is being built, so the selector can say it is working rather than empty. */
+    var serviceIndexLoading by mutableStateOf(false)
+        private set
+
+    private var serviceIndexBuiltFor: String? = null
+
+    /**
+     * The service the catalogue is currently filtered to, by label, or null for all of them.
+     *
+     * Separate from [selectedXtreamCategoryId] because it is a different kind of filter: a category
+     * is one of the provider's own folders, while this is a set of library ids assembled from TMDb.
+     * They are mutually exclusive in the UI for the reason set out on [splitCategories] — a title
+     * belongs to one category, so combining the two returns an empty grid.
+     */
+    var selectedServiceLabel by mutableStateOf<String?>(null)
+        private set
+
+    /** Filters the catalogue to one service, or clears the filter when [label] is null. */
+    suspend fun selectService(label: String?) {
+        if (selectedServiceLabel == label) return
+        selectedServiceLabel = label
+        // A service filter and a category filter answer different questions and cannot both apply:
+        // see the note on selectedServiceLabel.
+        if (label != null) selectedXtreamCategoryId = null
+        refreshXtreamPage(pageIndex = 0)
+    }
+
+    /**
+     * Builds the service index, unless it is already built for this key and region.
+     *
+     * ## Why this is cheap
+     *
+     * The obvious direction — ask TMDb which services carry each of the user's films — costs two
+     * requests per title, and on a 42,095-item catalogue that is tens of thousands of requests TMDb
+     * would rate-limit long before finishing. So the question is inverted: each service is asked what
+     * it carries, several pages at a time, which is a handful of requests per service. The answers are
+     * then matched against the library by the same normalised name-and-year rule the details page uses.
+     *
+     * Failure is silence. This adds a filter to a screen that works without it.
+     */
+    suspend fun ensureServiceTitleIndex() {
+        val key = effectiveMetadataKey()?.takeIf(String::isNotBlank) ?: return
+        val region = streamingRegion
+        val cacheKey = "$key@$region"
+        if (serviceIndexBuiltFor == cacheKey && !serviceTitleIndex.isEmpty) return
+        if (serviceIndexLoading) return
+
+        val candidates = libraryMatchCandidates()
+        if (candidates.isEmpty()) return
+
+        serviceIndexLoading = true
+        val built =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val client = TmdbClient(key)
+                    val services = client.watchProviderDirectory(region, forSeries = false)
+                    val byService = LinkedHashMap<String, MutableList<Pair<String, Int?>>>()
+                    services.forEach { service ->
+                        // Matched to the label this app recognises the service as, so the selector's
+                        // rows and the index agree on what "Netflix" means.
+                        val label = providerIdentityFor(service.name)?.label ?: return@forEach
+                        val titles = byService.getOrPut(label) { mutableListOf() }
+                        // Several pages, because one page is twenty titles and a filter built from
+                        // twenty would miss almost everything the user owns. Stops early when a page
+                        // comes back short, which means the service has no more to give.
+                        for (page in 1..SERVICE_INDEX_PAGES) {
+                            val batch =
+                                client.titlesOnProvider(
+                                    providerId = service.providerId,
+                                    region = region,
+                                    limit = SERVICE_INDEX_PAGE_SIZE,
+                                    page = page,
+                                )
+                            titles += batch.map { it.title to it.year }
+                            if (batch.size < SERVICE_INDEX_PAGE_SIZE) break
+                        }
+                    }
+                    ServiceTitleIndex.build(
+                        serviceTitles = byService,
+                        library =
+                            candidates.map { candidate ->
+                                Triple(candidate.title, candidate.year, candidate.localContentId)
+                            },
+                    )
+                }.getOrDefault(ServiceTitleIndex.EMPTY)
+            }
+
+        serviceIndexLoading = false
+        if (!built.isEmpty) {
+            serviceTitleIndex = built
+            serviceIndexBuiltFor = cacheKey
+            println(
+                "[servicos] indice: " +
+                    built.services.joinToString(", ") { name -> "$name=${built.countFor(name)}" },
+            )
+        } else {
+            println("[servicos] indice vazio - nenhum titulo da lista casou com o que a TMDb oferece")
+        }
+    }
+
+    /**
+     * How many pages of each service to read.
+     *
+     * Twenty titles a page, so ten pages is two hundred per service — enough that a filter finds a
+     * useful share of an ordinary library, and few enough that eight services cost eighty requests
+     * rather than the tens of thousands a per-title lookup would.
+     */
+    private val SERVICE_INDEX_PAGES = 10
+
+    /** TMDb's discover page size. Asking for less would waste a request; more is not offered. */
+    private val SERVICE_INDEX_PAGE_SIZE = 20
+
     /** Opens the Assinaturas area at its shelves, loading them if this is the first visit. */
     fun openSubscriptions() {
         favoritesOnly = false
@@ -6179,6 +6303,10 @@ class DesktopAppState(
         val kidsMode = activeProfile?.isKids == true
         // Captured on the calling thread with every other input, for the reason above.
         val collapse = collapsesDuplicateTitles
+        // The service filter, as the set of library ids that service carries. Null when no service is
+        // selected, which is the ordinary case and costs nothing.
+        val serviceIds =
+            selectedServiceLabel?.let { label -> serviceTitleIndex.idsFor(label).takeIf { it.isNotEmpty() } }
         val page =
             withContext(Dispatchers.Default) {
                 xtreamRepository.page(
@@ -6194,6 +6322,9 @@ class DesktopAppState(
                     // One card per film unless the user asked for every copy. A provider carries the
                     // same title several times over and the grid listed all of them.
                     collapseDuplicates = collapse,
+                    // Restricted to one service's titles when the user picked one. The ids come from
+                    // the TMDb-built index, since this playlist's categories do not name services.
+                    allowedLocalIds = serviceIds,
                 )
             }
         if (requestGeneration == xtreamPageRequestGeneration) {

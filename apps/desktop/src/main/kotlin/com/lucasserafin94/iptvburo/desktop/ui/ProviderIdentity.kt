@@ -80,6 +80,15 @@ fun providerIdentityFor(categoryName: String?): ProviderIdentity? {
 }
 
 /**
+ * The identity for a label this app has already resolved, such as "Netflix" or "Prime Video".
+ *
+ * The service index keys on those labels rather than on the raw category names it was built from, so
+ * turning one back into a mark needs the reverse lookup. Implemented through [providerIdentityFor] so
+ * there is one list of services rather than two that could disagree.
+ */
+fun providerIdentityForLabel(label: String): ProviderIdentity? = providerIdentityFor(label)
+
+/**
  * "Max" as a whole word, compiled once.
  *
  * Bounded rather than a plain `in` test so a category called "Cinemax" or "Max Series" is not badged

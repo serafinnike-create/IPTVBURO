@@ -115,6 +115,8 @@ import com.lucasserafin94.iptvburo.desktop.ui.CategoryBadge
 import com.lucasserafin94.iptvburo.desktop.ui.CategoryChoice
 import com.lucasserafin94.iptvburo.desktop.ui.LocalProviderLogos
 import com.lucasserafin94.iptvburo.desktop.ui.ProviderIdentity
+import com.lucasserafin94.iptvburo.desktop.ui.providerIdentityForLabel
+import com.lucasserafin94.iptvburo.desktop.ui.withLogoFrom
 import com.lucasserafin94.iptvburo.desktop.ui.splitCategories
 import com.lucasserafin94.iptvburo.desktop.ui.CriticInkDark
 import com.lucasserafin94.iptvburo.desktop.ui.CriticMark
@@ -161,6 +163,30 @@ fun XtreamWorkspace(
     val capabilities = DesktopPlatformCapabilities.current
     var detailsOpen by remember { mutableStateOf(false) }
     var personOpen by remember { mutableStateOf(false) }
+
+    // Built when the tab has no service categories of its own, which is when the filter is missing.
+    //
+    // Deliberately not on every tab: Ao vivo files channels by service already, and paying for a TMDb
+    // index there would buy a worse answer than the provider's own.
+    val index = appState.serviceTitleIndex
+    val indexedServices =
+        remember(index, appState.providerLogos) {
+            index.services.mapNotNull { label ->
+                val identity = providerIdentityForLabel(label) ?: return@mapNotNull null
+                CategoryChoice(
+                    id = label,
+                    label = "$label (${index.countFor(label)})",
+                    provider = identity.withLogoFrom(appState.providerLogos),
+                )
+            }
+        }
+    LaunchedEffect(appState.xtreamContentType, appState.xtreamCategories) {
+        // Films only for now. It is the tab that asks the question and the one whose categories
+        // answer it least often.
+        if (appState.xtreamContentType == XtreamContentType.MOVIE) {
+            appState.ensureServiceTitleIndex()
+        }
+    }
 
     LaunchedEffect(appState.xtreamSearchQuery, appState.xtreamContentType) {
         delay(SEARCH_DEBOUNCE_MILLIS)
@@ -307,6 +333,16 @@ fun XtreamWorkspace(
                 detailsOpen = false
                 scope.launch { appState.selectXtreamCategory(categoryId) }
             },
+            // Services the playlist does not name, brought from TMDb. Built once per key and region;
+            // see ensureServiceTitleIndex for why it asks each service what it carries rather than
+            // asking about each film.
+            indexedServiceChoices = indexedServices,
+            selectedServiceLabel = appState.selectedServiceLabel,
+            onServiceSelected = { label ->
+                detailsOpen = false
+                scope.launch { appState.selectService(label) }
+            },
+            serviceIndexLoading = appState.serviceIndexLoading,
         )
         }
         HorizontalDivider(color = BuroColors.BorderSoft)
@@ -651,6 +687,18 @@ private fun XtreamCategorySelectors(
     contentType: XtreamContentType,
     selectedCategoryId: String?,
     onSelected: (String?) -> Unit,
+    /**
+     * Services derived from TMDb, for a playlist whose categories name none.
+     *
+     * Empty when the playlist already files by service — those categories are the provider's own and
+     * are preferred — or when nothing in the library matched.
+     */
+    indexedServiceChoices: List<CategoryChoice> = emptyList(),
+    /** The service label currently filtering the grid, or null for all of them. */
+    selectedServiceLabel: String? = null,
+    onServiceSelected: (String?) -> Unit = {},
+    /** True while the index is being built, so the control says so rather than reading as empty. */
+    serviceIndexLoading: Boolean = false,
 ) {
     val text = strings
     val services = text.shareStrings.serviceCatalogue
@@ -690,23 +738,40 @@ private fun XtreamCategorySelectors(
         // It appeared under Ao vivo, where channels are filed by service, which made it look
         // arbitrary rather than absent.
         //
-        // Nothing better is possible from the categories alone: if the playlist never records which
-        // service a film came from, that fact is not in the data. The honest fix is to say so, which
-        // the empty state below does, instead of hiding the control and leaving the user to wonder
-        // whether the feature exists.
-        if (split.hasProviders) {
-            CategorySelector(
-                title = services.serviceSelector,
-                anyLabel = services.allServices,
-                choices = split.providers,
-                selectedId = providerSelected,
-                onSelect = onSelected,
-            )
-        } else {
-            ServiceSelectorUnavailable(
-                title = services.serviceSelector,
-                explanation = services.servicesUnavailable,
-            )
+        // The categories alone cannot answer it, so TMDb is asked instead.
+        //
+        // `serviceTitleIndex` holds which of the user's own films each service carries, built by
+        // asking each service what it has rather than asking about each film — see the note on
+        // ServiceTitleIndex for why that direction is the only affordable one. When the playlist does
+        // name services in its categories those are used directly, since they are the provider's own
+        // filing and cost nothing.
+        val indexed = indexedServiceChoices
+        when {
+            split.hasProviders ->
+                CategorySelector(
+                    title = services.serviceSelector,
+                    anyLabel = services.allServices,
+                    choices = split.providers,
+                    selectedId = providerSelected,
+                    onSelect = onSelected,
+                )
+            indexed.isNotEmpty() ->
+                CategorySelector(
+                    title = services.serviceSelector,
+                    anyLabel = services.allServices,
+                    choices = indexed,
+                    selectedId = selectedServiceLabel,
+                    onSelect = onServiceSelected,
+                )
+            else ->
+                // Still nothing: no service categories, and TMDb matched none of this library. Saying
+                // so is better than hiding the control, which would leave the user wondering whether
+                // the feature exists at all.
+                ServiceSelectorUnavailable(
+                    title = services.serviceSelector,
+                    explanation =
+                        if (serviceIndexLoading) services.servicesLoading else services.servicesUnavailable,
+                )
         }
     }
 }

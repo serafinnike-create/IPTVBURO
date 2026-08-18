@@ -705,6 +705,7 @@ data class DesktopStrings(
                             allGenres = "Todos los géneros",
                             allServices = "Todos los servicios",
                             servicesUnavailable = "no indicado en tu lista",
+                            servicesLoading = "buscando…",
                             duplicatesLabel = "Copias repetidas",
                             duplicatesHint = "Las listas suelen traer la misma película varias veces, una por calidad o doblaje.",
                             duplicatesToggle = "Mostrar una sola tarjeta por película",
@@ -1354,6 +1355,7 @@ data class DesktopStrings(
                             allGenres = "Todos os gêneros",
                             allServices = "Todos os serviços",
                             servicesUnavailable = "não informado na sua lista",
+                            servicesLoading = "procurando…",
                             duplicatesLabel = "Cópias repetidas",
                             duplicatesHint = "As listas costumam trazer o mesmo filme várias vezes, uma por qualidade ou dublagem.",
                             duplicatesToggle = "Mostrar só um card por filme",
@@ -2003,6 +2005,7 @@ data class DesktopStrings(
                             allGenres = "All genres",
                             allServices = "All services",
                             servicesUnavailable = "not recorded in your list",
+                            servicesLoading = "looking…",
                             duplicatesLabel = "Repeated copies",
                             duplicatesHint = "Lists usually carry the same film several times over, one per quality or dubbing.",
                             duplicatesToggle = "Show one card per film",
@@ -2651,6 +2654,7 @@ data class DesktopStrings(
                             allGenres = "Alle Genres",
                             allServices = "Alle Dienste",
                             servicesUnavailable = "in Ihrer Liste nicht angegeben",
+                            servicesLoading = "suche…",
                             duplicatesLabel = "Mehrfache Kopien",
                             duplicatesHint = "Listen enthalten denselben Film oft mehrfach, je nach Qualität oder Synchronisation.",
                             duplicatesToggle = "Nur eine Karte pro Film zeigen",
@@ -3304,6 +3308,7 @@ data class DesktopStrings(
                             allGenres = "Tutti i generi",
                             allServices = "Tutti i servizi",
                             servicesUnavailable = "non indicato nella tua lista",
+                            servicesLoading = "ricerca…",
                             duplicatesLabel = "Copie ripetute",
                             duplicatesHint = "Le liste portano spesso lo stesso film più volte, una per qualità o doppiaggio.",
                             duplicatesToggle = "Mostra una sola scheda per film",
@@ -4130,6 +4135,8 @@ data class ServiceCatalogueStrings(
      * a fault. Naming the reason is more use than silence.
      */
     val servicesUnavailable: String,
+    /** Shown while the service index is being built from TMDb, so the control is not read as empty. */
+    val servicesLoading: String,
     /**
      * The setting that collapses a provider's repeated copies of one film.
      *
