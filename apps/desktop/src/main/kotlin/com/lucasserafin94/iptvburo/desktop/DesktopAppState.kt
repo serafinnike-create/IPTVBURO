@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.lucasserafin94.iptvburo.desktop.data.CatalogLoadProgress
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.MusicLibraryLoader
 import com.lucasserafin94.iptvburo.desktop.data.ArtworkCache
@@ -4445,6 +4446,13 @@ class DesktopAppState(
          * behind an already-drawn screen with no bar to move.
          */
         onCatalogueStage: (progress: Float, message: String) -> Unit = { _, _ -> },
+        /**
+         * Reports items as a catalogue streams in, so the bar moves during the longest wait.
+         *
+         * Separate from [onCatalogueStage]: that one marks a step boundary and moves the bar, this
+         * one fires many times inside a single step and changes only the detail line.
+         */
+        onCatalogueItems: (message: String, progress: CatalogLoadProgress) -> Unit = { _, _ -> },
     ) {
         if (dailyHomeStatus is DailyHomeStatus.Loading) return
         val existing = dailyHomeStatus as? DailyHomeStatus.Loaded
@@ -4483,13 +4491,25 @@ class DesktopAppState(
                 // These two are the slowest part of a cold start by a wide margin — each pulls a
                 // provider's entire catalogue, and a large list is tens of thousands of items. They
                 // report themselves so the splash does not sit on one number for the whole wait.
+                // Reported while they run, not just before them.
+                //
+                // These two used to announce themselves once — 0.75 for films, 0.88 for series — and
+                // then say nothing for the whole download, which on a real list is tens of seconds.
+                // The bar sat at 80% throughout, and a bar that does not move reads as a hang. The
+                // repository now calls back as items are parsed, so the count and the rate move.
                 if (XtreamContentType.MOVIE !in latestSummary?.loadedContentTypes.orEmpty()) {
                     onCatalogueStage(0.75f, "Baixando a lista de filmes…")
-                    latestSummary = xtreamRepository.loadCatalog(XtreamContentType.MOVIE)
+                    latestSummary =
+                        xtreamRepository.loadCatalog(XtreamContentType.MOVIE) { progress ->
+                            onCatalogueItems("Baixando a lista de filmes…", progress)
+                        }
                 }
                 if (XtreamContentType.SERIES !in latestSummary?.loadedContentTypes.orEmpty()) {
                     onCatalogueStage(0.88f, "Baixando a lista de séries…")
-                    latestSummary = xtreamRepository.loadCatalog(XtreamContentType.SERIES)
+                    latestSummary =
+                        xtreamRepository.loadCatalog(XtreamContentType.SERIES) { progress ->
+                            onCatalogueItems("Baixando a lista de séries…", progress)
+                        }
                 }
                 onCatalogueStage(0.96f, "Montando a tela inicial…")
                 val movies =
@@ -4961,6 +4981,23 @@ class DesktopAppState(
     /** Session, connect, catalogues, home, done. */
     private val STARTUP_STEPS = 5
 
+    /**
+     * The shortest gap worth deriving a rate from.
+     *
+     * Below this the divisor is small enough that ordinary scheduling jitter produces a wild figure,
+     * and a rate that leaps between 400/s and 9,000/s is noise rather than information.
+     */
+    private val RATE_SAMPLE_MINIMUM_MILLIS = 200L
+
+    /**
+     * Thousands as "12,4 mil".
+     *
+     * An exact five-digit count changing several times a second is unreadable — the eye cannot track
+     * the digits — and the figure is there to convey scale and movement, not an audit.
+     */
+    private fun formatItemCount(count: Int): String =
+        if (count >= 1_000) "%.1f mil".format(count / 1_000.0) else count.toString()
+
     /** What the splash screen is currently waiting on, so a slow provider looks like progress. */
     var startupMessage by mutableStateOf("")
         private set
@@ -4978,7 +5015,74 @@ class DesktopAppState(
     private fun startupStep(step: Int, message: String) {
         startupProgress = (step.toFloat() / STARTUP_STEPS).coerceIn(0f, 1f)
         startupMessage = message
+        startupDetail = ""
+        startupBeatAt = System.currentTimeMillis()
     }
+
+    /**
+     * The second line on the splash: how much of the current step has been done.
+     *
+     * Separate from [startupMessage] because they answer different questions and change at different
+     * rates. The message names the step and changes rarely; this carries the count and the rate, and
+     * changes several times a second while a catalogue streams in. Empty whenever there is nothing
+     * countable to say, which is most steps.
+     */
+    var startupDetail by mutableStateOf("")
+        private set
+
+    /**
+     * When the bar last actually moved.
+     *
+     * The reported defect was a bar stuck at 80% — which was true, and worse, indistinguishable from
+     * a hang. A determinate bar is only honest while it is moving; once it stops, the screen has to
+     * say "still working" some other way. The splash reads this and switches to an indeterminate bar
+     * when nothing has changed for a moment, so the app never looks frozen while it is busy.
+     */
+    var startupBeatAt by mutableStateOf(System.currentTimeMillis())
+        private set
+
+    /**
+     * Records progress inside a catalogue download.
+     *
+     * The rate is computed over the gap between two readings rather than since the download began: a
+     * running average flattens out and stops reflecting a network that has just slowed down, which is
+     * exactly the moment somebody watching the screen wants to know.
+     */
+    private fun startupCatalogueProgress(
+        stepMessage: String,
+        items: Int,
+        atMillis: Long,
+    ) {
+        val elapsed = atMillis - lastCatalogueSampleAt
+        val gained = items - lastCatalogueSampleItems
+        // Under a fifth of a second the divisor is small enough that ordinary jitter turns into a
+        // wild figure, so the previous rate is kept rather than printed as a spike.
+        if (elapsed >= RATE_SAMPLE_MINIMUM_MILLIS && gained > 0) {
+            catalogueItemsPerSecond = (gained * 1000.0 / elapsed).toInt()
+            lastCatalogueSampleAt = atMillis
+            lastCatalogueSampleItems = items
+        }
+
+        startupMessage = stepMessage
+        startupDetail =
+            if (catalogueItemsPerSecond > 0) {
+                "${formatItemCount(items)} · ${formatItemCount(catalogueItemsPerSecond)}/s"
+            } else {
+                formatItemCount(items)
+            }
+        startupBeatAt = atMillis
+    }
+
+    /** Reset between catalogues, so the series rate is not dragged down by the films before it. */
+    private fun resetCatalogueRate() {
+        lastCatalogueSampleAt = System.currentTimeMillis()
+        lastCatalogueSampleItems = 0
+        catalogueItemsPerSecond = 0
+    }
+
+    private var lastCatalogueSampleAt = 0L
+    private var lastCatalogueSampleItems = 0
+    private var catalogueItemsPerSecond = 0
 
     /**
      * Moves the bar *inside* one phase, between [from] and [to].
@@ -5037,9 +5141,18 @@ class DesktopAppState(
             // complete when the splash clears rather than filling in afterwards.
             if (xtreamStatus !is XtreamStatus.Error) {
                 startupStep(4, "Organizando filmes e séries…")
-                loadDailyHome(LocalDate.now()) { progress, message ->
-                    startupProgressWithin(from = progress, to = progress, fraction = 1f, message = message)
-                }
+                loadDailyHome(
+                    LocalDate.now(),
+                    onCatalogueStage = { progress, message ->
+                        // A new step: the rate belongs to the catalogue that is starting, not to the
+                        // one that just finished.
+                        resetCatalogueRate()
+                        startupProgressWithin(from = progress, to = progress, fraction = 1f, message = message)
+                    },
+                    onCatalogueItems = { message, progress ->
+                        startupCatalogueProgress(message, progress.items, progress.atMillis)
+                    },
+                )
                 startupStep(5, "Pronto")
                 // Only here, where a catalogue really did load. Marking it in the `finally` would
                 // count a failed connection as a completed first run, and the user who then fixed

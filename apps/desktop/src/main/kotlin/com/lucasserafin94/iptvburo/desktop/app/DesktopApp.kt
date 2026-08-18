@@ -833,6 +833,8 @@ fun DesktopApp(
                     SplashScreen(
                         message = appState.startupMessage.ifBlank { text.loadingCatalog },
                         progress = appState.startupProgress,
+                        detail = appState.startupDetail,
+                        beatAtMillis = appState.startupBeatAt,
                         backdropPosters = appState.backdropPosters,
                         isFirstRun = appState.isFirstStartup,
                     )
@@ -1050,6 +1052,8 @@ fun DesktopApp(
                                     ?: text.loadingCatalog
                             },
                         progress = appState.startupProgress,
+                        detail = appState.startupDetail,
+                        beatAtMillis = appState.startupBeatAt,
                         backdropPosters = appState.backdropPosters,
                         isFirstRun = true,
                     )

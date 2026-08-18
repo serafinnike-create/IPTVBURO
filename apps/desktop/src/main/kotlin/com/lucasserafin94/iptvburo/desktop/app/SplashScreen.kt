@@ -23,6 +23,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +41,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroMark
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
@@ -56,6 +61,22 @@ fun SplashScreen(
     message: String,
     progress: Float,
     /**
+     * The count and rate for the current step, or empty when there is nothing countable.
+     *
+     * A second line rather than more words in [message]: it changes several times a second while a
+     * catalogue streams in, and a heading that rewrites itself that fast is harder to read than one
+     * that stays put with a figure moving beneath it.
+     */
+    detail: String = "",
+    /**
+     * When the bar last moved.
+     *
+     * The reported defect was a bar stuck at 80%, which was true and — worse — looked identical to a
+     * hang. A determinate bar is only honest while it is moving; once it stops, the screen has to
+     * say "still working" another way. This is what lets it tell the difference.
+     */
+    beatAtMillis: Long = 0L,
+    /**
      * Whether this is the first launch after setting an account up.
      *
      * The wait is longest exactly then — the whole catalogue is being read for the first time — and
@@ -73,6 +94,23 @@ fun SplashScreen(
     backdropPosters: List<String> = emptyList(),
 ) {
     val transition = rememberInfiniteTransition(label = "splash")
+
+    // Whether the bar has stopped moving.
+    //
+    // The whole point of the reported defect: a bar frozen at a number cannot be told apart from a
+    // crashed app. Once nothing has moved for a moment the bar stops claiming a percentage and
+    // becomes an indeterminate sweep instead, which says "working" honestly when there is no figure
+    // worth showing.
+    //
+    // Recomputed on a timer rather than only when progress arrives, because the case that matters is
+    // precisely the one where progress *stops* arriving — a version keyed on the progress value
+    // alone would never re-evaluate during the stall it exists to detect.
+    var stalled by remember { mutableStateOf(false) }
+    LaunchedEffect(beatAtMillis) {
+        stalled = false
+        delay(STALL_AFTER_MILLIS)
+        stalled = true
+    }
 
     // A slow breath rather than a spinner. The mark is the brand; making it pulse says "working"
     // without putting a progress bar on a wait whose length nobody can predict.
@@ -202,8 +240,18 @@ fun SplashScreen(
                 )
             }
             Spacer(Modifier.height(BuroSpacing.Sm))
+            // The percentage is dropped while stalled.
+            //
+            // A number that has not changed for seconds is the thing that made the app look hung, so
+            // rather than keep printing it, the line carries the count and rate when there is one and
+            // nothing at all when there is not. The sweep above continues either way.
             Text(
-                text = "${(progress.coerceIn(0f, 1f) * 100).toInt()}%",
+                text =
+                    when {
+                        detail.isNotBlank() -> detail
+                        stalled -> ""
+                        else -> "${(progress.coerceIn(0f, 1f) * 100).toInt()}%"
+                    },
                 color = BuroColors.Primary,
                 style = MaterialTheme.typography.labelMedium,
             )
@@ -229,6 +277,15 @@ fun SplashScreen(
         }
     }
 }
+
+/**
+ * How long the bar may sit still before the screen stops claiming a percentage.
+ *
+ * The brief's rule: if progress has not moved for about this long, the bar must be animated rather
+ * than parked on a figure. Short enough that a stall is caught while the user is still looking, long
+ * enough that the ordinary gap between two steps does not flicker the display.
+ */
+private const val STALL_AFTER_MILLIS = 1_500L
 
 /** One explanatory note under the progress bar: a heading and a sentence, centred. */
 @Composable

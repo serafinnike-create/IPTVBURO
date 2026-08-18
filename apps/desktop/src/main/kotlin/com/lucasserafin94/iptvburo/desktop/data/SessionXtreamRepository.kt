@@ -179,6 +179,13 @@ class SessionXtreamRepository(
     fun loadCatalog(
         contentType: XtreamContentType,
         forceRefresh: Boolean = false,
+        /**
+         * Reports items as they are parsed, so the splash can move while this runs.
+         *
+         * Ignored on the disk-cache path below, which returns in milliseconds — there is nothing to
+         * report and a caller that saw progress events for it would show a bar flashing past.
+         */
+        onProgress: CatalogLoadListener? = null,
     ): XtreamSessionSummary {
         synchronized(lock) {
             catalogs[contentType]?.let { return summaryLocked() }
@@ -217,7 +224,7 @@ class SessionXtreamRepository(
                 }
             }
 
-            val loaded = loadCatalogItems(vault, contentType)
+            val loaded = loadCatalogItems(vault, contentType, onProgress)
             return synchronized(lock) {
                 checkGeneration(currentGeneration)
                 catalogs[contentType] = loaded
@@ -860,11 +867,27 @@ class SessionXtreamRepository(
     private fun loadCatalogItems(
         vault: CredentialVault,
         contentType: XtreamContentType,
+        onProgress: CatalogLoadListener? = null,
     ): CompactXtreamCatalog {
         val items = CompactXtreamCatalog(contentType)
         vault.use { credentials ->
-            client.streamCatalog(credentials, contentType) { item ->
-                items.add(item)
+            if (onProgress == null) {
+                client.streamCatalog(credentials, contentType) { item -> items.add(item) }
+            } else {
+                // Counted here rather than read off `items.size`, which is the same number but
+                // reached through a synchronized accessor on the hot path of a 41,698-item parse.
+                var seen = 0
+                client.streamCatalog(credentials, contentType) { item ->
+                    items.add(item)
+                    seen += 1
+                    // Throttled: an event per item costs more than the parse it describes.
+                    if (seen % CATALOG_PROGRESS_ITEM_INTERVAL == 0) {
+                        onProgress(CatalogLoadProgress(seen, System.currentTimeMillis()))
+                    }
+                }
+                // The tail, so the last partial batch is not silently dropped and the screen does
+                // not finish showing a count lower than what was actually loaded.
+                onProgress(CatalogLoadProgress(seen, System.currentTimeMillis()))
             }
         }
         return items
