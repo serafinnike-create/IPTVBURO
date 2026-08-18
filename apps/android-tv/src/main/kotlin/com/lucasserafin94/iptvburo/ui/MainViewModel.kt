@@ -93,6 +93,8 @@ import javax.inject.Inject
 import javax.inject.Provider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
@@ -109,6 +111,7 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -151,6 +154,26 @@ class MainViewModel @Inject constructor(
     private var importJob: Job? = null
     private var homeJob: Job? = null
     private var bootBackdropJob: Job? = null
+
+    /**
+     * Whether the profile remembered from last time may see the catalogue's own covers.
+     *
+     * Started in `init` so the preference read and the single profile row resolve while Room is
+     * still opening, rather than after the first source list arrives. On a real phone that opening
+     * is most of the wait — the covers themselves take about a fifth of a second — so asking these
+     * two questions in parallel with it is what lets the loading screen start on real artwork
+     * instead of swapping to it a few seconds in. Awaited rather than polled, so a slow database
+     * delays the covers and never the boot.
+     */
+    private val earlyBootProfileAllowed: Deferred<Boolean> =
+        viewModelScope.async(start = CoroutineStart.LAZY) {
+            val storedId = onboardingPreferences.activeProfileId.firstOrNull()
+            val stored =
+                storedId?.let { id ->
+                    runCatching { userLibraryRepository.getProfile(id) }.getOrNull()
+                }
+            mayLoadEarlyBootBackdrop(stored?.type)
+        }
     private var favoritesJob: Job? = null
     private var licenseJob: Job? = null
     private var subscriptionsJob: Job? = null
@@ -199,6 +222,9 @@ class MainViewModel @Inject constructor(
     private var nextChannelCursor: CatalogCursor? = null
 
     init {
+        // Runs alongside Room opening rather than after it, which is where most of a cold start
+        // goes. By the time the first source list arrives the answer is usually already in hand.
+        earlyBootProfileAllowed.start()
         observeOnboarding()
         observeProfiles()
         observeSources()
@@ -3407,8 +3433,21 @@ class MainViewModel @Inject constructor(
                             // A child's loading screen must never inherit covers selected for the
                             // previous adult profile. A regular profile fills this again from its
                             // own source as soon as the first movie and series pages are available.
+                            //
+                            // Arriving for the first time is not a profile change. On a cold start
+                            // this collector runs with no active profile yet, so comparing ids alone
+                            // treated the very first profile as a switch and cleared the covers the
+                            // early load had just put up — the wall dropped back to the bundled
+                            // images and then filled in again, which is the flicker this avoids.
+                            // A Kids profile still clears them, whenever it appears.
                             bootBackdropUrls =
-                                if (active?.id == it.activeProfile?.id && active?.isKids != true) {
+                                if (
+                                    keepBootBackdropForArrivingProfile(
+                                        currentActiveProfileId = it.activeProfile?.id,
+                                        arrivingProfileId = active?.id,
+                                        arrivingIsKids = active?.isKids == true,
+                                    )
+                                ) {
                                     it.bootBackdropUrls
                                 } else {
                                     emptyList()
@@ -4153,7 +4192,19 @@ class MainViewModel @Inject constructor(
                         sources.firstOrNull { source -> source.id == active?.sourceId }?.id
                             ?: sources.firstOrNull { it.type == SourceType.XTREAM }?.id
                             ?: sources.firstOrNull()?.id
-                    loadBootBackdrop(sourceId = sourceId, profile = active)
+                    if (active != null) {
+                        loadBootBackdrop(sourceId = sourceId, profile = active)
+                    } else {
+                        // Sources are observed from `init`, in parallel with the profile list, and
+                        // they usually arrive first. Waiting for the mapped profile before asking
+                        // for any artwork is what made the loading screen start on the four bundled
+                        // images and visibly swap to real covers the moment the profile resolved.
+                        //
+                        // The stored id plus a single row read answer "is this a child's profile?"
+                        // well before `observeProfiles` finishes, so the wall can start on the real
+                        // catalogue without ever guessing at that boundary.
+                        loadEarlyBootBackdrop(sourceId)
+                    }
                     loadHomeItems(sourceId)
                 }
         }
@@ -4175,26 +4226,7 @@ class MainViewModel @Inject constructor(
         bootBackdropJob =
             viewModelScope.launch {
                 try {
-                    val candidates =
-                        coroutineScope {
-                            val movies =
-                                async {
-                                    catalogRepository.loadChannelsPage(
-                                        sourceId = sourceId,
-                                        contentType = CatalogContentType.MOVIE,
-                                        limit = BOOT_BACKDROP_QUERY_LIMIT,
-                                    ).items
-                                }
-                            val series =
-                                async {
-                                    catalogRepository.loadChannelsPage(
-                                        sourceId = sourceId,
-                                        contentType = CatalogContentType.SERIES,
-                                        limit = BOOT_BACKDROP_QUERY_LIMIT,
-                                    ).items
-                                }
-                            movies.await() + series.await()
-                        }
+                    val candidates = loadBootBackdropCandidates(sourceId)
                     if (mutableState.value.activeProfile?.id == profile.id) {
                         mutableState.update { state ->
                             state.copy(
@@ -4211,6 +4243,70 @@ class MainViewModel @Inject constructor(
                 }
             }
     }
+
+    /**
+     * Fills the loading screen's wall before the profile list has been mapped.
+     *
+     * Waits on [earlyBootProfileAllowed], which has been resolving since `init` and answers the
+     * only question this decision needs: whether the person coming back is on a Kids profile. A
+     * child's loading screen keeps the neutral bundled artwork, so anything short of a confirmed
+     * non-Kids profile loads nothing at all — including the case where no profile has been chosen
+     * yet, where the picker is next and the covers would belong to nobody in particular.
+     *
+     * [loadBootBackdrop] still runs once `observeProfiles` settles and overwrites this with the
+     * selection made for the profile that actually became active.
+     */
+    private fun loadEarlyBootBackdrop(sourceId: String?) {
+        bootBackdropJob?.cancel()
+        if (sourceId == null) {
+            mutableState.update { it.copy(bootBackdropUrls = emptyList()) }
+            return
+        }
+        bootBackdropJob =
+            viewModelScope.launch {
+                try {
+                    if (!earlyBootProfileAllowed.await()) return@launch
+                    val candidates = loadBootBackdropCandidates(sourceId)
+                    // The profile list may have arrived while the covers were being read. Whoever it
+                    // made active owns the screen from that point on, and its own load is already on
+                    // the way, so this early guess must not overwrite the decision made for them.
+                    if (mutableState.value.activeProfile == null) {
+                        mutableState.update { state ->
+                            state.copy(
+                                bootBackdropUrls =
+                                    selectBootBackdropUrls(candidates.map(Channel::logoUri)),
+                            )
+                        }
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    logger.error(TAG, "Could not prepare loading-screen artwork", error)
+                }
+            }
+    }
+
+    /** The first page of films and series, read together, for the loading screen's wall. */
+    private suspend fun loadBootBackdropCandidates(sourceId: String): List<Channel> =
+        coroutineScope {
+            val movies =
+                async {
+                    catalogRepository.loadChannelsPage(
+                        sourceId = sourceId,
+                        contentType = CatalogContentType.MOVIE,
+                        limit = BOOT_BACKDROP_QUERY_LIMIT,
+                    ).items
+                }
+            val series =
+                async {
+                    catalogRepository.loadChannelsPage(
+                        sourceId = sourceId,
+                        contentType = CatalogContentType.SERIES,
+                        limit = BOOT_BACKDROP_QUERY_LIMIT,
+                    ).items
+                }
+            movies.await() + series.await()
+        }
 
     private fun loadHomeItems(sourceId: String?) {
         homeJob?.cancel()
@@ -4855,6 +4951,32 @@ private val WHITESPACE_RUN = Regex("\\s+")
 private val TITLE_KEY_BRACKETED = Regex("\\[[^]]{1,12}]")
 private val TITLE_KEY_DECORATION = Regex("\\b(4k|uhd|fhd|hd|sd|h\\.?265|hevc|multi|dual)\\b")
 private val TITLE_KEY_NON_ALPHANUMERIC = Regex("[^\\p{L}\\p{N}]+")
+
+/**
+ * Whether the loading screen may show real covers for the profile remembered from last time.
+ *
+ * Asked before the profile list has been mapped, so that the wall can start on the user's own
+ * catalogue rather than swapping to it once the profile resolves. The permissive answer requires
+ * positive proof of an adult profile: a Kids profile keeps the neutral bundled artwork, and so does
+ * a start with no remembered profile, where the picker comes next and the covers would be nobody's.
+ */
+internal fun mayLoadEarlyBootBackdrop(storedProfileType: ProfileType?): Boolean =
+    storedProfileType != null && storedProfileType != ProfileType.KIDS
+
+/**
+ * Whether covers already on the loading screen survive the profile list arriving.
+ *
+ * A cold start reaches this with no active profile yet, and the profile that arrives is not a
+ * change of profile — treating it as one cleared the covers the early load had just put up and made
+ * the wall fall back to the bundled images before filling in again. A Kids profile clears them
+ * whenever it appears, and so does an actual switch to a different profile.
+ */
+internal fun keepBootBackdropForArrivingProfile(
+    currentActiveProfileId: String?,
+    arrivingProfileId: String?,
+    arrivingIsKids: Boolean,
+): Boolean =
+    !arrivingIsKids && (currentActiveProfileId == null || currentActiveProfileId == arrivingProfileId)
 
 /** Real, non-empty, non-repeating covers used by the custom startup screen. */
 internal fun selectBootBackdropUrls(candidates: Iterable<String?>): List<String> =

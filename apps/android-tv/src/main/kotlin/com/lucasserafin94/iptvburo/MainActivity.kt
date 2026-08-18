@@ -78,6 +78,7 @@ import javax.inject.Inject
 import coil3.SingletonImageLoader
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
+import coil3.size.Size
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -228,7 +229,16 @@ private fun IptvBuroRoot(
                         async {
                             runCatching {
                                 loader.execute(
-                                    ImageRequest.Builder(platformContext).data(url).build(),
+                                    ImageRequest.Builder(platformContext)
+                                        .data(url)
+                                        // An explicit size, because this request has no view and
+                                        // no layout to measure itself against. Without one the
+                                        // request waits for a size that never arrives: it never
+                                        // completes and never fails, so `awaitAll` below hangs
+                                        // until the timeout and the wall's own covers queue behind
+                                        // it. Roughly the poster size the wall draws at.
+                                        .size(BOOT_POSTER_PIXEL_WIDTH, BOOT_POSTER_PIXEL_HEIGHT)
+                                        .build(),
                                 )
                             }
                         }
@@ -595,3 +605,8 @@ private const val BOOT_POSTER_SETTLE_MILLIS = 220L
 
 /** How many of the first screen's images are waited for. The hero and the first row, in practice. */
 private const val BOOT_POSTER_PREFETCH_COUNT = 6
+
+/** The size the loading screen's covers are decoded at; see the prefetch above. */
+private const val BOOT_POSTER_PIXEL_WIDTH = 232
+
+private const val BOOT_POSTER_PIXEL_HEIGHT = 348
