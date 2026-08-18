@@ -111,6 +111,19 @@ O alvo de 16ms por frame ainda não é atingido em todos os frames, mas a tela d
 slideshow: a mediana está dentro ou perto do orçamento e a proporção de frames travados caiu
 por um fator de seis.
 
+Medido de novo depois do commit `6b0d751`, que tirou duas compilações de `Regex` de dentro de
+`isAllowedForKids` — chamada por item na paginação do catálogo, portanto também durante o
+boot. As duas correções se somam:
+
+```text
+run1:  270 frames,  8 travados (2,96%),  mediana 17ms
+run2:  175 frames, 24 travados (13,7%),  mediana 25ms
+```
+
+Uma das execuções ficou praticamente dentro do orçamento de 60 fps. A variação entre execuções
+é real — depende do que o Android está fazendo em paralelo no cold start — então meça mais de
+uma vez antes de concluir qualquer coisa.
+
 ### Verificado também em geometria de televisão
 
 O mesmo módulo roda em telefone e em TV, então a parede foi medida nas duas. Sem emulador de
