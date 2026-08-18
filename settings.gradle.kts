@@ -32,5 +32,6 @@ include(
     ":packages:stalker-client",
     ":packages:metadata-client",
     ":packages:media-source-spi",
+    ":packages:webdav-client",
     ":packages:xtream-client",
 )

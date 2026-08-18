@@ -2,6 +2,47 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [3.0.1] - 2026-08-18 (Windows e Android)
+
+As duas aplicações passam a compartilhar a numeração. O Android continua em
+prévia — o APK é de depuração e não é uma versão de loja.
+
+### Windows
+
+#### Corrigido
+
+- **O filtro por serviço agora funciona numa lista que não nomeia serviços.**
+  O seletor lia os nomes das categorias, e uma lista que arquiva filmes como
+  "Filmes | Ação" não lhe dava nada — medido na lista do relator, todas as 31
+  categorias de filmes eram gêneros, contra 6 serviços em Ao vivo. A versão
+  anterior apenas explicava o problema em vez de resolvê-lo. Agora a pergunta é
+  feita à TMDb, e ao contrário: cada serviço é perguntado sobre o que **ele**
+  carrega, e esses títulos são casados com a biblioteca por nome normalizado
+  mais ano. A contagem ao lado de cada serviço mostra quantos títulos casaram,
+  para que a cobertura fique visível em vez de subentendida.
+- **Voltar de um título aberto em Descobrir devolvia ao catálogo.** Abrir um
+  título sempre leva ao catálogo, porque é a única tela que sabe carregar a
+  ficha; a rota agora lembra de onde veio.
+- **Os padrões de segurança do perfil Kids eram compilados a cada título.**
+  `isAllowedForKids` roda para o título e para cada categoria de cada linha, e a
+  paginação a chama para dezenas de milhares de itens — uma virada de página
+  compilava os mesmos dois padrões dezenas de milhares de vezes.
+
+#### Melhorado
+
+- **A barra de carregamento se move enquanto o catálogo baixa.** Antes ela
+  anunciava três marcos fixos, e o salto do primeiro para o segundo cobria todo
+  o download — em uma lista real, dezenas de segundos parada em 80%, que lê como
+  travamento. Agora a contagem e a velocidade aparecem, e se o progresso parar
+  por um instante a barra deixa de afirmar uma porcentagem e passa a uma
+  animação, que é honesto sobre não saber em vez de mentir sobre estar preso.
+
+### Android
+
+- **A tela de carregamento mostra as capas do próprio catálogo** em vez de um
+  fundo genérico, e informa a velocidade de chegada da lista.
+- **A tela de carregamento deixou de recompor sessenta vezes por segundo.**
+
 ## [3.0.0] - 2026-08-18 (Windows)
 
 Primeira versão do Windows publicada sem o rótulo de prévia. O que mudou desde

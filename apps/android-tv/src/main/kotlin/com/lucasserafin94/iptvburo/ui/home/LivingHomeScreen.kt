@@ -116,40 +116,86 @@ fun LivingHomeScreen(
         val metrics = HomeLayoutMetrics.resolve(maxWidth, maxHeight)
         // Resolved here, where there are resources, and handed to the catalogue — which is a pure
         // object and has none. Without this the rails stayed Portuguese in every language.
+        //
+        // Every string is read first and the object built inside `remember`, because a
+        // `stringResource` call is itself composable and cannot run inside one. That indirection is
+        // what makes `labels` stable: `HomeLabels` is a data class but carries a lambda, so a fresh
+        // instance never compares equal to the last, and an unstable `labels` would defeat the memo
+        // below and rebuild the whole home screen on every pass.
+        val continueWatchingLabel = stringResource(R.string.home_rail_continue)
+        val continueBadgeLabel = stringResource(R.string.home_badge_continue)
+        val remindersLabel = stringResource(R.string.home_rail_reminders)
+        val reminderBadgeLabel = stringResource(R.string.home_badge_reminder)
+        val newClassicsLabel = stringResource(R.string.home_rail_new_classics)
+        val classicBadgeLabel = stringResource(R.string.home_badge_classic)
+        val recentlyAddedLabel = stringResource(R.string.home_rail_recently_added)
+        val newBadgeLabel = stringResource(R.string.home_badge_new)
+        val topRatedLabel = stringResource(R.string.home_rail_top_rated)
+        val topBadgeLabel = stringResource(R.string.home_badge_top)
+        val moviesLabel = stringResource(R.string.home_rail_movies)
+        val movieBadgeLabel = stringResource(R.string.home_badge_movie)
+        val seriesLabel = stringResource(R.string.home_rail_series)
+        val seriesBadgeLabel = stringResource(R.string.home_badge_series)
+        val heroBadgeLabel = stringResource(R.string.home_badge_hero)
         val labels =
-            HomeLabels(
-                continueWatching = stringResource(R.string.home_rail_continue),
-                continueBadge = stringResource(R.string.home_badge_continue),
-                reminders = stringResource(R.string.home_rail_reminders),
-                reminderBadge = stringResource(R.string.home_badge_reminder),
-                newClassics = stringResource(R.string.home_rail_new_classics),
-                classicBadge = stringResource(R.string.home_badge_classic),
-                recentlyAdded = stringResource(R.string.home_rail_recently_added),
-                newBadge = stringResource(R.string.home_badge_new),
-                topRated = stringResource(R.string.home_rail_top_rated),
-                topBadge = stringResource(R.string.home_badge_top),
-                movies = stringResource(R.string.home_rail_movies),
-                movieBadge = stringResource(R.string.home_badge_movie),
-                series = stringResource(R.string.home_rail_series),
-                seriesBadge = stringResource(R.string.home_badge_series),
-                heroBadge = stringResource(R.string.home_badge_hero),
-                releases = { year -> releasesLabel.format(year) },
-            )
+            remember(continueWatchingLabel, releasesLabel) {
+                HomeLabels(
+                    continueWatching = continueWatchingLabel,
+                    continueBadge = continueBadgeLabel,
+                    reminders = remindersLabel,
+                    reminderBadge = reminderBadgeLabel,
+                    newClassics = newClassicsLabel,
+                    classicBadge = classicBadgeLabel,
+                    recentlyAdded = recentlyAddedLabel,
+                    newBadge = newBadgeLabel,
+                    topRated = topRatedLabel,
+                    topBadge = topBadgeLabel,
+                    movies = moviesLabel,
+                    movieBadge = movieBadgeLabel,
+                    series = seriesLabel,
+                    seriesBadge = seriesBadgeLabel,
+                    heroBadge = heroBadgeLabel,
+                    releases = { year -> releasesLabel.format(year) },
+                )
+            }
         when (uiState) {
             LivingHomeUiState.Ready -> {
+                // Built once per change of input, not once per recomposition.
+                //
+                // `section` assembles the whole home screen — every rail, the hero rotation, the
+                // seasonal picks, a sort over the catalogue — and it was being rebuilt on every
+                // recomposition, which on a screen whose whole job is to scroll means rebuilding
+                // it continuously while the user drags.
+                //
+                // Keyed on everything it reads, so a new reminder, a loaded shelf or a change of
+                // language still refreshes it.
+                val hasOwnContent = catalogItems.isNotEmpty() || continueWatching.isNotEmpty()
                 val section =
-                    if (catalogItems.isEmpty() && continueWatching.isEmpty()) {
+                    if (!hasOwnContent) {
+                        // The demonstration home is itself composable — it reads drawables — so it
+                        // cannot be memoised here. It is also tiny and only shown before a source
+                        // has been added, so there is nothing to gain.
                         DemoHomeCatalog.section(sources)
                     } else {
-                        RealHomeCatalog.section(
-                            sources = sources,
-                            catalogItems = catalogItems,
-                            continueWatching = continueWatching,
-                            reminders = reminders,
-                            streamingShelves = streamingShelves,
-                            synopses = synopses,
-                            labels = labels,
-                        )
+                        remember(
+                            sources,
+                            catalogItems,
+                            continueWatching,
+                            reminders,
+                            streamingShelves,
+                            synopses,
+                            labels,
+                        ) {
+                            RealHomeCatalog.section(
+                                sources = sources,
+                                catalogItems = catalogItems,
+                                continueWatching = continueWatching,
+                                reminders = reminders,
+                                streamingShelves = streamingShelves,
+                                synopses = synopses,
+                                labels = labels,
+                            )
+                        }
                     }
                 val resolvedInitialFocusedItemId =
                     section.resolveInitialFocusId(initialFocusedItemId)

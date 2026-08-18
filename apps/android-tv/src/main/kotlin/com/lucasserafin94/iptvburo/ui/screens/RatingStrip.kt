@@ -13,6 +13,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -21,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -41,6 +46,10 @@ import com.lucasserafin94.iptvburo.ui.theme.BuroGold
 import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
 import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
 import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
+import androidx.compose.ui.graphics.Path
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.math.roundToInt
 
 /**
@@ -86,12 +95,19 @@ fun RatingStrip(
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(14.dp))
-        // Scrolls sideways rather than wrapping: with a score, an audience, three critics and a
-        // platform this is six meters, which no phone fits in one row. Wrapping would push the play
-        // button off the first screen, and this is a strip somebody glances at on the way to it.
+        // Everything on screen at once, without scrolling.
+        //
+        // This used to scroll sideways, which hid whichever meters fell off the right edge — and on
+        // a well-known film that is the Tomatometer and the Metascore, the two somebody is most
+        // likely looking for. Six meters do fit a phone once each is given an equal share of the
+        // width and sized to it; a strip that has to be dragged to be read is a strip that mostly
+        // is not read.
+        //
+        // `SpaceBetween` rather than a fixed gap: the meters then sit evenly however many there
+        // are, so a title with no critics' scores does not leave a gap on the right.
         Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(if (compact) 22.dp else 30.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Top,
         ) {
             rating?.let { score ->
@@ -123,7 +139,7 @@ fun RatingStrip(
                     percent = score,
                     caption = stringResource(R.string.details_tomatometer),
                     compact = compact,
-                    icon = { size -> ScoreDial(percent = score, size = size) },
+                    icon = { size -> CriticSealGlyph(percent = score, size = size) },
                 )
             }
             critics?.imdbRating?.let { score ->
@@ -131,10 +147,7 @@ fun RatingStrip(
                     value = "%.1f".format(score),
                     caption = stringResource(R.string.details_imdb),
                     compact = compact,
-                    icon = { size ->
-                        // IMDb's own scale is out of ten, so the dial is filled from that.
-                        ScoreDial(percent = (score * 10).roundToInt(), size = size)
-                    },
+                    icon = { size -> StarRatingGlyph(size = size) },
                 )
             }
             critics?.metascore?.let { score ->
@@ -142,7 +155,7 @@ fun RatingStrip(
                     percent = score,
                     caption = stringResource(R.string.details_metascore),
                     compact = compact,
-                    icon = { size -> ScoreDial(percent = score, size = size) },
+                    icon = { size -> MetascoreGlyph(percent = score, size = size) },
                 )
             }
             provider?.let { service ->
@@ -167,28 +180,39 @@ fun RatingStrip(
  * commercial APIs this app has no access to besides, so the figures would be invented.
  */
 @Composable
-private fun ScoreMeter(
+private fun RowScope.ScoreMeter(
     caption: String,
     compact: Boolean,
     icon: @Composable (Dp) -> Unit,
     value: String? = null,
     percent: Int? = null,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        icon(if (compact) 40.dp else 46.dp)
-        Spacer(Modifier.height(8.dp))
+    // An equal share of the row, so however many meters there are they divide the width between
+    // them rather than the last ones falling off the edge.
+    Column(
+        modifier = Modifier.weight(1f),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        icon(if (compact) 32.dp else 40.dp)
+        Spacer(Modifier.height(6.dp))
         Text(
             text = percent?.let { "$it%" } ?: value.orEmpty(),
             color = BuroTextPrimary,
-            fontSize = if (compact) 20.sp else 23.sp,
+            fontSize = if (compact) 16.sp else 20.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
+            // Scaled down rather than truncated: an ellipsis inside a figure would make the number
+            // itself unreadable, and these values are short enough to stay legible when squeezed.
+            softWrap = false,
+            style = LocalTextStyle.current.copy(lineHeight = if (compact) 18.sp else 22.sp),
         )
         Text(
             text = caption,
             color = BuroTextSecondary,
-            fontSize = if (compact) 12.sp else 13.sp,
+            fontSize = if (compact) 10.sp else 12.sp,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
         )
     }
 }
@@ -318,3 +342,109 @@ private const val WELL_LIKED = 70
 
 /** Above this it is mixed rather than poor. */
 private const val MIXED = 50
+
+/**
+ * The critics' seal: a ring with a notched edge, like a stamp of approval.
+ *
+ * This app's own mark, not anyone else's. The tomato and the popcorn tub are registered marks of
+ * Fandango and the yellow square is Amazon's, so drawing look-alikes would be using their brands
+ * without licence — but the *figures* are theirs and real, republished through OMDb. A distinct
+ * shape per meter is what stops four different measurements reading as one repeated four times.
+ */
+@Composable
+private fun CriticSealGlyph(
+    percent: Int,
+    size: Dp,
+) {
+    val colour =
+        when {
+            percent >= WELL_LIKED -> BuroGold
+            percent >= MIXED -> Color(0xFFC9A227)
+            else -> Color(0xFF8C8C8C)
+        }
+    Canvas(modifier = Modifier.size(size)) {
+        val unit = this.size.minDimension
+        val centre = Offset(unit / 2, unit / 2)
+        // The notched rim: short spokes around a filled disc, which reads as a seal at any size.
+        val spokes = 12
+        repeat(spokes) { index ->
+            val angle = (index * (360f / spokes)) * (PI / 180f).toFloat()
+            val inner = unit * 0.34f
+            val outer = unit * 0.46f
+            drawLine(
+                color = colour,
+                start = Offset(centre.x + cos(angle) * inner, centre.y + sin(angle) * inner),
+                end = Offset(centre.x + cos(angle) * outer, centre.y + sin(angle) * outer),
+                strokeWidth = unit * 0.07f,
+                cap = StrokeCap.Round,
+            )
+        }
+        drawCircle(color = colour.copy(alpha = 0.22f), radius = unit * 0.3f, center = centre)
+        drawCircle(
+            color = colour,
+            radius = unit * 0.3f,
+            center = centre,
+            style = Stroke(width = unit * 0.08f),
+        )
+    }
+}
+
+/** A star, for the score IMDb states out of ten — the shape everyone already reads as a rating. */
+@Composable
+private fun StarRatingGlyph(size: Dp) {
+    val colour = BuroGold
+    Canvas(modifier = Modifier.size(size)) {
+        val unit = this.size.minDimension
+        val centre = Offset(unit / 2, unit / 2)
+        val outer = unit * 0.44f
+        val inner = outer * 0.42f
+        val path = Path()
+        repeat(10) { index ->
+            val radius = if (index % 2 == 0) outer else inner
+            // Started at the top, so the star sits upright rather than on a point.
+            val angle = (-90f + index * 36f) * (PI / 180f).toFloat()
+            val x = centre.x + cos(angle) * radius
+            val y = centre.y + sin(angle) * radius
+            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        path.close()
+        drawPath(path = path, color = colour)
+    }
+}
+
+/**
+ * A stack of bars, for the Metascore — a weighted aggregate rather than a single verdict.
+ *
+ * Three bars whose heights follow the figure: it reads as "assembled from several opinions", which
+ * is exactly what a Metascore is, and it cannot be mistaken for the seal or the star beside it.
+ */
+@Composable
+private fun MetascoreGlyph(
+    percent: Int,
+    size: Dp,
+) {
+    val colour =
+        when {
+            percent >= WELL_LIKED -> BuroGold
+            percent >= MIXED -> Color(0xFFC9A227)
+            else -> Color(0xFF8C8C8C)
+        }
+    Canvas(modifier = Modifier.size(size)) {
+        val unit = this.size.minDimension
+        val barWidth = unit * 0.18f
+        val gap = unit * 0.09f
+        val totalWidth = barWidth * 3 + gap * 2
+        val left = (unit - totalWidth) / 2
+        val bottom = unit * 0.76f
+        // Middle tallest, so the shape is legible even when the score is low and the bars short.
+        listOf(0.46f, 0.72f, 0.58f).forEachIndexed { index, factor ->
+            val height = unit * factor * (percent.coerceIn(0, 100) / 100f).coerceAtLeast(0.25f)
+            drawRoundRect(
+                color = if (index == 1) colour else colour.copy(alpha = 0.6f),
+                topLeft = Offset(left + index * (barWidth + gap), bottom - height),
+                size = Size(barWidth, height),
+                cornerRadius = CornerRadius(barWidth / 2, barWidth / 2),
+            )
+        }
+    }
+}
