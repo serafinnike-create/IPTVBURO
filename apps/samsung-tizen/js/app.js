@@ -2354,7 +2354,10 @@ var BuroApp = (function () {
            categoria, então filtrar pelos dois só poderia esvaziar a tela. */
         if (property === 'service' && scope.service) { scope.genre = null; }
         if (property === 'genre' && scope.genre) { scope.service = null; }
-        focusIndex = 0;
+        /* Sem `focusIndex = 0`: `refreshFocus` reencontra o mesmo chip pelo
+           data-action, então ciclar o valor deixa o foco onde estava. Zerar o
+           índice mandava o foco para o primeiro chip a cada ENTER, e escolher o
+           terceiro gênero exigia voltar até ele toda vez. */
         render();
     }
 
@@ -2364,6 +2367,8 @@ var BuroApp = (function () {
         var scope = catalogueScope(contentType);
         scope.genre = null;
         scope.service = null;
+        /* O chip "Limpar filtros" some depois de limpar, então aqui o foco não
+           tem para onde voltar: cai no primeiro chip, que é o de gênero. */
         focusIndex = 0;
         render();
     }
@@ -3477,7 +3482,8 @@ var BuroApp = (function () {
 
     function settingCard(key, property) {
         return '<button class="setting-card focusable ' + (state.preferences[property] ? 'on' : '') + '" data-action="toggle-setting" data-property="' +
-            property + '"><div><h3>' + t(key) + '</h3><p>' + (state.preferences[property] ? 'ON' : 'OFF') + '</p></div><span class="toggle"><span></span></span></button>';
+            property + '"><div><h3>' + t(key) + '</h3><p>' + t(state.preferences[property] ? 'settingOn' : 'settingOff') +
+            '</p></div><span class="toggle"><span></span></span></button>';
     }
 
     function applicationVersion() {
@@ -3489,6 +3495,44 @@ var BuroApp = (function () {
             }
         } catch (ignored) {}
         return APP_VERSION_FALLBACK;
+    }
+
+    function subtitleChoice(action, value, labelKey, selected, colour) {
+        var sample = colour ?
+            '<span class="subtitle-colour-sample colour-' + attr(value) + '" aria-hidden="true"></span>' :
+            '<span class="subtitle-size-sample size-' + attr(value) + '" aria-hidden="true"></span>';
+        return '<button class="subtitle-choice focusable ' + (selected ? 'selected' : '') +
+            '" data-action="' + attr(action) + '" data-value="' + attr(value) + '">' + sample +
+            '<strong>' + escapeHtml(t(labelKey)) + '</strong></button>';
+    }
+
+    /*
+      Android e Windows deixam as opções de legenda visíveis ao mesmo tempo.
+      Na TV, esconder a próxima opção atrás de ENTER tornava "Muito grande" oito
+      movimentos distante (voltar ao chip + ciclar). As duas linhas cabem em
+      1920 px, cada escolha é um destino D-pad e a cor é mostrada de verdade.
+    */
+    function subtitleSettingsPanel() {
+        var size = state.preferences.subtitleSize;
+        var colour = state.preferences.subtitleColour;
+        var sizes = [
+            ['small', 'subtitleSizeSmall'], ['medium', 'subtitleSizeMedium'],
+            ['large', 'subtitleSizeLarge'], ['huge', 'subtitleSizeHuge']
+        ];
+        var colours = [
+            ['white', 'subtitleColourWhite'], ['yellow', 'subtitleColourYellow'],
+            ['grey', 'subtitleColourGrey'], ['green', 'subtitleColourGreen'],
+            ['cyan', 'subtitleColourCyan']
+        ];
+        return '<section class="subtitle-settings-card"><h3>' + t('subtitleSettings') + '</h3><p>' +
+            t('subtitleHint') + '</p><h4>' + t('subtitleSize') + '</h4><div class="subtitle-choice-row">' +
+            sizes.map(function (option) {
+                return subtitleChoice('subtitle-size-select', option[0], option[1], size === option[0], false);
+            }).join('') + '</div><h4>' + t('subtitleColour') + '</h4><div class="subtitle-choice-row">' +
+            colours.map(function (option) {
+                return subtitleChoice('subtitle-colour-select', option[0], option[1], colour === option[0], true);
+            }).join('') + '</div><div class="subtitle-background-row">' +
+            settingCard('subtitleBackground', 'subtitleBackground') + '</div></section>';
     }
 
     /*
@@ -3599,12 +3643,8 @@ var BuroApp = (function () {
                 (selected ? '<em>' + t('languageCurrent') + '</em>' : '') + '</button>';
         }).join('');
         if (BuroPlayer.styledSubtitlesAvailable()) {
-            subtitleSettings = '<div class="section-heading"><h2>' + t('subtitleSettings') + '</h2></div><div class="settings-grid">' +
-                '<button class="setting-card focusable" data-action="subtitle-size"><div><h3>' + t('subtitleSize') + '</h3><p>' +
-                escapeHtml(state.preferences.subtitleSize) + '</p></div><strong>Aa</strong></button>' +
-                '<button class="setting-card focusable" data-action="subtitle-colour"><div><h3>' + t('subtitleColour') + '</h3><p>' +
-                escapeHtml(state.preferences.subtitleColour) + '</p></div><strong>●</strong></button>' +
-                settingCard('subtitleBackground', 'subtitleBackground') + '</div>';
+            subtitleSettings = '<div class="section-heading"><h2>' + t('subtitleSettings') + '</h2></div>' +
+                subtitleSettingsPanel();
         }
         shell('<section class="settings-about-card"><div><h2>IPTV BURO</h2><p>' +
             escapeHtml(t('settingsVersion').replace('{version}', version)) + '</p></div><p>' +
@@ -3622,7 +3662,7 @@ var BuroApp = (function () {
             '</h3><p>' + (state.preferences.parentalPin ? t('configured') : t('notConfigured')) + '</p></div><strong>PIN</strong></button>' +
             '<button class="setting-card focusable ' + (state.preferences.parentalPin && state.preferences.lockAdultCategories ? 'on' : '') +
             '" data-action="toggle-adult-lock"><div><h3>' + t('lockAdult') + '</h3><p>' +
-            (state.preferences.parentalPin ? (state.preferences.lockAdultCategories ? 'ON' : 'OFF') : t('pinRequired')) +
+            (state.preferences.parentalPin ? t(state.preferences.lockAdultCategories ? 'settingOn' : 'settingOff') : t('pinRequired')) +
             '</p></div><span class="toggle"><span></span></span></button>' +
             '<button class="setting-card focusable" data-action="category-settings"><div><h3>' + t('categoryControl') +
             '</h3><p>' + manageableCategories.length + '</p></div><strong>›</strong></button></div>' +
@@ -4550,7 +4590,7 @@ var BuroApp = (function () {
     }
 
     function focusIdentity(element) {
-        var names = ['data-action', 'data-id', 'data-section', 'data-season', 'data-property',
+        var names = ['data-action', 'data-id', 'data-section', 'data-season', 'data-property', 'data-value',
             'data-language', 'data-type', 'data-avatar', 'data-name', 'data-scope', 'data-kind',
             'data-region', 'data-key', 'data-series', 'data-title', 'data-year'];
         if (!element) { return ''; }
@@ -4650,7 +4690,7 @@ var BuroApp = (function () {
         var pressedActions = {
             'profile-avatar': true, 'profile-source': true, 'library-filter': true,
             'download-filter': true, 'download-compact': true, favorite: true,
-            reminder: true,
+            reminder: true, 'subtitle-size-select': true, 'subtitle-colour-select': true,
             language: true, 'subscription-filter': true, 'subscription-region': true
         };
         if (!root || !root.querySelectorAll) { return; }
@@ -6825,9 +6865,9 @@ var BuroApp = (function () {
         }, function (error) { pinMessage(friendlyError(error), true); });
     }
 
-    function cyclePreference(property, values) {
-        var current = values.indexOf(state.preferences[property]);
-        state.preferences[property] = values[(current + 1) % values.length];
+    function selectPreference(property, value, values) {
+        if (values.indexOf(value) < 0) { return; }
+        state.preferences[property] = value;
         savePreferences(); render();
     }
 
@@ -7070,8 +7110,12 @@ var BuroApp = (function () {
                 state.preferences.lockedCategoryIds = BuroGuard.toggle(state.preferences.lockedCategoryIds, id);
                 state.unlockedCategoryIds[id] = false; savePreferences(); render();
             }
-        } else if (action === 'subtitle-size') { cyclePreference('subtitleSize', ['small', 'medium', 'large', 'huge']); }
-        else if (action === 'subtitle-colour') { cyclePreference('subtitleColour', ['white', 'yellow', 'grey', 'green', 'cyan']); }
+        } else if (action === 'subtitle-size-select') {
+            selectPreference('subtitleSize', element.getAttribute('data-value'), ['small', 'medium', 'large', 'huge']);
+        }
+        else if (action === 'subtitle-colour-select') {
+            selectPreference('subtitleColour', element.getAttribute('data-value'), ['white', 'yellow', 'grey', 'green', 'cyan']);
+        }
         else if (action === 'language') {
             state.preferences.language = element.getAttribute('data-language'); savePreferences(); render();
         } else if (action === 'retry') { initializeData(); }

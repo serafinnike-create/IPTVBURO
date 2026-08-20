@@ -84,6 +84,7 @@ check('movimento reduzido também desliga a entrada da carta de Descobrir',
 check('controles compactos continuam acima do alvo mínimo de 44 px',
     /\.cast-chip\s*\{[^}]*min-height:\s*46px/s.test(css) &&
     /\.filter-chip\s*\{[^}]*min-height:\s*54px/s.test(css) &&
+    /\.subtitle-choice\s*\{[^}]*height:\s*70px/s.test(css) &&
     /\.episode-download-action\s*\{[^}]*min-height:\s*46px/s.test(css) &&
     /\.discover-action\s*\{[^}]*min-width:\s*176px;\s*min-height:\s*70px/s.test(css) &&
     /\.button\s*\{[^}]*min-height:\s*64px/s.test(css));

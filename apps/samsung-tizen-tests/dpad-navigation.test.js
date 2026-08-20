@@ -378,6 +378,9 @@ async function run() {
             'discoverAgain', 'discoverCounter', 'discoverLoading', 'discoverNeedsCatalogue',
             'settingsVersion', 'settingsLegal', 'settingsLanguageHint', 'languageCurrent',
             'activeProfile', 'chooseProfile',
+            'settingOn', 'settingOff', 'subtitleHint', 'subtitleSizeSmall', 'subtitleSizeMedium', 'subtitleSizeLarge',
+            'subtitleSizeHuge', 'subtitleColourWhite', 'subtitleColourYellow',
+            'subtitleColourGrey', 'subtitleColourGreen', 'subtitleColourCyan',
             'subscriptions', 'subscriptionsBrowse', 'subscriptionsMovies', 'subscriptionsSeries',
             'subscriptionsThisWeek', 'subscriptionsUpcoming', 'subscriptionsRegion',
             'subscriptionsLoading', 'subscriptionsServices', 'subscriptionsUnavailable',
@@ -775,6 +778,7 @@ async function run() {
         getState: function () { return 'READY'; },
         open: function (url) { offlineOpenedUrl = url; }, setListener: function () {},
         setDisplayRect: function () {}, setDisplayMethod: function () {},
+        setSilentSubtitle: function () {},
         prepareAsync: function (done) { done(); }, play: function () {}, stop: function () {}, close: function () {},
         seekTo: function (position, done) { offlineInitialSeek = position; done(); },
         getDuration: function () { return 120000; }
@@ -835,6 +839,53 @@ async function run() {
     check('preferências booleanas expõem papel switch e estado atual',
         window.document.querySelector('[data-action="toggle-setting"]').getAttribute('role') === 'switch' &&
         /^(true|false)$/.test(window.document.querySelector('[data-action="toggle-setting"]').getAttribute('aria-checked')));
+    (function () {
+        var expectedSubtitleLabels = {
+            'pt-BR': ['Pequeno', 'Médio', 'Grande', 'Muito grande', 'Branco', 'Amarelo', 'Cinza', 'Verde', 'Ciano'],
+            en: ['Small', 'Medium', 'Large', 'Very large', 'White', 'Yellow', 'Grey', 'Green', 'Cyan'],
+            de: ['Klein', 'Mittel', 'Groß', 'Sehr groß', 'Weiß', 'Gelb', 'Grau', 'Grün', 'Cyan'],
+            it: ['Piccolo', 'Medio', 'Grande', 'Molto grande', 'Bianco', 'Giallo', 'Grigio', 'Verde', 'Ciano'],
+            es: ['Pequeño', 'Mediano', 'Grande', 'Muy grande', 'Blanco', 'Amarillo', 'Gris', 'Verde', 'Cian']
+        };
+        var subtitleKeys = [
+            'subtitleSizeSmall', 'subtitleSizeMedium', 'subtitleSizeLarge', 'subtitleSizeHuge',
+            'subtitleColourWhite', 'subtitleColourYellow', 'subtitleColourGrey',
+            'subtitleColourGreen', 'subtitleColourCyan'
+        ];
+        var previousLanguage = window.BuroI18n.language();
+        var translated = Object.keys(expectedSubtitleLabels).every(function (language) {
+            window.BuroI18n.setLanguage(language);
+            return subtitleKeys.map(function (key) { return window.BuroI18n.t(key); }).join('|') ===
+                expectedSubtitleLabels[language].join('|');
+        });
+        window.BuroI18n.setLanguage(previousLanguage);
+        check('as nove opções de legenda repetem os rótulos Android nos cinco idiomas', translated);
+    }());
+    var subtitleSizeChoices = Array.prototype.slice.call(
+        window.document.querySelectorAll('[data-action="subtitle-size-select"]'));
+    var subtitleColourChoices = Array.prototype.slice.call(
+        window.document.querySelectorAll('[data-action="subtitle-colour-select"]'));
+    check('Configurações mostra as quatro dimensões e cinco cores de uma vez como Android',
+        subtitleSizeChoices.length === 4 && subtitleColourChoices.length === 5 &&
+        subtitleSizeChoices.map(function (row) { return row.textContent.trim(); }).join('|') ===
+            'Pequeno|Médio|Grande|Muito grande' &&
+        subtitleColourChoices.map(function (row) { return row.textContent.trim(); }).join('|') ===
+            'Branco|Amarelo|Cinza|Verde|Ciano');
+    check('a aparência atual da legenda possui seleção visual e semântica única',
+        window.document.querySelectorAll('[data-action="subtitle-size-select"][aria-pressed="true"]').length === 1 &&
+        window.document.querySelector('[data-action="subtitle-size-select"][aria-pressed="true"]').getAttribute('data-value') === 'medium' &&
+        window.document.querySelectorAll('[data-action="subtitle-colour-select"][aria-pressed="true"]').length === 1 &&
+        window.document.querySelector('[data-action="subtitle-colour-select"][aria-pressed="true"]').getAttribute('data-value') === 'white' &&
+        window.document.querySelector('[data-action="toggle-setting"][data-property="subtitleBackground"] p').textContent === 'Ligado');
+    window.BuroApp._activate(window.document.querySelector('[data-action="subtitle-size-select"][data-value="huge"]'));
+    window.BuroApp._activate(window.document.querySelector('[data-action="subtitle-colour-select"][data-value="cyan"]'));
+    check('escolhas diretas atualizam a preferência e continuam selecionadas após render',
+        window.BuroApp.state.preferences.subtitleSize === 'huge' &&
+        window.BuroApp.state.preferences.subtitleColour === 'cyan' &&
+        window.document.querySelector('[data-action="subtitle-size-select"][data-value="huge"]').getAttribute('aria-pressed') === 'true' &&
+        window.document.querySelector('[data-action="subtitle-colour-select"][data-value="cyan"]').getAttribute('aria-pressed') === 'true' &&
+        (window.localStorage.getItem('iptvburo.preferences.v1') || '').indexOf('"subtitleSize":"huge"') >= 0 &&
+        (window.localStorage.getItem('iptvburo.preferences.v1') || '').indexOf('"subtitleColour":"cyan"') >= 0);
     check('Configuracoes oferece o guia OMDb presente no Android e Windows',
         Boolean(window.document.querySelector('[data-action="critics-settings"]')));
     window.BuroApp._activate(window.document.querySelector('[data-action="critics-settings"]'));
@@ -1741,6 +1792,35 @@ async function run() {
         window.document.querySelector('.live-now strong').textContent === 'Programa atual' &&
         parseFloat(window.document.querySelector('.epg-progress i').style.width) >= 49 &&
         parseFloat(window.document.querySelector('.epg-progress i').style.width) <= 51);
+
+    process.stdout.write('Foco dos seletores de catálogo\n');
+    var scopeFixtureIds = ['cat-scope-action', 'cat-scope-drama', 'cat-scope-netflix'];
+    window.BuroApp.state.categories.push(
+        { id: scopeFixtureIds[0], sourceId: 'source-home', contentType: 'MOVIE', name: 'Filmes | Ação' },
+        { id: scopeFixtureIds[1], sourceId: 'source-home', contentType: 'MOVIE', name: 'Filmes | Drama' },
+        { id: scopeFixtureIds[2], sourceId: 'source-home', contentType: 'MOVIE', name: 'Filmes | Netflix' }
+    );
+    window.BuroApp.state.section = 'MOVIES';
+    window.BuroApp.state.screenData = null;
+    window.BuroApp.render();
+    var scopeGenreChip = window.document.querySelector('[data-action="catalogue-scope-genre"]');
+    var scopeFocusables = Array.prototype.slice.call(window.document.querySelectorAll('.focusable:not([disabled])'));
+    var scopeFocusedIndex = scopeFocusables.indexOf(window.document.querySelector('.focusable.focused'));
+    var scopeGenreIndex = scopeFocusables.indexOf(scopeGenreChip);
+    while (scopeFocusedIndex < scopeGenreIndex) { press(window, 40); scopeFocusedIndex += 1; }
+    while (scopeFocusedIndex > scopeGenreIndex) { press(window, 38); scopeFocusedIndex -= 1; }
+    press(window, 13);
+    check('ENTER no gênero conserva o foco no mesmo seletor',
+        window.document.querySelector('[data-action="catalogue-scope-genre"]').classList.contains('focused'));
+    var firstScopeGenre = window.document.querySelector('[data-action="catalogue-scope-genre"] strong').textContent;
+    press(window, 13);
+    check('ENTER consecutivo avança o gênero sem exigir voltar pelo D-pad',
+        window.document.querySelector('[data-action="catalogue-scope-genre"]').classList.contains('focused') &&
+        window.document.querySelector('[data-action="catalogue-scope-genre"] strong').textContent !== firstScopeGenre);
+    window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-scope-reset"]'));
+    window.BuroApp.state.categories = window.BuroApp.state.categories.filter(function (category) {
+        return scopeFixtureIds.indexOf(category.id) === -1;
+    });
 
     process.stdout.write('Filtros de catálogo e temporadas\n');
     window.BuroApp.state.section = 'MOVIES';
