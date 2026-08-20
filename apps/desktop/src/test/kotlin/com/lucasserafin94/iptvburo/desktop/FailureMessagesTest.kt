@@ -1,5 +1,7 @@
 package com.lucasserafin94.iptvburo.desktop
 
+import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.xtream.XtreamClientException
 import com.lucasserafin94.iptvburo.xtream.XtreamFailureReason
 import java.io.IOException
@@ -11,7 +13,10 @@ import kotlin.test.assertTrue
 class FailureMessagesTest {
     private val log = "C:\\Users\\alguem\\.iptvburo\\logs\\iptvburo.log"
 
-    private fun message(error: Throwable) = FailureMessages.forFailure(error, log)
+    /** Portuguese, because the assertions below quote its wording. */
+    private val text = DesktopStrings.of(DesktopLanguage.PORTUGUESE_BRAZIL).shareStrings.failures
+
+    private fun message(error: Throwable) = FailureMessages.forFailure(error, log, text)
 
     /**
      * The report that produced this test: a user installed a new build over an old one, their

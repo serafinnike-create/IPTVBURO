@@ -1,5 +1,6 @@
 package com.lucasserafin94.iptvburo.desktop
 
+import com.lucasserafin94.iptvburo.desktop.ui.FailureStrings
 import com.lucasserafin94.iptvburo.xtream.XtreamClientException
 import com.lucasserafin94.iptvburo.xtream.XtreamFailureReason
 
@@ -18,6 +19,10 @@ import com.lucasserafin94.iptvburo.xtream.XtreamFailureReason
  * - the provider is blamed only for an [XtreamClientException], never for anything else;
  * - the exception's own `message` is never shown. OkHttp puts the full request URL into its
  *   IOException text, and an Xtream URL carries the subscriber's username and password.
+ *
+ * The wording arrives as [FailureStrings] rather than living here. These were Portuguese literals, so
+ * an app running in English, German, Spanish or Italian answered a failed connection in Portuguese —
+ * and a failure message is the moment a user most needs to be able to read what it says.
  */
 internal object FailureMessages {
     /** Marker the repository raises when the catalogue is present but the credentials are not. */
@@ -26,9 +31,10 @@ internal object FailureMessages {
     fun forFailure(
         error: Throwable,
         logLocation: String,
+        text: FailureStrings,
     ): String =
         when (error) {
-            is XtreamClientException -> forXtream(error, logLocation)
+            is XtreamClientException -> forXtream(error, logLocation, text)
 
             // The catalogue survived on disk and the session did not.
             //
@@ -37,40 +43,36 @@ internal object FailureMessages {
             // malformed. Nothing had been asked of the provider at all.
             is IllegalArgumentException, is IllegalStateException ->
                 if (error.message?.contains(NO_SESSION_MARKER) == true) {
-                    "A sessão da sua lista expirou. O catálogo continua salvo, mas é preciso " +
-                        "entrar de novo na fonte para carregar novidades."
+                    text.sessionExpired
                 } else {
-                    appFault(error, logLocation)
+                    appFault(error, logLocation, text)
                 }
 
-            is OutOfMemoryError ->
-                "Não houve memória suficiente para montar esta tela. " +
-                    "Isso é uma limitação do aplicativo, não da sua lista."
+            is OutOfMemoryError -> text.outOfMemory
 
-            else -> appFault(error, logLocation)
+            else -> appFault(error, logLocation, text)
         }
 
     private fun forXtream(
         error: XtreamClientException,
         logLocation: String,
+        text: FailureStrings,
     ): String =
         when (error.reason) {
-            XtreamFailureReason.INVALID_SERVER -> "O endereço do servidor não é válido."
-            XtreamFailureReason.AUTHENTICATION -> "O servidor recusou o usuário ou a senha."
-            XtreamFailureReason.NETWORK -> "Não foi possível alcançar o servidor."
-            XtreamFailureReason.HTTP -> "O servidor respondeu com um erro HTTP."
-            XtreamFailureReason.RESPONSE_TOO_LARGE -> "O catálogo excedeu o limite seguro desta prévia."
+            XtreamFailureReason.INVALID_SERVER -> text.invalidServer
+            XtreamFailureReason.AUTHENTICATION -> text.authenticationRejected
+            XtreamFailureReason.NETWORK -> text.networkUnreachable
+            XtreamFailureReason.HTTP -> text.httpError
+            XtreamFailureReason.RESPONSE_TOO_LARGE -> text.responseTooLarge
             // Names the log: this is the one reason the user can do nothing about unaided, and
             // telling a genuinely odd provider from a fault in this app needs the file.
-            XtreamFailureReason.INVALID_RESPONSE ->
-                "O servidor não retornou um catálogo Xtream compatível. Detalhes em $logLocation"
+            XtreamFailureReason.INVALID_RESPONSE -> text.invalidResponse.format(logLocation)
         }
 
     /** Names the type so a screenshot is worth something, and never the message. */
     private fun appFault(
         error: Throwable,
         logLocation: String,
-    ): String =
-        "Não foi possível montar esta tela (${error::class.simpleName}). " +
-            "Isso é uma falha do aplicativo, não da sua lista. Detalhes em $logLocation"
+        text: FailureStrings,
+    ): String = text.appFault.format(error::class.simpleName.orEmpty(), logLocation)
 }

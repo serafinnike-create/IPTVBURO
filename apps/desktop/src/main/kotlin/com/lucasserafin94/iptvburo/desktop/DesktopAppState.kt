@@ -6558,7 +6558,14 @@ class DesktopAppState(
      * is worth a test rather than a comment promising care.
      */
     private fun Throwable.toSafeFailureMessage(): String =
-        FailureMessages.forFailure(this, DiagnosticLog.location().toString())
+        FailureMessages.forFailure(
+            error = this,
+            logLocation = DiagnosticLog.location().toString(),
+            // The active language's wording. Read here rather than held as a field: the user can
+            // change language while the app is open, and a cached copy would answer the next
+            // failure in the language they just left.
+            text = DesktopStrings.of(language).shareStrings.failures,
+        )
 
     private companion object {
         const val MAX_SEARCH_LENGTH = 120

@@ -603,6 +603,25 @@ data class DesktopStrings(
                             clearAll = "Borrar todo",
                             dismiss = "Descartar",
                         ),
+                    failures =
+                        FailureStrings(
+                            sessionExpired =
+                                "La sesión de tu lista ha caducado. El catálogo sigue guardado, " +
+                                    "pero hay que entrar de nuevo en la fuente para cargar novedades.",
+                            outOfMemory =
+                                "No hubo memoria suficiente para montar esta pantalla. " +
+                                    "Es una limitación de la aplicación, no de tu lista.",
+                            invalidServer = "La dirección del servidor no es válida.",
+                            authenticationRejected = "El servidor rechazó el usuario o la contraseña.",
+                            networkUnreachable = "No se pudo alcanzar el servidor.",
+                            httpError = "El servidor respondió con un error HTTP.",
+                            responseTooLarge = "El catálogo superó el límite seguro de esta versión.",
+                            invalidResponse =
+                                "El servidor no devolvió un catálogo Xtream compatible. Detalles en %1${'$'}s",
+                            appFault =
+                                "No se pudo montar esta pantalla (%1${'$'}s). Es un fallo de la " +
+                                    "aplicación, no de tu lista. Detalles en %2${'$'}s",
+                        ),
                     remoteSource =
                         RemoteSourceStrings(
                             title = "Servidor propio (NAS)",
@@ -1252,6 +1271,24 @@ data class DesktopStrings(
                             empty = "Nada por aqui.",
                             clearAll = "Limpar tudo",
                             dismiss = "Descartar",
+                        ),
+                    failures =
+                        FailureStrings(
+                            sessionExpired =
+                                "A sessão da sua lista expirou. O catálogo continua salvo, mas é " +
+                                    "preciso entrar de novo na fonte para carregar novidades.",
+                            outOfMemory =
+                                "Não houve memória suficiente para montar esta tela. " +
+                                    "Isso é uma limitação do aplicativo, não da sua lista.",
+                            invalidServer = "O endereço do servidor não é válido.",
+                            authenticationRejected = "O servidor recusou o usuário ou a senha.",
+                            networkUnreachable = "Não foi possível alcançar o servidor.",
+                            httpError = "O servidor respondeu com um erro HTTP.",
+                            responseTooLarge = "O catálogo excedeu o limite seguro desta prévia.",
+                            invalidResponse = "O servidor não retornou um catálogo Xtream compatível. Detalhes em %1${'$'}s",
+                            appFault =
+                                "Não foi possível montar esta tela (%1${'$'}s). Isso é uma falha do " +
+                                    "aplicativo, não da sua lista. Detalhes em %2${'$'}s",
                         ),
                     remoteSource =
                         RemoteSourceStrings(
@@ -1903,6 +1940,24 @@ data class DesktopStrings(
                             clearAll = "Clear all",
                             dismiss = "Dismiss",
                         ),
+                    failures =
+                        FailureStrings(
+                            sessionExpired =
+                                "Your list's session has expired. The catalogue is still saved, but you " +
+                                    "need to sign in to the source again to load anything new.",
+                            outOfMemory =
+                                "There was not enough memory to build this screen. " +
+                                    "That is a limit of the application, not of your list.",
+                            invalidServer = "The server address is not valid.",
+                            authenticationRejected = "The server refused the username or password.",
+                            networkUnreachable = "The server could not be reached.",
+                            httpError = "The server answered with an HTTP error.",
+                            responseTooLarge = "The catalogue exceeded this build's safe limit.",
+                            invalidResponse = "The server did not return a compatible Xtream catalogue. Details in %1${'$'}s",
+                            appFault =
+                                "This screen could not be built (%1${'$'}s). That is a fault in the " +
+                                    "application, not in your list. Details in %2${'$'}s",
+                        ),
                     remoteSource =
                         RemoteSourceStrings(
                             title = "Your own server (NAS)",
@@ -2551,6 +2606,24 @@ data class DesktopStrings(
                             empty = "Nichts hier.",
                             clearAll = "Alles loeschen",
                             dismiss = "Verwerfen",
+                        ),
+                    failures =
+                        FailureStrings(
+                            sessionExpired =
+                                "Die Sitzung Ihrer Liste ist abgelaufen. Der Katalog bleibt gespeichert, " +
+                                    "aber Sie müssen sich erneut bei der Quelle anmelden, um Neues zu laden.",
+                            outOfMemory =
+                                "Es war nicht genug Speicher vorhanden, um diesen Bildschirm aufzubauen. " +
+                                    "Das ist eine Grenze der Anwendung, nicht Ihrer Liste.",
+                            invalidServer = "Die Serveradresse ist ungültig.",
+                            authenticationRejected = "Der Server hat Benutzername oder Passwort abgelehnt.",
+                            networkUnreachable = "Der Server war nicht erreichbar.",
+                            httpError = "Der Server antwortete mit einem HTTP-Fehler.",
+                            responseTooLarge = "Der Katalog überschritt die sichere Grenze dieser Version.",
+                            invalidResponse = "Der Server lieferte keinen kompatiblen Xtream-Katalog. Details in %1${'$'}s",
+                            appFault =
+                                "Dieser Bildschirm konnte nicht aufgebaut werden (%1${'$'}s). Das ist ein Fehler " +
+                                    "der Anwendung, nicht Ihrer Liste. Details in %2${'$'}s",
                         ),
                     remoteSource =
                         RemoteSourceStrings(
@@ -3205,6 +3278,24 @@ data class DesktopStrings(
                             empty = "Niente qui.",
                             clearAll = "Cancella tutto",
                             dismiss = "Ignora",
+                        ),
+                    failures =
+                        FailureStrings(
+                            sessionExpired =
+                                "La sessione della tua lista è scaduta. Il catalogo resta salvato, ma devi " +
+                                    "accedere di nuovo alla fonte per caricare le novità.",
+                            outOfMemory =
+                                "Non c'era memoria sufficiente per costruire questa schermata. " +
+                                    "È un limite dell'applicazione, non della tua lista.",
+                            invalidServer = "L'indirizzo del server non è valido.",
+                            authenticationRejected = "Il server ha rifiutato l'utente o la password.",
+                            networkUnreachable = "Non è stato possibile raggiungere il server.",
+                            httpError = "Il server ha risposto con un errore HTTP.",
+                            responseTooLarge = "Il catalogo ha superato il limite sicuro di questa versione.",
+                            invalidResponse = "Il server non ha restituito un catalogo Xtream compatibile. Dettagli in %1${'$'}s",
+                            appFault =
+                                "Non è stato possibile costruire questa schermata (%1${'$'}s). È un errore " +
+                                    "dell'applicazione, non della tua lista. Dettagli in %2${'$'}s",
                         ),
                     remoteSource =
                         RemoteSourceStrings(
@@ -4207,6 +4298,33 @@ data class DownloadStrings(
     val downloadConfirmAction: String,
 )
 
+/**
+ * What the user is told when something fails.
+ *
+ * These lived as Portuguese literals inside `FailureMessages`, so an app running in English, Spanish,
+ * German or Italian answered a failed connection in Portuguese — and a failure message is exactly the
+ * moment a user most needs to read what it says.
+ *
+ * The rules the messages themselves follow are set out on `FailureMessages`: the provider is blamed
+ * only for a genuine Xtream failure, and the exception's own text is never shown, because OkHttp puts
+ * the full request URL — with the subscriber's username and password — into its IOException.
+ */
+data class FailureStrings(
+    /** The catalogue survived on disk and the session did not. */
+    val sessionExpired: String,
+    /** Not enough memory to build the screen. An app limitation, not the user's list. */
+    val outOfMemory: String,
+    val invalidServer: String,
+    val authenticationRejected: String,
+    val networkUnreachable: String,
+    val httpError: String,
+    val responseTooLarge: String,
+    /** Takes the log location: this is the one cause the user cannot act on unaided. */
+    val invalidResponse: String,
+    /** Takes the exception's type name and the log location. Never its message. */
+    val appFault: String,
+)
+
 data class ShareStrings(
     /**
      * Sending to a screen on the network.
@@ -4236,6 +4354,8 @@ data class ShareStrings(
     val remoteSource: RemoteSourceStrings,
     /** The bell beside the profile. */
     val notifications: NotificationStrings,
+    /** What the user is told when something fails. */
+    val failures: FailureStrings,
     /** The button on the title page, beside Favourites. */
     val share: String,
     val shareTitle: String,
