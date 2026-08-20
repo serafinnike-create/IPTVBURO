@@ -1,4 +1,4 @@
-/* IndexedDB v1 -> v2 migration and ordered search cursor contracts. */
+/* IndexedDB v1 -> current migration, ordered search and category cursors. */
 'use strict';
 
 var fs = require('fs');
@@ -64,6 +64,16 @@ function search(storage, query, predicate, cursor, limit) {
     });
 }
 
+function categoryPage(storage, sourceId, categoryId, cursor, limit) {
+    return new Promise(function (resolve, reject) {
+        storage.categoryPage(sourceId, categoryId, cursor, limit, resolve, reject);
+    });
+}
+
+function putBatch(storage, rows) {
+    return new Promise(function (resolve, reject) { storage.putBatch('items', rows, resolve, reject); });
+}
+
 function replaceSource(storage, source, categories, items) {
     return new Promise(function (resolve, reject) {
         storage.replaceSourceCatalogue(source, categories, items, true, resolve, reject);
@@ -92,6 +102,11 @@ async function run() {
     var migrated;
     var first;
     var second;
+    var categoryFirst;
+    var categorySecond;
+    var categoryThird;
+    var categoryRows = [];
+    var categoryIndex;
     var secondPredicateCalls = 0;
     var oneLetterCalls = 0;
 
@@ -104,19 +119,21 @@ async function run() {
     window.eval(fs.readFileSync(path.join(APP_DIR, 'js', 'domain.js'), 'utf8'));
     window.eval(fs.readFileSync(path.join(APP_DIR, 'js', 'storage.js'), 'utf8'));
 
-    process.stdout.write('Migration IndexedDB v1 → v3\n');
+    process.stdout.write('Migration IndexedDB v1 → v4\n');
     database = await openStorage(window.BuroStorage);
     /* A versão sobe conforme o esquema cresce; o que este teste protege é que
        subir de v1 direto para a atual não recria os stores nem perde o que já
        estava gravado. As asserções seguintes conferem o conteúdo. */
     check('banco legado abre na versão atual sem recriar os stores',
-        database.version === 3 && database.objectStoreNames.contains('profiles') && database.objectStoreNames.contains('items'));
+        database.version === 4 && database.objectStoreNames.contains('profiles') && database.objectStoreNames.contains('items'));
     /* Um banco criado antes de os lembretes existirem precisa ganhar o store
        vazio, senão marcar um título falharia só para quem já usava o app. */
     check('um banco anterior aos lembretes ganha o store novo, vazio',
         database.objectStoreNames.contains('reminders'));
     check('migration cria o índice composto de ordem da busca',
         database.transaction(['items'], 'readonly').objectStore('items').indexNames.contains('bySearchOrder'));
+    check('migration cria o índice ordenado de categoria sem recriar o store',
+        database.transaction(['items'], 'readonly').objectStore('items').indexNames.contains('byCategoryOrder'));
     migrated = await get(window.BuroStorage, 'movie:b');
     check('migration preenche nome normalizado, prioridade e ordem',
         migrated.searchName === 'noite cafe' && migrated.searchRank === 0 && migrated.searchSort === 20);
@@ -163,6 +180,33 @@ async function run() {
     migrated = await get(window.BuroStorage, 'movie:category-snapshot');
     check('reconciliação individual de categoria mantém o mesmo índice derivado',
         migrated.searchName === 'categoria orbita' && migrated.searchRank === 0 && migrated.searchSort === 3);
+
+    process.stdout.write('Categoria paginada por cursor\n');
+    for (categoryIndex = 0; categoryIndex < 450; categoryIndex += 1) {
+        categoryRows.push({
+            id: 'movie:page:' + categoryIndex,
+            sourceId: 'source-b',
+            categoryId: 'category-page',
+            contentType: 'MOVIE',
+            name: 'Filme ' + categoryIndex,
+            sortOrder: 449 - categoryIndex
+        });
+    }
+    await putBatch(window.BuroStorage, categoryRows);
+    categoryFirst = await categoryPage(window.BuroStorage, 'source-b', 'category-page', null, 200);
+    categorySecond = await categoryPage(window.BuroStorage, 'source-b', 'category-page', categoryFirst.nextCursor, 200);
+    categoryThird = await categoryPage(window.BuroStorage, 'source-b', 'category-page', categorySecond.nextCursor, 200);
+    check('primeira leitura materializa somente 200 dos 450 registros',
+        categoryFirst.rows.length === 200 && categoryFirst.totalCount === 450 && categoryFirst.hasMore);
+    check('ordem segue sortOrder e id como no cursor do Android',
+        categoryFirst.rows[0].id === 'movie:page:449' && categoryFirst.rows[199].id === 'movie:page:250');
+    check('cursor exclusivo não duplica a fronteira entre páginas',
+        categorySecond.rows.length === 200 && categorySecond.rows[0].id === 'movie:page:249' &&
+        categorySecond.rows[199].id === 'movie:page:50');
+    check('última página devolve o restante e conserva a chave para possível append remoto',
+        categoryThird.rows.length === 50 && categoryThird.rows[0].id === 'movie:page:49' &&
+        categoryThird.rows[49].id === 'movie:page:0' && !categoryThird.hasMore &&
+        Array.isArray(categoryThird.nextCursor) && categoryThird.nextCursor[3] === 'movie:page:0');
 
     database.close();
     dom.window.close();

@@ -3920,7 +3920,9 @@ var BuroApp = (function () {
             '<p class="form-message ' + (state.screenData.error ? 'error' : '') + '">' +
             escapeHtml(t(state.screenData.messageKey)) + '</p>' : '';
         shell('<div class="form-panel tmdb-settings-panel"><h2>' + t('tmdbTitle') + '</h2><p class="form-message">' +
-            t('tmdbBody') + '</p><div class="tmdb-guide-action"><button class="button ghost focusable" data-action="tmdb-guide">?' +
+            t('tmdbBody') + '</p><div class="tmdb-guide-action">' +
+            '<button class="button primary focusable" data-action="pair-tmdb">' + t('pairFromPhone') + '</button>' +
+            '<button class="button ghost focusable" data-action="tmdb-guide">?' +
             '<span>' + t('tmdbGuideButton') + '</span></button></div><section class="tmdb-key-scope"><h3>' + t('tmdbSharedLabel') + '</h3><p>' +
             t('tmdbSharedHint') + '</p><div class="field"><label>' + t('tmdbKeyLabel') + '</label>' +
             '<input id="tmdb-key-shared" class="focusable" type="password" autocomplete="off" maxlength="256" value="' +

@@ -33,7 +33,7 @@ function waitFor(predicate, timeoutMs) {
     return new Promise(function (resolve, reject) {
         function poll() {
             if (predicate()) { resolve(); return; }
-            if (Date.now() - started > timeoutMs) { reject(new Error('timeout')); return; }
+            if (Date.now() - started > timeoutMs) { reject(new Error('timeout: ' + predicate.toString())); return; }
             setTimeout(poll, 10);
         }
         poll();
@@ -339,6 +339,7 @@ async function run() {
             'loadingCatalogue', 'couldNotLoad', 'catalogueLoadError', 'detailsLoadError',
             'noCategories', 'noCategoriesBody', 'noItems', 'noItemsBody', 'noEpisodes', 'noEpisodesBody',
             'resumeQuestion', 'resumeFrom', 'resumeSavedAt', 'startOver',
+            'seriesWatchEpisode', 'seriesContinueEpisode',
             'searchIdle', 'searchIdleBody', 'searchWorking', 'searchEmpty', 'searchEmptyBody',
             'searchLoadError', 'searchPage', 'pageOf', 'previousPage', 'nextPage',
             'homeReleases', 'homeNewClassics', 'homeRecentlyAdded', 'homeTopRated',
@@ -511,11 +512,37 @@ async function run() {
         pointerReachedSearch && window.BuroApp.state.section === 'HOME');
     check('a Home vazia mantém a Living Home cinematográfica do Android',
         Boolean(window.document.querySelector('.living-hero')) &&
-        window.document.querySelectorAll('.demo-media-card').length === 3);
+        window.document.querySelectorAll('.demo-media-card').length === 14 &&
+        window.document.querySelectorAll('[data-demo-rail]').length === 3);
+    check('os três trilhos demonstrativos repetem a composição 4/4/6 do Android',
+        window.document.querySelectorAll('[data-demo-rail="demo:rail:continue"] .demo-media-card').length === 4 &&
+        window.document.querySelectorAll('[data-demo-rail="demo:rail:live"] .demo-media-card').length === 4 &&
+        window.document.querySelectorAll('[data-demo-rail="demo:rail:editorial"] .demo-media-card').length === 6 &&
+        window.document.querySelectorAll('.demo-card-copy small').length === 14);
+    check('continuidade e ao vivo mostram progresso e o editorial usa pôster',
+        window.document.querySelectorAll('.demo-card-progress').length === 8 &&
+        window.document.querySelectorAll('.demo-media-card.poster').length === 6);
     check('a Living Home deixa explícito que os cards são demonstração visual',
         window.document.querySelector('.demo-notice').textContent.indexOf(window.BuroI18n.t('demoNotice')) >= 0);
     check('o aviso da Home vazia participa do fluxo da barra superior sem cobrir sino ou plataforma',
         window.document.querySelector('.demo-notice').parentElement === window.document.querySelector('.topbar'));
+    var demoTranslationKeys = ['demoPrismTitle', 'demoLiveTitle', 'demoFrequencyTitle', 'demoStoryNoPlayback'];
+    check('os novos trilhos e detalhes têm texto real nos cinco idiomas',
+        window.BuroI18n.supported().every(function (language) {
+            window.BuroI18n.setLanguage(language);
+            return demoTranslationKeys.every(function (key) { return window.BuroI18n.t(key) !== key; });
+        }));
+    window.BuroI18n.setLanguage('pt-BR');
+    window.BuroApp._activate(window.document.querySelector('[data-id="demo:continue:prism-city"]'));
+    check('cada card abre seu próprio detalhe fictício sem ação de reprodução',
+        window.BuroApp.state.screenData.demoId === 'demo:continue:prism-city' &&
+        window.document.querySelector('.demo-story h2').textContent === window.BuroI18n.t('demoPrismTitle') &&
+        window.document.querySelector('.demo-no-playback').textContent === window.BuroI18n.t('demoStoryNoPlayback') &&
+        !window.document.querySelector('[data-action="play"]'));
+    window.BuroApp._activate(window.document.querySelector('[data-action="back"]'));
+    check('voltar do detalhe demonstrativo restaura os três trilhos da Home',
+        window.BuroApp.state.section === 'HOME' && !window.BuroApp.state.screenData &&
+        window.document.querySelectorAll('[data-demo-rail]').length === 3);
     check('o player possui timeline e atalhos visíveis para áudio e legenda',
         Boolean(window.document.querySelector('.player-timeline')) &&
         Boolean(window.document.getElementById('player-audio-label')) &&
@@ -1046,11 +1073,18 @@ async function run() {
         expandService && expandService.getAttribute('data-provider') === '8' &&
         !window.document.querySelector('[data-provider="coming-soon"]'));
     if (expandService) {
+        var subscriptionShelfContent = window.document.querySelector('.content.scrollable');
+        var subscriptionShelfRow = expandService.closest('.subscription-row');
+        subscriptionShelfContent.scrollTop = 73;
+        subscriptionShelfRow.scrollLeft = 31;
         window.BuroApp._activate(expandService);
         check('Ver mais abre imediatamente os títulos da prateleira enquanto busca o restante',
             expandedCatalogueCall && expandedCatalogueCall.providerId === 8 && expandedCatalogueCall.kind === 'MOVIES' &&
             window.BuroApp.state.screenData.expanded.loading &&
             window.document.querySelectorAll('.subscription-expanded-grid [data-action="subscription-title"]').length === 2);
+        check('Ver mais abre no topo com Voltar focado em vez de herdar um índice distante',
+            window.document.querySelector('[data-action="subscription-expanded-back"]').classList.contains('focused') &&
+            window.document.querySelector('.content.scrollable').scrollTop === 0);
         check('grade ampla conserva a marca no cabecalho e em cada card',
             window.document.querySelector('.subscription-expanded .subscription-provider-logo') &&
             window.document.querySelector('.subscription-expanded .subscription-provider-logo').getAttribute('src') ===
@@ -1065,16 +1099,26 @@ async function run() {
         check('resposta ampla substitui a grade sem deixar mais de cem títulos no DOM',
             !window.BuroApp.state.screenData.expanded.loading &&
             window.document.querySelectorAll('.subscription-expanded-grid [data-action="subscription-title"]').length === 45);
-        window.BuroApp._activate(window.document.querySelector('.subscription-expanded-grid [data-action="subscription-title"]'));
+        var expandedOrigin = window.document.querySelector('.subscription-expanded-grid [data-action="subscription-title"]');
+        window.document.querySelector('.content.scrollable').scrollTop = 137;
+        window.BuroApp._activate(expandedOrigin);
         await waitFor(function () { return window.document.querySelector('[data-action="subscription-back"]'); }, 1000);
+        check('detalhe externo abre no topo e entrega foco ao botão Voltar',
+            window.document.querySelector('[data-action="subscription-back"]').classList.contains('focused') &&
+            window.document.querySelector('.content.scrollable').scrollTop === 0);
         window.BuroApp._activate(window.document.querySelector('[data-action="subscription-back"]'));
         check('Voltar do detalhe restaura a mesma grade ampla',
             window.BuroApp.state.screenData.expanded &&
-            window.document.querySelectorAll('.subscription-expanded-grid [data-action="subscription-title"]').length === 45);
+            window.document.querySelectorAll('.subscription-expanded-grid [data-action="subscription-title"]').length === 45 &&
+            window.document.querySelector('.subscription-expanded-grid [data-action="subscription-title"]').classList.contains('focused') &&
+            window.document.querySelector('.content.scrollable').scrollTop === 137);
         press(window, 10009);
         check('RETURN fecha a grade ampla e devolve as prateleiras do mesmo filtro',
             !window.BuroApp.state.screenData.expanded &&
-            window.document.querySelectorAll('.subscription-shelves [data-action="subscription-title"]').length === 2);
+            window.document.querySelectorAll('.subscription-shelves [data-action="subscription-title"]').length === 2 &&
+            window.document.querySelector('[data-action="subscription-expand"]').classList.contains('focused') &&
+            window.document.querySelector('.content.scrollable').scrollTop === 73 &&
+            window.document.querySelector('.subscription-row').scrollLeft === 31);
         window.BuroApp._activate(window.document.querySelector('[data-action="subscription-expand"]'));
         expandedCatalogueCall.failure({ code: 'NETWORK_ERROR' });
         check('falha conserva os títulos iniciais e uma explicação visível na grade',
@@ -1090,8 +1134,24 @@ async function run() {
             closedExpandedCall.aborted && !window.BuroApp.state.screenData.expanded &&
             window.document.body.textContent.indexOf('Resposta atrasada') === -1);
     }
-    window.BuroApp._activate(window.document.querySelector('[data-action="subscription-title"]'));
+    var duplicatedShelf = {
+        providerId: 18,
+        providerName: 'Segundo serviço',
+        providerLogoUrl: null,
+        titles: window.BuroApp.state.screenData.shelves[0].titles.slice()
+    };
+    window.BuroApp.state.screenData.shelves.push(duplicatedShelf);
+    window.BuroApp.render();
+    var subscriptionRows = window.document.querySelectorAll('.subscription-row');
+    var shelfOrigin = subscriptionRows[1].querySelector('[data-action="subscription-title"]');
+    window.document.querySelector('.content.scrollable').scrollTop = 91;
+    subscriptionRows[0].scrollLeft = 7;
+    subscriptionRows[1].scrollLeft = 24;
+    window.BuroApp._activate(shelfOrigin);
     await waitFor(function () { return window.document.querySelector('[data-action="subscription-local"]'); }, 1000);
+    check('título de prateleira abre com Ribbon e cabeçalho preservados pelo foco no Voltar',
+        window.document.querySelector('[data-action="subscription-back"]').classList.contains('focused') &&
+        window.document.querySelector('.content.scrollable').scrollTop === 0);
     check('detalhe cruza o catálogo inteiro e apresenta biblioteca local junto às ofertas externas',
         window.document.querySelector('[data-action="subscription-local"]').getAttribute('data-id') === 'movie:favorite-only' &&
         window.document.querySelectorAll('.subscription-offer').length === 4);
@@ -1124,6 +1184,10 @@ async function run() {
     check('fechar o trailer devolve a árvore acessível ao aplicativo',
         !window.document.getElementById('app').hasAttribute('aria-hidden'));
     window.BuroApp._activate(window.document.querySelector('[data-action="subscription-back"]'));
+    check('Voltar do título restaura card, rolagem vertical e prateleira horizontal',
+        window.document.querySelector('.subscription-row .focused').closest('section').getAttribute('data-provider') === '18' &&
+        window.document.querySelector('.content.scrollable').scrollTop === 91 &&
+        window.document.querySelectorAll('.subscription-row')[1].scrollLeft === 24);
     window.BuroApp._activate(window.document.querySelectorAll('[data-action="subscription-title"]')[1]);
     await waitFor(function () {
         return window.BuroApp.state.screenData.selected &&
@@ -1555,6 +1619,9 @@ async function run() {
         window.BuroApp.state.screenData.deck.length <= 15 &&
         Boolean(window.document.querySelector('.discover-counter')) &&
         window.document.querySelectorAll('.home-rail-heading').length === 0);
+    check('a próxima carta fica fora da árvore acessível até assumir o primeiro plano',
+        !window.document.querySelector('.discover-card.next') ||
+        window.document.querySelector('.discover-card.next').getAttribute('aria-hidden') === 'true');
     check('Descobrir oferece Pular, Guardar e Detalhes pelo D-pad',
         Boolean(window.document.querySelector('[data-action="discover-skip"]')) &&
         Boolean(window.document.querySelector('[data-action="discover-keep"]')) &&
@@ -1644,7 +1711,11 @@ async function run() {
     window.BuroXtream.loadMovieDetails = function (secret, item, success, failure) {
         movieDetailRequests.push({ success: success, failure: failure });
     };
-    window.BuroApp._activate(window.document.querySelector('.real-home-hero [data-action="movie-details"]'));
+    var homeBeforeLocalDetails = window.BuroApp.state.screenData;
+    var homeDetailOrigin = window.document.querySelector('.real-home-hero [data-action="movie-details"]');
+    var homeScrollBeforeDetails = window.document.querySelector('.content');
+    homeScrollBeforeDetails.scrollTop = 480;
+    window.BuroApp._activate(homeDetailOrigin);
     check('detalhes de filme exibem estado de carregamento próprio', Boolean(window.document.querySelector('.catalogue-loading')));
     movieDetailRequests[0].failure({ code: 'NETWORK_ERROR' });
     check('falha nos detalhes oferece retry sem voltar silenciosamente ao catálogo',
@@ -1765,10 +1836,26 @@ async function run() {
     check('RETURN da pessoa restaura os mesmos detalhes de filme',
         window.BuroApp.state.screen === 'SHELL' && window.BuroApp.state.screenData.kind === 'movie' &&
         window.BuroApp.state.screenData.parent.id === detailedMovieId);
+    /* A chave foi acrescentada artificialmente já depois de abrir esta Home,
+       apenas para exercitar pessoa/filmografia. Removê-la antes de voltar evita
+       introduzir na mesma asserção uma consulta pública que não existia na
+       fotografia de origem. */
+    window.BuroTmdb.remove('profile', window.BuroApp.state.activeProfile.id);
+    press(window, 10009);
+    var restoredHomeDetailOrigin = window.document.querySelector('.content .focused');
+    check('RETURN do detalhe local reutiliza o mesmo modelo da Home sem outro cursor',
+        window.BuroApp.state.section === 'HOME' &&
+        window.BuroApp.state.screenData === homeBeforeLocalDetails &&
+        !window.BuroApp.state.screenData.loading);
+    check('RETURN do detalhe local conserva a rolagem vertical da Home',
+        window.document.querySelector('.content').scrollTop === 480);
+    check('RETURN do detalhe local restaura o mesmo destaque da Home',
+        restoredHomeDetailOrigin &&
+        restoredHomeDetailOrigin.getAttribute('data-action') === homeDetailOrigin.getAttribute('data-action') &&
+        restoredHomeDetailOrigin.getAttribute('data-id') === homeDetailOrigin.getAttribute('data-id'));
     window.BuroXtream.loadMovieDetails = originalLoadMovieDetails;
     window.BuroTmdb.loadTitle = originalLoadTmdbTitle;
     window.BuroTmdb.loadPerson = originalLoadTmdbPerson;
-    window.BuroTmdb.remove('profile', window.BuroApp.state.activeProfile.id);
     window.BuroStorage.secureRemove('source-home');
     window.BuroApp.state.sources[0].type = 'REMOTE_M3U';
 
@@ -1897,6 +1984,54 @@ async function run() {
         window.document.querySelectorAll('.media-card').length === 200 &&
         window.BuroApp.state.screenData.items.length === 450);
 
+    var originalCategoryPage = window.BuroStorage.categoryPage;
+    var progressiveCalls = 0;
+    var progressiveRows = pagedCatalogueRows.map(function (item, index) {
+        item.categoryId = 'cat-progressive';
+        item.sortOrder = index;
+        return item;
+    });
+    window.BuroStorage.categoryPage = function (sourceId, categoryId, cursor, limit, success) {
+        var start = progressiveCalls === 0 ? 200 : 400;
+        var end = progressiveCalls === 0 ? 400 : 450;
+        progressiveCalls += 1;
+        window.setTimeout(function () {
+            success({
+                rows: progressiveRows.slice(start, end),
+                hasMore: end < progressiveRows.length,
+                nextCursor: end < progressiveRows.length ? [sourceId, categoryId, end - 1, progressiveRows[end - 1].id] : null,
+                totalCount: progressiveRows.length
+            });
+        }, 0);
+    };
+    window.BuroApp.state.screenData = {
+        kind: 'category', contentType: 'MOVIE',
+        category: { id: 'cat-progressive', sourceId: 'source-home', name: 'Catálogo progressivo' },
+        items: progressiveRows.slice(0, 200), cataloguePage: 0, catalogueHasMore: true,
+        catalogueNextCursor: ['source-home', 'cat-progressive', 199, progressiveRows[199].id],
+        catalogueTotalCount: 450
+    };
+    window.BuroApp.render();
+    check('categoria paginada informa 200 de 450 sem colocar os demais na memória',
+        window.BuroApp.state.screenData.items.length === 200 &&
+        window.document.querySelector('[data-action="category-load-more"]').parentNode.textContent.indexOf('200 / 450') >= 0);
+    window.BuroApp._activate(window.document.querySelector('[data-action="category-load-more"]'));
+    await waitFor(function () { return window.BuroApp.state.screenData.items.length === 400; }, 1000);
+    check('Carregar mais acrescenta um bloco e abre a próxima página mantendo 200 cards no DOM',
+        window.BuroApp.state.screenData.cataloguePage === 1 &&
+        window.document.querySelectorAll('.media-card').length === 200 &&
+        window.document.querySelector('[data-action="category-load-more"]').classList.contains('focused'));
+    window.BuroApp._activate(window.document.querySelector('[data-action="category-load-more"]'));
+    await waitFor(function () { return window.BuroApp.state.screenData.items.length === 450; }, 1000);
+    check('último bloco encerra o cursor, mostra 50 cards e preserva navegação para trás',
+        window.BuroApp.state.screenData.cataloguePage === 2 &&
+        window.document.querySelectorAll('.media-card').length === 50 &&
+        !window.document.querySelector('[data-action="category-load-more"]') &&
+        window.document.querySelector('[data-action="category-page-previous"]').classList.contains('focused'));
+    check('blocos progressivos não repetem identidades',
+        new Set(window.BuroApp.state.screenData.items.map(function (item) { return item.id; })).size === 450 && progressiveCalls === 2);
+    window.BuroStorage.categoryPage = originalCategoryPage;
+
     window.BuroApp.state.section = 'SERIES';
     window.BuroApp.state.screenData = {
         kind: 'series', parent: { id: 'series:seasons', sourceId: 'source-home', name: 'Série teste', contentType: 'SERIES' },
@@ -1980,6 +2115,10 @@ async function run() {
         }
     });
     window.BuroApp.render();
+    var seriesPrimaryButton = window.document.querySelector('[data-action="series-primary-play"]');
+    check('série oferece no topo a retomada do primeiro episódio em andamento como Windows',
+        seriesPrimaryButton && seriesPrimaryButton.getAttribute('data-id') === 'episode:1' &&
+        seriesPrimaryButton.textContent.indexOf('Continuar T1 E1') >= 0);
     check('série oferece download completo e por temporada somente com USB e Xtream reais',
         Boolean(window.document.querySelector('[data-action="series-download-all"]')) &&
         window.document.querySelectorAll('[data-action="series-download-season"]').length === 2);
@@ -2086,7 +2225,8 @@ async function run() {
     window.BuroApp.render();
     check('série sem episódios apresenta estado vazio específico',
         window.document.body.textContent.indexOf(window.BuroI18n.t('noEpisodes')) >= 0 &&
-        !window.document.querySelector('.season-header'));
+        !window.document.querySelector('.season-header') &&
+        !window.document.querySelector('[data-action="series-primary-play"]'));
 
     var cachedSeries = {
         id: 'series:cached-refresh', sourceId: 'source-home', contentType: 'SERIES', name: 'Série em cache',
@@ -2554,6 +2694,81 @@ async function run() {
         initialSeek === -1 && window.document.body.classList.contains('playing'));
     press(window, 10009);
 
+    var primarySeriesFirst = {
+        id: 'episode:series-primary-1', sourceId: 'source-home', categoryId: 'series:primary',
+        contentType: 'EPISODE', name: 'Primeiro episódio',
+        locator: { kind: 'xtream', contentType: 'EPISODE', providerItemId: '501', season: 1, episode: 1, extension: 'mp4' }
+    };
+    var primarySeriesResumable = {
+        id: 'episode:series-primary-2', sourceId: 'source-home', categoryId: 'series:primary',
+        contentType: 'EPISODE', name: 'Episódio retomável',
+        locator: { kind: 'xtream', contentType: 'EPISODE', providerItemId: '502', season: 1, episode: 2, extension: 'mp4' }
+    };
+    window.BuroApp.state.items.push(primarySeriesFirst, primarySeriesResumable);
+    window.BuroApp.state.progress.push({
+        id: 'progress:series-primary-2', profileId: window.BuroApp.state.activeProfile.id,
+        itemId: primarySeriesResumable.id, positionMs: 45000, durationMs: 120000,
+        completed: false, updatedAt: Date.now()
+    });
+    window.BuroApp.state.screen = 'SHELL';
+    window.BuroApp.state.section = 'SERIES';
+    window.BuroApp.state.screenData = {
+        kind: 'series', parent: { id: 'series:primary', sourceId: 'source-home', contentType: 'SERIES', name: 'Série principal' },
+        details: { title: 'Série principal' }, items: [primarySeriesFirst, primarySeriesResumable], expandedSeason: 1
+    };
+    window.BuroApp.render();
+    var resumableSeriesButton = window.document.querySelector('[data-action="series-primary-play"]');
+    check('ação principal ignora o primeiro não iniciado e escolhe o episódio retomável',
+        resumableSeriesButton && resumableSeriesButton.getAttribute('data-id') === primarySeriesResumable.id &&
+        resumableSeriesButton.textContent.indexOf('Continuar T1 E2') >= 0);
+    var seriesReturnContent = window.document.querySelector('.content');
+    seriesReturnContent.scrollTop = 640;
+    resumableSeriesButton.focus();
+    initialSeek = -1;
+    openedPlaybackUrl = null;
+    window.BuroApp._activate(resumableSeriesButton);
+    check('Continuar série inicia diretamente o episódio e a posição anunciados',
+        window.BuroApp.state.screen === 'SHELL' && initialSeek === 45000 &&
+        openedPlaybackUrl && openedPlaybackUrl.indexOf('/502.mp4') >= 0 &&
+        window.document.body.classList.contains('playing'));
+    avListener.oncurrentplaytime(60000);
+    press(window, 10009);
+    var returnedSeriesButton = window.document.querySelector('[data-action="series-primary-play"]');
+    check('RETURN do AVPlay atualiza imediatamente o progresso visível da série',
+        parseFloat(window.document.querySelector('[data-id="' + primarySeriesResumable.id + '"] .media-progress i').style.width) === 50 &&
+        returnedSeriesButton && returnedSeriesButton.textContent.indexOf('Continuar T1 E2') >= 0);
+    check('recomposição pós-player conserva rolagem e foco do detalhe',
+        window.document.querySelector('.content').scrollTop === 640 &&
+        returnedSeriesButton.classList.contains('focused') && window.document.activeElement === returnedSeriesButton);
+    window.BuroApp.state.progress = window.BuroApp.state.progress.filter(function (row) {
+        return row.itemId !== primarySeriesResumable.id;
+    });
+    window.BuroApp.render();
+    var freshSeriesButton = window.document.querySelector('[data-action="series-primary-play"]');
+    check('sem retomada, a ação principal oferece o primeiro episódio da série',
+        freshSeriesButton && freshSeriesButton.getAttribute('data-id') === primarySeriesFirst.id &&
+        freshSeriesButton.textContent.indexOf('Assistir T1 E1') >= 0);
+    var firstEpisodeCard = window.document.querySelector('[data-action="play"][data-id="' + primarySeriesFirst.id + '"]');
+    var episodeReturnRow = firstEpisodeCard.parentNode.parentNode;
+    window.document.querySelector('.content').scrollTop = 720;
+    episodeReturnRow.scrollLeft = 180;
+    firstEpisodeCard.focus();
+    window.BuroApp._activate(firstEpisodeCard);
+    avListener.oncurrentplaytime(110000);
+    avListener.onstreamcompleted();
+    var completedEpisodeCard = window.document.querySelector('[data-action="play"][data-id="' + primarySeriesFirst.id + '"]');
+    var completedEpisodeRow = completedEpisodeCard.parentNode.parentNode;
+    check('fim natural recompõe o episódio como assistido sem sair do detalhe',
+        !window.document.body.classList.contains('playing') &&
+        completedEpisodeCard.querySelector('.badge').textContent.indexOf('✓') >= 0 &&
+        parseFloat(completedEpisodeCard.querySelector('.media-progress i').style.width) === 100);
+    check('fim natural conserva foco, rolagem vertical e posição horizontal da temporada',
+        completedEpisodeCard.classList.contains('focused') && window.document.activeElement === completedEpisodeCard &&
+        window.document.querySelector('.content').scrollTop === 720 && completedEpisodeRow.scrollLeft === 180);
+    window.BuroApp.state.items = window.BuroApp.state.items.filter(function (item) {
+        return item.id !== primarySeriesFirst.id && item.id !== primarySeriesResumable.id;
+    });
+
     var livePlayerItem = {
         id: 'live:player-guide', sourceId: 'source-home', categoryId: 'cat-home-live',
         contentType: 'LIVE', name: 'Canal com guia',
@@ -2588,6 +2803,9 @@ async function run() {
     check('guia completo mantém programa encerrado atenuado e descrições como Android e Windows',
         window.document.querySelector('.player-guide-option.past').textContent.indexOf('Programa encerrado') >= 0 &&
         window.document.querySelector('.player-guide-option.current small').textContent === 'Resumo atual');
+    check('rodapé do guia identifica o canal e nunca vaza undefined',
+        window.document.getElementById('player-menu-hint').textContent.indexOf('Canal com guia') >= 0 &&
+        window.document.getElementById('player-menu-hint').textContent.indexOf('undefined') === -1);
     press(window, 39);
     press(window, 13);
     check('D-pad percorre e fecha o guia sem interromper o canal',

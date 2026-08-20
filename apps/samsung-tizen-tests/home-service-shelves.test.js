@@ -99,18 +99,43 @@ function seed(window) {
             locator: { kind: 'xtream', contentType: 'MOVIE', providerItemId: prefix }
         });
     }
+    function series(id, name, order) {
+        return window.BuroDomain.createItem({
+            id: id, sourceId: 'src', providerItemId: id, name: name,
+            categoryId: 'cs', contentType: 'SERIES', rating: 8, year: 2020, sortOrder: order,
+            locator: { kind: 'xtream', contentType: 'SERIES', providerItemId: id }
+        });
+    }
+    function episode(id, parentId, name, number) {
+        return window.BuroDomain.createItem({
+            id: id, sourceId: 'src', providerItemId: id, name: name,
+            categoryId: parentId, contentType: 'EPISODE',
+            locator: { kind: 'xtream', contentType: 'EPISODE', providerItemId: id, season: 1, episode: number }
+        });
+    }
+    var parentA = series('series:home-parent-a', 'Série Alfa', 1);
+    var parentB = series('series:home-parent-b', 'Série Beta', 2);
+    var episodeAOld = episode('episode:home-a-old', parentA.id, 'Alfa anterior', 1);
+    var episodeANew = episode('episode:home-a-new', parentA.id, 'Alfa mais recente', 2);
+    var episodeB = episode('episode:home-b', parentB.id, 'Beta recente', 1);
     window.BuroApp.state.sources = [source];
     window.BuroApp.state.activeSource = source;
     window.BuroApp.state.categories = [
         { id: 'c1', sourceId: 'src', providerCategoryId: '1', name: 'Filmes | Netflix', contentType: 'MOVIE', sortOrder: 0 },
         { id: 'c2', sourceId: 'src', providerCategoryId: '2', name: 'Filmes | HBO Max', contentType: 'MOVIE', sortOrder: 1 },
-        { id: 'c3', sourceId: 'src', providerCategoryId: '3', name: 'Filmes | Ação', contentType: 'MOVIE', sortOrder: 2 }
+        { id: 'c3', sourceId: 'src', providerCategoryId: '3', name: 'Filmes | Ação', contentType: 'MOVIE', sortOrder: 2 },
+        { id: 'cs', sourceId: 'src', providerCategoryId: '4', name: 'Séries', contentType: 'SERIES', sortOrder: 3 }
     ];
     for (index = 0; index < 18; index += 1) {
         items.push(movie('n' + index, 'c1', 8, 2019));
         items.push(movie('h' + index, 'c2', 7, 2018));
         items.push(movie('a' + index, 'c3', 6, 2017));
     }
+    items.push(parentA, parentB, episodeAOld, episodeANew, episodeB);
+    window.__homeEpisodeFixtures = {
+        parentA: parentA, parentB: parentB, episodeAOld: episodeAOld,
+        episodeANew: episodeANew, episodeB: episodeB
+    };
     return new Promise(function (resolve, reject) {
         window.BuroStorage.putBatch('items', items, resolve, reject);
     });
@@ -192,6 +217,59 @@ async function run() {
             seen[id] = true;
         });
         check('nenhum título é desenhado duas vezes na Home', !duplicated);
+    }());
+
+    process.stdout.write('A Home representa progresso de episódio pela série\n');
+    (function () {
+        var fixture = window.__homeEpisodeFixtures;
+        var profileId = window.BuroApp.state.activeProfile.id;
+        var continueCards;
+        var alpha;
+        [fixture.episodeAOld, fixture.episodeANew, fixture.episodeB].forEach(function (item) {
+            if (!window.BuroApp.state.items.some(function (known) { return known.id === item.id; })) {
+                window.BuroApp.state.items.push(item);
+            }
+        });
+        window.BuroApp.state.progress = [
+            { id: 'progress:a-old', profileId: profileId, itemId: fixture.episodeAOld.id,
+                positionMs: 25000, durationMs: 100000, completed: false, updatedAt: 1000 },
+            { id: 'progress:a-new', profileId: profileId, itemId: fixture.episodeANew.id,
+                positionMs: 50000, durationMs: 100000, completed: false, updatedAt: 3000 },
+            { id: 'progress:b', profileId: profileId, itemId: fixture.episodeB.id,
+                positionMs: 40000, durationMs: 100000, completed: false, updatedAt: 2000 }
+        ];
+        window.BuroApp.render();
+        continueCards = Array.prototype.slice.call(
+            window.document.querySelectorAll('.home-rail[data-home-rail="continue"] .media-card')
+        );
+        alpha = continueCards[0];
+        check('episódios da mesma série viram um único card da série mais recente',
+            continueCards.length === 2 &&
+            continueCards.map(function (card) { return card.getAttribute('data-id'); }).join(',') ===
+                fixture.parentA.id + ',' + fixture.parentB.id &&
+            continueCards.every(function (card) { return card.getAttribute('data-action') === 'series-details'; }));
+        check('a barra usa o episódio incompleto mais recente sem alterar a série persistida',
+            alpha && alpha.querySelector('.media-progress i').getAttribute('style').indexOf('50.00%') >= 0 &&
+            typeof fixture.parentA._libraryProgressItemId === 'undefined');
+
+        window.BuroApp.state.progress[1].completed = true;
+        window.BuroApp.render();
+        continueCards = Array.prototype.slice.call(
+            window.document.querySelectorAll('.home-rail[data-home-rail="continue"] .media-card')
+        );
+        check('concluir o episódio mais recente revela o anterior e reordena as séries',
+            continueCards.length === 2 &&
+            continueCards.map(function (card) { return card.getAttribute('data-id'); }).join(',') ===
+                fixture.parentB.id + ',' + fixture.parentA.id &&
+            continueCards[1].querySelector('.media-progress i').getAttribute('style').indexOf('25.00%') >= 0);
+
+        window.BuroApp.state.progress[0].completed = true;
+        window.BuroApp.render();
+        continueCards = Array.prototype.slice.call(
+            window.document.querySelectorAll('.home-rail[data-home-rail="continue"] .media-card')
+        );
+        check('a série sai de Continuar quando não resta episódio incompleto',
+            continueCards.length === 1 && continueCards[0].getAttribute('data-id') === fixture.parentB.id);
     }());
 
     window.close();

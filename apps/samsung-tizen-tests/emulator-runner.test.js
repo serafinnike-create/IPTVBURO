@@ -29,6 +29,17 @@ check('o runner espera o SDB sem laço infinito',
     /AddSeconds\(\$TimeoutSeconds\)/.test(runner));
 check('uma VM recém-iniciada ganha tempo para concluir os serviços da TV',
     /Start-Sleep\s+-Seconds\s+20/.test(runner));
+check('a janela pós-launch possui limite explícito e validado',
+    /ValidateRange\(3,\s*60\)[\s\S]{0,80}\$LaunchStabilitySeconds/.test(runner));
+check('o runner extrai o PID confirmado pelo launcher Tizen',
+    /function\s+Get-TizenLaunchPid/.test(runner) &&
+    /successfully launched pid\\s\*=\\s\*\(\\d\+\)/.test(runner));
+check('o app é consultado novamente depois da janela de estabilidade',
+    /Start-Sleep\s+-Seconds\s+\$LaunchStabilitySeconds[\s\S]{0,500}\$verificationOutput/.test(runner) &&
+    (runner.match(/'run',\s*'-p',\s*'IPTVBUROxx\.IPTVBURO'/g) || []).length === 2);
+check('um PID diferente transforma reinício silencioso em falha',
+    /\$verificationPid\s+-ne\s+\$launchPid/.test(runner) &&
+    /O aplicativo reiniciou durante a validacao/.test(runner));
 check('a automação nunca reseta nem exclui o disco da VM',
     !/@\('(reset|delete)'/.test(runner) &&
     !/\bem-cli(?:\.bat)?\s+(reset|delete)\b/i.test(runner));

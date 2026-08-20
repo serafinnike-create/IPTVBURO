@@ -37,6 +37,9 @@ function makeWindow() {
 
     /* Conta transações abertas: é a métrica que separa lote de um-a-um. */
     var transactions = 0;
+    var putsInCurrentTask = 0;
+    var maximumPutBurst = 0;
+    var putResetScheduled = false;
     var openDatabases = [];
     var originalOpen = window.indexedDB.open.bind(window.indexedDB);
     window.indexedDB.open = function () {
@@ -48,7 +51,29 @@ function makeWindow() {
             var originalTransaction = database.transaction.bind(database);
             database.transaction = function () {
                 transactions += 1;
-                return originalTransaction.apply(null, arguments);
+                var transaction = originalTransaction.apply(null, arguments);
+                var originalObjectStore = transaction.objectStore.bind(transaction);
+                transaction.objectStore = function (name) {
+                    var store = originalObjectStore(name);
+                    var originalPut;
+                    if (store.__buroBurstObserved) { return store; }
+                    originalPut = store.put.bind(store);
+                    store.put = function () {
+                        putsInCurrentTask += 1;
+                        maximumPutBurst = Math.max(maximumPutBurst, putsInCurrentTask);
+                        if (!putResetScheduled) {
+                            putResetScheduled = true;
+                            window.setTimeout(function () {
+                                putsInCurrentTask = 0;
+                                putResetScheduled = false;
+                            }, 0);
+                        }
+                        return originalPut.apply(null, arguments);
+                    };
+                    store.__buroBurstObserved = true;
+                    return store;
+                };
+                return transaction;
             };
         });
         return request;
@@ -60,6 +85,12 @@ function makeWindow() {
 
     window.__transactions = function () { return transactions; };
     window.__resetTransactions = function () { transactions = 0; };
+    window.__maximumPutBurst = function () { return maximumPutBurst; };
+    window.__resetPutBurst = function () {
+        putsInCurrentTask = 0;
+        maximumPutBurst = 0;
+        putResetScheduled = false;
+    };
     return window;
 }
 
@@ -147,6 +178,49 @@ async function run() {
         }, function () { resolve(false); });
     });
     check('a gravação devolve o controle entre blocos', yielded);
+
+    process.stdout.write('Substituição transacional usada pela importação\n');
+    var snapshotSource = {
+        id: 'source-snapshot', name: 'Fonte sintética grande', type: 'REMOTE_M3U',
+        createdAt: 1000, updatedAt: 2000
+    };
+    var snapshotCategories = [];
+    var snapshotItems = [];
+    for (var categoryIndex = 0; categoryIndex < 40; categoryIndex += 1) {
+        snapshotCategories.push({
+            id: 'snapshot-category-' + categoryIndex,
+            sourceId: snapshotSource.id,
+            name: 'Categoria ' + categoryIndex,
+            contentType: 'LIVE',
+            sortOrder: categoryIndex
+        });
+    }
+    for (var snapshotIndex = 0; snapshotIndex < 5000; snapshotIndex += 1) {
+        snapshotItems.push({
+            id: 'snapshot-item-' + snapshotIndex,
+            sourceId: snapshotSource.id,
+            categoryId: snapshotCategories[snapshotIndex % snapshotCategories.length].id,
+            contentType: 'LIVE',
+            name: 'Canal de escala ' + snapshotIndex,
+            sortOrder: snapshotIndex,
+            addedAt: snapshotIndex + 1
+        });
+    }
+    window.__resetPutBurst();
+    window.__resetTransactions();
+    var snapshotResult = await promised(function (ok, no) {
+        window.BuroStorage.replaceSourceCatalogue(
+            snapshotSource, snapshotCategories, snapshotItems, true, ok, no
+        );
+    });
+    check('a fotografia grande continua sendo uma substituição atômica completa',
+        snapshotResult && snapshotResult.removedItemIds.length === 0 &&
+        window.__transactions() === 1,
+        window.__transactions() + ' transações para a fotografia');
+    check('o caminho real de importação limita cada rajada de escrita a mil itens',
+        window.__maximumPutBurst() <= 1050,
+        window.__maximumPutBurst() + ' puts consecutivos para 5000 itens');
+
 
     window.close();
     process.stdout.write('\n');

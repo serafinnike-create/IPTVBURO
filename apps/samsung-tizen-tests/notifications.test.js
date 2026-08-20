@@ -160,7 +160,10 @@ async function run() {
     process.stdout.write('O sino aparece no shell e conta o que está guardado\n');
     window = loadApp({
         language: 'pt-BR', languageSelected: true, acceptedLegal: true,
-        notifications: [notice('reminder-digest:2026-08-18', { title: 'Você tem títulos esperando' })]
+        notifications: [
+            notice('reminder-digest:2026-08-18', { title: 'Você tem títulos esperando' }),
+            notice('season:serie:2', { title: 'Temporada já vista', kind: 'NEW_SEASON', read: true })
+        ]
     });
     await waitFor(function () {
         return Boolean(window.document.querySelector('[data-action="profile-form"], .shell'));
@@ -180,32 +183,41 @@ async function run() {
     check('o sino é alcançável pelo D-pad',
         window.document.querySelector('.topbar-bell').classList.contains('focusable'));
 
-    process.stdout.write('Abrir o sino mostra os avisos e permite marcar como lidos\n');
+    process.stdout.write('Abrir o sino mostra os avisos e marca a central como lida\n');
     window.BuroApp._activate(window.document.querySelector('.topbar-bell'));
     await waitFor(function () { return window.BuroApp.state.screen === 'NOTIFICATIONS'; }, 6000);
     check('a lista mostra o aviso guardado',
-        window.document.querySelectorAll('.notice-row').length === 1 &&
+        window.document.querySelectorAll('.notice-row').length === 2 &&
         window.document.querySelector('.notice-row').textContent.indexOf('esperando') >= 0);
-    check('o aviso não lido é marcado como tal',
-        window.document.querySelector('.notice-row').classList.contains('unread'));
+    check('abrir é ler, como no Android e no Windows',
+        window.BuroNotifications.unreadCount(window.BuroApp.state.preferences.notifications) === 0 &&
+        window.document.querySelectorAll('.notice-row.unread').length === 0);
+    check('abrir remove o marcador sem exigir uma segunda ação',
+        !window.document.querySelector('.bell-badge') &&
+        !window.document.querySelector('[data-action="notifications-read"]'));
+    check('o estado lido é persistido ao abrir',
+        JSON.parse(window.localStorage.getItem('iptvburo.preferences.v1'))
+            .notifications.every(function (row) { return row.read === true; }));
     check('a tela diz que a TV não avisa com o app fechado',
         window.document.body.textContent.indexOf('aplicativo fechado') >= 0);
-    window.BuroApp._activate(window.document.querySelector('[data-action="notifications-read"]'));
-    await waitFor(function () {
-        return window.BuroNotifications.unreadCount(window.BuroApp.state.preferences.notifications) === 0;
-    }, 6000);
-    check('marcar todos como lidos apaga o marcador',
-        !window.document.querySelector('.bell-badge'));
-    check('o estado lido foi gravado nas preferências',
-        JSON.parse(window.localStorage.getItem('iptvburo.preferences.v1'))
-            .notifications[0].read === true);
+    check('a central cheia oferece Limpar tudo',
+        Boolean(window.document.querySelector('[data-action="notifications-clear"]')) &&
+        window.document.querySelector('[data-action="notifications-clear"]').textContent.indexOf('Limpar tudo') >= 0);
 
-    process.stdout.write('Remover um aviso o apaga de verdade\n');
+    process.stdout.write('Remover um aviso e limpar todos apagam de verdade\n');
     window.BuroApp._activate(window.document.querySelector('[data-action="notification-remove"]'));
+    await waitFor(function () {
+        return window.BuroApp.state.preferences.notifications.length === 1;
+    }, 6000);
+    check('remover apaga somente a linha escolhida',
+        window.BuroApp.state.preferences.notifications.length === 1);
+    window.BuroApp._activate(window.document.querySelector('[data-action="notifications-clear"]'));
     await waitFor(function () {
         return window.BuroApp.state.preferences.notifications.length === 0;
     }, 6000);
-    check('a lista fica vazia', window.BuroApp.state.preferences.notifications.length === 0);
+    check('Limpar tudo deixa a central vazia',
+        window.BuroApp.state.preferences.notifications.length === 0 &&
+        JSON.parse(window.localStorage.getItem('iptvburo.preferences.v1')).notifications.length === 0);
     check('a tela vazia explica o que apareceria ali',
         Boolean(window.document.querySelector('.empty-state')));
     window.close();
@@ -220,6 +232,7 @@ async function run() {
             window.BuroI18n.setLanguage(language);
             return ['notificationsTitle', 'notificationsEmpty', 'notificationsEmptyBody',
                 'notificationsUnread', 'notificationsMarkAllRead', 'notificationsOpen',
+                'notificationsClearAll',
                 'notificationKindReminder', 'notificationKindEpisode', 'notificationKindSeason',
                 'notificationsBackground'].every(function (key) {
                 var value = window.BuroI18n.t(key);
