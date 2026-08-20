@@ -117,6 +117,34 @@ process.stdout.write('Filtrar por serviço alcança todas as categorias dele\n')
         P.categoryIdsForLabel(categories, 'Star+').length === 0);
 }());
 
+/*
+  O que o seletor de gênero precisa mostrar.
+
+  O escopo guarda o id da categoria, porque é por id que o filtro compara. Mas o
+  chip mostra texto, e passar o id para `categoryLabel` punha "category-79iyjj"
+  na tela — apareceu no emulador. O rótulo tem de vir do split, que já resolveu
+  o nome sem o prefixo de seção.
+*/
+process.stdout.write('O seletor mostra nome, e filtra por id\n');
+(function () {
+    var categories = [
+        category('category-79iyjj', 'Canais | Jogos do Dia'),
+        category('category-abc123', 'Canais | Variedades')
+    ];
+    var split = P.split(categories);
+    var chosen = 'category-79iyjj';
+    var label = null;
+    split.genres.some(function (row) {
+        if (row.id === chosen) { label = row.label; return true; }
+        return false;
+    });
+    check('o id da categoria leva ao nome legível dela', label === 'Jogos do Dia');
+    check('o id nunca é o que se mostra',
+        label !== chosen && String(label).indexOf('category-') === -1);
+    check('cada gênero carrega o id junto do rótulo, para o filtro comparar',
+        split.genres.length === 2 && split.genres[0].id === 'category-79iyjj');
+}());
+
 process.stdout.write('Cada serviço traz marca e cor para a interface\n');
 (function () {
     var identity = P.identityFor('Filmes | Netflix');

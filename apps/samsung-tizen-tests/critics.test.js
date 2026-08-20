@@ -124,6 +124,27 @@ async function run() {
         window.BuroCritics._parsePercent('45%') === 45 &&
         window.BuroCritics._parsePercent('62/100') === 62);
 
+    process.stdout.write('Cada fonte recebe uma marca textual e uma cor verificavel\n');
+    check('Rotten Tomatoes usa RT sobre o vermelho da fonte',
+        typeof window.BuroCritics.markFor === 'function' &&
+        window.BuroCritics.markFor('tomatometer', 83).initials === 'RT' &&
+        window.BuroCritics.markFor('tomatometer', 83).accent === '#FA320A' &&
+        window.BuroCritics.markFor('tomatometer', 83).ink === '#FFFFFF');
+    check('IMDb usa a sigla completa com tinta escura sobre amarelo',
+        typeof window.BuroCritics.markFor === 'function' &&
+        window.BuroCritics.markFor('imdb', 8.7).initials === 'IMDb' &&
+        window.BuroCritics.markFor('imdb', 8.7).accent === '#F5C518' &&
+        window.BuroCritics.markFor('imdb', 8.7).ink === '#111111');
+    check('Metascore respeita exatamente as faixas publica favoravel mista e desfavoravel',
+        typeof window.BuroCritics.markFor === 'function' &&
+        window.BuroCritics.markFor('metascore', 61).accent === '#00CE7A' &&
+        window.BuroCritics.markFor('metascore', 60).accent === '#FFBD3F' &&
+        window.BuroCritics.markFor('metascore', 40).accent === '#FFBD3F' &&
+        window.BuroCritics.markFor('metascore', 39).accent === '#FF6874');
+    check('fonte desconhecida nao ganha uma marca inventada',
+        typeof window.BuroCritics.markFor === 'function' &&
+        window.BuroCritics.markFor('desconhecida', 90) === null);
+
     process.stdout.write('O id do IMDb é conferido antes de gastar requisição\n');
     check('um id bem formado passa', window.BuroCritics.safeImdbId('tt0111161') === 'tt0111161');
     check('um id curto é recusado', window.BuroCritics.safeImdbId('tt111') === null);

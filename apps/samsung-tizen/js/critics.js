@@ -11,6 +11,8 @@ var BuroCritics = (function () {
     var SOURCE_ROTTEN_TOMATOES = 'Rotten Tomatoes';
     var SOURCE_METACRITIC = 'Metacritic';
     var SOURCE_IMDB = 'Internet Movie Database';
+    var METASCORE_FAVOURABLE = 61;
+    var METASCORE_MIXED = 40;
 
     /*
       As notas ficam em memória, por id do IMDb.
@@ -101,6 +103,32 @@ var BuroCritics = (function () {
     }
 
     /*
+      Identidade visual das três fontes, equivalente ao contrato do Windows.
+
+      Letras e cor, nunca uma cópia dos logotipos registrados. O Metascore usa
+      as faixas públicas da própria fonte; pintar 32 de verde contradiz o número
+      e seria pior do que omitir a cor.
+    */
+    function markFor(kind, score) {
+        var percent;
+        if (kind === 'tomatometer') {
+            return { initials: 'RT', accent: '#FA320A', ink: '#FFFFFF' };
+        }
+        if (kind === 'imdb') {
+            return { initials: 'IMDb', accent: '#F5C518', ink: '#111111' };
+        }
+        if (kind !== 'metascore') { return null; }
+        percent = Number(score);
+        if (!isFinite(percent) || percent < 0 || percent > 100) { return null; }
+        return {
+            initials: 'MC',
+            accent: percent >= METASCORE_FAVOURABLE ? '#00CE7A' :
+                (percent >= METASCORE_MIXED ? '#FFBD3F' : '#FF6874'),
+            ink: '#111111'
+        };
+    }
+
+    /*
       Cada nota é opcional por conta própria: o OMDb costuma ter nota do IMDb
       para filme sem Tomatometer, e mostrar a lacuna é honesto de um jeito que
       substituir pelo número de outra empresa não seria.
@@ -166,7 +194,7 @@ var BuroCritics = (function () {
 
     return {
         safeKey: safeKey, safeImdbId: safeImdbId, key: key, configured: configured,
-        save: save, remove: remove, clear: clear, scoresFor: scoresFor,
+        save: save, remove: remove, clear: clear, scoresFor: scoresFor, markFor: markFor,
         cached: cached, _scoresFrom: scoresFrom, _parsePercent: parsePercent
     };
 }());

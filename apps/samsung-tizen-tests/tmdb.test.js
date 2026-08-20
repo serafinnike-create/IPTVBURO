@@ -47,9 +47,9 @@ function run() {
         json: function (options, success, failure) {
             requests.push(options);
             if (options.url.indexOf('/watch/providers/movie?') >= 0) {
-                success({ results: [{ provider_id: 8, provider_name: 'Netflix', display_priority: 1 }] });
+                success({ results: [{ provider_id: 8, provider_name: 'Netflix', logo_path: '/netflix.jpg', display_priority: 1 }] });
             } else if (options.url.indexOf('/watch/providers/tv?') >= 0) {
-                success({ results: [{ provider_id: 9, provider_name: 'Prime Video', display_priority: 1 }] });
+                success({ results: [{ provider_id: 9, provider_name: 'Prime Video', logo_path: '/prime-video.jpg', display_priority: 1 }] });
             } else if (options.url.indexOf('/discover/tv?') >= 0) {
                 success({ results: [{ id: 77, name: 'Série sintética', first_air_date: '2024-01-02', poster_path: '/tv.jpg', vote_average: 7.5 }] });
             } else if (options.url.indexOf('/discover/movie?') >= 0) {
@@ -61,8 +61,9 @@ function run() {
             } else if (options.url.indexOf('/movie/42/watch/providers?') >= 0) {
                 success({ results: { BR: {
                     link: 'https://www.themoviedb.org/movie/42/watch',
-                    flatrate: [{ provider_id: 8, provider_name: 'Netflix' }],
-                    ads: [{ provider_id: 9, provider_name: 'Plex' }], rent: [{ provider_id: 3, provider_name: 'Apple TV' }]
+                    flatrate: [{ provider_id: 8, provider_name: 'Netflix', logo_path: '/netflix.jpg' }],
+                    ads: [{ provider_id: 9, provider_name: 'Plex', logo_path: '/plex.jpg' }],
+                    rent: [{ provider_id: 3, provider_name: 'Apple TV', logo_path: '/apple-tv.jpg' }]
                 } } });
             } else if (options.url.indexOf('/search/movie?') >= 0) {
                 success({ results: [
@@ -196,6 +197,7 @@ function run() {
     var publicShelves = [{
         providerId: 8,
         providerName: 'Netflix',
+        providerLogoUrl: 'https://image.tmdb.org/t/p/w92/netflix.jpg',
         titles: [{
             tmdbId: 42,
             isSeries: false,
@@ -222,7 +224,9 @@ function run() {
     }
     check('a resposta do mesmo dia, região, filtro e idioma abre sem rede',
         restoredShelves && restoredShelves.length === 1 && restoredShelves[0].providerId === 8 &&
-        restoredShelves[0].providerName === 'Netflix' && restoredShelves[0].titles.length === 1 &&
+        restoredShelves[0].providerName === 'Netflix' &&
+        restoredShelves[0].providerLogoUrl === 'https://image.tmdb.org/t/p/w92/netflix.jpg' &&
+        restoredShelves[0].titles.length === 1 &&
         restoredShelves[0].titles[0].tmdbId === 42 && restoredShelves[0].titles[0].title === 'Filme sintético' &&
         restoredShelves[0].titles[0].releaseDate === '2025-02-03');
     check('o cache guarda apenas o cartão público e nunca chave, oferta ou URL arbitrária',
@@ -231,6 +235,12 @@ function run() {
         shelfCacheRaw.indexOf('Este texto não é necessário') === -1 &&
         restoredShelves && !Object.prototype.hasOwnProperty.call(restoredShelves[0].titles[0], 'url') &&
         !Object.prototype.hasOwnProperty.call(restoredShelves[0].titles[0], 'overview'));
+    if (hasShelfCache) {
+        publicShelves[0].providerLogoUrl = 'https://evil.test/provider.jpg?token=secret';
+        window.BuroTmdb.writeShelfCache('BR', 'UPCOMING', 'pt-BR', publicShelves, cacheDay);
+    }
+    check('o cache descarta marca fora do CDN e tamanho publicos do TMDb',
+        hasShelfCache && window.BuroTmdb.readShelfCache('BR', 'UPCOMING', 'pt-BR', cacheDay)[0].providerLogoUrl === null);
     check('região, filtro e idioma diferentes nunca reutilizam a resposta errada',
         hasShelfCache && window.BuroTmdb.readShelfCache('DE', 'MOVIES', 'pt-BR', cacheDay) === null &&
         window.BuroTmdb.readShelfCache('BR', 'SERIES', 'pt-BR', cacheDay) === null &&
@@ -274,6 +284,9 @@ function run() {
         seriesShelves[0].providerName === 'Prime Video' && seriesShelves[0].titles[0].isSeries &&
         weeklyShelves[0].titles[0].title === 'Série sintética' &&
         upcomingShelves[0].providerName === 'coming-soon' && upcomingShelves[0].titles[0].tmdbId === 88);
+    check('o diretorio conserva a marca publica w92 ao lado do nome do servico',
+        movieShelves[0].providerLogoUrl === 'https://image.tmdb.org/t/p/w92/netflix.jpg' &&
+        seriesShelves[0].providerLogoUrl === 'https://image.tmdb.org/t/p/w92/prime-video.jpg');
     check('descoberta sempre envia região e filtro de provedor quando aplicável',
         requests.some(function (entry) {
             return entry.url.indexOf('/discover/movie?') >= 0 && entry.url.indexOf('watch_region=BR') >= 0 &&
@@ -301,6 +314,10 @@ function run() {
         subscriptionSelection.offers.every(function (offer) {
             return offer.price === undefined && offer.requiresAttribution === true;
         }));
+    check('cada oferta conserva a mesma marca publica do servico',
+        subscriptionSelection.offers[0].providerLogoUrl === 'https://image.tmdb.org/t/p/w92/netflix.jpg' &&
+        subscriptionSelection.offers[1].providerLogoUrl === 'https://image.tmdb.org/t/p/w92/plex.jpg' &&
+        subscriptionSelection.offers[2].providerLogoUrl === 'https://image.tmdb.org/t/p/w92/apple-tv.jpg');
     check('serviço conhecido recebe busca oficial e desconhecido usa somente fallback TMDb confiável',
         subscriptionSelection.offers[0].url.indexOf('https://www.netflix.com/search?q=') === 0 &&
         window.BuroTmdb.providerTarget('Serviço desconhecido', 'Filme', 'https://evil.test/watch') === null &&

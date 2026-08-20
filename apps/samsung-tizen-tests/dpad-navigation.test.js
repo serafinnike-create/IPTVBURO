@@ -48,6 +48,18 @@ function loadApp(preferences) {
     var window = dom.window;
     var secureData = {};
     var launchedAppControls = [];
+    var runtimeReadyMessages = [];
+    window.console.info = function () {
+        runtimeReadyMessages.push(Array.prototype.join.call(arguments, ' '));
+    };
+    window.__scrollIntoViewCalls = [];
+    window.HTMLElement.prototype.scrollIntoView = function (options) {
+        window.__scrollIntoViewCalls.push({
+            section: this.getAttribute('data-section') || '',
+            action: this.getAttribute('data-action') || '',
+            inline: options && options.inline
+        });
+    };
     window.indexedDB = new fakeIndexedDb.IDBFactory();
     if (preferences) {
         window.localStorage.setItem('iptvburo.preferences.v1', JSON.stringify(preferences));
@@ -79,18 +91,30 @@ function loadApp(preferences) {
     /* A primeira etapa do boot é síncrona e pode ser verificada sem temporização. */
     window.__bootFirstFrame = (function () {
         var message = window.document.querySelector('.boot-message');
+        var progress = window.document.querySelector('.boot-progress');
+        var panel = window.document.querySelector('.boot-panel');
         return {
             present: Boolean(window.document.querySelector('.boot-screen')),
             cinematic: Boolean(window.document.querySelector('.boot-backdrop')),
             panel: Boolean(window.document.querySelector('.boot-panel')),
+            mark: Boolean(window.document.querySelector('.boot-mark')),
             spinner: Boolean(window.document.querySelector('.boot-indicator')),
             dots: window.document.querySelectorAll('.boot-dot').length,
-            message: message ? message.textContent : ''
+            message: message ? message.textContent : '',
+            live: panel && panel.getAttribute('role') === 'status' &&
+                panel.getAttribute('aria-live') === 'polite' && panel.getAttribute('aria-atomic') === 'true',
+            progress: progress ? {
+                role: progress.getAttribute('role'),
+                now: progress.getAttribute('aria-valuenow'),
+                min: progress.getAttribute('aria-valuemin'),
+                max: progress.getAttribute('aria-valuemax')
+            } : null
         };
     }());
 
     window.__secureData = secureData;
     window.__launchedAppControls = launchedAppControls;
+    window.__runtimeReadyMessages = runtimeReadyMessages;
     return window;
 }
 
@@ -98,6 +122,23 @@ function press(window, keyCode) {
     var event = new window.KeyboardEvent('keydown', { bubbles: true, cancelable: true });
     Object.defineProperty(event, 'keyCode', { get: function () { return keyCode; } });
     window.document.dispatchEvent(event);
+    event = new window.KeyboardEvent('keyup', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'keyCode', { get: function () { return keyCode; } });
+    window.document.dispatchEvent(event);
+}
+
+function hold(window, keyCode, durationMs) {
+    var event = new window.KeyboardEvent('keydown', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'keyCode', { get: function () { return keyCode; } });
+    window.document.dispatchEvent(event);
+    return new Promise(function (resolve) {
+        setTimeout(function () {
+            event = new window.KeyboardEvent('keyup', { bubbles: true, cancelable: true });
+            Object.defineProperty(event, 'keyCode', { get: function () { return keyCode; } });
+            window.document.dispatchEvent(event);
+            resolve();
+        }, durationMs);
+    });
 }
 
 async function run() {
@@ -291,6 +332,7 @@ async function run() {
             'noFilterResults', 'season', 'manageSource', 'sourceUpdated', 'sourceDeleted',
             'deleteSource', 'confirmDeleteSource', 'deleteSourceWarning', 'audioTracks',
             'subtitleTracks', 'subtitlesOff', 'noAudioTracks', 'noSubtitleTracks', 'playerMenuHint', 'playbackSpeed',
+            'playerLockHint', 'playerControlsLocked', 'playerUnlockHint',
             'playbackProgress', 'trailerProgress',
             'playbackSourceUnavailableError', 'playerAspectRatio', 'playerScaleOriginal',
             'playerScaleFill', 'playerScaleAuto',
@@ -309,6 +351,10 @@ async function run() {
             'trailer', 'trailerLoading', 'trailerPlaying', 'trailerPlayingMuted',
             'trailerPaused', 'trailerEnded', 'trailerUnavailable', 'trailerHint',
             'metadata', 'tmdbTitle', 'tmdbBody', 'tmdbSharedLabel', 'tmdbSharedHint',
+            'criticsGuideButton', 'criticsGuideTitle', 'criticsGuideIntro',
+            'criticsGuideStep1Title', 'criticsGuideStep1Body', 'criticsGuideStep2Title',
+            'criticsGuideStep2Body', 'criticsGuideStep3Title', 'criticsGuideStep3Body',
+            'criticsGuideStep4Title', 'criticsGuideStep4Body', 'criticsGuideOpenSite',
             'tmdbGuideButton', 'tmdbGuideTitle', 'tmdbGuideIntro', 'tmdbGuideStepAccount',
             'tmdbGuideStepSettings', 'tmdbGuideStepRequest', 'tmdbGuideStepCopy', 'tmdbGuideOpenSite',
             'tmdbProfileLabel', 'tmdbProfileHint', 'tmdbKeyLabel', 'tmdbKeyHint', 'tmdbClear',
@@ -316,6 +362,8 @@ async function run() {
             'tmdbUnavailable', 'tmdbSecureError', 'tmdbAttribution', 'personLoading',
             'personMetadataHint', 'personFilmography', 'personNoFilmography', 'personInLibrary',
             'share', 'shareTitle', 'shareScan', 'shareSafe', 'shareQrUnavailable', 'shareLink',
+            'sharedOpening', 'sharedMissingTitle', 'sharedMissingBody', 'sharedRetry',
+            'sharedDismiss', 'sharedResolveError',
             'profilePhoto', 'chooseProfilePhoto', 'removeProfilePhoto', 'profilePhotoHint',
             'profilePhotoUsb', 'profilePhotoLoading', 'profilePhotoReading', 'profilePhotoError',
             'profilePhotoErrorBody', 'profilePhotoEmpty', 'profilePhotoEmptyBody', 'profilePhotoPickerHint',
@@ -325,6 +373,9 @@ async function run() {
             'downloadInterrupted',
             'localM3u', 'usbM3uHint', 'usbM3uLoading', 'usbM3uEmpty', 'usbM3uError',
             'favoritesEmpty', 'continueEmpty', 'historyEmpty', 'playerNow', 'playerNext',
+            'reminderNotInLibrary',
+            'discoverIntro', 'discoverKeep', 'discoverSkip', 'discoverDetails', 'discoverExhausted',
+            'discoverAgain', 'discoverCounter', 'discoverLoading', 'discoverNeedsCatalogue',
             'settingsVersion', 'settingsLegal', 'settingsLanguageHint', 'languageCurrent',
             'activeProfile', 'chooseProfile',
             'subscriptions', 'subscriptionsBrowse', 'subscriptionsMovies', 'subscriptionsSeries',
@@ -332,6 +383,7 @@ async function run() {
             'subscriptionsLoading', 'subscriptionsServices', 'subscriptionsUnavailable',
             'subscriptionsEmpty', 'subscriptionsUpcomingShelf', 'subscriptionsWhere',
             'subscriptionsBack', 'subscriptionsAvailable', 'subscriptionsLoadingOffers',
+            'subscriptionsSeeMore', 'subscriptionsAllOn', 'subscriptionsLoadingMore', 'subscriptionsMoreFailed',
             'subscriptionsUnknown', 'subscriptionsSynopsis', 'offerLibrary', 'offerSubscription',
             'offerAds', 'offerFree', 'offerRent', 'offerBuy', 'externalOpenUnavailable'
         ];
@@ -351,7 +403,10 @@ async function run() {
                 window.BuroI18n.setLanguage(language);
                 return window.BuroI18n.t('discover') !== 'discover' &&
                     window.BuroI18n.t('discoverIntro') !== 'discoverIntro' &&
-                    window.BuroI18n.t('topRated') !== 'topRated';
+                    window.BuroI18n.t('discoverKeep') !== 'discoverKeep' &&
+                    window.BuroI18n.t('discoverSkip') !== 'discoverSkip' &&
+                    window.BuroI18n.t('discoverDetails') !== 'discoverDetails' &&
+                    window.BuroI18n.t('discoverCounter').indexOf('{current}') >= 0;
             }));
         window.BuroI18n.setLanguage(previous);
     }());
@@ -363,10 +418,15 @@ async function run() {
     check('a tela de carregamento aparece antes do shell', bootFrame.present);
     check('o boot usa a arte cinematográfica original do Android', bootFrame.cinematic);
     check('o conteúdo fica no painel central equivalente ao Android', bootFrame.panel);
+    check('a tela usa a marca circular vetorial equivalente ao Windows', bootFrame.mark);
     check('há indicador circular em vez de porcentagem inventada', bootFrame.spinner);
     check('as quatro etapas universais são representadas', bootFrame.dots === 4);
     check('a etapa em curso é descrita ao usuário',
         Boolean(bootFrame.message) && bootFrame.message !== 'bootProfiles');
+    check('o primeiro estágio expõe progresso real de 25 por cento',
+        bootFrame.progress && bootFrame.progress.role === 'progressbar' &&
+        bootFrame.progress.now === '25' && bootFrame.progress.min === '0' && bootFrame.progress.max === '100');
+    check('mudanças do boot formam uma única região de status educada', bootFrame.live);
 
     await new Promise(function (resolve, reject) {
         window.BuroStorage.put('items', { id: 'movie:favorite-only', sourceId: 'source-public', categoryId: 'movies', contentType: 'MOVIE', name: 'Favorite only' }, resolve, reject);
@@ -406,6 +466,14 @@ async function run() {
     window.BuroApp._activate(window.document.querySelector('[data-action="profile-save"]'));
     await waitFor(function () { return window.document.querySelector('.shell'); }, 2500);
     check('cria perfil e abre o shell', Boolean(window.document.querySelector('.shell')));
+    check('o runtime anuncia uma vez que o shell terminou o boot',
+        window.__runtimeReadyMessages.length === 1 &&
+        window.__runtimeReadyMessages[0] === 'IPTVBURO_RUNTIME_READY screen=SHELL version=3.0.1' &&
+        window.document.getElementById('app').getAttribute('data-runtime-ready') === '3.0.1');
+    check('o marcador de prontidão não expõe perfil, fonte nem credencial',
+        window.__runtimeReadyMessages[0].indexOf('Sala') === -1 &&
+        window.__runtimeReadyMessages[0].indexOf('source-') === -1 &&
+        window.__runtimeReadyMessages[0].indexOf('password') === -1);
     /* Descobrir entrou como décima terceira seção e usa somente o catálogo
        autorizado; Lembretes é a décima quarta, ao lado de Histórico. */
     check('shell contém todas as catorze seções', window.document.querySelectorAll('.nav-list [data-action="section"]').length === 14);
@@ -415,6 +483,24 @@ async function run() {
         window.document.querySelector('.main-pane').getAttribute('aria-labelledby') === 'screen-title' &&
         window.document.querySelector('.nav-item[aria-current="page"]').getAttribute('role') === 'button' &&
         !window.document.getElementById('app').hasAttribute('aria-live'));
+    window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="HOME"]'));
+    check('novas renderizações do shell não repetem o marcador de prontidão',
+        window.__runtimeReadyMessages.length === 1);
+    var ribbonPath = [];
+    for (var ribbonStep = 0; ribbonStep < 20; ribbonStep += 1) {
+        var ribbonFocus = window.document.querySelector('.nav-list .focused');
+        if (ribbonFocus) { ribbonPath.push(ribbonFocus.getAttribute('data-section')); }
+        if (ribbonFocus && ribbonFocus.getAttribute('data-section') === 'SETTINGS') { break; }
+        press(window, 39);
+    }
+    check('D-pad alcança Fontes e Configurações mesmo fora da largura inicial da Ribbon',
+        ribbonPath.indexOf('SOURCES') >= 0 &&
+        ribbonPath.indexOf('SETTINGS') === ribbonPath.indexOf('SOURCES') + 1);
+    check('o destino fora da largura é revelado pela rolagem programática da Ribbon',
+        window.__scrollIntoViewCalls.some(function (call) {
+            return call.section === 'SETTINGS' && call.inline === 'nearest';
+        }));
+    window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="HOME"]'));
     window.document.querySelector('.nav-list [data-section="SEARCH"]').click();
     var pointerReachedSearch = window.BuroApp.state.section === 'SEARCH';
     window.document.querySelector('.nav-list [data-section="HOME"]').click();
@@ -425,6 +511,8 @@ async function run() {
         window.document.querySelectorAll('.demo-media-card').length === 3);
     check('a Living Home deixa explícito que os cards são demonstração visual',
         window.document.querySelector('.demo-notice').textContent.indexOf(window.BuroI18n.t('demoNotice')) >= 0);
+    check('o aviso da Home vazia participa do fluxo da barra superior sem cobrir sino ou plataforma',
+        window.document.querySelector('.demo-notice').parentElement === window.document.querySelector('.topbar'));
     check('o player possui timeline e atalhos visíveis para áudio e legenda',
         Boolean(window.document.querySelector('.player-timeline')) &&
         Boolean(window.document.getElementById('player-audio-label')) &&
@@ -721,13 +809,13 @@ async function run() {
     await new Promise(function (resolve) { window.BuroUsb.refresh(resolve, resolve); });
 
     process.stdout.write('TMDb seguro por perfil\n');
-    window.tizen.application.getAppInfo = function () { return { version: '0.3.0' }; };
+    window.tizen.application.getAppInfo = function () { return { version: '3.0.1' }; };
     window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="SETTINGS"]'));
     var settingsLanguages = Array.prototype.slice.call(
         window.document.querySelectorAll('.settings-language-option[data-action="language"]'));
     var currentSettingsLanguage = window.document.querySelector('.settings-language-option.selected');
     check('Configurações mostra versão instalada e aviso legal equivalente ao Android',
-        window.document.querySelector('.settings-about-card').textContent.indexOf('0.3.0') >= 0 &&
+        window.document.querySelector('.settings-about-card').textContent.indexOf('3.0.1') >= 0 &&
         window.document.querySelector('.settings-about-card').textContent.indexOf(window.BuroI18n.t('settingsLegal')) >= 0);
     check('idiomas aparecem em cinco linhas legíveis em vez de códigos isolados',
         settingsLanguages.length === 5 &&
@@ -747,6 +835,36 @@ async function run() {
     check('preferências booleanas expõem papel switch e estado atual',
         window.document.querySelector('[data-action="toggle-setting"]').getAttribute('role') === 'switch' &&
         /^(true|false)$/.test(window.document.querySelector('[data-action="toggle-setting"]').getAttribute('aria-checked')));
+    check('Configuracoes oferece o guia OMDb presente no Android e Windows',
+        Boolean(window.document.querySelector('[data-action="critics-settings"]')));
+    window.BuroApp._activate(window.document.querySelector('[data-action="critics-settings"]'));
+    check('tela OMDb explica as notas e oferece ajuda para obter a chave',
+        Boolean(window.document.getElementById('critics-key')) &&
+        Boolean(window.document.querySelector('[data-action="critics-guide"]')) &&
+        window.document.querySelector('[data-action="critics-guide"]').textContent.indexOf(
+            window.BuroI18n.t('criticsGuideButton')) >= 0);
+    var criticsGuideDraftKey = 'criticGuideDraft1234';
+    window.document.getElementById('critics-key').value = criticsGuideDraftKey;
+    window.BuroApp._activate(window.document.querySelector('[data-action="critics-guide"]'));
+    check('guia OMDb apresenta quatro etapas e quatro ilustracoes locais',
+        window.BuroApp.state.screen === 'CRITICS_GUIDE' &&
+        window.document.querySelectorAll('.critics-guide-step').length === 4 &&
+        window.document.querySelectorAll('.critics-guide-diagram[aria-hidden="true"]').length === 4);
+    check('guia OMDb nao expoe nem persiste o rascunho da chave',
+        window.document.body.textContent.indexOf(criticsGuideDraftKey) === -1 &&
+        (window.localStorage.getItem('iptvburo.preferences.v1') || '').indexOf(criticsGuideDraftKey) === -1);
+    window.BuroApp._activate(window.document.querySelector('[data-action="critics-guide-open"]'));
+    var criticsGuideAppControl = window.__launchedAppControls[window.__launchedAppControls.length - 1];
+    check('guia OMDb abre somente o emissor HTTPS oficial da chave',
+        criticsGuideAppControl &&
+        criticsGuideAppControl.operation === 'http://tizen.org/appcontrol/operation/view' &&
+        criticsGuideAppControl.uri === 'https://www.omdbapi.com/apikey.aspx');
+    press(window, 10009);
+    check('RETURN fecha o guia OMDb e restaura o rascunho somente em memoria',
+        window.BuroApp.state.screen === 'CRITICS_SETTINGS' &&
+        window.document.getElementById('critics-key').value === criticsGuideDraftKey &&
+        (window.localStorage.getItem('iptvburo.preferences.v1') || '').indexOf(criticsGuideDraftKey) === -1);
+    press(window, 10009);
     check('Configurações expõe TMDb como capability opcional e inicialmente não configurada',
         Boolean(window.document.querySelector('[data-action="tmdb-settings"]')) &&
         window.document.querySelector('[data-action="tmdb-settings"]').textContent.indexOf(window.BuroI18n.t('notConfigured')) >= 0);
@@ -791,15 +909,26 @@ async function run() {
 
     var originalLoadSubscriptionShelves = window.BuroTmdb.loadShelves;
     var originalLoadSubscriptionTitle = window.BuroTmdb.loadSubscriptionTitle;
+    var originalLoadServiceCatalogue = window.BuroTmdb.loadServiceCatalogue;
     var subscriptionCalls = [];
+    var expandedCatalogueCall = null;
     window.BuroTmdb.loadShelves = function (key, region, kind, locale, progress, success) {
-        subscriptionCalls.push({ key: key, region: region, kind: kind, locale: locale });
-        progress(1, 1, 1);
-        success([{ providerId: 8, providerName: 'Netflix', titles: [{
+        var titles = [{
             tmdbId: 42, isSeries: kind === 'SERIES', title: kind === 'SERIES' ? 'Série externa' : 'Favorite only',
             year: null, rating: 8.2, overview: 'Sinopse da prateleira',
             posterUrl: 'https://image.tmdb.org/t/p/w342/subscription.jpg'
-        }] }]);
+        }];
+        if (kind === 'MOVIES') {
+            titles.push({
+                tmdbId: 84, isSeries: false, title: 'Filme futuro', year: 2099,
+                releaseDate: '2099-06-15', rating: 7.9, overview: 'Ainda não entrou no catálogo',
+                posterUrl: 'https://image.tmdb.org/t/p/w342/future.jpg'
+            });
+        }
+        subscriptionCalls.push({ key: key, region: region, kind: kind, locale: locale });
+        progress(1, 1, 1);
+        success([{ providerId: 8, providerName: 'Netflix',
+            providerLogoUrl: 'https://image.tmdb.org/t/p/w92/netflix.jpg', titles: titles }]);
         return { abort: function () {} };
     };
     window.BuroTmdb.loadSubscriptionTitle = function (key, title, region, locale, success) {
@@ -814,15 +943,25 @@ async function run() {
             },
             offers: [
                 { providerId: 8, providerName: 'Netflix', type: 'subscription',
+                    providerLogoUrl: 'https://image.tmdb.org/t/p/w92/netflix.jpg',
                     url: 'https://www.netflix.com/search?q=Favorite%20only', requiresAttribution: true },
                 { providerId: 9, providerName: 'Plex', type: 'ads',
+                    providerLogoUrl: 'https://image.tmdb.org/t/p/w92/plex.jpg',
                     url: 'https://www.themoviedb.org/movie/42/watch', requiresAttribution: true },
                 { providerId: 10, providerName: 'Serviço inválido', type: 'buy',
+                    providerLogoUrl: 'https://evil.test/logo.jpg?token=secret',
                     url: 'https://evil.test/watch/42', requiresAttribution: true }
             ],
             unknown: false
         });
         return { abort: function () {} };
+    };
+    window.BuroTmdb.loadServiceCatalogue = function (key, providerId, region, kind, locale, success, failure) {
+        expandedCatalogueCall = {
+            key: key, providerId: providerId, region: region, kind: kind, locale: locale,
+            success: success, failure: failure, aborted: false
+        };
+        return { abort: function () { expandedCatalogueCall.aborted = true; } };
     };
 
     press(window, 10009);
@@ -837,16 +976,82 @@ async function run() {
         subscriptionCalls[0].kind === 'MOVIES' && subscriptionCalls[0].region === 'BR' &&
         window.document.querySelector('[data-action="subscription-filter"].primary').getAttribute('aria-pressed') === 'true' &&
         window.document.querySelector('[data-action="subscription-region"].primary').getAttribute('aria-pressed') === 'true');
+    check('prateleira mostra a marca publica sem substituir o nome textual',
+        window.document.querySelector('.subscription-shelves .subscription-provider-logo') &&
+        window.document.querySelector('.subscription-shelves .subscription-provider-logo').getAttribute('src') ===
+            'https://image.tmdb.org/t/p/w92/netflix.jpg' &&
+        window.document.querySelector('.subscription-shelves .section-heading').textContent.indexOf('Netflix') >= 0 &&
+        window.document.querySelectorAll('.subscription-shelves .subscription-card-logo').length === 2);
+    var subscriptionCallsAfterFirstVisit = subscriptionCalls.length;
+    window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="HOME"]'));
+    window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]'));
+    await waitFor(function () { return window.document.querySelector('[data-action="subscription-title"]'); }, 1000);
+    check('reabrir Assinaturas no mesmo dia usa as prateleiras públicas sem outra consulta',
+        subscriptionCalls.length === subscriptionCallsAfterFirstVisit &&
+        window.BuroApp.state.screenData.shelves.length === 1 &&
+        !window.BuroApp.state.screenData.loading);
+    var expandService = window.document.querySelector('[data-action="subscription-expand"]');
+    check('cada serviço real termina com Ver mais e Em breve não inventa catálogo',
+        expandService && expandService.getAttribute('data-provider') === '8' &&
+        !window.document.querySelector('[data-provider="coming-soon"]'));
+    if (expandService) {
+        window.BuroApp._activate(expandService);
+        check('Ver mais abre imediatamente os títulos da prateleira enquanto busca o restante',
+            expandedCatalogueCall && expandedCatalogueCall.providerId === 8 && expandedCatalogueCall.kind === 'MOVIES' &&
+            window.BuroApp.state.screenData.expanded.loading &&
+            window.document.querySelectorAll('.subscription-expanded-grid [data-action="subscription-title"]').length === 2);
+        check('grade ampla conserva a marca no cabecalho e em cada card',
+            window.document.querySelector('.subscription-expanded .subscription-provider-logo') &&
+            window.document.querySelector('.subscription-expanded .subscription-provider-logo').getAttribute('src') ===
+                'https://image.tmdb.org/t/p/w92/netflix.jpg' &&
+            window.document.querySelectorAll('.subscription-expanded-grid .subscription-card-logo').length === 2);
+        expandedCatalogueCall.success(Array.from({ length: 45 }, function (_, index) {
+            return {
+                tmdbId: 1000 + index, isSeries: false, title: 'Catálogo amplo ' + index,
+                year: 2026, posterUrl: 'https://image.tmdb.org/t/p/w342/expanded-' + index + '.jpg'
+            };
+        }));
+        check('resposta ampla substitui a grade sem deixar mais de cem títulos no DOM',
+            !window.BuroApp.state.screenData.expanded.loading &&
+            window.document.querySelectorAll('.subscription-expanded-grid [data-action="subscription-title"]').length === 45);
+        window.BuroApp._activate(window.document.querySelector('.subscription-expanded-grid [data-action="subscription-title"]'));
+        await waitFor(function () { return window.document.querySelector('[data-action="subscription-back"]'); }, 1000);
+        window.BuroApp._activate(window.document.querySelector('[data-action="subscription-back"]'));
+        check('Voltar do detalhe restaura a mesma grade ampla',
+            window.BuroApp.state.screenData.expanded &&
+            window.document.querySelectorAll('.subscription-expanded-grid [data-action="subscription-title"]').length === 45);
+        press(window, 10009);
+        check('RETURN fecha a grade ampla e devolve as prateleiras do mesmo filtro',
+            !window.BuroApp.state.screenData.expanded &&
+            window.document.querySelectorAll('.subscription-shelves [data-action="subscription-title"]').length === 2);
+        window.BuroApp._activate(window.document.querySelector('[data-action="subscription-expand"]'));
+        expandedCatalogueCall.failure({ code: 'NETWORK_ERROR' });
+        check('falha conserva os títulos iniciais e uma explicação visível na grade',
+            window.BuroApp.state.screenData.expanded.error &&
+            window.document.querySelectorAll('.subscription-expanded-grid [data-action="subscription-title"]').length === 2 &&
+            window.document.body.textContent.indexOf('Os títulos iniciais continuam disponíveis') >= 0);
+        press(window, 10009);
+        window.BuroApp._activate(window.document.querySelector('[data-action="subscription-expand"]'));
+        var closedExpandedCall = expandedCatalogueCall;
+        press(window, 10009);
+        closedExpandedCall.success([{ tmdbId: 9999, isSeries: false, title: 'Resposta atrasada' }]);
+        check('fechar cancela a consulta e resposta atrasada não reabre outro catálogo',
+            closedExpandedCall.aborted && !window.BuroApp.state.screenData.expanded &&
+            window.document.body.textContent.indexOf('Resposta atrasada') === -1);
+    }
     window.BuroApp._activate(window.document.querySelector('[data-action="subscription-title"]'));
     await waitFor(function () { return window.document.querySelector('[data-action="subscription-local"]'); }, 1000);
     check('detalhe cruza o catálogo inteiro e apresenta biblioteca local junto às ofertas externas',
         window.document.querySelector('[data-action="subscription-local"]').getAttribute('data-id') === 'movie:favorite-only' &&
         window.document.querySelectorAll('.subscription-offer').length === 4);
-    check('cada oferta externa mostra atribuição JustWatch e nenhuma inventa preço ou logotipo',
+    check('cada oferta externa mostra atribuição JustWatch, marca pública segura e nenhum preço inventado',
         window.document.querySelectorAll('.subscription-offer small').length === 3 &&
         Array.prototype.every.call(window.document.querySelectorAll('.subscription-offer small'), function (node) {
             return node.textContent === 'Streaming data provided by JustWatch';
-        }) && !window.document.querySelector('.subscription-offer img') &&
+        }) && window.document.querySelectorAll('.subscription-offer-logo').length === 2 &&
+        Array.prototype.every.call(window.document.querySelectorAll('.subscription-offer-logo'), function (node) {
+            return node.getAttribute('src').indexOf('https://image.tmdb.org/t/p/w92/') === 0;
+        }) && window.document.body.innerHTML.indexOf('https://evil.test/logo.jpg') === -1 &&
         window.document.querySelector('.subscription-offers').textContent.indexOf('R$') === -1);
     var appControlsBeforeOffer = window.__launchedAppControls.length;
     window.BuroApp._activate(window.document.querySelector('[data-action="subscription-offer"][data-url^="https://www.netflix.com"]'));
@@ -868,6 +1073,41 @@ async function run() {
     check('fechar o trailer devolve a árvore acessível ao aplicativo',
         !window.document.getElementById('app').hasAttribute('aria-hidden'));
     window.BuroApp._activate(window.document.querySelector('[data-action="subscription-back"]'));
+    window.BuroApp._activate(window.document.querySelectorAll('[data-action="subscription-title"]')[1]);
+    await waitFor(function () {
+        return window.BuroApp.state.screenData.selected &&
+            window.BuroApp.state.screenData.selected.title === 'Filme futuro' &&
+            !window.BuroApp.state.screenData.selectionLoading;
+    }, 1000);
+    var subscriptionReminder = window.document.querySelector('[data-action="subscription-reminder"]');
+    check('detalhe externo oferece lembrete mesmo antes de o título existir na lista',
+        subscriptionReminder && !window.document.querySelector('[data-action="subscription-local"]') &&
+        subscriptionReminder.getAttribute('aria-pressed') === 'false' &&
+        subscriptionReminder.textContent.indexOf('Lembrete') >= 0);
+    window.BuroApp._activate(subscriptionReminder);
+    await waitFor(function () {
+        return window.BuroApp.state.reminders.some(function (row) {
+            return row.title === 'Filme futuro' && row.identity === 'movie:filme futuro:2099';
+        });
+    }, 1000);
+    subscriptionReminder = window.document.querySelector('[data-action="subscription-reminder"]');
+    check('guardar lembrete externo persiste só identidade pública e atualiza o estado do botão',
+        subscriptionReminder && subscriptionReminder.getAttribute('aria-pressed') === 'true' &&
+        window.BuroApp.state.reminders.some(function (row) {
+            return row.title === 'Filme futuro' && row.contentType === 'MOVIE' &&
+                row.releaseDate === '2099-06-15' &&
+                row.artworkUrl === 'https://image.tmdb.org/t/p/w342/subscription-detail.jpg' &&
+                !Object.prototype.hasOwnProperty.call(row, 'url') &&
+                !Object.prototype.hasOwnProperty.call(row, 'tmdbKey');
+        }));
+    window.BuroApp._activate(subscriptionReminder);
+    await waitFor(function () {
+        return !window.BuroApp.state.reminders.some(function (row) { return row.title === 'Filme futuro'; });
+    }, 1000);
+    check('segundo clique remove o lembrete externo sem sair da tela',
+        window.document.querySelector('[data-action="subscription-reminder"]').getAttribute('aria-pressed') === 'false' &&
+        window.BuroApp.state.section === 'SUBSCRIPTIONS' && window.BuroApp.state.screenData.selected);
+    window.BuroApp._activate(window.document.querySelector('[data-action="subscription-back"]'));
     window.BuroApp._activate(window.document.querySelector('[data-action="subscription-filter"][data-kind="SERIES"]'));
     window.BuroApp._activate(window.document.querySelector('[data-action="subscription-region"][data-region="DE"]'));
     check('filtro e região recarregam a descoberta e a região fica persistida',
@@ -886,6 +1126,7 @@ async function run() {
         !window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]'));
     window.BuroTmdb.loadShelves = originalLoadSubscriptionShelves;
     window.BuroTmdb.loadSubscriptionTitle = originalLoadSubscriptionTitle;
+    window.BuroTmdb.loadServiceCatalogue = originalLoadServiceCatalogue;
     window.BuroTmdb.validateKey = originalValidateTmdbKey;
 
     window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="HOME"]'));
@@ -1257,24 +1498,64 @@ async function run() {
     check('Descobrir apresenta estado de carregamento durante a leitura por cursor',
         Boolean(window.document.querySelector('.search-loading')));
     await waitFor(function () { return window.document.querySelector('.discover-intro'); }, 1000);
-    check('Descobrir cria prateleiras de nota, data, filmes, séries e ao vivo',
-        window.document.querySelectorAll('.home-rail-heading').length === 5 &&
-        window.document.body.textContent.indexOf(window.BuroI18n.t('topRated')) >= 0 &&
-        window.document.body.textContent.indexOf(window.BuroI18n.t('newest')) >= 0);
-    check('melhor avaliação e lançamento recente usam todo o IndexedDB, não só a amostra da Home',
-        window.document.querySelectorAll('.card-row')[0].querySelector('h3').textContent === 'Destaque do catálogo inteiro' &&
-        window.document.querySelectorAll('.card-row')[1].querySelector('h3').textContent === 'Destaque do catálogo inteiro');
-    check('Descobrir respeita fonte ativa e categorias ocultas ou protegidas por PIN',
+    check('Descobrir apresenta uma carta por vez, a próxima em profundidade e uma mão finita',
+        window.document.querySelectorAll('.discover-card.current').length === 1 &&
+        window.document.querySelectorAll('.discover-card.next').length <= 1 &&
+        window.BuroApp.state.screenData.deck.length <= 15 &&
+        Boolean(window.document.querySelector('.discover-counter')) &&
+        window.document.querySelectorAll('.home-rail-heading').length === 0);
+    check('Descobrir oferece Pular, Guardar e Detalhes pelo D-pad',
+        Boolean(window.document.querySelector('[data-action="discover-skip"]')) &&
+        Boolean(window.document.querySelector('[data-action="discover-keep"]')) &&
+        Boolean(window.document.querySelector('[data-action="discover-details"]')));
+    check('Descobrir respeita fonte, visibilidade, PIN, histórico e exclui TV ao vivo',
         window.document.body.textContent.indexOf('Título oculto') === -1 &&
         window.document.body.textContent.indexOf('Título bloqueado') === -1 &&
         window.document.body.textContent.indexOf('Outra fonte') === -1 &&
-        window.document.body.textContent.indexOf('Canal autorizado') >= 0);
-    window.BuroApp._activate(window.document.querySelector('[data-id="movie:discover-new"]'));
-    check('um título aberto por Descobrir apresenta os detalhes normais de Filmes',
+        window.document.body.textContent.indexOf('Canal autorizado') === -1 &&
+        window.document.body.textContent.indexOf('Filme dois') === -1);
+    var skippedDiscoverId = window.document.querySelector('.discover-card.current').getAttribute('data-id');
+    var discoverLengthBeforeSkip = window.BuroApp.state.screenData.deck.length;
+    window.BuroApp._activate(window.document.querySelector('[data-action="discover-skip"]'));
+    check('Pular avança a carta sem criar favorito',
+        window.BuroApp.state.screenData.deck.length === discoverLengthBeforeSkip - 1 &&
+        !window.BuroApp.state.favorites.some(function (row) { return row.itemId === skippedDiscoverId; }) &&
+        window.document.querySelector('.discover-card.current').getAttribute('data-id') !== skippedDiscoverId);
+    var keptDiscoverId = window.document.querySelector('.discover-card.current').getAttribute('data-id');
+    window.BuroApp._activate(window.document.querySelector('[data-action="discover-keep"]'));
+    await waitFor(function () {
+        return window.BuroApp.state.favorites.some(function (row) { return row.itemId === keptDiscoverId; }) &&
+            window.document.querySelector('.discover-card.current') &&
+            window.document.querySelector('.discover-card.current').getAttribute('data-id') !== keptDiscoverId;
+    }, 1000);
+    check('Guardar persiste o favorito e só então avança a carta',
+        window.BuroApp.state.favorites.some(function (row) { return row.itemId === keptDiscoverId; }));
+    var detailedDiscoverId = window.document.querySelector('.discover-card.current').getAttribute('data-id');
+    window.BuroApp._activate(window.document.querySelector('[data-action="discover-details"]'));
+    check('Detalhes abre a página normal sem julgar a carta',
         window.BuroApp.state.section === 'MOVIES' && window.BuroApp.state.screenData.kind === 'movie');
     press(window, 10009);
     await waitFor(function () { return window.BuroApp.state.section === 'DISCOVER' && window.document.querySelector('.discover-intro'); }, 1000);
-    check('RETURN nos detalhes devolve o usuário à seção Descobrir', window.BuroApp.state.section === 'DISCOVER');
+    check('RETURN restaura a mesma carta e o foco em Detalhes',
+        window.document.querySelector('.discover-card.current').getAttribute('data-id') === detailedDiscoverId &&
+        window.document.querySelector('[data-action="discover-details"]').classList.contains('focused'));
+    while (window.document.querySelector('[data-action="discover-skip"]')) {
+        window.BuroApp._activate(window.document.querySelector('[data-action="discover-skip"]'));
+    }
+    check('ao terminar a mão a tela anuncia o fim e oferece uma nova rodada',
+        !window.document.querySelector('.discover-card.current') &&
+        Boolean(window.document.querySelector('[data-action="discover-again"]')) &&
+        window.document.body.textContent.indexOf(window.BuroI18n.t('discoverExhausted')) >= 0);
+    check('decisões de Descobrir permanecem somente na memória da sessão',
+        window.localStorage.getItem('iptvburo.preferences.v1').indexOf(skippedDiscoverId) === -1);
+    window.BuroApp._activate(window.document.querySelector('[data-action="discover-again"]'));
+    check('Nova rodada volta ao estado de carregamento explícito', Boolean(window.document.querySelector('.search-loading')));
+    await waitFor(function () {
+        return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'discover' &&
+            !window.BuroApp.state.screenData.loading;
+    }, 1000);
+    check('a rodada seguinte não oferece novamente o que já foi julgado na sessão',
+        !window.BuroApp.state.screenData.deck.some(function (row) { return row.id === skippedDiscoverId; }));
     window.BuroApp.state.preferences.hiddenCategoryIds = [];
     window.BuroApp.state.preferences.lockedCategoryIds = [];
     window.BuroApp.state.preferences.parentalPin = null;
@@ -1347,6 +1628,23 @@ async function run() {
         window.document.querySelector('.cast-chip small').textContent === 'Lia' &&
         window.document.body.textContent.indexOf('Fixture pública') >= 0 &&
         window.document.body.textContent.indexOf('Sinopse TMDb') === -1);
+    window.BuroApp.state.screenData.details.critics = {
+        hasAny: true, tomatometer: 83, imdbRating: 8.7, metascore: 39
+    };
+    window.BuroApp.render();
+    var criticMarks = Array.prototype.slice.call(window.document.querySelectorAll('.critic-mark'));
+    check('notas da critica identificam RT IMDb e MC pelas mesmas marcas do Windows',
+        criticMarks.length === 3 && criticMarks.map(function (mark) { return mark.textContent; }).join('|') === 'RT|IMDb|MC' &&
+        criticMarks[0].style.backgroundColor === 'rgb(250, 50, 10)' &&
+        criticMarks[1].style.backgroundColor === 'rgb(245, 197, 24)' &&
+        criticMarks[2].style.backgroundColor === 'rgb(255, 104, 116)');
+    check('cada selo conserva nome e valor completos para leitores de tela',
+        Array.prototype.every.call(window.document.querySelectorAll('.critic-score'), function (cell) {
+            return cell.getAttribute('role') === 'group';
+        }) && criticMarks.every(function (mark) { return mark.getAttribute('aria-hidden') === 'true'; }) &&
+        Array.prototype.slice.call(window.document.querySelectorAll('.critic-score')).map(function (cell) {
+            return cell.getAttribute('aria-label');
+        }).join('|') === 'Tomatometer: 83%|IMDb: 8.7/10|Metascore: 39');
     check('trailer fornecido pela fonte aparece como ação própria nos detalhes',
         Boolean(window.document.querySelector('[data-action="trailer"]')));
     window.BuroApp._activate(window.document.querySelector('[data-action="trailer"]'));
@@ -1942,6 +2240,47 @@ async function run() {
     window.BuroXtream.loadHeroDetails = originalLoadHeroDetails;
     window.BuroStorage.secureRemove(homeSource.id);
 
+    process.stdout.write('Lembretes abrem títulos locais\n');
+    homeSource.type = 'REMOTE_M3U';
+    var reminderLocalItem = window.BuroApp.state.items.filter(function (item) {
+        return item.id === 'movie:home-two';
+    })[0];
+    var reminderFixtures = [window.BuroDomain.createReminder({
+        profileId: window.BuroApp.state.activeProfile.id,
+        item: reminderLocalItem,
+        releaseDate: String(homeYear) + '-06-15'
+    })];
+    for (var reminderIndex = 0; reminderIndex < 13; reminderIndex += 1) {
+        reminderFixtures.push(window.BuroDomain.createReminder({
+            profileId: window.BuroApp.state.activeProfile.id,
+            identity: 'movie:future reminder ' + reminderIndex + ':2099',
+            title: 'Lançamento futuro ' + reminderIndex,
+            contentType: 'MOVIE',
+            releaseDate: '2099-12-31'
+        }));
+    }
+    window.BuroApp.state.reminders = reminderFixtures;
+    window.BuroApp.state.screen = 'SHELL';
+    window.BuroApp.state.section = 'REMINDERS';
+    window.BuroApp.state.screenData = null;
+    window.BuroApp.render();
+    check('a página mostra todos os lembretes e não corta a lista no limite do trilho da Home',
+        window.document.querySelectorAll('.reminder-row').length === 14);
+    check('somente o lembrete que já corresponde à biblioteca vira ação de detalhes',
+        window.document.querySelectorAll('[data-action="reminder-open"]').length === 1 &&
+        window.document.querySelector('[data-action="reminder-open"]').getAttribute('data-id') === reminderLocalItem.id &&
+        window.document.querySelectorAll('.reminder-row-static').length === 13 &&
+        window.document.body.textContent.indexOf('Ainda não está na sua biblioteca') >= 0);
+    window.BuroApp._activate(window.document.querySelector('[data-action="reminder-open"]'));
+    check('abrir um lembrete local reutiliza a tela real de detalhes do filme',
+        window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'movie' &&
+        window.BuroApp.state.screenData.parent.id === reminderLocalItem.id &&
+        window.BuroApp.state.screenData.originSection === 'REMINDERS');
+    press(window, 10009);
+    check('RETURN restaura a lista e o foco no mesmo lembrete',
+        window.BuroApp.state.section === 'REMINDERS' && !window.BuroApp.state.screenData &&
+        window.document.querySelectorAll('.reminder-row').length === 14 &&
+        window.document.querySelector('[data-action="reminder-open"]').classList.contains('focused'));
     process.stdout.write('Proteção de credenciais\n');
     await new Promise(function (resolve, reject) {
         window.BuroStorage.secureSave('source-safe', { username: 'alice', password: 'super-secret' }, resolve, reject);
@@ -2035,6 +2374,26 @@ async function run() {
     press(window, 13);
     check('segundo ENTER retoma a reproducao pelo mesmo contrato',
         playerPlayCount === playCountBeforeEnter + 1);
+    await hold(window, 13, 950);
+    var lockedPlayerPanel = window.document.getElementById('player-lock-panel');
+    check('ENTER longo bloqueia os controles e mostra como desbloquear',
+        lockedPlayerPanel && !lockedPlayerPanel.hidden &&
+        window.document.getElementById('player-overlay').classList.contains('controls-locked') &&
+        lockedPlayerPanel.textContent.indexOf(window.BuroI18n.t('playerUnlockHint')) >= 0);
+    var seekWhileLocked = seekForward;
+    var pausesWhileLocked = playerPauseCount;
+    var playsWhileLocked = playerPlayCount;
+    press(window, 39);
+    press(window, 10252);
+    press(window, 413);
+    check('D-pad e teclas de mídia ficam inertes enquanto os controles estão bloqueados',
+        seekForward === seekWhileLocked && playerPauseCount === pausesWhileLocked &&
+        playerPlayCount === playsWhileLocked && window.document.body.classList.contains('playing'));
+    await hold(window, 13, 950);
+    check('outro ENTER longo desbloqueia sem interromper a reprodução',
+        lockedPlayerPanel && lockedPlayerPanel.hidden &&
+        !window.document.getElementById('player-overlay').classList.contains('controls-locked') &&
+        window.document.body.classList.contains('playing'));
     check('player expoe a acao contextual de Minha BURO para o titulo atual',
         !window.document.getElementById('player-favorite-label').hidden &&
         window.document.getElementById('player-favorite-label').textContent.indexOf(window.BuroI18n.t('removeFavorite')) >= 0);
@@ -2186,6 +2545,12 @@ async function run() {
     check('filme 4K HDR DV ou HEVC prefere variante compatível da mesma fonte',
         openedPlaybackUrl.indexOf('/99.mp4') >= 0 &&
         window.document.getElementById('player-title').textContent === '[4K] Filme dois');
+    await hold(window, 13, 950);
+    window.BuroApp._playbackFailed({ code: 'PLAYBACK_CONNECTION' });
+    check('erro de reprodução remove o bloqueio para deixar Retry e Voltar acessíveis',
+        window.document.getElementById('player-lock-panel').hidden &&
+        !window.document.getElementById('player-overlay').classList.contains('controls-locked') &&
+        !window.document.getElementById('player-error-panel').hidden);
     press(window, 10009);
 
     window.BuroStorage.secureRemove('source-home');

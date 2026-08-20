@@ -1185,9 +1185,12 @@ var BuroApp = (function () {
             escapeHtml(label) + '</button>' : '') + '</div>';
     }
 
-    function homeRail(title, items, key) {
+    function homeRail(title, items, key, service) {
+        var identity = service ? BuroProviders.identityForLabel(service) : null;
         if (!items.length) { return ''; }
-        return '<section class="home-rail" data-home-rail="' + attr(key || '') + '"><div class="section-heading home-rail-heading"><h2>' + escapeHtml(title) + '</h2><p>' +
+        return '<section class="home-rail" data-home-rail="' + attr(key || '') + '"><div class="section-heading home-rail-heading">' +
+            (identity ? '<h2>' + providerBadge(identity) + escapeHtml(title) + '</h2>' :
+                '<h2>' + escapeHtml(title) + '</h2>') + '<p>' +
             items.length + '</p></div>' +
             /* Lembretes trazem entradas próprias, não linhas do catálogo: parte
                delas não tem item para `mediaCards` desenhar. */
@@ -1366,14 +1369,21 @@ var BuroApp = (function () {
     function catalogueVisibilitySnapshot() {
         var sourceId = state.activeSource && state.activeSource.id;
         var visibility = {};
+        /* Qual serviço cada categoria nomeia, resolvido uma vez por varredura em
+           vez de uma vez por item: a Home percorre dezenas de milhares de linhas
+           e o casamento de provedor roda uma expressão regular por chamada. */
+        var categoryService = {};
         var kids = Boolean(state.activeProfile && state.activeProfile.isKids);
         state.categories.forEach(function (category) {
+            var identity;
             if (!sourceId || category.sourceId === sourceId) {
                 visibility[category.id] = BuroGuard.categoryVisible(category, state.preferences, kids) &&
                     (!BuroGuard.requiresPin(category, state.preferences) || Boolean(state.unlockedCategoryIds[category.id]));
+                identity = BuroProviders.identityFor(category.name);
+                if (identity) { categoryService[category.id] = identity.label; }
             }
         });
-        return { sourceId: sourceId, categoryVisibility: visibility };
+        return { sourceId: sourceId, categoryVisibility: visibility, categoryService: categoryService };
     }
 
     function snapshotItemVisible(snapshot, item) {
@@ -1391,12 +1401,18 @@ var BuroApp = (function () {
             sourceId: snapshot.sourceId,
             categoryVisibility: snapshot.categoryVisibility,
             currentYear: new Date().getFullYear(),
-            currentReleases: [], previousReleases: [], recent: [], topRated: [], movies: [], series: []
+            currentReleases: [], previousReleases: [], recent: [], topRated: [], movies: [], series: [],
+            categoryService: snapshot.categoryService,
+            /* Uma prateleira por serviço que a lista nomeia — o que o Windows
+               mostra como "tudo na Netflix". Montado durante a mesma varredura
+               porque uma segunda passada pelo catálogo custaria o dobro. */
+            byService: {}
         };
     }
 
     function collectHome(result, item) {
         var type = item && item.contentType;
+        var service;
         var orderCompare = function (left, right) {
             return Number(left.sortOrder) - Number(right.sortOrder) || String(left.id).localeCompare(String(right.id));
         };
@@ -1420,6 +1436,14 @@ var BuroApp = (function () {
             }, 36);
         }
         rankedInsert(type === 'MOVIE' ? result.movies : result.series, item, orderCompare, 24);
+        service = result.categoryService[item.categoryId];
+        if (service) {
+            if (!result.byService[service]) { result.byService[service] = []; }
+            rankedInsert(result.byService[service], item, function (left, right) {
+                return Number(right.rating) - Number(left.rating) ||
+                    Number(right.addedAt) - Number(left.addedAt) || orderCompare(left, right);
+            }, 24);
+        }
         return result;
     }
 
@@ -1428,6 +1452,14 @@ var BuroApp = (function () {
         var known = {};
         ['currentReleases', 'previousReleases', 'recent', 'topRated', 'movies', 'series'].forEach(function (key) {
             (result[key] || []).forEach(function (item) {
+                if (!known[item.id]) { known[item.id] = true; rows.push(item); }
+            });
+        });
+        /* As prateleiras de serviço entram aqui também: sem isto os títulos
+           delas apareceriam sem capa, porque é esta lista que a hidratação de
+           arte percorre. */
+        Object.keys(result.byService || {}).forEach(function (service) {
+            (result.byService[service] || []).forEach(function (item) {
                 if (!known[item.id]) { known[item.id] = true; rows.push(item); }
             });
         });
@@ -1526,6 +1558,25 @@ var BuroApp = (function () {
         rails.push({ key: 'top-rated', title: t('homeTopRated'), items: takeHomeItems(result.topRated, consumedIds, consumedTitles) });
         rails.push({ key: 'movies', title: t('homeFeaturedMovies'), items: takeHomeItems(result.movies, consumedIds, consumedTitles) });
         rails.push({ key: 'series', title: t('homeFeaturedSeries'), items: takeHomeItems(result.series, consumedIds, consumedTitles) });
+        /*
+          Uma prateleira por serviço, no fim: "tudo na Netflix", como o Windows.
+
+          Depois das editoriais de propósito. As de cima respondem "o que vejo
+          agora"; estas respondem "o que tem naquele serviço", que é uma pergunta
+          de quem já desceu a Home procurando algo específico.
+
+          Ordenadas pelo tamanho do acervo, porque um serviço com trinta títulos
+          é mais útil no topo do que um com dois.
+        */
+        Object.keys(result.byService || {}).sort(function (left, right) {
+            return (result.byService[right] || []).length - (result.byService[left] || []).length ||
+                left.localeCompare(right);
+        }).forEach(function (service) {
+            rails.push({
+                key: 'service-' + service, title: service, service: service,
+                items: takeHomeItems(result.byService[service], consumedIds, consumedTitles)
+            });
+        });
         return { hero: hero, rotation: rotation, rails: rails.filter(function (rail) { return rail.items.length; }) };
     }
 
@@ -1565,7 +1616,7 @@ var BuroApp = (function () {
             escapeHtml(metadata.join(' · ')) + '</p><p class="hero-synopsis">' + escapeHtml(synopsis) +
             '</p><button class="button primary focusable" data-action="' + action +
             '" data-id="' + attr(hero.id) + '">' + (action === 'play' ? t('watch') : t('viewDetails')) + '</button></div>';
-        model.rails.forEach(function (rail) { content += homeRail(rail.title, rail.items, rail.key); });
+        model.rails.forEach(function (rail) { content += homeRail(rail.title, rail.items, rail.key, rail.service); });
         return content;
     }
 
@@ -1981,7 +2032,16 @@ var BuroApp = (function () {
     function catalogueScopeBar(contentType, categories) {
         var scope = catalogueScope(contentType);
         var parts = BuroProviders.split(categories);
-        var genreLabel = scope.genre ? BuroProviders.categoryLabel(scope.genre) : t('filterAll');
+        /* `scope.genre` guarda o id da categoria, não o nome dela: o rótulo sai do
+           split, que já calculou o nome sem o prefixo de seção. Passar o id
+           direto para `categoryLabel` punha "category-79iyjj" na tela. */
+        var genreLabel = t('filterAll');
+        if (scope.genre) {
+            parts.genres.some(function (row) {
+                if (row.id === scope.genre) { genreLabel = row.label; return true; }
+                return false;
+            });
+        }
         var serviceLabel = scope.service || t('filterAll');
         var serviceIdentity = scope.service ? BuroProviders.identityForLabel(scope.service) : null;
         var chips = '<button class="scope-chip focusable ' + (scope.genre ? 'selected' : '') +
@@ -2432,18 +2492,25 @@ var BuroApp = (function () {
         var cells = [];
         if (!scores || !scores.hasAny) { return ''; }
         if (scores.tomatometer != null) {
-            cells.push({ label: t('tomatometer'), value: scores.tomatometer + '%' });
+            cells.push({ kind: 'tomatometer', score: scores.tomatometer,
+                label: t('tomatometer'), value: scores.tomatometer + '%' });
         }
         if (scores.imdbRating != null) {
-            cells.push({ label: t('imdbScore'), value: scores.imdbRating.toFixed(1) + '/10' });
+            cells.push({ kind: 'imdb', score: scores.imdbRating,
+                label: t('imdbScore'), value: scores.imdbRating.toFixed(1) + '/10' });
         }
         if (scores.metascore != null) {
-            cells.push({ label: t('metascore'), value: String(scores.metascore) });
+            cells.push({ kind: 'metascore', score: scores.metascore,
+                label: t('metascore'), value: String(scores.metascore) });
         }
         return '<section class="detail-critics" aria-label="' + attr(t('criticsSection')) + '">' +
             cells.map(function (cell) {
-                return '<div class="critic-score"><strong>' + escapeHtml(cell.value) + '</strong><small>' +
-                    escapeHtml(cell.label) + '</small></div>';
+                var mark = BuroCritics.markFor(cell.kind, cell.score);
+                return '<div class="critic-score" role="group" aria-label="' + attr(cell.label + ': ' + cell.value) + '">' +
+                    (mark ? '<span class="critic-mark" aria-hidden="true" style="background-color:' +
+                        attr(mark.accent) + ';color:' + attr(mark.ink) + '">' + escapeHtml(mark.initials) + '</span>' : '') +
+                    '<span class="critic-copy"><strong>' + escapeHtml(cell.value) + '</strong><small>' +
+                    escapeHtml(cell.label) + '</small></span></div>';
             }).join('') + '</section>';
     }
 
@@ -4277,14 +4344,12 @@ var BuroApp = (function () {
         var anchor = document.createElement('a');
         var hosts = ['www.netflix.com', 'www.primevideo.com', 'www.disneyplus.com', 'tv.apple.com', 'play.google.com',
             'play.max.com', 'globoplay.globo.com', 'www.paramountplus.com', 'www.themoviedb.org', 'themoviedb.org'];
-        hosts.push('www.omdbapi.com');
         try { anchor.href = String(value || ''); }
         catch (ignoredUrl) { return null; }
         return anchor.protocol === 'https:' && hosts.indexOf(anchor.hostname) >= 0 ? anchor.href : null;
     }
 
-    function openExternalOffer(value) {
-        var url = safeOfferUrl(value);
+    function launchExternalUrl(url) {
         if (!url || !window.tizen || !tizen.application || !tizen.ApplicationControl) {
             showToast(t('externalOpenUnavailable'), true); return;
         }
@@ -4293,6 +4358,14 @@ var BuroApp = (function () {
                 'http://tizen.org/appcontrol/operation/view', url, null, null), null,
                 function () {}, function () { showToast(t('externalOpenUnavailable'), true); });
         } catch (ignoredLaunch) { showToast(t('externalOpenUnavailable'), true); }
+    }
+
+    function openExternalOffer(value) {
+        launchExternalUrl(safeOfferUrl(value));
+    }
+
+    function openOfficialCriticsSite() {
+        launchExternalUrl(OMDB_API_KEY_URL);
     }
 
     function openSubscriptionTrailer() {
@@ -6968,7 +7041,7 @@ var BuroApp = (function () {
         else if (action === 'tmdb-clear') { clearTmdbKey(element.getAttribute('data-scope')); }
         else if (action === 'critics-settings') { pushScreen('CRITICS_SETTINGS', {}); }
         else if (action === 'critics-guide') { openCriticsGuide(); }
-        else if (action === 'critics-guide-open') { openExternalOffer(OMDB_API_KEY_URL); }
+        else if (action === 'critics-guide-open') { openOfficialCriticsSite(); }
         else if (action === 'critics-save') { saveCriticsKey(); }
         else if (action === 'critics-clear') { clearCriticsKey(); }
         else if (action === 'storage-settings') { pushScreen('STORAGE_SETTINGS', {}); measureStorage(); }

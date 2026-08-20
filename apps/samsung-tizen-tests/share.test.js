@@ -64,6 +64,9 @@ function run() {
         payload.webUrl.indexOf('https://iptvburo.pages.dev/t/?') === 0 &&
         payload.webUrl.indexOf('t=O%20Auto%20da%20Compadecida%20%2B%20Extras') >= 0 &&
         payload.webUrl.indexOf('y=2024') >= 0 && payload.webUrl.indexOf('image.tmdb.org') >= 0);
+    check('URI do aplicativo usa exatamente o esquema privado registrado pela TV',
+        payload.appUri.indexOf('iptvburo://title?') === 0 &&
+        payload.appUri.indexOf('id=movie%3Ao-auto-da-compadecida-extras%3A2024') >= 0);
     check('stream, provedor, usuário e senha jamais entram no link ou QR',
         [payload.webUrl, payload.qr.url].every(function (value) {
             return value.indexOf('provider.test') === -1 && value.indexOf('password') === -1 &&
@@ -80,6 +83,26 @@ function run() {
     check('link é interpretável pelo mesmo contrato sem relaxar a imagem',
         parsed.identity === payload.identity && parsed.title === payload.title && parsed.year === 2024 &&
         parsed.artworkUrl.indexOf('image.tmdb.org') >= 0);
+    parsed = window.BuroShare.parseIncoming(payload.appUri);
+    check('entrada privada valida preserva a identidade compartilhada',
+        parsed && parsed.identity === payload.identity && parsed.title === payload.title && parsed.year === 2024);
+    check('entrada rejeita host, esquema, caminho e userinfo adulterados',
+        !window.BuroShare.parseIncoming(payload.webUrl) &&
+        !window.BuroShare.parseIncoming('iptvburo://evil?id=movie%3Ateste&t=Teste') &&
+        !window.BuroShare.parseIncoming('iptvburo://title/extra?id=movie%3Ateste&t=Teste') &&
+        !window.BuroShare.parseIncoming('iptvburo://user@title?id=movie%3Ateste&t=Teste'));
+    check('entrada rejeita campos ausentes, identidade sem tipo e payload excessivo',
+        !window.BuroShare.parseIncoming('iptvburo://title?t=Teste') &&
+        !window.BuroShare.parseIncoming('iptvburo://title?id=qualquer&t=Teste') &&
+        !window.BuroShare.parseIncoming('iptvburo://title?id=movie%3Ateste&t=' + 'x'.repeat(301)));
+    check('manifesto registra somente o esquema privado e preserva a sessão quente',
+        (function () {
+            var config = fs.readFileSync(path.join(APP_DIR, 'config.xml'), 'utf8');
+            return config.indexOf('<tizen:app-control>') >= 0 &&
+                config.indexOf('<tizen:src name="index.html" reload="disable"/>') >= 0 &&
+                config.indexOf('<tizen:uri name="iptvburo"/>') >= 0 &&
+                config.indexOf('<tizen:uri name="https"/>') === -1;
+        }()));
 
     process.stdout.write('Matriz QR local\n');
     matrix = window.BuroQr.encode('https://iptvburo.pages.dev/t/?id=movie%3Ateste&t=Teste');

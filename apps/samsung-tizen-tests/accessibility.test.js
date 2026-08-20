@@ -56,6 +56,12 @@ check('iframe do trailer tem título e decoração do boot fica fora da árvore 
     Boolean(document.getElementById('trailer-frame').getAttribute('title')) &&
     document.querySelector('.boot-backdrop').getAttribute('aria-hidden') === 'true' &&
     document.querySelector('.boot-dots').getAttribute('aria-hidden') === 'true');
+check('boot é uma região atômica com progresso numérico nomeado',
+    document.querySelector('.boot-panel').getAttribute('role') === 'status' &&
+    document.querySelector('.boot-panel').getAttribute('aria-live') === 'polite' &&
+    document.querySelector('.boot-panel').getAttribute('aria-atomic') === 'true' &&
+    document.querySelector('.boot-progress').getAttribute('role') === 'progressbar' &&
+    Boolean(document.querySelector('.boot-progress').getAttribute('aria-label')));
 
 process.stdout.write('Contraste, foco e alvos\n');
 check('texto principal, secundário e discreto passam 4,5:1 nas superfícies padrão',
@@ -70,10 +76,16 @@ check('foco possui borda clara adicional e modo de alto contraste dedicado',
 check('movimento reduzido elimina transição e escala do foco',
     /body\.reduced-motion \.focusable\s*\{[^}]*transition:\s*none/s.test(css) &&
     /body\.reduced-motion \.focusable\.focused\s*\{[^}]*transform:\s*none/s.test(css));
+check('movimento reduzido também desliga animações do boot',
+    /body\.reduced-motion \.boot-indicator\s*\{[^}]*animation:\s*none/s.test(css) &&
+    /body\.reduced-motion \.boot-mark\s*\{[^}]*animation:\s*none/s.test(css));
+check('movimento reduzido também desliga a entrada da carta de Descobrir',
+    /body\.reduced-motion \.discover-card\.current\s*\{[^}]*animation:\s*none/s.test(css));
 check('controles compactos continuam acima do alvo mínimo de 44 px',
     /\.cast-chip\s*\{[^}]*min-height:\s*46px/s.test(css) &&
     /\.filter-chip\s*\{[^}]*min-height:\s*54px/s.test(css) &&
     /\.episode-download-action\s*\{[^}]*min-height:\s*46px/s.test(css) &&
+    /\.discover-action\s*\{[^}]*min-width:\s*176px;\s*min-height:\s*70px/s.test(css) &&
     /\.button\s*\{[^}]*min-height:\s*64px/s.test(css));
 
 if (failures.length) {

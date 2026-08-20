@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=1920, initial-scale=1">
+    <title>IPTV BURO AVPlay Smoke</title>
+    <style>
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; color: #fff; font-family: sans-serif; }
+        #av-player { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+        #diagnostic { position: absolute; z-index: 2; top: 32px; left: 32px; min-width: 620px; padding: 24px 30px; border-radius: 16px; background: rgba(5, 12, 24, .88); border: 2px solid #36d399; }
+        h1 { margin: 0 0 12px; font-size: 34px; }
+        p { margin: 7px 0; font-size: 24px; }
+        #state { color: #61dafb; font-weight: 700; }
+    </style>
+</head>
+<body data-smoke-state="BOOTING">
+    <object id="av-player" type="application/avplayer"></object>
+    <section id="diagnostic" aria-live="polite">
+        <h1>IPTV BURO · AVPlay</h1>
+        <p>Estado: <span id="state">BOOTING</span></p>
+        <p>Tempo: <span id="position">0 ms</span></p>
+        <p id="result">Aguardando reprodução nativa…</p>
+    </section>
+    <script src="js/keys.js"></script>
+    <script src="js/player.js"></script>
+    <script src="smoke.js"></script>
+</body>
+</html>
