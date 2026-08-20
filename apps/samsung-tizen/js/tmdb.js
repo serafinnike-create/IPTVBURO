@@ -206,13 +206,36 @@ var BuroTmdb = (function () {
         catch (ignoredRemove) { return false; }
     }
 
+    /*
+      O TMDb tem duas credenciais e elas viajam por caminhos diferentes.
+
+      A v3 e uma chave de 32 hex e vai na query como `api_key=`. A v4 e um JWT
+      com tres partes separadas por ponto e SO funciona no header
+      `Authorization: Bearer` — mandada como api_key ela volta 401.
+
+      O site do TMDb mostra as duas na mesma pagina, e a v4 e a que a pessoa
+      costuma copiar porque aparece primeiro e tem nome mais obvio. Aceitar so
+      uma delas significava um formulario que engole a credencial certa e nunca
+      carrega nada, sem dizer por que.
+    */
+    function isBearerToken(key) {
+        return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(clean(key));
+    }
+
     function url(path, key, params) {
-        var query = ['api_key=' + encodeURIComponent(key)];
+        var query = isBearerToken(key) ? [] : ['api_key=' + encodeURIComponent(key)];
         Object.keys(params || {}).forEach(function (name) {
             var value = params[name];
             if (value != null && value !== '') { query.push(encodeURIComponent(name) + '=' + encodeURIComponent(value)); }
         });
-        return API_BASE + '/' + String(path || '').replace(/^\/+/, '') + '?' + query.join('&');
+        return API_BASE + '/' + String(path || '').replace(/^\/+/, '') +
+            (query.length ? '?' + query.join('&') : '');
+    }
+
+    function requestHeaders(key) {
+        var headers = { Accept: 'application/json' };
+        if (isBearerToken(key)) { headers.Authorization = 'Bearer ' + clean(key); }
+        return headers;
     }
 
     function image(path, size) {
@@ -223,7 +246,7 @@ var BuroTmdb = (function () {
 
     function request(path, key, params, success, failure) {
         return BuroNetwork.json({
-            url: url(path, key, params), headers: { Accept: 'application/json' },
+            url: url(path, key, params), headers: requestHeaders(key),
             maxBytes: 4 * 1024 * 1024, timeoutMs: 18000
         }, function (payload) {
             if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -631,7 +654,7 @@ var BuroTmdb = (function () {
     }
 
     return {
-        safeKey: safeKey, safeImdbId: safeImdbId, profileSecretId: profileSecretId, keyForProfile: keyForProfile,
+        safeKey: safeKey, safeImdbId: safeImdbId, isBearerToken: isBearerToken, profileSecretId: profileSecretId, keyForProfile: keyForProfile,
         configuration: configuration, save: save, remove: remove, validateKey: validateKey,
         loadTitle: loadTitle, loadPerson: loadPerson, image: image, safeRegion: safeRegion,
         supportedRegions: function () { return SUPPORTED_REGIONS.slice(); },

@@ -27,6 +27,7 @@ function run() {
     var weeklyShelves;
     var upcomingShelves;
     var subscriptionSelection;
+    var expandedTitles;
     var titleFailure;
     var key = '1234567890abcdef1234567890abcdef';
     var sharedKey = 'abcdef1234567890abcdef1234567890';
@@ -52,9 +53,9 @@ function run() {
             } else if (options.url.indexOf('/discover/tv?') >= 0) {
                 success({ results: [{ id: 77, name: 'Série sintética', first_air_date: '2024-01-02', poster_path: '/tv.jpg', vote_average: 7.5 }] });
             } else if (options.url.indexOf('/discover/movie?') >= 0) {
-                success({ results: options.url.indexOf('with_release_type=3') >= 0 ?
+                success({ results: options.url.indexOf('page=2') >= 0 ? [] : (options.url.indexOf('with_release_type=3') >= 0 ?
                     [{ id: 88, title: 'Cinema recente', release_date: '2026-07-01', poster_path: '/cinema.jpg' }] :
-                    [{ id: 42, title: 'Filme sintético', release_date: '2025-02-03', poster_path: '/poster.jpg', vote_average: 8.4 }] });
+                    [{ id: 42, title: 'Filme sintético', release_date: '2025-02-03', poster_path: '/poster.jpg', vote_average: 8.4 }]) });
             } else if (options.url.indexOf('/movie/88/watch/providers?') >= 0) {
                 success({ results: { BR: { rent: [{ provider_id: 3, provider_name: 'Loja' }] } } });
             } else if (options.url.indexOf('/movie/42/watch/providers?') >= 0) {
@@ -106,6 +107,43 @@ function run() {
     check('aceita chave opaca limitada e rejeita espaços/URL',
         window.BuroTmdb.safeKey(key) === key && !window.BuroTmdb.safeKey('short') &&
         !window.BuroTmdb.safeKey('https://example.test/key'));
+    /*
+      As duas credenciais do TMDb.
+
+      A v3 e uma chave curta que vai na query; a v4 e um JWT que so funciona no
+      header Bearer — como api_key ela volta 401. O site mostra as duas na mesma
+      pagina e a v4 e a que a pessoa costuma copiar, entao aceitar so uma
+      significava engolir a credencial certa e nunca carregar nada.
+
+      O token abaixo e sintetico: tres segmentos base64url que satisfazem a
+      forma sem serem uma credencial de ninguem.
+    */
+    process.stdout.write('As duas formas de credencial do TMDb\n');
+    var bearerToken = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJzeW50aGV0aWMiLCJ2ZXJzaW9uIjoxfQ.c3ludGhldGljLXNpZ25hdHVyZQ';
+    check('um token v4 e reconhecido pela forma de tres segmentos',
+        window.BuroTmdb.isBearerToken(bearerToken) === true);
+    check('uma chave v3 nao e confundida com token',
+        window.BuroTmdb.isBearerToken(key) === false);
+    check('o token v4 passa na validacao de formato',
+        window.BuroTmdb.safeKey(bearerToken) === bearerToken);
+    (function () {
+        var bearerRequest = null;
+        var keyRequest = null;
+        var originalJson = window.BuroNetwork.json;
+        window.BuroNetwork.json = function (options) { bearerRequest = options; return { abort: function () {} }; };
+        window.BuroTmdb.validateKey(bearerToken, function () {}, function () {});
+        window.BuroNetwork.json = function (options) { keyRequest = options; return { abort: function () {} }; };
+        window.BuroTmdb.validateKey(key, function () {}, function () {});
+        window.BuroNetwork.json = originalJson;
+        check('o token v4 viaja no header Authorization',
+            bearerRequest.headers.Authorization === 'Bearer ' + bearerToken);
+        check('o token v4 nao entra na URL, que e o que vai parar em log',
+            bearerRequest.url.indexOf(bearerToken) === -1 &&
+            bearerRequest.url.indexOf('api_key') === -1);
+        check('a chave v3 continua indo como api_key, sem header',
+            keyRequest.url.indexOf('api_key=' + key) > 0 && !keyRequest.headers.Authorization);
+    }());
+
     window.BuroTmdb.save('shared', 'profile-a', sharedKey, function () {}, function () {});
     check('chave compartilhada é fallback sem entrar no localStorage',
         window.BuroTmdb.keyForProfile('profile-a') === sharedKey && window.localStorage.length === 0);
@@ -149,6 +187,79 @@ function run() {
         (function () { var valid = false; window.BuroTmdb.validateKey(key, function () { valid = true; }, function () {}); return valid; }()) &&
         window.localStorage.length === 0);
 
+    process.stdout.write('Cache diário das prateleiras públicas\n');
+    var hasShelfCache = typeof window.BuroTmdb.readShelfCache === 'function' &&
+        typeof window.BuroTmdb.writeShelfCache === 'function' &&
+        typeof window.BuroTmdb.clearShelfCache === 'function';
+    var cacheDay = new Date('2026-08-20T12:00:00');
+    var nextDay = new Date('2026-08-21T12:00:00');
+    var publicShelves = [{
+        providerId: 8,
+        providerName: 'Netflix',
+        titles: [{
+            tmdbId: 42,
+            isSeries: false,
+            title: 'Filme sintético',
+            year: 2025,
+            releaseDate: '2025-02-03',
+            posterUrl: 'https://image.tmdb.org/t/p/w342/poster.jpg',
+            overview: 'Este texto não é necessário para desenhar a prateleira',
+            url: 'https://provider.test/private?token=secret'
+        }]
+    }];
+    var restoredShelves = null;
+    var shelfCacheRaw = '';
+    check('cliente expõe um cache separado do segredo TMDb', hasShelfCache);
+    if (hasShelfCache) {
+        window.BuroTmdb.clearShelfCache();
+        window.BuroTmdb.writeShelfCache('BR', 'MOVIES', 'pt-BR', publicShelves, cacheDay);
+        restoredShelves = window.BuroTmdb.readShelfCache('BR', 'MOVIES', 'pt-BR', cacheDay);
+        var cacheValues = [];
+        for (var valueIndex = 0; valueIndex < window.localStorage.length; valueIndex += 1) {
+            cacheValues.push(window.localStorage.getItem(window.localStorage.key(valueIndex)));
+        }
+        shelfCacheRaw = cacheValues.join('\n');
+    }
+    check('a resposta do mesmo dia, região, filtro e idioma abre sem rede',
+        restoredShelves && restoredShelves.length === 1 && restoredShelves[0].providerId === 8 &&
+        restoredShelves[0].providerName === 'Netflix' && restoredShelves[0].titles.length === 1 &&
+        restoredShelves[0].titles[0].tmdbId === 42 && restoredShelves[0].titles[0].title === 'Filme sintético' &&
+        restoredShelves[0].titles[0].releaseDate === '2025-02-03');
+    check('o cache guarda apenas o cartão público e nunca chave, oferta ou URL arbitrária',
+        shelfCacheRaw.indexOf(key) === -1 && shelfCacheRaw.indexOf(sharedKey) === -1 &&
+        shelfCacheRaw.indexOf('provider.test') === -1 && shelfCacheRaw.indexOf('token=') === -1 &&
+        shelfCacheRaw.indexOf('Este texto não é necessário') === -1 &&
+        restoredShelves && !Object.prototype.hasOwnProperty.call(restoredShelves[0].titles[0], 'url') &&
+        !Object.prototype.hasOwnProperty.call(restoredShelves[0].titles[0], 'overview'));
+    check('região, filtro e idioma diferentes nunca reutilizam a resposta errada',
+        hasShelfCache && window.BuroTmdb.readShelfCache('DE', 'MOVIES', 'pt-BR', cacheDay) === null &&
+        window.BuroTmdb.readShelfCache('BR', 'SERIES', 'pt-BR', cacheDay) === null &&
+        window.BuroTmdb.readShelfCache('BR', 'MOVIES', 'de', cacheDay) === null);
+    check('uma resposta do dia anterior expira em vez de aparecer como atual',
+        hasShelfCache && window.BuroTmdb.readShelfCache('BR', 'MOVIES', 'pt-BR', nextDay) === null);
+    if (hasShelfCache) {
+        window.BuroTmdb.writeShelfCache('BR', 'MOVIES', 'pt-BR', [], cacheDay);
+    }
+    check('resposta vazia não substitui um catálogo público válido',
+        hasShelfCache && window.BuroTmdb.readShelfCache('BR', 'MOVIES', 'pt-BR', cacheDay) !== null);
+    if (hasShelfCache) {
+        var shelfCacheKey = null;
+        /* A chave é descoberta pelo efeito público do adapter, não duplicada do código de produção. */
+        for (var cacheIndex = 0; cacheIndex < window.localStorage.length; cacheIndex += 1) {
+            var candidate = window.localStorage.key(cacheIndex);
+            if (candidate && candidate.indexOf('tmdb-shelves') >= 0) { shelfCacheKey = candidate; break; }
+        }
+        if (shelfCacheKey) { window.localStorage.setItem(shelfCacheKey, '{corrompido'); }
+    }
+    check('cache corrompido degrada para nova consulta sem derrubar a tela',
+        hasShelfCache && window.BuroTmdb.readShelfCache('BR', 'MOVIES', 'pt-BR', cacheDay) === null);
+    if (hasShelfCache) { window.BuroTmdb.clearShelfCache(); }
+    var hasShelfCacheEntry = false;
+    for (var storageIndex = 0; storageIndex < window.localStorage.length; storageIndex += 1) {
+        if (window.localStorage.key(storageIndex).indexOf('tmdb-shelves') >= 0) { hasShelfCacheEntry = true; }
+    }
+    check('limpar a chave TMDb pode remover todo o cache público associado', hasShelfCache && !hasShelfCacheEntry);
+
     process.stdout.write('Assinaturas e onde assistir\n');
     window.BuroTmdb.loadShelves(key, 'BR', 'MOVIES', 'pt-BR', function () {},
         function (value) { movieShelves = value; }, function () {});
@@ -170,6 +281,19 @@ function run() {
         }) && requests.some(function (entry) {
             return entry.url.indexOf('/discover/tv?') >= 0 && entry.url.indexOf('air_date.gte') >= 0;
         }));
+    check('cliente expõe o catálogo amplo e cancelável de um serviço',
+        typeof window.BuroTmdb.loadServiceCatalogue === 'function');
+    if (typeof window.BuroTmdb.loadServiceCatalogue === 'function') {
+        window.BuroTmdb.loadServiceCatalogue(key, 8, 'BR', 'MOVIES', 'pt-BR',
+            function (value) { expandedTitles = value; }, function () {});
+        check('catálogo amplo percorre páginas, deduplica e para na primeira vazia',
+            expandedTitles && expandedTitles.length === 1 && expandedTitles[0].tmdbId === 42 &&
+            requests.some(function (entry) {
+                return entry.url.indexOf('/discover/movie?') >= 0 && entry.url.indexOf('page=1') >= 0;
+            }) && requests.some(function (entry) {
+                return entry.url.indexOf('/discover/movie?') >= 0 && entry.url.indexOf('page=2') >= 0;
+            }));
+    }
     window.BuroTmdb.loadSubscriptionTitle(key, movieShelves[0].titles[0], 'BR', 'pt-BR',
         function (value) { subscriptionSelection = value; }, function () {});
     check('detalhe combina página e buckets de disponibilidade sem inventar preço',
