@@ -14,17 +14,23 @@ package com.lucasserafin94.iptvburo.desktop.ui
 fun String.categoryLabel(): String {
     var label = trim()
 
+    var strippedBySeparator = false
     val separator = label.indexOfFirst { it in SEPARATORS }
     if (separator > 0) {
         val head = label.take(separator).trim()
         val tail = label.drop(separator + 1).trim()
         if (tail.any(Char::isLetterOrDigit) && head.normalisedForSection() in SECTION_WORDS) {
             label = tail
+            strippedBySeparator = true
         }
     }
 
     // Some providers use no separator at all, only a prefix: "FILMES LANÇAMENTOS".
-    val firstSpace = label.indexOf(' ')
+    //
+    // Only when the separator pass found nothing to remove. "Canais | Filmes e Séries" names one
+    // category whose own name begins with a section word, and running both passes over it left
+    // "e Séries" — a chip that reads as a fragment because it is one.
+    val firstSpace = if (strippedBySeparator) -1 else label.indexOf(' ')
     if (firstSpace > 0) {
         val head = label.take(firstSpace).normalisedForSection()
         val tail = label.drop(firstSpace + 1).trim()

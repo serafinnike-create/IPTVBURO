@@ -23,6 +23,19 @@ class CategoryLabelTest {
         assertEquals("LANÇAMENTOS", "FILMES LANÇAMENTOS".categoryLabel())
     }
 
+    /**
+     * The prefix comes off once, not twice.
+     *
+     * "Canais | Filmes e Séries" names one category whose own name begins with a section word. The
+     * separator pass removed "Canais", and the bare-prefix pass then removed "Filmes" from what was
+     * left, putting "e Séries" on screen — a chip that reads as a fragment because it was one.
+     */
+    @Test
+    fun `strips the section prefix once`() {
+        assertEquals("Filmes e Séries", "Canais | Filmes e Séries".categoryLabel())
+        assertEquals("Filmes de Ação", "Filmes | Filmes de Ação".categoryLabel())
+    }
+
     @Test
     fun `keeps a category that is only the section word`() {
         assertEquals("Filmes", "Filmes".categoryLabel())

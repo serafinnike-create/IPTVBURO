@@ -12,7 +12,7 @@ var BuroTmdb = (function () {
     var MAX_EXPANDED_TITLES = 100;
     var MAX_EXPANDED_PAGES = 8;
     var SHELF_CACHE_KEY = 'iptvburo.tmdb-shelves.v1';
-    var SHELF_CACHE_VERSION = 1;
+    var SHELF_CACHE_VERSION = 2;
     var MAX_SHELF_CACHE_RECORDS = 8;
 
     function clean(value) {
@@ -67,6 +67,12 @@ var BuroTmdb = (function () {
             poster.indexOf('..') < 0 ? poster : null;
     }
 
+    function shelfCacheProviderLogo(value) {
+        var logo = clean(value);
+        return /^https:\/\/image\.tmdb\.org\/t\/p\/w92\/[A-Za-z0-9._\/-]{1,240}$/.test(logo) &&
+            logo.indexOf('..') < 0 ? logo : null;
+    }
+
     function shelfCacheTitle(value) {
         var tmdbId = Math.floor(Number(value && value.tmdbId));
         var title = clean(value && value.title).substring(0, 240);
@@ -93,7 +99,12 @@ var BuroTmdb = (function () {
                 .map(shelfCacheTitle).filter(Boolean) : [];
             if ((!providerId || providerId < 1) && providerName !== 'coming-soon') { return null; }
             if (!providerName || !titles.length) { return null; }
-            return { providerId: providerId > 0 ? providerId : null, providerName: providerName, titles: titles };
+            return {
+                providerId: providerId > 0 ? providerId : null,
+                providerName: providerName,
+                providerLogoUrl: shelfCacheProviderLogo(shelf && shelf.providerLogoUrl),
+                titles: titles
+            };
         }).filter(Boolean);
         return rows.length ? rows : null;
     }
@@ -430,6 +441,7 @@ var BuroTmdb = (function () {
         return rows.map(function (row) {
             return {
                 id: Number(row && row.provider_id) || null, name: clean(row && row.provider_name),
+                logoUrl: image(row && row.logo_path, 'w92'),
                 priority: isFinite(Number(row && row.display_priority)) ? Number(row.display_priority) : 999999
             };
         }).filter(function (row) { return row.id && row.name; })
@@ -509,7 +521,12 @@ var BuroTmdb = (function () {
             params.language = language(locale);
             active = request(isSeries ? 'discover/tv' : 'discover/movie', key, params, function (payload) {
                 var titles = discoveredTitles(payload, isSeries).slice(0, TITLES_PER_SERVICE);
-                if (titles.length) { shelves.push({ providerId: service.id, providerName: service.name, titles: titles }); }
+                if (titles.length) {
+                    shelves.push({
+                        providerId: service.id, providerName: service.name,
+                        providerLogoUrl: service.logoUrl, titles: titles
+                    });
+                }
                 if (progress) { progress(index, services.length, shelves.length); }
                 next();
             }, function () { failures += 1; if (progress) { progress(index, services.length, shelves.length); } next(); });
@@ -620,7 +637,8 @@ var BuroTmdb = (function () {
                 var key = id + ':' + type;
                 if (!id || !name || seen[key]) { return; }
                 seen[key] = true;
-                rows.push({ providerId: id, providerName: name, type: type,
+                rows.push({ providerId: id, providerName: name,
+                    providerLogoUrl: image(entry && entry.logo_path, 'w92'), type: type,
                     url: providerTarget(name, title, area.link), requiresAttribution: true });
             });
         }

@@ -121,10 +121,14 @@ var BuroApp = (function () {
     ];
     var APP_VERSION_FALLBACK = '3.0.1';
     var TMDB_SIGNUP_URL = 'https://www.themoviedb.org/signup';
+    var OMDB_API_KEY_URL = 'https://www.omdbapi.com/apikey.aspx';
     var CATALOGUE_LAYOUTS = ['poster', 'compact', 'list'];
     var CATALOGUE_SORTS = ['provider', 'title-asc', 'title-desc', 'year-desc', 'year-asc', 'rating-desc'];
     var libraryFilters = { MY_BURO: 'ALL', CONTINUE_WATCHING: 'ALL', HISTORY: 'ALL' };
     var libraryPages = { MY_BURO: 0, CONTINUE_WATCHING: 0, HISTORY: 0 };
+    /* Gênero e serviço escolhidos em cada aba de catálogo, preservados ao ir e
+       voltar de uma categoria. */
+    var catalogueScopes = {};
     var downloadFilter = 'ALL';
     var downloadCompact = false;
     var downloadPage = 0;
@@ -196,6 +200,27 @@ var BuroApp = (function () {
         if (!url || url.length > 4096 || !/^https?:\/\/[^\s]+$/i.test(url)) { return null; }
         if (/^https?:\/\/[^\/\s]*@/i.test(url)) { return null; }
         return url;
+    }
+
+    function safeProviderLogoUrl(value) {
+        var url = BuroDomain.trim(value);
+        return /^https:\/\/image\.tmdb\.org\/t\/p\/w92\/[A-Za-z0-9._\/-]{1,240}$/.test(url) &&
+            url.indexOf('..') < 0 ? url : null;
+    }
+
+    function subscriptionProviderLogo(value) {
+        var logo = safeProviderLogoUrl(value);
+        return logo ? '<img class="subscription-provider-logo" src="' + attr(logo) + '" alt="" aria-hidden="true">' : '';
+    }
+
+    function subscriptionCardLogo(value) {
+        var logo = safeProviderLogoUrl(value);
+        return logo ? '<i class="subscription-card-logo" aria-hidden="true"><img src="' + attr(logo) + '" alt=""></i>' : '';
+    }
+
+    function subscriptionOfferLogo(value) {
+        var logo = safeProviderLogoUrl(value);
+        return logo ? '<img class="subscription-offer-logo" src="' + attr(logo) + '" alt="" aria-hidden="true">' : '';
     }
 
     /*
@@ -1924,11 +1949,87 @@ var BuroApp = (function () {
         return !BuroGuard.requiresPin(category, state.preferences) || Boolean(state.unlockedCategoryIds[category.id]);
     }
 
+    /*
+      A marca de um serviço, do jeito que o Windows desenha: monograma sobre a
+      cor oficial da marca. Sem logotipo baixado — a TV não guarda imagem em
+      disco e um pedido de rede por chip atrasaria a fileira inteira.
+    */
+    function providerBadge(identity) {
+        if (!identity) { return ''; }
+        return '<span class="provider-badge" style="background:' + attr(identity.colour) + '" aria-hidden="true">' +
+            escapeHtml(identity.mark || identity.label.charAt(0)) + '</span>';
+    }
+
+    /* O filtro de serviço/gênero vigente para esta aba, criado sob demanda. */
+    function catalogueScope(contentType) {
+        if (!catalogueScopes[contentType]) {
+            catalogueScopes[contentType] = { genre: null, service: null };
+        }
+        return catalogueScopes[contentType];
+    }
+
+    /*
+      Os dois seletores no topo de Filmes, Séries e Ao Vivo.
+
+      Portado do XtreamWorkspace do Windows, inclusive a decisão de mostrar o
+      seletor de Serviço desativado quando a lista não arquiva por serviço: um
+      controle que aparece numa aba e some na outra é lido como defeito, e
+      esconder deixava quem procura "só Netflix" sem saber se a função não
+      existe, está quebrada ou não se aplica à lista dele. Dizer o motivo serve
+      mais do que o silêncio.
+    */
+    function catalogueScopeBar(contentType, categories) {
+        var scope = catalogueScope(contentType);
+        var parts = BuroProviders.split(categories);
+        var genreLabel = scope.genre ? BuroProviders.categoryLabel(scope.genre) : t('filterAll');
+        var serviceLabel = scope.service || t('filterAll');
+        var serviceIdentity = scope.service ? BuroProviders.identityForLabel(scope.service) : null;
+        var chips = '<button class="scope-chip focusable ' + (scope.genre ? 'selected' : '') +
+            '" data-action="catalogue-scope-genre"><small>' + t('genreSelector') + '</small><strong>' +
+            escapeHtml(genreLabel) + '</strong></button>';
+        if (parts.hasProviders) {
+            chips += '<button class="scope-chip focusable ' + (scope.service ? 'selected' : '') +
+                '" data-action="catalogue-scope-service">' + providerBadge(serviceIdentity) +
+                '<small>' + t('serviceSelector') + '</small><strong>' + escapeHtml(serviceLabel) + '</strong></button>';
+        } else {
+            chips += '<span class="scope-chip disabled"><small>' + t('serviceSelector') +
+                '</small><strong>' + escapeHtml(t('servicesUnavailable')) + '</strong></span>';
+        }
+        if (scope.genre || scope.service) {
+            chips += '<button class="scope-chip clear focusable" data-action="catalogue-scope-reset">' +
+                t('clearFilters') + '</button>';
+        }
+        return '<div class="catalogue-scope-bar">' + chips + '</div>';
+    }
+
+    /* As categorias que sobrevivem ao filtro de serviço e de gênero. */
+    function scopedCategories(contentType, categories) {
+        var scope = catalogueScope(contentType);
+        var allowed = null;
+        if (scope.service) {
+            allowed = {};
+            BuroProviders.categoryIdsForLabel(categories, scope.service).forEach(function (id) {
+                allowed[id] = true;
+            });
+        }
+        return categories.filter(function (category) {
+            if (allowed && !allowed[category.id]) { return false; }
+            if (scope.genre && category.id !== scope.genre) { return false; }
+            return true;
+        });
+    }
+
     function categoryCards(categories) {
         if (!categories.length) { return emptyState('B', t('noCategories'), t('noCategoriesBody'), '', ''); }
         return '<div class="card-row">' + categories.map(function (category) {
-            return '<button class="category-card focusable" data-action="category" data-id="' + attr(category.id) + '"><h3>' +
-                escapeHtml(category.name) + '</h3><p>' + escapeHtml(category.contentType) + '</p></button>';
+            var identity = BuroProviders.identityFor(category.name);
+            /* O contentType repetido em toda linha não dizia nada — numa aba
+               chamada Filmes toda categoria é MOVIE. O serviço, quando a lista
+               nomeia um, é a informação que distingue uma categoria da outra. */
+            return '<button class="category-card focusable ' + (identity ? 'has-provider' : '') +
+                '" data-action="category" data-id="' + attr(category.id) + '">' +
+                providerBadge(identity) + '<h3>' + escapeHtml(BuroProviders.categoryLabel(category.name)) +
+                '</h3><p>' + escapeHtml(identity ? identity.label : category.name) + '</p></button>';
         }).join('') + '</div>';
     }
 
@@ -2160,7 +2261,51 @@ var BuroApp = (function () {
             shell(renderFilteredCategory(state.screenData), state.screenData.category.name, true);
             return;
         }
-        shell(categoryCards(sourceCategories(contentType)), t(titleKey), true);
+        (function () {
+            var categories = sourceCategories(contentType);
+            shell(catalogueScopeBar(contentType, categories) +
+                categoryCards(scopedCategories(contentType, categories)), t(titleKey), true);
+        }());
+    }
+
+    /*
+      Escolher gênero ou serviço, um passo por ENTER.
+
+      Ciclar em vez de abrir uma lista: com D-pad, um menu suspenso custa abrir,
+      descer, confirmar e fechar, e a lista de serviços de uma playlist cabe em
+      poucos passos. A mesma escolha que `cyclePreference` já faz no resto do app.
+    */
+    function cycleCatalogueScope(property) {
+        var contentType = state.section === 'LIVE' ? 'LIVE' :
+            (state.section === 'MOVIES' ? 'MOVIE' : 'SERIES');
+        var categories = sourceCategories(contentType);
+        var scope = catalogueScope(contentType);
+        var parts = BuroProviders.split(categories);
+        var values;
+        var index;
+        if (property === 'service') {
+            values = [null].concat(parts.providers.map(function (row) { return row.label; }));
+        } else {
+            values = [null].concat(parts.genres.map(function (row) { return row.id; }));
+        }
+        index = values.indexOf(scope[property]);
+        scope[property] = values[(index + 1) % values.length];
+        /* Gênero e serviço se excluem: um título pertence a exatamente uma
+           categoria, então filtrar pelos dois só poderia esvaziar a tela. */
+        if (property === 'service' && scope.service) { scope.genre = null; }
+        if (property === 'genre' && scope.genre) { scope.service = null; }
+        focusIndex = 0;
+        render();
+    }
+
+    function resetCatalogueScope() {
+        var contentType = state.section === 'LIVE' ? 'LIVE' :
+            (state.section === 'MOVIES' ? 'MOVIE' : 'SERIES');
+        var scope = catalogueScope(contentType);
+        scope.genre = null;
+        scope.service = null;
+        focusIndex = 0;
+        render();
     }
 
     function detailDuration(value) {
@@ -3582,7 +3727,8 @@ var BuroApp = (function () {
             escapeHtml(t(draft.messageKey)) + '</p>' : '';
         shell('<div class="form-panel tmdb-settings-panel"><h2>' + t('criticsTitle') + '</h2>' +
             '<p class="form-message">' + escapeHtml(configured ? t('criticsConfigured') : t('criticsAbsent')) +
-            '</p><div class="field"><label>' + t('criticsField') + '</label>' +
+            '</p><div class="tmdb-guide-action"><button class="button ghost focusable" data-action="critics-guide">?' +
+            '<span>' + t('criticsGuideButton') + '</span></button></div><div class="field"><label>' + t('criticsField') + '</label>' +
             '<input id="critics-key" class="focusable" type="password" autocomplete="off" maxlength="64" value="' +
             attr(draft.criticsDraft || '') + '" placeholder="' +
             attr(configured ? t('configured') : t('criticsHint')) + '"><small class="field-hint">' +
@@ -3619,6 +3765,34 @@ var BuroApp = (function () {
             state.screenData = { messageKey: 'tmdbSecureError', error: true };
         }
         render();
+    }
+
+    function renderCriticsGuide() {
+        var steps = [
+            { title: 'criticsGuideStep1Title', text: 'criticsGuideStep1Body', diagram: 'omdb-api' },
+            { title: 'criticsGuideStep2Title', text: 'criticsGuideStep2Body', diagram: 'omdb-free' },
+            { title: 'criticsGuideStep3Title', text: 'criticsGuideStep3Body', diagram: 'omdb-email' },
+            { title: 'criticsGuideStep4Title', text: 'criticsGuideStep4Body', diagram: 'omdb-activate' }
+        ];
+        var rows = steps.map(function (step, index) {
+            return '<article class="tmdb-guide-step critics-guide-step"><div class="tmdb-guide-copy">' +
+                '<b>' + (index + 1) + '</b><div><h3>' + t(step.title) + '</h3><p>' + t(step.text) +
+                '</p></div></div>' + tmdbGuideDiagram(step.diagram).replace(
+                    'tmdb-guide-diagram', 'tmdb-guide-diagram critics-guide-diagram') + '</article>';
+        }).join('');
+        shell('<div class="form-panel tmdb-guide-panel"><h2>' + t('criticsGuideTitle') + '</h2>' +
+            '<p class="tmdb-guide-intro">' + t('criticsGuideIntro') + '</p><div class="tmdb-guide-grid">' +
+            rows + '</div><div class="action-row tmdb-guide-actions">' +
+            '<button class="button primary focusable" data-action="critics-guide-open">' +
+            t('criticsGuideOpenSite') + '</button><button class="button ghost focusable" data-action="back">' +
+            t('back') + '</button></div></div>', t('criticsGuideTitle'), true);
+    }
+
+    function openCriticsGuide() {
+        var input = document.getElementById('critics-key');
+        state.screenData = state.screenData || {};
+        state.screenData.criticsDraft = String(input && input.value || '').substring(0, 64);
+        pushScreen('CRITICS_GUIDE');
     }
 
     function tmdbGuideDiagram(kind) {
@@ -3864,7 +4038,7 @@ var BuroApp = (function () {
                 var action = offer.localItem ? 'subscription-local' : 'subscription-offer';
                 return '<button class="subscription-offer focusable" data-action="' + action + '"' +
                     (offer.localItem ? ' data-id="' + attr(offer.localItem.id) + '"' : ' data-url="' + attr(offer.url || '') + '"') +
-                    '><div><strong>' + escapeHtml(offer.providerName) + '</strong><p>' + t('offer' +
+                    '>' + subscriptionOfferLogo(offer.providerLogoUrl) + '<div><strong>' + escapeHtml(offer.providerName) + '</strong><p>' + t('offer' +
                     String(offer.type || '').charAt(0).toUpperCase() + String(offer.type || '').slice(1)) + '</p>' +
                     (offer.requiresAttribution ? '<small>Streaming data provided by JustWatch</small>' : '') + '</div><span>›</span></button>';
             }).join('') : (!data.selectionLoading ? '<p class="form-message">' + t('subscriptionsUnknown') + '</p>' : ''));
@@ -3902,12 +4076,14 @@ var BuroApp = (function () {
             var poster = safeArtworkUrl(item.posterUrl);
             return '<button class="subscription-poster focusable" data-action="subscription-title" data-key="' +
                 attr(subscriptionTitleKey(item)) + '">' + (poster ? '<img src="' + attr(poster) + '" alt="">' :
-                '<span>' + escapeHtml(item.title.charAt(0)) + '</span>') + '<strong>' + escapeHtml(item.title) + '</strong>' +
+                '<span>' + escapeHtml(item.title.charAt(0)) + '</span>') + subscriptionCardLogo(expanded.providerLogoUrl) +
+                '<strong>' + escapeHtml(item.title) + '</strong>' +
                 (item.year ? '<small>' + item.year + '</small>' : '') + '</button>';
         }).join('');
         return '<div class="subscription-expanded" aria-busy="' + (expanded.loading ? 'true' : 'false') + '">' +
             '<button class="button ghost focusable" data-action="subscription-expanded-back">‹ ' +
-            t('subscriptionsBack') + '</button><div class="section-heading"><h2>' + escapeHtml(title) + '</h2><p>' +
+            t('subscriptionsBack') + '</button><div class="section-heading"><h2>' +
+            subscriptionProviderLogo(expanded.providerLogoUrl) + escapeHtml(title) + '</h2><p>' +
             expanded.titles.length + '</p></div>' + status + '<div class="subscription-expanded-grid">' + cards + '</div></div>';
     }
 
@@ -3944,13 +4120,15 @@ var BuroApp = (function () {
             body = emptyState('B', t('subscriptions'), t('subscriptionsEmpty'), '', '');
         } else {
             body = '<div class="subscription-shelves">' + data.shelves.map(function (shelf) {
-                return '<section><div class="section-heading"><h2>' + escapeHtml(shelf.providerName === 'coming-soon' ?
+                return '<section><div class="section-heading"><h2>' + subscriptionProviderLogo(shelf.providerLogoUrl) +
+                    escapeHtml(shelf.providerName === 'coming-soon' ?
                     t('subscriptionsUpcomingShelf') : shelf.providerName) + '</h2><p>' + shelf.titles.length + '</p></div><div class="subscription-row">' +
                     shelf.titles.map(function (title) {
                         var poster = safeArtworkUrl(title.posterUrl);
                         return '<button class="subscription-poster focusable" data-action="subscription-title" data-key="' +
                             attr(subscriptionTitleKey(title)) + '">' + (poster ? '<img src="' + attr(poster) + '" alt="">' :
-                            '<span>' + escapeHtml(title.title.charAt(0)) + '</span>') + '<strong>' + escapeHtml(title.title) + '</strong>' +
+                            '<span>' + escapeHtml(title.title.charAt(0)) + '</span>') + subscriptionCardLogo(shelf.providerLogoUrl) +
+                            '<strong>' + escapeHtml(title.title) + '</strong>' +
                             (title.year ? '<small>' + title.year + '</small>' : '') + '</button>';
                     }).join('') + (shelf.providerId ? '<button class="subscription-see-more focusable" data-action="subscription-expand" data-provider="' +
                         attr(shelf.providerId) + '"><strong>' + t('subscriptionsSeeMore') + '</strong><span>›</span></button>' : '') +
@@ -3999,6 +4177,7 @@ var BuroApp = (function () {
         data.expanded = {
             providerId: shelf.providerId,
             providerName: shelf.providerName,
+            providerLogoUrl: safeProviderLogoUrl(shelf.providerLogoUrl),
             titles: shelf.titles.slice(0, 100),
             loading: true,
             error: false
@@ -4098,6 +4277,7 @@ var BuroApp = (function () {
         var anchor = document.createElement('a');
         var hosts = ['www.netflix.com', 'www.primevideo.com', 'www.disneyplus.com', 'tv.apple.com', 'play.google.com',
             'play.max.com', 'globoplay.globo.com', 'www.paramountplus.com', 'www.themoviedb.org', 'themoviedb.org'];
+        hosts.push('www.omdbapi.com');
         try { anchor.href = String(value || ''); }
         catch (ignoredUrl) { return null; }
         return anchor.protocol === 'https:' && hosts.indexOf(anchor.hostname) >= 0 ? anchor.href : null;
@@ -4277,6 +4457,7 @@ var BuroApp = (function () {
         else if (state.screen === 'LICENCE') { renderLicenceActivation(); }
         else if (state.screen === 'TMDB_SETTINGS') { renderTmdbSettings(); }
         else if (state.screen === 'CRITICS_SETTINGS') { renderCriticsSettings(); }
+        else if (state.screen === 'CRITICS_GUIDE') { renderCriticsGuide(); }
         else if (state.screen === 'STORAGE_SETTINGS') { renderStorageSettings(); }
         else if (state.screen === 'NOTIFICATIONS') { renderNotifications(); }
         else if (state.screen === 'TMDB_GUIDE') { renderTmdbGuide(); }
@@ -6786,6 +6967,8 @@ var BuroApp = (function () {
         else if (action === 'tmdb-save') { saveTmdbKey(element.getAttribute('data-scope')); }
         else if (action === 'tmdb-clear') { clearTmdbKey(element.getAttribute('data-scope')); }
         else if (action === 'critics-settings') { pushScreen('CRITICS_SETTINGS', {}); }
+        else if (action === 'critics-guide') { openCriticsGuide(); }
+        else if (action === 'critics-guide-open') { openExternalOffer(OMDB_API_KEY_URL); }
         else if (action === 'critics-save') { saveCriticsKey(); }
         else if (action === 'critics-clear') { clearCriticsKey(); }
         else if (action === 'storage-settings') { pushScreen('STORAGE_SETTINGS', {}); measureStorage(); }
@@ -6794,6 +6977,9 @@ var BuroApp = (function () {
         else if (action === 'notifications') { pushScreen('NOTIFICATIONS', {}); }
         else if (action === 'notifications-read') { markNotificationsRead(); }
         else if (action === 'notification-remove') { removeNotification(element.getAttribute('data-id')); }
+        else if (action === 'catalogue-scope-genre') { cycleCatalogueScope('genre'); }
+        else if (action === 'catalogue-scope-service') { cycleCatalogueScope('service'); }
+        else if (action === 'catalogue-scope-reset') { resetCatalogueScope(); }
         else if (action === 'parental-form') { pushScreen('PARENTAL_FORM'); }
         else if (action === 'parental-save') { saveParentalPin(); }
         else if (action === 'parental-clear') { clearParentalPin(); }
