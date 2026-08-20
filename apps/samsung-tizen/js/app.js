@@ -20,6 +20,10 @@ var BuroApp = (function () {
     var playerSubtitleText;
     var playerSpeedLabel;
     var playerAspectLabel;
+    var playerLockLabel;
+    var playerLockPanel;
+    var playerLockTitle;
+    var playerLockHint;
     var playerReturnLabel;
     var playerRemoteActions;
     var playerMenu;
@@ -37,11 +41,16 @@ var BuroApp = (function () {
     var playerErrorFocus = 0;
     var playerMenuState = null;
     var playerControlsTimer = null;
+    var playerEnterTimer = null;
+    var playerEnterPressActive = false;
+    var playerEnterLongPress = false;
+    var playerControlsLocked = false;
     var playerSubtitleTimer = null;
     var focusables = [];
     var focusIndex = 0;
     var toastTimer = null;
     var initialized = false;
+    var runtimeReadyReported = false;
     var bootStartedAt = 0;
     var playlistMemory = {};
     var artworkMemory = {};
@@ -56,10 +65,18 @@ var BuroApp = (function () {
     var personReturnData = null;
     var subscriptionReturnData = null;
     var subscriptionRequest = null;
+    var pendingSharedTitle = null;
+    var sharedTitleNoticeVisible = false;
+    var sharedTitleResolving = false;
+    var sharedTitleResolveId = 0;
     var homeRequestId = 0;
     var homeHeroTimer = null;
     var homeEnrichmentTimer = null;
     var discoverRequestId = 0;
+    var discoverSessionKey = null;
+    var discoverSessionTaste = { leaningByGenre: {} };
+    var discoverJudgedIds = {};
+    var discoverReturnData = null;
     var catalogueRequestId = 0;
     var searchRequestId = 0;
     var searchDebounceTimer = null;
@@ -90,6 +107,7 @@ var BuroApp = (function () {
     var HOME_RAIL_LIMIT = 12;
     var HOME_HERO_LIMIT = 10;
     var HOME_HERO_ROTATION_MILLIS = 10000;
+    var PLAYER_LOCK_HOLD_MILLIS = 800;
     var BOOT_MINIMUM_MILLIS = 900;
     var BOOT_POSTER_REVEAL_MILLIS = 1600;
     var MAX_PROFILES = 5;
@@ -101,7 +119,7 @@ var BuroApp = (function () {
         { tag: 'it', name: 'Italiano' },
         { tag: 'es', name: 'Español' }
     ];
-    var APP_VERSION_FALLBACK = '0.3.0';
+    var APP_VERSION_FALLBACK = '3.0.1';
     var TMDB_SIGNUP_URL = 'https://www.themoviedb.org/signup';
     var CATALOGUE_LAYOUTS = ['poster', 'compact', 'list'];
     var CATALOGUE_SORTS = ['provider', 'title-asc', 'title-desc', 'year-desc', 'year-asc', 'rating-desc'];
@@ -352,11 +370,63 @@ var BuroApp = (function () {
     function showPlayerControls() {
         if (!overlay) { return; }
         updatePlayerProgrammeLabel();
+        if (playerControlsLocked) {
+            overlay.classList.add('controls-hidden');
+            return;
+        }
         overlay.classList.remove('controls-hidden');
         if (playerControlsTimer) { window.clearTimeout(playerControlsTimer); }
         playerControlsTimer = window.setTimeout(function () {
             if (document.body.classList.contains('playing') && !playerErrorActive) { overlay.classList.add('controls-hidden'); }
         }, 5500);
+    }
+
+    function cancelPlayerEnterPress() {
+        if (playerEnterTimer) { window.clearTimeout(playerEnterTimer); playerEnterTimer = null; }
+        playerEnterPressActive = false;
+        playerEnterLongPress = false;
+    }
+
+    function resetPlayerControlsLock() {
+        cancelPlayerEnterPress();
+        playerControlsLocked = false;
+        if (overlay) { overlay.classList.remove('controls-locked'); }
+        if (playerLockPanel) { playerLockPanel.hidden = true; }
+    }
+
+    function setPlayerControlsLocked(locked) {
+        playerControlsLocked = Boolean(locked);
+        overlay.classList.toggle('controls-locked', playerControlsLocked);
+        if (playerLockPanel) { playerLockPanel.hidden = !playerControlsLocked; }
+        if (playerControlsLocked) {
+            closePlayerMenu();
+            if (playerControlsTimer) { window.clearTimeout(playerControlsTimer); playerControlsTimer = null; }
+            overlay.classList.add('controls-hidden');
+        } else {
+            overlay.classList.remove('controls-hidden');
+            showPlayerControls();
+        }
+    }
+
+    function beginPlayerEnterPress() {
+        if (playerEnterPressActive) { return; }
+        playerEnterPressActive = true;
+        playerEnterLongPress = false;
+        playerEnterTimer = window.setTimeout(function () {
+            playerEnterTimer = null;
+            playerEnterLongPress = true;
+            setPlayerControlsLocked(!playerControlsLocked);
+        }, PLAYER_LOCK_HOLD_MILLIS);
+    }
+
+    function finishPlayerEnterPress() {
+        var wasLocked;
+        if (!playerEnterPressActive) { return; }
+        wasLocked = playerControlsLocked;
+        if (playerEnterTimer) { window.clearTimeout(playerEnterTimer); playerEnterTimer = null; }
+        playerEnterPressActive = false;
+        if (!playerEnterLongPress && !wasLocked) { BuroPlayer.togglePause(); }
+        playerEnterLongPress = false;
     }
 
     function clearPlayerSubtitle() {
@@ -396,6 +466,7 @@ var BuroApp = (function () {
     }
 
     function preparePlayerOverlay() {
+        resetPlayerControlsLock();
         clearPlayerError();
         closePlayerMenu();
         clearPlayerSubtitle();
@@ -407,6 +478,9 @@ var BuroApp = (function () {
         playerSpeedLabel.textContent = 'YELLOW ' + t('playbackSpeed') + ': 1×';
         playerAspectLabel.hidden = !BuroPlayer.displayModeAvailable();
         playerAspectLabel.textContent = 'BLUE ' + t('playerAspectRatio') + ': ' + t('playerScaleOriginal');
+        playerLockLabel.textContent = t('playerLockHint');
+        playerLockTitle.textContent = t('playerControlsLocked');
+        playerLockHint.textContent = t('playerUnlockHint');
         playerReturnLabel.textContent = 'RETURN ' + t('back');
         playerRemoteActions.textContent = '◀ 10s · ENTER ' + t('playPause') + ' · 30s ▶';
         playerWaiting.hidden = false;
@@ -509,6 +583,7 @@ var BuroApp = (function () {
     }
 
     function showPlayerError(error) {
+        resetPlayerControlsLock();
         playerErrorActive = true;
         playerErrorFocus = 0;
         playerWaiting.hidden = true;
@@ -883,6 +958,8 @@ var BuroApp = (function () {
 
     function renderBoot() {
         var boot = state.boot || { index: 0, total: BOOT_STEPS.length, messageKey: 'bootProfiles' };
+        var progressValue = Math.min(100, Math.round(((boot.index + 1) / boot.total) * 100));
+        var progressLabel = t(boot.messageKey);
         var dots = BOOT_STEPS.map(function (step, index) {
             var status = index < boot.index ? 'complete' : (index === boot.index ? 'active' : '');
             return '<span class="boot-dot ' + status + '" aria-hidden="true"></span>';
@@ -890,12 +967,16 @@ var BuroApp = (function () {
         root.innerHTML = '<main class="boot-screen">' +
             '<div class="boot-backdrop" aria-hidden="true"><span></span><span></span><span></span><span></span></div>' +
             '<div class="boot-vignette" aria-hidden="true"></div>' +
-            '<section class="boot-panel">' +
+            '<section class="boot-panel" role="status" aria-live="polite" aria-atomic="true">' +
+            '<div class="boot-mark" aria-hidden="true"><span>B</span></div>' +
             '<p class="boot-brand">IPTV BURO</p>' +
-            '<p class="boot-message">' + t(boot.messageKey) + '</p>' +
+            '<p class="boot-message">' + progressLabel + '</p>' +
             '<p class="boot-stage">' + t('bootStageLabel') + '</p>' +
-            '<div class="boot-indicator" aria-label="' + attr(t('loading')) + '"></div>' +
-            '<div class="boot-dots">' + dots + '</div>' +
+            '<div class="boot-indicator" aria-hidden="true"></div>' +
+            '<div class="boot-progress" role="progressbar" aria-label="' + attr(progressLabel) +
+            '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + progressValue + '">' +
+            '<span style="width: ' + progressValue + '%"></span></div>' +
+            '<div class="boot-dots" aria-hidden="true">' + dots + '</div>' +
             '</section>' +
             '</main>';
     }
@@ -1049,7 +1130,7 @@ var BuroApp = (function () {
         }).join('');
     }
 
-    function shell(content, title, scrollable) {
+    function shell(content, title, scrollable, topbarExtra) {
         var profileName = state.activeProfile ? state.activeProfile.name : t('profiles');
         root.innerHTML = '<div class="shell"><nav class="buro-ribbon" aria-label="IPTV BURO"><div class="nav-brand">' +
             '<span>IPTV</span><strong>BURO</strong></div><ul class="nav-list">' + navHtml() + '</ul>' +
@@ -1057,8 +1138,20 @@ var BuroApp = (function () {
             attr(profileName) + '"><span class="ribbon-avatar ' + (state.activeProfile && state.activeProfile.isKids ? 'kids' : '') + '">' +
             profileAvatarContent(state.activeProfile || { name: profileName }) + '</span><strong>' + escapeHtml(profileName) + '</strong></button></nav>' +
             '<main class="main-pane" aria-labelledby="screen-title"><header class="topbar"><h1 id="screen-title">' + escapeHtml(title) +
-            '</h1>' + notificationBellHtml() + '<span class="platform-chip">Samsung Tizen</span></header><section class="content ' + (scrollable ? 'scrollable' : '') + '">' +
-            content + '</section><div class="bottom-hint">' + t('useArrows') + '</div></main></div>';
+            '</h1>' + (topbarExtra || '') + notificationBellHtml() + '<span class="platform-chip">Samsung Tizen</span></header><section class="content ' + (scrollable ? 'scrollable' : '') + '">' +
+            sharedTitleNoticeHtml() + content + '</section><div class="bottom-hint">' + t('useArrows') + '</div></main></div>';
+    }
+
+    function sharedTitleNoticeHtml() {
+        var title;
+        if (!sharedTitleNoticeVisible || !pendingSharedTitle) { return ''; }
+        title = pendingSharedTitle.title;
+        return '<aside class="shared-link-notice" role="alertdialog" aria-labelledby="shared-link-title" aria-describedby="shared-link-body">' +
+            '<span class="shared-link-symbol" aria-hidden="true">↗</span><div><h2 id="shared-link-title">' +
+            t('sharedMissingTitle') + '</h2><p id="shared-link-body">' +
+            escapeHtml(t('sharedMissingBody').replace('{title}', title)) + '</p></div><div class="shared-link-actions">' +
+            '<button class="button primary focusable" data-action="shared-retry">' + t('sharedRetry') + '</button>' +
+            '<button class="button ghost focusable" data-action="shared-dismiss">' + t('sharedDismiss') + '</button></div></aside>';
     }
 
     function emptyState(symbol, title, body, action, label) {
@@ -1094,6 +1187,7 @@ var BuroApp = (function () {
         var resolved = [];
         state.items.forEach(function (item) {
             var identity = BuroDomain.contentIdentity(item);
+            if (!state.activeSource || item.sourceId !== state.activeSource.id) { return; }
             if (identity && !identities[identity]) { identities[identity] = item; }
         });
         BuroDomain.sortReminders(profileReminders()).forEach(function (reminder) {
@@ -1101,7 +1195,13 @@ var BuroApp = (function () {
             if (item && !itemVisible(item)) { return; }
             resolved.push({ reminder: reminder, item: item || null });
         });
-        return resolved.slice(0, 12);
+        return resolved;
+    }
+
+    function reminderItemCanOpen(item) {
+        if (!item || !state.activeSource || item.sourceId !== state.activeSource.id) { return false; }
+        if (item.contentType === 'MOVIE') { return true; }
+        return item.contentType === 'SERIES' && state.activeSource.type === 'XTREAM';
     }
 
     /* Dias que faltam, ou null quando não há data utilizável. */
@@ -1173,17 +1273,26 @@ var BuroApp = (function () {
       A página de lembretes: uma linha por título, não uma grade de pôsteres.
 
       A referência Android é uma lista vertical com arte pequena à esquerda,
-      título e estado no meio e Remover à direita. A grade fica na Home, onde o
-      trilho é de navegação; aqui a pergunta é "o que eu marquei, e o que faço
-      com isso", que se lê melhor em linhas.
+      título e estado no meio e Remover à direita. Quando a identidade já
+      corresponde a um filme ou série local, a parte principal também abre os
+      detalhes; um lançamento ainda ausente continua visível, mas não finge ser
+      clicável. A grade fica na Home, onde o trilho é de navegação.
     */
     function reminderRowsHtml(entries) {
         return '<div class="reminder-list">' + entries.map(function (entry) {
             var reminder = entry.reminder;
-            return '<div class="reminder-row">' +
-                reminderArtHtml(reminder, 'reminder-row-art') +
+            var item = entry.item;
+            var openable = reminderItemCanOpen(item);
+            var status = reminderStatusLabel(reminder) +
+                (openable ? '' : ' · ' + t(item ? 'unavailable' : 'reminderNotInLibrary'));
+            var summary = reminderArtHtml(reminder, 'reminder-row-art') +
                 '<div class="reminder-row-text"><h3>' + escapeHtml(reminder.title) + '</h3><p>' +
-                escapeHtml(reminderStatusLabel(reminder)) + '</p></div>' +
+                escapeHtml(status) + '</p></div>';
+            return '<div class="reminder-row">' +
+                (openable ? '<button class="reminder-row-open focusable" data-action="reminder-open" data-id="' +
+                    attr(item.id) + '" aria-label="' + attr(t('viewDetails') + ': ' + reminder.title) + '">' +
+                    summary + '</button>' : '<div class="reminder-row-open reminder-row-static">' +
+                    summary + '</div>') +
                 '<button class="button ghost focusable" data-action="reminder-remove" data-id="' +
                 attr(reminder.id) + '" aria-label="' +
                 attr(t('reminderRemove') + ': ' + reminder.title) + '">' +
@@ -1381,7 +1490,7 @@ var BuroApp = (function () {
           contra os itens já consumidos descartaria exatamente os lembretes que
           valem a pena mostrar. Mesma decisão do Android.
         */
-        rails.push({ key: 'reminders', title: t('homeReminders'), items: reminderCards() });
+        rails.push({ key: 'reminders', title: t('homeReminders'), items: reminderCards().slice(0, 12) });
         rails.push({ key: 'releases-current', title: t('homeReleases').replace('{year}', currentYear),
             items: takeHomeItems(result.currentReleases, consumedIds, consumedTitles) });
         rails.push({ key: 'releases-previous', title: t('homeReleases').replace('{year}', currentYear - 1),
@@ -1521,6 +1630,7 @@ var BuroApp = (function () {
     function renderHome() {
         var data = state.screenData;
         var content;
+        var topbarExtra = '';
         var year = new Date().getFullYear();
         if (state.screenData && state.screenData.kind === 'demo-story') {
             content = '<div class="demo-story"><span class="hero-kicker">' + t('demoBadge') + '</span>' +
@@ -1532,8 +1642,8 @@ var BuroApp = (function () {
             return;
         }
         if (!state.sources.length) {
-            content = '<div class="demo-notice">' + t('demoNotice') + '</div>' +
-                '<div class="hero living-hero"><span class="hero-kicker">' + t('demoBadge') + '</span><h2>' +
+            topbarExtra = '<div class="demo-notice">' + t('demoNotice') + '</div>';
+            content = '<div class="hero living-hero"><span class="hero-kicker">' + t('demoBadge') + '</span><h2>' +
                 t('demoHeroTitle') + '</h2><p class="hero-metadata">' + year + ' · ' + t('demoHeroMetadata') + '</p><p>' +
                 t('demoHeroSynopsis') + '</p><button class="button primary focusable" data-action="demo-story">' +
                 t('demoViewStory') + '</button></div>' +
@@ -1557,7 +1667,7 @@ var BuroApp = (function () {
             }
             content = catalogueSyncBanner(state.activeSource) + content;
         }
-        shell(content, t('home'), Boolean(state.sources.length));
+        shell(content, t('home'), Boolean(state.sources.length), topbarExtra);
         if (state.sources.length && data && data.kind === 'home' && !data.loading && !data.error) {
             scheduleHomeHeroRotation(data);
             scheduleHomeHeroEnrichment(data);
@@ -1571,42 +1681,96 @@ var BuroApp = (function () {
         if (rows.length > (limit || 12)) { rows.pop(); }
     }
 
+    function discoveryGenres(item) {
+        var label = item && item.genre;
+        if (!label && item && item.categoryId) {
+            state.categories.some(function (category) {
+                if (category.id === item.categoryId) { label = category.name; return true; }
+                return false;
+            });
+        }
+        return String(label || '').split(/[,\/|;]/).map(function (part) {
+            return BuroDomain.trim(part);
+        }).filter(function (part) { return Boolean(part); });
+    }
+
+    function ensureDiscoverSession() {
+        var key = (state.activeProfile && state.activeProfile.id || '') + ':' +
+            (state.activeSource && state.activeSource.id || '');
+        if (key !== discoverSessionKey) {
+            discoverSessionKey = key;
+            discoverSessionTaste = { leaningByGenre: {} };
+            discoverJudgedIds = {};
+            discoverReturnData = null;
+        }
+    }
+
     function discoverAccumulator() {
         var snapshot = catalogueVisibilitySnapshot();
         return {
             count: 0, sourceId: snapshot.sourceId, categoryVisibility: snapshot.categoryVisibility,
-            topRated: [], newest: [], movies: [], series: [], live: []
+            movieCount: 0, seriesCount: 0, items: []
         };
     }
 
     function collectDiscover(result, item) {
         var type = item && item.contentType;
-        if (!item || ['MOVIE', 'SERIES', 'LIVE'].indexOf(type) < 0 || !snapshotItemVisible(result, item)) { return result; }
+        if (!item || ['MOVIE', 'SERIES'].indexOf(type) < 0 || !snapshotItemVisible(result, item)) { return result; }
         result.count += 1;
-        if (type === 'MOVIE' && result.movies.length < 12) { result.movies.push(item); }
-        else if (type === 'SERIES' && result.series.length < 12) { result.series.push(item); }
-        else if (type === 'LIVE' && result.live.length < 12) { result.live.push(item); }
-        if (type !== 'LIVE' && Number(item.rating) > 0) {
-            rankedInsert(result.topRated, item, function (left, right) {
-                return Number(right.rating) - Number(left.rating) || Number(right.year) - Number(left.year);
-            });
-        }
-        if (type !== 'LIVE' && Number(item.year) > 0) {
-            rankedInsert(result.newest, item, function (left, right) {
-                return Number(right.year) - Number(left.year) || Number(right.rating) - Number(left.rating);
-            });
+        if (type === 'MOVIE' && result.movieCount < 400) {
+            result.movieCount += 1;
+            result.items.push(item);
+        } else if (type === 'SERIES' && result.seriesCount < 400) {
+            result.seriesCount += 1;
+            result.items.push(item);
         }
         return result;
     }
 
+    function buildDiscoverDeck(result) {
+        var profileId = state.activeProfile && state.activeProfile.id;
+        var byId = {};
+        var favouriteGenres = [];
+        var watchedGenres = [];
+        var seenIds = [];
+        var candidates;
+        (result.items || []).forEach(function (item) { byId[item.id] = item; });
+        state.favorites.forEach(function (row) {
+            if (row.profileId !== profileId) { return; }
+            seenIds.push(row.itemId);
+            if (byId[row.itemId]) { favouriteGenres = favouriteGenres.concat(discoveryGenres(byId[row.itemId])); }
+        });
+        state.progress.forEach(function (row) {
+            if (row.profileId !== profileId) { return; }
+            seenIds.push(row.itemId);
+            if (byId[row.itemId]) { watchedGenres = watchedGenres.concat(discoveryGenres(byId[row.itemId])); }
+        });
+        Object.keys(discoverJudgedIds).forEach(function (itemId) {
+            if (discoverJudgedIds[itemId]) { seenIds.push(itemId); }
+        });
+        candidates = (result.items || []).map(function (item) {
+            return {
+                id: item.id, title: item.name, genres: discoveryGenres(item), year: item.year,
+                rating: item.rating, isSeries: item.contentType === 'SERIES'
+            };
+        });
+        return BuroDomain.discoveryDeck(candidates, {
+            favouriteGenres: favouriteGenres, watchedGenres: watchedGenres, seenIds: seenIds
+        }, discoverSessionTaste, 0).map(function (candidate) { return byId[candidate.id]; }).filter(Boolean);
+    }
+
     function loadDiscover() {
         var requestId = ++discoverRequestId;
+        ensureDiscoverSession();
         BuroStorage.fold('items', collectDiscover, discoverAccumulator(), function (result) {
-            var all;
+            var deck;
             if (requestId !== discoverRequestId || state.screen !== 'SHELL' || state.section !== 'DISCOVER') { return; }
-            all = result.topRated.concat(result.newest, result.movies, result.series, result.live);
-            mergeItems(all);
-            state.screenData = { kind: 'discover', loading: false, result: result };
+            mergeItems(result.items);
+            deck = buildDiscoverDeck(result);
+            state.screenData = {
+                kind: 'discover', loading: false, deck: deck, dealtCount: deck.length,
+                catalogueCount: (result.items || []).length
+            };
             focusIndex = 0;
             render();
         }, function (error) {
@@ -1617,9 +1781,25 @@ var BuroApp = (function () {
         });
     }
 
+    function renderDiscoverCard(item, layer) {
+        var genres = discoveryGenres(item);
+        var facts = [];
+        var rating = Number(item && item.rating);
+        if (item && item.year) { facts.push(String(item.year)); }
+        if (genres.length) { facts.push(genres.slice(0, 2).join(' · ')); }
+        if (rating > 0) { facts.push('★ ' + rating.toFixed(1)); }
+        return '<article class="discover-card ' + layer + (artworkMemory[item.id] ? ' has-art' : '') +
+            '" data-id="' + attr(item.id) + '" aria-label="' + attr(item.name) + '">' +
+            artworkHtml(item, 'discover-art') + '<span class="badge">' + escapeHtml(item.contentType) +
+            '</span><div class="discover-card-copy"><h3>' + escapeHtml(item.name) + '</h3><p>' +
+            escapeHtml(facts.join('  ·  ')) + '</p></div></article>';
+    }
+
     function renderDiscover() {
         var data = state.screenData;
-        var result;
+        var deck;
+        var current;
+        var position;
         var content;
         if (!state.sources.length) {
             shell(emptyState('+', t('addSource'), t('emptyHome'), 'source-add', t('addSource')), t('discover'), false);
@@ -1631,7 +1811,7 @@ var BuroApp = (function () {
             data = state.screenData;
         }
         if (data.loading) {
-            shell('<div class="search-loading"><span class="boot-indicator"></span><p>' + t('loading') + '</p></div>',
+            shell('<div class="search-loading"><span class="boot-indicator"></span><p>' + t('discoverLoading') + '</p></div>',
                 t('discover'), false);
             return;
         }
@@ -1639,16 +1819,72 @@ var BuroApp = (function () {
             shell(emptyState('!', t('error'), data.error, 'discover-retry', t('retry')), t('discover'), false);
             return;
         }
-        result = data.result || discoverAccumulator();
+        deck = data.deck || [];
         content = '<div class="discover-intro"><span class="hero-kicker">IPTV BURO</span><h2>' + t('discover') +
             '</h2><p>' + t('discoverIntro') + '</p></div>';
-        content += homeRail(t('topRated'), result.topRated);
-        content += homeRail(t('newest'), result.newest);
-        content += homeRail(t('movies'), result.movies);
-        content += homeRail(t('series'), result.series);
-        content += homeRail(t('live'), result.live);
-        if (!result.count) { content += emptyState('B', t('discover'), t('discoverEmpty'), '', ''); }
+        if (!deck.length) {
+            content += Number(data.catalogueCount) > 0 ?
+                emptyState('B', t('discoverExhausted'), t('discoverEmpty'), 'discover-again', t('discoverAgain')) :
+                emptyState('B', t('discover'), t('discoverNeedsCatalogue'), 'discover-again', t('discoverAgain'));
+            shell(content, t('discover'), true);
+            return;
+        }
+        current = deck[0];
+        position = Math.max(1, Number(data.dealtCount) - deck.length + 1);
+        content += '<section class="discover-workspace" aria-label="' + attr(t('discover')) + '">' +
+            '<p class="discover-counter" aria-live="polite">' +
+            escapeHtml(t('discoverCounter').replace('{current}', position).replace('{total}', Math.max(position, Number(data.dealtCount) || 0))) +
+            '</p><div class="discover-stage">' + (deck[1] ? renderDiscoverCard(deck[1], 'next') : '') +
+            renderDiscoverCard(current, 'current') + '</div><div class="discover-actions">' +
+            '<button class="discover-action skip focusable" data-action="discover-skip" data-id="' + attr(current.id) +
+            '" aria-label="' + attr(t('discoverSkip')) + '"><span>×</span><strong>' + t('discoverSkip') + '</strong></button>' +
+            '<button class="discover-action keep focusable" data-action="discover-keep" data-id="' + attr(current.id) +
+            '" aria-label="' + attr(t('discoverKeep')) + '"><span>✓</span><strong>' + t('discoverKeep') + '</strong></button>' +
+            '<button class="discover-action details focusable" data-action="discover-details" data-id="' + attr(current.id) +
+            '" aria-label="' + attr(t('discoverDetails')) + '"><span>i</span><strong>' + t('discoverDetails') + '</strong></button>' +
+            '</div></section>';
         shell(content, t('discover'), true);
+    }
+
+    function advanceDiscover(item, verdict) {
+        var data = state.screenData;
+        if (!data || data.kind !== 'discover' || !item) { return; }
+        discoverJudgedIds[item.id] = true;
+        discoverSessionTaste = BuroDomain.discoverySessionAfter(
+            discoverSessionTaste, discoveryGenres(item), verdict
+        );
+        data.deck = (data.deck || []).filter(function (candidate) { return candidate.id !== item.id; });
+        render();
+    }
+
+    function decideDiscover(verdict) {
+        var data = state.screenData;
+        var item = data && data.kind === 'discover' && data.deck && data.deck[0];
+        if (!item) { return; }
+        if (verdict !== 'KEPT') { advanceDiscover(item, 'SKIPPED'); return; }
+        if (isFavorite(item.id)) { advanceDiscover(item, 'KEPT'); return; }
+        toggleFavorite(item.id, function (added) {
+            if (added && state.section === 'DISCOVER' && state.screenData === data) {
+                advanceDiscover(item, 'KEPT');
+            }
+        });
+    }
+
+    function openDiscoverDetails(itemId) {
+        var data = state.screenData;
+        var found = findItemAndSource(itemId);
+        if (!data || data.kind !== 'discover' || !found.item) { return; }
+        discoverReturnData = data;
+        if (found.item.contentType === 'MOVIE') { openMovieDetails(itemId, 'DISCOVER'); }
+        else if (found.item.contentType === 'SERIES') { openSeriesById(itemId, 'DISCOVER'); }
+        if (state.screenData === data) { discoverReturnData = null; }
+    }
+
+    function dealDiscoverAgain() {
+        state.screenData = { kind: 'discover', loading: true };
+        focusIndex = 0;
+        render();
+        window.setTimeout(loadDiscover, 0);
     }
 
     function demoHomeCard(artwork, title) {
@@ -2120,6 +2356,130 @@ var BuroApp = (function () {
             escapeHtml(qr && qr.url || value.webUrl) + '</code></div></div>', t('shareTitle'), true);
     }
 
+    function requestedAppControlUri() {
+        var application;
+        var requested;
+        try {
+            if (!window.tizen || !tizen.application || !tizen.application.getCurrentApplication) { return ''; }
+            application = tizen.application.getCurrentApplication();
+            if (!application || !application.getRequestedAppControl) { return ''; }
+            requested = application.getRequestedAppControl();
+            return requested && requested.appControl ? String(requested.appControl.uri || '') : '';
+        } catch (ignoredAppControl) { return ''; }
+    }
+
+    function receiveRequestedAppControl(rawOverride) {
+        var raw = typeof rawOverride === 'string' ? rawOverride : requestedAppControlUri();
+        var value = BuroShare.parseIncoming(raw);
+        if (!value) { return false; }
+        pendingSharedTitle = value;
+        sharedTitleNoticeVisible = false;
+        sharedTitleResolveId += 1;
+        resolvePendingSharedTitle();
+        return true;
+    }
+
+    function sharedTitleCandidate(snapshot, wanted, found, item) {
+        if (found || !item || item.sourceId !== snapshot.sourceId) { return found; }
+        if (item.contentType !== 'MOVIE' && item.contentType !== 'SERIES') { return found; }
+        if (item.contentType === 'SERIES' && (!state.activeSource || state.activeSource.type !== 'XTREAM')) { return found; }
+        if (!snapshotItemVisible(snapshot, item)) { return found; }
+        return BuroShare.identity(item.contentType, item.name, item.year) === wanted.identity ? item : found;
+    }
+
+    /*
+      Resolve contra o catalogo local completo, nao contra a amostra que a Home
+      mantem em memoria. A identidade recebida nunca e usada como id do
+      provedor, stream ou URL: ela serve somente para comparar nomes locais.
+    */
+    function resolvePendingSharedTitle() {
+        var wanted = pendingSharedTitle;
+        var snapshot;
+        var requestId;
+        if (!wanted || sharedTitleResolving || !state.ready || state.screen !== 'SHELL' ||
+                !state.preferences || !state.preferences.acceptedLegal || !state.activeProfile || !state.activeSource) { return; }
+        snapshot = catalogueVisibilitySnapshot();
+        requestId = sharedTitleResolveId;
+        sharedTitleResolving = true;
+        BuroStorage.fold('items', function (found, item) {
+            return sharedTitleCandidate(snapshot, wanted, found, item);
+        }, null, function (found) {
+            sharedTitleResolving = false;
+            if (requestId !== sharedTitleResolveId || pendingSharedTitle !== wanted) {
+                resolvePendingSharedTitle();
+                return;
+            }
+            if (state.screen !== 'SHELL') { return; }
+            if (!found) {
+                sharedTitleNoticeVisible = true;
+                render();
+                return;
+            }
+            pendingSharedTitle = null;
+            sharedTitleNoticeVisible = false;
+            mergeItems([found]);
+            showToast(t('sharedOpening').replace('{title}', wanted.title), false);
+            if (found.contentType === 'SERIES') { openSeriesById(found.id, state.section); }
+            else { openMovieDetails(found.id, state.section); }
+        }, function () {
+            sharedTitleResolving = false;
+            if (requestId !== sharedTitleResolveId || pendingSharedTitle !== wanted) {
+                resolvePendingSharedTitle();
+                return;
+            }
+            sharedTitleNoticeVisible = true;
+            if (state.screen === 'SHELL') { render(); }
+            showToast(t('sharedResolveError'), true);
+        });
+    }
+
+    function retryPendingSharedTitle() {
+        if (!pendingSharedTitle) { return; }
+        sharedTitleNoticeVisible = false;
+        sharedTitleResolveId += 1;
+        resolvePendingSharedTitle();
+    }
+
+    /*
+      Titulos parecidos, tirados do proprio catalogo.
+
+      Do catalogo e nao do TMDb de proposito: sem chave configurada a pagina de
+      detalhes fica com hero e cinco botoes e mais nada, e foi exatamente assim
+      que ela apareceu na TV de teste. Genero em comum e o sinal mais barato que
+      existe aqui — ja esta em memoria, nao custa rede e nao depende de chave.
+
+      Tambem e o que da ao D-pad para onde descer: com so os botoes de acao, a
+      tela nao rolava porque nao havia nada abaixo para receber o foco.
+    */
+    function similarTitles(item, details, limit) {
+        var genreText = String((details && details.genre) || item.genre || '');
+        var wanted = {};
+        var scored = [];
+        var maximum = Number(limit) || 12;
+        genreText.split(/[,\/|;]/).forEach(function (part) {
+            var clean = BuroDomain.foldAccents(BuroDomain.trim(part));
+            if (clean) { wanted[clean] = true; }
+        });
+        if (!Object.keys(wanted).length) { return []; }
+        state.items.forEach(function (candidate) {
+            var shared = 0;
+            if (candidate.id === item.id) { return; }
+            if (candidate.contentType !== item.contentType) { return; }
+            if (!itemVisible(candidate)) { return; }
+            String(candidate.genre || '').split(/[,\/|;]/).forEach(function (part) {
+                var clean = BuroDomain.foldAccents(BuroDomain.trim(part));
+                if (clean && wanted[clean]) { shared += 1; }
+            });
+            if (!shared) { return; }
+            scored.push({ item: candidate, shared: shared, rating: Number(candidate.rating) || 0 });
+        });
+        scored.sort(function (left, right) {
+            return (right.shared - left.shared) || (right.rating - left.rating) ||
+                String(left.item.name).localeCompare(String(right.item.name));
+        });
+        return scored.slice(0, maximum).map(function (row) { return row.item; });
+    }
+
     function renderTitleDetails(item, details, isSeries, episodes) {
         var facts = [];
         var cast;
@@ -2127,6 +2487,7 @@ var BuroApp = (function () {
         var supporting = '';
         var trailerId;
         var seasonIds = {};
+        var related;
         var episodeRows = episodes || [];
         details = details || { title: item.name };
         trailerId = BuroDomain.sanitizeYouTubeReference(details.youtubeTrailerId);
@@ -2159,6 +2520,19 @@ var BuroApp = (function () {
                         '<span><strong>' + escapeHtml(member.name) + '</strong>' +
                         (member.character ? '<small>' + escapeHtml(member.character) + '</small>' : '') + '</span></button>';
                 }).join('') + '</div></section>';
+        }
+        /* Sem chave, a pagina fica com o que a lista mandou: sem elenco, sem
+           sinopse, sem arte. Dizer isso aqui, com o caminho ao lado, e melhor
+           do que deixar o usuario achar que o app e assim mesmo. */
+        if (!BuroTmdb.keyForProfile(state.activeProfile && state.activeProfile.id)) {
+            supporting += '<div class="detail-metadata-hint"><p>' + escapeHtml(t('detailNoMetadata')) +
+                '</p><button class="button ghost focusable" data-action="tmdb-settings">' +
+                t('detailAddKey') + '</button></div>';
+        }
+        related = similarTitles(item, details, 12);
+        if (related.length) {
+            supporting += '<section class="detail-related"><h3>' + t('similarTitles') + '</h3>' +
+                mediaCards(related, 'poster') + '</section>';
         }
         return '<div class="detail-page"><div class="detail-hero">' + detailArtworkHtml(item) +
             '<span class="hero-kicker">' + (isSeries ? t('series') : t('movies')) +
@@ -3290,6 +3664,7 @@ var BuroApp = (function () {
             if (state.screen !== 'TMDB_SETTINGS') { return; }
             BuroTmdb.save(scope, profileId, validated, function () {
                 clearTmdbDetails();
+                BuroTmdb.clearShelfCache();
                 state.screenData = { messageKey: 'tmdbSaved', error: false }; render();
             }, function () {
                 state.screenData = { messageKey: 'tmdbSecureError', error: true }; render();
@@ -3308,6 +3683,7 @@ var BuroApp = (function () {
     function clearTmdbKey(scope) {
         if (BuroTmdb.remove(scope, state.activeProfile && state.activeProfile.id)) {
             clearTmdbDetails();
+            BuroTmdb.clearShelfCache();
             state.screenData = { messageKey: 'tmdbCleared', error: false };
         } else { state.screenData = { messageKey: 'tmdbSecureError', error: true }; }
         render();
@@ -3409,17 +3785,20 @@ var BuroApp = (function () {
         return (title.isSeries ? 'series:' : 'movie:') + String(title.tmdbId || title.id || '');
     }
 
-    function loadSubscriptions(kind) {
+    function loadSubscriptions(kind, force) {
         var key = BuroTmdb.keyForProfile(state.activeProfile && state.activeProfile.id);
         var region = BuroTmdb.safeRegion(state.preferences.tmdbRegion);
+        var cached;
         kind = String(kind || 'MOVIES').toUpperCase();
         if (subscriptionRequest && subscriptionRequest.abort) { subscriptionRequest.abort(); }
+        cached = !force && key ? BuroTmdb.readShelfCache(region, kind, state.preferences.language) : null;
         state.screenData = {
-            kind: 'subscriptions', filter: kind, region: region, loading: true,
-            completedServices: 0, totalServices: 0, shelves: [], error: null, selected: null
+            kind: 'subscriptions', filter: kind, region: region, loading: !cached,
+            completedServices: 0, totalServices: 0, shelves: cached || [], error: null, selected: null
         };
         render();
         if (!key) { state.section = 'SETTINGS'; state.screenData = null; render(); return; }
+        if (cached) { return; }
         subscriptionRequest = BuroTmdb.loadShelves(key, region, kind, state.preferences.language,
             function (completed, total, visible) {
                 if (state.section !== 'SUBSCRIPTIONS' || !state.screenData || state.screenData.filter !== kind) { return; }
@@ -3432,6 +3811,7 @@ var BuroApp = (function () {
                 if (state.section !== 'SUBSCRIPTIONS' || !state.screenData || state.screenData.filter !== kind) { return; }
                 state.screenData.loading = false;
                 state.screenData.shelves = shelves;
+                BuroTmdb.writeShelfCache(region, kind, state.preferences.language, shelves);
                 render();
             }, function (error) {
                 subscriptionRequest = null;
@@ -3447,9 +3827,28 @@ var BuroApp = (function () {
             .filter(Boolean).join(' · ');
     }
 
+    /*
+      Um título das prateleiras externas ainda não possui linha no catálogo.
+      Mesmo assim ele precisa compartilhar a identidade por nome/ano usada pelos
+      lembretes locais: quando a mesma obra entrar numa lista futura, os dois
+      caminhos encontrarão uma única marca. O id TMDb não é usado como
+      providerItemId porque isso quebraria essa reconciliação.
+    */
+    function subscriptionReminderItem(data) {
+        var selected = data && data.selected;
+        if (!selected || !BuroDomain.trim(selected.title)) { return null; }
+        return {
+            contentType: selected.isSeries ? 'SERIES' : 'MOVIE',
+            name: selected.title,
+            year: selected.year || null
+        };
+    }
+
     function renderSubscriptionSelection(data) {
         var selection = data.selection || { details: null, offers: [], unknown: false };
         var selected = data.selected;
+        var reminderItem = subscriptionReminderItem(data);
+        var reminderMarked = hasReminder(reminderItem);
         var details = mergeTmdbDetails({
             tmdbId: selected.tmdbId, title: selected.title, plot: selected.overview,
             releaseDate: selected.year, rating: selected.rating, youtubeTrailerId: selected.youtubeTrailerId
@@ -3482,10 +3881,34 @@ var BuroApp = (function () {
             '<div class="subscription-title-head">' + (poster ? '<img src="' + attr(poster) + '" alt="">' : '') +
             '<div><span class="hero-kicker">' + t('subscriptionsWhere') + '</span><h2>' + escapeHtml(details.title || selected.title) + '</h2>' +
             (subscriptionFacts(details) ? '<p>' + escapeHtml(subscriptionFacts(details)) + '</p>' : '') +
+            '<div class="action-row">' +
             (details.youtubeTrailerId ? '<button class="button ghost focusable" data-action="subscription-trailer">' + t('trailer') + '</button>' : '') +
+            '<button class="button ghost focusable' + (reminderMarked ? ' selected' : '') +
+            '" data-action="subscription-reminder" aria-pressed="' + (reminderMarked ? 'true' : 'false') + '">' +
+            (reminderMarked ? t('reminderRemove') : t('reminderAdd')) + '</button></div>' +
             '</div></div><div class="section-heading"><h2>' + t('subscriptionsAvailable') + '</h2></div><div class="subscription-offers">' +
             offerHtml + '</div>' + (details.plot ? '<section class="subscription-copy"><h3>' + t('subscriptionsSynopsis') + '</h3><p>' +
             escapeHtml(details.plot) + '</p></section>' : '') + cast + '</div>';
+    }
+
+    function renderExpandedSubscription(data) {
+        var expanded = data.expanded;
+        var title = t('subscriptionsAllOn').replace('{service}', expanded.providerName);
+        var status = expanded.loading ? '<div class="subscription-loading subscription-expanded-status" role="status">' +
+            '<span class="boot-indicator"></span><p>' + t('subscriptionsLoadingMore') + '</p></div>' :
+            (expanded.error ? '<p class="form-message error-message" role="status">' +
+                t('subscriptionsMoreFailed') + '</p>' : '');
+        var cards = expanded.titles.slice(0, 100).map(function (item) {
+            var poster = safeArtworkUrl(item.posterUrl);
+            return '<button class="subscription-poster focusable" data-action="subscription-title" data-key="' +
+                attr(subscriptionTitleKey(item)) + '">' + (poster ? '<img src="' + attr(poster) + '" alt="">' :
+                '<span>' + escapeHtml(item.title.charAt(0)) + '</span>') + '<strong>' + escapeHtml(item.title) + '</strong>' +
+                (item.year ? '<small>' + item.year + '</small>' : '') + '</button>';
+        }).join('');
+        return '<div class="subscription-expanded" aria-busy="' + (expanded.loading ? 'true' : 'false') + '">' +
+            '<button class="button ghost focusable" data-action="subscription-expanded-back">‹ ' +
+            t('subscriptionsBack') + '</button><div class="section-heading"><h2>' + escapeHtml(title) + '</h2><p>' +
+            expanded.titles.length + '</p></div>' + status + '<div class="subscription-expanded-grid">' + cards + '</div></div>';
     }
 
     function renderSubscriptions() {
@@ -3500,6 +3923,7 @@ var BuroApp = (function () {
             data = state.screenData;
         }
         if (data.selected) { shell(renderSubscriptionSelection(data), t('subscriptions'), true); return; }
+        if (data.expanded) { shell(renderExpandedSubscription(data), t('subscriptions'), true); return; }
         filters = ['MOVIES', 'SERIES', 'THIS_WEEK', 'UPCOMING'].map(function (kind) {
             return '<button class="button ' + (data.filter === kind ? 'primary' : 'ghost') +
                 ' focusable" data-action="subscription-filter" data-kind="' + kind + '">' + t('subscriptions' +
@@ -3528,7 +3952,9 @@ var BuroApp = (function () {
                             attr(subscriptionTitleKey(title)) + '">' + (poster ? '<img src="' + attr(poster) + '" alt="">' :
                             '<span>' + escapeHtml(title.title.charAt(0)) + '</span>') + '<strong>' + escapeHtml(title.title) + '</strong>' +
                             (title.year ? '<small>' + title.year + '</small>' : '') + '</button>';
-                    }).join('') + '</div></section>';
+                    }).join('') + (shelf.providerId ? '<button class="subscription-see-more focusable" data-action="subscription-expand" data-provider="' +
+                        attr(shelf.providerId) + '"><strong>' + t('subscriptionsSeeMore') + '</strong><span>›</span></button>' : '') +
+                    '</div></section>';
             }).join('') + '</div>';
         }
         shell('<div class="subscriptions-header"><h2>' + t('subscriptionsBrowse') + '</h2><div class="action-row">' + filters +
@@ -3539,6 +3965,13 @@ var BuroApp = (function () {
     function findSubscriptionTitle(key) {
         var found = null;
         var data = state.screenData;
+        if (data && data.expanded) {
+            data.expanded.titles.some(function (title) {
+                if (subscriptionTitleKey(title) === key) { found = title; return true; }
+                return false;
+            });
+            if (found) { return found; }
+        }
         (data && data.shelves || []).some(function (shelf) {
             return shelf.titles.some(function (title) {
                 if (subscriptionTitleKey(title) === key) { found = title; return true; }
@@ -3546,6 +3979,55 @@ var BuroApp = (function () {
             });
         });
         return found;
+    }
+
+    function findSubscriptionShelf(providerId) {
+        var found = null;
+        (state.screenData && state.screenData.shelves || []).some(function (shelf) {
+            if (String(shelf.providerId || '') === String(providerId || '')) { found = shelf; return true; }
+            return false;
+        });
+        return found;
+    }
+
+    function expandSubscriptionService(providerId) {
+        var data = state.screenData;
+        var shelf = findSubscriptionShelf(providerId);
+        var key = BuroTmdb.keyForProfile(state.activeProfile && state.activeProfile.id);
+        if (!data || !shelf || !shelf.providerId || data.filter === 'UPCOMING' || !key) { return; }
+        if (subscriptionRequest && subscriptionRequest.abort) { subscriptionRequest.abort(); }
+        data.expanded = {
+            providerId: shelf.providerId,
+            providerName: shelf.providerName,
+            titles: shelf.titles.slice(0, 100),
+            loading: true,
+            error: false
+        };
+        render();
+        subscriptionRequest = BuroTmdb.loadServiceCatalogue(key, shelf.providerId, data.region, data.filter,
+            state.preferences.language, function (titles) {
+                subscriptionRequest = null;
+                if (state.section !== 'SUBSCRIPTIONS' || !state.screenData || !state.screenData.expanded ||
+                        String(state.screenData.expanded.providerId) !== String(shelf.providerId)) { return; }
+                state.screenData.expanded.loading = false;
+                state.screenData.expanded.error = false;
+                if (titles && titles.length) { state.screenData.expanded.titles = titles.slice(0, 100); }
+                render();
+            }, function () {
+                subscriptionRequest = null;
+                if (state.section !== 'SUBSCRIPTIONS' || !state.screenData || !state.screenData.expanded ||
+                        String(state.screenData.expanded.providerId) !== String(shelf.providerId)) { return; }
+                state.screenData.expanded.loading = false;
+                state.screenData.expanded.error = true;
+                render();
+            });
+    }
+
+    function closeExpandedSubscription() {
+        if (subscriptionRequest && subscriptionRequest.abort) { subscriptionRequest.abort(); subscriptionRequest = null; }
+        if (!state.screenData) { return; }
+        state.screenData.expanded = null;
+        render();
     }
 
     function matchSubscriptionLocal(title) {
@@ -3757,6 +4239,15 @@ var BuroApp = (function () {
         else { shell(emptyState('B', t('unavailable'), t('previewNotice'), '', ''), sectionTitle(), false); }
     }
 
+    function reportRuntimeReady() {
+        if (runtimeReadyReported || state.screen !== 'SHELL' || !root.querySelector('.shell')) { return; }
+        runtimeReadyReported = true;
+        root.setAttribute('data-runtime-ready', APP_VERSION_FALLBACK);
+        if (window.console && typeof window.console.info === 'function') {
+            window.console.info('IPTVBURO_RUNTIME_READY screen=SHELL version=' + APP_VERSION_FALLBACK);
+        }
+    }
+
     function sectionTitle() {
         var result = state.section;
         navigationEntries().forEach(function (entry) { if (entry.section === state.section) { result = t(entry.label); } });
@@ -3800,6 +4291,8 @@ var BuroApp = (function () {
         bindSearchInput();
         bindDownloadSearchInput();
         bindStalkerForm();
+        reportRuntimeReady();
+        if (pendingSharedTitle && !sharedTitleNoticeVisible) { resolvePendingSharedTitle(); }
     }
 
     function focusIdentity(element) {
@@ -4058,8 +4551,20 @@ var BuroApp = (function () {
         applyFocus();
     }
 
+    /* Restaura foco sem montar um seletor CSS com um id vindo da fonte. */
+    function focusActionId(action, id) {
+        focusables.some(function (element, index) {
+            if (element.getAttribute('data-action') !== action || element.getAttribute('data-id') !== id) {
+                return false;
+            }
+            focusIndex = index;
+            applyFocus();
+            return true;
+        });
+    }
+
     function bindArtworkErrors() {
-        Array.prototype.slice.call(root.querySelectorAll('.media-art img, .hero-art img, .detail-art img')).forEach(function (image) {
+        Array.prototype.slice.call(root.querySelectorAll('.media-art img, .hero-art img, .detail-art img, .discover-art img')).forEach(function (image) {
             image.addEventListener('error', function () {
                 var fallback = safeArtworkUrl(image.getAttribute('data-artwork-fallback'));
                 if (fallback) {
@@ -4089,8 +4594,13 @@ var BuroApp = (function () {
         var previous;
         var focused;
         var ribbonTarget;
+        var reminderReturnId;
         if (state.screen === 'PERSON' && tmdbPersonRequest && tmdbPersonRequest.abort) {
             tmdbPersonRequest.abort(); tmdbPersonRequest = null;
+        }
+        if (state.screen === 'SHELL' && state.section === 'SUBSCRIPTIONS' && state.screenData) {
+            if (state.screenData.selected) { backFromSubscriptionSelection(); return; }
+            if (state.screenData.expanded) { closeExpandedSubscription(); return; }
         }
         if (state.screen === 'SHELL' && state.screenData &&
                 (state.screenData.kind === 'category' || state.screenData.kind === 'series' ||
@@ -4098,6 +4608,15 @@ var BuroApp = (function () {
                     state.screenData.kind === 'catalogue-loading' || state.screenData.kind === 'catalogue-error' ||
                     state.screenData.kind === 'demo-story')) {
             catalogueRequestId += 1;
+            if (state.screenData.originSection === 'DISCOVER' && discoverReturnData) {
+                state.section = 'DISCOVER';
+                state.screenData = discoverReturnData;
+                discoverReturnData = null;
+                focusIndex = 0;
+                render();
+                focusMatching('[data-action="discover-details"]');
+                return;
+            }
             if (personReturnData) {
                 state.screen = 'PERSON';
                 state.screenData = personReturnData;
@@ -4114,10 +4633,14 @@ var BuroApp = (function () {
                 render();
                 return;
             }
+            if (state.screenData.originSection === 'REMINDERS' && state.screenData.parent) {
+                reminderReturnId = state.screenData.parent.id;
+            }
             if (state.screenData.originSection) { state.section = state.screenData.originSection; }
             state.screenData = null;
             focusIndex = 0;
             render();
+            if (reminderReturnId) { focusActionId('reminder-open', reminderReturnId); }
             return;
         }
         if (state.screen === 'SHELL') {
@@ -4263,6 +4786,7 @@ var BuroApp = (function () {
             state.backStack = [];
             state.screen = 'SHELL'; state.section = existing ? 'PROFILES' : 'HOME'; state.screenData = null;
             render();
+            retryPendingSharedTitle();
             startActiveSourceHydration(false);
             showToast(t('profileSaved'), false);
         }, function (error) { showToast(friendlyError(error), true); });
@@ -4658,6 +5182,7 @@ var BuroApp = (function () {
                 state.screenData.refreshSuccess = replaceAllItems;
             }
             render();
+            retryPendingSharedTitle();
             if (updated.type === 'XTREAM') {
                 BuroHeroEnrichment.clearSource(updated.id);
                 startXtreamHydration(updated, true);
@@ -4731,6 +5256,7 @@ var BuroApp = (function () {
             state.backStack = [];
             state.screen = 'SHELL'; state.section = 'SOURCES'; state.screenData = null;
             render(); showToast(t('sourceSaved'), false);
+            retryPendingSharedTitle();
             startXtreamHydration(source, false);
         }, function (error) {
             try { BuroStorage.secureRemove(source.id); } catch (ignoredSecretCleanup) {}
@@ -4903,6 +5429,7 @@ var BuroApp = (function () {
                 state.screenData = null;
             }
             render();
+            retryPendingSharedTitle();
             showToast(t('catalogueSyncCompleted'), false);
         }, function (error) { showToast(friendlyError(error), true); });
     }
@@ -5804,6 +6331,7 @@ var BuroApp = (function () {
 
     function stopPlayback() {
         playbackResolveRequestId += 1;
+        resetPlayerControlsLock();
         persistProgress(false);
         currentPlayback = null;
         clearPlayerError();
@@ -5894,13 +6422,12 @@ var BuroApp = (function () {
         });
     }
 
-    function toggleReminder(itemId) {
-        var found = findItemAndSource(itemId);
-        var item = found && found.item;
+    function toggleReminderTarget(item, options) {
         var profileId = state.activeProfile && state.activeProfile.id;
         var identity = reminderIdentityFor(item);
         var existing = null;
         var row;
+        options = options || {};
         if (!profileId || !identity) { return; }
         state.reminders.forEach(function (reminder) {
             if (reminder.profileId === profileId && reminder.identity === identity) { existing = reminder; }
@@ -5921,12 +6448,12 @@ var BuroApp = (function () {
                 item: item,
                 /* A arte vem da memória da sessão, e mesmo assim passa pelo filtro
                    de credencial do domínio antes de ser gravada. */
-                artworkUrl: artworkMemory[item.id] || item.artworkUrl,
+                artworkUrl: options.artworkUrl || artworkMemory[item.id] || item.artworkUrl,
                 /* A data de estreia raramente vem na linha do catálogo; quando a
                    tela de detalhes já a buscou, ela está no cache da sessão. Sem
                    nenhuma das duas o lembrete fica sem data, que é a forma
                    "me lembre disto" e continua perfeitamente válida. */
-                releaseDate: item.releaseDate ||
+                releaseDate: options.releaseDate || item.releaseDate ||
                     (tmdbDetailsMemory[item.id] && tmdbDetailsMemory[item.id].releaseDate)
             });
         } catch (error) { showToast(friendlyError(error), true); return; }
@@ -5935,6 +6462,33 @@ var BuroApp = (function () {
             render();
             showToast(t('reminderAdded'), false);
         }, function (error) { showToast(friendlyError(error), true); });
+    }
+
+    function toggleReminder(itemId) {
+        var found = findItemAndSource(itemId);
+        toggleReminderTarget(found && found.item);
+    }
+
+    function toggleSubscriptionReminder() {
+        var data = state.section === 'SUBSCRIPTIONS' && state.screenData;
+        var item = subscriptionReminderItem(data);
+        var details = data && data.selection && data.selection.details;
+        var selected = data && data.selected;
+        if (!item || !selected) { return; }
+        toggleReminderTarget(item, {
+            artworkUrl: (details && details.posterUrl) || selected.posterUrl,
+            releaseDate: selected.releaseDate || (details && details.releaseDate)
+        });
+    }
+
+    function openReminderItem(itemId) {
+        var found = findItemAndSource(itemId);
+        if (!reminderItemCanOpen(found.item) || !itemVisible(found.item)) {
+            showToast(t('unavailable'), true); return;
+        }
+        if (found.item.contentType === 'MOVIE') { openMovieDetails(itemId, 'REMINDERS'); return; }
+        if (found.item.contentType === 'SERIES') { openSeriesById(itemId, 'REMINDERS'); return; }
+        showToast(t('unavailable'), true);
     }
 
     function removeReminderById(reminderId) {
@@ -6074,6 +6628,7 @@ var BuroApp = (function () {
                 resetLibraryView();
                 clearTmdbDetails();
                 state.screen = 'SHELL'; state.section = 'HOME'; state.screenData = null; render();
+                retryPendingSharedTitle();
                 startActiveSourceHydration(false);
             }
         } else if (action === 'section') {
@@ -6086,6 +6641,7 @@ var BuroApp = (function () {
             catalogueRequestId += 1;
             searchRequestId += 1;
             if (subscriptionRequest && subscriptionRequest.abort) { subscriptionRequest.abort(); subscriptionRequest = null; }
+            discoverReturnData = null;
             state.section = element.getAttribute('data-section'); state.screen = 'SHELL'; state.screenData = null;
             state.preferences.section = state.section; savePreferences(); focusIndex = 0; render();
         } else if (action === 'library-filter') {
@@ -6103,6 +6659,12 @@ var BuroApp = (function () {
         } else if (action === 'download-page-previous') { changeDownloadPage(-1);
         } else if (action === 'discover-retry') {
             state.screenData = null; focusIndex = 0; render();
+        } else if (action === 'discover-again') { dealDiscoverAgain();
+        } else if (action === 'discover-skip') { decideDiscover('SKIPPED');
+        } else if (action === 'discover-keep') { decideDiscover('KEPT');
+        } else if (action === 'discover-details') { openDiscoverDetails(id);
+        } else if (action === 'shared-retry') { retryPendingSharedTitle();
+        } else if (action === 'shared-dismiss') { sharedTitleNoticeVisible = false; render();
         } else if (action === 'home-retry') {
             state.screenData = null; focusIndex = 0; render();
         } else if (action === 'catalogue-retry') { retryCatalogueRequest();
@@ -6129,7 +6691,8 @@ var BuroApp = (function () {
         else if (action === 'select-source') {
             source = state.sources.filter(function (row) { return row.id === id; })[0];
             if (source) {
-                assignSourceToProfile(source); render(); startXtreamHydration(source, false); showToast(source.name, false);
+                assignSourceToProfile(source); render(); retryPendingSharedTitle();
+                startXtreamHydration(source, false); showToast(source.name, false);
             }
         } else if (action === 'catalogue-layout') {
             state.screenData.catalogueLayout = cycleValue(CATALOGUE_LAYOUTS, state.screenData.catalogueLayout || 'poster');
@@ -6183,17 +6746,21 @@ var BuroApp = (function () {
             state.preferences.tmdbRegion = BuroTmdb.safeRegion(element.getAttribute('data-region'));
             savePreferences(); loadSubscriptions(state.screenData.filter);
         }
-        else if (action === 'subscription-retry') { loadSubscriptions(state.screenData.filter); }
+        else if (action === 'subscription-retry') { loadSubscriptions(state.screenData.filter, true); }
         else if (action === 'subscription-title') {
             var subscriptionTitle = findSubscriptionTitle(element.getAttribute('data-key'));
             if (subscriptionTitle) { selectSubscriptionTitle(subscriptionTitle); }
         }
+        else if (action === 'subscription-expand') { expandSubscriptionService(element.getAttribute('data-provider')); }
+        else if (action === 'subscription-expanded-back') { closeExpandedSubscription(); }
         else if (action === 'subscription-back') { backFromSubscriptionSelection(); }
         else if (action === 'subscription-local') { openSubscriptionLocal(id); }
         else if (action === 'subscription-offer') { openExternalOffer(element.getAttribute('data-url')); }
         else if (action === 'subscription-trailer') { openSubscriptionTrailer(); }
+        else if (action === 'subscription-reminder') { toggleSubscriptionReminder(); }
         else if (action === 'favorite') { toggleFavorite(id); }
         else if (action === 'reminder') { toggleReminder(id); }
+        else if (action === 'reminder-open') { openReminderItem(id); }
         else if (action === 'reminder-remove') { removeReminderById(id); }
         else if (action === 'download') { downloadItem(id); }
         else if (action === 'download-retry') {
@@ -6282,9 +6849,16 @@ var BuroApp = (function () {
                 event.preventDefault();
                 return;
             }
+            if (playerControlsLocked) {
+                if (event.keyCode === K.RETURN) { stopPlayback(); }
+                else if (event.keyCode === K.ENTER) { beginPlayerEnterPress(); }
+                event.preventDefault();
+                return;
+            }
             if (event.keyCode === K.RETURN || event.keyCode === K.STOP) { stopPlayback(); event.preventDefault(); }
-            else if (event.keyCode === K.ENTER || event.keyCode === K.PLAY_PAUSE ||
-                    event.keyCode === K.PLAY || event.keyCode === K.PAUSE) { BuroPlayer.togglePause(); event.preventDefault(); }
+            else if (event.keyCode === K.ENTER) { beginPlayerEnterPress(); event.preventDefault(); }
+            else if (event.keyCode === K.PLAY_PAUSE || event.keyCode === K.PLAY ||
+                    event.keyCode === K.PAUSE) { BuroPlayer.togglePause(); event.preventDefault(); }
             else if (event.keyCode === K.LEFT || event.keyCode === K.REWIND) { BuroPlayer.seekBy(-10000); event.preventDefault(); }
             else if (event.keyCode === K.RIGHT || event.keyCode === K.FAST_FORWARD) { BuroPlayer.seekBy(30000); event.preventDefault(); }
             else if (event.keyCode === K.UP) { openPlayerMenu('AUDIO'); event.preventDefault(); }
@@ -6316,6 +6890,12 @@ var BuroApp = (function () {
         else if (event.keyCode === K.RETURN) { if (active && active.blur) { active.blur(); } goBack(); event.preventDefault(); }
     }
 
+    function onKeyUp(event) {
+        if (event.keyCode !== BuroKeys.CODES.ENTER || !playerEnterPressActive) { return; }
+        finishPlayerEnterPress();
+        event.preventDefault();
+    }
+
     function init() {
         if (initialized) { return; }
         initialized = true;
@@ -6337,6 +6917,10 @@ var BuroApp = (function () {
         playerSubtitleText = document.getElementById('player-subtitle-text');
         playerSpeedLabel = document.getElementById('player-speed-label');
         playerAspectLabel = document.getElementById('player-aspect-label');
+        playerLockLabel = document.getElementById('player-lock-label');
+        playerLockPanel = document.getElementById('player-lock-panel');
+        playerLockTitle = document.getElementById('player-lock-title');
+        playerLockHint = document.getElementById('player-lock-hint');
         playerReturnLabel = document.getElementById('player-return-label');
         playerRemoteActions = document.querySelector('.player-remote-actions');
         playerMenu = document.getElementById('player-menu');
@@ -6441,6 +7025,11 @@ var BuroApp = (function () {
         }
 
         document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+        window.addEventListener('appcontrol', receiveRequestedAppControl);
+        /* Pedido frio: no primeiro launch o evento pode ter ocorrido antes de o
+           JavaScript registrar o listener, por isso consultamos o app atual. */
+        receiveRequestedAppControl();
         initializeData();
     }
 
@@ -6450,7 +7039,12 @@ var BuroApp = (function () {
         state: state,
         _activate: activate,
         _onKeyDown: onKeyDown,
+        _onKeyUp: onKeyUp,
+        _playbackFailed: playbackFailed,
         _friendlyError: friendlyError,
+        _receiveRequestedAppControl: receiveRequestedAppControl,
+        _resolvePendingSharedTitle: resolvePendingSharedTitle,
+        _pendingSharedTitle: function () { return pendingSharedTitle; },
         /*
           Só para os testes. Um vazamento de memória não tem sintoma
           observável de fora — a TV apenas fica lenta depois de horas — então

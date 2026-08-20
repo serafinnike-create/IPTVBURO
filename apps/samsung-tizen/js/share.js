@@ -4,6 +4,8 @@ var BuroShare = (function () {
 
     var BASE_URL = 'https://iptvburo.pages.dev';
     var MAX_DESCRIPTION = 400;
+    var MAX_INCOMING_LINK = 4096;
+    var MAX_INCOMING_FIELD = 300;
     var NOISE = {};
     ('4k uhd hd sd fhd hdr hdr10 dolby atmos vision 1080p 1080 720p 720 480p 2160p 2160 ' +
         'h264 h265 hevc x264 x265 avc aac ac3 dts dub dubbed dublado leg legendado sub subbed ' +
@@ -67,6 +69,9 @@ var BuroShare = (function () {
 
     function webUrl(value, options) { return BASE_URL + '/t/?' + query(value, options); }
 
+    /* O esquema privado e o que o Web App Samsung declara no config.xml. */
+    function appUri(value, options) { return 'iptvburo://title?' + query(value, options); }
+
     function qr(value) {
         var candidates = [webUrl(value), webUrl(value, { description: false }),
             webUrl(value, { artwork: false, description: false })];
@@ -91,6 +96,7 @@ var BuroShare = (function () {
             artworkUrl: publicArtwork(input.artworkUrl), description: description(input.description)
         };
         result.webUrl = webUrl(result);
+        result.appUri = appUri(result);
         result.qr = qr(result);
         return result;
     }
@@ -109,14 +115,36 @@ var BuroShare = (function () {
             if (value) { fields[name] = value; }
         });
         if (!fields.id || !fields.t) { return null; }
+        fields.t = clean(fields.t);
+        if (!fields.t) { return null; }
         return {
-            identity: fields.id, title: clean(fields.t), year: Number(fields.y) || null,
+            identity: fields.id, title: fields.t, year: Number(fields.y) || null,
             artworkUrl: publicArtwork(fields.img), description: description(fields.d)
         };
     }
 
+    /*
+      Entrada do app-control: o parser generico acima tambem atende ao link web
+      exibido no QR, mas o runtime da TV so deve aceitar o esquema que o
+      manifesto registrou. A checagem acontece antes de qualquer consulta ao
+      catalogo e nenhum campo recebido vira URL de reproducao.
+    */
+    function parseIncoming(raw) {
+        var text = clean(raw);
+        var value;
+        if (!text || text.length > MAX_INCOMING_LINK || /[\u0000-\u001f\u007f\s]/.test(text)) { return null; }
+        if (!/^iptvburo:\/\/title\/?\?/i.test(text) || text.indexOf('#') >= 0) { return null; }
+        value = parse(text);
+        if (!value || value.identity.length > MAX_INCOMING_FIELD || value.title.length > MAX_INCOMING_FIELD) {
+            return null;
+        }
+        if (/[\u0000-\u001f\u007f]/.test(value.identity) ||
+                !/^(movie|series|episode|live|unknown):[^:]+(?::\d{4})?$/i.test(value.identity)) { return null; }
+        return value;
+    }
+
     return {
-        build: build, parse: parse, identity: identity, publicArtwork: publicArtwork,
+        build: build, parse: parse, parseIncoming: parseIncoming, identity: identity, publicArtwork: publicArtwork,
         maxDescription: MAX_DESCRIPTION, baseUrl: BASE_URL
     };
 }());

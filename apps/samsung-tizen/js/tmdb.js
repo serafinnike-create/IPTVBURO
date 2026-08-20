@@ -9,6 +9,11 @@ var BuroTmdb = (function () {
     var SUPPORTED_REGIONS = ['BR', 'PT', 'US', 'DE', 'IT'];
     var MAX_SERVICES = 12;
     var TITLES_PER_SERVICE = 20;
+    var MAX_EXPANDED_TITLES = 100;
+    var MAX_EXPANDED_PAGES = 8;
+    var SHELF_CACHE_KEY = 'iptvburo.tmdb-shelves.v1';
+    var SHELF_CACHE_VERSION = 1;
+    var MAX_SHELF_CACHE_RECORDS = 8;
 
     function clean(value) {
         return String(value == null ? '' : value).replace(/^\s+|\s+$/g, '');
@@ -26,6 +31,136 @@ var BuroTmdb = (function () {
     function safeRegion(value) {
         var region = clean(value).toUpperCase();
         return SUPPORTED_REGIONS.indexOf(region) >= 0 ? region : 'BR';
+    }
+
+    /*
+      Cache estritamente público das prateleiras de Assinaturas.
+
+      A chave TMDb continua no KeyManager. Aqui entram somente os campos que
+      desenham um card: id público TMDb, título, tipo, ano/data e pôster no host
+      fixo do TMDb. Ofertas, URLs externas, sinopse e qualquer campo inesperado
+      são reconstruídos fora deste objeto e nunca chegam ao localStorage.
+    */
+    function shelfCacheDay(now) {
+        var date = now instanceof Date ? now : new Date(now == null ? Date.now() : now);
+        var month;
+        var day;
+        if (!date || !isFinite(date.getTime())) { return null; }
+        month = String(date.getMonth() + 1); day = String(date.getDate());
+        return date.getFullYear() + '-' + (month.length < 2 ? '0' + month : month) + '-' +
+            (day.length < 2 ? '0' + day : day);
+    }
+
+    function shelfCacheKind(value) {
+        var kind = String(value || '').toUpperCase();
+        return ['MOVIES', 'SERIES', 'THIS_WEEK', 'UPCOMING'].indexOf(kind) >= 0 ? kind : null;
+    }
+
+    function shelfCacheLocale(value) {
+        var locale = String(value || '');
+        return ['pt-BR', 'en', 'de', 'it', 'es'].indexOf(locale) >= 0 ? locale : 'pt-BR';
+    }
+
+    function shelfCachePoster(value) {
+        var poster = clean(value);
+        return /^https:\/\/image\.tmdb\.org\/t\/p\/w342\/[A-Za-z0-9._\/-]{1,240}$/.test(poster) &&
+            poster.indexOf('..') < 0 ? poster : null;
+    }
+
+    function shelfCacheTitle(value) {
+        var tmdbId = Math.floor(Number(value && value.tmdbId));
+        var title = clean(value && value.title).substring(0, 240);
+        var year = Math.floor(Number(value && value.year));
+        var releaseDate = clean(value && value.releaseDate);
+        if (!tmdbId || tmdbId < 1 || !title) { return null; }
+        return {
+            tmdbId: tmdbId,
+            isSeries: Boolean(value && value.isSeries),
+            title: title,
+            year: year >= 1800 && year <= 3000 ? year : null,
+            releaseDate: /^\d{4}-\d{2}-\d{2}$/.test(releaseDate) ? releaseDate : null,
+            posterUrl: shelfCachePoster(value && value.posterUrl)
+        };
+    }
+
+    function shelfCacheShelves(value) {
+        var rows;
+        if (!Array.isArray(value) || !value.length) { return null; }
+        rows = value.slice(0, MAX_SERVICES + 1).map(function (shelf) {
+            var providerId = Math.floor(Number(shelf && shelf.providerId));
+            var providerName = clean(shelf && shelf.providerName).substring(0, 120);
+            var titles = Array.isArray(shelf && shelf.titles) ? shelf.titles.slice(0, TITLES_PER_SERVICE)
+                .map(shelfCacheTitle).filter(Boolean) : [];
+            if ((!providerId || providerId < 1) && providerName !== 'coming-soon') { return null; }
+            if (!providerName || !titles.length) { return null; }
+            return { providerId: providerId > 0 ? providerId : null, providerName: providerName, titles: titles };
+        }).filter(Boolean);
+        return rows.length ? rows : null;
+    }
+
+    function shelfCacheRecordId(region, kind, locale) {
+        kind = shelfCacheKind(kind);
+        return kind ? safeRegion(region) + ':' + kind + ':' + shelfCacheLocale(locale) : null;
+    }
+
+    function readShelfCacheStore(day) {
+        var raw;
+        var parsed;
+        try {
+            raw = localStorage.getItem(SHELF_CACHE_KEY);
+            parsed = raw ? JSON.parse(raw) : null;
+            if (!parsed || parsed.version !== SHELF_CACHE_VERSION ||
+                    !parsed.entries || typeof parsed.entries !== 'object' || Array.isArray(parsed.entries)) {
+                if (raw) { localStorage.removeItem(SHELF_CACHE_KEY); }
+                return { version: SHELF_CACHE_VERSION, day: day, order: [], entries: {} };
+            }
+            /* Uma leitura em outro dia só é miss. A próxima gravação substitui
+               o registro antigo; não destruímos dados por causa de um relógio
+               que avançou e depois foi corrigido. */
+            if (parsed.day !== day) {
+                return { version: SHELF_CACHE_VERSION, day: day, order: [], entries: {} };
+            }
+            parsed.order = Array.isArray(parsed.order) ? parsed.order.filter(function (id) {
+                return typeof id === 'string' && Object.prototype.hasOwnProperty.call(parsed.entries, id);
+            }).slice(-MAX_SHELF_CACHE_RECORDS) : [];
+            return parsed;
+        } catch (ignoredCacheRead) {
+            try { localStorage.removeItem(SHELF_CACHE_KEY); } catch (ignoredCacheRemove) {}
+            return { version: SHELF_CACHE_VERSION, day: day, order: [], entries: {} };
+        }
+    }
+
+    function readShelfCache(region, kind, locale, now) {
+        var day = shelfCacheDay(now);
+        var id = shelfCacheRecordId(region, kind, locale);
+        var store;
+        if (!day || !id) { return null; }
+        store = readShelfCacheStore(day);
+        return shelfCacheShelves(store.entries[id]);
+    }
+
+    function writeShelfCache(region, kind, locale, shelves, now) {
+        var day = shelfCacheDay(now);
+        var id = shelfCacheRecordId(region, kind, locale);
+        var safeShelves = shelfCacheShelves(shelves);
+        var store;
+        if (!day || !id || !safeShelves) { return false; }
+        store = readShelfCacheStore(day);
+        store.entries[id] = safeShelves;
+        store.order = store.order.filter(function (entryId) { return entryId !== id; });
+        store.order.push(id);
+        while (store.order.length > MAX_SHELF_CACHE_RECORDS) {
+            delete store.entries[store.order.shift()];
+        }
+        try {
+            localStorage.setItem(SHELF_CACHE_KEY, JSON.stringify(store));
+            return true;
+        } catch (ignoredCacheWrite) { return false; }
+    }
+
+    function clearShelfCache() {
+        try { localStorage.removeItem(SHELF_CACHE_KEY); return true; }
+        catch (ignoredCacheClear) { return false; }
     }
 
     function profileSecretId(profileId) {
@@ -366,6 +501,62 @@ var BuroTmdb = (function () {
         return { abort: function () { stopped = true; if (active && active.abort) { active.abort(); } } };
     }
 
+    /*
+      Catálogo atrás do "Ver mais" de uma prateleira. Igual ao contrato Kotlin:
+      só é consultado sob demanda, percorre páginas de 20, para na primeira vazia
+      e impõe dois limites independentes para uma resposta defeituosa nunca
+      crescer sem controle numa TV.
+    */
+    function loadServiceCatalogue(key, providerId, region, kind, locale, success, failure) {
+        var active = null;
+        var stopped = false;
+        var page = 1;
+        var collected = [];
+        var seen = {};
+        var isSeries;
+        key = safeKey(key);
+        providerId = Number(providerId);
+        region = safeRegion(region);
+        kind = String(kind || 'MOVIES').toUpperCase();
+        isSeries = kind === 'SERIES' || kind === 'THIS_WEEK';
+        if (!key || !providerId || providerId < 1 || kind === 'UPCOMING') {
+            failure({ code: 'TMDB_NOT_CONFIGURED' });
+            return null;
+        }
+
+        function finish() {
+            if (!stopped) { success(collected.slice(0, MAX_EXPANDED_TITLES)); }
+        }
+
+        function next() {
+            var params;
+            if (stopped) { return; }
+            if (page > MAX_EXPANDED_PAGES || collected.length >= MAX_EXPANDED_TITLES) { finish(); return; }
+            params = discoverParams(providerId, region, kind);
+            params.language = language(locale);
+            params.page = page;
+            active = request(isSeries ? 'discover/tv' : 'discover/movie', key, params, function (payload) {
+                var batch = discoveredTitles(payload, isSeries);
+                if (stopped) { return; }
+                if (!batch.length) { finish(); return; }
+                batch.forEach(function (title) {
+                    var identity = (title.isSeries ? 'series:' : 'movie:') + title.tmdbId;
+                    if (!seen[identity] && collected.length < MAX_EXPANDED_TITLES) {
+                        seen[identity] = true;
+                        collected.push(title);
+                    }
+                });
+                page += 1;
+                next();
+            }, function (error) {
+                if (!stopped) { failure(error && error.code ? error : { code: 'TMDB_UNAVAILABLE' }); }
+            });
+        }
+
+        next();
+        return { abort: function () { stopped = true; if (active && active.abort) { active.abort(); } } };
+    }
+
     function providerSlug(name) {
         return BuroDomain.foldAccents(name || '').replace(/\+/g, '-plus').replace(/[^a-z0-9]+/g, '-')
             .replace(/-+/g, '-').replace(/^-|-$/g, '');
@@ -444,7 +635,9 @@ var BuroTmdb = (function () {
         configuration: configuration, save: save, remove: remove, validateKey: validateKey,
         loadTitle: loadTitle, loadPerson: loadPerson, image: image, safeRegion: safeRegion,
         supportedRegions: function () { return SUPPORTED_REGIONS.slice(); },
-        loadShelves: loadShelves, loadSubscriptionTitle: loadSubscriptionTitle,
+        readShelfCache: readShelfCache, writeShelfCache: writeShelfCache, clearShelfCache: clearShelfCache,
+        loadShelves: loadShelves, loadServiceCatalogue: loadServiceCatalogue,
+        loadSubscriptionTitle: loadSubscriptionTitle,
         providerTarget: providerTarget
     };
 }());

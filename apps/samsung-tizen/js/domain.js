@@ -492,6 +492,156 @@ var BuroDomain = (function () {
         };
     }
 
+    /*
+      O mesmo baralho finito de DiscoveryDeck.kt.
+
+      O domínio decide quais títulos entram e em que ordem; a tela decide como
+      desenhá-los. Manter esta parte pura evita que IndexedDB, rede ou foco do
+      controle remoto alterem uma recomendação no meio da rodada.
+    */
+    var DISCOVERY_DECK_SIZE = 15;
+    var DISCOVERY_SURPRISE_SLOTS = 2;
+    var DISCOVERY_RATING_WEIGHT = 0.35;
+    var DISCOVERY_SESSION_WEIGHT = 1.2;
+
+    function discoveryGenre(value) {
+        var raw = trim(value).toLowerCase();
+        if (!raw || raw.length > 60) { return null; }
+        raw = foldAccents(raw).replace(/\s+/g, '-');
+        return raw || null;
+    }
+
+    function discoveryTasteWeights(taste) {
+        var counted = {};
+        function add(values, amount) {
+            (values || []).forEach(function (value) {
+                var key = discoveryGenre(value);
+                if (key) { counted[key] = (counted[key] || 0) + amount; }
+            });
+        }
+        add(taste && taste.favouriteGenres, 2);
+        add(taste && taste.watchedGenres, 1);
+        Object.keys(counted).forEach(function (key) {
+            counted[key] = Math.min(1, counted[key] / 10);
+            if (counted[key] <= 0) { delete counted[key]; }
+        });
+        return counted;
+    }
+
+    function discoverySessionLeaningFor(session, genres) {
+        var leaning = session && session.leaningByGenre ? session.leaningByGenre : {};
+        var keys = Object.keys(leaning);
+        var strongest = 0;
+        var best = null;
+        keys.forEach(function (key) { strongest = Math.max(strongest, Math.abs(Number(leaning[key]) || 0)); });
+        if (!strongest) { return 0; }
+        (genres || []).forEach(function (value) {
+            var key = discoveryGenre(value);
+            var scoreValue;
+            if (!key || !Object.prototype.hasOwnProperty.call(leaning, key)) { return; }
+            scoreValue = Number(leaning[key]) || 0;
+            if (best === null || scoreValue > best) { best = scoreValue; }
+        });
+        return best === null ? 0 : best / strongest;
+    }
+
+    function discoverySessionAfter(session, genres, verdict) {
+        var current = session && session.leaningByGenre ? session.leaningByGenre : {};
+        var next = {};
+        var delta = verdict === 'KEPT' ? 2 : -1;
+        Object.keys(current).forEach(function (key) { next[key] = Number(current[key]) || 0; });
+        (genres || []).forEach(function (value) {
+            var key = discoveryGenre(value);
+            if (key) { next[key] = clamp((next[key] || 0) + delta, -6, 6); }
+        });
+        return { leaningByGenre: next };
+    }
+
+    function discoveryScoreWithWeights(candidate, weights, session) {
+        var genreScore = 0;
+        var rating = Number(candidate && candidate.rating) || 0;
+        (candidate && candidate.genres || []).forEach(function (value) {
+            var key = discoveryGenre(value);
+            if (key) { genreScore += Number(weights[key]) || 0; }
+        });
+        return genreScore + clamp(rating / 10, 0, 1) * DISCOVERY_RATING_WEIGHT +
+            discoverySessionLeaningFor(session, candidate && candidate.genres || []) * DISCOVERY_SESSION_WEIGHT;
+    }
+
+    function discoveryScore(candidate, taste, session) {
+        return discoveryScoreWithWeights(candidate, discoveryTasteWeights(taste || {}), session || {});
+    }
+
+    function discoverySeenMap(seenIds) {
+        var found = {};
+        if (Array.isArray(seenIds)) {
+            seenIds.forEach(function (idValue) { found[String(idValue)] = true; });
+        } else if (seenIds) {
+            Object.keys(seenIds).forEach(function (idValue) {
+                if (seenIds[idValue]) { found[String(idValue)] = true; }
+            });
+        }
+        return found;
+    }
+
+    function discoveryDeck(candidates, taste, session, shuffleSeed) {
+        var seen = discoverySeenMap(taste && taste.seenIds);
+        var unique = {};
+        var eligible = [];
+        var weights = discoveryTasteWeights(taste || {});
+        var hasSession = Boolean(session && session.leaningByGenre && Object.keys(session.leaningByGenre).length);
+        var ranked;
+        var matched;
+        var strangers;
+        var surprises;
+        var offset;
+        (candidates || []).forEach(function (candidate) {
+            var candidateId = trim(candidate && candidate.id);
+            if (!candidateId || seen[candidateId] || unique[candidateId]) { return; }
+            unique[candidateId] = true;
+            eligible.push(candidate);
+        });
+        if (!eligible.length) { return []; }
+
+        if (!Object.keys(weights).length && !hasSession) {
+            return eligible.slice().sort(function (left, right) {
+                var ratingDifference = (Number(right.rating) || 0) - (Number(left.rating) || 0);
+                if (ratingDifference) { return ratingDifference; }
+                return String(left.title || '') < String(right.title || '') ? -1 :
+                    (String(left.title || '') > String(right.title || '') ? 1 : 0);
+            }).slice(0, DISCOVERY_DECK_SIZE);
+        }
+
+        ranked = eligible.map(function (candidate) {
+            return { candidate: candidate, score: discoveryScoreWithWeights(candidate, weights, session || {}) };
+        }).sort(function (left, right) {
+            if (right.score !== left.score) { return right.score - left.score; }
+            return String(left.candidate.title || '') < String(right.candidate.title || '') ? -1 :
+                (String(left.candidate.title || '') > String(right.candidate.title || '') ? 1 : 0);
+        }).map(function (entry) { return entry.candidate; });
+
+        matched = ranked.slice(0, DISCOVERY_DECK_SIZE - DISCOVERY_SURPRISE_SLOTS);
+        strangers = ranked.filter(function (candidate) {
+            if (matched.indexOf(candidate) >= 0) { return false; }
+            return !(candidate.genres || []).some(function (value) {
+                var key = discoveryGenre(value);
+                return key && Object.prototype.hasOwnProperty.call(weights, key);
+            });
+        });
+        if (strangers.length) {
+            offset = ((Number(shuffleSeed) || 0) % strangers.length + strangers.length) % strangers.length;
+            surprises = strangers.slice(offset).concat(strangers.slice(0, offset)).slice(0, DISCOVERY_SURPRISE_SLOTS);
+        } else {
+            surprises = ranked.slice(DISCOVERY_DECK_SIZE - DISCOVERY_SURPRISE_SLOTS, DISCOVERY_DECK_SIZE);
+        }
+        unique = {};
+        return matched.concat(surprises).filter(function (candidate) {
+            if (unique[candidate.id]) { return false; }
+            unique[candidate.id] = true;
+            return true;
+        }).slice(0, DISCOVERY_DECK_SIZE);
+    }
+
     function redactMessage(error) {
         var message = error && error.message ? error.message : String(error || 'UNKNOWN');
         return message
@@ -525,6 +675,12 @@ var BuroDomain = (function () {
         playbackCompleted: playbackCompleted,
         resumeDecision: resumeDecision,
         COUNTDOWN_HORIZON_DAYS: COUNTDOWN_HORIZON_DAYS,
+        DISCOVERY_DECK_SIZE: DISCOVERY_DECK_SIZE,
+        DISCOVERY_SURPRISE_SLOTS: DISCOVERY_SURPRISE_SLOTS,
+        discoveryDeck: discoveryDeck,
+        discoveryScore: discoveryScore,
+        discoverySessionAfter: discoverySessionAfter,
+        discoverySessionLeaningFor: discoverySessionLeaningFor,
         createReminder: createReminder,
         reminderDigest: reminderDigest,
         sortReminders: sortReminders,
