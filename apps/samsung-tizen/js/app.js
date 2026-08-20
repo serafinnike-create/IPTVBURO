@@ -5544,6 +5544,48 @@ var BuroApp = (function () {
         state.screenData = data || null;
         focusIndex = 0;
         render();
+        /*
+          O foco entra no conteúdo, não na faixa de navegação.
+
+          `focusIndex = 0` sozinho punha o foco no primeiro item da ribbon, que
+          vem antes do conteúdo no DOM. Numa tela aberta de propósito — a chave
+          do TMDb, o pareamento — isso obrigava a descer às cegas antes de
+          alcançar o primeiro controle, e um ENTER apressado saía da tela em vez
+          de agir nela. Apareceu no emulador exatamente assim.
+        */
+        focusFirstInMainPane();
+    }
+
+    /*
+      O primeiro focável da área de conteúdo.
+
+      `.content` e não `.main-pane`: o sino de avisos mora na barra superior, que
+      também está dentro do painel, e abrir a tela da chave do TMDb com o foco no
+      sino é quase tão inútil quanto abri-la com o foco na ribbon.
+    */
+    function focusFirstInMainPane() {
+        var content = root.querySelector ? root.querySelector('.content') : null;
+        var target = content && content.querySelector ? content.querySelector('.focusable:not([disabled])') : null;
+        var index;
+        var contentRect;
+        var targetRect;
+        if (!target || !target.getBoundingClientRect) { return; }
+        index = focusables.indexOf(target);
+        if (index < 0) { return; }
+        /*
+          Só se o alvo já estiver à vista.
+
+          `applyFocus` rola para o que recebe o foco. Numa tela cujo primeiro
+          focável está no fim de um texto longo — o guia da chave, com quatro
+          passos e os botões embaixo — mover o foco para lá rolaria a página e
+          esconderia o passo 1, que é justamente o que a pessoa veio ler.
+          Nesse caso o foco fica onde estava e a rolagem começa do começo.
+        */
+        contentRect = content.getBoundingClientRect();
+        targetRect = target.getBoundingClientRect();
+        if (targetRect.bottom > contentRect.bottom || targetRect.top < contentRect.top) { return; }
+        focusIndex = index;
+        applyFocus();
     }
 
     function goBack() {
