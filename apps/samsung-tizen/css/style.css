@@ -216,38 +216,58 @@ body.playing .app-root { display: none; }
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/*
+  A navegacao mora na lateral esquerda, como no aplicativo do Windows.
+
+  Em cima ela cabia catorze secoes so cortando os nomes e rolando na horizontal:
+  "Continuar assistindo" e "Minha BURO" competiam pela mesma faixa de 1920px e o
+  fim da lista saia da tela. Empilhada, cada secao ocupa uma linha inteira, o
+  nome cabe por extenso e o icone ganha lugar ao lado dele.
+
+  Tambem casa com o D-pad: subir e descer percorre as secoes, e a direita entra
+  no conteudo — em vez de esquerda/direita fazer as duas coisas.
+*/
 .shell {
     position: fixed; top: 0; right: 0; bottom: 0; left: 0;
-    display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden;
+    display: flex; flex-direction: row; width: 100%; height: 100%; overflow: hidden;
 }
 .buro-ribbon {
     position: relative;
-    flex: 0 0 92px;
-    width: 100%;
-    padding: 0 48px;
+    flex: 0 0 340px;
+    height: 100%;
+    padding: 34px 20px 24px;
     display: flex;
-    align-items: center;
-    background: var(--canvas);
-    border-bottom: 1px solid #272A2E;
+    flex-direction: column;
+    align-items: stretch;
+    background: #0B0C0E;
+    border-right: 1px solid #272A2E;
     z-index: 10;
 }
-.nav-brand { flex: 0 0 auto; display: flex; align-items: baseline; margin-right: 34px; }
+.nav-brand { flex: 0 0 auto; display: flex; align-items: baseline; margin: 0 0 30px 18px; }
 .nav-brand span { color: var(--secondary); font-size: 18px; font-weight: 650; letter-spacing: 1px; }
 .nav-brand strong { margin-left: 9px; color: var(--text); font-size: 25px; letter-spacing: 1px; }
-.nav-list { min-width: 0; list-style: none; flex: 1; display: flex; align-items: center; overflow: hidden; }
+/* A lista rola sozinha se a TV tiver pouca altura; a marca e o perfil ficam. */
+.nav-list { min-width: 0; list-style: none; flex: 1; display: block; overflow-y: auto; overflow-x: hidden; }
 .nav-item {
-    flex: 0 0 auto;
-    min-width: 76px; height: 54px; padding: 0 17px; margin-right: 8px;
-    display: flex; align-items: center; justify-content: center;
-    background: transparent; border: 3px solid transparent; border-radius: 27px;
-    color: var(--secondary); font-size: 18px; font-weight: 650; text-align: center;
+    width: 100%; min-height: 58px; padding: 0 18px; margin-bottom: 4px;
+    display: flex; align-items: center; justify-content: flex-start;
+    background: transparent; border: 3px solid transparent; border-radius: 14px;
+    color: var(--secondary); font-size: 21px; font-weight: 650; text-align: left;
 }
-.nav-item .nav-icon { display: none; }
+/* O icone volta a aparecer: na lateral ha largura para ele e para o nome. */
+.nav-item .nav-icon {
+    display: flex; align-items: center; justify-content: center;
+    flex: 0 0 42px; margin-right: 16px;
+    font-size: 17px; font-weight: 800; color: var(--muted);
+}
+.nav-item > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-item.selected { background: rgba(214,169,86,.22); color: var(--text); }
+.nav-item.selected .nav-icon { color: var(--gold); }
 .nav-item.focused { background: var(--ivory); color: var(--canvas); }
+.nav-item.focused .nav-icon { color: var(--canvas); }
 .ribbon-profile {
-    flex: 0 0 auto; max-width: 210px; height: 58px; margin-left: 20px; padding: 0 12px 0 8px;
-    display: flex; align-items: center; border: 3px solid transparent; border-radius: 29px;
+    flex: 0 0 auto; width: 100%; max-width: none; height: 66px; margin: 16px 0 0; padding: 0 14px;
+    display: flex; align-items: center; border: 3px solid transparent; border-radius: 14px;
     background: transparent; overflow: hidden;
 }
 .ribbon-avatar {
@@ -260,7 +280,7 @@ body.playing .app-root { display: none; }
 .ribbon-profile.focused { background: var(--ivory); }
 .ribbon-profile.focused strong { color: var(--canvas); }
 
-.main-pane { flex: 1; min-height: 0; width: 100%; overflow: hidden; position: relative; z-index: 1; }
+.main-pane { flex: 1; min-width: 0; min-height: 0; overflow: hidden; position: relative; z-index: 1; }
 .topbar {
     position: absolute; top: 0; right: 0; left: 0; z-index: 12; background: var(--canvas);
     height: 92px; padding: 28px 64px 16px;
@@ -527,17 +547,17 @@ body.reduced-motion .discover-card.current { animation: none; }
     display: flex; flex-direction: column; justify-content: flex-end;
 }
 .detail-hero > *:not(.detail-art) { position: relative; z-index: 2; }
-.detail-hero h2 { width: 1100px; margin: 15px 0; font-size: 62px; line-height: 1.06; }
+.detail-hero h2 { width: 100%; max-width: 1100px; margin: 15px 0; font-size: 62px; line-height: 1.06; }
 /* A sinopse inteira, nao as quatro linhas que cabiam no cartao antigo: a pagina
    rola, entao cortar o texto so escondia o que o usuario veio ler. */
-.detail-hero > p { width: 1040px; color: var(--secondary); font-size: 24px; line-height: 1.45; }
-.detail-facts { width: 1100px; display: flex; flex-wrap: wrap; margin: 0 0 18px; }
+.detail-hero > p { width: 100%; max-width: 1040px; color: var(--secondary); font-size: 24px; line-height: 1.45; }
+.detail-facts { width: 100%; max-width: 1100px; display: flex; flex-wrap: wrap; margin: 0 0 18px; }
 .detail-fact { margin: 0 10px 9px 0; padding: 7px 12px; border: 1px solid rgba(232,225,207,.16); border-radius: 999px; background: rgba(8,10,12,.58); color: var(--secondary); font-size: 16px; font-weight: 700; }
 .detail-fact.rating { border-color: rgba(214,169,86,.35); color: var(--gold); }
 /* A fileira da crítica. Nada aqui recebe foco: é informação que o olho pega no
    caminho para o botão de assistir, e uma nota clicável interromperia a única
    coisa para a qual a tela existe. */
-.detail-critics { display: flex; width: 1100px; margin: 0 0 20px; }
+.detail-critics { display: flex; width: 100%; max-width: 1100px; margin: 0 0 20px; }
 .critic-score {
     display: flex; align-items: center; margin-right: 14px; padding: 10px 18px; min-width: 176px;
     border: 1px solid rgba(232,225,207,.16); border-radius: 14px;
@@ -618,7 +638,7 @@ body.reduced-motion .discover-card.current { animation: none; }
   na mao, olhando a TV do outro lado da sala. O codigo sai grande e espacado
   porque vai ser copiado de longe, a mao.
 */
-.pair-panel { width: 1180px; margin: 0 auto; }
+.pair-panel { width: 100%; max-width: 1180px; margin: 0 auto; }
 .pair-steps { margin: 26px 0 8px; padding: 0; list-style: none; counter-reset: pair; }
 .pair-steps li {
     position: relative; margin-bottom: 22px; padding: 22px 28px 22px 92px;
@@ -686,7 +706,7 @@ body.reduced-motion .discover-card.current { animation: none; }
 .cast-chip span, .cast-chip strong, .cast-chip small { display: block; }
 .cast-chip strong { max-width: 180px; overflow: hidden; font-size: 15px; white-space: nowrap; text-overflow: ellipsis; }
 .cast-chip small { max-width: 180px; margin-top: 2px; overflow: hidden; color: var(--muted); font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
-.person-page { width: 1120px; padding-bottom: 70px; }
+.person-page { width: 100%; max-width: 1120px; padding-bottom: 70px; }
 .person-header { min-height: 118px; display: flex; align-items: center; }
 .person-portrait { width: 96px; height: 96px; margin-right: 22px; border-radius: 50%; object-fit: cover; background: var(--elevated); }
 .person-portrait.fallback { display: inline-flex; align-items: center; justify-content: center; color: var(--gold); font-size: 34px; font-weight: 900; }
@@ -701,7 +721,7 @@ body.reduced-motion .discover-card.current { animation: none; }
 .person-credit strong { display: block; font-size: 20px; }
 .person-credit p { margin-top: 5px; color: var(--secondary); font-size: 15px; }
 .person-credit small { display: block; margin-top: 7px; color: var(--gold); font-size: 13px; font-weight: 800; }
-.subscriptions-header { width: 1180px; margin-bottom: 28px; }
+.subscriptions-header { width: 100%; max-width: 1180px; margin-bottom: 28px; }
 .subscriptions-header > h2 { margin-bottom: 14px; font-size: 29px; }
 .subscriptions-header .action-row { justify-content: flex-start; }
 .subscription-region { margin-top: 17px; display: flex; align-items: center; }
@@ -711,7 +731,7 @@ body.reduced-motion .discover-card.current { animation: none; }
 .subscription-loading { min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .subscription-loading .boot-indicator { width: 52px; height: 52px; }
 .subscription-loading h2, .subscription-loading p { margin-top: 18px; color: var(--secondary); }
-.subscription-shelves { width: 1210px; padding-bottom: 70px; }
+.subscription-shelves { width: 100%; max-width: 1210px; padding-bottom: 70px; }
 .subscription-shelves > section { margin-bottom: 30px; }
 .subscription-shelves .section-heading h2, .subscription-expanded .section-heading h2 { display: flex; align-items: center; }
 .subscription-provider-logo { width: 36px; height: 36px; margin-right: 12px; padding: 3px; border-radius: 8px; background: var(--elevated); object-fit: contain; }
@@ -728,14 +748,14 @@ body.reduced-motion .discover-card.current { animation: none; }
 .subscription-see-more { flex: 0 0 160px; width: 160px; min-height: 300px; margin-right: 14px; padding: 28px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid #363944; border-radius: 14px; background: var(--surface); color: var(--text); text-align: center; }
 .subscription-see-more strong { font-size: 19px; }
 .subscription-see-more span { margin-top: 18px; color: var(--gold); font-size: 42px; line-height: 1; }
-.subscription-expanded { width: 1210px; padding-bottom: 70px; }
+.subscription-expanded { width: 100%; max-width: 1210px; padding-bottom: 70px; }
 .subscription-expanded > .section-heading { margin-top: 24px; }
 .subscription-expanded-status { min-height: 70px; flex-direction: row; justify-content: flex-start; }
 .subscription-expanded-status .boot-indicator { width: 28px; height: 28px; margin-right: 14px; }
 .subscription-expanded-status p { margin-top: 0; }
 .subscription-expanded-grid { display: flex; flex-wrap: wrap; padding: 4px 0 30px 4px; }
 .subscription-expanded-grid .subscription-poster { margin-bottom: 18px; }
-.subscription-detail { position: relative; width: 1160px; min-height: 620px; padding: 32px 38px 70px; overflow: hidden; border: 1px solid #30333d; border-radius: 24px; background: var(--surface); }
+.subscription-detail { position: relative; width: 100%; max-width: 1160px; min-height: 620px; padding: 32px 38px 70px; overflow: hidden; border: 1px solid #30333d; border-radius: 24px; background: var(--surface); }
 .subscription-detail > *:not(.subscription-backdrop) { position: relative; z-index: 2; }
 .subscription-backdrop { position: absolute; top: 0; right: 0; width: 72%; height: 430px; opacity: .25; }
 .subscription-backdrop::after { content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: linear-gradient(90deg,var(--surface),transparent 45%,var(--surface)),linear-gradient(0deg,var(--surface),transparent 70%); }
@@ -758,7 +778,7 @@ body.reduced-motion .discover-card.current { animation: none; }
 .subscription-copy h3, .subscription-cast h3 { margin-bottom: 12px; font-size: 23px; }
 .subscription-copy p { color: var(--secondary); font-size: 18px; line-height: 1.55; }
 .subscription-cast > div { display: flex; flex-wrap: wrap; }
-.details-inline-warning { width: 1120px; margin: 22px 0; padding: 16px 20px; display: flex; align-items: center; border: 1px solid rgba(214,169,86,.38); border-radius: 16px; background: rgba(214,169,86,.08); }
+.details-inline-warning { width: 100%; max-width: 1120px; margin: 22px 0; padding: 16px 20px; display: flex; align-items: center; border: 1px solid rgba(214,169,86,.38); border-radius: 16px; background: rgba(214,169,86,.08); }
 .details-inline-warning > span { width: 36px; height: 36px; margin-right: 14px; border-radius: 50%; background: var(--gold); color: #17130d; font-size: 23px; font-weight: 900; line-height: 36px; text-align: center; }
 .details-inline-warning p { flex: 1; color: var(--secondary); font-size: 17px; }
 .live-detail { min-height: 260px; }
@@ -766,7 +786,7 @@ body.reduced-motion .discover-card.current { animation: none; }
 .live-now > span { margin-right: 18px; color: var(--gold); font-size: 15px; font-weight: 900; }
 .live-now strong { font-size: 20px; }
 .live-now p { margin-top: 4px; color: var(--secondary); font-size: 15px; }
-.epg-list { width: 1120px; padding-bottom: 80px; }
+.epg-list { width: 100%; max-width: 1120px; padding-bottom: 80px; }
 .epg-row { min-height: 92px; margin-bottom: 10px; padding: 17px 22px; display: flex; align-items: center; border: 1px solid #30333d; border-radius: 14px; background: var(--surface); }
 .epg-row.current { border-color: rgba(214,169,86,.55); background: var(--elevated); }
 .epg-row.past { opacity: .52; }
@@ -781,7 +801,7 @@ body.reduced-motion .discover-card.current { animation: none; }
 
 /* Lista de downloads. Sem `gap`: as TVs antigas não o suportam em flex. */
 .download-hint { margin-bottom: 22px; color: var(--muted); font-size: 20px; }
-.download-list { width: 1120px; padding-bottom: 80px; }
+.download-list { width: 100%; max-width: 1120px; padding-bottom: 80px; }
 .download-row { min-height: 104px; margin-bottom: 10px; padding: 18px 24px; display: flex; align-items: center; border: 1px solid #30333d; border-radius: 14px; background: var(--surface); }
 .download-info { flex: 1; margin-right: 24px; }
 .download-info strong { display: block; font-size: 22px; }
