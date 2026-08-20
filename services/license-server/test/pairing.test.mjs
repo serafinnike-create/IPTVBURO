@@ -284,6 +284,67 @@ test('two televisions polling the same code do not both walk away with it', asyn
   env.DB.close();
 });
 
+function form(path, fields) {
+  return new Request(`https://iptvburo.test${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(fields).toString(),
+  });
+}
+
+test('the phone page sends a key through the same checks as the endpoint', async () => {
+  const env = createEnv();
+  const { code } = await startPairing(env, 'tmdb_key');
+
+  const response = await worker.fetch(
+    form('/parear', { lang: 'pt', code, value: 'chave-sintetica' }),
+    env,
+  );
+  assert.equal(response.status, 200);
+
+  const claimed = await worker.fetch(post('/v1/pair/claim', { code }), env);
+  assert.equal((await claimed.json()).payload, 'chave-sintetica');
+  env.DB.close();
+});
+
+test('the phone page does not have to know which key the television asked for', async () => {
+  const env = createEnv();
+  // The television is waiting for a critics key; the person just pastes "the key".
+  const { code } = await startPairing(env, 'critics_key');
+  const response = await worker.fetch(form('/parear', { lang: 'pt', code, value: 'omdb' }), env);
+  assert.equal(response.status, 200);
+
+  const row = env.DB.prepare('SELECT attempts FROM pairing_requests').bind().first();
+  assert.equal(row.attempts, 0, 'a phone that cannot know the kind is not charged an attempt');
+  env.DB.close();
+});
+
+test('the phone page says which thing went wrong, in the visitor language', async () => {
+  const env = createEnv();
+  const badCode = await worker.fetch(form('/parear', { lang: 'pt', code: '12', value: 'x' }), env);
+  assert.equal(badCode.status, 400);
+  assert.match(await badCode.text(), /seis d/i);
+
+  const unknown = await worker.fetch(
+    form('/parear', { lang: 'en', code: '000001', value: 'x' }),
+    env,
+  );
+  assert.equal(unknown.status, 400);
+  assert.match(await unknown.text(), /not found or expired/i);
+  env.DB.close();
+});
+
+test('the phone page is a plain form that works without scripting', async () => {
+  const env = createEnv();
+  const response = await worker.fetch(new Request('https://iptvburo.test/parear'), env);
+  const body = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(body, /<form method="POST" action="\/parear"/);
+  assert.match(body, /inputmode="numeric"/);
+  assert.equal(body.includes('<script'), false, 'nothing here should need JavaScript');
+  env.DB.close();
+});
+
 test('codes are drawn without the bias a modulo would introduce', async () => {
   // Not a statistical test: rejection sampling is the thing being asserted, and what is checkable
   // cheaply is that the generator spans the range and does not repeat itself trivially.

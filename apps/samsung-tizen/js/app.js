@@ -61,10 +61,18 @@ var BuroApp = (function () {
     var tmdbDetailOrder = [];
     var tmdbTitleRequest = null;
     var criticsRequest = null;
+    /* O relógio do pareamento, para poder parar quando a tela sai. */
+    var pairingRequest = null;
     var tmdbPersonRequest = null;
     var personReturnData = null;
     var subscriptionReturnData = null;
     var subscriptionRequest = null;
+    var homeStreamingShelves = [];
+    var homeStreamingIdentity = '';
+    var homeStreamingRequest = null;
+    var homeStreamingLoading = false;
+    var homeStreamingFailed = false;
+    var homeLocalReturnData = null;
     var pendingSharedTitle = null;
     var sharedTitleNoticeVisible = false;
     var sharedTitleResolving = false;
@@ -684,7 +692,9 @@ var BuroApp = (function () {
                 escapeHtml(option.label) + '</button>';
             }).join('');
         }
-        playerMenuHint.textContent = guide && currentPlayback ? currentPlayback.title + ' · ' + t('playerMenuHint') : t('playerMenuHint');
+        playerMenuHint.textContent = guide && currentPlayback ?
+            (currentPlayback.title || playerTitle.textContent || t('programmeGuide')) + ' · ' + t('playerMenuHint') :
+            t('playerMenuHint');
         Array.prototype.slice.call(playerMenuOptions.querySelectorAll('[data-player-option]')).forEach(function (button) {
             button.addEventListener('click', function () {
                 playerMenuState.position = Number(button.getAttribute('data-player-option')) || 0;
@@ -1199,6 +1209,87 @@ var BuroApp = (function () {
     }
 
     /*
+      Android e Windows encerram a Home com as prateleiras publicas de
+      Assinaturas. Elas sao descoberta externa: nunca recebem acao de play e
+      so abrem a ficha "onde assistir".
+    */
+    function homeStreamingRail(shelf) {
+        var seen = {};
+        var cards = [];
+        var providerId = String(shelf && shelf.providerId || '');
+        var providerName = BuroDomain.trim(shelf && shelf.providerName || '');
+        (shelf && shelf.titles || []).some(function (title) {
+            var key = subscriptionTitleKey(title);
+            var poster;
+            if (!key || seen[key] || !BuroDomain.trim(title && title.title)) { return false; }
+            seen[key] = true;
+            poster = safeArtworkUrl(title.posterUrl);
+            cards.push('<button class="subscription-poster focusable" data-action="home-subscription-title" data-key="' +
+                attr(key) + '">' + (poster ? '<img src="' + attr(poster) + '" alt="">' :
+                '<span>' + escapeHtml(title.title.charAt(0)) + '</span>') +
+                '<strong>' + escapeHtml(title.title) + '</strong>' +
+                (title.year ? '<small>' + escapeHtml(String(title.year)) + '</small>' : '') + '</button>');
+            return cards.length >= 12;
+        });
+        if (!cards.length || !providerName) { return ''; }
+        return '<section class="home-rail home-streaming-rail" data-home-rail="streaming-' + attr(providerId) + '">' +
+            '<div class="section-heading home-rail-heading"><h2>' + subscriptionProviderLogo(shelf.providerLogoUrl) +
+            escapeHtml(providerName) + '</h2><p>' + cards.length + '</p></div>' +
+            '<div class="subscription-row home-streaming-row">' + cards.join('') + '</div></section>';
+    }
+
+    function resetHomeStreamingShelves() {
+        if (homeStreamingRequest && homeStreamingRequest.abort) { homeStreamingRequest.abort(); }
+        homeStreamingRequest = null;
+        homeStreamingShelves = [];
+        homeStreamingIdentity = '';
+        homeStreamingLoading = false;
+        homeStreamingFailed = false;
+    }
+
+    function ensureHomeStreamingShelves() {
+        var profileId = state.activeProfile && state.activeProfile.id || '';
+        var region = BuroTmdb.safeRegion(state.preferences.tmdbRegion);
+        var language = state.preferences.language;
+        var identity = profileId + '|' + region + '|MOVIES|' + language;
+        var key = BuroTmdb.keyForProfile(profileId);
+        var cached;
+        if (!key) {
+            if (homeStreamingIdentity || homeStreamingShelves.length || homeStreamingLoading || homeStreamingFailed) {
+                resetHomeStreamingShelves();
+            }
+            return;
+        }
+        if (identity !== homeStreamingIdentity) {
+            resetHomeStreamingShelves();
+            homeStreamingIdentity = identity;
+        }
+        if (homeStreamingShelves.length || homeStreamingLoading || homeStreamingFailed) { return; }
+        cached = BuroTmdb.readShelfCache(region, 'MOVIES', language);
+        if (cached) { homeStreamingShelves = cached; return; }
+        homeStreamingLoading = true;
+        try {
+            homeStreamingRequest = BuroTmdb.loadShelves(key, region, 'MOVIES', language, function () {}, function (shelves) {
+                if (homeStreamingIdentity !== identity) { return; }
+                homeStreamingRequest = null;
+                homeStreamingLoading = false;
+                homeStreamingShelves = shelves || [];
+                BuroTmdb.writeShelfCache(region, 'MOVIES', language, homeStreamingShelves);
+                if (state.screen === 'SHELL' && state.section === 'HOME') { render(); }
+            }, function () {
+                if (homeStreamingIdentity !== identity) { return; }
+                homeStreamingRequest = null;
+                homeStreamingLoading = false;
+                homeStreamingFailed = true;
+            });
+        } catch (ignoredHomeStreamingError) {
+            homeStreamingRequest = null;
+            homeStreamingLoading = false;
+            homeStreamingFailed = true;
+        }
+    }
+
+    /*
       Os lembretes deste perfil, prontos para virar cards.
 
       Um lembrete guarda identidade, não id de linha, então o item do catálogo é
@@ -1506,9 +1597,20 @@ var BuroApp = (function () {
         }).sort(function (a, b) {
             return Number(b.updatedAt) - Number(a.updatedAt);
         }).forEach(function (entry) {
-            if (byId[entry.itemId] && !continuedIds[entry.itemId]) {
-                continuedIds[entry.itemId] = true;
-                continued.push(byId[entry.itemId]);
+            var item = byId[entry.itemId];
+            var parent;
+            if (!item) { return; }
+            /* Android e Windows representam o progresso de episodio pela serie
+               na Home. O episodio mais recente ainda fornece a barra correta,
+               sem alterar o objeto persistido da serie. */
+            if (item.contentType === 'EPISODE') {
+                parent = item.categoryId ? byId[item.categoryId] : null;
+                if (!parent || parent.contentType !== 'SERIES') { return; }
+                item = transientLibraryItem(parent, entry.itemId);
+            }
+            if (!continuedIds[item.id]) {
+                continuedIds[item.id] = true;
+                continued.push(item);
             }
         });
         seasonal = seasonalTerms.length ? catalog.filter(function (item) {
@@ -1617,6 +1719,7 @@ var BuroApp = (function () {
             '</p><button class="button primary focusable" data-action="' + action +
             '" data-id="' + attr(hero.id) + '">' + (action === 'play' ? t('watch') : t('viewDetails')) + '</button></div>';
         model.rails.forEach(function (rail) { content += homeRail(rail.title, rail.items, rail.key, rail.service); });
+        homeStreamingShelves.forEach(function (shelf) { content += homeStreamingRail(shelf); });
         return content;
     }
 
@@ -1703,32 +1806,118 @@ var BuroApp = (function () {
         }, 0);
     }
 
+    /*
+      A demonstração local é o mesmo catálogo fictício usado pelo Android.
+
+      Não há URL, stream, provedor nem obra real nestes objetos. Manter os ids,
+      três trilhos, formatos e progressos alinhados permite que a primeira Home
+      ensine foco, rolagem e hierarquia antes de o usuário importar uma fonte.
+    */
+    function demoHomeCatalogue(year) {
+        function item(id, titleKey, subtitleKey, artwork, progress, kind, format) {
+            return {
+                id: id,
+                titleKey: titleKey,
+                subtitleKey: subtitleKey,
+                artwork: artwork,
+                progress: progress,
+                kind: kind || 'story',
+                format: format || 'landscape'
+            };
+        }
+        return {
+            hero: item('demo:hero:quiet-orbit', 'demoHeroTitle', 'demoHeroSubtitle', 'aurora'),
+            rails: [
+                {
+                    id: 'demo:rail:continue', title: t('demoContinueTitle'), badgeKey: 'demoBadge',
+                    items: [
+                        item('demo:continue:amber-archive', 'demoAmberTitle', 'demoAmberSubtitle', 'paper', 0.68),
+                        item('demo:continue:prism-city', 'demoPrismTitle', 'demoPrismSubtitle', 'cobalt', 0.42),
+                        item('demo:continue:green-signal', 'demoSignalTitle', 'demoSignalSubtitle', 'forest', 0.81),
+                        item('demo:continue:violet-map', 'demoMapTitle', 'demoMapSubtitle', 'plum', 0.23)
+                    ]
+                },
+                {
+                    id: 'demo:rail:live', title: t('demoLiveTitle'), badgeKey: 'demoLiveBadge',
+                    items: [
+                        item('demo:live:north-studio', 'demoNorthTitle', 'demoNorthSubtitle', 'cobalt', 0.31, 'live'),
+                        item('demo:live:solar-room', 'demoSolarTitle', 'demoSolarSubtitle', 'paper', 0.57, 'live'),
+                        item('demo:live:field-notes', 'demoFieldTitle', 'demoFieldSubtitle', 'forest', 0.74, 'live'),
+                        item('demo:live:violet-stage', 'demoStageTitle', 'demoStageSubtitle', 'plum', 0.46, 'live')
+                    ]
+                },
+                {
+                    id: 'demo:rail:editorial', title: t('demoEditorialTitle').replace('{year}', year), badgeKey: 'demoBadge',
+                    items: [
+                        item('demo:editorial:blue-frequency', 'demoFrequencyTitle', 'demoVisualSubtitle', 'cobalt', null, 'editorial', 'poster'),
+                        item('demo:editorial:paper-sun', 'demoSunTitle', 'demoVisualSubtitle', 'paper', null, 'editorial', 'poster'),
+                        item('demo:editorial:forest-code', 'demoForestTitle', 'demoVisualSubtitle', 'forest', null, 'editorial', 'poster'),
+                        item('demo:editorial:ember-line', 'demoEmberTitle', 'demoVisualSubtitle', 'ember', null, 'editorial', 'poster'),
+                        item('demo:editorial:soft-axis', 'demoAxisTitle', 'demoVisualSubtitle', 'aurora', null, 'editorial', 'poster'),
+                        item('demo:editorial:plum-window', 'demoWindowTitle', 'demoVisualSubtitle', 'plum', null, 'editorial', 'poster')
+                    ]
+                }
+            ]
+        };
+    }
+
+    function demoHomeItemById(catalogue, id) {
+        var found = catalogue.hero.id === id ? catalogue.hero : null;
+        catalogue.rails.some(function (rail) {
+            return rail.items.some(function (item) {
+                if (item.id === id) { found = item; return true; }
+                return false;
+            });
+        });
+        return found || catalogue.hero;
+    }
+
+    function demoItemMetadata(item, year) {
+        if (item.id === 'demo:hero:quiet-orbit') { return year + ' · ' + t('demoHeroMetadata'); }
+        if (item.kind === 'live') { return year + ' · ' + t('demoLiveMetadata'); }
+        return year + ' · ' + t('demoConceptMetadata');
+    }
+
+    function demoItemSynopsis(item) {
+        if (item.id === 'demo:hero:quiet-orbit') { return t('demoHeroSynopsis'); }
+        if (item.kind === 'live') { return t('demoLiveSynopsis'); }
+        if (item.kind === 'editorial') { return t('demoEditorialSynopsis'); }
+        return t('demoStorySynopsis');
+    }
+
     function renderHome() {
         var data = state.screenData;
         var content;
+        var demoCatalogue;
+        var demoItem;
         var topbarExtra = '';
         var year = new Date().getFullYear();
         if (state.screenData && state.screenData.kind === 'demo-story') {
+            demoCatalogue = demoHomeCatalogue(year);
+            demoItem = demoHomeItemById(demoCatalogue, state.screenData.demoId);
             content = '<div class="demo-story"><span class="hero-kicker">' + t('demoBadge') + '</span>' +
-                '<h2>' + t('demoHeroTitle') + '</h2><p class="demo-story-meta">' + year + ' · ' + t('demoHeroMetadata') + '</p>' +
-                '<p>' + t('demoHeroSynopsis') + '</p><div class="action-row detail-actions">' +
+                '<h2>' + escapeHtml(t(demoItem.titleKey)) + '</h2><p class="demo-story-subtitle">' +
+                escapeHtml(t(demoItem.subtitleKey)) + '</p><p class="demo-story-meta">' +
+                escapeHtml(demoItemMetadata(demoItem, year)) + '</p><p>' + escapeHtml(demoItemSynopsis(demoItem)) +
+                '</p><p class="demo-no-playback">' + escapeHtml(t('demoStoryNoPlayback')) +
+                '</p><div class="action-row detail-actions">' +
                 '<button class="button primary focusable" data-action="source-add">' + t('addSource') + '</button>' +
                 '<button class="button ghost focusable" data-action="back">' + t('back') + '</button></div></div>';
             shell(content, t('home'), true);
             return;
         }
         if (!state.sources.length) {
+            demoCatalogue = demoHomeCatalogue(year);
             topbarExtra = '<div class="demo-notice">' + t('demoNotice') + '</div>';
             content = '<div class="hero living-hero"><span class="hero-kicker">' + t('demoBadge') + '</span><h2>' +
                 t('demoHeroTitle') + '</h2><p class="hero-metadata">' + year + ' · ' + t('demoHeroMetadata') + '</p><p>' +
-                t('demoHeroSynopsis') + '</p><button class="button primary focusable" data-action="demo-story">' +
+                t('demoHeroSynopsis') + '</p><button class="button primary focusable" data-action="demo-story" data-id="' +
+                attr(demoCatalogue.hero.id) + '">' +
                 t('demoViewStory') + '</button></div>' +
-                '<div class="section-heading demo-heading"><h2>' + t('demoContinueTitle') + '</h2><p>' + t('demoBadge') + '</p></div>' +
-                '<div class="demo-card-row">' +
-                demoHomeCard('paper', t('demoAmberTitle')) + demoHomeCard('forest', t('demoSignalTitle')) +
-                demoHomeCard('atlas', t('demoAtlasTitle')) + '</div>';
+                demoCatalogue.rails.map(renderDemoRail).join('');
         } else {
             if (!data || data.kind !== 'home') { startHomeLoad(); data = state.screenData; }
+            ensureHomeStreamingShelves();
             if (data.loading && !(data.result && data.result.count)) {
                 content = '<div class="home-loading"><span class="boot-indicator"></span><h2>' + t('homeLoading') +
                     '</h2><p>' + t('homeLoadingBody') + '</p></div>';
@@ -1865,7 +2054,8 @@ var BuroApp = (function () {
         if (genres.length) { facts.push(genres.slice(0, 2).join(' · ')); }
         if (rating > 0) { facts.push('★ ' + rating.toFixed(1)); }
         return '<article class="discover-card ' + layer + (artworkMemory[item.id] ? ' has-art' : '') +
-            '" data-id="' + attr(item.id) + '" aria-label="' + attr(item.name) + '">' +
+            '" data-id="' + attr(item.id) + '"' + (layer === 'next' ? ' aria-hidden="true"' :
+                ' aria-label="' + attr(item.name) + '"') + '>' +
             artworkHtml(item, 'discover-art') + '<span class="badge">' + escapeHtml(item.contentType) +
             '</span><div class="discover-card-copy"><h3>' + escapeHtml(item.name) + '</h3><p>' +
             escapeHtml(facts.join('  ·  ')) + '</p></div></article>';
@@ -1963,9 +2153,25 @@ var BuroApp = (function () {
         window.setTimeout(loadDiscover, 0);
     }
 
-    function demoHomeCard(artwork, title) {
-        return '<button class="demo-media-card ' + artwork + ' focusable" data-action="demo-story">' +
-            '<span class="badge">' + t('demoBadge') + '</span><strong>' + escapeHtml(title) + '</strong></button>';
+    function renderDemoRail(rail) {
+        return '<section class="demo-rail" data-demo-rail="' + attr(rail.id) + '">' +
+            '<div class="section-heading demo-heading"><h2>' + escapeHtml(rail.title) + '</h2><p>' +
+            escapeHtml(t(rail.badgeKey)) + '</p></div><div class="demo-card-row ' +
+            (rail.items[0] && rail.items[0].format === 'poster' ? 'poster-row' : '') + '">' +
+            rail.items.map(function (item) { return demoHomeCard(item, rail.badgeKey); }).join('') +
+            '</div></section>';
+    }
+
+    function demoHomeCard(item, badgeKey) {
+        var progress = item.progress == null ? '' : '<span class="demo-card-progress" aria-label="' +
+            attr(Math.round(item.progress * 100) + '%') + '"><span style="width:' +
+            Math.round(item.progress * 100) + '%"></span></span>';
+        return '<button class="demo-media-card ' + attr(item.artwork) + ' ' + attr(item.format) +
+            ' focusable" data-action="demo-story" data-id="' + attr(item.id) + '" aria-label="' +
+            attr(t(item.titleKey) + ' · ' + t(item.subtitleKey)) + '"><span class="badge">' +
+            escapeHtml(t(badgeKey)) + '</span><span class="demo-card-copy"><strong>' +
+            escapeHtml(t(item.titleKey)) + '</strong><small>' + escapeHtml(t(item.subtitleKey)) +
+            '</small></span>' + progress + '</button>';
     }
 
     function sourceCategories(contentType) {
@@ -2206,6 +2412,19 @@ var BuroApp = (function () {
                 extraAttributes + '>' + t('nextPage') + '</button>' : '') + '</div>';
     }
 
+    function categoryLoadMoreControl(data) {
+        var loaded;
+        var total;
+        if (!data.catalogueHasMore && !data.catalogueLoadingMore) { return ''; }
+        loaded = (data.items || []).length;
+        total = Math.max(loaded, Number(data.catalogueTotalCount) || loaded);
+        return '<div class="catalogue-progressive" aria-live="polite">' +
+            '<button class="button primary focusable" data-action="category-load-more"' +
+            (data.catalogueLoadingMore ? ' disabled aria-busy="true"' : '') + '>' +
+            (data.catalogueLoadingMore ? t('loadingMoreCatalogue') : t('loadMoreCatalogue')) +
+            '</button><span>' + loaded + ' / ' + total + '</span></div>';
+    }
+
     function renderFilteredCategory(data) {
         var filterBar = catalogueFilterBar(data.items || [], data);
         var filtered = BuroDomain.applyCatalogueFilter(data.items || [], data.catalogueFilter);
@@ -2220,7 +2439,7 @@ var BuroApp = (function () {
         else {
             body = mediaCards(visible, data.catalogueLayout) + paginationControls(
                 'category-page', page, pageCount, start, start + visible.length, filtered.length
-            );
+            ) + categoryLoadMoreControl(data);
         }
         return (data.refreshError ? '<div class="details-inline-warning category-refresh-warning"><span>!</span><p>' +
             t('categoryCachedWarning') + '</p><button class="button ghost focusable" data-action="category-refresh">' +
@@ -3037,20 +3256,30 @@ var BuroApp = (function () {
                         '<button class="button ghost focusable" data-action="notification-remove" data-id="' +
                         attr(row.id) + '" aria-label="' + attr(t('notificationsRemove')) + '">×</button></div>';
                 }).join('') + '</div>' +
-                (unread ? '<div class="action-row"><button class="button primary focusable" data-action="notifications-read">' +
-                    t('notificationsMarkAllRead') + '</button></div>' : '');
+                '<div class="action-row"><button class="button ghost focusable" data-action="notifications-clear">' +
+                t('notificationsClearAll') + '</button></div>';
         }
         shell(content + '<p class="form-note privacy">' + escapeHtml(t('notificationsBackground')) + '</p>',
             t('notificationsTitle'), true);
     }
 
-    function markNotificationsRead() {
-        saveNotifications(BuroNotifications.markAllRead(profileNotifications()));
-        render();
+    function openNotifications() {
+        var rows = profileNotifications();
+        /* Android e Windows tratam abrir como leitura. Persistir antes de trocar
+           a tela também remove o contador do shell já na primeira renderização. */
+        if (BuroNotifications.unreadCount(rows)) {
+            saveNotifications(BuroNotifications.markAllRead(rows));
+        }
+        pushScreen('NOTIFICATIONS', {});
     }
 
     function removeNotification(id) {
         saveNotifications(BuroNotifications.remove(profileNotifications(), id));
+        render();
+    }
+
+    function clearNotifications() {
+        saveNotifications(BuroNotifications.clear());
         render();
     }
 
@@ -3826,6 +4055,105 @@ var BuroApp = (function () {
         });
     }
 
+    /*
+      A tela que mostra o código e espera o celular.
+
+      Três passos numerados em vez de um parágrafo: quem está lendo isto está de
+      pé com o celular na mão, olhando para a TV do outro lado da sala, e um
+      texto corrido nessa posição não se lê.
+
+      O código sai em dígitos grandes e espaçados porque vai ser copiado de
+      longe, à mão.
+    */
+    function renderPairing() {
+        var data = state.screenData || {};
+        var body;
+        if (data.error) {
+            body = emptyState('!', t(data.error === 'PAIRING_EXPIRED' ? 'pairExpired' : 'pairFailed'),
+                t('pairHint'), 'pair-retry', t('pairRetry'));
+        } else if (!data.code) {
+            body = '<div class="search-loading"><span class="boot-indicator"></span><p>' +
+                escapeHtml(t('pairStarting')) + '</p></div>';
+        } else {
+            body = '<div class="pair-panel"><p class="form-note">' + escapeHtml(t('pairHint')) + '</p>' +
+                '<ol class="pair-steps">' +
+                '<li><span>' + escapeHtml(t('pairStep1')) + '</span><strong class="pair-url">' +
+                escapeHtml(BuroPairing.phoneUrl()) + '</strong></li>' +
+                '<li><span>' + escapeHtml(t('pairStep2')) + '</span><strong class="pair-code">' +
+                escapeHtml(data.code) + '</strong></li>' +
+                '<li><span>' + escapeHtml(t('pairStep3')) + '</span></li></ol>' +
+                '<p class="pair-waiting"><span class="boot-indicator"></span>' +
+                escapeHtml(t('pairWaiting')) + '</p>' +
+                '<p class="form-note">' + escapeHtml(t('pairExpiresIn').replace('{minutes}',
+                    Math.max(1, Math.round((Number(data.seconds) || 300) / 60)))) + '</p>' +
+                '<div class="action-row"><button class="button ghost focusable" data-action="back">' +
+                t('cancel') + '</button></div></div>';
+        }
+        shell(body, t('pairTitle'), true);
+    }
+
+    function startPairing(kind) {
+        cancelPairing();
+        pushScreen('PAIRING', { kind: kind });
+        pairingRequest = BuroPairing.start(kind, {
+            code: function (code, seconds) {
+                if (state.screen !== 'PAIRING') { return; }
+                state.screenData = { kind: kind, code: code, seconds: seconds };
+                render();
+            },
+            success: function (value) {
+                pairingRequest = null;
+                if (state.screen !== 'PAIRING') { return; }
+                applyPairedValue(kind, value);
+                value = null;
+            },
+            failure: function (error) {
+                pairingRequest = null;
+                if (state.screen !== 'PAIRING') { return; }
+                state.screenData = { kind: kind, error: (error && error.code) || 'PAIRING_FAILED' };
+                render();
+            }
+        });
+    }
+
+    function cancelPairing() {
+        if (pairingRequest && pairingRequest.cancel) { pairingRequest.cancel(); }
+        pairingRequest = null;
+    }
+
+    /*
+      Guarda o que veio do celular pelo mesmo caminho da digitação manual: a
+      validação e o armazenamento seguro são os mesmos, então uma chave enviada
+      do celular não entra por uma porta com menos conferência.
+    */
+    function applyPairedValue(kind, value) {
+        var profileId = state.activeProfile && state.activeProfile.id;
+        if (kind === 'critics_key') {
+            BuroCritics.save(value, function () {
+                clearTmdbDetails();
+                goBack();
+                showToast(t('pairReceived'), false);
+            }, function () {
+                state.screenData = { kind: kind, error: 'PAIRING_FAILED' };
+                render();
+            });
+            return;
+        }
+        BuroTmdb.validateKey(value, function (validated) {
+            BuroTmdb.save('profile', profileId, validated, function () {
+                clearTmdbDetails();
+                goBack();
+                showToast(t('pairReceived'), false);
+            }, function () {
+                state.screenData = { kind: kind, error: 'PAIRING_FAILED' };
+                render();
+            });
+        }, function () {
+            state.screenData = { kind: kind, error: 'TMDB_KEY_REJECTED' };
+            render();
+        });
+    }
+
     function renderCriticsSettings() {
         var configured = BuroCritics.configured();
         var draft = state.screenData || {};
@@ -3840,7 +4168,8 @@ var BuroApp = (function () {
             attr(draft.criticsDraft || '') + '" placeholder="' +
             attr(configured ? t('configured') : t('criticsHint')) + '"><small class="field-hint">' +
             escapeHtml(t('criticsHint')) + '</small></div><div class="action-row">' +
-            '<button class="button primary focusable" data-action="critics-save">' + t('criticsSave') + '</button>' +
+            '<button class="button primary focusable" data-action="pair-critics">' + t('pairFromPhone') + '</button>' +
+            '<button class="button ghost focusable" data-action="critics-save">' + t('criticsSave') + '</button>' +
             (configured ? '<button class="button ghost focusable" data-action="critics-clear">' +
                 t('criticsClear') + '</button>' : '') +
             '</div>' + message + '</div>', t('criticsTitle'), true);
@@ -3946,6 +4275,7 @@ var BuroApp = (function () {
             BuroTmdb.save(scope, profileId, validated, function () {
                 clearTmdbDetails();
                 BuroTmdb.clearShelfCache();
+                resetHomeStreamingShelves();
                 state.screenData = { messageKey: 'tmdbSaved', error: false }; render();
             }, function () {
                 state.screenData = { messageKey: 'tmdbSecureError', error: true }; render();
@@ -3965,6 +4295,7 @@ var BuroApp = (function () {
         if (BuroTmdb.remove(scope, state.activeProfile && state.activeProfile.id)) {
             clearTmdbDetails();
             BuroTmdb.clearShelfCache();
+            resetHomeStreamingShelves();
             state.screenData = { messageKey: 'tmdbCleared', error: false };
         } else { state.screenData = { messageKey: 'tmdbSecureError', error: true }; }
         render();
@@ -4227,7 +4558,8 @@ var BuroApp = (function () {
             body = emptyState('B', t('subscriptions'), t('subscriptionsEmpty'), '', '');
         } else {
             body = '<div class="subscription-shelves">' + data.shelves.map(function (shelf) {
-                return '<section><div class="section-heading"><h2>' + subscriptionProviderLogo(shelf.providerLogoUrl) +
+                return '<section data-provider="' + attr(String(shelf.providerId || shelf.providerName || '')) +
+                    '"><div class="section-heading"><h2>' + subscriptionProviderLogo(shelf.providerLogoUrl) +
                     escapeHtml(shelf.providerName === 'coming-soon' ?
                     t('subscriptionsUpcomingShelf') : shelf.providerName) + '</h2><p>' + shelf.titles.length + '</p></div><div class="subscription-row">' +
                     shelf.titles.map(function (title) {
@@ -4266,6 +4598,31 @@ var BuroApp = (function () {
         return found;
     }
 
+    function findHomeStreamingTitle(key) {
+        var found = null;
+        homeStreamingShelves.some(function (shelf) {
+            return (shelf.titles || []).some(function (title) {
+                if (subscriptionTitleKey(title) === key) { found = title; return true; }
+                return false;
+            });
+        });
+        return found;
+    }
+
+    function openHomeStreamingTitle(key) {
+        var title = findHomeStreamingTitle(key);
+        var homeData = state.screenData;
+        if (!title) { return; }
+        state.section = 'SUBSCRIPTIONS';
+        state.screen = 'SHELL';
+        state.screenData = {
+            kind: 'subscriptions', filter: 'MOVIES',
+            region: BuroTmdb.safeRegion(state.preferences.tmdbRegion),
+            loading: false, shelves: homeStreamingShelves, selected: null
+        };
+        selectSubscriptionTitle(title, { screen: 'HOME', data: homeData, key: key });
+    }
+
     function findSubscriptionShelf(providerId) {
         var found = null;
         (state.screenData && state.screenData.shelves || []).some(function (shelf) {
@@ -4281,6 +4638,7 @@ var BuroApp = (function () {
         var key = BuroTmdb.keyForProfile(state.activeProfile && state.activeProfile.id);
         if (!data || !shelf || !shelf.providerId || data.filter === 'UPCOMING' || !key) { return; }
         if (subscriptionRequest && subscriptionRequest.abort) { subscriptionRequest.abort(); }
+        data.expandedVisual = subscriptionExpandedVisual(providerId);
         data.expanded = {
             providerId: shelf.providerId,
             providerName: shelf.providerName,
@@ -4289,7 +4647,9 @@ var BuroApp = (function () {
             loading: true,
             error: false
         };
+        focusIndex = 0;
         render();
+        focusMatching('[data-action="subscription-expanded-back"]');
         subscriptionRequest = BuroTmdb.loadServiceCatalogue(key, shelf.providerId, data.region, data.filter,
             state.preferences.language, function (titles) {
                 subscriptionRequest = null;
@@ -4310,10 +4670,14 @@ var BuroApp = (function () {
     }
 
     function closeExpandedSubscription() {
+        var visual = state.screenData && state.screenData.expandedVisual;
         if (subscriptionRequest && subscriptionRequest.abort) { subscriptionRequest.abort(); subscriptionRequest = null; }
         if (!state.screenData) { return; }
         state.screenData.expanded = null;
+        state.screenData.expandedVisual = null;
+        focusIndex = 0;
         render();
+        restoreSubscriptionExpandedVisual(visual);
     }
 
     function matchSubscriptionLocal(title) {
@@ -4331,7 +4695,93 @@ var BuroApp = (function () {
         }, function () {});
     }
 
-    function selectSubscriptionTitle(title, selectedReturn) {
+    function subscriptionVisualForTitle(title, originElement) {
+        var key = subscriptionTitleKey(title);
+        var content = root && root.querySelector ? root.querySelector('.content.scrollable') : null;
+        var element = originElement && originElement.getAttribute &&
+            originElement.getAttribute('data-action') === 'subscription-title' &&
+            originElement.getAttribute('data-key') === key ? originElement : null;
+        var row = null;
+        var section = null;
+        if (!element && root && root.querySelectorAll) {
+            Array.prototype.some.call(root.querySelectorAll('[data-action="subscription-title"]'), function (candidate) {
+                if (candidate.getAttribute('data-key') !== key) { return false; }
+                element = candidate;
+                return true;
+            });
+        }
+        row = element && element.closest ? element.closest('.subscription-row') : null;
+        section = row && row.parentNode;
+        return {
+            key: key,
+            providerId: section && section.getAttribute ? section.getAttribute('data-provider') || '' : '',
+            contentScrollTop: content ? Number(content.scrollTop) || 0 : 0,
+            rowScrollLeft: row ? Number(row.scrollLeft) || 0 : 0
+        };
+    }
+
+    function restoreSubscriptionTitleVisual(visual) {
+        var content = root && root.querySelector ? root.querySelector('.content.scrollable') : null;
+        var element = null;
+        var row = null;
+        var index = -1;
+        if (!visual || !root || !root.querySelectorAll) { return; }
+        Array.prototype.some.call(root.querySelectorAll('[data-action="subscription-title"]'), function (candidate) {
+            if (candidate.getAttribute('data-key') !== visual.key) { return false; }
+            var candidateRow = candidate.closest ? candidate.closest('.subscription-row') : null;
+            var candidateSection = candidateRow && candidateRow.parentNode;
+            if (visual.providerId && (!candidateSection ||
+                    candidateSection.getAttribute('data-provider') !== visual.providerId)) { return false; }
+            element = candidate;
+            return true;
+        });
+        if (!element) { return; }
+        if (content) { content.scrollTop = Math.max(0, Number(visual.contentScrollTop) || 0); }
+        row = element.closest ? element.closest('.subscription-row') : null;
+        if (row) { row.scrollLeft = Math.max(0, Number(visual.rowScrollLeft) || 0); }
+        index = focusables.indexOf(element);
+        if (index >= 0) { focusIndex = index; applyFocus(); }
+    }
+
+    function subscriptionExpandedVisual(providerId) {
+        var content = root && root.querySelector ? root.querySelector('.content.scrollable') : null;
+        var element = null;
+        var row = null;
+        if (root && root.querySelectorAll) {
+            Array.prototype.some.call(root.querySelectorAll('[data-action="subscription-expand"]'), function (candidate) {
+                if (candidate.getAttribute('data-provider') !== String(providerId || '')) { return false; }
+                element = candidate;
+                return true;
+            });
+        }
+        row = element && element.closest ? element.closest('.subscription-row') : null;
+        return {
+            providerId: String(providerId || ''),
+            contentScrollTop: content ? Number(content.scrollTop) || 0 : 0,
+            rowScrollLeft: row ? Number(row.scrollLeft) || 0 : 0
+        };
+    }
+
+    function restoreSubscriptionExpandedVisual(visual) {
+        var content = root && root.querySelector ? root.querySelector('.content.scrollable') : null;
+        var element = null;
+        var row;
+        var index;
+        if (!visual || !root || !root.querySelectorAll) { return; }
+        Array.prototype.some.call(root.querySelectorAll('[data-action="subscription-expand"]'), function (candidate) {
+            if (candidate.getAttribute('data-provider') !== visual.providerId) { return false; }
+            element = candidate;
+            return true;
+        });
+        if (!element) { return; }
+        if (content) { content.scrollTop = Math.max(0, Number(visual.contentScrollTop) || 0); }
+        row = element.closest ? element.closest('.subscription-row') : null;
+        if (row) { row.scrollLeft = Math.max(0, Number(visual.rowScrollLeft) || 0); }
+        index = focusables.indexOf(element);
+        if (index >= 0) { focusIndex = index; applyFocus(); }
+    }
+
+    function selectSubscriptionTitle(title, selectedReturn, selectedVisual) {
         var data = state.screenData;
         var key = BuroTmdb.keyForProfile(state.activeProfile && state.activeProfile.id);
         if (!data || data.kind !== 'subscriptions') {
@@ -4340,11 +4790,14 @@ var BuroApp = (function () {
             state.screenData = data;
         }
         if (subscriptionRequest && subscriptionRequest.abort) { subscriptionRequest.abort(); }
+        data.selectedVisual = selectedVisual || subscriptionVisualForTitle(title);
         data.selected = title;
         data.selectedReturn = selectedReturn || null;
         data.selectionLoading = true;
         data.selection = { details: null, offers: [], unknown: false, localItem: null };
+        focusIndex = 0;
         render();
+        focusMatching('[data-action="subscription-back"]');
         subscriptionRequest = BuroTmdb.loadSubscriptionTitle(key, title, data.region, state.preferences.language, function (selection) {
             subscriptionRequest = null;
             if (state.section !== 'SUBSCRIPTIONS' || !state.screenData || !state.screenData.selected ||
@@ -4365,11 +4818,35 @@ var BuroApp = (function () {
 
     function backFromSubscriptionSelection() {
         var returned = state.screenData && state.screenData.selectedReturn;
+        var visual = state.screenData && state.screenData.selectedVisual;
+        var restoredIndex;
         if (subscriptionRequest && subscriptionRequest.abort) { subscriptionRequest.abort(); subscriptionRequest = null; }
         if (returned && returned.screen === 'PERSON') {
             state.screen = 'PERSON'; state.screenData = returned.data; render(); return;
         }
-        state.screenData.selected = null; state.screenData.selection = null; state.screenData.selectionLoading = false; render();
+        if (returned && returned.screen === 'HOME') {
+            state.screen = 'SHELL';
+            state.section = 'HOME';
+            state.screenData = returned.data;
+            render();
+            focusables.some(function (element, index) {
+                if (element.getAttribute('data-action') === 'home-subscription-title' &&
+                        element.getAttribute('data-key') === returned.key) {
+                    restoredIndex = index;
+                    return true;
+                }
+                return false;
+            });
+            if (restoredIndex != null) { focusIndex = restoredIndex; applyFocus(); }
+            return;
+        }
+        state.screenData.selected = null;
+        state.screenData.selection = null;
+        state.screenData.selectionLoading = false;
+        state.screenData.selectedVisual = null;
+        focusIndex = 0;
+        render();
+        restoreSubscriptionTitleVisual(visual);
     }
 
     function openSubscriptionLocal(itemId) {
@@ -4570,6 +5047,7 @@ var BuroApp = (function () {
         else if (state.screen === 'LICENCE') { renderLicenceActivation(); }
         else if (state.screen === 'TMDB_SETTINGS') { renderTmdbSettings(); }
         else if (state.screen === 'CRITICS_SETTINGS') { renderCriticsSettings(); }
+        else if (state.screen === 'PAIRING') { renderPairing(); }
         else if (state.screen === 'CRITICS_GUIDE') { renderCriticsGuide(); }
         else if (state.screen === 'STORAGE_SETTINGS') { renderStorageSettings(); }
         else if (state.screen === 'NOTIFICATIONS') { renderNotifications(); }
@@ -4617,12 +5095,97 @@ var BuroApp = (function () {
         applyFocus();
     }
 
+    /*
+      `scrollIntoView({ inline: 'nearest' })` só recebeu o objeto de opções em
+      engines posteriores às primeiras TVs suportadas. Nessas versões antigas
+      a chamada pode alinhar verticalmente e deixar o card focado escondido no
+      `overflow: hidden` da prateleira. O deslocamento horizontal explícito
+      mantém o mesmo contrato das LazyRows Android/Windows sem depender dessa
+      parte moderna da API.
+    */
+    function horizontalContainerFor(element) {
+        var container = element && element.parentNode;
+        while (container && container !== root) {
+            if (container.classList && (container.classList.contains('nav-list') ||
+                    container.classList.contains('card-row') ||
+                    container.classList.contains('subscription-row') ||
+                    container.classList.contains('demo-card-row'))) { return container; }
+            container = container.parentNode;
+        }
+        return null;
+    }
+
+    function revealFocusedRowItem(element) {
+        var container = horizontalContainerFor(element);
+        var containerRect;
+        var elementRect;
+        var scrollLeft;
+        var inset = 12;
+        if (!container || !container.getBoundingClientRect ||
+                !element || !element.getBoundingClientRect) { return; }
+        containerRect = container.getBoundingClientRect();
+        elementRect = element.getBoundingClientRect();
+        if (!containerRect || !elementRect || !(containerRect.right > containerRect.left)) { return; }
+        scrollLeft = Number(container.scrollLeft) || 0;
+        if (elementRect.left < containerRect.left + inset) {
+            container.scrollLeft = Math.max(0, scrollLeft - (containerRect.left + inset - elementRect.left));
+        } else if (elementRect.right > containerRect.right - inset) {
+            container.scrollLeft = scrollLeft + elementRect.right - (containerRect.right - inset);
+        }
+    }
+
+    function verticalContentFor(element) {
+        var container = element && element.parentNode;
+        while (container && container !== root) {
+            if (container.classList && container.classList.contains('content') &&
+                    container.classList.contains('scrollable')) { return container; }
+            container = container.parentNode;
+        }
+        return null;
+    }
+
+    /*
+      Rola somente a área de conteúdo do shell.
+
+      `scrollIntoView` também pode deslocar um ancestral com `overflow: hidden`.
+      No Chromium e em alguns Web Engines Tizen isso fazia `.main-pane` subir e
+      levava Ribbon/topbar para fora do quadro ao abrir detalhes. Ajustar o
+      `scrollTop` conhecido preserva o chrome fixo da TV.
+    */
+    function revealFocusedContentItem(element, container) {
+        var containerRect;
+        var elementRect;
+        var scrollTop;
+        var inset = 12;
+        if (!container || !container.getBoundingClientRect || !element ||
+                !element.getBoundingClientRect) { return; }
+        containerRect = container.getBoundingClientRect();
+        elementRect = element.getBoundingClientRect();
+        if (!containerRect || !elementRect || !(containerRect.bottom > containerRect.top)) { return; }
+        scrollTop = Number(container.scrollTop) || 0;
+        if (elementRect.top < containerRect.top + inset) {
+            container.scrollTop = Math.max(0, scrollTop - (containerRect.top + inset - elementRect.top));
+        } else if (elementRect.bottom > containerRect.bottom - inset) {
+            container.scrollTop = scrollTop + elementRect.bottom - (containerRect.bottom - inset);
+        }
+    }
+
     function applyFocus() {
         focusables.forEach(function (element, index) {
+            var verticalContent;
             element.classList.toggle('focused', index === focusIndex);
             if (index === focusIndex) {
                 element.setAttribute('tabindex', '0');
-                if (element.scrollIntoView) { element.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+                verticalContent = verticalContentFor(element);
+                if (verticalContent) {
+                    revealFocusedContentItem(element, verticalContent);
+                } else if (element.scrollIntoView) {
+                    try { element.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+                    catch (ignoredScrollOptions) {
+                        try { element.scrollIntoView(false); } catch (ignoredScroll) {}
+                    }
+                }
+                revealFocusedRowItem(element);
                 if (element.focus) {
                     try { element.focus({ preventScroll: true }); }
                     catch (ignoredFocusOptions) { try { element.focus(); } catch (ignoredFocus) {} }
@@ -4857,6 +5420,103 @@ var BuroApp = (function () {
         });
     }
 
+    /*
+      O AVPlay fica sobre o shell sem destruí-lo. Mesmo assim, ao voltar, filmes,
+      episódios e trilhos precisam refletir o checkpoint que acabou de ser
+      gravado. Android/Windows recompõem a UI reativa; aqui fazemos uma única
+      recomposição e recolocamos exatamente o scroll e o foco existentes antes
+      do overlay, inclusive a posição horizontal da prateleira.
+    */
+    function capturePlaybackReturnVisual() {
+        var focused;
+        var row;
+        var rows;
+        var content;
+        if (state.screen !== 'SHELL') { return null; }
+        focused = document.activeElement;
+        if (!focused || !root.contains(focused)) { focused = focusables[focusIndex] || null; }
+        row = horizontalContainerFor(focused);
+        rows = Array.prototype.slice.call(root.querySelectorAll(
+            '.nav-list, .card-row, .subscription-row, .demo-card-row'));
+        content = root.querySelector('.content');
+        return {
+            action: focused ? focused.getAttribute('data-action') || '' : '',
+            id: focused ? focused.getAttribute('data-id') || '' : '',
+            contentScrollTop: content ? Number(content.scrollTop) || 0 : 0,
+            rowIndex: row ? rows.indexOf(row) : -1,
+            rowScrollLeft: row ? Number(row.scrollLeft) || 0 : 0
+        };
+    }
+
+    function refreshPlaybackReturnVisual(snapshot) {
+        var content;
+        var rows;
+        if (!snapshot || state.screen !== 'SHELL') { return; }
+        render();
+        content = root.querySelector('.content');
+        if (content) { content.scrollTop = snapshot.contentScrollTop; }
+        rows = Array.prototype.slice.call(root.querySelectorAll(
+            '.nav-list, .card-row, .subscription-row, .demo-card-row'));
+        if (snapshot.rowIndex >= 0 && rows[snapshot.rowIndex]) {
+            rows[snapshot.rowIndex].scrollLeft = snapshot.rowScrollLeft;
+        }
+        if (snapshot.action && snapshot.id) { focusActionId(snapshot.action, snapshot.id); }
+    }
+
+    /*
+      A Home é um modelo composto por cursor, hero e várias prateleiras. Recriá-la
+      ao voltar de um detalhe custa outra leitura do IndexedDB e perde exatamente
+      o ponto que a pessoa escolheu. Android e Windows conservam o estado das
+      listas; na TV guardamos apenas a referência transitória e as posições
+      visuais, nunca catálogo ou URL em outro armazenamento.
+    */
+    function rememberHomeLocalReturn(element) {
+        var content;
+        var rail = element;
+        var row;
+        if (state.screen !== 'SHELL' || state.section !== 'HOME' || !state.screenData ||
+                state.screenData.kind !== 'home' || !element) { return; }
+        while (rail && rail !== root && (!rail.classList || !rail.classList.contains('home-rail'))) {
+            rail = rail.parentNode;
+        }
+        if (!rail || rail === root) { rail = null; }
+        row = rail && rail.querySelector ? rail.querySelector('.card-row, .subscription-row') : null;
+        content = root.querySelector('.content');
+        homeLocalReturnData = {
+            data: state.screenData,
+            action: element.getAttribute('data-action') || '',
+            id: element.getAttribute('data-id') || '',
+            contentScrollTop: content ? Number(content.scrollTop) || 0 : 0,
+            railKey: rail ? rail.getAttribute('data-home-rail') || '' : '',
+            railScrollLeft: row ? Number(row.scrollLeft) || 0 : 0
+        };
+    }
+
+    function restoreHomeLocalReturn() {
+        var returned = homeLocalReturnData;
+        var content;
+        var row;
+        homeLocalReturnData = null;
+        if (!returned || !returned.data) { return false; }
+        state.screen = 'SHELL';
+        state.section = 'HOME';
+        state.screenData = returned.data;
+        focusIndex = 0;
+        render();
+        content = root.querySelector('.content');
+        if (content) { content.scrollTop = returned.contentScrollTop; }
+        if (returned.railKey) {
+            Array.prototype.some.call(root.querySelectorAll('.home-rail[data-home-rail]'), function (rail) {
+                if (rail.getAttribute('data-home-rail') !== returned.railKey) { return false; }
+                row = rail.querySelector('.card-row, .subscription-row');
+                if (row) { row.scrollLeft = returned.railScrollLeft; }
+                return true;
+            });
+        }
+        focusActionId(returned.action, returned.id);
+        return true;
+    }
+
     function bindArtworkErrors() {
         Array.prototype.slice.call(root.querySelectorAll('.media-art img, .hero-art img, .detail-art img, .discover-art img')).forEach(function (image) {
             image.addEventListener('error', function () {
@@ -4927,6 +5587,7 @@ var BuroApp = (function () {
                 render();
                 return;
             }
+            if (state.screenData.originSection === 'HOME' && restoreHomeLocalReturn()) { return; }
             if (state.screenData.originSection === 'REMINDERS' && state.screenData.parent) {
                 reminderReturnId = state.screenData.parent.id;
             }
@@ -5570,6 +6231,48 @@ var BuroApp = (function () {
         element.className = isError ? 'form-message error' : 'form-message';
     }
 
+    function showStoredCategoryPage(category, page, values) {
+        var data = {
+            kind: 'category',
+            contentType: category.contentType,
+            category: category,
+            items: page.rows || [],
+            cataloguePage: 0,
+            catalogueHasMore: Boolean(page.hasMore),
+            catalogueNextCursor: page.nextCursor || null,
+            catalogueTotalCount: Math.max((page.rows || []).length, Number(page.totalCount) || 0),
+            catalogueLoadingMore: false
+        };
+        Object.keys(values || {}).forEach(function (key) { data[key] = values[key]; });
+        mergeItems(data.items);
+        state.screenData = data;
+        focusIndex = 0;
+        render();
+    }
+
+    function stalkerPagingValues(category, localTotal) {
+        var remotePage = Math.max(0, Number(category && category.stalkerLoadedPage) || 0);
+        var remoteTotal = Math.max(Number(localTotal) || 0,
+            Number(category && category.stalkerTotalItems) || 0);
+        return {
+            catalogueRemoteType: remotePage > 0 ? 'STALKER' : null,
+            catalogueRemotePage: remotePage,
+            catalogueRemotePageSize: Math.max(0, Number(category && category.stalkerPageSize) || 0),
+            catalogueRemoteTotalCount: remoteTotal,
+            catalogueRemoteHasMore: remotePage > 0 && (Number(localTotal) || 0) < remoteTotal,
+            catalogueTotalCount: remoteTotal
+        };
+    }
+
+    function persistStalkerPaging(category, page, success, failure) {
+        category.stalkerLoadedPage = Math.max(1, Number(page && page.page) || 1);
+        category.stalkerTotalItems = Math.max((page && page.items || []).length,
+            Number(page && page.totalItems) || 0);
+        category.stalkerPageSize = Math.max((page && page.items || []).length,
+            Number(page && page.pageSize) || 0);
+        BuroStorage.put('categories', category, success, failure);
+    }
+
     function openCategory(categoryId) {
         var category = null;
         var source = null;
@@ -5582,16 +6285,16 @@ var BuroApp = (function () {
         }
         state.sources.forEach(function (candidate) { if (candidate.id === category.sourceId) { source = candidate; } });
         requestId = beginCatalogueRequest('category', category.contentType, { category: category });
-        BuroStorage.byIndex('items', 'byCategory', [category.sourceId, category.id], function (cached) {
+        BuroStorage.categoryPage(category.sourceId, category.id, null, CATALOGUE_PAGE_SIZE, function (page) {
             /* Xtream e Stalker paginam no servidor: a categoria chega vazia da
                importação e só busca itens quando é aberta. M3U já vem inteira. */
             var lazy = source && (source.type === 'XTREAM' || source.type === 'STALKER');
             if (!catalogueRequestCurrent(requestId)) { return; }
-            if (cached.length || !lazy) {
-                mergeItems(cached);
-                state.screenData = { kind: 'category', contentType: category.contentType, category: category,
-                    items: cached, cataloguePage: 0 };
-                focusIndex = 0; render(); hydrateCategoryArtwork(category); return;
+            if (page.rows.length || !lazy) {
+                showStoredCategoryPage(category, page,
+                    source && source.type === 'STALKER' ? stalkerPagingValues(category, page.totalCount) : null);
+                hydrateCategoryArtwork(category);
+                return;
             }
             if (source.type === 'STALKER') { loadStalkerCategory(category, requestId); return; }
             if (BuroCatalogueSync.contains(category.sourceId, category.id)) { return; }
@@ -5837,6 +6540,14 @@ var BuroApp = (function () {
         });
     }
 
+    function showRefreshedCategoryFromStorage(category, requestId, explicitRefresh, failed) {
+        BuroStorage.categoryPage(category.sourceId, category.id, null, CATALOGUE_PAGE_SIZE, function (page) {
+            if (!catalogueRequestCurrent(requestId)) { return; }
+            showStoredCategoryPage(category, page);
+            if (explicitRefresh) { showToast(t('categoryRefreshed'), false); }
+        }, failed);
+    }
+
     function loadXtreamCategory(category, requestId, cached, explicitRefresh, fallbackPage, resumeBackground) {
         var secret;
         cached = cached || [];
@@ -5863,7 +6574,7 @@ var BuroApp = (function () {
                 });
                 state.items = state.items.filter(function (candidate) {
                     return !(candidate.sourceId === category.sourceId && candidate.categoryId === category.id);
-                }).concat(items);
+                });
                 state.favorites = state.favorites.filter(function (row) { return !removed[row.itemId]; });
                 state.progress = state.progress.filter(function (row) { return !removed[row.itemId]; });
                 rememberArtworkMap(artwork);
@@ -5871,10 +6582,7 @@ var BuroApp = (function () {
                 if (explicitRefresh) { BuroHeroEnrichment.clearSource(category.sourceId); }
                 if (resumeBackground) { startActiveSourceHydration(false); }
                 if (!displayCurrent) { return; }
-                state.screenData = { kind: 'category', contentType: category.contentType, category: category,
-                    items: items, cataloguePage: 0 };
-                focusIndex = 0; render();
-                if (explicitRefresh) { showToast(t('categoryRefreshed'), false); }
+                showRefreshedCategoryFromStorage(category, requestId, explicitRefresh, failed);
             }, failed);
         }, failed);
     }
@@ -5918,14 +6626,11 @@ var BuroApp = (function () {
                     });
                     state.items = state.items.filter(function (candidate) {
                         return !(candidate.sourceId === category.sourceId && candidate.categoryId === category.id);
-                    }).concat(items);
+                    });
                     state.favorites = state.favorites.filter(function (row) { return !removed[row.itemId]; });
                     state.progress = state.progress.filter(function (row) { return !removed[row.itemId]; });
                     if (!displayCurrent) { return; }
-                    state.screenData = { kind: 'category', contentType: category.contentType, category: category,
-                        items: items, cataloguePage: 0 };
-                    focusIndex = 0; render();
-                    if (explicitRefresh) { showToast(t('categoryRefreshed'), false); }
+                    showRefreshedCategoryFromStorage(category, requestId, explicitRefresh, failed);
                 }, failed);
             }, failed);
         }, failed);
@@ -5970,6 +6675,50 @@ var BuroApp = (function () {
             preferred = delta > 0 ? 'category-page-previous' : 'category-page-next';
         }
         focusMatching('[data-action="' + preferred + '"]');
+    }
+
+    function loadMoreCategory() {
+        var data = state.screenData;
+        var category;
+        var oldFiltered;
+        var oldPageCount;
+        if (!data || data.kind !== 'category' || data.catalogueLoadingMore || !data.catalogueHasMore) { return; }
+        category = data.category;
+        oldFiltered = BuroDomain.applyCatalogueFilter(data.items || [], data.catalogueFilter);
+        oldPageCount = Math.max(1, Math.ceil(oldFiltered.length / CATALOGUE_PAGE_SIZE));
+        data.catalogueLoadingMore = true;
+        render();
+        BuroStorage.categoryPage(category.sourceId, category.id, data.catalogueNextCursor,
+            CATALOGUE_PAGE_SIZE, function (page) {
+                var known = {};
+                var newFiltered;
+                var newPageCount;
+                if (state.screenData !== data || data.kind !== 'category') { return; }
+                (data.items || []).forEach(function (item) { known[item.id] = true; });
+                (page.rows || []).forEach(function (item) {
+                    if (!known[item.id]) { known[item.id] = true; data.items.push(item); }
+                });
+                mergeItems(page.rows || []);
+                data.catalogueHasMore = Boolean(page.hasMore);
+                data.catalogueNextCursor = page.nextCursor || null;
+                data.catalogueTotalCount = Math.max(data.items.length, Number(page.totalCount) || 0);
+                data.catalogueLoadingMore = false;
+                newFiltered = BuroDomain.applyCatalogueFilter(data.items || [], data.catalogueFilter);
+                newPageCount = Math.max(1, Math.ceil(newFiltered.length / CATALOGUE_PAGE_SIZE));
+                if ((Number(data.cataloguePage) || 0) === oldPageCount - 1 && newPageCount > oldPageCount) {
+                    data.cataloguePage = oldPageCount;
+                }
+                render();
+                if (root.querySelector('[data-action="category-load-more"]')) {
+                    focusMatching('[data-action="category-load-more"]');
+                } else { focusMatching('[data-action="category-page-previous"]'); }
+            }, function (error) {
+                if (state.screenData !== data || data.kind !== 'category') { return; }
+                data.catalogueLoadingMore = false;
+                render();
+                focusMatching('[data-action="category-load-more"]');
+                showToast(friendlyError(error), true);
+            });
     }
 
     function changeCategorySettingsPage(delta) {
@@ -6088,13 +6837,51 @@ var BuroApp = (function () {
             '</button>';
     }
 
+    /*
+      Windows oferece uma ação principal no topo da série: o primeiro episódio
+      com retomada vence; sem retomada, vence o primeiro episódio da lista.
+      A escolha usa a mesma ResumeDecision do player, para o texto e a posição
+      inicial nunca divergirem. Itens concluídos não sequestram o botão.
+    */
+    function seriesPrimaryEpisode(episodeRows) {
+        var first = null;
+        var resumable = null;
+        (episodeRows || []).some(function (episode) {
+            var progress;
+            var decision;
+            if (!episode || episode.contentType !== 'EPISODE') { return false; }
+            if (!first) { first = episode; }
+            progress = playbackProgress(episode.id);
+            decision = BuroDomain.resumeDecision(progress && progress.entry, true);
+            if (decision.kind === 'resume') {
+                resumable = { item: episode, decision: decision };
+                return true;
+            }
+            return false;
+        });
+        if (resumable) { return resumable; }
+        return first ? { item: first, decision: { kind: 'start', positionMs: 0 } } : null;
+    }
+
+    function seriesPrimaryLabel(target) {
+        var locator = target && target.item && target.item.locator || {};
+        var season = Number(locator.season) > 0 ? String(Number(locator.season)) : '—';
+        var episode = Number(locator.episode) > 0 ? String(Number(locator.episode)) : '—';
+        return t(target && target.decision && target.decision.kind === 'resume' ?
+            'seriesContinueEpisode' : 'seriesWatchEpisode')
+            .replace('{season}', season).replace('{episode}', episode);
+    }
+
     function detailActionsHtml(item, isSeries, episodeRows, trailerId) {
         var favorite = isFavorite(item.id);
         var marked = hasReminder(item);
+        var seriesPrimary = isSeries ? seriesPrimaryEpisode(episodeRows) : null;
         var glyphs = '';
         var primary = !isSeries ?
             '<div class="action-row detail-actions"><button class="button primary focusable" data-action="play" data-id="' +
-                attr(item.id) + '">' + t('watch') + '</button></div>' : '';
+                attr(item.id) + '">' + t('watch') + '</button></div>' :
+            (seriesPrimary ? '<div class="action-row detail-actions"><button class="button primary focusable" data-action="series-primary-play" data-id="' +
+                attr(seriesPrimary.item.id) + '">▶ ' + escapeHtml(seriesPrimaryLabel(seriesPrimary)) + '</button></div>' : '');
         /* Rótulo curto nesta barra: `addFavorite` é "Adicionar à Minha BURO",
            escrito para uma pílula larga. Numa coluna de 128 px ele quebrava em
            duas linhas e empurrava as legendas vizinhas para fora do alinhamento.
@@ -6286,6 +7073,16 @@ var BuroApp = (function () {
         beginPlayback(itemId, 0);
     }
 
+    function playSeriesPrimaryEpisode(itemId) {
+        var data = state.screenData;
+        var target;
+        if (!data || data.kind !== 'series') { return; }
+        target = seriesPrimaryEpisode(data.items);
+        if (!target || target.item.id !== itemId) { return; }
+        beginPlayback(target.item.id, target.decision.kind === 'resume' ?
+            Number(target.decision.positionMs) || 0 : 0);
+    }
+
     function compatibleAlternativeBetter(candidate, current) {
         var candidateRisk;
         var currentRisk;
@@ -6320,7 +7117,7 @@ var BuroApp = (function () {
             state.screenData.parent && state.screenData.parent.id === item.id ?
             (state.screenData.schedule || []).slice(0, 100) : [];
         playerTitle.textContent = item.name;
-        currentPlayback = { itemId: item.id, contentType: item.contentType, positionMs: startPositionMs,
+        currentPlayback = { itemId: item.id, title: item.name, contentType: item.contentType, positionMs: startPositionMs,
             durationMs: startPositionMs > 0 && savedProgress && savedProgress.entry ?
                 Number(savedProgress.entry.durationMs) || 0 : 0, lastSavedAt: 0, schedule: schedule };
         overlay.hidden = false;
@@ -6389,7 +7186,7 @@ var BuroApp = (function () {
         var playback;
         if (!entry || entry.state !== 'COMPLETED') { showToast(t('unavailable'), true); return; }
         currentPlayback = {
-            itemId: entry.id, contentType: entry.contentType, positionMs: Math.max(0, Number(startPositionMs) || 0),
+            itemId: entry.id, title: entry.name, contentType: entry.contentType, positionMs: Math.max(0, Number(startPositionMs) || 0),
             durationMs: 0, lastSavedAt: 0, offline: true
         };
         playback = currentPlayback;
@@ -6624,9 +7421,11 @@ var BuroApp = (function () {
     }
 
     function stopPlayback() {
+        var visual = capturePlaybackReturnVisual();
+        var progressChanged;
         playbackResolveRequestId += 1;
         resetPlayerControlsLock();
-        persistProgress(false);
+        progressChanged = persistProgress(false);
         currentPlayback = null;
         clearPlayerError();
         closePlayerMenu();
@@ -6634,6 +7433,7 @@ var BuroApp = (function () {
         document.body.classList.remove('playing');
         root.removeAttribute('aria-hidden');
         overlay.hidden = true;
+        if (progressChanged) { refreshPlaybackReturnVisual(visual); }
     }
 
     function updatePlaybackTime(positionMs, durationMs) {
@@ -6650,7 +7450,7 @@ var BuroApp = (function () {
         var row;
         var replaced = false;
         if (!profileId || !playback || playback.contentType === 'LIVE' ||
-                (!completed && Number(playback.durationMs) <= 0)) { return; }
+                (!completed && Number(playback.durationMs) <= 0)) { return false; }
         row = {
             id: BuroDomain.id('progress', profileId + ':' + playback.itemId),
             profileId: profileId, itemId: playback.itemId,
@@ -6666,6 +7466,7 @@ var BuroApp = (function () {
         if (!replaced) { state.progress.push(row); }
         BuroStorage.put('progress', row, function () {}, function () {});
         if (completed) { currentPlayback = null; }
+        return true;
     }
 
     function toggleFavorite(itemId, completed) {
@@ -6926,6 +7727,7 @@ var BuroApp = (function () {
                 startActiveSourceHydration(false);
             }
         } else if (action === 'section') {
+            homeLocalReturnData = null;
             if (element.getAttribute('data-section') !== 'DOWNLOADS') { clearDownloadSearchDebounce(); }
             if (state.section === 'HOME' && element.getAttribute('data-section') !== 'HOME') {
                 BuroHeroEnrichment.cancel();
@@ -6964,7 +7766,7 @@ var BuroApp = (function () {
         } else if (action === 'catalogue-retry') { retryCatalogueRequest();
         } else if (action === 'series-details-retry') { openSeriesById(id, state.screenData && state.screenData.originSection);
         } else if (action === 'demo-story') {
-            state.screenData = { kind: 'demo-story' }; focusIndex = 0; render();
+            state.screenData = { kind: 'demo-story', demoId: id || 'demo:hero:quiet-orbit' }; focusIndex = 0; render();
         } else if (action === 'source-add') { pushScreen('SOURCE_CHOICE'); }
         else if (action === 'source-usb-m3u') { openUsbM3uPicker(); }
         else if (action === 'source-usb-m3u-retry') { loadUsbM3uFiles(); }
@@ -7009,6 +7811,7 @@ var BuroApp = (function () {
             state.screenData.cataloguePage = 0;
             render();
         } else if (action === 'category-refresh') { refreshOpenCategory();
+        } else if (action === 'category-load-more') { loadMoreCategory();
         } else if (action === 'category-page-next') { changeCategoryPage(1);
         } else if (action === 'category-page-previous') { changeCategoryPage(-1);
         } else if (action === 'series-season') {
@@ -7025,11 +7828,12 @@ var BuroApp = (function () {
         } else if (action === 'bulk-download-confirm') { confirmBulkDownload();
         } else if (action === 'category') { openCategory(id); }
         else if (action === 'play') { playItem(id); }
+        else if (action === 'series-primary-play') { playSeriesPrimaryEpisode(id); }
         else if (action === 'resume-continue') { chooseResume(true); }
         else if (action === 'resume-restart') { chooseResume(false); }
-        else if (action === 'movie-details') { openMovieDetails(id); }
-        else if (action === 'series-details') { openSeriesById(id); }
-        else if (action === 'live-details') { openLiveDetails(id); }
+        else if (action === 'movie-details') { rememberHomeLocalReturn(element); openMovieDetails(id); }
+        else if (action === 'series-details') { rememberHomeLocalReturn(element); openSeriesById(id); }
+        else if (action === 'live-details') { rememberHomeLocalReturn(element); openLiveDetails(id); }
         else if (action === 'trailer') { openTrailer(id); }
         else if (action === 'person') { openPerson(element.getAttribute('data-name')); }
         else if (action === 'person-local') { openPersonLocal(id); }
@@ -7043,7 +7847,10 @@ var BuroApp = (function () {
         else if (action === 'subscription-retry') { loadSubscriptions(state.screenData.filter, true); }
         else if (action === 'subscription-title') {
             var subscriptionTitle = findSubscriptionTitle(element.getAttribute('data-key'));
-            if (subscriptionTitle) { selectSubscriptionTitle(subscriptionTitle); }
+            if (subscriptionTitle) { selectSubscriptionTitle(subscriptionTitle, null, subscriptionVisualForTitle(subscriptionTitle, element)); }
+        }
+        else if (action === 'home-subscription-title') {
+            openHomeStreamingTitle(element.getAttribute('data-key'));
         }
         else if (action === 'subscription-expand') { expandSubscriptionService(element.getAttribute('data-provider')); }
         else if (action === 'subscription-expanded-back') { closeExpandedSubscription(); }
@@ -7084,11 +7891,14 @@ var BuroApp = (function () {
         else if (action === 'critics-guide-open') { openOfficialCriticsSite(); }
         else if (action === 'critics-save') { saveCriticsKey(); }
         else if (action === 'critics-clear') { clearCriticsKey(); }
+        else if (action === 'pair-tmdb') { startPairing('tmdb_key'); }
+        else if (action === 'pair-critics') { startPairing('critics_key'); }
+        else if (action === 'pair-retry') { startPairing((state.screenData && state.screenData.kind) || 'tmdb_key'); }
         else if (action === 'storage-settings') { pushScreen('STORAGE_SETTINGS', {}); measureStorage(); }
         else if (action === 'storage-measure') { measureStorage(); }
         else if (action === 'storage-clear') { clearStoredCatalogue(); }
-        else if (action === 'notifications') { pushScreen('NOTIFICATIONS', {}); }
-        else if (action === 'notifications-read') { markNotificationsRead(); }
+        else if (action === 'notifications') { openNotifications(); }
+        else if (action === 'notifications-clear') { clearNotifications(); }
         else if (action === 'notification-remove') { removeNotification(element.getAttribute('data-id')); }
         else if (action === 'catalogue-scope-genre') { cycleCatalogueScope('genre'); }
         else if (action === 'catalogue-scope-service') { cycleCatalogueScope('service'); }
@@ -7264,8 +8074,11 @@ var BuroApp = (function () {
             },
             onSubtitle: showPlayerSubtitle,
             onComplete: function () {
-                persistProgress(true); clearPlayerError(); closePlayerMenu();
+                var visual = capturePlaybackReturnVisual();
+                var progressChanged = persistProgress(true);
+                clearPlayerError(); closePlayerMenu();
                 document.body.classList.remove('playing'); root.removeAttribute('aria-hidden'); overlay.hidden = true;
+                if (progressChanged) { refreshPlaybackReturnVisual(visual); }
             }
         });
         /*

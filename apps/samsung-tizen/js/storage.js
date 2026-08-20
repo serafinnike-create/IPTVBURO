@@ -4,8 +4,8 @@ var BuroStorage = (function () {
 
     var PREFERENCES_KEY = 'iptvburo.preferences.v1';
     var DB_NAME = 'iptvburo.catalog';
-    /* v3 acrescenta o store `reminders`. Ver configureSchema. */
-    var DB_VERSION = 3;
+    /* v4 acrescenta o indice ordenado e paginavel de categoria. */
+    var DB_VERSION = 4;
     var db = null;
 
     function searchRank(contentType) {
@@ -88,10 +88,14 @@ var BuroStorage = (function () {
             store = database.createObjectStore('items', { keyPath: 'id' });
             store.createIndex('bySource', 'sourceId', { unique: false });
             store.createIndex('byCategory', ['sourceId', 'categoryId'], { unique: false });
+            store.createIndex('byCategoryOrder', ['sourceId', 'categoryId', 'searchSort', 'id'], { unique: false });
             store.createIndex('byType', ['sourceId', 'contentType'], { unique: false });
             store.createIndex('bySearchOrder', ['searchRank', 'searchSort', 'id'], { unique: false });
         } else if (transaction) {
             store = transaction.objectStore('items');
+            if (!store.indexNames.contains('byCategoryOrder')) {
+                store.createIndex('byCategoryOrder', ['sourceId', 'categoryId', 'searchSort', 'id'], { unique: false });
+            }
             if (!store.indexNames.contains('bySearchOrder')) {
                 store.createIndex('bySearchOrder', ['searchRank', 'searchSort', 'id'], { unique: false });
             }
@@ -190,6 +194,35 @@ var BuroStorage = (function () {
     */
     var BATCH_SIZE = 1000;
 
+    /*
+      Enfileira uma coleção grande dentro de uma transação que já existe sem
+      colocar todos os `put()` na mesma tarefa JavaScript.
+
+      O último request de cada bloco agenda o próximo enquanto a transação
+      ainda está ativa. Assim o commit continua atômico — requisito das
+      fotografias de catálogo — mas o navegador pode atender render/input
+      entre eventos do IndexedDB. Não usar `setTimeout` aqui: ao devolver o
+      controle sem request pendente o IndexedDB pode fechar a transação.
+    */
+    function putRowsInTransaction(store, rows, transform, done) {
+        var values = rows || [];
+        var index = 0;
+        function queueChunk() {
+            var end = Math.min(values.length, index + BATCH_SIZE);
+            var lastRequest = null;
+            while (index < end) {
+                lastRequest = store.put(transform ? transform(values[index]) : values[index]);
+                index += 1;
+            }
+            if (index >= values.length) { done(); return; }
+            /* Há requests anteriores pendentes; a transação não pode fazer
+               auto-commit antes deste callback enfileirar o bloco seguinte. */
+            lastRequest.onsuccess = queueChunk;
+        }
+        if (!values.length) { done(); return; }
+        queueChunk();
+    }
+
     function putBatch(storeName, values, success, failure) {
         var items = values || [];
         var index = 0;
@@ -269,6 +302,101 @@ var BuroStorage = (function () {
         requestStore(storeName, 'readonly', function (store) {
             return store.index(indexName).getAll(key);
         }, success, failure);
+    }
+
+    /*
+      Le uma categoria na mesma ordem estavel usada pelo Android
+      (sortOrder, id), sem materializar todos os seus registros.
+
+      O cursor e opaco para a UI e aponta para o ultimo item devolvido. A
+      retomada e exclusiva, portanto blocos consecutivos nao repetem o item da
+      fronteira. `byCategory` conta no motor; `byCategoryOrder` percorre apenas
+      o bloco solicitado.
+    */
+    function categoryPage(sourceId, categoryId, afterKey, limit, success, failure) {
+        var settled = false;
+        var maximum = Math.min(200, Math.max(1, Number(limit) || 1));
+        var cursorKey = Array.isArray(afterKey) && afterKey.length === 4 ? afterKey : null;
+        var rows = [];
+        var lastIncludedKey = null;
+        var totalCount = 0;
+        var countReady = false;
+        var pageReady = false;
+        var pageHasMore = false;
+        var startKey;
+        if (!BuroDomain.safeId(sourceId) || !categoryId || String(categoryId).length > 200 ||
+                (cursorKey && (cursorKey[0] !== sourceId || cursorKey[1] !== categoryId))) {
+            failure(new Error('CATEGORY_PAGE_INVALID')); return;
+        }
+        startKey = cursorKey || [sourceId, categoryId];
+        function finish() {
+            if (settled || !countReady || !pageReady) { return; }
+            settled = true;
+            success({
+                rows: rows,
+                hasMore: pageHasMore,
+                /* Preserve the last key even at the current end. A remote
+                   Stalker page can append more rows later and resume exactly
+                   here without rereading the category. */
+                nextCursor: lastIncludedKey,
+                totalCount: totalCount
+            });
+        }
+        open(function (database) {
+            var transaction;
+            var orderIndex;
+            var countRequest;
+            var cursorRequest;
+            function fail(error) {
+                if (!settled) { settled = true; failure(error || new Error('DATABASE_REQUEST_FAILED')); }
+            }
+            try {
+                transaction = database.transaction(['items'], 'readonly');
+                orderIndex = transaction.objectStore('items').index('byCategoryOrder');
+                countRequest = transaction.objectStore('items').index('byCategory').count([sourceId, categoryId]);
+                cursorRequest = orderIndex.openCursor();
+                countRequest.onsuccess = function () {
+                    totalCount = Number(countRequest.result) || 0;
+                    countReady = true;
+                    finish();
+                };
+                countRequest.onerror = function () { fail(countRequest.error); };
+                cursorRequest.onsuccess = function (event) {
+                    var cursor = event.target.result;
+                    var key;
+                    if (settled || pageReady) { return; }
+                    if (!cursor) { pageReady = true; finish(); return; }
+                    key = cursor.key;
+                    try {
+                        if (indexedDB.cmp(key, startKey) < 0) {
+                            cursor.continue(startKey);
+                            return;
+                        }
+                        if (key[0] !== sourceId || key[1] !== categoryId) {
+                            pageReady = true;
+                            finish();
+                            return;
+                        }
+                        if (cursorKey && indexedDB.cmp(key, cursorKey) <= 0) {
+                            cursor.continue();
+                            return;
+                        }
+                    } catch (compareError) { fail(compareError); return; }
+                    if (rows.length >= maximum) {
+                        pageHasMore = true;
+                        pageReady = true;
+                        finish();
+                        return;
+                    }
+                    rows.push(cursor.value);
+                    lastIncludedKey = Array.prototype.slice.call(key);
+                    cursor.continue();
+                };
+                cursorRequest.onerror = function () { fail(cursorRequest.error); };
+                transaction.onerror = function () { fail(transaction.error); };
+                transaction.onabort = function () { fail(transaction.error); };
+            } catch (error) { fail(error); }
+        }, failure);
     }
 
     function where(storeName, predicate, limit, success, failure) {
@@ -637,9 +765,10 @@ var BuroStorage = (function () {
             }
             function writeSnapshot() {
                 categoryRows.forEach(function (row) { transaction.objectStore('categories').put(row); });
-                itemRows.forEach(function (row) { transaction.objectStore('items').put(searchableItem(row)); });
-                removeReferences('favorites', function () {
-                    removeReferences('progress', function () {});
+                putRowsInTransaction(transaction.objectStore('items'), itemRows, searchableItem, function () {
+                    removeReferences('favorites', function () {
+                        removeReferences('progress', function () {});
+                    });
                 });
             }
             function reconcileItems() {
@@ -718,9 +847,10 @@ var BuroStorage = (function () {
                 request.onerror = function () { fail(request.error); };
             }
             function writeItems() {
-                itemRows.forEach(function (row) { transaction.objectStore('items').put(searchableItem(row)); });
-                removeReferences('favorites', function () {
-                    removeReferences('progress', function () {});
+                putRowsInTransaction(transaction.objectStore('items'), itemRows, searchableItem, function () {
+                    removeReferences('favorites', function () {
+                        removeReferences('progress', function () {});
+                    });
                 });
             }
             try {
@@ -799,6 +929,7 @@ var BuroStorage = (function () {
         take: take,
         count: count,
         byIndex: byIndex,
+        categoryPage: categoryPage,
         where: where,
         fold: fold,
         foldByIndex: foldByIndex,

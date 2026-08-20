@@ -219,10 +219,32 @@ export async function handlePairingSubmit(request, env) {
     return json({ error: 'malformed_body' }, 400);
   }
 
-  const code = String(body?.code ?? '').trim();
-  const payload = String(body?.payload ?? '');
-  if (!CODE_PATTERN.test(code)) return json({ error: 'invalid_code' }, 400);
-  if (!payload || payload.length > MAX_PAYLOAD_LENGTH) return json({ error: 'invalid_payload' }, 400);
+  const outcome = await submitPairedPayload(
+    String(body?.code ?? '').trim(),
+    String(body?.payload ?? ''),
+    env,
+    body?.kind === undefined ? null : String(body.kind),
+  );
+
+  if (outcome.ok) return json({ ok: true, kind: outcome.kind });
+  return json({ error: outcome.error }, outcome.status);
+}
+
+/**
+ * Storing a payload against a code, without an HTTP shape.
+ *
+ * Shared by the JSON endpoint and the phone's own form page so a key sent from either meets the
+ * same checks. Returns a plain outcome rather than a Response: the form page needs to turn the
+ * failure into a sentence in the visitor's language, and a Response would already have decided.
+ *
+ * [expectedKind] is null when the caller does not know what the television asked for — which is the
+ * phone page's case, since the person holding it knows only that they are sending "the key".
+ */
+export async function submitPairedPayload(code, payload, env, expectedKind = null) {
+  if (!CODE_PATTERN.test(code)) return { ok: false, error: 'invalid_code', status: 400 };
+  if (!payload || payload.length > MAX_PAYLOAD_LENGTH) {
+    return { ok: false, error: 'invalid_payload', status: 400 };
+  }
 
   await sweepExpired(env);
 
@@ -235,20 +257,19 @@ export async function handlePairingSubmit(request, env) {
     .bind(hash, nowIso())
     .first();
 
-  if (!row) return json({ error: 'unknown_code' }, 404);
-  if (row.attempts >= MAX_ATTEMPTS) return json({ error: 'too_many_attempts' }, 429);
+  if (!row) return { ok: false, error: 'unknown_code', status: 404 };
+  if (row.attempts >= MAX_ATTEMPTS) return { ok: false, error: 'too_many_attempts', status: 429 };
   // One payload per code. A second sender must not overwrite what the first left waiting.
-  if (row.payload) return json({ error: 'already_sent' }, 409);
+  if (row.payload) return { ok: false, error: 'already_sent', status: 409 };
 
-  const kind = String(body?.kind ?? row.kind);
-  if (kind !== row.kind) {
+  if (expectedKind !== null && expectedKind !== row.kind) {
     // The television asked for one thing and is being sent another. Counted as an attempt: this is
     // what probing a code you do not own looks like.
     await env.DB
       .prepare('UPDATE pairing_requests SET attempts = attempts + 1 WHERE code = ?1')
       .bind(hash)
       .run();
-    return json({ error: 'kind_mismatch' }, 409);
+    return { ok: false, error: 'kind_mismatch', status: 409 };
   }
 
   const encrypted = await encryptPayload(code, payload);
@@ -260,8 +281,8 @@ export async function handlePairingSubmit(request, env) {
     .bind(hash, encrypted.payload, encrypted.nonce)
     .run();
 
-  if (!updated?.meta?.changes) return json({ error: 'already_sent' }, 409);
-  return json({ ok: true, kind: row.kind });
+  if (!updated?.meta?.changes) return { ok: false, error: 'already_sent', status: 409 };
+  return { ok: true, kind: row.kind };
 }
 
 /**

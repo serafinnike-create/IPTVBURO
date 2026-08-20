@@ -216,14 +216,18 @@ body.playing .app-root { display: none; }
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.shell { display: flex; flex-direction: column; width: 100%; height: 100%; }
+.shell {
+    position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+    display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden;
+}
 .buro-ribbon {
+    position: relative;
     flex: 0 0 92px;
     width: 100%;
     padding: 0 48px;
     display: flex;
     align-items: center;
-    background: rgba(8,9,10,.94);
+    background: var(--canvas);
     border-bottom: 1px solid #272A2E;
     z-index: 10;
 }
@@ -256,8 +260,9 @@ body.playing .app-root { display: none; }
 .ribbon-profile.focused { background: var(--ivory); }
 .ribbon-profile.focused strong { color: var(--canvas); }
 
-.main-pane { flex: 1; min-height: 0; width: 100%; overflow: hidden; position: relative; }
+.main-pane { flex: 1; min-height: 0; width: 100%; overflow: hidden; position: relative; z-index: 1; }
 .topbar {
+    position: absolute; top: 0; right: 0; left: 0; z-index: 12; background: var(--canvas);
     height: 92px; padding: 28px 64px 16px;
     display: flex; align-items: center; justify-content: space-between;
 }
@@ -292,7 +297,10 @@ body.playing .app-root { display: none; }
 .notice-row p { margin-top: 6px; color: var(--secondary); font-size: 19px; line-height: 1.4; }
 .notice-row > button { flex: none; }
 .notice-kind { color: var(--muted); font-size: 16px; letter-spacing: .06em; text-transform: uppercase; }
-.content { height: 896px; overflow: hidden; padding: 10px 64px 70px; }
+.content {
+    position: absolute; top: 92px; right: 0; bottom: 0; left: 0; z-index: 1;
+    height: auto; overflow: hidden; padding: 10px 64px 70px;
+}
 .content.scrollable { overflow-y: auto; }
 
 /* Link recebido: permanece visível até o usuário fechar ou tentar novamente. */
@@ -430,6 +438,10 @@ body.reduced-motion .real-home-hero .hero-art img { animation: none; }
     text-align: left;
 }
 .discover-card.next { top: 28px; opacity: .42; transform: scale(.94); }
+/* A próxima carta cria profundidade pela arte e pela borda, mas seu texto não
+   pode atravessar o gradiente da carta atual. O Android mantém a próxima carta
+   visualmente atrás, sem duas sinopses/títulos competindo no mesmo plano. */
+.discover-card.next .badge, .discover-card.next .discover-card-copy { visibility: hidden; }
 .discover-card.current { top: 0; animation: discover-card-in 180ms ease-out; }
 @keyframes discover-card-in { from { opacity: .45; transform: translateY(16px) scale(.97); } to { opacity: 1; transform: none; } }
 .discover-card::after {
@@ -463,8 +475,9 @@ body.reduced-motion .discover-card.current { animation: none; }
     padding: 10px 16px; border: 1px solid rgba(214,169,86,.34); border-radius: 18px;
     background: rgba(8,9,10,.78); color: var(--secondary); font-size: 15px;
 }
-.demo-heading { margin: 24px 0 10px; }
-.demo-card-row { display: flex; padding: 8px 8px 18px; }
+.demo-heading { margin: 34px 0 10px; }
+.demo-rail:first-of-type .demo-heading { margin-top: 24px; }
+.demo-card-row { display: flex; padding: 8px 8px 18px; overflow-x: hidden; scroll-behavior: smooth; }
 .demo-media-card {
     position: relative; flex: 0 0 300px; height: 168px; margin-right: 22px; padding: 20px;
     display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
@@ -475,16 +488,27 @@ body.reduced-motion .discover-card.current { animation: none; }
 .demo-media-card.paper { background-image: url('../assets/buro_paper_sun.webp'); }
 .demo-media-card.forest { background-image: url('../assets/buro_forest_signal.webp'); }
 .demo-media-card.atlas { background-image: url('../assets/buro_category_atlas_v1.webp'); }
+.demo-media-card.cobalt { background-image: linear-gradient(145deg,#203D75,#14213E 55%,#08090A); }
+.demo-media-card.plum { background-image: linear-gradient(145deg,#5A315F,#291B36 55%,#08090A); }
+.demo-media-card.ember { background-image: linear-gradient(145deg,#7A3E2D,#351D1A 55%,#08090A); }
+.demo-media-card.aurora { background-image: linear-gradient(145deg,#214F54,#2C3158 55%,#08090A); }
+.demo-media-card.poster { flex-basis: 224px; height: 336px; }
 .demo-media-card > * { position: relative; z-index: 1; }
 .demo-media-card .badge { padding: 6px 9px; border: 1px solid rgba(214,169,86,.62); border-radius: 9px; color: var(--gold); font-size: 13px; font-weight: 800; }
+.demo-card-copy { display: flex; width: 100%; flex-direction: column; }
 .demo-media-card strong { font-size: 23px; }
+.demo-media-card small { margin-top: 5px; overflow: hidden; color: var(--secondary); font-size: 15px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.demo-card-progress { width: 100%; height: 6px; margin-top: 12px; overflow: hidden; border-radius: 999px; background: rgba(244,241,234,.2); }
+.demo-card-progress > span { display: block; height: 100%; border-radius: inherit; background: var(--gold); }
 .demo-story {
-    width: 1180px; min-height: 560px; padding: 68px 72px; border: 1px solid #30333D; border-radius: 28px;
+    width: auto; min-height: 560px; padding: 68px 72px; border: 1px solid #30333D; border-radius: 28px;
     background: linear-gradient(90deg,rgba(8,9,10,.98),rgba(8,9,10,.62)), url('../assets/buro_nocturne_hero.webp') center / cover;
 }
 .demo-story h2 { width: 800px; margin: 18px 0 10px; font-size: 58px; }
 .demo-story > p { width: 760px; color: var(--secondary); font-size: 24px; line-height: 1.5; }
+.demo-story .demo-story-subtitle { margin: 0 0 8px; color: var(--text); font-size: 27px; }
 .demo-story .demo-story-meta { margin-bottom: 20px; color: var(--gold); font-size: 18px; font-weight: 700; }
+.demo-story .demo-no-playback { padding: 14px 18px; border-left: 4px solid var(--gold); background: rgba(214,169,86,.08); font-size: 18px; }
 /*
   A pagina de detalhes ocupa a largura util inteira.
 
@@ -587,6 +611,32 @@ body.reduced-motion .discover-card.current { animation: none; }
 /* A marca do servico no titulo da prateleira, alinhada com o texto. */
 .home-rail-heading h2 { display: flex; align-items: center; }
 .home-rail-heading h2 .provider-badge { margin: 0 14px 0 0; }
+/*
+  A tela de pareamento.
+
+  Tres passos numerados, nao um paragrafo: quem le isto esta de pe com o celular
+  na mao, olhando a TV do outro lado da sala. O codigo sai grande e espacado
+  porque vai ser copiado de longe, a mao.
+*/
+.pair-panel { width: 1180px; margin: 0 auto; }
+.pair-steps { margin: 26px 0 8px; padding: 0; list-style: none; counter-reset: pair; }
+.pair-steps li {
+    position: relative; margin-bottom: 22px; padding: 22px 28px 22px 92px;
+    border: 1px solid #30333d; border-radius: 18px; background: var(--elevated);
+}
+.pair-steps li::before {
+    counter-increment: pair; content: counter(pair);
+    position: absolute; top: 24px; left: 26px;
+    width: 44px; height: 44px; line-height: 44px; text-align: center;
+    border-radius: 50%; background: var(--gold); color: #14161b;
+    font-size: 22px; font-weight: 800;
+}
+.pair-steps li span { display: block; color: var(--secondary); font-size: 21px; }
+.pair-url { display: block; margin-top: 8px; color: var(--text); font-size: 34px; font-weight: 700; word-break: break-all; }
+/* Espacado para nao se confundir 0 com O, nem 1 com l, lendo de longe. */
+.pair-code { display: block; margin-top: 8px; color: var(--gold); font-size: 68px; font-weight: 800; letter-spacing: 14px; }
+.pair-waiting { display: flex; align-items: center; color: var(--secondary); font-size: 22px; margin: 6px 0 18px; }
+.pair-waiting .boot-indicator { margin-right: 16px; }
 .catalogue-scope-bar { display: flex; flex-wrap: wrap; margin: 0 0 26px; }
 .scope-chip {
     display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
@@ -666,6 +716,8 @@ body.reduced-motion .discover-card.current { animation: none; }
 .subscription-shelves .section-heading h2, .subscription-expanded .section-heading h2 { display: flex; align-items: center; }
 .subscription-provider-logo { width: 36px; height: 36px; margin-right: 12px; padding: 3px; border-radius: 8px; background: var(--elevated); object-fit: contain; }
 .subscription-row { width: 100%; padding: 5px 4px 22px; display: flex; overflow-x: hidden; }
+.home-streaming-rail .home-rail-heading h2 { display: flex; align-items: center; }
+.home-streaming-row { padding-bottom: 30px; }
 .subscription-poster { position: relative; flex: 0 0 160px; width: 160px; min-height: 300px; margin-right: 14px; padding: 0 0 10px; overflow: hidden; border: 2px solid transparent; border-radius: 14px; background: var(--surface); color: var(--text); text-align: left; }
 .subscription-poster > img, .subscription-poster > span { width: 156px; height: 234px; display: flex; align-items: center; justify-content: center; object-fit: cover; background: var(--elevated); color: var(--gold); font-size: 32px; font-weight: 900; }
 .subscription-card-logo { position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: rgba(8,10,14,.90); box-shadow: 0 2px 8px rgba(0,0,0,.48); }
@@ -941,7 +993,9 @@ body.reduced-motion .catalogue-sync-track span { transition: none; }
 .storage-row h3 { color: var(--text); font-size: 22px; }
 .storage-row p { margin-top: 6px; color: var(--muted); font-size: 18px; line-height: 1.4; }
 .storage-row strong { flex: none; color: var(--gold); font-size: 24px; font-weight: 700; text-align: right; }
-.section-heading.form-optional { margin: 6px 0 18px; }
+.section-heading.form-optional {
+    display: block; margin: 6px 0 18px;
+}
 .section-heading.form-optional h3 { font-size: 22px; color: var(--text); }
 .section-heading.form-optional p { color: var(--muted); font-size: 19px; line-height: 1.45; margin-top: 6px; }
 .tmdb-settings-panel { width: 1100px; }
@@ -1026,6 +1080,12 @@ body.reduced-motion .catalogue-sync-track span { transition: none; }
 .catalogue-pagination strong, .catalogue-pagination span { display: block; }
 .catalogue-pagination strong { font-size: 21px; }
 .catalogue-pagination span { margin-top: 5px; color: var(--muted); font-size: 16px; }
+.catalogue-progressive {
+    min-height: 84px; margin: 18px 0 30px;
+    display: flex; align-items: center; justify-content: center;
+}
+.catalogue-progressive .button { min-width: 250px; }
+.catalogue-progressive span { margin-left: 18px; color: var(--muted); font-size: 18px; }
 .season-pagination { margin-top: -12px; margin-bottom: 30px; }
 .library-pagination { margin-bottom: 8px; }
 .catalogue-loading { padding-top: 44px; }
@@ -1159,7 +1219,10 @@ body.reduced-motion .catalogue-skeleton-card em { animation: none; }
 .empty-state h2 { font-size: 34px; margin-bottom: 12px; }
 .empty-state p { color: var(--secondary); font-size: 23px; margin-bottom: 28px; }
 
-.bottom-hint { position: absolute; left: 68px; bottom: 26px; color: var(--muted); font-size: 18px; }
+.bottom-hint {
+    position: absolute; left: 68px; bottom: 26px; z-index: 20;
+    padding-right: 18px; background: var(--canvas); color: var(--muted); font-size: 18px;
+}
 .toast { position: absolute; right: 72px; bottom: 64px; max-width: 660px; padding: 20px 28px; border: 1px solid #3b3f4a; border-radius: 16px; background: rgba(17,19,25,.96); color: var(--text); font-size: 22px; z-index: 50; }
 .toast.error { border-color: rgba(255,107,107,.6); color: var(--error); }
 
@@ -1266,7 +1329,10 @@ body.reduced-motion .catalogue-skeleton-card em { animation: none; }
 .player-guide-option.past { opacity: .55; }
 .player-guide-option.current { background: rgba(214,169,86,.13); }
 .player-menu.guide .player-menu-option.selected::after { content: none; }
-.player-guide-option.focused, .player-guide-option.focused time, .player-guide-option.focused strong, .player-guide-option.focused small { color: #151718; opacity: 1; }
+.player-guide-option.focused {
+    border-color: var(--ivory); background: var(--ivory); color: #151718; opacity: 1;
+}
+.player-guide-option.focused time, .player-guide-option.focused strong, .player-guide-option.focused small { color: #151718; opacity: 1; }
 .player-guide-empty { min-height: 190px; padding: 26px 8px; color: var(--secondary); font-size: 20px; line-height: 1.45; }
 .player-guide-close { width: 220px; }
 .player-overlay.controls-hidden .player-topbar, .player-overlay.controls-hidden .player-controls { opacity: 0; }

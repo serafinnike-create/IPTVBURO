@@ -100,6 +100,18 @@ const COPY = {
     proofTrial: '7 dias para testar',
     proofTerm: '2 anos por pagamento único',
     proofPrivate: 'As suas listas continuam sendo suas',
+    pairPageTitle: 'Enviar para a TV',
+    pairPageLead: 'Digite o código que apareceu na televisão e cole a chave. A TV recebe sozinha.',
+    pairPageCode: 'Código da TV',
+    pairPageValue: 'Chave',
+    pairPageValueHint: 'Cole aqui a chave do TMDb ou do OMDb',
+    pairPageSend: 'Enviar para a TV',
+    pairPageSent: 'Enviado. Confira a televisão.',
+    pairPageUnknown: 'Código não encontrado ou vencido. Peça um novo na TV.',
+    pairPageTaken: 'Este código já recebeu uma chave.',
+    pairPageBadCode: 'O código tem seis dígitos.',
+    pairPageBadValue: 'Cole uma chave antes de enviar.',
+    pairPageFailed: 'Não foi possível enviar. Tente de novo.',
   },
   en: {
     title: 'Activate IPTV BURO',
@@ -176,6 +188,18 @@ const COPY = {
     proofTrial: '7 days to try it',
     proofTerm: '2 years, one payment',
     proofPrivate: 'Your playlists remain yours',
+    pairPageTitle: 'Send to the TV',
+    pairPageLead: 'Enter the code shown on the television and paste the key. The TV picks it up on its own.',
+    pairPageCode: 'TV code',
+    pairPageValue: 'Key',
+    pairPageValueHint: 'Paste your TMDb or OMDb key here',
+    pairPageSend: 'Send to the TV',
+    pairPageSent: 'Sent. Check the television.',
+    pairPageUnknown: 'Code not found or expired. Ask the TV for a new one.',
+    pairPageTaken: 'This code already received a key.',
+    pairPageBadCode: 'The code is six digits.',
+    pairPageBadValue: 'Paste a key before sending.',
+    pairPageFailed: 'Could not send. Try again.',
   },
   de: {
     title: 'IPTV BURO aktivieren',
@@ -252,6 +276,18 @@ const COPY = {
     proofTrial: '7 Tage testen',
     proofTerm: '2 Jahre, eine Zahlung',
     proofPrivate: 'Ihre Playlists bleiben Ihre',
+    pairPageTitle: 'An den Fernseher senden',
+    pairPageLead: 'Gib den Code ein, der auf dem Fernseher steht, und füge den Schlüssel ein. Der Fernseher holt ihn selbst ab.',
+    pairPageCode: 'Fernseher-Code',
+    pairPageValue: 'Schlüssel',
+    pairPageValueHint: 'Füge hier deinen TMDb- oder OMDb-Schlüssel ein',
+    pairPageSend: 'An den Fernseher senden',
+    pairPageSent: 'Gesendet. Sieh auf den Fernseher.',
+    pairPageUnknown: 'Code nicht gefunden oder abgelaufen. Fordere am Fernseher einen neuen an.',
+    pairPageTaken: 'Dieser Code hat bereits einen Schlüssel erhalten.',
+    pairPageBadCode: 'Der Code hat sechs Ziffern.',
+    pairPageBadValue: 'Füge einen Schlüssel ein, bevor du sendest.',
+    pairPageFailed: 'Senden nicht möglich. Versuche es erneut.',
   },
   it: {
     title: 'Attiva IPTV BURO',
@@ -327,6 +363,18 @@ const COPY = {
     proofTrial: '7 giorni di prova',
     proofTerm: '2 anni, un solo pagamento',
     proofPrivate: 'Le tue playlist restano tue',
+    pairPageTitle: 'Invia al televisore',
+    pairPageLead: 'Inserisci il codice mostrato sul televisore e incolla la chiave. Il televisore la riceve da solo.',
+    pairPageCode: 'Codice del televisore',
+    pairPageValue: 'Chiave',
+    pairPageValueHint: 'Incolla qui la tua chiave TMDb o OMDb',
+    pairPageSend: 'Invia al televisore',
+    pairPageSent: 'Inviata. Controlla il televisore.',
+    pairPageUnknown: 'Codice non trovato o scaduto. Richiedine uno nuovo sul televisore.',
+    pairPageTaken: 'Questo codice ha già ricevuto una chiave.',
+    pairPageBadCode: 'Il codice è di sei cifre.',
+    pairPageBadValue: 'Incolla una chiave prima di inviare.',
+    pairPageFailed: 'Invio non riuscito. Riprova.',
   },
 };
 
@@ -538,6 +586,56 @@ export function activatePage({ deviceId, language, message, done }) {
           <input name="key" placeholder="XXXX-XXXX" required autocomplete="off" spellcheck="false">
         </label>
         <button type="submit">${escape(t.activate)}</button>
+      </form>
+    </div>
+  `);
+}
+
+/**
+ * The page the phone opens to send a key to a television.
+ *
+ * A plain form that posts to itself, with no JavaScript: the whole point is that this works on
+ * whatever phone somebody happens to be holding, including one whose browser is old enough that
+ * the television it is helping was new.
+ *
+ * The code field is `inputmode="numeric"` so a phone offers the number pad, and the key field is
+ * left unrestricted because it holds anything from a 32-character hex string to a 239-character
+ * token, and guessing at the shape here would reject a credential the app itself accepts.
+ */
+export function pairPage({ language, message, sent, code }) {
+  const t = copyFor(language);
+
+  if (sent) {
+    return shell(t.pairPageTitle, language, `
+      <div class="card">
+        ${header()}
+        <h1>✓ ${escape(t.pairPageSent)}</h1>
+      </div>
+    `);
+  }
+
+  return shell(t.pairPageTitle, language, `
+    <div class="card">
+      ${header()}
+      <h1>${escape(t.pairPageTitle)}</h1>
+      <p class="lead">${escape(t.pairPageLead)}</p>
+
+      ${message ? `<p class="error">${escape(message)}</p>` : ''}
+
+      <form method="POST" action="/parear" class="stack">
+        <input type="hidden" name="lang" value="${escape(language)}">
+        <label>
+          <span>${escape(t.pairPageCode)}</span>
+          <input name="code" value="${escape(code ?? '')}" placeholder="000000"
+                 inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+                 required autocomplete="off" spellcheck="false">
+        </label>
+        <label>
+          <span>${escape(t.pairPageValue)}</span>
+          <input name="value" placeholder="${escape(t.pairPageValueHint)}"
+                 required autocomplete="off" spellcheck="false">
+        </label>
+        <button type="submit">${escape(t.pairPageSend)}</button>
       </form>
     </div>
   `);

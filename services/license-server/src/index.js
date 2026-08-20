@@ -20,9 +20,15 @@ import {
   copyFor,
   homePage,
   languageForRequest,
+  pairPage,
   thanksPage,
 } from './pages.js';
-import { handlePairingStart, handlePairingSubmit, handlePairingClaim } from './pairing.js';
+import {
+  handlePairingStart,
+  handlePairingSubmit,
+  handlePairingClaim,
+  submitPairedPayload,
+} from './pairing.js';
 import { adminPage } from './admin-page.js';
 import {
   archiveDevice,
@@ -158,6 +164,9 @@ export default {
           return await handleBuyPage(request, env);
         case '/checkout':
           return await handleCheckout(request, env);
+        case '/parear':
+        case '/pair':
+          return await handlePairPage(request, env);
         case '/ativar':
         case '/activate':
           return await handleActivatePage(request, env);
@@ -609,6 +618,60 @@ async function handleActivatePage(request, env) {
     : t.keyFailed;
 
   return html(activatePage({ deviceId, language, message }), 400);
+}
+
+/**
+ * The page a phone opens to hand a television a key.
+ *
+ * Reuses the submit endpoint rather than talking to the database directly, so a key sent from this
+ * form and one sent by any other client meet exactly the same checks — the attempt counter, the
+ * kind match, the one-payload rule.
+ *
+ * The kind is inferred from the code's own row rather than asked for on the form. The person
+ * holding the phone knows they are sending "the key"; which of the two the television asked for is
+ * the television's business, and a wrong guess here would be counted against them as an attempt.
+ */
+async function handlePairPage(request, env) {
+  const url = new URL(request.url);
+
+  if (request.method !== 'POST') {
+    return html(pairPage({
+      language: languageForRequest(request, url),
+      code: /^[0-9]{6}$/.test(url.searchParams.get('code') ?? '')
+        ? url.searchParams.get('code')
+        : null,
+    }));
+  }
+
+  const form = await readUrlEncodedForm(request, MAX_FORM_BODY_BYTES);
+  if (!form) return json({ error: 'bad_or_oversized_form' }, 413);
+
+  const submitted = String(form.get('lang') ?? '').toLowerCase();
+  if (['pt', 'en', 'de', 'it'].includes(submitted)) url.searchParams.set('lang', submitted);
+  const language = languageForRequest(request, url);
+  const t = copyFor(language);
+
+  const code = String(form.get('code') ?? '').trim();
+  const value = String(form.get('value') ?? '').trim();
+
+  if (!/^[0-9]{6}$/.test(code)) {
+    return html(pairPage({ language, message: t.pairPageBadCode, code: null }), 400);
+  }
+  if (!value) {
+    return html(pairPage({ language, message: t.pairPageBadValue, code }), 400);
+  }
+
+  const outcome = await submitPairedPayload(code, value, env);
+
+  if (outcome.ok) return html(pairPage({ language, sent: true }));
+
+  const message = outcome.error === 'unknown_code' ? t.pairPageUnknown
+    : outcome.error === 'already_sent' ? t.pairPageTaken
+    : outcome.error === 'too_many_attempts' ? t.pairPageUnknown
+    : outcome.error === 'invalid_payload' ? t.pairPageBadValue
+    : t.pairPageFailed;
+
+  return html(pairPage({ language, message, code }), 400);
 }
 
 /**

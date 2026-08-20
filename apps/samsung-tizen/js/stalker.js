@@ -355,6 +355,7 @@ var BuroStalker = (function () {
                 var rows = js && js.data;
                 var result = [];
                 var total;
+                var pageSize;
                 if (!js || !Array.isArray(rows)) {
                     safeCallback(failure, fail('MALFORMED_CATALOG'));
                     return;
@@ -387,12 +388,23 @@ var BuroStalker = (function () {
                         logoUrl: null,
                         year: yearText ? Number(yearText.substring(0, 4)) || null : null,
                         rating: rating,
+                        /* Keep pages in portal order even when a portal omits
+                           max_page_items or returns a shorter final page. */
+                        sortOrder: ((Math.floor(pageNumber) - 1) * MAX_ITEMS_PER_PAGE) + index,
                         locator: locator
                     }));
                 });
                 total = numberValue(js.total_items);
                 if (total == null || total < result.length) { total = result.length; }
-                safeCallback(success, { items: result, totalItems: Math.floor(total) });
+                pageSize = numberValue(js.max_page_items);
+                if (pageSize == null || pageSize < result.length) { pageSize = result.length; }
+                safeCallback(success, {
+                    items: result,
+                    totalItems: Math.floor(total),
+                    page: Math.floor(pageNumber),
+                    pageSize: Math.floor(pageSize),
+                    hasMore: result.length > 0 && (Math.floor(pageNumber) * Math.floor(pageSize)) < Math.floor(total)
+                });
             }, failure);
         }
 
