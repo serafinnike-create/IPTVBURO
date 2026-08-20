@@ -22,6 +22,7 @@ import {
   languageForRequest,
   thanksPage,
 } from './pages.js';
+import { handlePairingStart, handlePairingSubmit, handlePairingClaim } from './pairing.js';
 import { adminPage } from './admin-page.js';
 import {
   archiveDevice,
@@ -135,6 +136,14 @@ export default {
           return withCors(await handleKeyInfo(request, env));
         case '/v1/google-play/purchase':
           return withCors(await handleGooglePlayPurchase(request, env));
+        // Pairing: the television posts a code, the phone posts against it, the television
+        // collects. See src/pairing.js for why a server is involved at all.
+        case '/v1/pair/start':
+          return withCors(await handlePairingStart(request, env));
+        case '/v1/pair/submit':
+          return withCors(await handlePairingSubmit(request, env));
+        case '/v1/pair/claim':
+          return withCors(await handlePairingClaim(request, env));
         case '/v1/signing-key-check':
           return await handleSigningKeyCheck(request, env);
         case '/v1/stripe-webhook':
@@ -2951,6 +2960,11 @@ function rateLimitBindingFor(pathname) {
     // one, so it must not be a cheaper way to enumerate them.
     return 'LICENSE_API_RATE_LIMITER';
   }
+  // Submitting is where a six-digit code would be guessed, so it shares the tightest limiter the
+  // account has. Claiming is polled by the television every couple of seconds while a code is on
+  // screen, so it takes the roomier one — throttling it would break the normal case.
+  if (pathname === '/v1/pair/submit' || pathname === '/v1/pair/start') return 'REGISTRATION_RATE_LIMITER';
+  if (pathname === '/v1/pair/claim') return 'LICENSE_API_RATE_LIMITER';
   if (pathname === '/v1/google-play/purchase') return 'CHECKOUT_RATE_LIMITER';
   if (pathname === '/v1/signing-key-check') return 'REGISTRATION_RATE_LIMITER';
   if (pathname === '/checkout') return 'CHECKOUT_RATE_LIMITER';
@@ -3042,6 +3056,9 @@ function devicesCsv(devices) {
 }
 
 const PUBLIC_CORS_PATHS = new Set([
+  '/v1/pair/start',
+  '/v1/pair/submit',
+  '/v1/pair/claim',
   '/v1/register',
   '/v1/validate',
   '/v1/redeem',
