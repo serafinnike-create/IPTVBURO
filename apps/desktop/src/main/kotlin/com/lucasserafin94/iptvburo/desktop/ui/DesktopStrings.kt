@@ -622,6 +622,17 @@ data class DesktopStrings(
                                 "No se pudo montar esta pantalla (%1${'$'}s). Es un fallo de la " +
                                     "aplicación, no de tu lista. Detalles en %2${'$'}s",
                         ),
+                    startup =
+                        StartupStrings(
+                            openingSession = "Abriendo tu sesión…",
+                            loadingLiveCategories = "Cargando categorías de canales…",
+                            loadingMovieCategories = "Cargando categorías de películas…",
+                            loadingSeriesCategories = "Cargando categorías de series…",
+                            downloadingMovies = "Descargando la lista de películas…",
+                            downloadingSeries = "Descargando la lista de series…",
+                            organising = "Organizando películas y series…",
+                            ready = "Listo",
+                        ),
                     remoteSource =
                         RemoteSourceStrings(
                             title = "Servidor propio (NAS)",
@@ -1289,6 +1300,17 @@ data class DesktopStrings(
                             appFault =
                                 "Não foi possível montar esta tela (%1${'$'}s). Isso é uma falha do " +
                                     "aplicativo, não da sua lista. Detalhes em %2${'$'}s",
+                        ),
+                    startup =
+                        StartupStrings(
+                            openingSession = "Abrindo a sua sessão…",
+                            loadingLiveCategories = "Carregando categorias de canais…",
+                            loadingMovieCategories = "Carregando categorias de filmes…",
+                            loadingSeriesCategories = "Carregando categorias de séries…",
+                            downloadingMovies = "Baixando a lista de filmes…",
+                            downloadingSeries = "Baixando a lista de séries…",
+                            organising = "Organizando filmes e séries…",
+                            ready = "Pronto",
                         ),
                     remoteSource =
                         RemoteSourceStrings(
@@ -1958,6 +1980,17 @@ data class DesktopStrings(
                                 "This screen could not be built (%1${'$'}s). That is a fault in the " +
                                     "application, not in your list. Details in %2${'$'}s",
                         ),
+                    startup =
+                        StartupStrings(
+                            openingSession = "Opening your session…",
+                            loadingLiveCategories = "Loading channel categories…",
+                            loadingMovieCategories = "Loading film categories…",
+                            loadingSeriesCategories = "Loading series categories…",
+                            downloadingMovies = "Downloading the film list…",
+                            downloadingSeries = "Downloading the series list…",
+                            organising = "Organising films and series…",
+                            ready = "Ready",
+                        ),
                     remoteSource =
                         RemoteSourceStrings(
                             title = "Your own server (NAS)",
@@ -2624,6 +2657,17 @@ data class DesktopStrings(
                             appFault =
                                 "Dieser Bildschirm konnte nicht aufgebaut werden (%1${'$'}s). Das ist ein Fehler " +
                                     "der Anwendung, nicht Ihrer Liste. Details in %2${'$'}s",
+                        ),
+                    startup =
+                        StartupStrings(
+                            openingSession = "Ihre Sitzung wird geöffnet…",
+                            loadingLiveCategories = "Senderkategorien werden geladen…",
+                            loadingMovieCategories = "Filmkategorien werden geladen…",
+                            loadingSeriesCategories = "Serienkategorien werden geladen…",
+                            downloadingMovies = "Filmliste wird heruntergeladen…",
+                            downloadingSeries = "Serienliste wird heruntergeladen…",
+                            organising = "Filme und Serien werden sortiert…",
+                            ready = "Fertig",
                         ),
                     remoteSource =
                         RemoteSourceStrings(
@@ -3296,6 +3340,17 @@ data class DesktopStrings(
                             appFault =
                                 "Non è stato possibile costruire questa schermata (%1${'$'}s). È un errore " +
                                     "dell'applicazione, non della tua lista. Dettagli in %2${'$'}s",
+                        ),
+                    startup =
+                        StartupStrings(
+                            openingSession = "Apertura della sessione…",
+                            loadingLiveCategories = "Caricamento categorie dei canali…",
+                            loadingMovieCategories = "Caricamento categorie dei film…",
+                            loadingSeriesCategories = "Caricamento categorie delle serie…",
+                            downloadingMovies = "Scaricamento della lista dei film…",
+                            downloadingSeries = "Scaricamento della lista delle serie…",
+                            organising = "Organizzazione di film e serie…",
+                            ready = "Pronto",
                         ),
                     remoteSource =
                         RemoteSourceStrings(
@@ -4309,6 +4364,23 @@ data class DownloadStrings(
  * only for a genuine Xtream failure, and the exception's own text is never shown, because OkHttp puts
  * the full request URL — with the subscriber's username and password — into its IOException.
  */
+/**
+ * What the splash says it is doing.
+ *
+ * These were Portuguese literals in `DesktopAppState`, so the first screen a non-Portuguese user ever
+ * sees — before any setting can be reached — was in a language they may not read.
+ */
+data class StartupStrings(
+    val openingSession: String,
+    val loadingLiveCategories: String,
+    val loadingMovieCategories: String,
+    val loadingSeriesCategories: String,
+    val downloadingMovies: String,
+    val downloadingSeries: String,
+    val organising: String,
+    val ready: String,
+)
+
 data class FailureStrings(
     /** The catalogue survived on disk and the session did not. */
     val sessionExpired: String,
@@ -4356,6 +4428,8 @@ data class ShareStrings(
     val notifications: NotificationStrings,
     /** What the user is told when something fails. */
     val failures: FailureStrings,
+    /** What the splash says it is doing while the catalogue loads. */
+    val startup: StartupStrings,
     /** The button on the title page, beside Favourites. */
     val share: String,
     val shareTitle: String,

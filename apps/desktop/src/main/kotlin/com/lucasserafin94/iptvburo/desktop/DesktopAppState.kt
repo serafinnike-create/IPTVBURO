@@ -4654,18 +4654,21 @@ class DesktopAppState(
                 // then say nothing for the whole download, which on a real list is tens of seconds.
                 // The bar sat at 80% throughout, and a bar that does not move reads as a hang. The
                 // repository now calls back as items are parsed, so the count and the rate move.
+                // The active language's wording. Read here rather than passed in: this runs from
+                // several callers, only one of which has a splash to write to.
+                val stageText = DesktopStrings.of(language).shareStrings.startup
                 if (XtreamContentType.MOVIE !in latestSummary?.loadedContentTypes.orEmpty()) {
-                    onCatalogueStage(0.75f, "Baixando a lista de filmes…")
+                    onCatalogueStage(0.75f, stageText.downloadingMovies)
                     latestSummary =
                         xtreamRepository.loadCatalog(XtreamContentType.MOVIE) { progress ->
-                            onCatalogueItems("Baixando a lista de filmes…", progress)
+                            onCatalogueItems(stageText.downloadingMovies, progress)
                         }
                 }
                 if (XtreamContentType.SERIES !in latestSummary?.loadedContentTypes.orEmpty()) {
-                    onCatalogueStage(0.88f, "Baixando a lista de séries…")
+                    onCatalogueStage(0.88f, stageText.downloadingSeries)
                     latestSummary =
                         xtreamRepository.loadCatalog(XtreamContentType.SERIES) { progress ->
-                            onCatalogueItems("Baixando a lista de séries…", progress)
+                            onCatalogueItems(stageText.downloadingSeries, progress)
                         }
                 }
                 onCatalogueStage(0.96f, "Montando a tela inicial…")
@@ -5270,7 +5273,10 @@ class DesktopAppState(
             // Swept before anything else: a chunk from a transfer that died with the app is not a
             // download, and leaving it makes the library claim a title it cannot play.
             downloadManager.discardInterruptedDownloads()
-            startupStep(1, "Abrindo a sua sessão…")
+            // The active language's wording, read once for the whole sequence. The splash is the
+            // first screen a user ever sees, and it was in Portuguese whatever they had chosen.
+            val stageText = DesktopStrings.of(language).shareStrings.startup
+            startupStep(1, stageText.openingSession)
             val input = withContext(Dispatchers.IO) { rememberedXtreamStore.load() } ?: return
 
             // The connect phase is four network round trips and used to sit under one unchanging
@@ -5283,21 +5289,21 @@ class DesktopAppState(
                     fraction = fraction,
                     message =
                         when (stage) {
-                            is SessionXtreamRepository.XtreamLoadStage.Authenticating -> "Autenticando…"
+                            is SessionXtreamRepository.XtreamLoadStage.Authenticating -> stageText.openingSession
                             is SessionXtreamRepository.XtreamLoadStage.Categories ->
                                 when (stage.contentType) {
-                                    XtreamContentType.LIVE -> "Carregando categorias de canais…"
-                                    XtreamContentType.MOVIE -> "Carregando categorias de filmes…"
-                                    XtreamContentType.SERIES -> "Carregando categorias de séries…"
+                                    XtreamContentType.LIVE -> stageText.loadingLiveCategories
+                                    XtreamContentType.MOVIE -> stageText.loadingMovieCategories
+                                    XtreamContentType.SERIES -> stageText.loadingSeriesCategories
                                 }
-                            is SessionXtreamRepository.XtreamLoadStage.Channels -> "Carregando canais…"
+                            is SessionXtreamRepository.XtreamLoadStage.Channels -> stageText.loadingLiveCategories
                         },
                 )
             }
             // The home is built from the catalogue, so loading it here means the first screen is
             // complete when the splash clears rather than filling in afterwards.
             if (xtreamStatus !is XtreamStatus.Error) {
-                startupStep(4, "Organizando filmes e séries…")
+                startupStep(4, stageText.organising)
                 loadDailyHome(
                     LocalDate.now(),
                     onCatalogueStage = { progress, message ->
@@ -5310,7 +5316,7 @@ class DesktopAppState(
                         startupCatalogueProgress(message, progress.items, progress.atMillis)
                     },
                 )
-                startupStep(5, "Pronto")
+                startupStep(5, stageText.ready)
                 // Only here, where a catalogue really did load. Marking it in the `finally` would
                 // count a failed connection as a completed first run, and the user who then fixed
                 // their credentials would never get the explanation they were owed.
