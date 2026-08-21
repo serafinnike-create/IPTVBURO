@@ -2,6 +2,38 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [3.0.2] - 2026-08-21 (Windows)
+
+Uma versão só de tradução. Nenhuma mudança de comportamento no vídeo, no
+catálogo ou no player — apenas as mensagens que ainda estavam presas em
+português.
+
+### Windows
+
+#### Corrigido
+
+- **As telas diziam algumas frases sempre em português, qualquer que fosse o
+  idioma escolhido.** Eram 93 no total, terminadas nesta versão: a falha ao
+  importar uma lista, as duas recusas do player externo, o estado vazio da lista
+  de canais, os avisos de cabeçalhos HTTP, o título do login Xtream, a busca na
+  filmografia e as três falhas do próprio motor de vídeo. Um espectador alemão
+  cujo stream morria recebia uma frase em português.
+- **As falhas do motor de vídeo eram `const val` num companion**, que é o único
+  lugar onde um idioma não chega. O player, a superfície de multiview e o
+  atualizador passaram a receber o texto por construtor, e o player é
+  reconstruído quando o idioma muda — antes continuaria respondendo no idioma
+  anterior.
+- **A falha genérica de importação não tinha tradução nenhuma**, nem sequer uma
+  entrada; ganhou uma.
+
+#### Interno
+
+- A guarda `NoHardcodedTextTest` cobre agora todas as telas menos uma: um
+  catálogo de demonstração alcançável apenas por um teste, que nenhum usuário lê.
+  A verificação foi confirmada plantando um literal em português e observando o
+  teste falhar — essa mesma guarda já passou por cima de uma isca porque `"\b"`
+  numa string Kotlin é um backspace, não uma fronteira de palavra.
+
 ## [3.0.1] - 2026-08-18 (Windows e Android)
 
 As duas aplicações passam a compartilhar a numeração. O Android continua em

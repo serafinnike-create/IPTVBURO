@@ -1,15 +1,16 @@
 # Implementação atual do IPTV BURO
 
-- Data da auditoria: 18 de agosto de 2026
+- Data da auditoria: 21 de agosto de 2026
 - Branch: `codex/windows-clean-release`
 - Baseline anterior: `v0.1.0-alpha.1`
-- Tag mais recente no repositório atual: `v3.0.1`
+- Tag mais recente no repositório atual: `v3.0.2`
 - Releases publicadas: `v2.0.0-alpha.7`, `v2.0.0-alpha.11`, `v2.0.0-alpha.12`
-  como prévia; `v3.0.0` e `v3.0.1` como versões finais do Windows
-- Windows: `v3.0.1`; MSI ainda sem assinatura Authenticode
-- Android/Android TV: `v3.0.1`, ainda prévia. A numeração passou a ser
-  compartilhada com o Windows a partir da 3.0.1; o APK é de depuração e não é
-  versão de loja, e a numeração comum alinha as aplicações, não a maturidade
+  como prévia; `v3.0.0`, `v3.0.1` e `v3.0.2` como versões finais do Windows
+- Windows: `v3.0.2`; MSI ainda sem assinatura Authenticode
+- Android/Android TV: `v3.0.1`, ainda prévia — a 3.0.2 é só do Windows. A
+  numeração passou a ser compartilhada com o Windows a partir da 3.0.1; o APK é
+  de depuração e não é versão de loja, e a numeração comum alinha as aplicações,
+  não a maturidade
 - Milestone em validação: `0.2`, Android adaptativo e Compose Desktop
 
 ## Correções de 17 de agosto de 2026
