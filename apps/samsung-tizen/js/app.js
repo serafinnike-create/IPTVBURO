@@ -191,12 +191,17 @@ var BuroApp = (function () {
         { section: 'SETTINGS', label: 'settings', icon: '*' }
     ];
 
+    /*
+      As seções da barra lateral.
+
+      Assinaturas aparece sempre, como no aplicativo do Windows, e não só quando
+      há chave do TMDb. Sumir de uma instalação e existir na outra fazia a mesma
+      função parecer defeito; quando falta a chave, o destino continua alcançável
+      e diz que precisa dela — a mesma decisão do seletor de Serviço.
+    */
     function navigationEntries() {
         var entries = NAVIGATION.slice();
-        var profileId = state.activeProfile && state.activeProfile.id;
-        if (state.preferences && BuroTmdb.keyForProfile(profileId)) {
-            entries.splice(9, 0, { section: 'SUBSCRIPTIONS', label: 'subscriptions', icon: '$' });
-        }
+        entries.splice(9, 0, { section: 'SUBSCRIPTIONS', label: 'subscriptions', icon: '$' });
         return entries;
     }
 
@@ -4066,7 +4071,7 @@ var BuroApp = (function () {
             '<p class="gate-copy">' + escapeHtml(licenceStatusText(decision)) + '</p>' +
             '<div class="licence-device"><small>' + escapeHtml(t('licenceDeviceId')) + '</small>' +
             '<strong>' + escapeHtml(deviceId || '—') + '</strong></div>' +
-            '<p class="licence-hint">' + escapeHtml(t('licenceBuyHint')) + '</p>' +
+            licencePurchaseHtml(deviceId) +
             '<div class="field"><label>' + t('licenceKey') + '</label>' +
             '<input id="licence-key" class="focusable" maxlength="32" autocomplete="off"></div>' +
             '<div class="action-row">' +
@@ -4075,6 +4080,29 @@ var BuroApp = (function () {
             (pending ? t('licenceChecking') : t('licenceRedeem')) + '</button>' +
             '<button class="button ghost focusable" data-action="back">' + t('back') + '</button>' +
             '</div></main>';
+    }
+
+    /*
+      Como comprar, sem digitar o código do aparelho em lugar nenhum.
+
+      O QR já leva o dispositivo na URL, então o celular abre a página de compra
+      com o campo preenchido. O endereço aparece por extenso ao lado porque nem
+      toda câmera lê QR de tela de TV, e um endereço legível é a saída quando
+      isso acontece.
+    */
+    function licencePurchaseHtml(deviceId) {
+        var url = BuroPairing.BASE + '/comprar' +
+            (deviceId ? '?device=' + encodeURIComponent(deviceId) : '');
+        var matrix;
+        var drawing = '';
+        try {
+            matrix = BuroQr.encode(url);
+            drawing = matrix ? BuroQr.svg(matrix) : '';
+        } catch (ignoredQr) { drawing = ''; }
+        return '<div class="licence-purchase">' +
+            (drawing ? '<div class="licence-qr">' + drawing + '</div>' : '') +
+            '<div class="licence-purchase-copy"><p>' + escapeHtml(t('licenceBuyHint')) + '</p>' +
+            '<strong>' + escapeHtml(url.replace(/^https:\/\//, '')) + '</strong></div></div>';
     }
 
     function redeemLicenceKey() {
@@ -4663,7 +4691,20 @@ var BuroApp = (function () {
             completedServices: 0, totalServices: 0, shelves: cached || [], error: null, selected: null
         };
         render();
-        if (!key) { state.section = 'SETTINGS'; state.screenData = null; render(); return; }
+        /*
+          Sem chave, a tela diz o que falta em vez de jogar o usuário nas
+          configurações. O desvio silencioso era defensável quando a guia só
+          existia com chave; agora que ela aparece sempre — como no Windows —
+          ser levado para outra tela sem explicação parece defeito.
+        */
+        if (!key) {
+            state.screenData = {
+                kind: 'subscriptions', filter: kind, region: region, loading: false,
+                completedServices: 0, totalServices: 0, shelves: [], error: 'NO_KEY', selected: null
+            };
+            render();
+            return;
+        }
         if (cached) { return; }
         subscriptionRequest = BuroTmdb.loadShelves(key, region, kind, state.preferences.language,
             function (completed, total, visible) {
@@ -4789,6 +4830,11 @@ var BuroApp = (function () {
                 loading: true, shelves: [], selected: null };
             window.setTimeout(function () { loadSubscriptions('MOVIES'); }, 0);
             data = state.screenData;
+        }
+        if (data.error === 'NO_KEY') {
+            shell(emptyState('$', t('subscriptions'), t('subscriptionsNeedKey'),
+                'tmdb-settings', t('detailAddKey')), t('subscriptions'), true);
+            return;
         }
         if (data.selected) { shell(renderSubscriptionSelection(data), t('subscriptions'), true); return; }
         if (data.expanded) { shell(renderExpandedSubscription(data), t('subscriptions'), true); return; }

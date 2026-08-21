@@ -257,6 +257,28 @@ async function run() {
         Boolean(window.document.querySelector('[data-action="pair-retry"]')));
     window.close();
 
+    /*
+      A tela de licença precisa dizer como comprar sem obrigar ninguém a
+      transcrever o código do aparelho no celular.
+    */
+    process.stdout.write('A tela de licença mostra o QR e o endereço\n');
+    window = loadApp();
+    await waitFor(function () {
+        return Boolean(window.document.querySelector('[data-action="profile-form"], .shell'));
+    }, 8000);
+    window.BuroApp.state.screen = 'LICENCE';
+    window.BuroApp.state.screenData = {};
+    window.BuroApp.render();
+    await waitFor(function () { return Boolean(window.document.querySelector('.licence-purchase')); }, 8000);
+    check('o QR é desenhado de verdade, com módulos',
+        Boolean(window.document.querySelector('.licence-qr svg path')) &&
+        window.document.querySelector('.licence-qr svg path').getAttribute('d').length > 100);
+    check('o endereço aparece por extenso, para quem não conseguir ler o QR',
+        (window.document.querySelector('.licence-purchase-copy strong').textContent || '').indexOf('/comprar') > 0);
+    check('o endereço não repete o https, que ninguém digita',
+        (window.document.querySelector('.licence-purchase-copy strong').textContent || '').indexOf('https') === -1);
+    window.close();
+
     process.stdout.write('Os textos existem nos cinco idiomas\n');
     window = loadApp();
     await waitFor(function () {

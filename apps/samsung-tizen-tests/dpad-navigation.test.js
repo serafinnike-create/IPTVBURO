@@ -480,8 +480,10 @@ async function run() {
         window.__runtimeReadyMessages[0].indexOf('password') === -1);
     /* Descobrir entrou como décima terceira seção e usa somente o catálogo
        autorizado; Lembretes é a décima quarta, ao lado de Histórico. */
-    check('shell contém todas as catorze seções', window.document.querySelectorAll('.nav-list [data-action="section"]').length === 14);
-    check('a navegação principal usa a BURO Ribbon horizontal',
+    /* Quinze: Assinaturas passou a aparecer sempre, como no aplicativo do
+       Windows, em vez de só quando havia chave do TMDb. */
+    check('shell contém todas as quinze seções', window.document.querySelectorAll('.nav-list [data-action="section"]').length === 15);
+    check('a navegação principal usa a BURO Ribbon',
         Boolean(window.document.querySelector('.buro-ribbon')) && !window.document.querySelector('.nav-rail'));
     check('Ribbon e tela corrente expõem landmark, título e destino atual',
         window.document.querySelector('.main-pane').getAttribute('aria-labelledby') === 'screen-title' &&
@@ -1236,9 +1238,12 @@ async function run() {
     check('remoção limpa somente a chave segura do perfil',
         !Object.keys(window.__secureData).some(function (name) { return name.indexOf('tmdb-profile-') >= 0; }));
     press(window, 10009);
-    check('Assinaturas desaparece quando a capability TMDb é removida',
-        window.document.querySelectorAll('.nav-list [data-action="section"]').length === 14 &&
-        !window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]'));
+    /* A guia continua ali sem chave — sumir de uma instalação e existir na outra
+       fazia a mesma função parecer defeito. Quem entra encontra a explicação e o
+       caminho para configurar, em vez de ser desviado sem aviso. */
+    check('Assinaturas continua alcançável sem a chave TMDb',
+        window.document.querySelectorAll('.nav-list [data-action="section"]').length === 15 &&
+        Boolean(window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]')));
     window.BuroTmdb.loadShelves = originalLoadSubscriptionShelves;
     window.BuroTmdb.loadSubscriptionTitle = originalLoadSubscriptionTitle;
     window.BuroTmdb.loadServiceCatalogue = originalLoadServiceCatalogue;
