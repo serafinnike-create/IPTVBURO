@@ -63,6 +63,11 @@ var BuroApp = (function () {
     var criticsRequest = null;
     /* O relógio do pareamento, para poder parar quando a tela sai. */
     var pairingRequest = null;
+    var homeArtworkRedrawTimer = null;
+    var HOME_ARTWORK_REDRAW_MILLIS = 500;
+    /* Quantas categorias a Home busca de uma vez. Dezenas de requisições ao
+       abrir o app deixariam a TV sem responder ao controle. */
+    var HOME_ARTWORK_CATEGORY_LIMIT = 6;
     var tmdbPersonRequest = null;
     var personReturnData = null;
     var subscriptionReturnData = null;
@@ -320,8 +325,10 @@ var BuroApp = (function () {
         artworkRequests[key] = 'done';
         if (state.screen === 'SHELL' && state.screenData && state.screenData.kind === 'category' &&
                 state.screenData.category.id === category.id) { render(); }
+        /* Agrupado: a Home pede várias categorias e cada resposta traria um
+           redesenho, fazendo a tela piscar enquanto o usuário navega. */
         else if (state.screen === 'SHELL' && state.section === 'HOME' && state.screenData &&
-                state.screenData.kind === 'home') { render(); }
+                state.screenData.kind === 'home') { scheduleHomeArtworkRedraw(); }
     }
 
     function hydrateCategoryArtwork(category) {
@@ -1733,6 +1740,9 @@ var BuroApp = (function () {
             state.screenData = { kind: 'home', loading: false, result: result, heroIndex: 0, requestId: requestId };
             focusIndex = 0;
             render();
+            /* Depois de desenhar, não antes: a Home aparece com o que já tem e
+               as capas entram conforme chegam. */
+            hydrateHomeArtwork(state.screenData);
         }, function (error) {
             var current;
             if (requestId !== homeRequestId || state.screen !== 'SHELL' || state.section !== 'HOME' ||
@@ -6435,17 +6445,96 @@ var BuroApp = (function () {
         var current = state.screenData;
         var foreground = state.screen === 'SHELL' && current && current.category && current.category.id === category.id;
         removeHydrationReferences(removedItemIds);
-        if (!foreground) { return; }
+        /*
+          A arte fica guardada mesmo com a categoria fechada.
+
+          Antes isto vinha depois do `return` abaixo, então tudo o que a varredura
+          de fundo trazia era descartado a menos que o usuário estivesse olhando
+          exatamente aquela categoria. O efeito aparecia na Home: o destaque tinha
+          pôster, porque tem enriquecimento próprio, e as prateleiras ficavam com
+          cartões de texto — que foi o que se viu na TV.
+
+          `rememberArtwork` tem teto e descarte LRU, então guardar o que a
+          varredura já trouxe não faz a memória crescer sem limite.
+        */
+        rememberArtworkMap(artwork);
+        if (!foreground) {
+            /* A Home mostra o catálogo inteiro, então arte nova de qualquer
+               categoria muda o que está na tela. Mas a varredura entrega uma
+               categoria por vez e são dezenas: redesenhar a cada uma faria a
+               Home piscar e roubaria o controle do usuário. Um redesenho
+               agrupado, no fim de uma rajada, mostra as capas sem isso. */
+            if (state.screen === 'SHELL' && state.section === 'HOME' &&
+                    current && current.kind === 'home') { scheduleHomeArtworkRedraw(); }
+            return;
+        }
         state.items = state.items.filter(function (candidate) {
             return !(candidate.sourceId === category.sourceId && candidate.categoryId === category.id);
         }).concat(items);
-        rememberArtworkMap(artwork);
         state.screenData = {
             kind: 'category', contentType: category.contentType, category: category,
             items: items, cataloguePage: 0
         };
         focusIndex = 0;
         render();
+    }
+
+    /*
+      Um redesenho da Home depois que a arte parou de chegar.
+
+      Agrupado em vez de imediato: a varredura entrega categoria por categoria e
+      cada uma acrescenta algumas capas. Meio segundo sem novidade é sinal de que
+      a rajada acabou, e aí um único redesenho troca os cartões de texto pelas
+      capas de uma vez.
+    */
+    /*
+      Busca as capas que faltam para o que a Home está mostrando.
+
+      A varredura de catálogo marca cada categoria como concluída e as pula na
+      próxima execução, então uma TV que sincronizou antes desta correção nunca
+      voltaria a pedir a arte — a Home ficaria com cartões de texto para sempre.
+      Isto cobre essa lacuna e o caso normal ao mesmo tempo.
+
+      Por categoria e não por título: uma chamada ao Xtream devolve o mapa de
+      arte da categoria inteira, então doze capas custam uma requisição e não
+      doze. As categorias entram na ordem em que aparecem na Home e o número é
+      limitado, para a primeira prateleira ganhar capa antes das de baixo.
+    */
+    function hydrateHomeArtwork(data) {
+        var source = state.activeSource;
+        var sync;
+        var wanted = [];
+        var seen = {};
+        var byId = {};
+        if (!source || source.type !== 'XTREAM' || !data || data.kind !== 'home') { return; }
+        /* Com a varredura em curso, ela já está buscando estas categorias e
+           entrega a arte pelo mesmo caminho: pedir de novo aqui seria baixar
+           duas vezes o que uma requisição só já traz. */
+        if (window.BuroCatalogueSync) {
+            sync = BuroCatalogueSync.progress(source, categoriesForSource(source.id));
+            if (sync && sync.state === 'RUNNING') { return; }
+        }
+        state.categories.forEach(function (category) { byId[category.id] = category; });
+        (data.result ? homeResultItems(data.result) : []).forEach(function (item) {
+            var category = byId[item.categoryId];
+            if (artworkMemory[item.id] || !category || seen[category.id]) { return; }
+            if (artworkRequests[source.id + ':' + category.id]) { return; }
+            seen[category.id] = true;
+            wanted.push(category);
+        });
+        wanted.slice(0, HOME_ARTWORK_CATEGORY_LIMIT).forEach(function (category) {
+            hydrateCategoryArtwork(category);
+        });
+    }
+
+    function scheduleHomeArtworkRedraw() {
+        if (homeArtworkRedrawTimer) { window.clearTimeout(homeArtworkRedrawTimer); }
+        homeArtworkRedrawTimer = window.setTimeout(function () {
+            homeArtworkRedrawTimer = null;
+            if (state.screen !== 'SHELL' || state.section !== 'HOME') { return; }
+            if (!state.screenData || state.screenData.kind !== 'home') { return; }
+            render();
+        }, HOME_ARTWORK_REDRAW_MILLIS);
     }
 
     function completeXtreamHydration(source, status) {
