@@ -94,6 +94,12 @@ class VlcDesktopPlayer(
         require(startupDelayMillis in 0L..MAX_STARTUP_DELAY_MILLIS) {
             "startupDelayMillis is outside the safe range"
         }
+        // The buffer was the one construction parameter with no bound, and it reaches both a VLC
+        // command line and the stop-grace arithmetic. A negative value would ask VLC for nonsense;
+        // an enormous one would delay every start by minutes. Bounded here so neither is possible.
+        require(networkCachingMillis in 0..MAX_NETWORK_CACHING_MILLIS) {
+            "networkCachingMillis is outside the safe range"
+        }
     }
 
     @Volatile
@@ -1157,6 +1163,14 @@ class VlcDesktopPlayer(
         const val MAX_STARTUP_DELAY_MILLIS = 3_000L
 
         /**
+         * The largest buffer a player may be built with: one minute.
+         *
+         * Far above anything the app asks for — multiview, the greediest caller, uses five seconds
+         * — and low enough that a mistake cannot turn into a start that appears to hang.
+         */
+        const val MAX_NETWORK_CACHING_MILLIS = 60_000
+
+        /**
          * How long a `stopped` report is ignored after a track switch.
          *
          * Changing audio makes VLC rebuild the stream; while it does, the status looks identical to
@@ -1433,8 +1447,11 @@ internal fun shouldTreatStopAsDrop(
  * which is precisely the flicker this whole mechanism exists to prevent.
  */
 internal fun stopGraceFor(networkCachingMillis: Int): Long =
-    (networkCachingMillis + STOP_GRACE_HEADROOM_MILLIS)
-        .toLong()
+    // Widened before the addition, not after. Summing two Ints and converting afterwards overflows
+    // for a large buffer, and the negative result is then coerced *up* to the four-second floor —
+    // so the most heavily buffered player would have got the shortest grace, which is exactly
+    // backwards and would reconnect streams that were still refilling.
+    (networkCachingMillis.toLong() + STOP_GRACE_HEADROOM_MILLIS)
         .coerceAtLeast(STOP_GRACE_DWELL_MILLIS)
 
 /** The floor, for a player with little or no buffering configured. */
