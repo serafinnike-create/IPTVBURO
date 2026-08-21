@@ -17,6 +17,8 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermissions
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.concurrent.Executors
@@ -31,6 +33,11 @@ import javax.swing.SwingUtilities
  *
  * The credential-bearing media URI is sent only to VLC's password-protected loopback interface;
  * it is never placed in the process command line, persisted, or logged.
+ *
+ * Nor is the password that guards that interface. On Windows any process running as this user can
+ * read another's command line, and this password reaches a status document that names the playing
+ * input — so an argument would have handed a local reader a route to the very credentials the rule
+ * above protects. It travels in a config file only this account can read, removed on dispose.
  */
 class VlcDesktopPlayer(
     /**
@@ -213,6 +220,19 @@ class VlcDesktopPlayer(
     /** The loopback port this player holds, released on dispose so it can be handed out again. */
     @Volatile
     private var claimedPort: Int? = null
+
+    /**
+     * The throwaway VLC config carrying this player's control password, deleted on dispose.
+     *
+     * The password used to be an argument. On Windows any process running as this user can read
+     * another's command line, and that password opens VLC's control interface — whose status
+     * document names the playing input, which for a provider stream carries the user's own
+     * credentials. A file readable only by this account closes that, and VLC accepts it: verified
+     * against the bundled engine, which answered 200 with the password from the file and 401
+     * without it, while the command line showed only the path.
+     */
+    @Volatile
+    private var configFile: File? = null
 
     fun createComponent(
         request: DesktopPlaybackRequest,
@@ -552,6 +572,12 @@ class VlcDesktopPlayer(
         // Released only after both process sweeps. Releasing before destroy opened a small window
         // where another tile could receive this port while the old VLC still owned it.
         releaseClaimedPort()
+        // Deleted after the engines are gone, for the same reason: VLC re-reads its config on some
+        // paths, and removing the file from under a live process is a way to break a restart.
+        // `deleteOnExit` was registered when it was written, so an app that never reaches dispose
+        // still does not leave the password behind.
+        runCatching { configFile?.delete() }
+        configFile = null
     }
 
     /**
@@ -656,15 +682,25 @@ class VlcDesktopPlayer(
         // difference between "VLC is running and drawing nowhere" and "VLC never started", and
         // from outside the two look identical: a black window with 00:00 / 00:00.
         println("[$logTag] starting: handle=$windowHandle surface=${canvas.width}x${canvas.height}")
+        // The password goes in a file this account alone can read, because a command line cannot
+        // hold a secret: any process running as this user can read another's. Falls back to the
+        // argument only if the file could not be written, since a player that refuses to start
+        // would be a worse outcome than the exposure it avoids.
+        val config = writeControlConfig(port, password)
+        configFile = config
+        val secretArguments =
+            if (config != null) {
+                listOf("--config=${config.absolutePath}")
+            } else {
+                listOf("--http-host=127.0.0.1", "--http-port=$port", "--http-password=$password")
+            }
         val child =
             ProcessBuilder(
                 executable.absolutePath,
                 "-I",
                 "dummy",
                 "--extraintf=http",
-                "--http-host=127.0.0.1",
-                "--http-port=$port",
-                "--http-password=$password",
+                *secretArguments.toTypedArray(),
                 "--drawable-hwnd=$windowHandle",
                 "--no-video-title-show",
                 "--no-qt-error-dialogs",
@@ -1090,6 +1126,46 @@ class VlcDesktopPlayer(
             if (claimedPort == port) claimedPort = null
         }
     }
+
+    /**
+     * Writes the control password where only this account can read it.
+     *
+     * Created empty first and given its permissions before the secret goes in, so there is never a
+     * moment when a world-readable file holds the password. On Windows the owner-only ACL is set
+     * through the POSIX view Java exposes for it; where the filesystem refuses — a FAT volume, an
+     * unusual profile — the write still happens, because a player that will not start is worse than
+     * one whose temporary file is readable by an account that could read this process's memory
+     * anyway.
+     */
+    private fun writeControlConfig(port: Int, password: String): File? =
+        runCatching {
+            val file = Files.createTempFile("iptvburo-vlc-", ".conf")
+            runCatching {
+                val ownerOnly = PosixFilePermissions.fromString("rw-------")
+                Files.setPosixFilePermissions(file, ownerOnly)
+            }.onFailure {
+                // Windows' default ACL is already profile-scoped; this is belt and braces.
+                file.toFile().apply {
+                    setReadable(false, false)
+                    setReadable(true, true)
+                    setWritable(false, false)
+                    setWritable(true, true)
+                }
+            }
+            // Only the secret lives here. Everything else stays on the command line, where it is
+            // readable and reviewable — hiding harmless flags would only make the engine's
+            // configuration harder to reason about.
+            Files.writeString(
+                file,
+                "[core]\nhttp-host=127.0.0.1\nhttp-port=$port\nhttp-password=$password\n",
+                StandardCharsets.UTF_8,
+            )
+            file.toFile().apply {
+                // dispose() removes it in the ordinary case; this covers a crash or a kill, so a
+                // password is never left sitting in the temp directory after the app is gone.
+                deleteOnExit()
+            }
+        }.getOrNull()
 
     private fun randomPassword(): String {
         val bytes = ByteArray(24)
