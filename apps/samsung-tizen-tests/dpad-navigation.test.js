@@ -1895,20 +1895,33 @@ async function run() {
     window.BuroApp.state.section = 'MOVIES';
     window.BuroApp.state.screenData = null;
     window.BuroApp.render();
-    var scopeGenreChip = window.document.querySelector('[data-action="catalogue-scope-genre"]');
+    var scopeGenreChip = window.document.querySelector('[data-action="catalogue-pick-genre"]');
     var scopeFocusables = Array.prototype.slice.call(window.document.querySelectorAll('.focusable:not([disabled])'));
     var scopeFocusedIndex = scopeFocusables.indexOf(window.document.querySelector('.focusable.focused'));
     var scopeGenreIndex = scopeFocusables.indexOf(scopeGenreChip);
     while (scopeFocusedIndex < scopeGenreIndex) { press(window, 40); scopeFocusedIndex += 1; }
     while (scopeFocusedIndex > scopeGenreIndex) { press(window, 38); scopeFocusedIndex -= 1; }
     press(window, 13);
-    check('ENTER no gênero conserva o foco no mesmo seletor',
-        window.document.querySelector('[data-action="catalogue-scope-genre"]').classList.contains('focused'));
-    var firstScopeGenre = window.document.querySelector('[data-action="catalogue-scope-genre"] strong').textContent;
-    press(window, 13);
-    check('ENTER consecutivo avança o gênero sem exigir voltar pelo D-pad',
-        window.document.querySelector('[data-action="catalogue-scope-genre"]').classList.contains('focused') &&
-        window.document.querySelector('[data-action="catalogue-scope-genre"] strong').textContent !== firstScopeGenre);
+    /*
+      O seletor abre a lista em vez de avançar um valor.
+
+      Ciclar escondia o que existia: chegar ao terceiro gênero eram três toques
+      às cegas. Agora cada opção é um alvo próprio do D-pad, como no aplicativo
+      do Windows.
+    */
+    check('ENTER no gênero abre a lista de opções em vez de avançar um valor',
+        window.document.querySelectorAll('.option-chip').length >= 3);
+    check('a lista mostra "todos" e cada gênero da lista do usuário',
+        Array.prototype.slice.call(window.document.querySelectorAll('.option-chip'))
+            .map(function (chip) { return chip.textContent; })
+            .filter(function (label) { return label === 'Ação' || label === 'Drama'; }).length === 2);
+    check('o valor em uso aparece marcado, para o D-pad saber onde está',
+        window.document.querySelectorAll('.option-chip.selected').length === 1);
+    window.BuroApp._activate(Array.prototype.slice.call(window.document.querySelectorAll('.option-chip'))
+        .filter(function (chip) { return chip.textContent === 'Drama'; })[0]);
+    check('escolher uma opção aplica o filtro e fecha a lista',
+        window.document.querySelectorAll('.option-chip').length === 0 &&
+        window.document.querySelector('[data-action="catalogue-pick-genre"] strong').textContent === 'Drama');
     window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-scope-reset"]'));
     window.BuroApp.state.categories = window.BuroApp.state.categories.filter(function (category) {
         return scopeFixtureIds.indexOf(category.id) === -1;

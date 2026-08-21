@@ -695,6 +695,20 @@ body.reduced-motion .discover-card.current { animation: none; }
 /* A linha de ano e nota fica acima da de genero/servico e usa chips menores:
    sao respostas curtas ("2026", "Nota 8+") e nao precisam do rotulo em cima. */
 .catalogue-year-bar { margin-bottom: 14px; }
+/* As opcoes de um seletor, abertas embaixo dele. Uma lista por vez: duas
+   ocupariam a tela inteira numa TV. */
+.catalogue-options {
+    display: flex; flex-wrap: wrap; margin: -14px 0 24px;
+    padding: 18px 20px; border: 1px solid #343741; border-radius: 18px; background: var(--elevated);
+}
+.option-chip {
+    min-height: 58px; margin: 0 12px 12px 0; padding: 0 22px;
+    display: flex; align-items: center;
+    border: 3px solid transparent; border-radius: 14px; background: var(--surface);
+    color: var(--secondary); font-size: 20px; font-weight: 650; cursor: none;
+}
+.option-chip.selected { background: rgba(214,169,86,.22); color: var(--gold); }
+.option-chip.focused { background: var(--ivory); color: var(--canvas); border-color: var(--gold); }
 .scope-chip.compact { min-width: 0; min-height: 68px; justify-content: center; padding: 12px 26px; }
 .scope-chip.compact strong { margin-top: 0; font-size: 22px; }
 .scope-chip {
@@ -875,6 +889,10 @@ body.reduced-motion .download-fill { transition: none; }
 .section-heading h2 { font-size: 31px; }
 .section-heading p { color: var(--muted); font-size: 20px; }
 .card-row { display: flex; min-height: 236px; padding: 12px 10px; overflow: hidden; }
+/* A grade do catalogo: quebra em varias linhas e rola com o foco, em vez de
+   esconder o resto da pagina atras de overflow. */
+.card-row.card-grid { flex-wrap: wrap; overflow: visible; min-height: 0; padding-bottom: 24px; }
+.card-row.card-grid > * { margin-bottom: 22px; }
 .card-row > * { margin-right: 26px; }
 .card-row > *:last-child { margin-right: 0; }
 .catalogue-filter-bar { display: flex; align-items: center; flex-wrap: wrap; padding: 4px 2px 12px; }

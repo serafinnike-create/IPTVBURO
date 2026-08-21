@@ -2276,11 +2276,11 @@ var BuroApp = (function () {
         var serviceLabel = scope.service || t('filterAll');
         var serviceIdentity = scope.service ? BuroProviders.identityForLabel(scope.service) : null;
         var chips = '<button class="scope-chip focusable ' + (scope.genre ? 'selected' : '') +
-            '" data-action="catalogue-scope-genre"><small>' + t('genreSelector') + '</small><strong>' +
+            '" data-action="catalogue-pick-genre"><small>' + t('genreSelector') + '</small><strong>' +
             escapeHtml(genreLabel) + '</strong></button>';
         if (parts.hasProviders) {
             chips += '<button class="scope-chip focusable ' + (scope.service ? 'selected' : '') +
-                '" data-action="catalogue-scope-service">' + providerBadge(serviceIdentity) +
+                '" data-action="catalogue-pick-service">' + providerBadge(serviceIdentity) +
                 '<small>' + t('serviceSelector') + '</small><strong>' + escapeHtml(serviceLabel) + '</strong></button>';
         } else {
             chips += '<span class="scope-chip disabled"><small>' + t('serviceSelector') +
@@ -2299,7 +2299,8 @@ var BuroApp = (function () {
           nem nota, e chips que não filtram nada só ocupam a tela.
         */
         return (contentType === 'LIVE' ? '' : catalogueYearBar(contentType)) +
-            '<div class="catalogue-scope-bar">' + chips + '</div>';
+            '<div class="catalogue-scope-bar">' + chips + '</div>' +
+            catalogueOptionsHtml(contentType);
     }
 
     /* As notas mínimas oferecidas. Estrelas inteiras e não um controle contínuo:
@@ -2321,10 +2322,107 @@ var BuroApp = (function () {
             escapeHtml(t('releasesIn').replace('{year}', currentYear)) + '</strong></button>' +
             '<button class="scope-chip compact focusable ' +
             (scope.year != null && scope.year !== currentYear ? 'selected' : '') +
-            '" data-action="catalogue-year-pick"><strong>' + escapeHtml(yearLabel) + ' ▾</strong></button>' +
+            '" data-action="catalogue-pick-year"><strong>' + escapeHtml(yearLabel) + ' ▾</strong></button>' +
             '<button class="scope-chip compact focusable ' + (scope.minimumRating != null ? 'selected' : '') +
-            '" data-action="catalogue-rating"><strong>' + escapeHtml(ratingLabel) + ' ▾</strong></button>' +
+            '" data-action="catalogue-pick-rating"><strong>' + escapeHtml(ratingLabel) + ' ▾</strong></button>' +
             '</div>';
+    }
+
+    /*
+      As opções de um seletor, todas visíveis.
+
+      Ciclar o valor com ENTER escondia o que existia: para chegar ao terceiro
+      gênero eram três toques às cegas. Aqui o chip abre a lista embaixo dele e
+      cada opção é um alvo próprio do D-pad, como no aplicativo do Windows.
+
+      Uma lista aberta por vez — duas ocupariam a tela inteira numa TV.
+    */
+    function catalogueOptionsHtml(contentType) {
+        var scope = catalogueScope(contentType);
+        var open = scope.openPicker;
+        var options = [];
+        var currentYear = new Date().getFullYear();
+        var categories;
+        var parts;
+        if (!open) { return ''; }
+        categories = sourceCategories(contentType);
+        parts = BuroProviders.split(categories);
+        if (open === 'year') {
+            options.push({ value: null, label: t('allYears'), selected: scope.year == null });
+            catalogueYears(contentType).forEach(function (year) {
+                options.push({ value: year, label: String(year), selected: scope.year === year });
+            });
+        } else if (open === 'rating') {
+            CATALOGUE_RATINGS.forEach(function (rating) {
+                options.push({
+                    value: rating,
+                    label: rating == null ? t('anyRating') : t('ratingAtLeast').replace('{rating}', rating),
+                    selected: scope.minimumRating === rating
+                });
+            });
+        } else if (open === 'genre') {
+            options.push({ value: null, label: t('allGenres'), selected: !scope.genre });
+            parts.genres.forEach(function (row) {
+                options.push({ value: row.id, label: row.label, selected: scope.genre === row.id });
+            });
+        } else if (open === 'service') {
+            options.push({ value: null, label: t('allServices'), selected: !scope.service });
+            parts.providers.forEach(function (row) {
+                options.push({ value: row.label, label: row.label, selected: scope.service === row.label });
+            });
+        } else if (open === 'density') {
+            CATALOGUE_LAYOUTS.forEach(function (layout) {
+                options.push({
+                    value: layout, label: catalogueDensityLabel(layout),
+                    selected: (scope.layout || 'poster') === layout
+                });
+            });
+        }
+        if (!options.length) { return ''; }
+        return '<div class="catalogue-options" role="listbox">' + options.map(function (option) {
+            return '<button class="option-chip focusable ' + (option.selected ? 'selected' : '') +
+                '" role="option" aria-selected="' + (option.selected ? 'true' : 'false') +
+                '" data-action="catalogue-option" data-picker="' + attr(open) +
+                '" data-value="' + attr(option.value == null ? '' : option.value) + '">' +
+                escapeHtml(option.label) + '</button>';
+        }).join('') + '</div>';
+    }
+
+    /* Abre a lista de um seletor, ou a fecha se já era ela que estava aberta. */
+    function toggleCataloguePicker(picker) {
+        var scope = catalogueScope(currentCatalogueType());
+        scope.openPicker = scope.openPicker === picker ? null : picker;
+        render();
+    }
+
+    /* Aplica a opção escolhida e fecha a lista. */
+    function chooseCatalogueOption(picker, rawValue) {
+        var scope = catalogueScope(currentCatalogueType());
+        var value = rawValue === '' ? null : rawValue;
+        if (picker === 'year') {
+            scope.year = value == null ? null : Number(value);
+        } else if (picker === 'rating') {
+            scope.minimumRating = value == null ? null : Number(value);
+        } else if (picker === 'genre') {
+            scope.genre = value;
+            /* Gênero e serviço se excluem: um título pertence a uma categoria só,
+               então filtrar pelos dois só poderia esvaziar a tela. */
+            if (value) { scope.service = null; }
+        } else if (picker === 'service') {
+            scope.service = value;
+            if (value) { scope.genre = null; }
+        } else if (picker === 'density') {
+            /* A densidade não muda o resultado, só como ele é desenhado, então a
+               página carregada continua valendo. */
+            scope.layout = value || 'poster';
+            scope.openPicker = null;
+            render();
+            return;
+        }
+        scope.openPicker = null;
+        scope.page = 0;
+        scope.rows = undefined;
+        render();
     }
 
     /* As categorias que sobrevivem ao filtro de serviço e de gênero. */
@@ -2374,11 +2472,20 @@ var BuroApp = (function () {
             (playback ? '<span class="media-progress"><i style="width:' + playback.percent.toFixed(2) + '%"></i></span>' : '') + '</button>';
     }
 
-    function mediaCards(items, layout) {
+    /*
+      `wrap` transforma a fileira numa grade.
+
+      As prateleiras da Home são uma linha por assunto e rolam com o foco, então
+      quebrar linha ali misturaria os assuntos. O catálogo é o contrário: uma
+      página de duzentos títulos desenhada como uma fileira só mostrava sete e
+      escondia o resto atrás de `overflow: hidden`, deixando meia tela vazia.
+    */
+    function mediaCards(items, layout, wrap) {
         layout = CATALOGUE_LAYOUTS.indexOf(layout) >= 0 ? layout : 'poster';
         items = items.filter(itemVisible);
         if (!items.length) { return emptyState('B', t('error'), t('unavailable'), '', ''); }
-        return '<div class="card-row catalogue-layout-' + layout + '">' + items.map(function (item) {
+        return '<div class="card-row ' + (wrap ? 'card-grid ' : '') + 'catalogue-layout-' + layout + '">' +
+            items.map(function (item) {
             return mediaCard(item, layout);
         }).join('') + '</div>';
     }
@@ -2713,7 +2820,19 @@ var BuroApp = (function () {
         var byId = {};
         var seen = {};
         var wanted = [];
-        if (state.screen !== 'SHELL' || state.screenData) { return; }
+        /*
+          Só enquanto a prateleira é o que está na tela.
+
+          A guarda anterior recusava qualquer `screenData` e com isso recusava a
+          própria prateleira — que é uma seção do shell sem screenData de
+          categoria, mas passa por aqui logo depois de carregar. O efeito foi
+          cartões sem capa nenhuma. O que precisa ser evitado é outra coisa:
+          abrir uma categoria ou um detalhe deixa o pedido da prateleira no ar, e
+          a resposta dele não deve ir buscar arte para uma tela que já saiu.
+        */
+        if (state.screen !== 'SHELL') { return; }
+        if (state.section !== 'LIVE' && state.section !== 'MOVIES' && state.section !== 'SERIES') { return; }
+        if (state.screenData) { return; }
         state.categories.forEach(function (category) { byId[category.id] = category; });
         (rows || []).forEach(function (item) {
             var category = byId[item.categoryId];
@@ -2746,7 +2865,7 @@ var BuroApp = (function () {
             window.setTimeout(function () { loadCatalogueShelf(contentType); }, 0);
         }
         heading = '<div class="section-heading catalogue-shelf-heading"><h2>' + t('catalogue') + '</h2>' +
-            '<button class="scope-chip compact focusable" data-action="catalogue-density"><strong>' +
+            '<button class="scope-chip compact focusable" data-action="catalogue-pick-density"><strong>' +
             escapeHtml(catalogueDensityLabel(layout)) + ' ▾</strong></button>' +
             '<p>' + (scope.loading && !rows.length ? '' : total) + '</p></div>';
         if (scope.loading && !rows.length) {
@@ -2758,50 +2877,18 @@ var BuroApp = (function () {
                chegando. As categorias continuam ali como saída. */
             return heading + categoryCards(scopedCategories(contentType, categories));
         }
-        return heading + mediaCards(rows, layout) +
+        return heading + mediaCards(rows, layout, true) +
             paginationControls('catalogue-shelf-page', page, pageCount, start,
                 start + rows.length, total, '', '');
     }
 
     /*
-      Escolher gênero ou serviço, um passo por ENTER.
+      Os anos que o catálogo desta aba realmente tem, do mais novo ao mais
+      antigo.
 
-      Ciclar em vez de abrir uma lista: com D-pad, um menu suspenso custa abrir,
-      descer, confirmar e fechar, e a lista de serviços de uma playlist cabe em
-      poucos passos. A mesma escolha que `cyclePreference` já faz no resto do app.
+      Lidos dos itens em memória em vez de uma faixa fixa: um provedor pode não
+      ter nada antes de 2015, e oferecer 1994 seria oferecer uma tela vazia.
     */
-    function cycleCatalogueScope(property) {
-        var contentType = state.section === 'LIVE' ? 'LIVE' :
-            (state.section === 'MOVIES' ? 'MOVIE' : 'SERIES');
-        var categories = sourceCategories(contentType);
-        var scope = catalogueScope(contentType);
-        var parts = BuroProviders.split(categories);
-        var values;
-        var index;
-        if (property === 'service') {
-            values = [null].concat(parts.providers.map(function (row) { return row.label; }));
-        } else {
-            values = [null].concat(parts.genres.map(function (row) { return row.id; }));
-        }
-        index = values.indexOf(scope[property]);
-        scope[property] = values[(index + 1) % values.length];
-        /* Gênero e serviço se excluem: um título pertence a exatamente uma
-           categoria, então filtrar pelos dois só poderia esvaziar a tela. */
-        if (property === 'service' && scope.service) { scope.genre = null; }
-        if (property === 'genre' && scope.genre) { scope.service = null; }
-        scope.page = 0;
-        scope.rows = undefined;
-        /* Sem `focusIndex = 0`: `refreshFocus` reencontra o mesmo chip pelo
-           data-action, então ciclar o valor deixa o foco onde estava. Zerar o
-           índice mandava o foco para o primeiro chip a cada ENTER, e escolher o
-           terceiro gênero exigia voltar até ele toda vez. */
-        render();
-    }
-
-    /* Os anos que o catálogo desta aba realmente tem, do mais novo ao mais
-       antigo. Percorrer os itens em memória e não inventar uma faixa fixa: um
-       provedor pode não ter nada antes de 2015, e oferecer 1994 seria oferecer
-       uma tela vazia. */
     function catalogueYears(contentType) {
         var wanted = contentType === 'LIVE' ? null : contentType;
         var found = {};
@@ -2818,43 +2905,14 @@ var BuroApp = (function () {
             (state.section === 'MOVIES' ? 'MOVIE' : 'SERIES');
     }
 
+    /* Os dois atalhos de ano da barra: tudo, ou o ano corrente. */
     function cycleCatalogueYear(mode) {
-        var contentType = currentCatalogueType();
-        var scope = catalogueScope(contentType);
-        var years;
-        var index;
-        if (mode === 'all') { scope.year = null; }
-        else if (mode === 'current') { scope.year = new Date().getFullYear(); }
-        else {
-            years = catalogueYears(contentType).filter(function (year) {
-                return year !== new Date().getFullYear();
-            });
-            if (!years.length) { return; }
-            index = years.indexOf(scope.year);
-            scope.year = index < 0 ? years[0] :
-                (index + 1 >= years.length ? null : years[index + 1]);
-        }
+        var scope = catalogueScope(currentCatalogueType());
+        scope.year = mode === 'current' ? new Date().getFullYear() : null;
+        scope.openPicker = null;
         /* Página quatro de um resultado que mudou embaixo não quer dizer nada. */
         scope.page = 0;
         scope.rows = undefined;
-        render();
-    }
-
-    function cycleCatalogueRating() {
-        var scope = catalogueScope(currentCatalogueType());
-        var index = CATALOGUE_RATINGS.indexOf(scope.minimumRating);
-        scope.minimumRating = CATALOGUE_RATINGS[(index + 1) % CATALOGUE_RATINGS.length];
-        scope.page = 0;
-        scope.rows = undefined;
-        render();
-    }
-
-    /* Poster, compacto, lista — e volta. A densidade não muda o resultado, só
-       como ele é desenhado, então a página carregada continua valendo. */
-    function cycleCatalogueDensity() {
-        var scope = catalogueScope(currentCatalogueType());
-        var index = CATALOGUE_LAYOUTS.indexOf(scope.layout || 'poster');
-        scope.layout = CATALOGUE_LAYOUTS[(index + 1) % CATALOGUE_LAYOUTS.length];
         render();
     }
 
@@ -8437,16 +8495,21 @@ var BuroApp = (function () {
         else if (action === 'notifications') { openNotifications(); }
         else if (action === 'notifications-clear') { clearNotifications(); }
         else if (action === 'notification-remove') { removeNotification(element.getAttribute('data-id')); }
-        else if (action === 'catalogue-scope-genre') { cycleCatalogueScope('genre'); }
-        else if (action === 'catalogue-scope-service') { cycleCatalogueScope('service'); }
+        else if (action === 'catalogue-pick-genre') { toggleCataloguePicker('genre'); }
+        else if (action === 'catalogue-pick-service') { toggleCataloguePicker('service'); }
+        else if (action === 'catalogue-pick-year') { toggleCataloguePicker('year'); }
+        else if (action === 'catalogue-pick-rating') { toggleCataloguePicker('rating'); }
+        else if (action === 'catalogue-pick-density') { toggleCataloguePicker('density'); }
+        else if (action === 'catalogue-option') {
+            chooseCatalogueOption(element.getAttribute('data-picker'), element.getAttribute('data-value'));
+        }
         else if (action === 'catalogue-scope-reset') { resetCatalogueScope(); }
         else if (action === 'catalogue-year-all') { cycleCatalogueYear('all'); }
         else if (action === 'catalogue-year-current') { cycleCatalogueYear('current'); }
-        else if (action === 'catalogue-year-pick') { cycleCatalogueYear('pick'); }
-        else if (action === 'catalogue-rating') { cycleCatalogueRating(); }
+
         else if (action === 'catalogue-shelf-page-previous') { changeCatalogueShelfPage(-1); }
         else if (action === 'catalogue-shelf-page-next') { changeCatalogueShelfPage(1); }
-        else if (action === 'catalogue-density') { cycleCatalogueDensity(); }
+
         else if (action === 'parental-form') { pushScreen('PARENTAL_FORM'); }
         else if (action === 'parental-save') { saveParentalPin(); }
         else if (action === 'parental-clear') { clearParentalPin(); }
