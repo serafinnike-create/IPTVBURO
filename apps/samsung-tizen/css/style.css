@@ -324,6 +324,14 @@ body.playing .app-root { display: none; }
 }
 .topbar-chip.urgent { border-color: rgba(214,169,86,.5); color: var(--gold); }
 .topbar-chip.focused { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(214,169,86,.18); }
+/* O chip de download: numero grande, velocidade e tempo embaixo, e a barra de
+   progresso rente ao pe do chip. So aparece com algo baixando de facto. */
+.download-chip { flex-direction: column; align-items: flex-start; position: relative; padding-bottom: 10px; }
+.download-chip-copy { display: flex; align-items: baseline; }
+.download-chip-copy strong { margin-right: 8px; color: var(--gold); font-size: 18px; font-weight: 700; }
+.download-chip-copy small { color: var(--muted); font-size: 13px; }
+.download-chip-bar { position: absolute; left: 12px; right: 12px; bottom: 5px; height: 3px; overflow: hidden; border-radius: 2px; background: rgba(246,247,250,.2); }
+.download-chip-bar i { display: block; height: 100%; background: var(--gold); }
 .topbar-clock { flex: none; margin-right: 20px; text-align: right; }
 .topbar-clock strong { display: block; color: var(--text); font-size: 26px; font-weight: 700; line-height: 1.05; }
 .topbar-clock small { display: block; color: var(--muted); font-size: 15px; }

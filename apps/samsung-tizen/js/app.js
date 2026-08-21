@@ -1313,7 +1313,7 @@ var BuroApp = (function () {
             /* O indicador fica fora do <h1>: o título tem de continuar sendo
                exatamente o nome da seção, que é o que a tela anuncia. */
             '</h1>' + catalogueSyncChip() + topbarSubtitleHtml() + (topbarExtra || '') +
-            '<div class="topbar-status">' + licenceChipHtml() + clockHtml() + profileChipHtml() +
+            '<div class="topbar-status">' + downloadChipHtml() + licenceChipHtml() + clockHtml() + profileChipHtml() +
             notificationBellHtml() + '</div></header><section class="content ' + (scrollable ? 'scrollable' : '') + '">' +
             sharedTitleNoticeHtml() + content + '</section><div class="bottom-hint">' + t('useArrows') + '</div></main></div>';
     }
@@ -3985,6 +3985,62 @@ var BuroApp = (function () {
 
     /* Quantos dias faltam, quando há uma data. O Windows mostra "Faltam 26
        dias"; sem data — dispositivo não registrado — o chip diz o estado. */
+    /*
+      O download em andamento, na barra superior.
+
+      Pedido do usuário: "barra de dawlaond deve aparecer na barra superior com
+      tempo velocidade". `js/downloads.js` já calcula velocidade e estimativa —
+      o que faltava era a TV mostrar. Sem isso a fila só era visível abrindo a
+      tela de Downloads, e uma cópia para o USB leva dezenas de minutos.
+
+      Só aparece quando algo está de facto baixando: um chip parado em "0%"
+      ocuparia a barra sem dizer nada. Quando a fila tem mais de um item, o
+      número deles acompanha, porque a barra mostra o progresso de um só.
+    */
+    function downloadChipHtml() {
+        var entries;
+        var active = null;
+        var queued = 0;
+        var detail = [];
+        if (!BuroDownloads.enabled()) { return ''; }
+        try { entries = BuroDownloads.list(); } catch (ignoredDownloads) { return ''; }
+        (entries || []).forEach(function (entry) {
+            if (entry.state === 'RUNNING' && !active) { active = entry; return; }
+            if (entry.state === 'RUNNING' || entry.state === 'QUEUED') { queued += 1; }
+        });
+        if (!active) { return ''; }
+        if (active.bytesPerSecond > 0) { detail.push(formatSpeed(active.bytesPerSecond)); }
+        if (active.remainingSeconds != null) { detail.push(formatRemaining(active.remainingSeconds)); }
+        if (queued > 0) { detail.push(t('downloadsWaiting').replace('{count}', queued)); }
+        return '<button class="topbar-chip download-chip focusable"' +
+            ' data-action="section" data-section="DOWNLOADS"' +
+            ' aria-label="' + attr(t('downloadProgressLabel')
+                .replace('{name}', active.name).replace('{percent}', active.percent)) + '">' +
+            '<span class="download-chip-copy"><strong>' + escapeHtml(active.percent + '%') + '</strong>' +
+            (detail.length ? '<small>' + escapeHtml(detail.join(' · ')) + '</small>' : '') + '</span>' +
+            '<span class="download-chip-bar" aria-hidden="true"><i style="width:' +
+            BuroDomain.clamp(active.percent, 0, 100) + '%"></i></span></button>';
+    }
+
+    /* Velocidade em MB/s ou kB/s. Casas decimais só abaixo de dez, onde elas
+       ainda mudam a leitura. */
+    function formatSpeed(bytesPerSecond) {
+        var mb = bytesPerSecond / 1048576;
+        if (mb >= 10) { return Math.round(mb) + ' MB/s'; }
+        if (mb >= 0.1) { return mb.toFixed(1) + ' MB/s'; }
+        return Math.max(1, Math.round(bytesPerSecond / 1024)) + ' kB/s';
+    }
+
+    /* O tempo que falta, arredondado. Segundos exatos numa estimativa que
+       oscila dariam uma precisão que ela não tem. */
+    function formatRemaining(seconds) {
+        var minutes;
+        if (seconds < 60) { return t('remainingSeconds').replace('{count}', Math.max(1, seconds)); }
+        minutes = Math.round(seconds / 60);
+        if (minutes < 60) { return t('remainingMinutes').replace('{count}', minutes); }
+        return t('remainingHours').replace('{count}', Math.round(minutes / 60));
+    }
+
     function licenceChipHtml() {
         var decision;
         var days;
@@ -9246,6 +9302,7 @@ var BuroApp = (function () {
         _playbackFailed: playbackFailed,
         _friendlyError: friendlyError,
         _ratingsSection: ratingsSection,
+        _downloadChipHtml: downloadChipHtml,
         _receiveRequestedAppControl: receiveRequestedAppControl,
         _resolvePendingSharedTitle: resolvePendingSharedTitle,
         _pendingSharedTitle: function () { return pendingSharedTitle; },
