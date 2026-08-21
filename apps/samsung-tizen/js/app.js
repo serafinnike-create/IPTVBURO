@@ -330,14 +330,28 @@ var BuroApp = (function () {
             ' alt=""></span>';
     }
 
+    /*
+      A arte chegou; quem está na tela precisa saber.
+
+      A prateleira do catálogo faltava aqui, e era por isso que os cartões
+      ficavam sem capa: a arte era buscada, guardada em `artworkMemory` e nunca
+      desenhada, porque o render já tinha acontecido e nada acontecia depois.
+
+      Agrupado nos dois casos que pedem várias categorias de uma vez — a Home e a
+      prateleira. Um redesenho por resposta faria a tela piscar enquanto o
+      usuário navega.
+    */
     function finishArtworkRequest(key, category) {
+        var section = state.section;
+        var onShelf = section === 'LIVE' || section === 'MOVIES' || section === 'SERIES';
         artworkRequests[key] = 'done';
-        if (state.screen === 'SHELL' && state.screenData && state.screenData.kind === 'category' &&
-                state.screenData.category.id === category.id) { render(); }
-        /* Agrupado: a Home pede várias categorias e cada resposta traria um
-           redesenho, fazendo a tela piscar enquanto o usuário navega. */
-        else if (state.screen === 'SHELL' && state.section === 'HOME' && state.screenData &&
-                state.screenData.kind === 'home') { scheduleHomeArtworkRedraw(); }
+        if (state.screen !== 'SHELL') { return; }
+        if (state.screenData && state.screenData.kind === 'category' &&
+                state.screenData.category.id === category.id) { render(); return; }
+        if (section === 'HOME' && state.screenData && state.screenData.kind === 'home') {
+            scheduleHomeArtworkRedraw(); return;
+        }
+        if (onShelf && !state.screenData) { scheduleHomeArtworkRedraw(); }
     }
 
     function hydrateCategoryArtwork(category) {
@@ -6992,10 +7006,18 @@ var BuroApp = (function () {
     function scheduleHomeArtworkRedraw() {
         if (homeArtworkRedrawTimer) { window.clearTimeout(homeArtworkRedrawTimer); }
         homeArtworkRedrawTimer = window.setTimeout(function () {
+            var section = state.section;
+            var onShelf = section === 'LIVE' || section === 'MOVIES' || section === 'SERIES';
             homeArtworkRedrawTimer = null;
-            if (state.screen !== 'SHELL' || state.section !== 'HOME') { return; }
-            if (!state.screenData || state.screenData.kind !== 'home') { return; }
-            render();
+            if (state.screen !== 'SHELL') { return; }
+            if (section === 'HOME') {
+                if (!state.screenData || state.screenData.kind !== 'home') { return; }
+                render();
+                return;
+            }
+            /* A prateleira usa o mesmo agrupamento: sem screenData, é ela que
+               está desenhada. */
+            if (onShelf && !state.screenData) { render(); }
         }, HOME_ARTWORK_REDRAW_MILLIS);
     }
 
