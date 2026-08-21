@@ -2,7 +2,53 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
-## [3.0.2] - 2026-08-21 (Windows)
+## [3.0.3] - 2026-08-21 (Windows)
+
+Versão de correção urgente. **A 3.0.2 foi retirada do ar**: atualizar por ela
+apagava o aplicativo.
+
+### Windows
+
+#### Corrigido
+
+- **Atualizar pelo aplicativo apagava o IPTV BURO.** O download terminava, o
+  instalador rodava e o aplicativo sumia — sem versão antiga, sem versão nova,
+  sem entrada em "Adicionar ou remover programas". O registro de eventos do
+  Windows mostrou uma única transação, sem remoção, terminando em 1603 por causa
+  do erro 1316. O script passava `REINSTALLMODE=amus`, que pede ao Windows para
+  *reparar um produto instalado*; como cada build recebe um ProductCode novo,
+  ele apontava para um produto que não existia, e a transação voltou atrás
+  levando o aplicativo junto. O MSI já é uma atualização completa por si só, e
+  agora é instalado como tal.
+- **O sucesso passou a ser verificado no disco.** Um código de saída zero não
+  prova nada: uma transação revertida também termina em silêncio. Agora o
+  executável é procurado antes de qualquer coisa ser apagada ou declarada
+  concluída, e se ele não estiver lá o usuário é avisado e recebe o instalador
+  para tentar de novo.
+- **Os números do relógio saíam em outro alfabeto.** Num Windows configurado
+  para Egito, Irã, Bangladesh ou Mianmar, o tempo de reprodução aparecia como
+  `١:٠٥:٠٩` em vez de `1:05:09`, dentro de uma interface em português. O mesmo
+  valia para avaliações, contagens e tamanhos.
+- **O player mais bufferizado recebia a menor tolerância antes de reconectar**,
+  por um estouro de inteiro. Não era alcançável pelos valores que o aplicativo
+  usa, mas a conta estava invertida.
+
+#### Melhorado
+
+- **A tela de atualização mostra velocidade e tempo restante.** Antes havia
+  apenas a porcentagem e os megabytes, e num download de 322 MB não dava para
+  distinguir uma transferência lenta de uma travada. Agora lê
+  "Baixando 61% (197 / 322 MB) · 4,0 MB/s · 31s", e a velocidade cai em segundos
+  quando a transferência para de verdade.
+
+## [3.0.2] - 2026-08-21 (Windows) — RETIRADA
+
+> [!CAUTION]
+> Esta versão foi despublicada. Atualizar por ela apagava o aplicativo: o
+> instalador passava `REINSTALLMODE=amus`, o Windows revertia a transação e o
+> produto ficava sem registro. Use a 3.0.3. Se você ficou sem o aplicativo,
+> baixe e instale o MSI da 3.0.3 manualmente.
+
 
 Uma versão só de tradução. Nenhuma mudança de comportamento no vídeo, no
 catálogo ou no player — apenas as mensagens que ainda estavam presas em
