@@ -34,6 +34,25 @@ português.
   teste falhar — essa mesma guarda já passou por cima de uma isca porque `"\b"`
   numa string Kotlin é um backspace, não uma fronteira de palavra.
 
+#### Nota sobre o nome do arquivo
+
+O MSI da 3.0.2 se chama `IPTV-BURO-v3.0.2-windows-x64.msi`, sem o sufixo
+`-unsigned` que as versões anteriores traziam. **O arquivo continua sem
+assinatura Authenticode.**
+
+O atualizador embutido decide pelo nome: uma build estável recusa qualquer
+instalador cujo nome contenha `-unsigned` ([`GitHubReleaseUpdater.kt`][updater],
+linha 101). Como a 3.0.1 é estável, ela nunca ofereceria a 3.0.2, e o fluxo de
+atualização pelo app não podia ser testado. O nome foi encurtado para permitir
+esse teste.
+
+A regra em si não foi alterada, e o teste `stable installs ignore unsigned
+stable assets` continua valendo — apenas este arquivo deixou de casar com ela.
+A correção de verdade é assinar o MSI; enquanto isso não acontece, quem instalar
+a 3.0.2 deve conferir o `SHA256SUMS.txt`.
+
+[updater]: apps/desktop/src/main/kotlin/com/lucasserafin94/iptvburo/desktop/update/GitHubReleaseUpdater.kt
+
 ## [3.0.1] - 2026-08-18 (Windows e Android)
 
 As duas aplicações passam a compartilhar a numeração. O Android continua em

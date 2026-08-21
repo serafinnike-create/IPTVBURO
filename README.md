@@ -113,7 +113,7 @@ loja.
 
 | Plataforma | Baixar |
 |---|---|
-| Windows 10/11 (64 bits) | [`IPTV-BURO-v3.0.2-windows-x64-unsigned.msi`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v3.0.2/IPTV-BURO-v3.0.2-windows-x64-unsigned.msi) |
+| Windows 10/11 (64 bits) | [`IPTV-BURO-v3.0.2-windows-x64.msi`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v3.0.2/IPTV-BURO-v3.0.2-windows-x64.msi) — sem assinatura, veja a nota abaixo |
 | Android / Android TV (prévia) | [`IPTV-BURO-v3.0.1-android-debug.apk`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v3.0.1/IPTV-BURO-v3.0.1-android-debug.apk) |
 
 O [`SHA256SUMS.txt`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v3.0.2/SHA256SUMS.txt)
