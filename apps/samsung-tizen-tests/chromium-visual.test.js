@@ -717,13 +717,20 @@ async function main() {
     await evaluate("(function () { var input=document.querySelector('#profile-name'); input.value='Casa Visual'; input.dispatchEvent(new Event('input', { bubbles:true })); document.querySelector('[data-action=profile-save]').click(); return true; }())");
 
     await waitFor("BuroApp.state.screen === 'SHELL' && BuroApp.state.section === 'HOME' && document.querySelector('.shell')", 8000);
-    var home = await geometry(['.buro-ribbon', '.topbar', '.demo-notice', '.living-hero', '.platform-chip', '[data-action=notifications]']);
+    var home = await geometry(['.buro-ribbon', '.topbar', '.demo-notice', '.living-hero', '.topbar-status', '[data-action=notifications]']);
     var runtimeReady = await evaluate("document.querySelector('#app').getAttribute('data-runtime-ready')");
     process.stdout.write('Home sem fonte\n');
     check('shell anuncia runtime 3.0.1 e nao cria overflow global', runtimeReady === '3.0.1' && home.scrollWidth <= 1920 && home.scrollHeight <= 1080);
     check('ribbon e topbar full bleed ficam inteiras no quadro da TV', rectVisible(home.rectangles[0]) && rectVisible(home.rectangles[1]));
     check('aviso e hero permanecem inteiros no quadro da TV', rectVisible(home.rectangles[2]) && rectVisible(home.rectangles[3]));
-    check('aviso, chip Samsung e sino nao se sobrepoem', !rectanglesOverlap(home.rectangles[2], home.rectangles[4]) && !rectanglesOverlap(home.rectangles[4], home.rectangles[5]));
+    /* O chip "Samsung Tizen" deu lugar ao bloco de estado — licenca, relogio,
+       perfil e sino — como no aplicativo do Windows. O que se mede continua
+       sendo o mesmo: o aviso nao invade esse bloco. O sino agora esta dentro
+       dele, entao a segunda comparacao passou a ser contencao e nao separacao. */
+    check('aviso e bloco de estado da barra nao se sobrepoem',
+        !rectanglesOverlap(home.rectangles[2], home.rectangles[4]) &&
+        home.rectangles[5].left >= home.rectangles[4].left - 1 &&
+        home.rectangles[5].right <= home.rectangles[4].right + 1);
     check('o primeiro destino da Home recebe foco visivel', home.focused && rectVisible(home.focused.rectangle));
     var demoComposition = await evaluate("({ rails:document.querySelectorAll('[data-demo-rail]').length, cards:document.querySelectorAll('.demo-media-card').length, progress:document.querySelectorAll('.demo-card-progress').length, posters:document.querySelectorAll('.demo-media-card.poster').length })");
     check('Home demonstra os mesmos tres trilhos e 14 conceitos do Android', demoComposition.rails === 3 && demoComposition.cards === 14 && demoComposition.progress === 8 && demoComposition.posters === 6);

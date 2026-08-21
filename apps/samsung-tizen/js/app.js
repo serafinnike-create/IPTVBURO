@@ -64,6 +64,7 @@ var BuroApp = (function () {
     /* O relógio do pareamento, para poder parar quando a tela sai. */
     var pairingRequest = null;
     var homeArtworkRedrawTimer = null;
+    var clockTimer = null;
     var HOME_ARTWORK_REDRAW_MILLIS = 500;
     /* Quantas categorias a Home busca de uma vez. Dezenas de requisições ao
        abrir o app deixariam a TV sem responder ao controle. */
@@ -1181,7 +1182,9 @@ var BuroApp = (function () {
             attr(profileName) + '"><span class="ribbon-avatar ' + (state.activeProfile && state.activeProfile.isKids ? 'kids' : '') + '">' +
             profileAvatarContent(state.activeProfile || { name: profileName }) + '</span><strong>' + escapeHtml(profileName) + '</strong></button></nav>' +
             '<main class="main-pane" aria-labelledby="screen-title"><header class="topbar"><h1 id="screen-title">' + escapeHtml(title) +
-            '</h1>' + (topbarExtra || '') + notificationBellHtml() + '<span class="platform-chip">Samsung Tizen</span></header><section class="content ' + (scrollable ? 'scrollable' : '') + '">' +
+            '</h1>' + topbarSubtitleHtml() + (topbarExtra || '') +
+            '<div class="topbar-status">' + licenceChipHtml() + clockHtml() + profileChipHtml() +
+            notificationBellHtml() + '</div></header><section class="content ' + (scrollable ? 'scrollable' : '') + '">' +
             sharedTitleNoticeHtml() + content + '</section><div class="bottom-hint">' + t('useArrows') + '</div></main></div>';
     }
 
@@ -3350,6 +3353,90 @@ var BuroApp = (function () {
       zero chama atenção para a ausência de novidade, que é o contrário do que
       um sino serve para dizer.
     */
+    /*
+      A barra superior, com o que o aplicativo do Windows mostra ali.
+
+      Antes tinha só o sino e um chip escrito "Samsung Tizen" — o nome da
+      plataforma, que quem está usando a TV já sabe. O Windows usa esse espaço
+      para as quatro coisas que mudam sozinhas: quanto falta da licença, que
+      horas são, quem está usando e se há aviso.
+    */
+    /*
+      Mantém o relógio da barra certo sem redesenhar a tela.
+
+      Trocar só o texto do relógio, de minuto em minuto: um `render()` a cada
+      minuto reconstruiria a tela inteira e tiraria o foco do lugar enquanto a
+      pessoa navega, o que é caro para o único elemento que precisa mudar.
+    */
+    function startClock() {
+        if (clockTimer) { window.clearInterval(clockTimer); }
+        clockTimer = window.setInterval(function () {
+            var host = root && root.querySelector ? root.querySelector('.topbar-clock') : null;
+            var fresh;
+            if (!host) { return; }
+            fresh = document.createElement('div');
+            fresh.innerHTML = clockHtml();
+            if (fresh.firstChild) { host.innerHTML = fresh.firstChild.innerHTML; }
+        }, 30000);
+    }
+
+    function topbarSubtitleHtml() {
+        var parts = [];
+        if (state.sources.length) {
+            parts.push(t('topbarSources').replace('{count}', state.sources.length));
+        }
+        if (state.items.length) {
+            parts.push(t('topbarItems').replace('{count}', state.items.length));
+        }
+        parts.push('IPTV BURO v' + applicationVersion());
+        return '<p class="topbar-subtitle">' + escapeHtml(parts.join(' · ')) + '</p>';
+    }
+
+    /* Quantos dias faltam, quando há uma data. O Windows mostra "Faltam 26
+       dias"; sem data — dispositivo não registrado — o chip diz o estado. */
+    function licenceChipHtml() {
+        var decision;
+        var days;
+        try { decision = BuroLicense.decide(); }
+        catch (ignoredLicence) { return ''; }
+        if (!decision) { return ''; }
+        days = decision.expiresAt ? Math.ceil((Date.parse(decision.expiresAt) - Date.now()) / 86400000) : null;
+        if (days != null && isFinite(days) && days >= 0) {
+            return '<button class="topbar-chip focusable ' + (days <= 7 ? 'urgent' : '') +
+                '" data-action="licence-activate">' +
+                escapeHtml(t(days === 1 ? 'licenceDayLeft' : 'licenceDaysLeft').replace('{count}', days)) +
+                '</button>';
+        }
+        return '<button class="topbar-chip focusable ' + (decision.allowed ? '' : 'urgent') +
+            '" data-action="licence-activate">' + escapeHtml(licenceStatusText(decision)) + '</button>';
+    }
+
+    /*
+      Hora e data.
+
+      Redesenhado pelo relógio de minuto em minuto e não a cada segundo: numa TV
+      ninguém confere segundos, e um `render()` por segundo tiraria o foco do
+      lugar enquanto a pessoa navega.
+    */
+    function clockHtml() {
+        var now = new Date();
+        var hours = ('0' + now.getHours()).slice(-2);
+        var minutes = ('0' + now.getMinutes()).slice(-2);
+        var days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+        var months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+        return '<div class="topbar-clock"><strong>' + hours + ':' + minutes + '</strong><small>' +
+            escapeHtml(t('day' + days[now.getDay()]) + ', ' + now.getDate() + ' ' +
+                t('month' + months[now.getMonth()])) + '</small></div>';
+    }
+
+    function profileChipHtml() {
+        var profile = state.activeProfile;
+        var name = profile ? profile.name : t('profiles');
+        return '<button class="topbar-profile focusable" data-action="section" data-section="PROFILES" aria-label="' +
+            attr(name) + '"><span class="topbar-avatar ' + (profile && profile.isKids ? 'kids' : '') + '">' +
+            profileAvatarContent(profile || { name: name }) + '</span></button>';
+    }
+
     function notificationBellHtml() {
         var unread = BuroNotifications.unreadCount(profileNotifications());
         return '<button class="topbar-bell focusable" data-action="notifications" aria-label="' +
@@ -8345,6 +8432,7 @@ var BuroApp = (function () {
         playerErrorBack.onclick = stopPlayback;
         BuroTrailer.init();
         BuroKeys.registerMediaKeys();
+        startClock();
         BuroPlayer.setListeners({
             onStatus: function (code, value) {
                 var message = playerStatusText(code, value);
