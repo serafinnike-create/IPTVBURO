@@ -102,6 +102,13 @@ var BuroApp = (function () {
     var SEARCH_PAGE_SIZE = 40;
     var SEARCH_DEBOUNCE_MILLIS = 300;
     var CATALOGUE_PAGE_SIZE = 200;
+    /*
+      Quantos títulos a prateleira acrescenta por vez.
+
+      Dez porque é o que cabe numa fileira e meia da TV: o bloco desenha na
+      hora e quem só queria ver o começo não paga por duzentos cartões.
+    */
+    var CATALOGUE_BLOCK_SIZE = 10;
     var EPISODE_PAGE_SIZE = 40;
     var CATEGORY_SETTINGS_PAGE_SIZE = 40;
     var LIBRARY_PAGE_SIZE = 40;
@@ -2258,7 +2265,7 @@ var BuroApp = (function () {
         if (!catalogueScopes[contentType]) {
             catalogueScopes[contentType] = {
                 genre: null, service: null, year: null, minimumRating: null,
-                layout: 'poster', page: 0, rows: undefined, total: 0, loading: false
+                layout: 'poster', rows: undefined, total: null, hasMore: false, loading: false
             };
         }
         return catalogueScopes[contentType];
@@ -2434,7 +2441,8 @@ var BuroApp = (function () {
             return;
         }
         scope.openPicker = null;
-        scope.page = 0;
+        /* Filtro novo, prateleira do zero: o que já estava carregado respondia a
+           outra pergunta. */
         scope.rows = undefined;
         render();
     }
@@ -2787,37 +2795,54 @@ var BuroApp = (function () {
       Contagem e página vêm da mesma regra e do mesmo pedido: primeiro o total,
       que é o que permite dizer "página 1 de 230", depois a fatia visível.
     */
-    function loadCatalogueShelf(contentType) {
+    function loadCatalogueShelf(contentType, more) {
         var categories = sourceCategories(contentType);
         var scope = catalogueScope(contentType);
         var matcher = catalogueMatcher(contentType, categories);
-        var requestId = ++catalogueShelfRequestId;
-        var offset = (Number(scope.page) || 0) * CATALOGUE_PAGE_SIZE;
+        var requestId;
+        var loaded = more && scope.rows ? scope.rows : [];
+        var offset = loaded.length;
+        if (scope.loading) { return; }
+        requestId = ++catalogueShelfRequestId;
         scope.loading = true;
-        BuroStorage.countWhere('items', matcher, function (total) {
+        if (!more) { scope.total = null; }
+
+        function withTotal(total) {
             if (requestId !== catalogueShelfRequestId) { return; }
-            BuroStorage.wherePage('items', matcher, offset, CATALOGUE_PAGE_SIZE, function (result) {
+            BuroStorage.wherePage('items', matcher, offset, CATALOGUE_BLOCK_SIZE, function (result) {
+                var fresh = result.rows || [];
                 if (requestId !== catalogueShelfRequestId) { return; }
                 scope.loading = false;
                 scope.total = total;
-                scope.rows = result.rows || [];
+                scope.rows = loaded.concat(fresh);
+                /* `hasMore` vem do cursor e não de uma conta com o total: o total
+                   é de quando a contagem rodou, e o catálogo pode ter crescido
+                   desde então enquanto a varredura de fundo trabalha. */
+                scope.hasMore = Boolean(result.hasMore);
                 /* Os itens carregados entram no estado para que capa, favorito e
                    progresso encontrem o mesmo objeto que o resto do app usa. */
-                mergeItems(scope.rows);
+                mergeItems(fresh);
                 render();
-                hydrateShelfArtwork(contentType, scope.rows);
+                hydrateShelfArtwork(contentType, fresh);
             }, function () {
                 if (requestId !== catalogueShelfRequestId) { return; }
                 scope.loading = false;
-                scope.rows = [];
-                scope.total = 0;
+                scope.rows = loaded;
+                scope.hasMore = false;
                 render();
             });
-        }, function () {
+        }
+
+        /* A contagem roda uma vez por filtro, não a cada bloco: ela percorre o
+           store inteiro, e repetir isso a cada dez títulos seria o oposto de
+           aliviar a TV. */
+        if (more && scope.total != null) { withTotal(scope.total); return; }
+        BuroStorage.countWhere('items', matcher, withTotal, function () {
             if (requestId !== catalogueShelfRequestId) { return; }
             scope.loading = false;
             scope.rows = [];
             scope.total = 0;
+            scope.hasMore = false;
             render();
         });
     }
@@ -2866,23 +2891,33 @@ var BuroApp = (function () {
         return t('cataloguePoster');
     }
 
+    /*
+      A prateleira cresce em blocos, em vez de paginar de duzentos em duzentos.
+
+      Duzentos cartões de uma vez é DOM demais para uma TV: montar a página
+      prende o controle por um instante e a memória sobe de degrau. Um punhado
+      por vez desenha na hora, e quem chega ao fim pede o próximo — que é como um
+      catálogo de quarenta mil títulos cabe num aparelho modesto.
+
+      "Carregar mais" é um botão e não um gatilho por posição de rolagem: numa TV
+      a rolagem acompanha o foco, então chegar ao fim da lista é exatamente o
+      foco chegar ao último cartão, e ali o próximo passo do D-pad já é o botão.
+    */
     function catalogueShelf(contentType, categories) {
         var scope = catalogueScope(contentType);
         var layout = scope.layout || 'poster';
         var total = Number(scope.total) || 0;
         var rows = scope.rows || [];
-        var pageCount = Math.max(1, Math.ceil(total / CATALOGUE_PAGE_SIZE));
-        var page = BuroDomain.clamp(Number(scope.page) || 0, 0, pageCount - 1);
-        var start = page * CATALOGUE_PAGE_SIZE;
         var heading;
         if (scope.rows === undefined && !scope.loading) {
-            window.setTimeout(function () { loadCatalogueShelf(contentType); }, 0);
+            window.setTimeout(function () { loadCatalogueShelf(contentType, false); }, 0);
         }
         heading = '<div class="section-heading catalogue-shelf-heading"><h2>' + t('catalogue') + '</h2>' +
             '<button class="scope-chip compact focusable" data-action="catalogue-pick-density"><strong>' +
             escapeHtml(catalogueDensityLabel(layout)) + ' ▾</strong></button>' +
-            '<p>' + (scope.loading && !rows.length ? '' : total) + '</p></div>';
-        if (scope.loading && !rows.length) {
+            '<p>' + (scope.total == null ? '' : escapeHtml(t('shelfLoadedOf')
+                .replace('{loaded}', rows.length).replace('{total}', total))) + '</p></div>';
+        if (!rows.length && scope.loading) {
             return heading + '<div class="search-loading"><span class="boot-indicator"></span><p>' +
                 escapeHtml(t('loadingCatalogue')) + '</p></div>';
         }
@@ -2892,8 +2927,9 @@ var BuroApp = (function () {
             return heading + categoryCards(scopedCategories(contentType, categories));
         }
         return heading + mediaCards(rows, layout, true) +
-            paginationControls('catalogue-shelf-page', page, pageCount, start,
-                start + rows.length, total, '', '');
+            (scope.hasMore ? '<div class="catalogue-pagination"><button class="button primary focusable"' +
+                ' data-action="catalogue-shelf-more"' + (scope.loading ? ' disabled' : '') + '>' +
+                (scope.loading ? t('loadingCatalogue') : t('loadMore')) + '</button></div>' : '');
     }
 
     /*
@@ -2924,15 +2960,6 @@ var BuroApp = (function () {
         var scope = catalogueScope(currentCatalogueType());
         scope.year = mode === 'current' ? new Date().getFullYear() : null;
         scope.openPicker = null;
-        /* Página quatro de um resultado que mudou embaixo não quer dizer nada. */
-        scope.page = 0;
-        scope.rows = undefined;
-        render();
-    }
-
-    function changeCatalogueShelfPage(delta) {
-        var scope = catalogueScope(currentCatalogueType());
-        scope.page = Math.max(0, (Number(scope.page) || 0) + delta);
         scope.rows = undefined;
         render();
     }
@@ -2945,7 +2972,6 @@ var BuroApp = (function () {
         scope.service = null;
         scope.year = null;
         scope.minimumRating = null;
-        scope.page = 0;
         scope.rows = undefined;
         /* O chip "Limpar filtros" some depois de limpar, então aqui o foco não
            tem para onde voltar: cai no primeiro chip, que é o de gênero. */
@@ -8529,8 +8555,7 @@ var BuroApp = (function () {
         else if (action === 'catalogue-year-all') { cycleCatalogueYear('all'); }
         else if (action === 'catalogue-year-current') { cycleCatalogueYear('current'); }
 
-        else if (action === 'catalogue-shelf-page-previous') { changeCatalogueShelfPage(-1); }
-        else if (action === 'catalogue-shelf-page-next') { changeCatalogueShelfPage(1); }
+        else if (action === 'catalogue-shelf-more') { loadCatalogueShelf(currentCatalogueType(), true); }
 
         else if (action === 'parental-form') { pushScreen('PARENTAL_FORM'); }
         else if (action === 'parental-save') { saveParentalPin(); }

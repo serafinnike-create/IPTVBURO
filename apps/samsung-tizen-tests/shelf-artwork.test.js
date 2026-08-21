@@ -92,7 +92,10 @@ function activate(window, selector) {
 /* Uma fonte Xtream com uma categoria e três filmes gravados. */
 function seed(window, artwork) {
     var source = { id: 's1', name: 'Fonte', type: 'XTREAM', channelCount: 3, createdAt: 1, updatedAt: null };
-    var items = [1, 2, 3].map(function (index) {
+    var items = [];
+    var index;
+    for (index = 1; index <= (window.__seedCount || 3); index += 1) { items.push(index); }
+    items = items.map(function (index) {
         var item = window.BuroDomain.createItem({
             sourceId: 's1', providerItemId: String(index), name: 'Filme ' + index,
             categoryId: 'c1', contentType: 'MOVIE', year: 2024, rating: 8,
@@ -164,6 +167,47 @@ async function run() {
         window.document.querySelector('.media-card img').getAttribute('src') === 'https://art.test/um.jpg');
     check('o cartão é marcado como tendo arte, para o CSS diferenciá-lo',
         window.document.querySelectorAll('.media-card.has-art').length === 3);
+
+    /*
+      O bloco: a prateleira não monta o catálogo inteiro de uma vez.
+
+      Duzentos cartões prendiam o controle da TV enquanto o DOM era montado. Dez
+      por vez desenha na hora, e quem chega ao fim pede o próximo.
+    */
+    process.stdout.write('A prateleira cresce em blocos\n');
+    window.close();
+    window = loadApp();
+    window.__seedCount = 25;
+    await reachShell(window);
+    await seed(window, {});
+    window.BuroApp.state.section = 'MOVIES';
+    window.BuroApp.state.screenData = null;
+    window.BuroApp.render();
+    await waitFor(function () {
+        return window.document.querySelectorAll('.media-card').length > 0;
+    }, 8000);
+    check('o primeiro bloco é pequeno, e não o catálogo inteiro',
+        window.document.querySelectorAll('.media-card').length === 10);
+    check('a contagem diz quanto já veio e quanto existe',
+        (window.document.querySelector('.catalogue-shelf-heading p').textContent || '').indexOf('25') > 0);
+    check('havendo mais, a prateleira oferece carregar',
+        Boolean(window.document.querySelector('[data-action="catalogue-shelf-more"]')));
+
+    window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-shelf-more"]'));
+    await waitFor(function () {
+        return window.document.querySelectorAll('.media-card').length === 20;
+    }, 8000);
+    check('carregar mais acrescenta ao que já estava, sem recomeçar',
+        window.document.querySelectorAll('.media-card').length === 20);
+
+    window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-shelf-more"]'));
+    await waitFor(function () {
+        return window.document.querySelectorAll('.media-card').length === 25;
+    }, 8000);
+    check('o último bloco traz só o que resta',
+        window.document.querySelectorAll('.media-card').length === 25);
+    check('sem mais nada para vir, o botão sai da tela',
+        !window.document.querySelector('[data-action="catalogue-shelf-more"]'));
 
     process.stdout.write('Sem arte, o cartão continua legível\n');
     window.close();
