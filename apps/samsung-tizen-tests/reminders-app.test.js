@@ -324,6 +324,17 @@ var PREFERENCES = {
     await waitFor(function () { return second.BuroApp.state.reminders.length === 0; }, 2000);
     check('desmarcar remove o lembrete', second.BuroApp.state.reminders.length === 0);
 
+    /*
+      As janelas precisam ser fechadas.
+
+      Cada `bootApp` deixa um app rodando com temporizadores próprios — o
+      relógio da barra, a rotação do destaque — e um jsdom aberto mantém
+      esses temporizadores vivos. O processo terminava os testes e não
+      saía, o que travava a suíte inteira no meio.
+    */
+    window.close();
+    second.close();
+
     process.stdout.write('\n');
     if (failures.length) {
         process.stdout.write(failures.length + ' falharam, ' + passed + ' aprovados\n');
