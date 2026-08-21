@@ -26,9 +26,21 @@ class IdleIsNotLoadingTest {
     private val source: String =
         Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/XtreamWorkspace.kt").readText()
 
-    private fun branch(after: String): String =
-        source.substringAfter(after).substringBefore("        LiveEpgStatus.Unavailable")
+    /**
+     * The body of one `when` branch, or a failure if that branch is not there.
+     *
+     * `substringAfter` returns the *whole* string when its marker is missing, so a version of this
+     * that used it directly kept passing against unrelated code after the branch was deleted — the
+     * home-screen check did exactly that until it was caught with a planted defect. A guard that
+     * cannot fail is worse than no guard, so the marker's absence is itself the failure.
+     */
+    private fun branch(after: String): String {
+        val start = source.indexOf(after)
+        assertTrue(start > 0, "Expected a branch starting with: $after")
+        return source.substring(start)
+            .substringBefore("        LiveEpgStatus.Unavailable")
             .substringBefore("        is MovieDetailsStatus.Error")
+    }
 
     @Test
     fun `idle no longer shares a branch with loading`() {
@@ -66,6 +78,31 @@ class IdleIsNotLoadingTest {
         assertTrue(
             idle.contains("LaunchedEffect(Unit) { onRetry() }"),
             "A guide stuck on Idle spun for ever exactly as the film details did.",
+        )
+    }
+
+    /**
+     * The home screen had it too, and it is the worst place for it: a viewer who never opens a
+     * film still meets this one, and a skeleton reads as an app still starting up.
+     */
+    @Test
+    fun `an idle home screen asks again by itself`() {
+        val home =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/XtreamDailyHome.kt").readText()
+        assertFalse(
+            Regex("""DailyHomeStatus\.Idle,\s*\n\s*DailyHomeStatus\.Loading,""").containsMatchIn(home),
+            "Idle drawn as a loading skeleton is the same defect as the film page's spinner.",
+        )
+        // Located rather than carved out with substringAfter, which returns the *whole* string when
+        // the marker is missing — so the branch check quietly passed against the effect at the top
+        // of the file even with the defect restored. A guard that cannot fail is worse than none.
+        val marker = "DailyHomeStatus.Idle -> {"
+        val start = home.indexOf(marker)
+        assertTrue(start > 0, "The idle branch must exist on its own.")
+        val idle = home.substring(start, home.indexOf("DailyHomeStatus.Loading ->", start))
+        assertTrue(
+            idle.contains("loadDailyHome(today)"),
+            "Nothing else re-runs the load, so the idle branch has to.",
         )
     }
 

@@ -251,9 +251,16 @@ fun XtreamDailyHome(
         }
 
         when (val status = appState.dailyHomeStatus) {
-            DailyHomeStatus.Idle,
-            DailyHomeStatus.Loading,
-            -> HomeSkeleton(metrics, text)
+            // Idle is not loading. The effect above is keyed on the profile, the source and the
+            // refresh counter — never on the status — so a load cancelled mid-flight resets to Idle
+            // and nothing runs again. Drawn as a skeleton, that is a home screen pretending to
+            // build itself for ever. The film details and the live guide had the same defect.
+            DailyHomeStatus.Idle -> {
+                LaunchedEffect(Unit) { appState.loadDailyHome(today) }
+                HomeSkeleton(metrics, text)
+            }
+
+            DailyHomeStatus.Loading -> HomeSkeleton(metrics, text)
 
             is DailyHomeStatus.Error ->
                 HomeError(status.message, text) { scope.launch { appState.loadDailyHome(today) } }
