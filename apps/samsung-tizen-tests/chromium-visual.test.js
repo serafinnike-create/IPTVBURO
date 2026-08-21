@@ -694,7 +694,9 @@ async function main() {
 
     var boot = await evaluate("(function () { document.querySelector('[data-action=select-language][data-language=\"pt-BR\"]').click(); var panel = document.querySelector('.boot-panel'); var r = panel && panel.getBoundingClientRect(); return { screen: BuroApp.state.screen, dots: document.querySelectorAll('.boot-dot').length, progress: Number(document.querySelector('.boot-progress') && document.querySelector('.boot-progress').getAttribute('aria-valuenow')), rectangle: r && { left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height }, scrollWidth:document.documentElement.scrollWidth, scrollHeight:document.documentElement.scrollHeight }; }())");
     process.stdout.write('Carregamento cinematico\n');
-    check('selecao do idioma abre imediatamente a tela de carregamento', boot.screen === 'BOOT' && boot.dots === 4 && boot.progress >= 25 && boot.progress <= 100);
+    /* Cinco passos: a varredura do catalogo entrou na abertura, para o app so
+       aparecer com as prateleiras cheias — ver BOOT_STEPS em js/app.js. */
+    check('selecao do idioma abre imediatamente a tela de carregamento', boot.screen === 'BOOT' && boot.dots === 5 && boot.progress >= 20 && boot.progress <= 100);
     check('painel de carregamento fica inteiro e sem overflow global', rectInside(boot.rectangle) && boot.scrollWidth <= 1920 && boot.scrollHeight <= 1080);
     check('a tela de carregamento produz um quadro PNG nao vazio', await screenshotIsRendered('boot'));
 

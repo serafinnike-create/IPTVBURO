@@ -65,6 +65,8 @@ var BuroApp = (function () {
     var pairingRequest = null;
     var homeArtworkRedrawTimer = null;
     var clockTimer = null;
+    var bootSweepTimer = null;
+    var bootSweepDone = null;
     var homeCache = null;
     /* Cada pedido de página da prateleira ganha um número: uma resposta que
        chega depois de o filtro mudar não pode substituir a atual. */
@@ -106,10 +108,16 @@ var BuroApp = (function () {
     /*
       Quantos títulos a prateleira acrescenta por vez.
 
-      Dez porque é o que cabe numa fileira e meia da TV: o bloco desenha na
-      hora e quem só queria ver o começo não paga por duzentos cartões.
+      Vinte e um, que é um múltiplo dos sete cartões que cabem numa fileira: com
+      dez, a segunda linha ficava pela metade e o botão de carregar mais era
+      empurrado para fora da tela — a prateleira parecia menor do que é e a
+      continuação ficava inalcançável. Três fileiras cheias preenchem a área
+      visível e deixam o botão logo abaixo, ao alcance do D-pad.
+
+      Ainda longe dos duzentos que travavam a TV: o que se paga aqui é uma tela,
+      não um catálogo.
     */
-    var CATALOGUE_BLOCK_SIZE = 10;
+    var CATALOGUE_BLOCK_SIZE = 21;
     var EPISODE_PAGE_SIZE = 40;
     var CATEGORY_SETTINGS_PAGE_SIZE = 40;
     var LIBRARY_PAGE_SIZE = 40;
@@ -327,6 +335,13 @@ var BuroApp = (function () {
             rememberUrl(detailBackdropMemory, detailBackdropOrder, itemId, url,
                 ARTWORK_MEMORY_LIMIT);
         }
+    }
+
+    /* A capa vertical do título, quando existe uma. */
+    function detailPosterHtml(item) {
+        var poster = item && safeArtworkUrl(artworkMemory[item.id]);
+        if (!poster) { return ''; }
+        return '<span class="detail-poster"><img src="' + attr(poster) + '" alt=""></span>';
     }
 
     function detailArtworkHtml(item) {
@@ -928,7 +943,16 @@ var BuroApp = (function () {
     }
 
     /* Mesmos estados universais usados pelo Android: perfil, catálogo, arte e pronto. */
-    var BOOT_STEPS = ['profiles', 'catalogue', 'artwork', 'ready'];
+    /*
+      Os passos da tela de abertura.
+
+      `sweep` é a varredura que completa o catálogo. Ela existia só como trabalho
+      de fundo: o app abria e as prateleiras iam se enchendo enquanto a pessoa
+      navegava, o que numa lista de quarenta mil títulos significa abrir numa
+      tela pela metade. O aplicativo do Windows espera na abertura — ver
+      `SplashScreen.kt`, que mostra progresso e contagem exatamente por isso.
+    */
+    var BOOT_STEPS = ['profiles', 'catalogue', 'artwork', 'sweep', 'ready'];
 
     function bootProgress(stepName, messageKey) {
         var index = 0;
@@ -944,20 +968,31 @@ var BuroApp = (function () {
 
     function finishInitialization() {
         var targetScreen;
-        var minimum;
-        var remaining;
-        bootProgress('ready', 'bootReady');
-        state.ready = true;
         if (!state.preferences.acceptedLegal) { targetScreen = 'LEGAL'; }
         else if (!state.profiles.length) { targetScreen = 'PROFILES'; }
         else { targetScreen = 'SHELL'; }
-        minimum = state.sources.length ? BOOT_POSTER_REVEAL_MILLIS : BOOT_MINIMUM_MILLIS;
-        remaining = Math.max(0, minimum - (Date.now() - bootStartedAt));
+        state.ready = true;
+        /*
+          A varredura entra na abertura só quando o destino é o shell.
+
+          Quem ainda vai aceitar o aviso legal ou criar um perfil não tem fonte
+          para varrer, e segurar a tela ali seria esperar por nada.
+        */
+        if (targetScreen !== 'SHELL') { revealApp(targetScreen); return; }
+        waitForCatalogueSweep(function () { revealApp(targetScreen); });
+    }
+
+    function revealApp(targetScreen) {
+        var minimum = state.sources.length ? BOOT_POSTER_REVEAL_MILLIS : BOOT_MINIMUM_MILLIS;
+        var remaining = Math.max(0, minimum - (Date.now() - bootStartedAt));
+        bootProgress('ready', 'bootReady');
         window.setTimeout(function () {
             state.screen = targetScreen;
             if (targetScreen === 'SHELL') { state.section = state.preferences.section || 'HOME'; }
             render();
             if (targetScreen === 'SHELL') {
+                /* A varredura já rodou na abertura; isto retoma o que tiver
+                   sobrado, por exemplo se a pessoa pulou a espera. */
                 window.setTimeout(function () { startActiveSourceHydration(false); }, 0);
                 /* Depois do shell aparecer, não durante o boot: um aviso sobre a
                    tela de carregamento seria lido como erro. */
@@ -1032,6 +1067,57 @@ var BuroApp = (function () {
             escapeHtml(profile.name) + '</strong><small>' + (profile.isKids ? t('kidsProfile') : 'BURO') + '</small>';
     }
 
+    /*
+      O que a varredura está fazendo, para a linha de contagem da abertura.
+
+      Vazio quando não há nada contável — sem fonte, ou antes de a varredura
+      começar — porque um contador em "0/0" diz menos que nenhum.
+    */
+    function bootDetail() {
+        var status = state.activeSource ? catalogueSyncStatus(state.activeSource) : null;
+        if (!status || !status.total) { return ''; }
+        return t('bootSweepDetail')
+            .replace('{completed}', status.completed)
+            .replace('{total}', status.total)
+            .replace('{items}', status.itemCount || 0);
+    }
+
+    /*
+      Espera a varredura terminar antes de mostrar o app.
+
+      Com uma saída: quem não quer esperar aperta ENTER e entra — o resto chega
+      em segundo plano, como antes. Uma espera sem saída numa TV é uma tela que
+      parece travada, e a varredura de um catálogo grande leva minutos.
+
+      Sem fonte configurada não há o que varrer, e a abertura segue direto.
+    */
+    function waitForCatalogueSweep(done) {
+        var source = state.activeSource;
+        var status;
+        if (!source || source.type !== 'XTREAM') { done(); return; }
+        bootProgress('sweep', 'bootSweep');
+        startActiveSourceHydration(false);
+        status = catalogueSyncStatus(source);
+        if (!status || !status.total || status.state === 'COMPLETE') { done(); return; }
+        bootSweepDone = done;
+        bootSweepTimer = window.setInterval(function () {
+            var current = catalogueSyncStatus(state.activeSource);
+            if (state.screen !== 'BOOT') { finishBootSweep(); return; }
+            render();
+            if (!current || current.state === 'COMPLETE' || current.state === 'CANCELLED') {
+                finishBootSweep();
+            }
+        }, 400);
+    }
+
+    /* Encerra a espera, seja porque acabou ou porque a pessoa pulou. */
+    function finishBootSweep() {
+        var done = bootSweepDone;
+        if (bootSweepTimer) { window.clearInterval(bootSweepTimer); bootSweepTimer = null; }
+        bootSweepDone = null;
+        if (done) { done(); }
+    }
+
     function renderBoot() {
         var boot = state.boot || { index: 0, total: BOOT_STEPS.length, messageKey: 'bootProfiles' };
         var progressValue = Math.min(100, Math.round(((boot.index + 1) / boot.total) * 100));
@@ -1047,6 +1133,15 @@ var BuroApp = (function () {
             '<div class="boot-mark" aria-hidden="true"><span>B</span></div>' +
             '<p class="boot-brand">IPTV BURO</p>' +
             '<p class="boot-message">' + progressLabel + '</p>' +
+            /*
+              A contagem, numa linha própria.
+
+              Muda várias vezes por segundo enquanto o catálogo entra, e um
+              título que se reescreve nesse ritmo é mais difícil de ler do que um
+              que fica parado com um número correndo embaixo. Mesma decisão do
+              `detail` na splash do Windows.
+            */
+            (bootDetail() ? '<p class="boot-detail">' + escapeHtml(bootDetail()) + '</p>' : '') +
             '<p class="boot-stage">' + t('bootStageLabel') + '</p>' +
             '<div class="boot-indicator" aria-hidden="true"></div>' +
             '<div class="boot-progress" role="progressbar" aria-label="' + attr(progressLabel) +
@@ -1215,7 +1310,9 @@ var BuroApp = (function () {
             attr(profileName) + '"><span class="ribbon-avatar ' + (state.activeProfile && state.activeProfile.isKids ? 'kids' : '') + '">' +
             profileAvatarContent(state.activeProfile || { name: profileName }) + '</span><strong>' + escapeHtml(profileName) + '</strong></button></nav>' +
             '<main class="main-pane" aria-labelledby="screen-title"><header class="topbar"><h1 id="screen-title">' + escapeHtml(title) +
-            '</h1>' + topbarSubtitleHtml() + (topbarExtra || '') +
+            /* O indicador fica fora do <h1>: o título tem de continuar sendo
+               exatamente o nome da seção, que é o que a tela anuncia. */
+            '</h1>' + catalogueSyncChip() + topbarSubtitleHtml() + (topbarExtra || '') +
             '<div class="topbar-status">' + licenceChipHtml() + clockHtml() + profileChipHtml() +
             notificationBellHtml() + '</div></header><section class="content ' + (scrollable ? 'scrollable' : '') + '">' +
             sharedTitleNoticeHtml() + content + '</section><div class="bottom-hint">' + t('useArrows') + '</div></main></div>';
@@ -2018,7 +2115,9 @@ var BuroApp = (function () {
                         t('homeCachedWarning') + '</p><button class="button ghost focusable" data-action="home-retry">' +
                         t('retry') + '</button></div>' : '') + renderRealHome(data);
             }
-            content = catalogueSyncBanner(state.activeSource) + content;
+            /* O aviso da varredura virou um indicador compacto ao lado do
+               título — ver `catalogueSyncChip`. Uma faixa inteira empurrava a
+               Home para baixo por algo que roda sozinho e termina. */
         }
         shell(content, t('home'), Boolean(state.sources.length), topbarExtra);
         if (state.sources.length && data && data.kind === 'home' && !data.loading && !data.error) {
@@ -2967,8 +3066,21 @@ var BuroApp = (function () {
                 escapeHtml(t('loadingCatalogue')) + '</p></div>';
         }
         if (!rows.length) {
-            /* Sem título nenhum: filtro apertado demais, ou catálogo ainda
-               chegando. As categorias continuam ali como saída. */
+            /*
+              Nada para mostrar, e o motivo muda a resposta.
+
+              Se o filtro casou zero títulos, o certo é dizer isso e oferecer
+              limpar — cair na lista de categorias era confuso: aparecia uma tela
+              diferente da que a pessoa estava usando, sem explicar por quê.
+
+              Se o catálogo inteiro está vazio, as categorias são de fato a única
+              saída, porque abrir uma delas é o que traz os títulos.
+            */
+            if (Number(scope.total) > 0 || scope.genre || scope.service ||
+                    scope.year != null || scope.minimumRating != null) {
+                return heading + emptyState('B', t('noMatches'), t('noMatchesBody'),
+                    'catalogue-scope-reset', t('clearFilters'));
+            }
             return heading + categoryCards(scopedCategories(contentType, categories));
         }
         return heading + mediaCards(rows, layout, true) +
@@ -3403,13 +3515,23 @@ var BuroApp = (function () {
                 mediaCards(related, 'poster') + '</section>';
         }
         return '<div class="detail-page"><div class="detail-hero">' + detailArtworkHtml(item) +
+            /*
+              O pôster ao lado do texto, como no aplicativo do Windows.
+
+              O fundo já é a arte do título, mas em paisagem e coberto por
+              degradês: o pôster vertical é a capa que a pessoa reconhece de
+              relance, e é o que o Windows põe à esquerda da ficha. Sai da tela
+              quando não há capa, em vez de deixar um retângulo cinza.
+            */
+            detailPosterHtml(item) +
+            '<div class="detail-hero-copy">' +
             '<span class="hero-kicker">' + (isSeries ? t('series') : t('movies')) +
             '</span><h2>' + escapeHtml(details.title || item.name) + '</h2>' +
             (facts.length ? '<div class="detail-facts">' + facts.map(function (fact) {
                 return detailFact(fact, /^★/.test(fact) ? 'rating' : '');
             }).join('') + '</div>' : '') + criticsStrip(details) +
             '<p>' + escapeHtml(details.plot || t('noSynopsis')) + '</p>' + detailProgress(item) +
-            detailActionsHtml(item, isSeries, episodeRows, trailerId) + '</div>' +
+            detailActionsHtml(item, isSeries, episodeRows, trailerId) + '</div></div>' +
             (supporting ? '<div class="detail-support">' + supporting + '</div>' : '') + '</div>';
     }
 
@@ -6999,6 +7121,29 @@ var BuroApp = (function () {
             .replace('{items}', String(status.itemCount));
     }
 
+    /*
+      O andamento da varredura, ao lado do nome da seção.
+
+      Era uma faixa larga no topo da Home, com título, contagem e um botão de
+      pausar — espaço demais para algo que começa sozinho na abertura e termina
+      sozinho. Aqui é uma barrinha com a porcentagem: quem quiser pausar ou
+      retomar continua tendo o painel inteiro em Fontes.
+
+      Sai da tela quando termina, porque um indicador parado em 100% vira
+      decoração.
+    */
+    function catalogueSyncChip() {
+        var source = state.activeSource;
+        var status = source ? catalogueSyncStatus(source) : null;
+        var percent;
+        if (!status || !status.total || status.state === 'COMPLETE') { return ''; }
+        percent = Math.round(status.completed / status.total * 100);
+        return '<span class="sync-chip" role="status" aria-label="' +
+            attr(t('catalogueSyncTitle') + ' ' + percent + '%') + '">' +
+            '<span class="sync-chip-track"><i style="width:' + percent + '%"></i></span>' +
+            '<small>' + escapeHtml(status.completed + '/' + status.total) + '</small></span>';
+    }
+
     function catalogueSyncBanner(source) {
         var status = catalogueSyncStatus(source);
         var percent;
@@ -8681,6 +8826,19 @@ var BuroApp = (function () {
     function onKeyDown(event) {
         var K = BuroKeys.CODES;
         var active = document.activeElement;
+        /*
+          Durante a espera da varredura, ENTER entra assim mesmo.
+
+          Uma espera sem saída numa TV é indistinguível de uma tela travada, e a
+          varredura de um catálogo grande leva minutos. Quem pular recebe o app
+          com o que já entrou; o resto continua chegando em segundo plano.
+        */
+        if (state.screen === 'BOOT' && bootSweepDone &&
+                (event.keyCode === K.ENTER || event.keyCode === K.RETURN)) {
+            event.preventDefault();
+            finishBootSweep();
+            return;
+        }
         if (BuroTrailer.isOpen()) {
             if (event.keyCode === K.RETURN || event.keyCode === K.STOP) { BuroTrailer.close(); }
             else if (event.keyCode === K.ENTER || event.keyCode === K.PLAY_PAUSE ||
@@ -8915,6 +9073,9 @@ var BuroApp = (function () {
         _rememberArtwork: rememberArtwork,
         _rememberDetailBackdrop: rememberDetailBackdrop,
         _openCategory: openCategory,
+        /* O tamanho do bloco muda para caber na fileira da TV; os testes leem daqui
+           em vez de repetir o número e quebrar a cada ajuste. */
+        _catalogueBlockSize: function () { return CATALOGUE_BLOCK_SIZE; },
         _artworkFor: function (itemId) { return artworkMemory[itemId]; },
         _cacheSizes: function () {
             return {

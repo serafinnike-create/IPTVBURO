@@ -424,12 +424,15 @@ async function run() {
     check('o conteúdo fica no painel central equivalente ao Android', bootFrame.panel);
     check('a tela usa a marca circular vetorial equivalente ao Windows', bootFrame.mark);
     check('há indicador circular em vez de porcentagem inventada', bootFrame.spinner);
-    check('as quatro etapas universais são representadas', bootFrame.dots === 4);
+    /* Cinco: a varredura do catálogo passou a fazer parte da abertura, para o
+       app aparecer com as prateleiras cheias em vez de ir enchendo enquanto a
+       pessoa navega. Ver BOOT_STEPS em js/app.js. */
+    check('as cinco etapas universais são representadas', bootFrame.dots === 5);
     check('a etapa em curso é descrita ao usuário',
         Boolean(bootFrame.message) && bootFrame.message !== 'bootProfiles');
-    check('o primeiro estágio expõe progresso real de 25 por cento',
+    check('o primeiro estágio expõe progresso real do primeiro de cinco passos',
         bootFrame.progress && bootFrame.progress.role === 'progressbar' &&
-        bootFrame.progress.now === '25' && bootFrame.progress.min === '0' && bootFrame.progress.max === '100');
+        bootFrame.progress.now === '20' && bootFrame.progress.min === '0' && bootFrame.progress.max === '100');
     check('mudanças do boot formam uma única região de status educada', bootFrame.live);
 
     await new Promise(function (resolve, reject) {

@@ -136,6 +136,7 @@ async function reachShell(window) {
 
 async function run() {
     var window;
+    var blockSize;
 
     process.stdout.write('A capa aparece depois de chegar\n');
     window = loadApp();
@@ -177,7 +178,11 @@ async function run() {
     process.stdout.write('A prateleira cresce em blocos\n');
     window.close();
     window = loadApp();
-    window.__seedCount = 25;
+    /* Dois blocos e sobra, para ver o crescimento e o fim da lista. O tamanho
+       do bloco é lido do app: fixá-lo aqui faria este teste quebrar toda vez
+       que ele fosse ajustado para encher a fileira da TV. */
+    blockSize = window.BuroApp._catalogueBlockSize();
+    window.__seedCount = blockSize * 2 + 3;
     await reachShell(window);
     await seed(window, {});
     window.BuroApp.state.section = 'MOVIES';
@@ -186,26 +191,27 @@ async function run() {
     await waitFor(function () {
         return window.document.querySelectorAll('.media-card').length > 0;
     }, 8000);
-    check('o primeiro bloco é pequeno, e não o catálogo inteiro',
-        window.document.querySelectorAll('.media-card').length === 10);
+    check('o primeiro bloco é um bloco, e não o catálogo inteiro',
+        window.document.querySelectorAll('.media-card').length === blockSize);
     check('a contagem diz quanto já veio e quanto existe',
-        (window.document.querySelector('.catalogue-shelf-heading p').textContent || '').indexOf('25') > 0);
+        (window.document.querySelector('.catalogue-shelf-heading p').textContent || '')
+            .indexOf(String(blockSize * 2 + 3)) > 0);
     check('havendo mais, a prateleira oferece carregar',
         Boolean(window.document.querySelector('[data-action="catalogue-shelf-more"]')));
 
     window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-shelf-more"]'));
     await waitFor(function () {
-        return window.document.querySelectorAll('.media-card').length === 20;
+        return window.document.querySelectorAll('.media-card').length === blockSize * 2;
     }, 8000);
     check('carregar mais acrescenta ao que já estava, sem recomeçar',
-        window.document.querySelectorAll('.media-card').length === 20);
+        window.document.querySelectorAll('.media-card').length === blockSize * 2);
 
     window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-shelf-more"]'));
     await waitFor(function () {
-        return window.document.querySelectorAll('.media-card').length === 25;
+        return window.document.querySelectorAll('.media-card').length === blockSize * 2 + 3;
     }, 8000);
     check('o último bloco traz só o que resta',
-        window.document.querySelectorAll('.media-card').length === 25);
+        window.document.querySelectorAll('.media-card').length === blockSize * 2 + 3);
     check('sem mais nada para vir, o botão sai da tela',
         !window.document.querySelector('[data-action="catalogue-shelf-more"]'));
 

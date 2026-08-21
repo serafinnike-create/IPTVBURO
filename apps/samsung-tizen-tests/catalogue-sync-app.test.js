@@ -126,9 +126,24 @@ async function run() {
         !window.document.querySelector('[data-action="source-manage"]').disabled);
 
     window.BuroApp._activate(window.document.querySelector('[data-action="section"][data-section="HOME"]'));
-    check('Home mostra progresso e oferece pausa pelo D-pad',
-        window.document.querySelector('.catalogue-sync-banner') &&
-        window.document.querySelector('[data-action="catalogue-sync-cancel"].focusable'));
+    /*
+      Na Home o andamento é um indicador ao lado do título, não uma faixa.
+
+      A faixa trazia título, contagem e um botão de pausar, e empurrava a Home
+      para baixo por algo que começa sozinho na abertura e termina sozinho. Quem
+      quer pausar ou retomar continua tendo o painel inteiro em Fontes, que é
+      onde se administra a fonte — e é de lá que este teste segue.
+    */
+    check('Home mostra o andamento sem ocupar a tela com ele',
+        Boolean(window.document.querySelector('.sync-chip')) &&
+        !window.document.querySelector('.catalogue-sync-banner'));
+    /* O painel inteiro vive em Gerenciar fonte, que é onde se administra a
+       fonte — e é de lá que a pausa é alcançada. */
+    window.BuroApp._activate(window.document.querySelector('[data-action="section"][data-section="SOURCES"]'));
+    window.BuroApp._activate(window.document.querySelector('[data-action="source-manage"]'));
+    check('Gerenciar fonte mantém o painel inteiro, com pausa alcançável pelo D-pad',
+        Boolean(window.document.querySelector('.catalogue-sync-banner')) &&
+        Boolean(window.document.querySelector('[data-action="catalogue-sync-cancel"].focusable')));
     window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-sync-cancel"]'));
     await waitFor(function () {
         return window.BuroCatalogueSync.progress(source, categories).state === 'CANCELLED';

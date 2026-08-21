@@ -102,6 +102,9 @@ body.playing .app-root { display: none; }
 
 .gate-screen h1, .boot-screen h1 { font-size: 54px; line-height: 1.08; }
 .boot-screen p { margin-top: 12px; color: var(--muted); font-size: 24px; }
+/* A contagem da varredura, embaixo da mensagem: ela muda varias vezes por
+   segundo e um titulo que se reescreve nesse ritmo nao se le. */
+.boot-detail { margin-top: 8px; color: var(--secondary); font-size: 19px; }
 .gate-copy { width: 1080px; margin: 28px auto 34px; color: var(--secondary); font-size: 28px; line-height: 1.5; }
 
 .legal-check {
@@ -292,7 +295,10 @@ body.playing .app-root { display: none; }
 /* O título absorve a sobra, então acrescentar o sino não reposiciona o resto.
    Sem isto, o space-between distribuiria o espaço entre tres filhos e o chip da
    plataforma sairia do canto onde sempre esteve. */
-.topbar h1 { flex: 1; min-width: 0; font-size: 34px; }
+/* O titulo ocupa so o que precisa, para o indicador de varredura ficar colado
+   nele. Sem corte: um titulo de secao e curto, e "Configuracoes" cortado seria
+   pior do que a folga que ele ocupa. */
+.topbar h1 { flex: 0 0 auto; min-width: 0; font-size: 34px; white-space: nowrap; }
 .platform-chip { flex: none; color: var(--muted); font-size: 19px; border: 1px solid #343741; border-radius: 18px; padding: 8px 16px; }
 /* O bloco da direita da barra: licenca, relogio, perfil e sino, na mesma ordem
    do aplicativo do Windows. */
@@ -300,6 +306,15 @@ body.playing .app-root { display: none; }
     flex: 1; min-width: 0; margin-left: 22px; align-self: flex-end; padding-bottom: 4px;
     color: var(--muted); font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* O andamento da varredura ao lado do nome da secao: uma barrinha e a fracao,
+   no lugar da faixa larga que empurrava a Home para baixo. */
+.sync-chip { flex: none; display: flex; align-items: center; margin-left: 22px; }
+.sync-chip-track {
+    width: 130px; height: 6px; margin-right: 12px;
+    border-radius: 3px; background: rgba(246,247,250,.18); overflow: hidden;
+}
+.sync-chip-track i { display: block; height: 100%; background: var(--gold); }
+.sync-chip small { color: var(--muted); font-size: 16px; }
 .topbar-status { flex: none; display: flex; align-items: center; }
 .topbar-chip {
     flex: none; height: 44px; padding: 0 18px; margin-right: 18px;
@@ -581,6 +596,21 @@ body.reduced-motion .discover-card.current { animation: none; }
     display: flex; flex-direction: column; justify-content: flex-end;
 }
 .detail-hero > *:not(.detail-art) { position: relative; z-index: 2; }
+/* Poster a esquerda e a ficha a direita, como no aplicativo do Windows. O
+   fundo continua sendo a arte em paisagem; o poster e a capa que se reconhece
+   de relance. */
+.detail-hero { flex-direction: row; align-items: flex-end; }
+.detail-poster {
+    flex: 0 0 300px; width: 300px; height: 450px; margin-right: 42px;
+    border-radius: 18px; overflow: hidden; background: var(--elevated);
+    box-shadow: 0 22px 50px rgba(0,0,0,.55);
+}
+.detail-poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.detail-hero-copy { flex: 1; min-width: 0; }
+.detail-hero-copy h2 { width: auto; max-width: 100%; }
+.detail-hero-copy > p { width: auto; max-width: 100%; }
+.detail-hero-copy .detail-facts,
+.detail-hero-copy .detail-critics { width: auto; max-width: 100%; }
 .detail-hero h2 { width: 100%; max-width: 1100px; margin: 15px 0; font-size: 62px; line-height: 1.06; }
 /* A sinopse inteira, nao as quatro linhas que cabiam no cartao antigo: a pagina
    rola, entao cortar o texto so escondia o que o usuario veio ler. */
@@ -697,16 +727,28 @@ body.reduced-motion .discover-card.current { animation: none; }
 .catalogue-year-bar { margin-bottom: 14px; }
 /* As opcoes de um seletor, abertas embaixo dele. Uma lista por vez: duas
    ocupariam a tela inteira numa TV. */
+/*
+  Uma janela pequena, nao um painel do tamanho da tela.
+
+  Aberta com todos os anos, a lista ocupava tres fileiras e empurrava a
+  prateleira para fora da vista — a pessoa perdia de vista justamente o que
+  estava filtrando. Agora e uma coluna estreita que rola: o foco leva a rolagem
+  junto, entao a lista pode ser longa sem custar tela.
+*/
 .catalogue-options {
-    display: flex; flex-wrap: wrap; margin: -14px 0 24px;
-    padding: 18px 20px; border: 1px solid #343741; border-radius: 18px; background: var(--elevated);
+    position: relative; z-index: 5;
+    display: block; width: 340px; max-height: 380px; overflow-y: auto;
+    margin: -10px 0 22px; padding: 12px;
+    border: 1px solid #3d414c; border-radius: 18px; background: var(--elevated);
+    box-shadow: 0 18px 40px rgba(0,0,0,.55);
 }
 .option-chip {
-    min-height: 58px; margin: 0 12px 12px 0; padding: 0 22px;
+    width: 100%; min-height: 56px; margin: 0 0 6px; padding: 0 18px;
     display: flex; align-items: center;
-    border: 3px solid transparent; border-radius: 14px; background: var(--surface);
-    color: var(--secondary); font-size: 20px; font-weight: 650; cursor: none;
+    border: 3px solid transparent; border-radius: 12px; background: transparent;
+    color: var(--secondary); font-size: 20px; font-weight: 650; text-align: left; cursor: none;
 }
+.option-chip:last-child { margin-bottom: 0; }
 .option-chip.selected { background: rgba(214,169,86,.22); color: var(--gold); }
 .option-chip.focused { background: var(--ivory); color: var(--canvas); border-color: var(--gold); }
 .scope-chip.compact { min-width: 0; min-height: 68px; justify-content: center; padding: 12px 26px; }
