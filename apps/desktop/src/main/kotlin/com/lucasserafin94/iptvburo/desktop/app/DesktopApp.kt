@@ -135,6 +135,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.LocalDesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.metadata.TmdbStreamingCatalogue
+import com.lucasserafin94.iptvburo.desktop.download.DownloadRateTracker
 import com.lucasserafin94.iptvburo.desktop.download.formatDuration
 import com.lucasserafin94.iptvburo.desktop.download.formatRate
 import com.lucasserafin94.iptvburo.desktop.platform.openStreamingOfferExternally
@@ -222,6 +223,12 @@ fun DesktopApp(
     var updateBusy by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
     var updateProgress by remember { mutableStateOf(0f) }
+    // Bytes per second and seconds left, measured the same way content downloads are.
+    var updateBytesPerSecond by remember { mutableStateOf(0L) }
+    var updateSecondsRemaining by remember { mutableStateOf<Long?>(null) }
+    // The same smoothing the download list uses: a raw rate over one buffer swings wildly, and a
+    // running average over the whole transfer keeps reporting a healthy speed after a stall.
+    val updateRateTracker = remember { DownloadRateTracker() }
     var updateRelease by remember { mutableStateOf<DesktopRelease?>(null) }
     var updateReadyToRestart by remember { mutableStateOf(false) }
     // Owned here rather than inside the setup screen, which is replaced by the connecting and
@@ -284,6 +291,11 @@ fun DesktopApp(
                 updateBusy = true
                 updateMessage = text.checkingUpdate
                 updateProgress = 0f
+                updateBytesPerSecond = 0L
+                updateSecondsRemaining = null
+                // A previous attempt's samples would otherwise be averaged into this one's first
+                // reading, which is how a resumed download reports a speed it is not achieving.
+                updateRateTracker.forget(UPDATE_RATE_KEY)
                 updateRelease = null
                 updateReadyToRestart = false
                 when (val result = releaseUpdater.check()) {
@@ -301,8 +313,22 @@ fun DesktopApp(
                         // downloadAndLaunch performs I/O on Dispatchers.IO. Marshal progress back
                         // through the composition scope instead of mutating snapshot state there.
                         releaseUpdater
-                            .downloadAndLaunch(result.release) { fraction ->
-                                scope.launch { updateProgress = fraction }
+                            .downloadAndLaunch(result.release) { fraction, bytesRead ->
+                                // Measured on the I/O thread, where the bytes actually land, so the
+                                // interval is the transfer's own and not the composition's.
+                                val rate = updateRateTracker.observe(UPDATE_RATE_KEY, bytesRead)
+                                val total = result.release.sizeBytes
+                                val remaining =
+                                    if (total > 0L && rate > 0L && bytesRead in 0 until total) {
+                                        (total - bytesRead) / rate
+                                    } else {
+                                        null
+                                    }
+                                scope.launch {
+                                    updateProgress = fraction
+                                    updateBytesPerSecond = rate
+                                    updateSecondsRemaining = remaining
+                                }
                             }.onSuccess {
                                 // The installer waits for this process to leave. Keep the choice in
                                 // the user's hands instead of making the window disappear abruptly.
@@ -818,6 +844,8 @@ fun DesktopApp(
                     UpdateOverlay(
                         release = release,
                         progress = updateProgress,
+                        bytesPerSecond = updateBytesPerSecond,
+                        secondsRemaining = updateSecondsRemaining,
                         readyToRestart = updateReadyToRestart,
                         onRestart = onExitForUpdate,
                         onDismiss = { updateRelease = null },
@@ -3188,6 +3216,14 @@ private enum class DownloadDensity {
 private const val SEARCHABLE_DOWNLOAD_COUNT = 8
 
 /**
+ * The rate tracker's key for the installer download.
+ *
+ * A constant because there is only ever one update in flight, and the tracker keys by string so it
+ * can measure several content downloads at once.
+ */
+private const val UPDATE_RATE_KEY = "app-update"
+
+/**
  * Offline library.
  *
  * The point of downloading is watching without the provider, so every completed row plays straight
@@ -3508,6 +3544,10 @@ private fun DownloadLibraryRow(
 private fun UpdateOverlay(
     release: DesktopRelease,
     progress: Float,
+    /** Current speed, or zero before the first measurable interval. */
+    bytesPerSecond: Long,
+    /** Seconds left at the current speed, or null while it cannot honestly be known. */
+    secondsRemaining: Long?,
     readyToRestart: Boolean,
     onRestart: () -> Unit,
     onDismiss: () -> Unit,
@@ -3577,14 +3617,25 @@ private fun UpdateOverlay(
                 // the user it is working and roughly how much longer it will take.
                 val totalMegabytes = release.sizeBytes / 1_048_576.0
                 val doneMegabytes = totalMegabytes * progress.coerceIn(0f, 1f)
+                // Speed and remaining time join the line once they mean something. Both are
+                // omitted rather than shown as a placeholder: an estimate from the first moments of
+                // a transfer swings between seconds and hours, and a number that jumps like that is
+                // worse than no number at all. This is the same rule the download list follows.
+                val progressLine =
+                    buildList {
+                        add(
+                            if (release.sizeBytes > 0) {
+                                "${text.downloading}  ${(progress * 100).toInt()}%  " +
+                                    "(${"%.0f".format(doneMegabytes)} / ${"%.0f".format(totalMegabytes)} MB)"
+                            } else {
+                                "${text.downloading}  ${(progress * 100).toInt()}%"
+                            },
+                        )
+                        if (bytesPerSecond > 0L) add(formatRate(bytesPerSecond))
+                        secondsRemaining?.takeIf { it > 0L }?.let { add(formatDuration(it)) }
+                    }.joinToString("  ·  ")
                 Text(
-                    text =
-                        if (release.sizeBytes > 0) {
-                            "${text.downloading}  ${(progress * 100).toInt()}%  " +
-                                "(${"%.0f".format(doneMegabytes)} / ${"%.0f".format(totalMegabytes)} MB)"
-                        } else {
-                            "${text.downloading}  ${(progress * 100).toInt()}%"
-                        },
+                    text = progressLine,
                     color = BuroColors.TextSubtle,
                     style = MaterialTheme.typography.bodySmall,
                 )
