@@ -1648,6 +1648,7 @@ internal fun XtreamInternalDetailsPage(
                 liveEpgStatus = appState.liveEpgStatus,
                 onLoadMovie = { scope.launch { appState.loadSelectedMovieDetails() } },
                 onLoadSeries = { scope.launch { appState.loadSelectedSeriesDetails() } },
+                onLoadEpg = { scope.launch { appState.loadSelectedLiveEpg() } },
                 onOpenTrailer = { trailerId -> openTrailerId = trailerId },
                 onOpenExternal = onOpenExternal,
                 onOpenPerson = onOpenPerson,
@@ -1778,6 +1779,8 @@ internal fun XtreamItemDetail(
     liveEpgStatus: LiveEpgStatus,
     onLoadMovie: () -> Unit,
     onLoadSeries: () -> Unit,
+    /** Asks for the guide again, for the same reason the film details can be asked for again. */
+    onLoadEpg: () -> Unit,
     onOpenTrailer: (String) -> Unit,
     onOpenExternal: (PendingXtreamExternal) -> Unit,
     onOpenPerson: (String) -> Unit,
@@ -2171,7 +2174,7 @@ internal fun XtreamItemDetail(
                 }
                 Spacer(Modifier.height(BuroSpacing.Lg))
                 if (item.contentType == XtreamContentType.LIVE) {
-                    LiveEpgContent(liveEpgStatus)
+                    LiveEpgContent(liveEpgStatus, onLoadEpg)
                     Spacer(Modifier.height(18.dp))
                 }
                 if (item.contentType == XtreamContentType.MOVIE) {
@@ -2228,16 +2231,29 @@ private fun Long?.asClockTime(): String =
         ?: "—"
 
 @Composable
-private fun LiveEpgContent(status: LiveEpgStatus) {
+private fun LiveEpgContent(
+    status: LiveEpgStatus,
+    onRetry: () -> Unit,
+) {
     val text = strings
     when (status) {
-        LiveEpgStatus.Idle,
-        LiveEpgStatus.Loading,
-        -> Row(verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(color = BuroColors.Primary, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.width(10.dp))
-            Text("Carregando agora e próximo…", color = BuroColors.TextMuted)
+        // Idle means nothing is in flight, so a spinner here is a lie — the same one that left the
+        // film page loading for ever. A cancelled fetch resets to Idle and nothing re-runs, because
+        // the effects that start a load are keyed on the item, not on the status.
+        LiveEpgStatus.Idle -> {
+            LaunchedEffect(Unit) { onRetry() }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(color = BuroColors.Primary, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(text.shareStrings.screens.epgLoading, color = BuroColors.TextMuted)
+            }
         }
+        LiveEpgStatus.Loading ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(color = BuroColors.Primary, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(text.shareStrings.screens.epgLoading, color = BuroColors.TextMuted)
+            }
         LiveEpgStatus.Unavailable ->
             Text("Guia indisponível; o canal continua acessível.", color = BuroColors.TextSubtle)
         is LiveEpgStatus.Loaded -> {
@@ -2318,12 +2334,27 @@ private fun MovieDetailContent(
     onRequestCastPhoto: suspend (String) -> Unit = {},
 ) {
     when (status) {
-        MovieDetailsStatus.Idle,
-        MovieDetailsStatus.Loading,
-        -> {
+        // Idle is not loading, and drawing it as though it were is what left this page spinning
+        // for ever. Every cancelled fetch resets to Idle — routinely, whenever the effect that
+        // started it recomposes — and neither effect that starts a load is keyed on the status, so
+        // nothing ever ran again. The spinner said "working" about a screen where nothing was.
+        //
+        // Asking again is right rather than offering a button: the user already asked, by opening
+        // the film. The button below is for when asking again did not help either.
+        MovieDetailsStatus.Idle -> {
+            LaunchedEffect(Unit) { onRetry() }
             CircularProgressIndicator(color = BuroColors.Primary, modifier = Modifier.size(30.dp))
             Spacer(Modifier.height(8.dp))
-            Text("Carregando ficha do filme…", color = BuroColors.TextMuted)
+            Text(strings.shareStrings.screens.movieDetailsLoading, color = BuroColors.TextMuted)
+            Spacer(Modifier.height(BuroSpacing.Md))
+            // Visible from the start, because the case this exists for is precisely the one where
+            // the automatic attempt does not arrive. A spinner with no way out is the bug.
+            OutlinedButton(onClick = onRetry) { Text(strings.tryAgain) }
+        }
+        MovieDetailsStatus.Loading -> {
+            CircularProgressIndicator(color = BuroColors.Primary, modifier = Modifier.size(30.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(strings.shareStrings.screens.movieDetailsLoading, color = BuroColors.TextMuted)
         }
         is MovieDetailsStatus.Error -> {
             Text(status.message, color = BuroColors.Error)
