@@ -2255,10 +2255,10 @@ private fun LiveEpgContent(
                 Text(text.shareStrings.screens.epgLoading, color = BuroColors.TextMuted)
             }
         LiveEpgStatus.Unavailable ->
-            Text("Guia indisponível; o canal continua acessível.", color = BuroColors.TextSubtle)
+            Text(text.shareStrings.screens.epgUnavailable, color = BuroColors.TextSubtle)
         is LiveEpgStatus.Loaded -> {
             if (status.now == null && status.next == null) {
-                Text("Sem programação informada pela fonte.", color = BuroColors.TextSubtle)
+                Text(text.shareStrings.screens.epgEmpty, color = BuroColors.TextSubtle)
             } else {
                 status.now?.let { program ->
                     Text("AGORA", color = BuroColors.Primary, fontWeight = FontWeight.Black)
@@ -2359,7 +2359,7 @@ private fun MovieDetailContent(
         is MovieDetailsStatus.Error -> {
             Text(status.message, color = BuroColors.Error)
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onRetry) { Text("Tentar novamente") }
+            OutlinedButton(onClick = onRetry) { Text(strings.tryAgain) }
         }
         is MovieDetailsStatus.Loaded -> {
             val details = status.details
@@ -2759,19 +2759,19 @@ private fun SeriesDetailContent(
                         contentColor = BuroColors.OnPrimary,
                     ),
             ) {
-                Text("Carregar episódios", fontWeight = FontWeight.Bold)
+                Text(text.shareStrings.screens.loadEpisodes, fontWeight = FontWeight.Bold)
             }
         }
         SeriesDetailsStatus.Loading -> {
             CircularProgressIndicator(color = BuroColors.Primary, modifier = Modifier.size(30.dp))
             Spacer(Modifier.height(8.dp))
-            Text("Carregando episódios…", color = BuroColors.TextMuted)
+            Text(text.shareStrings.screens.episodesLoading, color = BuroColors.TextMuted)
         }
         is SeriesDetailsStatus.Error -> {
             Text(status.message, color = BuroColors.Error)
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onLoadSeries) {
-                Text("Tentar novamente")
+                Text(text.tryAgain)
             }
         }
         is SeriesDetailsStatus.Loaded -> {
