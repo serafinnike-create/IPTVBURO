@@ -11,6 +11,11 @@ var BuroTmdb = (function () {
     var TITLES_PER_SERVICE = 20;
     var MAX_EXPANDED_TITLES = 100;
     var MAX_EXPANDED_PAGES = 8;
+    /* Paginas por servico no indice de servicos. Cinco paginas sao cem titulos,
+       o suficiente para o cruzamento render alguma coisa numa lista grande sem
+       virar dezenas de requisicoes por servico numa TV. */
+    var SERVICE_INDEX_PAGES = 5;
+    var SERVICE_INDEX_PAGE_SIZE = 20;
     var SHELF_CACHE_KEY = 'iptvburo.tmdb-shelves.v1';
     var SHELF_CACHE_VERSION = 2;
     var MAX_SHELF_CACHE_RECORDS = 8;
@@ -308,6 +313,10 @@ var BuroTmdb = (function () {
             posterUrl: image(payload.poster_path, 'w342'),
             releaseDate: clean(payload[isSeries ? 'first_air_date' : 'release_date']) || null,
             rating: isFinite(Number(payload.vote_average)) ? Number(payload.vote_average) : null,
+            /* Quantos votaram. É o que separa uma nota que vale ler de uma que
+               três pessoas deram, e sem isso o painel de notas não tem como
+               decidir se deve aparecer. */
+            voteCount: Math.max(0, Math.floor(Number(payload.vote_count)) || 0),
             duration: isSeries ? (Array.isArray(payload.episode_run_time) ? Number(payload.episode_run_time[0]) || null : null) :
                 (Number(payload.runtime) || null),
             genre: Array.isArray(payload.genres) ? payload.genres.map(function (genre) { return clean(genre && genre.name); }).filter(Boolean).join(' / ') : null,
@@ -542,6 +551,78 @@ var BuroTmdb = (function () {
     }
 
     /*
+      O que cada serviço carrega, para o índice de serviços.
+
+      Diferente de `loadShelves`, que traz vinte títulos por serviço para
+      desenhar uma prateleira: aqui o resultado não vai para a tela, vai ser
+      cruzado com a lista do usuário. Vinte títulos casariam quase nada de um
+      catálogo de dezenas de milhares, então são várias páginas por serviço.
+
+      Para na primeira página curta — significa que o serviço não tem mais o que
+      dar — e o erro de um serviço não derruba os outros: um índice com quatro
+      serviços é melhor do que nenhum.
+    */
+    function loadServiceTitles(key, region, locale, progress, success, failure) {
+        var active = null;
+        var stopped = false;
+        var services = [];
+        var byService = {};
+        var index = 0;
+        var page = 1;
+        key = safeKey(key);
+        region = safeRegion(region);
+        function nextService() {
+            if (stopped) { return; }
+            if (index >= services.length) { success(byService); return; }
+            page = 1;
+            nextPage();
+        }
+        function nextPage() {
+            var service = services[index];
+            if (stopped) { return; }
+            if (page > SERVICE_INDEX_PAGES) {
+                index += 1;
+                if (progress) { progress(index, services.length); }
+                nextService();
+                return;
+            }
+            active = request('discover/movie', key, (function () {
+                var params = discoverParams(service.id, region, 'MOVIES');
+                params.language = language(locale);
+                params.page = page;
+                return params;
+            }()), function (payload) {
+                var titles = discoveredTitles(payload, false);
+                if (!byService[service.name]) { byService[service.name] = []; }
+                titles.forEach(function (row) {
+                    byService[service.name].push({ title: row.title, year: row.year });
+                });
+                if (titles.length < SERVICE_INDEX_PAGE_SIZE) {
+                    index += 1;
+                    if (progress) { progress(index, services.length); }
+                    nextService();
+                    return;
+                }
+                page += 1;
+                nextPage();
+            }, function () {
+                /* O serviço falhou: segue para o próximo em vez de abortar. */
+                index += 1;
+                if (progress) { progress(index, services.length); }
+                nextService();
+            });
+        }
+        active = request('watch/providers/movie', key, {
+            language: language(locale), watch_region: region
+        }, function (payload) {
+            services = directory(payload);
+            if (!services.length) { success({}); return; }
+            nextService();
+        }, failure);
+        return { abort: function () { stopped = true; if (active && active.abort) { active.abort(); } } };
+    }
+
+    /*
       Catálogo atrás do "Ver mais" de uma prateleira. Igual ao contrato Kotlin:
       só é consultado sob demanda, percorre páginas de 20, para na primeira vazia
       e impõe dois limites independentes para uma resposta defeituosa nunca
@@ -678,6 +759,7 @@ var BuroTmdb = (function () {
         supportedRegions: function () { return SUPPORTED_REGIONS.slice(); },
         readShelfCache: readShelfCache, writeShelfCache: writeShelfCache, clearShelfCache: clearShelfCache,
         loadShelves: loadShelves, loadServiceCatalogue: loadServiceCatalogue,
+        loadServiceTitles: loadServiceTitles,
         loadSubscriptionTitle: loadSubscriptionTitle,
         providerTarget: providerTarget
     };

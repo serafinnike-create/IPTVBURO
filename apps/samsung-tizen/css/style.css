@@ -618,6 +618,25 @@ body.reduced-motion .discover-card.current { animation: none; }
 .detail-facts { width: 100%; max-width: 1100px; display: flex; flex-wrap: wrap; margin: 0 0 18px; }
 .detail-fact { margin: 0 10px 9px 0; padding: 7px 12px; border: 1px solid rgba(232,225,207,.16); border-radius: 999px; background: rgba(8,10,12,.58); color: var(--secondary); font-size: 16px; font-weight: 700; }
 .detail-fact.rating { border-color: rgba(214,169,86,.35); color: var(--gold); }
+/* O painel de notas do publico do TMDb, acima da fileira da critica: sao numeros
+   de origens diferentes e ficam separados para nao virarem uma fileira so, onde
+   um numero acabaria creditado a quem nao o calculou. */
+.detail-ratings { width: 100%; max-width: 1100px; margin: 0 0 18px; }
+.detail-ratings h3 { margin: 0 0 8px; color: var(--muted); font-size: 16px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.rating-row { display: flex; align-items: center; }
+/* A marca escrita, na cor do TMDb. Nao e um logotipo buscado da rede: ver a nota
+   em `ratingsSection`, onde o slot equivalente do Windows desenhava a marca da
+   Netflix ao lado das palavras "Nota TMDb". */
+.rating-mark {
+    display: flex; flex: 0 0 62px; width: 62px; height: 34px; margin-right: 14px;
+    align-items: center; justify-content: center; border-radius: 8px;
+    background: #01b4e4; color: #06202a;
+    font-size: 14px; font-weight: 900; letter-spacing: -.02em;
+}
+.rating-value { margin-right: 14px; color: var(--gold); font-size: 34px; font-weight: 700; line-height: 1; }
+.rating-copy { display: block; min-width: 0; }
+.rating-copy span { display: block; color: var(--text); font-size: 19px; }
+.rating-copy small { display: block; margin-top: 2px; color: var(--muted); font-size: 15px; }
 /* A fileira da crítica. Nada aqui recebe foco: é informação que o olho pega no
    caminho para o botão de assistir, e uma nota clicável interromperia a única
    coisa para a qual a tela existe. */
@@ -636,6 +655,9 @@ body.reduced-motion .discover-card.current { animation: none; }
 .critic-copy { display: block; min-width: 0; }
 .critic-score strong { display: block; color: var(--text); font-size: 26px; font-weight: 700; }
 .critic-score small { display: block; margin-top: 3px; color: var(--muted); font-size: 15px; letter-spacing: .04em; }
+/* A volta, abaixo da barra de acoes. Separada dela porque nao e uma acao sobre
+   o titulo, e porque a ordem dos glifos acompanha o Android. */
+.detail-back-row { margin-top: 18px; }
 .detail-watch-progress { width: 640px; margin-top: 20px; }
 .detail-watch-progress > div { height: 5px; overflow: hidden; border-radius: 3px; background: rgba(246,247,250,.22); }
 .detail-watch-progress i { display: block; height: 100%; background: var(--gold); }

@@ -2416,6 +2416,69 @@ var BuroApp = (function () {
     }
 
     /*
+      O índice de serviços: quais títulos da lista cada serviço carrega.
+
+      Existe para as listas que arquivam por gênero — "Filmes | Ação",
+      "Filmes | Drama" — onde categoria nenhuma nomeia um serviço e o seletor de
+      Serviço ficava permanentemente desativado. As categorias não sabem
+      responder "o que tem na Netflix"; o TMDb sabe.
+
+      Construído uma vez por chave e região, e só quando alguém abre o seletor:
+      são várias requisições e não vale gastá-las numa aba que talvez nunca use
+      o filtro. Falha em silêncio — isto acrescenta um filtro a uma tela que
+      funciona sem ele.
+    */
+    var serviceIndex = null;
+    var serviceIndexBuiltFor = null;
+    var serviceIndexLoading = false;
+    var serviceIndexRequest = null;
+
+    function currentServiceIndex() {
+        return serviceIndex || BuroServiceIndex.empty();
+    }
+
+    function ensureServiceIndex(contentType) {
+        var key = BuroTmdb.keyForProfile(state.activeProfile && state.activeProfile.id);
+        var region = BuroTmdb.safeRegion(state.preferences.tmdbRegion);
+        var cacheKey = key ? region : null;
+        if (!key || serviceIndexLoading) { return; }
+        if (serviceIndexBuiltFor === cacheKey && serviceIndex && !serviceIndex.isEmpty()) { return; }
+        serviceIndexLoading = true;
+        /* Sem `render()` aqui: esta função é chamada de dentro do desenho da
+           barra, e redesenhar no meio do desenho é recursão. O "procurando"
+           aparece no próximo quadro, que os retornos abaixo provocam. */
+        /*
+          A lista inteira, e não `state.items`: aquela é a amostra do boot, e um
+          índice construído sobre cento e vinte linhas casaria quase nada.
+
+          Guardando só nome, ano e id — a varredura passa por dezenas de milhares
+          de linhas e reter o item inteiro seria carregar o catálogo na memória
+          da TV para usar três campos.
+        */
+        BuroStorage.fold('items', function (accumulator, item) {
+            if (item && item.contentType === contentType &&
+                    (!state.activeSource || item.sourceId === state.activeSource.id)) {
+                accumulator.push({ id: item.id, name: item.name, year: item.year });
+            }
+            return accumulator;
+        }, [], function (library) {
+            if (!library.length) { serviceIndexLoading = false; render(); return; }
+            serviceIndexRequest = BuroTmdb.loadServiceTitles(key, region, state.preferences.language,
+                null, function (byService) {
+                    var built = BuroServiceIndex.build(byService, library);
+                    serviceIndexLoading = false;
+                    serviceIndexRequest = null;
+                    if (!built.isEmpty()) { serviceIndex = built; serviceIndexBuiltFor = cacheKey; }
+                    render();
+                }, function () {
+                    serviceIndexLoading = false;
+                    serviceIndexRequest = null;
+                    render();
+                });
+        }, function () { serviceIndexLoading = false; render(); });
+    }
+
+    /*
       Os dois seletores no topo de Filmes, Séries e Ao Vivo.
 
       Portado do XtreamWorkspace do Windows, inclusive a decisão de mostrar o
@@ -2443,13 +2506,30 @@ var BuroApp = (function () {
         var chips = '<button class="scope-chip focusable ' + (scope.genre ? 'selected' : '') +
             '" data-action="catalogue-pick-genre"><small>' + t('genreSelector') + '</small><strong>' +
             escapeHtml(genreLabel) + '</strong></button>';
-        if (parts.hasProviders) {
+        /*
+          Três casos, na mesma ordem do Windows.
+
+          A lista que nomeia serviços nas categorias é usada direto: é o
+          arquivamento do próprio provedor e não custa requisição nenhuma.
+          Faltando isso, o índice do TMDb responde. Faltando os dois, o chip
+          aparece desativado dizendo o motivo — esconder deixava quem procura
+          "só Netflix" sem saber se a função existe, está quebrada ou não se
+          aplica à lista dele.
+        */
+        if (parts.hasProviders || !currentServiceIndex().isEmpty()) {
             chips += '<button class="scope-chip focusable ' + (scope.service ? 'selected' : '') +
                 '" data-action="catalogue-pick-service">' + providerBadge(serviceIdentity) +
                 '<small>' + t('serviceSelector') + '</small><strong>' + escapeHtml(serviceLabel) + '</strong></button>';
         } else {
             chips += '<span class="scope-chip disabled"><small>' + t('serviceSelector') +
-                '</small><strong>' + escapeHtml(t('servicesUnavailable')) + '</strong></span>';
+                '</small><strong>' + escapeHtml(t(serviceIndexLoading ? 'servicesLoading' : 'servicesUnavailable')) +
+                '</strong></span>';
+            /*
+              Pedido aqui e não ao abrir o seletor: sem índice o chip não é
+              clicável, então não haveria como abri-lo. Ao vivo fica de fora —
+              um canal não está "na Netflix", e o índice do TMDb é de filmes.
+            */
+            if (contentType !== 'LIVE') { ensureServiceIndex(contentType); }
         }
         if (scope.genre || scope.service || scope.year != null || scope.minimumRating != null) {
             chips += '<button class="scope-chip clear focusable" data-action="catalogue-scope-reset">' +
@@ -2532,9 +2612,22 @@ var BuroApp = (function () {
             });
         } else if (open === 'service') {
             options.push({ value: null, label: t('allServices'), selected: !scope.service });
-            parts.providers.forEach(function (row) {
-                options.push({ value: row.label, label: row.label, selected: scope.service === row.label });
-            });
+            if (parts.hasProviders) {
+                parts.providers.forEach(function (row) {
+                    options.push({ value: row.label, label: row.label, selected: scope.service === row.label });
+                });
+            } else {
+                /* Do índice: o rótulo leva a contagem, que é o que permite julgar
+                   se vale filtrar por ele — "Netflix (128)" diz mais do que
+                   "Netflix" numa lista onde o cruzamento pode ter casado pouco. */
+                currentServiceIndex().services().forEach(function (label) {
+                    options.push({
+                        value: label,
+                        label: label + ' (' + currentServiceIndex().countFor(label) + ')',
+                        selected: scope.service === label
+                    });
+                });
+            }
         } else if (open === 'density') {
             CATALOGUE_LAYOUTS.forEach(function (layout) {
                 options.push({
@@ -2586,8 +2679,14 @@ var BuroApp = (function () {
         }
         scope.openPicker = null;
         /* Filtro novo, prateleira do zero: o que já estava carregado respondia a
-           outra pergunta. */
+           outra pergunta.
+
+           `loading` também volta a falso. Uma carga em andamento responde ao
+           filtro antigo e será descartada pelo `requestId` quando voltar; deixar
+           a marca de pé fazia a prateleira nunca pedir a carga nova, e a tela
+           ficava presa no resultado sem filtro. */
         scope.rows = undefined;
+        scope.loading = false;
         render();
     }
 
@@ -2909,18 +3008,32 @@ var BuroApp = (function () {
         var scope = catalogueScope(contentType);
         var sourceId = state.activeSource && state.activeSource.id;
         var allowed = null;
+        var allowedItems = null;
         var snapshot = catalogueVisibilitySnapshot();
         if (scope.service) {
             allowed = {};
             BuroProviders.categoryIdsForLabel(categories, scope.service).forEach(function (id) {
                 allowed[id] = true;
             });
+            /*
+              Nenhuma categoria com esse rótulo: o serviço veio do índice, que
+              responde por título e não por categoria. Filtrar pelo id do item é
+              o mesmo filtro visto de outro ângulo.
+            */
+            if (!Object.keys(allowed).length) {
+                allowed = null;
+                allowedItems = {};
+                currentServiceIndex().idsFor(scope.service).forEach(function (id) {
+                    allowedItems[id] = true;
+                });
+            }
         }
         return function (item) {
             if (!item || item.contentType !== contentType) { return false; }
             if (sourceId && item.sourceId !== sourceId) { return false; }
             if (!snapshotItemVisible(snapshot, item)) { return false; }
             if (allowed && !allowed[item.categoryId]) { return false; }
+            if (allowedItems && !allowedItems[item.id]) { return false; }
             if (scope.genre && item.categoryId !== scope.genre) { return false; }
             if (scope.year != null && Number(item.year) !== scope.year) { return false; }
             if (scope.minimumRating != null && !(Number(item.rating) >= scope.minimumRating)) { return false; }
@@ -2946,7 +3059,17 @@ var BuroApp = (function () {
         var requestId;
         var loaded = more && scope.rows ? scope.rows : [];
         var offset = loaded.length;
-        if (scope.loading) { return; }
+        /*
+          Um "carregar mais" sobre uma carga em andamento é ignorado: são a mesma
+          pergunta, e a segunda só duplicaria o bloco.
+
+          Um filtro novo, não. Recusar aqui deixava a carga antiga terminar e
+          escrever o resultado *sem* o filtro — escolher um serviço enquanto a
+          prateleira ainda carregava não filtrava nada, e nada tentava de novo
+          depois. O `requestId` abaixo é o que faz a carga antiga ser descartada
+          quando ela voltar.
+        */
+        if (scope.loading && more) { return; }
         requestId = ++catalogueShelfRequestId;
         scope.loading = true;
         if (!more) { scope.total = null; }
@@ -3250,6 +3373,53 @@ var BuroApp = (function () {
         });
     }
 
+    /* Abaixo disto a nota é de três pessoas, e uma média de três votos não é
+       uma nota. Mesmo limite do aplicativo do Windows. */
+    var MINIMUM_TMDB_VOTES = 20;
+
+    /*
+      A nota do público do TMDb, com a contagem de votos.
+
+      Separada da faixa da crítica logo abaixo porque as duas coisas são
+      diferentes: esta é o público do TMDb votando, aquela é Rotten Tomatoes,
+      IMDb e Metacritic. As duas discordam de rotina — o mesmo filme sai 80%
+      numa e 68% na outra — e juntá-las numa fileira só atribuiria um número a
+      quem não o calculou.
+
+      A marca é escrita, não é um logotipo buscado do CDN: no Windows esse slot
+      apontava para um caminho de logo de *provedor*, e o arquivo por trás dele
+      era a marca da Netflix — o painel desenhava o logotipo da Netflix ao lado
+      das palavras "Nota TMDb". Letras na cor da marca dizem de quem é o número
+      e não viram silenciosamente o de outra empresa.
+
+      Ausente quando ninguém votou: o TMDb responde 0.0 com zero votos para
+      títulos que guarda mas ninguém avaliou, e "0%" se lê como veredito e não
+      como a falta de um.
+    */
+    function ratingsSection(details) {
+        var average = details && Number(details.rating);
+        var votes = details && Number(details.voteCount);
+        if (!(average > 0) || !(votes >= MINIMUM_TMDB_VOTES)) { return ''; }
+        return '<section class="detail-ratings" aria-label="' + attr(t('ratingsSection')) + '">' +
+            '<h3>' + escapeHtml(t('ratingsSection')) + '</h3>' +
+            '<div class="rating-row" role="group" aria-label="' +
+            attr(t('tmdbScore') + ': ' + Math.round(average * 10) + '%') + '">' +
+            '<span class="rating-mark" aria-hidden="true">TMDb</span>' +
+            /* Em porcentagem, que é como se lê uma nota de relance: o TMDb
+               publica sobre dez, e "76%" entra mais rápido que "7,6". */
+            '<strong class="rating-value">' + Math.round(average * 10) + '%</strong>' +
+            '<span class="rating-copy"><span>' + escapeHtml(t('tmdbScore')) + '</span><small>' +
+            escapeHtml(t('ratingVotes').replace('{votes}', formatVoteCount(votes))) +
+            '</small></span></div></section>';
+    }
+
+    /* Milhares abreviados: "12 mil" cabe onde "12.438" quebraria a linha, e a
+       precisão exata de uma contagem de votos não muda nada para quem lê. */
+    function formatVoteCount(votes) {
+        if (votes >= 1000) { return Math.round(votes / 1000) + ' ' + t('thousandSuffix'); }
+        return String(votes);
+    }
+
     /*
       Cada nota traz o nome de quem a calculou. Não usamos o tomate nem a pipoca
       da Rotten Tomatoes: as marcas são delas, e um número sem a marca continua
@@ -3529,7 +3699,7 @@ var BuroApp = (function () {
             '</span><h2>' + escapeHtml(details.title || item.name) + '</h2>' +
             (facts.length ? '<div class="detail-facts">' + facts.map(function (fact) {
                 return detailFact(fact, /^★/.test(fact) ? 'rating' : '');
-            }).join('') + '</div>' : '') + criticsStrip(details) +
+            }).join('') + '</div>' : '') + ratingsSection(details) + criticsStrip(details) +
             '<p>' + escapeHtml(details.plot || t('noSynopsis')) + '</p>' + detailProgress(item) +
             detailActionsHtml(item, isSeries, episodeRows, trailerId) + '</div></div>' +
             (supporting ? '<div class="detail-support">' + supporting + '</div>' : '') + '</div>';
@@ -7772,7 +7942,20 @@ var BuroApp = (function () {
             glyphs += actionGlyph('trailer', item.id, '▷', t('trailer'), false);
         }
         glyphs += actionGlyph('share', item.id, '↗', t('share'), false);
-        return primary + '<div class="detail-action-bar">' + glyphs + '</div>';
+        /*
+          A volta, escrita — e fora da barra de glifos.
+
+          O RETURN do controle já faz isto e continua fazendo; o botão existe
+          porque o aplicativo do Windows tem um e porque quem usa mouse ou
+          teclado numa TV não tem RETURN à mão. Fica depois da barra e não
+          dentro dela: a ordem dos glifos é a mesma do Android — favoritar,
+          lembrete, …, compartilhar por último — e é verificada em
+          `reminders-app.test.js`. Uma volta enfiada ali dentro quebraria essa
+          paridade e poria um botão de sair no meio das ações do título.
+        */
+        return primary + '<div class="detail-action-bar">' + glyphs + '</div>' +
+            '<div class="detail-back-row"><button class="button ghost focusable" data-action="back">← ' +
+            escapeHtml(t('backToCatalogue')) + '</button></div>';
     }
 
     function downloadControls(item, compact) {
@@ -9062,6 +9245,7 @@ var BuroApp = (function () {
         _onKeyUp: onKeyUp,
         _playbackFailed: playbackFailed,
         _friendlyError: friendlyError,
+        _ratingsSection: ratingsSection,
         _receiveRequestedAppControl: receiveRequestedAppControl,
         _resolvePendingSharedTitle: resolvePendingSharedTitle,
         _pendingSharedTitle: function () { return pendingSharedTitle; },

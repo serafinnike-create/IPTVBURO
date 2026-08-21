@@ -215,6 +215,62 @@ async function run() {
     check('sem mais nada para vir, o botão sai da tela',
         !window.document.querySelector('[data-action="catalogue-shelf-more"]'));
 
+    /*
+      Escolher um filtro enquanto a prateleira ainda carrega.
+
+      Numa lista de quarenta mil títulos a primeira carga leva segundos, que é
+      exatamente quando alguém estende a mão para o seletor. A carga em
+      andamento respondia à pergunta antiga, e a nova era recusada por já haver
+      uma em curso: a antiga terminava, escrevia o resultado sem filtro, e nada
+      tentava de novo.
+
+      A sobreposição que provoca o defeito depende de um redesenho extra chegar
+      no meio da carga — `service-selector.test.js` a produz de forma confiável,
+      porque a construção do índice de serviços redesenha por conta própria.
+      Aqui fica a versão simples: escolher durante a carga tem de valer, e a
+      tela não pode ficar presa em "carregando".
+    */
+    process.stdout.write('Um filtro escolhido durante a carga vale mesmo assim\n');
+    window.close();
+    window = loadApp();
+    window.__seedCount = 6;
+    await reachShell(window);
+    await seed(window, {});
+    /*
+      A leitura é atrasada de propósito para garantir a sobreposição.
+
+      Sem isso a carga termina antes de o seletor abrir e o teste passa mesmo
+      com o defeito presente — que foi o que aconteceu na primeira versão dele.
+      Na TV o atraso é real: são dezenas de milhares de linhas.
+    */
+    (function () {
+        var realCountWhere = window.BuroStorage.countWhere;
+        window.BuroStorage.countWhere = function (store, matcher, success, failure) {
+            return realCountWhere(store, matcher, function (total) {
+                window.setTimeout(function () { success(total); }, 120);
+            }, failure);
+        };
+    }());
+    window.BuroApp.state.section = 'MOVIES';
+    window.BuroApp.state.screenData = null;
+    window.BuroApp.render();
+    /* Sem esperar a prateleira: o ponto é escolher com a carga em voo. */
+    await waitFor(function () {
+        return Boolean(window.document.querySelector('[data-action="catalogue-pick-year"]'));
+    }, 8000);
+    window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-pick-year"]'));
+    await waitFor(function () {
+        return Boolean(window.document.querySelector('[data-picker="year"][data-value="2024"]'));
+    }, 8000);
+    window.BuroApp._activate(window.document.querySelector('[data-picker="year"][data-value="2024"]'));
+    await waitFor(function () {
+        return window.document.querySelectorAll('.media-card').length === 6;
+    }, 8000);
+    check('a prateleira carrega com o filtro que foi escolhido',
+        window.document.querySelectorAll('.media-card').length === 6);
+    check('e a carga não fica presa em "carregando"',
+        !window.document.querySelector('.search-loading'));
+
     process.stdout.write('Sem arte, o cartão continua legível\n');
     window.close();
     window = loadApp();
