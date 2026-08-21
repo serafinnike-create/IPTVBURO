@@ -1167,7 +1167,8 @@ var BuroApp = (function () {
         return navigationEntries().map(function (entry) {
             return '<li class="nav-item focusable ' + (state.section === entry.section ? 'selected' : '') +
                 '" role="button"' + (state.section === entry.section ? ' aria-current="page"' : '') +
-                ' data-action="section" data-section="' + entry.section + '"><span class="nav-icon">' + entry.icon +
+                ' data-action="section" data-section="' + entry.section + '"><span class="nav-icon">' +
+                (BuroIcons.has(entry.label) ? BuroIcons.svg(entry.label) : escapeHtml(entry.icon)) +
                 '</span><span>' + t(entry.label) + '</span></li>';
         }).join('');
     }

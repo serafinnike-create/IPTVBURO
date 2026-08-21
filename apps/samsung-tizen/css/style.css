@@ -257,9 +257,12 @@ body.playing .app-root { display: none; }
 /* O icone volta a aparecer: na lateral ha largura para ele e para o nome. */
 .nav-item .nav-icon {
     display: flex; align-items: center; justify-content: center;
-    flex: 0 0 42px; margin-right: 16px;
+    flex: 0 0 34px; margin-right: 18px;
     font-size: 17px; font-weight: 800; color: var(--muted);
 }
+/* O desenho herda a cor do item, então segue os estados sem uma segunda regra
+   por estado: apagado em repouso, dourado quando selecionado, escuro no foco. */
+.nav-item .nav-icon svg { display: block; }
 .nav-item > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-item.selected { background: rgba(214,169,86,.22); color: var(--text); }
 .nav-item.selected .nav-icon { color: var(--gold); }
