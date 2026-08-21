@@ -121,7 +121,9 @@ class UpdateScriptTest {
                     ),
                 )
 
-            val skipAt = body.indexOf("if not errorlevel 1 goto :done")
+            // The jump target is :verify rather than :done since the install stopped trusting its
+            // own exit code, so this looks for the guard itself rather than one spelling of it.
+            val skipAt = Regex("""if not errorlevel 1 goto :\w+""").find(body)?.range?.first ?: -1
             val removeAt = body.indexOf("/x $code")
             assertTrue(skipAt in 0..<removeAt, "a successful install must skip the removal")
         }

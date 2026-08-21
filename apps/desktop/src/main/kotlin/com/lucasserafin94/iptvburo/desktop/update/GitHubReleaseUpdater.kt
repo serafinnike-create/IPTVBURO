@@ -126,14 +126,16 @@ class GitHubReleaseUpdater(
         }
 
     /**
-     * Downloads the installer, reporting progress as a 0..1 fraction.
+     * Downloads the installer, reporting progress as a 0..1 fraction and the bytes read so far.
      *
      * The installer is well over a hundred megabytes, so a caller that shows only "updating…" for
-     * several minutes is indistinguishable from one that has hung.
+     * several minutes is indistinguishable from one that has hung. The byte count rides along
+     * because a percentage alone cannot answer "should I wait": measuring a rate needs the count
+     * and the moment it was taken, and only this loop knows both.
      */
     suspend fun downloadAndLaunch(
         release: DesktopRelease,
-        onProgress: (Float) -> Unit = {},
+        onProgress: (fraction: Float, bytesRead: Long) -> Unit = { _, _ -> },
     ): Result<Path> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -162,9 +164,15 @@ class GitHubReleaseUpdater(
                                 copied += read
                                 check(copied <= MAX_INSTALLER_BYTES)
                                 output.write(buffer, 0, read)
-                                if (release.sizeBytes > 0L) {
-                                    onProgress((copied.toFloat() / release.sizeBytes).coerceIn(0f, 1f))
-                                }
+                                // The byte count is reported even when the size is unknown, so the
+                                // rate can still be measured; the fraction keeps the meaning it had.
+                                val fraction =
+                                    if (release.sizeBytes > 0L) {
+                                        (copied.toFloat() / release.sizeBytes).coerceIn(0f, 1f)
+                                    } else {
+                                        0f
+                                    }
+                                onProgress(fraction, copied)
                             }
                         }
                     }
@@ -300,6 +308,27 @@ internal fun writeUpdateScript(
             appendLine(")")
             append(":started")
         }
+    /**
+     * Proof that an installed app exists, before anything is deleted or called success.
+     *
+     * The update that erased a user's build reported its failure honestly, but the script only ever
+     * consulted the exit code. A rolled-back transaction can also end quietly, and by then the
+     * product is deregistered and the files are gone — so the one question worth asking is whether
+     * the launcher is on disk right now.
+     */
+    val verifyInstalled =
+        buildString {
+            appendLine("rem The install claimed success. Confirm the launcher is really there.")
+            launcher?.let { path ->
+                appendLine("""if exist "${path.toAbsolutePath()}" goto :done""")
+            }
+            // %LOCALAPPDATA% and %PROGRAMFILES% stay as batch variables; only the executable name
+            // is substituted here.
+            appendLine("""if exist "%LOCALAPPDATA%\IPTVBURO\$LAUNCHER_EXE" goto :done""")
+            appendLine("""if exist "%PROGRAMFILES%\IPTVBURO\$LAUNCHER_EXE" goto :done""")
+            appendLine("rem Nothing on disk: the transaction rolled back and took the app with it.")
+            append("goto :removed_and_failed")
+        }
     // Each MSI is generated with a fresh ProductCode, so installing over the existing one can return
     // 1638 ("another version is already installed") and do nothing. Removing the old product fixes
     // that, but only as a fallback: doing it first is what once deleted the app outright. The GUID
@@ -345,19 +374,35 @@ internal fun writeUpdateScript(
           timeout /t 1 /nobreak >nul
         )
         :install
-        rem Install over the existing product first. If this succeeds nothing is ever removed, so a
-        rem failure cannot leave the machine with no app.
+        rem A plain install, because this MSI is already a major upgrade: its UpgradeCode is fixed
+        rem across builds, its Upgrade table matches every older version, and it runs
+        rem RemoveExistingProducts. Windows therefore removes the old product and installs the new
+        rem one inside a single transaction, which either succeeds or rolls back to the old build.
+        rem
+        rem It used to pass REINSTALLMODE=amus, and that is what erased a user's installation on
+        rem 21/08/2026. REINSTALLMODE means "repair the installed product", but jpackage mints a new
+        rem ProductCode for every build, so it addressed a product that was not installed. Windows
+        rem tried to reinstall components already owned by the other ProductCode, failed with error
+        rem 1316, and rolled back — deregistering the app. The event log recorded one transaction,
+        rem no removal, and status 1603: nothing in the fallback below ever ran.
         echo Atualizando o IPTV BURO...
-        msiexec.exe /i "${installer.toAbsolutePath()}" /passive /norestart REINSTALLMODE=amus
-        if not errorlevel 1 goto :done
+        msiexec.exe /i "${installer.toAbsolutePath()}" /passive /norestart
+        if not errorlevel 1 goto :verify
         $retryAfterRemoval
-        goto :done
+        goto :verify
+
+        rem An exit code of zero is not proof the app is there. The install that erased the previous
+        rem build reported failure, but a rolled-back transaction can also finish quietly — so the
+        rem launcher is checked on disk before anything is deleted or declared done.
+        :verify
+        $verifyInstalled
 
         :failed
-        rem The update did not apply and nothing was removed, so the old build is still installed.
-        rem The installer and this script are kept so it can be retried by hand.
-        $relaunch
-        exit /b 1
+        rem The update did not apply. Nothing was removed on this path, so the old build should
+        rem still be installed — but that is an assumption, and assuming it is what hid the last
+        rem failure. Verified rather than trusted: :verify relaunches the app if it is there, and
+        rem says so plainly if it is not.
+        goto :verify
 
         :removed_and_failed
         rem The worst case: the old product was removed and the new one would not install. There is
@@ -382,6 +427,8 @@ internal fun writeUpdateScript(
 
         :done
         $relaunch
+        rem Deleted only on the verified path, so a failed update always leaves the installer and
+        rem this script behind for a retry by hand.
         del "%~f0"
         """.trimIndent(),
     )
