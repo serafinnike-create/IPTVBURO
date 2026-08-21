@@ -86,19 +86,25 @@ fun formatBytes(bytes: Long): String =
     when {
         bytes < 0 -> "—"
         bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> "%.0f KB".format(SIZE_LOCALE, bytes / 1024.0)
-        bytes < 1024L * 1024 * 1024 -> "%.1f MB".format(SIZE_LOCALE, bytes / (1024.0 * 1024))
-        else -> "%.2f GB".format(SIZE_LOCALE, bytes / (1024.0 * 1024 * 1024))
+        bytes < 1024 * 1024 -> "%.0f KB".format(DISPLAY_LOCALE, bytes / 1024.0)
+        bytes < 1024L * 1024 * 1024 -> "%.1f MB".format(DISPLAY_LOCALE, bytes / (1024.0 * 1024))
+        else -> "%.2f GB".format(DISPLAY_LOCALE, bytes / (1024.0 * 1024 * 1024))
     }
 
 /**
- * The decimal separator for sizes.
+ * The locale every user-facing number is formatted in.
  *
- * Pinned to the app's own audience rather than left to the JVM's default locale, which is whatever
- * Windows is set to and made the same build render "1.0 MB" on one machine and "1,0 MB" on another.
+ * Pinned to the app's own audience rather than left to the JVM's default, which is whatever Windows
+ * is set to and made the same build render "1.0 MB" on one machine and "1,0 MB" on another.
  * Portuguese is the primary language here and uses a comma.
+ *
+ * It is not only the separator. `%d` and `%f` follow the locale's *digits* too, so on a system set
+ * to Egypt, Iran, Bangladesh or Myanmar the playback clock rendered as `١:٠٥:٠٩` — Arabic-Indic
+ * numerals inside an interface that has no Arabic translation. Shared rather than private so every
+ * formatter that shows a number to a person can use the same one; hex digests are unaffected,
+ * because `%x` is ASCII in any locale.
  */
-private val SIZE_LOCALE: java.util.Locale = java.util.Locale.forLanguageTag("pt-BR")
+internal val DISPLAY_LOCALE: java.util.Locale = java.util.Locale.forLanguageTag("pt-BR")
 
 /** A transfer rate, as a person reads it. */
 fun formatRate(bytesPerSecond: Long): String =

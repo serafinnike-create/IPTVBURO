@@ -1,5 +1,7 @@
 package com.lucasserafin94.iptvburo.desktop.app
 
+import androidx.compose.foundation.LocalScrollbarStyle
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,20 +9,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import com.lucasserafin94.iptvburo.desktop.ui.rememberRestoredListState
-import androidx.compose.foundation.VerticalScrollbar
-import androidx.compose.foundation.LocalScrollbarStyle
-import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.layout.fillMaxHeight
-import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableList
-import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableVertically
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -41,15 +38,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.DesktopContinueWatchingEntry
+import com.lucasserafin94.iptvburo.desktop.download.DISPLAY_LOCALE
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
-import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSegmentedControl
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
+import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableList
+import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableVertically
 import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
+import com.lucasserafin94.iptvburo.desktop.ui.rememberRestoredListState
 import com.lucasserafin94.iptvburo.desktop.ui.strings
+import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 
 /** Which kind of unfinished title to show. */
 private enum class ContinueFilter {
@@ -299,8 +300,8 @@ private fun formatWatchTime(valueMillis: Long): String {
     val minutes = (totalSeconds % 3_600) / 60
     val seconds = totalSeconds % 60
     return if (hours > 0) {
-        "%d:%02d:%02d".format(hours, minutes, seconds)
+        "%d:%02d:%02d".format(DISPLAY_LOCALE, hours, minutes, seconds)
     } else {
-        "%02d:%02d".format(minutes, seconds)
+        "%02d:%02d".format(DISPLAY_LOCALE, minutes, seconds)
     }
 }

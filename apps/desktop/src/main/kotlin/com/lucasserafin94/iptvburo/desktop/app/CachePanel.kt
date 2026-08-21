@@ -2,10 +2,10 @@ package com.lucasserafin94.iptvburo.desktop.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,14 +20,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.lucasserafin94.iptvburo.desktop.download.DISPLAY_LOCALE
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
@@ -36,6 +36,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.domain.model.CacheBudget
 import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
 import com.lucasserafin94.iptvburo.domain.model.CacheFillState
+import kotlinx.coroutines.delay
 
 /**
  * The sizes offered.
@@ -297,7 +298,7 @@ private fun CacheProgressRow(
 internal fun formatBytes(bytes: Long): String =
     when {
         bytes >= CacheBudget.BYTES_PER_GB ->
-            "%.1f GB".format(bytes.toDouble() / CacheBudget.BYTES_PER_GB)
+            "%.1f GB".format(DISPLAY_LOCALE, bytes.toDouble() / CacheBudget.BYTES_PER_GB)
         bytes >= 1_048_576 -> "${bytes / 1_048_576} MB"
         else -> "${bytes / 1024} KB"
     }

@@ -32,15 +32,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.lucasserafin94.iptvburo.desktop.user.StoredReminder
-import com.lucasserafin94.iptvburo.domain.model.ReminderDigest
-import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
+import com.lucasserafin94.iptvburo.desktop.download.DISPLAY_LOCALE
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.strings
+import com.lucasserafin94.iptvburo.desktop.user.StoredReminder
+import com.lucasserafin94.iptvburo.domain.model.ReminderDigest
+import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
 
 /** Small enough that a long list stays scannable, at the 2:3 every other poster here uses. */
 private val POSTER_WIDTH = 40.dp
@@ -239,7 +240,7 @@ private fun ReminderSchedule(
             val choices = listOf(6, 9, 12, 15, 18, 21)
             Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
                 choices.forEach { candidate ->
-                    val label = "%02d:00".format(candidate)
+                    val label = "%02d:00".format(DISPLAY_LOCALE, candidate)
                     BuroInteractiveRow(
                         onClick = { onHourChange(candidate) },
                         selected = candidate == hour,

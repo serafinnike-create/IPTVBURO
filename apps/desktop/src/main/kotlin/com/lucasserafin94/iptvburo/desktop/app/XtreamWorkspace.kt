@@ -6,18 +6,25 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.draw.scale
+import androidx.compose.foundation.HorizontalScrollbar
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalScrollbarStyle
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,33 +36,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import com.lucasserafin94.iptvburo.desktop.playback.MULTIVIEW_MAX_TILES
-import com.lucasserafin94.iptvburo.desktop.ui.rememberRestoredGridState
 import androidx.compose.foundation.lazy.grid.items as gridItems
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.ui.draw.alpha
-import androidx.compose.foundation.focusable
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.onPointerEvent
-import androidx.compose.foundation.gestures.animateScrollBy
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.foundation.VerticalScrollbar
-import androidx.compose.foundation.HorizontalScrollbar
-import androidx.compose.foundation.LocalScrollbarStyle
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -78,9 +68,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -89,70 +84,76 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.lucasserafin94.iptvburo.desktop.CastSendState
+import com.lucasserafin94.iptvburo.desktop.CatalogLayout
 import com.lucasserafin94.iptvburo.desktop.CreditDestination
 import com.lucasserafin94.iptvburo.desktop.DesktopAppState
 import com.lucasserafin94.iptvburo.desktop.DownloadState
-import com.lucasserafin94.iptvburo.desktop.MovieDetailsStatus
 import com.lucasserafin94.iptvburo.desktop.LiveEpgStatus
+import com.lucasserafin94.iptvburo.desktop.MovieDetailsStatus
+import com.lucasserafin94.iptvburo.desktop.PersonCredit
 import com.lucasserafin94.iptvburo.desktop.PersonFilmography
-import com.lucasserafin94.iptvburo.desktop.platform.CastReceiver
-import com.lucasserafin94.iptvburo.desktop.platform.CastTarget
-import com.lucasserafin94.iptvburo.domain.model.CastMessage
-import com.lucasserafin94.iptvburo.desktop.CastSendState
 import com.lucasserafin94.iptvburo.desktop.SeriesDetailsStatus
 import com.lucasserafin94.iptvburo.desktop.XtreamStatus
 import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.data.episodeContentKey
+import com.lucasserafin94.iptvburo.desktop.download.DISPLAY_LOCALE
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
+import com.lucasserafin94.iptvburo.desktop.platform.CastReceiver
+import com.lucasserafin94.iptvburo.desktop.platform.CastTarget
 import com.lucasserafin94.iptvburo.desktop.platform.DesktopPlatformCapabilities
+import com.lucasserafin94.iptvburo.desktop.playback.MULTIVIEW_MAX_TILES
+import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
+import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
+import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
+import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
+import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
+import com.lucasserafin94.iptvburo.desktop.ui.BuroSegmentedControl
+import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
+import com.lucasserafin94.iptvburo.desktop.ui.CastStrings
 import com.lucasserafin94.iptvburo.desktop.ui.CategoryBadge
 import com.lucasserafin94.iptvburo.desktop.ui.CategoryChoice
-import com.lucasserafin94.iptvburo.desktop.ui.LocalProviderLogos
-import com.lucasserafin94.iptvburo.desktop.ui.ProviderIdentity
-import com.lucasserafin94.iptvburo.desktop.ui.providerIdentityForLabel
-import com.lucasserafin94.iptvburo.desktop.ui.withLogoFrom
-import com.lucasserafin94.iptvburo.desktop.ui.splitCategories
 import com.lucasserafin94.iptvburo.desktop.ui.CriticInkDark
 import com.lucasserafin94.iptvburo.desktop.ui.CriticMark
 import com.lucasserafin94.iptvburo.desktop.ui.CriticMarkImdb
 import com.lucasserafin94.iptvburo.desktop.ui.CriticMarkTomatometer
-import com.lucasserafin94.iptvburo.desktop.ui.criticMarkMetascore
-import com.lucasserafin94.iptvburo.desktop.ui.categoryLabel
-import com.lucasserafin94.iptvburo.desktop.CatalogLayout
-import com.lucasserafin94.iptvburo.desktop.PersonCredit
+import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.LocalProviderLogos
+import com.lucasserafin94.iptvburo.desktop.ui.ProviderIdentity
 import com.lucasserafin94.iptvburo.desktop.ui.arrowScrollableVertically
+import com.lucasserafin94.iptvburo.desktop.ui.categoryBadgeFor
+import com.lucasserafin94.iptvburo.desktop.ui.categoryLabel
+import com.lucasserafin94.iptvburo.desktop.ui.criticMarkMetascore
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollable
 import com.lucasserafin94.iptvburo.desktop.ui.edgeScrollableGrid
-import com.lucasserafin94.iptvburo.desktop.ui.categoryBadgeFor
+import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
+import com.lucasserafin94.iptvburo.desktop.ui.providerIdentityForLabel
+import com.lucasserafin94.iptvburo.desktop.ui.rememberRestoredGridState
+import com.lucasserafin94.iptvburo.desktop.ui.splitCategories
+import com.lucasserafin94.iptvburo.desktop.ui.strings
+import com.lucasserafin94.iptvburo.desktop.ui.withLogoFrom
+import com.lucasserafin94.iptvburo.domain.model.CastMessage
+import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
+import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
 import com.lucasserafin94.iptvburo.metadata.CriticScores
 import com.lucasserafin94.iptvburo.metadata.TmdbAudienceScore
-import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
-import com.lucasserafin94.iptvburo.desktop.ui.CastStrings
-import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
-import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
-import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
-import com.lucasserafin94.iptvburo.desktop.ui.BuroSegmentedControl
-import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
-import com.lucasserafin94.iptvburo.desktop.ui.BuroScrim
-import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
-import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
-import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
-import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.xtream.XtreamEpisode
-import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
-import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
+import java.time.Year
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.Year
 
 @Composable
 fun XtreamWorkspace(
@@ -2342,7 +2343,7 @@ private fun MovieDetailContent(
                     // Providers send 0 for anything unrated, and a title released days ago is
                     // unrated by definition — so a brand-new series showed "★ 0,0" twice over,
                     // which reads as the worst score there is rather than as the absence of one.
-                    details.rating?.takeIf { value -> value > 0.0 }?.let { "★ ${"%.1f".format(it)}" },
+                    details.rating?.takeIf { value -> value > 0.0 }?.let { "★ ${"%.1f".format(DISPLAY_LOCALE, it)}" },
                 )
             if (facts.isNotEmpty()) {
                 Text(
@@ -2785,7 +2786,7 @@ private fun SeriesDetailContent(
                     // Providers send 0 for anything unrated, and a title released days ago is
                     // unrated by definition — so a brand-new series showed "★ 0,0" twice over,
                     // which reads as the worst score there is rather than as the absence of one.
-                    details.rating?.takeIf { value -> value > 0.0 }?.let { "★ ${"%.1f".format(it)}" },
+                    details.rating?.takeIf { value -> value > 0.0 }?.let { "★ ${"%.1f".format(DISPLAY_LOCALE, it)}" },
                 )
             if (facts.isNotEmpty()) {
                 Text(
@@ -3557,7 +3558,7 @@ private fun itemMetadata(item: XtreamCatalogItem): String =
         // Zero means unrated, not nought out of ten. Providers send 0 for anything nobody has
         // scored, so a title released days ago carried "★ 0,0" beside its year — the worst possible
         // verdict, printed for a series that simply has not been reviewed yet.
-        item.rating?.takeIf { value -> value > 0.0 }?.let { add("★ ${"%.1f".format(it)}") }
+        item.rating?.takeIf { value -> value > 0.0 }?.let { add("★ ${"%.1f".format(DISPLAY_LOCALE, it)}") }
         item.containerExtension?.uppercase()?.let(::add)
         if (isEmpty()) {
             add(
@@ -3593,7 +3594,11 @@ private fun formatPlaybackTime(positionMs: Long): String {
     val hours = totalSeconds / 3_600L
     val minutes = (totalSeconds % 3_600L) / 60L
     val seconds = totalSeconds % 60L
-    return if (hours > 0L) "%d:%02d:%02d".format(hours, minutes, seconds) else "%02d:%02d".format(minutes, seconds)
+    return if (hours > 0L) {
+        "%d:%02d:%02d".format(DISPLAY_LOCALE, hours, minutes, seconds)
+    } else {
+        "%02d:%02d".format(DISPLAY_LOCALE, minutes, seconds)
+    }
 }
 
 private const val SEARCH_DEBOUNCE_MILLIS = 280L
@@ -4048,7 +4053,7 @@ private fun RatingsBlock(
                     CriticScore("$percent%", criticMarkMetascore(percent), "Metascore")
                 }
                 critics.imdbRating?.let { rating ->
-                    CriticScore("%.1f".format(rating), CriticMarkImdb, "IMDb")
+                    CriticScore("%.1f".format(DISPLAY_LOCALE, rating), CriticMarkImdb, "IMDb")
                 }
             }
         }
@@ -4133,7 +4138,7 @@ private val SCORE_MARK_HEIGHT = 22.dp
 
 /** Thousands as "1,2 mil": an exact five-digit count is noise beside the score it qualifies. */
 private fun formatVotes(votes: Int): String =
-    if (votes >= 1_000) "%.1f mil".format(votes / 1_000.0) else votes.toString()
+    if (votes >= 1_000) "%.1f mil".format(DISPLAY_LOCALE, votes / 1_000.0) else votes.toString()
 
 /**
  * Below this a score is one opinion rather than a verdict.

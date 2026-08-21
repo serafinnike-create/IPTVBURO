@@ -49,6 +49,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.lucasserafin94.iptvburo.desktop.download.DISPLAY_LOCALE
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
@@ -559,7 +560,7 @@ fun DesktopPlayerOverlay(
                 // reports the rate back as a float, so 1.2499999 fell through every branch and the
                 // button appeared to do nothing. The label is formatted, not the raw double.
                 TransportButton(
-                    label = "%.2fx".format(state.playbackRate).removeSuffix("0").removeSuffix("0").removeSuffix("."),
+                    label = "%.2fx".format(DISPLAY_LOCALE, state.playbackRate).removeSuffix("0").removeSuffix("0").removeSuffix("."),
                     enabled = state.ready,
                 ) {
                     val current = PLAYBACK_RATES.minByOrNull { rate -> kotlin.math.abs(rate - state.playbackRate) }
@@ -785,7 +786,11 @@ private fun formatPlaybackTime(valueMillis: Double): String {
     val hours = totalSeconds / 3_600
     val minutes = (totalSeconds % 3_600) / 60
     val seconds = totalSeconds % 60
-    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%02d:%02d".format(minutes, seconds)
+    return if (hours > 0) {
+        "%d:%02d:%02d".format(DISPLAY_LOCALE, hours, minutes, seconds)
+    } else {
+        "%02d:%02d".format(DISPLAY_LOCALE, minutes, seconds)
+    }
 }
 
 /**
