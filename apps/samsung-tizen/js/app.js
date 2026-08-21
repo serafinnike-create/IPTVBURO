@@ -65,6 +65,7 @@ var BuroApp = (function () {
     var pairingRequest = null;
     var homeArtworkRedrawTimer = null;
     var clockTimer = null;
+    var homeCache = null;
     /* Cada pedido de página da prateleira ganha um número: uma resposta que
        chega depois de o filtro mudar não pode substituir a atual. */
     var catalogueShelfRequestId = 0;
@@ -907,6 +908,9 @@ var BuroApp = (function () {
     function refreshActiveReferences() {
         var profileId = state.preferences.activeProfileId;
         var sourceId;
+        /* Perfil ou fonte diferente veem catálogos diferentes — um perfil Kids
+           esconde categorias — então a Home guardada não vale para o próximo. */
+        forgetHomeCache();
         state.activeProfile = null;
         state.profiles.forEach(function (profile) {
             if (profile.id === profileId) { state.activeProfile = profile; }
@@ -1771,6 +1775,7 @@ var BuroApp = (function () {
             all = homeResultItems(result);
             mergeItems(all);
             state.screenData = { kind: 'home', loading: false, result: result, heroIndex: 0, requestId: requestId };
+            rememberHome(result, 0);
             focusIndex = 0;
             render();
             /* Depois de desenhar, não antes: a Home aparece com o que já tem e
@@ -1783,18 +1788,58 @@ var BuroApp = (function () {
             current = state.screenData;
             current.loading = false;
             current.error = friendlyError(error);
+            /* Uma varredura que falhou não deixa Home guardada: a próxima visita
+               precisa tentar de novo, e não herdar um resultado que não existe. */
+            forgetHomeCache();
             focusIndex = 0;
             render();
         });
     }
 
+    /*
+      A Home é montada uma vez por dia, não a cada visita.
+
+      Voltar a Início mostrava "Montando sua Home…" de novo, porque sair da
+      seção limpa `screenData` e a varredura recomeçava do zero. Numa TV isso é
+      caro — a varredura percorre o catálogo inteiro — e desnecessário: a
+      seleção editorial é a do dia, então dentro do mesmo dia o resultado
+      guardado serve.
+
+      A varredura de fundo trocar o catálogo invalida o guardado, senão a Home
+      ficaria mostrando ontem enquanto novos títulos chegam.
+    */
     function startHomeLoad() {
         var requestId = ++homeRequestId;
-        var fallback = homeAccumulator();
+        var fallback;
+        if (homeCache && homeCache.day === localEditorialDay() && homeCache.result) {
+            /*
+              Mostra o guardado e confere por baixo.
+
+              Servir o cache e parar por aí esconderia uma falha de leitura: a
+              Home apareceria montada enquanto o banco estava inacessível. Então
+              a varredura roda de qualquer forma — o que a visita economiza é a
+              espera e a mensagem "Montando sua Home…", não a verificação.
+            */
+            state.screenData = {
+                kind: 'home', loading: false, result: homeCache.result,
+                heroIndex: homeCache.heroIndex || 0, requestId: requestId, cached: true
+            };
+            window.setTimeout(function () { loadHome(requestId); }, 0);
+            return;
+        }
+        fallback = homeAccumulator();
         state.items.forEach(function (item) { collectHome(fallback, item); });
         state.screenData = { kind: 'home', loading: true, result: fallback, heroIndex: 0, requestId: requestId };
         window.setTimeout(function () { loadHome(requestId); }, 0);
     }
+
+    /* O que a Home montou hoje, para uma segunda visita não refazer a varredura. */
+    function rememberHome(result, heroIndex) {
+        homeCache = { day: localEditorialDay(), result: result, heroIndex: heroIndex || 0 };
+    }
+
+    /* Catálogo novo, Home velha: o guardado deixa de valer. */
+    function forgetHomeCache() { homeCache = null; }
 
     function scheduleHomeHeroRotation(data) {
         if (homeHeroTimer) { window.clearTimeout(homeHeroTimer); homeHeroTimer = null; }
@@ -3599,13 +3644,48 @@ var BuroApp = (function () {
         }, 30000);
     }
 
+    /*
+      Quantos títulos o catálogo tem, de verdade.
+
+      A barra contava `state.items`, que é a amostra do boot mais o que as telas
+      carregaram sob demanda: numa lista de quarenta e dois mil títulos ela dizia
+      quatrocentos e poucos. O número certo está no banco, e `count()` o obtém
+      sem materializar nada.
+
+      Medido de tempos em tempos e guardado, porque a barra é redesenhada a cada
+      render e contar a cada vez seria caro sem necessidade — o total muda quando
+      a varredura de fundo grava, não entre dois desenhos da mesma tela.
+
+      Enquanto o total é zero a medição se repete de perto: no começo do app o
+      banco ainda está sendo preenchido, e uma primeira contagem que pegou zero
+      não pode congelar a barra por quinze segundos.
+    */
+    var catalogueSize = 0;
+    var catalogueSizeMeasuredAt = 0;
+    var CATALOGUE_SIZE_MAX_AGE_MILLIS = 15000;
+    var CATALOGUE_SIZE_EMPTY_RETRY_MILLIS = 1500;
+
+    function measureCatalogueSize() {
+        var age = catalogueSize ? CATALOGUE_SIZE_MAX_AGE_MILLIS : CATALOGUE_SIZE_EMPTY_RETRY_MILLIS;
+        if (catalogueSizeMeasuredAt && Date.now() - catalogueSizeMeasuredAt < age) { return; }
+        catalogueSizeMeasuredAt = Date.now();
+        BuroStorage.count('items', function (total) {
+            var changed = total !== catalogueSize;
+            catalogueSize = total;
+            /* Redesenha só quando o número mudou, senão a medição periódica
+               viraria um render periódico. */
+            if (changed && state.screen === 'SHELL') { render(); }
+        }, function () {});
+    }
+
     function topbarSubtitleHtml() {
         var parts = [];
+        measureCatalogueSize();
         if (state.sources.length) {
             parts.push(t('topbarSources').replace('{count}', state.sources.length));
         }
-        if (state.items.length) {
-            parts.push(t('topbarItems').replace('{count}', state.items.length));
+        if (catalogueSize) {
+            parts.push(t('topbarItems').replace('{count}', catalogueSize));
         }
         parts.push('IPTV BURO v' + applicationVersion());
         return '<p class="topbar-subtitle">' + escapeHtml(parts.join(' · ')) + '</p>';
@@ -4525,6 +4605,9 @@ var BuroApp = (function () {
         BuroStorage.clearCatalogue(function () {
             state.categories = [];
             state.items = [];
+            forgetHomeCache();
+            catalogueSize = 0;
+            catalogueSizeMeasuredAt = 0;
             /* Todo cache em memória é indexado por id de item, e os itens
                acabaram de sair: deixar qualquer um deles cheio guardaria arte de
                títulos que não existem mais. */
@@ -6399,6 +6482,7 @@ var BuroApp = (function () {
         BuroCatalogueSync.clearSource(sourceId);
         /* O token e os `cmd` em memória não sobrevivem à fonte que os originou. */
         delete stalkerSessions[sourceId];
+        forgetHomeCache();
         BuroStalker.clearSession();
         try { BuroStorage.secureRemove(sourceId); }
         catch (error) { showToast(friendlyError(error), true); return; }
@@ -6960,6 +7044,10 @@ var BuroApp = (function () {
           varredura já trouxe não faz a memória crescer sem limite.
         */
         rememberArtworkMap(artwork);
+        /* Catálogo novo: a seleção guardada é de antes destes títulos, e o total
+           da barra também. */
+        forgetHomeCache();
+        catalogueSizeMeasuredAt = 0;
         if (!foreground) {
             /* A Home mostra o catálogo inteiro, então arte nova de qualquer
                categoria muda o que está na tela. Mas a varredura entrega uma
@@ -8405,6 +8493,9 @@ var BuroApp = (function () {
         } else if (action === 'shared-retry') { retryPendingSharedTitle();
         } else if (action === 'shared-dismiss') { sharedTitleNoticeVisible = false; render();
         } else if (action === 'home-retry') {
+            /* Tentar de novo é pedir uma varredura nova: servir o guardado seria
+               responder a mesma coisa que acabou de falhar. */
+            forgetHomeCache();
             state.screenData = null; focusIndex = 0; render();
         } else if (action === 'catalogue-retry') { retryCatalogueRequest();
         } else if (action === 'series-details-retry') { openSeriesById(id, state.screenData && state.screenData.originSection);
