@@ -2,6 +2,22 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [3.0.6] - 2026-08-22 (Windows)
+
+### Windows
+
+#### Corrigido
+
+- **A tela inicial podia ficar montando o esqueleto para sempre.** Mesmo defeito
+  corrigido na 3.0.5 para a ficha do filme e para o guia ao vivo, agora na tela
+  que todo mundo vê: o estado *ocioso* dividia o ramo com o *carregando*, e o
+  efeito que carrega a Home observa o perfil, a fonte e o contador de
+  atualização — nunca o estado. Uma carga cancelada voltava para ocioso e nada
+  rodava de novo.
+- **As últimas frases em português da tela de detalhes** — guia indisponível,
+  sem programação, "Carregar episódios", "Carregando episódios…" e dois botões
+  "Tentar novamente" — passaram a respeitar o idioma escolhido.
+
 ## [3.0.5] - 2026-08-21 (Windows)
 
 ### Windows
