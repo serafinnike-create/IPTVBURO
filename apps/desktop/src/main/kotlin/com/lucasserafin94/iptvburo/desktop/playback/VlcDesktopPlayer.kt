@@ -1074,7 +1074,13 @@ class VlcDesktopPlayer(
         }
         // Every attempt collided, which should not happen. Returning the last answer is better than
         // failing to start: a port clash produces one black tile, and giving up produces no player.
+        //
+        // Claimed even so. This port is stored in `claimedPort` like any other, so leaving it out of
+        // the set made the two disagree: `releaseClaimedPort` would remove a port that was never
+        // there, and — the part that matters — a player starting alongside this one could be handed
+        // the very same port, which is the black tile the set exists to prevent.
         return ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
+            .also { candidate -> synchronized(claimedPorts) { claimedPorts.add(candidate) } }
     }
 
     private fun releaseClaimedPort() {

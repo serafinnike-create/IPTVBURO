@@ -53,6 +53,28 @@ class MultiviewPortRaceTest {
         )
     }
 
+    /**
+     * The fallback port is claimed too, like every other.
+     *
+     * It was not. After eight collisions the allocator returned a port without recording it, while
+     * `startVlc` stored it in `claimedPort` regardless — so the two disagreed: release would remove
+     * a port that had never been added, and a player starting alongside could be handed the very
+     * same port, which is the black tile this whole mechanism exists to prevent.
+     *
+     * The mirror below has always claimed it, and said so in a comment. Production had drifted from
+     * the model its own test was built on, which is the kind of gap nobody notices by reading.
+     */
+    @Test
+    fun `even the last-resort port is recorded`() {
+        val allocator =
+            source.substringAfter("private fun freeLoopbackPort()").substringBefore("private fun releaseClaimedPort")
+        val fallback = allocator.substringAfter("Every attempt collided")
+        assertTrue(
+            fallback.contains("claimedPorts.add"),
+            "the fallback port must join the claimed set, or it can be handed out twice",
+        )
+    }
+
     @Test
     fun `a failed start releases its port before retrying`() {
         val failure =
