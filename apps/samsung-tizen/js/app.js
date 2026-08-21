@@ -2231,7 +2231,7 @@ var BuroApp = (function () {
     /* O filtro de serviço/gênero vigente para esta aba, criado sob demanda. */
     function catalogueScope(contentType) {
         if (!catalogueScopes[contentType]) {
-            catalogueScopes[contentType] = { genre: null, service: null };
+            catalogueScopes[contentType] = { genre: null, service: null, year: null, minimumRating: null };
         }
         return catalogueScopes[contentType];
     }
@@ -2272,11 +2272,45 @@ var BuroApp = (function () {
             chips += '<span class="scope-chip disabled"><small>' + t('serviceSelector') +
                 '</small><strong>' + escapeHtml(t('servicesUnavailable')) + '</strong></span>';
         }
-        if (scope.genre || scope.service) {
+        if (scope.genre || scope.service || scope.year != null || scope.minimumRating != null) {
             chips += '<button class="scope-chip clear focusable" data-action="catalogue-scope-reset">' +
                 t('clearFilters') + '</button>';
         }
-        return '<div class="catalogue-scope-bar">' + chips + '</div>';
+        /*
+          Ano e nota numa linha própria, acima de gênero e serviço — a mesma
+          ordem do aplicativo do Windows, e a mesma pergunta: primeiro "de
+          quando", depois "de que tipo".
+
+          Ao vivo não tem nenhum dos dois: um canal não tem ano de lançamento
+          nem nota, e chips que não filtram nada só ocupam a tela.
+        */
+        return (contentType === 'LIVE' ? '' : catalogueYearBar(contentType)) +
+            '<div class="catalogue-scope-bar">' + chips + '</div>';
+    }
+
+    /* As notas mínimas oferecidas. Estrelas inteiras e não um controle contínuo:
+       a nota do provedor é grosseira e "pelo menos quatro estrelas" é a pergunta
+       que as pessoas realmente fazem. Mesma escolha do Windows. */
+    var CATALOGUE_RATINGS = [null, 9, 8, 7, 6, 5];
+
+    function catalogueYearBar(contentType) {
+        var scope = catalogueScope(contentType);
+        var currentYear = new Date().getFullYear();
+        var yearLabel = scope.year == null ? t('chooseYear') : String(scope.year);
+        var ratingLabel = scope.minimumRating == null ? t('anyRating') :
+            t('ratingAtLeast').replace('{rating}', scope.minimumRating);
+        return '<div class="catalogue-scope-bar catalogue-year-bar">' +
+            '<button class="scope-chip compact focusable ' + (scope.year == null ? 'selected' : '') +
+            '" data-action="catalogue-year-all"><strong>' + t('allYears') + '</strong></button>' +
+            '<button class="scope-chip compact focusable ' + (scope.year === currentYear ? 'selected' : '') +
+            '" data-action="catalogue-year-current"><strong>' +
+            escapeHtml(t('releasesIn').replace('{year}', currentYear)) + '</strong></button>' +
+            '<button class="scope-chip compact focusable ' +
+            (scope.year != null && scope.year !== currentYear ? 'selected' : '') +
+            '" data-action="catalogue-year-pick"><strong>' + escapeHtml(yearLabel) + ' ▾</strong></button>' +
+            '<button class="scope-chip compact focusable ' + (scope.minimumRating != null ? 'selected' : '') +
+            '" data-action="catalogue-rating"><strong>' + escapeHtml(ratingLabel) + ' ▾</strong></button>' +
+            '</div>';
     }
 
     /* As categorias que sobrevivem ao filtro de serviço e de gênero. */
@@ -2553,9 +2587,70 @@ var BuroApp = (function () {
         }
         (function () {
             var categories = sourceCategories(contentType);
+            /*
+              A aba abre na prateleira, não numa lista de categorias.
+
+              O aplicativo do Windows abre "Filmes" já com os pôsteres e põe as
+              categorias na barra de filtros — que é onde elas servem como
+              pergunta ("só Netflix", "só Ação") em vez de como um degrau a mais
+              antes de ver qualquer coisa. Com 42 mil títulos, a lista de
+              categorias era uma tela inteira que ninguém queria ver.
+
+              As categorias continuam alcançáveis: escolher um gênero na barra é
+              o mesmo que abrir aquela categoria.
+            */
             shell(catalogueScopeBar(contentType, categories) +
-                categoryCards(scopedCategories(contentType, categories)), t(titleKey), true);
+                catalogueShelf(contentType, categories), t(titleKey), true);
         }());
+    }
+
+    /*
+      Os títulos desta aba, já filtrados, paginados como o resto do catálogo.
+
+      Lê de `state.items`, que é o que a Home também usa: os itens que a
+      varredura de fundo já trouxe. Uma aba aberta antes da varredura terminar
+      mostra o que existe e cresce sozinha conforme o resto chega.
+    */
+    function catalogueShelf(contentType, categories) {
+        var scope = catalogueScope(contentType);
+        var allowed = null;
+        var rows;
+        var page;
+        var pageCount;
+        var start;
+        var visible;
+        if (scope.service) {
+            allowed = {};
+            BuroProviders.categoryIdsForLabel(categories, scope.service).forEach(function (id) {
+                allowed[id] = true;
+            });
+        }
+        rows = state.items.filter(function (item) {
+            if (item.contentType !== contentType) { return false; }
+            if (!itemVisible(item)) { return false; }
+            if (allowed && !allowed[item.categoryId]) { return false; }
+            if (scope.genre && item.categoryId !== scope.genre) { return false; }
+            if (scope.year != null && Number(item.year) !== scope.year) { return false; }
+            if (scope.minimumRating != null && !(Number(item.rating) >= scope.minimumRating)) { return false; }
+            return true;
+        }).sort(function (left, right) {
+            return (Number(right.addedAt) || 0) - (Number(left.addedAt) || 0) ||
+                String(left.name).localeCompare(String(right.name));
+        });
+        if (!rows.length) {
+            /* Sem título nenhum: pode ser filtro apertado demais ou catálogo
+               ainda chegando. As categorias continuam ali como saída. */
+            return categoryCards(scopedCategories(contentType, categories));
+        }
+        pageCount = Math.max(1, Math.ceil(rows.length / CATALOGUE_PAGE_SIZE));
+        page = BuroDomain.clamp(Number(scope.page) || 0, 0, pageCount - 1);
+        scope.page = page;
+        start = page * CATALOGUE_PAGE_SIZE;
+        visible = rows.slice(start, start + CATALOGUE_PAGE_SIZE);
+        return '<div class="section-heading"><h2>' + t('catalogue') + '</h2><p>' + rows.length + '</p></div>' +
+            mediaCards(visible, 'poster') +
+            paginationControls('catalogue-shelf-page', page, pageCount, start,
+                start + visible.length, rows.length, '', '');
     }
 
     /*
@@ -2584,10 +2679,66 @@ var BuroApp = (function () {
            categoria, então filtrar pelos dois só poderia esvaziar a tela. */
         if (property === 'service' && scope.service) { scope.genre = null; }
         if (property === 'genre' && scope.genre) { scope.service = null; }
+        scope.page = 0;
         /* Sem `focusIndex = 0`: `refreshFocus` reencontra o mesmo chip pelo
            data-action, então ciclar o valor deixa o foco onde estava. Zerar o
            índice mandava o foco para o primeiro chip a cada ENTER, e escolher o
            terceiro gênero exigia voltar até ele toda vez. */
+        render();
+    }
+
+    /* Os anos que o catálogo desta aba realmente tem, do mais novo ao mais
+       antigo. Percorrer os itens em memória e não inventar uma faixa fixa: um
+       provedor pode não ter nada antes de 2015, e oferecer 1994 seria oferecer
+       uma tela vazia. */
+    function catalogueYears(contentType) {
+        var wanted = contentType === 'LIVE' ? null : contentType;
+        var found = {};
+        state.items.forEach(function (item) {
+            var year = Number(item.year);
+            if (wanted && item.contentType !== wanted) { return; }
+            if (year >= 1900 && year <= 2100) { found[year] = true; }
+        });
+        return Object.keys(found).map(Number).sort(function (left, right) { return right - left; });
+    }
+
+    function currentCatalogueType() {
+        return state.section === 'LIVE' ? 'LIVE' :
+            (state.section === 'MOVIES' ? 'MOVIE' : 'SERIES');
+    }
+
+    function cycleCatalogueYear(mode) {
+        var contentType = currentCatalogueType();
+        var scope = catalogueScope(contentType);
+        var years;
+        var index;
+        if (mode === 'all') { scope.year = null; }
+        else if (mode === 'current') { scope.year = new Date().getFullYear(); }
+        else {
+            years = catalogueYears(contentType).filter(function (year) {
+                return year !== new Date().getFullYear();
+            });
+            if (!years.length) { return; }
+            index = years.indexOf(scope.year);
+            scope.year = index < 0 ? years[0] :
+                (index + 1 >= years.length ? null : years[index + 1]);
+        }
+        /* Página quatro de um resultado que mudou embaixo não quer dizer nada. */
+        scope.page = 0;
+        render();
+    }
+
+    function cycleCatalogueRating() {
+        var scope = catalogueScope(currentCatalogueType());
+        var index = CATALOGUE_RATINGS.indexOf(scope.minimumRating);
+        scope.minimumRating = CATALOGUE_RATINGS[(index + 1) % CATALOGUE_RATINGS.length];
+        scope.page = 0;
+        render();
+    }
+
+    function changeCatalogueShelfPage(delta) {
+        var scope = catalogueScope(currentCatalogueType());
+        scope.page = Math.max(0, (Number(scope.page) || 0) + delta);
         render();
     }
 
@@ -2597,6 +2748,9 @@ var BuroApp = (function () {
         var scope = catalogueScope(contentType);
         scope.genre = null;
         scope.service = null;
+        scope.year = null;
+        scope.minimumRating = null;
+        scope.page = 0;
         /* O chip "Limpar filtros" some depois de limpar, então aqui o foco não
            tem para onde voltar: cai no primeiro chip, que é o de gênero. */
         focusIndex = 0;
@@ -8037,6 +8191,12 @@ var BuroApp = (function () {
         else if (action === 'catalogue-scope-genre') { cycleCatalogueScope('genre'); }
         else if (action === 'catalogue-scope-service') { cycleCatalogueScope('service'); }
         else if (action === 'catalogue-scope-reset') { resetCatalogueScope(); }
+        else if (action === 'catalogue-year-all') { cycleCatalogueYear('all'); }
+        else if (action === 'catalogue-year-current') { cycleCatalogueYear('current'); }
+        else if (action === 'catalogue-year-pick') { cycleCatalogueYear('pick'); }
+        else if (action === 'catalogue-rating') { cycleCatalogueRating(); }
+        else if (action === 'catalogue-shelf-page-previous') { changeCatalogueShelfPage(-1); }
+        else if (action === 'catalogue-shelf-page-next') { changeCatalogueShelfPage(1); }
         else if (action === 'parental-form') { pushScreen('PARENTAL_FORM'); }
         else if (action === 'parental-save') { saveParentalPin(); }
         else if (action === 'parental-clear') { clearParentalPin(); }

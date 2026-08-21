@@ -156,9 +156,10 @@ var PREFERENCES = {
 
     section('Marcar um título');
 
+    /* A aba de Filmes abre direto na prateleira, como no aplicativo do Windows:
+       o título está na tela sem passar por uma lista de categorias antes. */
     window.BuroApp.state.section = 'MOVIES';
     window.BuroApp.render();
-    window.BuroApp._activate(window.document.querySelector('[data-action="category"][data-id="c1"]'));
     await waitFor(function () {
         return window.document.querySelector('[data-action="movie-details"][data-id="i1"]');
     }, 2000);
@@ -312,7 +313,6 @@ var PREFERENCES = {
     })[0];
     second.BuroApp.state.section = 'MOVIES';
     second.BuroApp.render();
-    second.BuroApp._activate(second.document.querySelector('[data-action="category"][data-id="c1"]'));
     await waitFor(function () {
         return second.document.querySelector('[data-action="movie-details"][data-id="i1"]');
     }, 2000);

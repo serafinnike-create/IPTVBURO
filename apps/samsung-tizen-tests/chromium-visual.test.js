@@ -752,15 +752,21 @@ async function main() {
     check('Home real não desloca o painel principal nem cria overflow global', realHomeData.mainScroll === 0 && realHome.scrollWidth <= 1920 && realHome.scrollHeight <= 1080);
     check('Home real produz um quadro PNG não vazio', await screenshotIsRendered('real-home'));
 
+    /* A aba abre direto na prateleira, como no aplicativo do Windows: as
+       categorias viraram filtro na barra em vez de um degrau antes dos
+       pôsteres. O que continua sendo medido é o mesmo — a barra de escopo e
+       os cartões cabem na tela da TV, sem deslocar o chrome. */
     await evaluate("document.querySelector('[data-action=section][data-section=MOVIES]').click(); true");
-    await waitFor("BuroApp.state.section === 'MOVIES' && document.querySelectorAll('[data-action=category]').length >= 2");
-    var movieCategories = await geometry(['.buro-ribbon', '.topbar', '.catalogue-scope-bar', '[data-action=category]']);
+    await waitFor("BuroApp.state.section === 'MOVIES' && document.querySelectorAll('.media-card.poster').length >= 1");
+    var movieCategories = await geometry(['.buro-ribbon', '.topbar', '.catalogue-scope-bar', '.catalogue-year-bar', '.media-card.poster']);
     process.stdout.write('Filmes e catálogo\n');
-    check('aba Filmes exibe escopo e categorias dentro da área da TV', movieCategories.rectangles.every(rectVisible));
+    check('aba Filmes exibe escopo e prateleira dentro da área da TV', movieCategories.rectangles.every(rectVisible));
     check('aba Filmes preserva o chrome fixo e sem overflow global', movieCategories.scrollWidth <= 1920 && movieCategories.scrollHeight <= 1080);
-    check('categorias de filmes produzem um quadro PNG não vazio', await screenshotIsRendered('movie-categories'));
+    check('prateleira de filmes produz um quadro PNG não vazio', await screenshotIsRendered('movie-categories'));
 
-    await evaluate("document.querySelector('[data-action=category][data-id=visual-movies]').click(); true");
+    /* A categoria continua alcançável; na prateleira ela é filtro, então o
+       teste abre pelo mesmo caminho que o resto do app usa. */
+    await evaluate("BuroApp._openCategory('visual-movies'); true");
     await waitFor("BuroApp.state.screenData && BuroApp.state.screenData.kind === 'category' && document.querySelectorAll('.media-card.poster').length === 6");
     var movieCatalogue = await geometry(['.buro-ribbon', '.topbar', '.catalogue-filter-bar', '.catalogue-result-count', '.media-card.poster']);
     var movieCatalogueData = await evaluate("({ count:document.querySelectorAll('.media-card.poster').length, art:document.querySelectorAll('.media-card.poster.has-art').length, text:document.querySelector('.catalogue-result-count').textContent, mainScroll:document.querySelector('.main-pane').scrollTop })");
@@ -801,10 +807,10 @@ async function main() {
     check('idiomas de Configurações produzem um quadro PNG não vazio', await screenshotIsRendered('settings-languages'));
 
     await evaluate("document.querySelector('[data-action=section][data-section=LIVE]').click(); true");
-    await waitFor("BuroApp.state.section === 'LIVE' && document.querySelector('[data-action=category][data-id=visual-live]')");
-    var liveCategories = await geometry(['.buro-ribbon', '.topbar', '.catalogue-scope-bar', '[data-id=visual-live]']);
+    await waitFor("BuroApp.state.section === 'LIVE' && document.querySelector('.media-card')");
+    var liveCategories = await geometry(['.buro-ribbon', '.topbar', '.catalogue-scope-bar', '.media-card']);
     process.stdout.write('Ao Vivo\n');
-    check('Ao Vivo mostra escopo e categoria sintética dentro da área da TV', liveCategories.rectangles.every(rectVisible));
+    check('Ao Vivo mostra escopo e canais dentro da área da TV', liveCategories.rectangles.every(rectVisible));
     check('categorias Ao Vivo produzem um quadro PNG válido', await screenshotIsRendered('live-categories'));
     var liveId = await evaluate('(' + showSyntheticLiveDetail.toString() + ')()');
     await waitFor("BuroApp.state.screenData && BuroApp.state.screenData.kind === 'live' && document.querySelector('.live-detail')");

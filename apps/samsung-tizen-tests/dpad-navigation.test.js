@@ -1505,7 +1505,7 @@ async function run() {
         catalogueRequests.push({ category: category, success: success, failure: failure });
     };
     window.BuroApp.state.section = 'MOVIES'; window.BuroApp.state.screenData = null; window.BuroApp.render();
-    window.BuroApp._activate(window.document.querySelector('[data-action="category"][data-id="cat-async-empty"]'));
+    window.BuroApp._openCategory('cat-async-empty');
     check('abrir categoria mostra skeleton imediatamente, sem depender de toast',
         Boolean(window.document.querySelector('.catalogue-loading')) &&
         window.document.querySelectorAll('.catalogue-skeleton-card').length === 8 &&
@@ -1571,7 +1571,7 @@ async function run() {
         Boolean(window.document.querySelector('.category-refresh-warning [data-action="category-refresh"]')));
 
     window.BuroApp.state.screenData = null; window.BuroApp.render();
-    window.BuroApp._activate(window.document.querySelector('[data-action="category"][data-id="cat-async-stale"]'));
+    window.BuroApp._openCategory('cat-async-stale');
     await waitFor(function () { return catalogueRequests.length === 6; }, 1000);
     window.BuroApp._activate(window.document.querySelector('[data-action="section"][data-section="HOME"]'));
     catalogueRequests[5].success([{
