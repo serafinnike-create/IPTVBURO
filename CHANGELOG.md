@@ -2,6 +2,21 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [3.0.4] - 2026-08-21 (Windows)
+
+### Windows
+
+#### Corrigido
+
+- **A senha do controle interno do VLC saía na linha de comando.** No Windows,
+  qualquer processo rodando com o seu usuário consegue ler a linha de comando de
+  outro. Essa senha abre a interface de controle do VLC, cujo relatório de estado
+  nomeia o vídeo em reprodução — que, numa lista de provedor, carrega o seu
+  usuário e a sua senha. O endereço do vídeo já era protegido; a senha que o
+  guardava, não. Agora ela vai num arquivo de configuração que só a sua conta lê,
+  criado com as permissões restritas **antes** de o segredo ser escrito, apagado
+  ao fechar o player e registrado para remoção mesmo se o aplicativo travar.
+
 ## [3.0.3] - 2026-08-21 (Windows)
 
 Versão de correção urgente. **A 3.0.2 foi retirada do ar**: atualizar por ela
