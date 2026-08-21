@@ -866,6 +866,12 @@ body.reduced-motion .discover-card.current { animation: none; }
 body.reduced-motion .download-fill { transition: none; }
 
 .section-heading { display: flex; justify-content: space-between; align-items: end; margin: 38px 0 20px; }
+/* O seletor de densidade fica entre o titulo e a contagem, como no Windows. */
+.catalogue-shelf-heading { align-items: center; }
+.catalogue-shelf-heading h2 { flex: none; margin-right: 22px; }
+.catalogue-shelf-heading .scope-chip { flex: none; min-height: 52px; margin: 0 auto 0 0; padding: 8px 20px; }
+.catalogue-shelf-heading .scope-chip strong { font-size: 19px; }
+.catalogue-shelf-heading p { flex: none; }
 .section-heading h2 { font-size: 31px; }
 .section-heading p { color: var(--muted); font-size: 20px; }
 .card-row { display: flex; min-height: 236px; padding: 12px 10px; overflow: hidden; }
@@ -915,7 +921,12 @@ body.reduced-motion .download-fill { transition: none; }
 .media-card { position: relative; width: 310px; height: 190px; padding: 28px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
 .media-card > *:not(.media-art) { position: relative; z-index: 2; }
 .media-art::after { background: linear-gradient(180deg, rgba(8,9,10,.16), rgba(8,9,10,.94)); }
-.media-card.poster { width: 220px; height: 330px; }
+/* Oito por fileira na area util de ~1450px, como o aplicativo do Windows: com
+   220px cabiam seis, e uma prateleira curta parece um catalogo pequeno. */
+.media-card.poster { width: 168px; height: 268px; padding: 18px; }
+.media-card.poster h3 { font-size: 20px; }
+.media-card.poster p { font-size: 16px; }
+.media-card.poster .badge { padding: 5px 8px; font-size: 13px; }
 .media-card h3, .category-card h3, .source-card h3 { font-size: 25px; line-height: 1.18; }
 .media-card p, .category-card p, .source-card p { color: var(--muted); font-size: 19px; }
 .media-card .badge { align-self: flex-start; padding: 7px 11px; color: var(--gold); border: 1px solid rgba(214,169,86,.48); border-radius: 10px; font-size: 15px; font-weight: 800; }

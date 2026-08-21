@@ -502,6 +502,42 @@ var BuroStorage = (function () {
         }, failure);
     }
 
+    /*
+      Quantos registros satisfazem o predicado, sem materializar nenhum.
+
+      O total da prateleira — "230 páginas", "18353 itens" — não cabe no
+      `count()` do IndexedDB, que só conta o store inteiro. Aqui o cursor
+      percorre as chaves e conta, sem montar objeto: é a diferença entre ler o
+      índice e ler o catálogo.
+    */
+    function countWhere(storeName, predicate, success, failure) {
+        var settled = false;
+        var total = 0;
+        open(function (database) {
+            var transaction;
+            var request;
+            function fail(error) {
+                if (!settled) { settled = true; failure(error || new Error('DATABASE_REQUEST_FAILED')); }
+            }
+            try {
+                transaction = database.transaction([storeName], 'readonly');
+                request = transaction.objectStore(storeName).openCursor();
+                request.onsuccess = function (event) {
+                    var cursor = event.target.result;
+                    var matches;
+                    if (settled) { return; }
+                    if (!cursor) { settled = true; success(total); return; }
+                    try { matches = predicate(cursor.value); } catch (error) { fail(error); return; }
+                    if (matches) { total += 1; }
+                    cursor.continue();
+                };
+                request.onerror = function () { fail(request.error); };
+                transaction.onerror = function () { fail(transaction.error); };
+                transaction.onabort = function () { fail(transaction.error); };
+            } catch (error) { fail(error); }
+        }, failure);
+    }
+
     function wherePage(storeName, predicate, offset, limit, success, failure) {
         var settled = false;
         var skipped = 0;
@@ -934,6 +970,7 @@ var BuroStorage = (function () {
         fold: fold,
         foldByIndex: foldByIndex,
         wherePage: wherePage,
+        countWhere: countWhere,
         searchPage: searchPage,
         deleteSourceData: deleteSourceData,
         clearCatalogue: clearCatalogue,

@@ -65,6 +65,9 @@ var BuroApp = (function () {
     var pairingRequest = null;
     var homeArtworkRedrawTimer = null;
     var clockTimer = null;
+    /* Cada pedido de página da prateleira ganha um número: uma resposta que
+       chega depois de o filtro mudar não pode substituir a atual. */
+    var catalogueShelfRequestId = 0;
     var HOME_ARTWORK_REDRAW_MILLIS = 500;
     /* Quantas categorias a Home busca de uma vez. Dezenas de requisições ao
        abrir o app deixariam a TV sem responder ao controle. */
@@ -2239,7 +2242,10 @@ var BuroApp = (function () {
     /* O filtro de serviço/gênero vigente para esta aba, criado sob demanda. */
     function catalogueScope(contentType) {
         if (!catalogueScopes[contentType]) {
-            catalogueScopes[contentType] = { genre: null, service: null, year: null, minimumRating: null };
+            catalogueScopes[contentType] = {
+                genre: null, service: null, year: null, minimumRating: null,
+                layout: 'poster', page: 0, rows: undefined, total: 0, loading: false
+            };
         }
         return catalogueScopes[contentType];
     }
@@ -2619,46 +2625,142 @@ var BuroApp = (function () {
       varredura de fundo já trouxe. Uma aba aberta antes da varredura terminar
       mostra o que existe e cresce sozinha conforme o resto chega.
     */
-    function catalogueShelf(contentType, categories) {
+    /*
+      O predicado desta aba, do jeito que o banco vai aplicá-lo.
+
+      Devolvido como função para que a contagem e a página usem exatamente a
+      mesma regra: um total que não bate com o que a página mostra é pior do que
+      não mostrar total nenhum.
+    */
+    function catalogueMatcher(contentType, categories) {
         var scope = catalogueScope(contentType);
+        var sourceId = state.activeSource && state.activeSource.id;
         var allowed = null;
-        var rows;
-        var page;
-        var pageCount;
-        var start;
-        var visible;
+        var snapshot = catalogueVisibilitySnapshot();
         if (scope.service) {
             allowed = {};
             BuroProviders.categoryIdsForLabel(categories, scope.service).forEach(function (id) {
                 allowed[id] = true;
             });
         }
-        rows = state.items.filter(function (item) {
-            if (item.contentType !== contentType) { return false; }
-            if (!itemVisible(item)) { return false; }
+        return function (item) {
+            if (!item || item.contentType !== contentType) { return false; }
+            if (sourceId && item.sourceId !== sourceId) { return false; }
+            if (!snapshotItemVisible(snapshot, item)) { return false; }
             if (allowed && !allowed[item.categoryId]) { return false; }
             if (scope.genre && item.categoryId !== scope.genre) { return false; }
             if (scope.year != null && Number(item.year) !== scope.year) { return false; }
             if (scope.minimumRating != null && !(Number(item.rating) >= scope.minimumRating)) { return false; }
             return true;
-        }).sort(function (left, right) {
-            return (Number(right.addedAt) || 0) - (Number(left.addedAt) || 0) ||
-                String(left.name).localeCompare(String(right.name));
+        };
+    }
+
+    /*
+      Carrega uma página da prateleira direto do banco.
+
+      `state.items` é uma amostra de HOME_CATALOG_LIMIT linhas lida no boot para
+      a Home ter o que desenhar de imediato. Filtrar essa amostra mostrava 93
+      filmes de um catálogo de dezenas de milhares — foi o que apareceu na TV.
+      O banco é quem sabe o catálogo inteiro, então é dele que a prateleira lê.
+
+      Contagem e página vêm da mesma regra e do mesmo pedido: primeiro o total,
+      que é o que permite dizer "página 1 de 230", depois a fatia visível.
+    */
+    function loadCatalogueShelf(contentType) {
+        var categories = sourceCategories(contentType);
+        var scope = catalogueScope(contentType);
+        var matcher = catalogueMatcher(contentType, categories);
+        var requestId = ++catalogueShelfRequestId;
+        var offset = (Number(scope.page) || 0) * CATALOGUE_PAGE_SIZE;
+        scope.loading = true;
+        BuroStorage.countWhere('items', matcher, function (total) {
+            if (requestId !== catalogueShelfRequestId) { return; }
+            BuroStorage.wherePage('items', matcher, offset, CATALOGUE_PAGE_SIZE, function (result) {
+                if (requestId !== catalogueShelfRequestId) { return; }
+                scope.loading = false;
+                scope.total = total;
+                scope.rows = result.rows || [];
+                /* Os itens carregados entram no estado para que capa, favorito e
+                   progresso encontrem o mesmo objeto que o resto do app usa. */
+                mergeItems(scope.rows);
+                render();
+                hydrateShelfArtwork(contentType, scope.rows);
+            }, function () {
+                if (requestId !== catalogueShelfRequestId) { return; }
+                scope.loading = false;
+                scope.rows = [];
+                scope.total = 0;
+                render();
+            });
+        }, function () {
+            if (requestId !== catalogueShelfRequestId) { return; }
+            scope.loading = false;
+            scope.rows = [];
+            scope.total = 0;
+            render();
         });
-        if (!rows.length) {
-            /* Sem título nenhum: pode ser filtro apertado demais ou catálogo
-               ainda chegando. As categorias continuam ali como saída. */
-            return categoryCards(scopedCategories(contentType, categories));
+    }
+
+    /*
+      As capas dos títulos desta página, pelas categorias que eles ocupam.
+
+      Só enquanto a prateleira é o que está na tela. Abrir uma categoria troca a
+      tela mas não cancela a busca da página que estava carregando, e a resposta
+      dela chegava depois — pedindo arte de categorias que ninguém está mais
+      olhando, e concorrendo com a requisição da categoria aberta.
+    */
+    function hydrateShelfArtwork(contentType, rows) {
+        var byId = {};
+        var seen = {};
+        var wanted = [];
+        if (state.screen !== 'SHELL' || state.screenData) { return; }
+        state.categories.forEach(function (category) { byId[category.id] = category; });
+        (rows || []).forEach(function (item) {
+            var category = byId[item.categoryId];
+            if (artworkMemory[item.id] || !category || seen[category.id]) { return; }
+            seen[category.id] = true;
+            wanted.push(category);
+        });
+        wanted.slice(0, HOME_ARTWORK_CATEGORY_LIMIT).forEach(function (category) {
+            hydrateCategoryArtwork(category);
+        });
+    }
+
+    /* Poster, compacto ou lista — o mesmo seletor de densidade do Windows. */
+    function catalogueDensityLabel(layout) {
+        if (layout === 'compact') { return t('catalogueCompact'); }
+        if (layout === 'list') { return t('catalogueList'); }
+        return t('cataloguePoster');
+    }
+
+    function catalogueShelf(contentType, categories) {
+        var scope = catalogueScope(contentType);
+        var layout = scope.layout || 'poster';
+        var total = Number(scope.total) || 0;
+        var rows = scope.rows || [];
+        var pageCount = Math.max(1, Math.ceil(total / CATALOGUE_PAGE_SIZE));
+        var page = BuroDomain.clamp(Number(scope.page) || 0, 0, pageCount - 1);
+        var start = page * CATALOGUE_PAGE_SIZE;
+        var heading;
+        if (scope.rows === undefined && !scope.loading) {
+            window.setTimeout(function () { loadCatalogueShelf(contentType); }, 0);
         }
-        pageCount = Math.max(1, Math.ceil(rows.length / CATALOGUE_PAGE_SIZE));
-        page = BuroDomain.clamp(Number(scope.page) || 0, 0, pageCount - 1);
-        scope.page = page;
-        start = page * CATALOGUE_PAGE_SIZE;
-        visible = rows.slice(start, start + CATALOGUE_PAGE_SIZE);
-        return '<div class="section-heading"><h2>' + t('catalogue') + '</h2><p>' + rows.length + '</p></div>' +
-            mediaCards(visible, 'poster') +
+        heading = '<div class="section-heading catalogue-shelf-heading"><h2>' + t('catalogue') + '</h2>' +
+            '<button class="scope-chip compact focusable" data-action="catalogue-density"><strong>' +
+            escapeHtml(catalogueDensityLabel(layout)) + ' ▾</strong></button>' +
+            '<p>' + (scope.loading && !rows.length ? '' : total) + '</p></div>';
+        if (scope.loading && !rows.length) {
+            return heading + '<div class="search-loading"><span class="boot-indicator"></span><p>' +
+                escapeHtml(t('loadingCatalogue')) + '</p></div>';
+        }
+        if (!rows.length) {
+            /* Sem título nenhum: filtro apertado demais, ou catálogo ainda
+               chegando. As categorias continuam ali como saída. */
+            return heading + categoryCards(scopedCategories(contentType, categories));
+        }
+        return heading + mediaCards(rows, layout) +
             paginationControls('catalogue-shelf-page', page, pageCount, start,
-                start + visible.length, rows.length, '', '');
+                start + rows.length, total, '', '');
     }
 
     /*
@@ -2688,6 +2790,7 @@ var BuroApp = (function () {
         if (property === 'service' && scope.service) { scope.genre = null; }
         if (property === 'genre' && scope.genre) { scope.service = null; }
         scope.page = 0;
+        scope.rows = undefined;
         /* Sem `focusIndex = 0`: `refreshFocus` reencontra o mesmo chip pelo
            data-action, então ciclar o valor deixa o foco onde estava. Zerar o
            índice mandava o foco para o primeiro chip a cada ENTER, e escolher o
@@ -2733,6 +2836,7 @@ var BuroApp = (function () {
         }
         /* Página quatro de um resultado que mudou embaixo não quer dizer nada. */
         scope.page = 0;
+        scope.rows = undefined;
         render();
     }
 
@@ -2741,12 +2845,23 @@ var BuroApp = (function () {
         var index = CATALOGUE_RATINGS.indexOf(scope.minimumRating);
         scope.minimumRating = CATALOGUE_RATINGS[(index + 1) % CATALOGUE_RATINGS.length];
         scope.page = 0;
+        scope.rows = undefined;
+        render();
+    }
+
+    /* Poster, compacto, lista — e volta. A densidade não muda o resultado, só
+       como ele é desenhado, então a página carregada continua valendo. */
+    function cycleCatalogueDensity() {
+        var scope = catalogueScope(currentCatalogueType());
+        var index = CATALOGUE_LAYOUTS.indexOf(scope.layout || 'poster');
+        scope.layout = CATALOGUE_LAYOUTS[(index + 1) % CATALOGUE_LAYOUTS.length];
         render();
     }
 
     function changeCatalogueShelfPage(delta) {
         var scope = catalogueScope(currentCatalogueType());
         scope.page = Math.max(0, (Number(scope.page) || 0) + delta);
+        scope.rows = undefined;
         render();
     }
 
@@ -2759,6 +2874,7 @@ var BuroApp = (function () {
         scope.year = null;
         scope.minimumRating = null;
         scope.page = 0;
+        scope.rows = undefined;
         /* O chip "Limpar filtros" some depois de limpar, então aqui o foco não
            tem para onde voltar: cai no primeiro chip, que é o de gênero. */
         focusIndex = 0;
@@ -8330,6 +8446,7 @@ var BuroApp = (function () {
         else if (action === 'catalogue-rating') { cycleCatalogueRating(); }
         else if (action === 'catalogue-shelf-page-previous') { changeCatalogueShelfPage(-1); }
         else if (action === 'catalogue-shelf-page-next') { changeCatalogueShelfPage(1); }
+        else if (action === 'catalogue-density') { cycleCatalogueDensity(); }
         else if (action === 'parental-form') { pushScreen('PARENTAL_FORM'); }
         else if (action === 'parental-save') { saveParentalPin(); }
         else if (action === 'parental-clear') { clearParentalPin(); }
