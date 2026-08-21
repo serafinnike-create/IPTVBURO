@@ -2,15 +2,18 @@ package com.lucasserafin94.iptvburo.desktop.update
 
 import com.google.gson.JsonParser
 import com.lucasserafin94.iptvburo.desktop.build.DESKTOP_RELEASE_VERSION
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.ScreenStrings
+import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.time.Duration
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 const val DESKTOP_VERSION = DESKTOP_RELEASE_VERSION
 internal const val DESKTOP_RELEASE_REPOSITORY = "serafinnike-create/IPTVBURO"
@@ -43,6 +46,14 @@ class GitHubReleaseUpdater(
     private val currentVersion: String = DESKTOP_VERSION,
     private val updatesDirectory: Path = defaultUpdatesDirectory(),
     private val installerLauncher: (Path) -> Boolean = ::launchWindowsInstaller,
+    /**
+     * The failure text, in the language the app is running in.
+     *
+     * Defaulted so the tests can construct an updater without one; the app passes the current
+     * language, because this string reaches the user in the update panel.
+     */
+    private val text: ScreenStrings =
+        DesktopStrings.of(DesktopLanguage.PORTUGUESE_BRAZIL).shareStrings.screens,
 ) {
     suspend fun check(): UpdateCheckResult =
         withContext(Dispatchers.IO) {
@@ -110,7 +121,7 @@ class GitHubReleaseUpdater(
                     candidates.firstOrNull()?.let(UpdateCheckResult::Available) ?: UpdateCheckResult.UpToDate
                 }
             }.getOrElse {
-                UpdateCheckResult.Failed("Não foi possível verificar atualizações agora.")
+                UpdateCheckResult.Failed(text.updateCheckFailed)
             }
         }
 

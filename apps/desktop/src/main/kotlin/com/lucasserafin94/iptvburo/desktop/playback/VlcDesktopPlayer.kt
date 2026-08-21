@@ -2,6 +2,10 @@ package com.lucasserafin94.iptvburo.desktop.playback
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.ScreenStrings
+import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
+import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import com.sun.jna.Native
 import com.sun.jna.Pointer
 import java.awt.BorderLayout
@@ -10,7 +14,6 @@ import java.awt.Color
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.InetAddress
-import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import java.net.ServerSocket
 import java.net.URI
 import java.nio.charset.StandardCharsets
@@ -77,6 +80,15 @@ class VlcDesktopPlayer(
      * A tile number, never a channel name or provider id — those can carry an address.
      */
     private val logTag: String = "player",
+    /**
+     * The engine's own failure messages.
+     *
+     * Passed in rather than held as constants: these used to be Portuguese literals, so a German
+     * or Italian viewer met a Portuguese sentence when a stream failed. The default keeps the
+     * tests, which construct a bare player and never read these, unchanged.
+     */
+    private val text: ScreenStrings =
+        DesktopStrings.of(DesktopLanguage.PORTUGUESE_BRAZIL).shareStrings.screens,
 ) {
     init {
         require(startupDelayMillis in 0L..MAX_STARTUP_DELAY_MILLIS) {
@@ -469,7 +481,7 @@ class VlcDesktopPlayer(
                     snapshot.copy(
                         loading = false,
                         playing = false,
-                        errorMessage = START_FAILURE_MESSAGE,
+                        errorMessage = text.playerStartFailed,
                     )
                 return
             }
@@ -495,7 +507,7 @@ class VlcDesktopPlayer(
                 snapshot.copy(
                     loading = false,
                     playing = false,
-                    errorMessage = START_FAILURE_MESSAGE,
+                    errorMessage = text.playerStartFailed,
                 )
         }
     }
@@ -609,7 +621,7 @@ class VlcDesktopPlayer(
                         snapshot.copy(
                             loading = false,
                             playing = false,
-                            errorMessage = START_FAILURE_MESSAGE,
+                            errorMessage = text.playerStartFailed,
                         )
                 }
             Unit
@@ -983,7 +995,7 @@ class VlcDesktopPlayer(
                     activeSubtitleTrackId = tracks.activeSubtitle,
                     errorMessage =
                         if (!ready && System.currentTimeMillis() - mediaStartedAt > START_TIMEOUT_MILLIS) {
-                            STALLED_MESSAGE
+                            text.playerStalled
                         } else {
                             null
                         },
@@ -995,7 +1007,7 @@ class VlcDesktopPlayer(
                     snapshot.copy(
                         loading = false,
                         playing = false,
-                        errorMessage = "O motor de vídeo foi encerrado inesperadamente.",
+                        errorMessage = text.playerStopped,
                     )
             } else if (System.currentTimeMillis() - mediaStartedAt > START_TIMEOUT_MILLIS) {
                 // A VLC that is alive but has stopped answering its control interface used to leave
@@ -1005,7 +1017,7 @@ class VlcDesktopPlayer(
                     snapshot.copy(
                         loading = false,
                         playing = false,
-                        errorMessage = STALLED_MESSAGE,
+                        errorMessage = text.playerStalled,
                     )
             }
         }
@@ -1157,9 +1169,6 @@ class VlcDesktopPlayer(
         /** Matches the thread name given to the single control executor. */
         const val CONTROL_THREAD_NAME = "iptvburo-vlc-control"
 
-        const val START_FAILURE_MESSAGE = "O motor de vídeo do Windows não pôde ser iniciado."
-        const val STALLED_MESSAGE =
-            "O servidor respondeu, mas este vídeo não iniciou. Tente novamente ou escolha outro título."
     }
 }
 

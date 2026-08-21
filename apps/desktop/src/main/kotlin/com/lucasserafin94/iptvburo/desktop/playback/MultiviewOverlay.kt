@@ -132,6 +132,8 @@ fun MultiviewOverlay(
             // arrangement, inside a single embedded panel, removes the problem rather than working
             // around it.
             val surface = remember { MultiviewSurface() }
+            // Read here, in composable scope; the effect below is not one.
+            val screenText = strings.shareStrings.screens
             val currentIsFullScreen = rememberUpdatedState(isFullScreen)
             val currentToggleFullScreen = rememberUpdatedState(onToggleFullScreen)
 
@@ -144,6 +146,7 @@ fun MultiviewOverlay(
             LaunchedEffect(surface, tiles.map(MultiviewTile::providerId)) {
                 surface.sync(
                     tiles = tiles,
+                    text = screenText,
                     onTileClicked = { providerId -> requestedAudioProviderId = providerId },
                     // Any key leaves full screen.
                     //

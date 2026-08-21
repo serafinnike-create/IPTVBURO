@@ -216,7 +216,9 @@ fun DesktopApp(
     // Which profile the editor is open for, or null when it is closed. Held as an id rather than as
     // the profile so an edit that renames it does not leave a stale copy on screen.
     var editingProfile by remember { mutableStateOf<String?>(null) }
-    val releaseUpdater = remember { GitHubReleaseUpdater() }
+    // Keyed on the text so a language change rebuilds it: the failure message reaches the user.
+    val updaterText = strings.shareStrings.screens
+    val releaseUpdater = remember(updaterText) { GitHubReleaseUpdater(text = updaterText) }
     var updateBusy by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
     var updateProgress by remember { mutableStateOf(0f) }
@@ -1157,13 +1159,13 @@ fun DesktopApp(
                                 Text(strings.understood)
                             }
                         },
-                        title = { Text("Não foi possível abrir") },
+                        title = { Text(strings.shareStrings.screens.externalOpenFailed) },
                         text = {
                             Text(
                                 if (result == ExternalOpenResult.NotSupported) {
-                                    "Este sistema não oferece um aplicativo padrão para abrir o canal."
+                                    strings.shareStrings.screens.externalNoDefaultApp
                                 } else {
-                                    "O aplicativo externo recusou o endereço. Nenhum dado foi copiado."
+                                    strings.shareStrings.screens.externalRefused
                                 },
                             )
                         },
@@ -2347,7 +2349,7 @@ private fun ChannelPane(
         Spacer(Modifier.height(12.dp))
         if (channels.isEmpty()) {
             Text(
-                "Nenhum canal corresponde ao filtro.",
+                strings.shareStrings.screens.noChannelMatches,
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(10.dp),
@@ -2562,9 +2564,9 @@ private fun PlaybackStatus(channel: Channel) {
     Text(
         text =
             if (requiresHeaders) {
-                "O canal exige cabeçalhos HTTP; um navegador comum pode não reproduzi-lo."
+                strings.shareStrings.screens.externalHeadersWarning
             } else {
-                "Endereço válido para um aplicativo externo."
+                strings.shareStrings.screens.externalAddressValid
             },
         color = if (requiresHeaders) BuroColors.Warning else BuroColors.Success,
         style = MaterialTheme.typography.bodyMedium,
@@ -2767,7 +2769,7 @@ private fun ExternalPlaybackDialog(
         text = {
             Text(
                 if (requiresHeaders) {
-                    "Este canal exige cabeçalhos HTTP que o player Windows atual ainda não consegue aplicar. A reprodução foi desativada para não apresentar um botão que falhará."
+                    strings.shareStrings.screens.headersUnsupported
                 } else {
                     "O vídeo será aberto no player VLC integrado, com suporte a H.264, H.265/HEVC, AAC, MP4, MKV e HLS."
                 },

@@ -1,5 +1,8 @@
 package com.lucasserafin94.iptvburo.desktop.playback
 
+import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.ScreenStrings
+import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import java.awt.Canvas
 import java.awt.Color
 import java.awt.Component
@@ -101,6 +104,9 @@ class MultiviewSurface {
          * @return true when the key was handled and should not reach VLC
          */
         onKey: (Int) -> Boolean = { false },
+        /** The engine's failure messages, in the language the app is running in. */
+        text: ScreenStrings =
+            DesktopStrings.of(DesktopLanguage.PORTUGUESE_BRAZIL).shareStrings.screens,
     ) {
         // Stored rather than captured, because the components are created once and kept: a tile
         // mounted before full screen was entered would otherwise hold the old handler for ever, and
@@ -144,6 +150,7 @@ class MultiviewSurface {
                             // The tile's position, so four players can be told apart in the log.
                             // A number, never the channel — a provider id can carry an address.
                             logTag = "tile${index + 1}",
+                            text = text,
                         )
                     MountedTile(
                         player = player,

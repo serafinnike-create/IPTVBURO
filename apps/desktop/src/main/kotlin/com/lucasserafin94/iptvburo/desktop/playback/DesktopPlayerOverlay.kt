@@ -1,20 +1,20 @@
 package com.lucasserafin94.iptvburo.desktop.playback
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -31,25 +31,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.layout.layout
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import kotlinx.coroutines.delay
 
@@ -93,8 +94,14 @@ fun DesktopPlayerOverlay(
     // Keyed on the style and the audio mode as well as the request: VLC builds its text renderer
     // and its audio chain with the video chain, so a change to either only reaches the engine
     // through a fresh player.
+    // Read here rather than inside `remember`: the engine's failure messages have to be in the
+    // language the app is running in, and a player kept across a language change would otherwise
+    // go on answering in the old one.
+    val screenText = strings.shareStrings.screens
     val controller =
-        remember(request, subtitleStyle, audioOutput) { VlcDesktopPlayer(subtitleStyle, audioOutput) }
+        remember(request, subtitleStyle, audioOutput, screenText) {
+            VlcDesktopPlayer(subtitleStyle, audioOutput, text = screenText)
+        }
     // Keyed on the controller, not on the request. Changing the speaker layout builds a new player
     // without changing the request, so a request-keyed snapshot survived the swap and reported the
     // dead engine's `ready` and duration for the new one — which is what left Space and the click

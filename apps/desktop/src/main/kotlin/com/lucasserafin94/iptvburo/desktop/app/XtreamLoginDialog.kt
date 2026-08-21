@@ -22,8 +22,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.security.SecureTextBuffer
 import com.lucasserafin94.iptvburo.desktop.security.XtreamLoginInput
-import com.lucasserafin94.iptvburo.xtream.XtreamSubscriptionParser
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.desktop.ui.strings
+import com.lucasserafin94.iptvburo.xtream.XtreamSubscriptionParser
 
 @Composable
 fun XtreamLoginDialog(
@@ -66,7 +67,7 @@ fun XtreamLoginDialog(
                 Text("Cancelar")
             }
         },
-        title = { Text("Conectar servidor Xtream") },
+        title = { Text(strings.shareStrings.screens.connectXtreamTitle) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),

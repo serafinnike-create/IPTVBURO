@@ -6527,12 +6527,14 @@ class DesktopAppState(
     }
 
     private fun Throwable.toSafeImportMessage(): String =
-        when (this) {
-            is NoSuchFileException -> "O arquivo selecionado não existe mais."
-            is AccessDeniedException -> "O sistema não permitiu ler esse arquivo."
-            is SecurityException -> "O acesso ao arquivo foi bloqueado pelo sistema."
-            else ->
-                "Não foi possível importar a lista. Verifique se o arquivo é M3U/M3U8 válido e tente novamente."
+        DesktopStrings.of(language).shareStrings.screens.let { text ->
+            when (this) {
+                is NoSuchFileException -> text.importFileMissing
+                is AccessDeniedException -> text.importAccessDenied
+                is SecurityException -> text.importBlocked
+                // The generic case keeps its own entry, which names the accepted formats.
+                else -> text.importFailed
+            }
         }
 
     /**

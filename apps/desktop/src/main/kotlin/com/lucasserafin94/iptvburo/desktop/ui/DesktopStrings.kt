@@ -633,6 +633,30 @@ data class DesktopStrings(
                             organising = "Organizando películas y series…",
                             ready = "Listo",
                         ),
+                    screens =
+                        ScreenStrings(
+                            importFileMissing = "El archivo seleccionado ya no existe.",
+                            importAccessDenied = "El sistema no permitió leer ese archivo.",
+                            importBlocked = "El acceso al archivo fue bloqueado por el sistema.",
+                            importFailed = "No se pudo importar la lista. Comprueba que el archivo sea un M3U/M3U8 válido e inténtalo de nuevo.",
+                            externalOpenFailed = "No se pudo abrir",
+                            externalNoDefaultApp = "Este sistema no ofrece una aplicación predeterminada para abrir el canal.",
+                            externalRefused = "La aplicación externa rechazó la dirección. No se copió ningún dato.",
+                            externalHeadersWarning = "El canal exige cabeceras HTTP; un navegador común puede no reproducirlo.",
+                            externalAddressValid = "Dirección válida para una aplicación externa.",
+                            headersUnsupported = "Este canal exige cabeceras HTTP que el reproductor de Windows aún no puede aplicar. La reproducción se desactivó para no mostrar un botón que fallará.",
+                            noChannelMatches = "Ningún canal coincide con el filtro.",
+                            connectXtreamTitle = "Conectar servidor Xtream",
+                            searchingCatalogue = "Buscando en el catálogo…",
+                            noFurtherTitles = "No se encontró ningún otro título en el catálogo.",
+                            noPlayableEpisodes = "El servidor no devolvió episodios reproducibles.",
+                            playerStopped = "El motor de vídeo se cerró inesperadamente.",
+                            playerStartFailed = "El motor de vídeo de Windows no pudo iniciarse.",
+                            playerStalled = "El servidor respondió, pero este vídeo no se inició. Inténtalo de nuevo o elige otro título.",
+                            updateCheckFailed = "No se pudo comprobar si hay actualizaciones ahora.",
+                            demoMovieNotice = "Título de ejemplo. Esta disponibilidad es ficticia.",
+                            demoSeriesNotice = "Serie de ejemplo. Esta disponibilidad es ficticia.",
+                        ),
                     remoteSource =
                         RemoteSourceStrings(
                             title = "Servidor propio (NAS)",
@@ -1311,6 +1335,30 @@ data class DesktopStrings(
                             downloadingSeries = "Baixando a lista de séries…",
                             organising = "Organizando filmes e séries…",
                             ready = "Pronto",
+                        ),
+                    screens =
+                        ScreenStrings(
+                            importFileMissing = "O arquivo selecionado não existe mais.",
+                            importAccessDenied = "O sistema não permitiu ler esse arquivo.",
+                            importBlocked = "O acesso ao arquivo foi bloqueado pelo sistema.",
+                            importFailed = "Não foi possível importar a lista. Verifique se o arquivo é M3U/M3U8 válido e tente novamente.",
+                            externalOpenFailed = "Não foi possível abrir",
+                            externalNoDefaultApp = "Este sistema não oferece um aplicativo padrão para abrir o canal.",
+                            externalRefused = "O aplicativo externo recusou o endereço. Nenhum dado foi copiado.",
+                            externalHeadersWarning = "O canal exige cabeçalhos HTTP; um navegador comum pode não reproduzi-lo.",
+                            externalAddressValid = "Endereço válido para um aplicativo externo.",
+                            headersUnsupported = "Este canal exige cabeçalhos HTTP que o player Windows atual ainda não consegue aplicar. A reprodução foi desativada para não apresentar um botão que falhará.",
+                            noChannelMatches = "Nenhum canal corresponde ao filtro.",
+                            connectXtreamTitle = "Conectar servidor Xtream",
+                            searchingCatalogue = "Procurando no catálogo…",
+                            noFurtherTitles = "Nenhum outro título encontrado no catálogo.",
+                            noPlayableEpisodes = "O servidor não retornou episódios reproduzíveis.",
+                            playerStopped = "O motor de vídeo foi encerrado inesperadamente.",
+                            playerStartFailed = "O motor de vídeo do Windows não pôde ser iniciado.",
+                            playerStalled = "O servidor respondeu, mas este vídeo não iniciou. Tente novamente ou escolha outro título.",
+                            updateCheckFailed = "Não foi possível verificar atualizações agora.",
+                            demoMovieNotice = "Título de exemplo. Esta disponibilidade é fictícia.",
+                            demoSeriesNotice = "Série de exemplo. Esta disponibilidade é fictícia.",
                         ),
                     remoteSource =
                         RemoteSourceStrings(
@@ -1991,6 +2039,30 @@ data class DesktopStrings(
                             organising = "Organising films and series…",
                             ready = "Ready",
                         ),
+                    screens =
+                        ScreenStrings(
+                            importFileMissing = "The selected file no longer exists.",
+                            importAccessDenied = "The system would not allow that file to be read.",
+                            importBlocked = "Access to the file was blocked by the system.",
+                            importFailed = "Could not import the playlist. Check that the file is valid M3U/M3U8 and try again.",
+                            externalOpenFailed = "Could not open",
+                            externalNoDefaultApp = "This system offers no default application for opening the channel.",
+                            externalRefused = "The external application refused the address. No data was copied.",
+                            externalHeadersWarning = "The channel requires HTTP headers; an ordinary browser may not play it.",
+                            externalAddressValid = "Address valid for an external application.",
+                            headersUnsupported = "This channel requires HTTP headers the current Windows player cannot yet apply. Playback is disabled rather than offering a button that will fail.",
+                            noChannelMatches = "No channel matches the filter.",
+                            connectXtreamTitle = "Connect an Xtream server",
+                            searchingCatalogue = "Searching the catalogue…",
+                            noFurtherTitles = "No further titles found in the catalogue.",
+                            noPlayableEpisodes = "The server returned no playable episodes.",
+                            playerStopped = "The video engine stopped unexpectedly.",
+                            playerStartFailed = "The Windows video engine could not start.",
+                            playerStalled = "The server answered, but this video did not start. Try again or choose another title.",
+                            updateCheckFailed = "Could not check for updates right now.",
+                            demoMovieNotice = "Example title. This availability is fictional.",
+                            demoSeriesNotice = "Example series. This availability is fictional.",
+                        ),
                     remoteSource =
                         RemoteSourceStrings(
                             title = "Your own server (NAS)",
@@ -2668,6 +2740,30 @@ data class DesktopStrings(
                             downloadingSeries = "Serienliste wird heruntergeladen…",
                             organising = "Filme und Serien werden sortiert…",
                             ready = "Fertig",
+                        ),
+                    screens =
+                        ScreenStrings(
+                            importFileMissing = "Die ausgewählte Datei existiert nicht mehr.",
+                            importAccessDenied = "Das System hat das Lesen dieser Datei nicht erlaubt.",
+                            importBlocked = "Der Zugriff auf die Datei wurde vom System blockiert.",
+                            importFailed = "Die Liste konnte nicht importiert werden. Prüfen Sie, ob die Datei gültiges M3U/M3U8 ist, und versuchen Sie es erneut.",
+                            externalOpenFailed = "Konnte nicht geöffnet werden",
+                            externalNoDefaultApp = "Dieses System bietet keine Standardanwendung zum Öffnen des Senders.",
+                            externalRefused = "Die externe Anwendung hat die Adresse abgelehnt. Es wurden keine Daten kopiert.",
+                            externalHeadersWarning = "Der Sender benötigt HTTP-Header; ein gewöhnlicher Browser kann ihn womöglich nicht abspielen.",
+                            externalAddressValid = "Für eine externe Anwendung gültige Adresse.",
+                            headersUnsupported = "Dieser Sender benötigt HTTP-Header, die der aktuelle Windows-Player noch nicht setzen kann. Die Wiedergabe ist deaktiviert, statt eine Schaltfläche anzubieten, die fehlschlägt.",
+                            noChannelMatches = "Kein Sender entspricht dem Filter.",
+                            connectXtreamTitle = "Xtream-Server verbinden",
+                            searchingCatalogue = "Der Katalog wird durchsucht…",
+                            noFurtherTitles = "Keine weiteren Titel im Katalog gefunden.",
+                            noPlayableEpisodes = "Der Server lieferte keine abspielbaren Folgen.",
+                            playerStopped = "Die Video-Engine wurde unerwartet beendet.",
+                            playerStartFailed = "Die Windows-Video-Engine konnte nicht gestartet werden.",
+                            playerStalled = "Der Server hat geantwortet, aber dieses Video startete nicht. Versuchen Sie es erneut oder wählen Sie einen anderen Titel.",
+                            updateCheckFailed = "Es konnte gerade nicht nach Updates gesucht werden.",
+                            demoMovieNotice = "Beispieltitel. Diese Verfügbarkeit ist fiktiv.",
+                            demoSeriesNotice = "Beispielserie. Diese Verfügbarkeit ist fiktiv.",
                         ),
                     remoteSource =
                         RemoteSourceStrings(
@@ -3351,6 +3447,30 @@ data class DesktopStrings(
                             downloadingSeries = "Scaricamento della lista delle serie…",
                             organising = "Organizzazione di film e serie…",
                             ready = "Pronto",
+                        ),
+                    screens =
+                        ScreenStrings(
+                            importFileMissing = "Il file selezionato non esiste più.",
+                            importAccessDenied = "Il sistema non ha permesso di leggere quel file.",
+                            importBlocked = "L'accesso al file è stato bloccato dal sistema.",
+                            importFailed = "Impossibile importare la lista. Verifica che il file sia un M3U/M3U8 valido e riprova.",
+                            externalOpenFailed = "Impossibile aprire",
+                            externalNoDefaultApp = "Questo sistema non offre un'applicazione predefinita per aprire il canale.",
+                            externalRefused = "L'applicazione esterna ha rifiutato l'indirizzo. Nessun dato è stato copiato.",
+                            externalHeadersWarning = "Il canale richiede intestazioni HTTP; un browser comune potrebbe non riprodurlo.",
+                            externalAddressValid = "Indirizzo valido per un'applicazione esterna.",
+                            headersUnsupported = "Questo canale richiede intestazioni HTTP che il lettore Windows attuale non sa ancora applicare. La riproduzione è disattivata invece di offrire un pulsante che fallirà.",
+                            noChannelMatches = "Nessun canale corrisponde al filtro.",
+                            connectXtreamTitle = "Connetti server Xtream",
+                            searchingCatalogue = "Ricerca nel catalogo…",
+                            noFurtherTitles = "Nessun altro titolo trovato nel catalogo.",
+                            noPlayableEpisodes = "Il server non ha restituito episodi riproducibili.",
+                            playerStopped = "Il motore video si è chiuso inaspettatamente.",
+                            playerStartFailed = "Il motore video di Windows non è riuscito ad avviarsi.",
+                            playerStalled = "Il server ha risposto, ma questo video non è partito. Riprova o scegli un altro titolo.",
+                            updateCheckFailed = "Impossibile controllare gli aggiornamenti in questo momento.",
+                            demoMovieNotice = "Titolo di esempio. Questa disponibilità è fittizia.",
+                            demoSeriesNotice = "Serie di esempio. Questa disponibilità è fittizia.",
                         ),
                     remoteSource =
                         RemoteSourceStrings(
@@ -4370,6 +4490,47 @@ data class DownloadStrings(
  * These were Portuguese literals in `DesktopAppState`, so the first screen a non-Portuguese user ever
  * sees — before any setting can be reached — was in a language they may not read.
  */
+/**
+ * The last of the wording that used to live inside the screens.
+ *
+ * Grouped by where it appears rather than by type, because that is how it is read: somebody
+ * translating checks one screen at a time. Nested on [ShareStrings] for the ceiling reason set out
+ * there — `DesktopStrings` is at its enforced constructor limit.
+ */
+data class ScreenStrings(
+    // Importing a playlist file.
+    val importFileMissing: String,
+    val importAccessDenied: String,
+    val importBlocked: String,
+    /** Anything else that goes wrong reading a playlist, naming the formats that are accepted. */
+    val importFailed: String,
+    // Handing a channel to an external player.
+    val externalOpenFailed: String,
+    val externalNoDefaultApp: String,
+    val externalRefused: String,
+    val externalHeadersWarning: String,
+    val externalAddressValid: String,
+    /** Why a channel cannot be played here at all, rather than offering a button that fails. */
+    val headersUnsupported: String,
+    /** The channel list, filtered to nothing. */
+    val noChannelMatches: String,
+    // The Xtream sign-in dialog.
+    val connectXtreamTitle: String,
+    // Searching the catalogue from a person's page.
+    val searchingCatalogue: String,
+    val noFurtherTitles: String,
+    val noPlayableEpisodes: String,
+    // The video engine.
+    val playerStopped: String,
+    val playerStartFailed: String,
+    val playerStalled: String,
+    // Checking for a new version.
+    val updateCheckFailed: String,
+    /** The demo catalogue's own disclaimer, which must never read as a real listing. */
+    val demoMovieNotice: String,
+    val demoSeriesNotice: String,
+)
+
 data class StartupStrings(
     val openingSession: String,
     val loadingLiveCategories: String,
@@ -4430,6 +4591,8 @@ data class ShareStrings(
     val failures: FailureStrings,
     /** What the splash says it is doing while the catalogue loads. */
     val startup: StartupStrings,
+    /** Wording that used to sit inside individual screens. */
+    val screens: ScreenStrings,
     /** The button on the title page, beside Favourites. */
     val share: String,
     val shareTitle: String,

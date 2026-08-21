@@ -27,14 +27,9 @@ class NoHardcodedTextTest {
      */
     private val pending =
         setOf(
-            "DesktopAppState.kt",
-            "DesktopApp.kt",
-            "XtreamWorkspace.kt",
-            "DesktopPlayerOverlay.kt",
-            "XtreamLoginDialog.kt",
-            "VlcDesktopPlayer.kt",
-            "GitHubReleaseUpdater.kt",
-            // Invented rows for the demo catalogue, which never ship enabled.
+            // Invented rows for a demo catalogue that is referenced only from a test: no user ever
+            // reads these, so translating them into five languages would be churn, not coverage.
+            // The moment it is wired into the app, it has to be translated and taken off this list.
             "DemoStreamingDiscoveryProvider.kt",
         )
 
@@ -108,6 +103,6 @@ class NoHardcodedTextTest {
 
     private companion object {
         /** What it was when the list was written. Lower it as files are cleared; never raise it. */
-        const val PENDING_CEILING = 8
+        const val PENDING_CEILING = 1
     }
 }

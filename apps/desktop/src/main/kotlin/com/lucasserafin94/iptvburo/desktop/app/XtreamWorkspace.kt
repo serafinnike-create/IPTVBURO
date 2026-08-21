@@ -2652,10 +2652,10 @@ internal fun PersonFilmographyPage(
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(BuroSpacing.Sm))
-                        Text("Procurando no catálogo…", color = BuroColors.TextMuted)
+                        Text(strings.shareStrings.screens.searchingCatalogue, color = BuroColors.TextMuted)
                     }
                 } else if (person.items.isEmpty()) {
-                    Text("Nenhum outro título encontrado no catálogo.", color = BuroColors.TextMuted)
+                    Text(strings.shareStrings.screens.noFurtherTitles, color = BuroColors.TextMuted)
                 } else {
                     person.items.take(20).forEach { item ->
                         Row(
@@ -2954,7 +2954,7 @@ private fun SeriesDetailContent(
 
             if (episodes.isEmpty()) {
                 Text(
-                    "O servidor não retornou episódios reproduzíveis.",
+                    text.shareStrings.screens.noPlayableEpisodes,
                     color = BuroColors.TextSubtle,
                     style = MaterialTheme.typography.bodyMedium,
                 )
