@@ -2,6 +2,28 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [3.0.5] - 2026-08-21 (Windows)
+
+### Windows
+
+#### Corrigido
+
+- **A ficha do filme ficava "carregando" para sempre.** Era o problema relatado
+  ao abrir um título pela tela Descobrir. A causa estava no desenho da tela, não
+  na busca: o estado *ocioso* dividia o mesmo ramo com o estado *carregando*.
+  Quando a busca era cancelada — o que acontece sempre que o efeito que a
+  iniciou é recomposto, e de forma previsível por aquele caminho — o estado
+  voltava corretamente para ocioso, mas a tela continuava mostrando o mesmo
+  círculo girando e o mesmo "Carregando ficha do filme…", sem nada em
+  andamento e sem nada que disparasse uma nova tentativa.
+
+  Agora a tela pede de novo sozinha, já que você pediu ao abrir o filme, e
+  mostra um botão "Tentar novamente" desde o início — porque a situação que
+  esse botão existe para resolver é justamente aquela em que a tentativa
+  automática não chega.
+- **O guia "agora e próximo" dos canais ao vivo tinha exatamente o mesmo
+  defeito**, e recebeu o mesmo tratamento.
+
 ## [3.0.4] - 2026-08-21 (Windows)
 
 ### Windows
