@@ -1,11 +1,8 @@
 package com.lucasserafin94.iptvburo.domain.model
 
-import java.net.URI
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 
 /** Stable universal identity. Authenticated URLs are reduced to a non-reversible digest. */
-@JvmInline
+@kotlin.jvm.JvmInline
 value class MediaIdentity(val key: String) {
     init {
         require(key.isNotBlank())
@@ -77,17 +74,15 @@ value class MediaIdentity(val key: String) {
         }
 
         private fun remoteLocatorDigest(rawUrl: String): String {
-            val uri = URI(rawUrl.trim())
-            require(uri.scheme.equals("http", true) || uri.scheme.equals("https", true))
-            require(!uri.host.isNullOrBlank())
+            val uri = requireNotNull(HttpLocator.parse(rawUrl)) { "not an http(s) locator" }
             // User-info and query are deliberately excluded. The path is retained only inside a
             // digest because several legal providers place account material in path segments.
             val normalized = buildString {
-                append(uri.scheme.lowercase())
+                append(uri.scheme)
                 append("://")
-                append(uri.host.lowercase())
-                if (uri.port >= 0 && !uri.usesDefaultPort()) append(":${uri.port}")
-                append(uri.normalize().rawPath.orEmpty().ifBlank { "/" })
+                append(uri.host)
+                if (uri.port != null) append(":${uri.port}")
+                append(uri.path)
             }
             return digest(normalized)
         }
@@ -95,26 +90,20 @@ value class MediaIdentity(val key: String) {
         /** RSS GUIDs are often URLs; normalize those so a rotating auth query is not identity. */
         private fun stableGuidDigest(rawGuid: String): String =
             runCatching {
-                val uri = URI(rawGuid.trim())
-                if (uri.scheme.equals("http", true) || uri.scheme.equals("https", true)) {
+                if (HttpLocator.parse(rawGuid) != null) {
                     remoteLocatorDigest(rawGuid)
                 } else {
                     digest(rawGuid.trim())
                 }
             }.getOrElse { digest(rawGuid.trim()) }
 
-        private fun URI.usesDefaultPort(): Boolean =
-            (scheme.equals("http", true) && port == 80) ||
-                (scheme.equals("https", true) && port == 443)
-
         private fun slugOrUnknown(value: String?): String =
             value?.let(ContentIdentity::slugify)?.takeIf(String::isNotBlank) ?: "unknown"
 
         private fun digest(value: String): String =
-            MessageDigest.getInstance("SHA-256")
-                .digest(value.toByteArray(StandardCharsets.UTF_8))
-                .take(DIGEST_BYTES)
-                .joinToString("") { byte -> "%02x".format(byte) }
+            sha256(value.encodeToByteArray())
+                .copyOf(DIGEST_BYTES)
+                .toHex()
 
         /** New namespaces are versioned before any value reaches persistence. Video keys stay v0. */
         private const val IDENTITY_VERSION = "v1"

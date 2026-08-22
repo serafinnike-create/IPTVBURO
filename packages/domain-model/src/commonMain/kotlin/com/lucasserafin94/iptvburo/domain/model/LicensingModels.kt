@@ -1,6 +1,6 @@
 package com.lucasserafin94.iptvburo.domain.model
 
-import java.time.Instant
+import kotlin.time.Instant
 
 enum class EntitlementState {
     UNREGISTERED,

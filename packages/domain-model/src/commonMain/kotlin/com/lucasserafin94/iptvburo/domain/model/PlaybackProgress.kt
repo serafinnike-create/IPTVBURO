@@ -1,5 +1,7 @@
 package com.lucasserafin94.iptvburo.domain.model
 
+import kotlin.time.Clock
+
 enum class PlaybackContentType {
     MOVIE,
     EPISODE,
@@ -109,7 +111,7 @@ class GetResumeDecisionUseCase(private val repository: PlaybackProgressRepositor
 
 class SavePlaybackCheckpointUseCase(
     private val repository: PlaybackProgressRepository,
-    private val clock: () -> Long = System::currentTimeMillis,
+    private val clock: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
     operator fun invoke(
         identity: PlaybackProgressIdentity,
@@ -141,7 +143,7 @@ class SavePlaybackCheckpointUseCase(
 
 class MarkPlaybackCompletedUseCase(
     private val repository: PlaybackProgressRepository,
-    private val clock: () -> Long = System::currentTimeMillis,
+    private val clock: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
     operator fun invoke(identity: PlaybackProgressIdentity, durationMs: Long): PlaybackProgress? {
         if (durationMs <= 0L) return null

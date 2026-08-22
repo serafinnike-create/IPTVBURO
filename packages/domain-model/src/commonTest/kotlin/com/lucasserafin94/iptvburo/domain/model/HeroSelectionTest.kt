@@ -60,7 +60,7 @@ class HeroSelectionTest {
     }
 
     @Test
-    fun `an unrated title is treated as unremarkable, not bad`() {
+    fun `an unrated title is treated as unremarkable - not bad`() {
         val pool = listOf(candidate("unrated"), candidate("poor", rating = 2.0), candidate("great", rating = 9.5))
 
         val order = HeroSelection.rotationFor(pool, dayOfEpoch = 0, count = 3).map(HeroCandidate::id)

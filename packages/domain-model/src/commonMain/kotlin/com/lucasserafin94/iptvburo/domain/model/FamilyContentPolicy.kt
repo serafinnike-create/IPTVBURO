@@ -1,7 +1,5 @@
 package com.lucasserafin94.iptvburo.domain.model
 
-import java.text.Normalizer
-import java.util.Locale
 
 /**
  * Conservative local guard used when a provider does not expose dependable age ratings.
@@ -38,9 +36,9 @@ object FamilyContentPolicy {
 
     private fun String?.normalizedSafetyWords(): String =
         this
-            ?.let { Normalizer.normalize(it, Normalizer.Form.NFD) }
+            ?.let(::decomposeForFolding)
             ?.replace(COMBINING_MARKS, "")
-            ?.lowercase(Locale.ROOT)
+            ?.lowercase()
             ?.replace(NON_WORD_RUNS, " ")
             ?.trim()
             .orEmpty()

@@ -232,7 +232,7 @@ class ProviderShelvesTest {
     // -------------------------------------------------------------------------------------------
 
     @Test
-    fun `shelves are ordered by size, largest first`() {
+    fun `shelves are ordered by size - largest first`() {
         val shelves =
             streamingShelves(
                 listOf(

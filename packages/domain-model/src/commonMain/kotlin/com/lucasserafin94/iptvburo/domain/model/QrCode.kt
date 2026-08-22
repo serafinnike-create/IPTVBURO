@@ -37,7 +37,13 @@ object QrCode {
      * rather than crash a settings screen over a cosmetic feature.
      */
     fun encode(text: String): Matrix? {
-        val data = text.toByteArray(Charsets.ISO_8859_1)
+        // Latin-1, because that is what QR's byte mode declares. Kotlin has no built-in for it,
+        // and it is a straight mapping: every code point below 256 is its own byte, and anything
+        // above has no Latin-1 spelling at all — replaced with '?', exactly as the JVM did.
+        val data = ByteArray(text.length) { i ->
+            val code = text[i].code
+            if (code < 256) code.toByte() else '?'.code.toByte()
+        }
         val version = (1..10).firstOrNull { data.size <= byteCapacity(it) } ?: return null
 
         val totalCodewords = totalDataCodewords(version)
@@ -150,7 +156,7 @@ object QrCode {
         val result = IntArray(ecCount)
         for (byte in data) {
             val factor = (byte.toInt() and 0xFF) xor result[0]
-            System.arraycopy(result, 1, result, 0, result.size - 1)
+            result.copyInto(result, destinationOffset = 0, startIndex = 1)
             result[result.size - 1] = 0
             for (i in result.indices) {
                 result[i] = result[i] xor multiply(generator[i + 1], factor)

@@ -1,6 +1,5 @@
 package com.lucasserafin94.iptvburo.domain.model
 
-import java.util.Locale
 
 /**
  * The rule behind a smart or system playlist.
@@ -205,7 +204,7 @@ object SmartPlaylists {
         tracks
             .filterNot(MusicTrack::isRadio)
             .mapNotNull { it.genre?.trim()?.takeIf(String::isNotBlank) }
-            .groupBy { it.lowercase(Locale.ROOT) }
+            .groupBy { it.lowercase() }
             .map { (_, spellings) -> spellings.first() }
             .sortedWith(String.CASE_INSENSITIVE_ORDER)
 }

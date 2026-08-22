@@ -59,7 +59,7 @@ class ViewerAffinityTest {
      * a measure of the provider's filing rather than of the viewer's taste.
      */
     @Test
-    fun `the strongest matching category decides, not the sum`() {
+    fun `the strongest matching category decides - not the sum`() {
         val watched =
             ViewerAffinity.from(
                 listOf(listOf("action"), listOf("action"), listOf("action"), listOf("drama")),

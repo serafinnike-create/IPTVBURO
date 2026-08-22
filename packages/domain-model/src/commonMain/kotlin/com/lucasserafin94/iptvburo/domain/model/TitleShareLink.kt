@@ -185,7 +185,7 @@ data class TitleShareLink(
  */
 private fun encodeComponent(value: String): String =
     buildString {
-        value.toByteArray(Charsets.UTF_8).forEach { byte ->
+        value.encodeToByteArray().forEach { byte ->
             val char = byte.toInt().toChar()
             if (char.isUnreservedInQuery()) {
                 append(char)
@@ -198,7 +198,7 @@ private fun encodeComponent(value: String): String =
     }
 
 private fun decodeComponent(value: String): String {
-    val bytes = java.io.ByteArrayOutputStream(value.length)
+    val bytes = ArrayList<Byte>(value.length)
     var index = 0
     while (index < value.length) {
         val char = value[index]
@@ -206,26 +206,26 @@ private fun decodeComponent(value: String): String {
             char == '%' && index + 2 < value.length -> {
                 val hex = value.substring(index + 1, index + 3).toIntOrNull(16)
                 if (hex == null) {
-                    bytes.write(char.code)
+                    bytes.add(char.code.toByte())
                     index++
                 } else {
-                    bytes.write(hex)
+                    bytes.add(hex.toByte())
                     index += 3
                 }
             }
             // Decoded for tolerance of links written by other tools, even though `encodeComponent`
             // never produces one.
             char == '+' -> {
-                bytes.write(' '.code)
+                bytes.add(' '.code.toByte())
                 index++
             }
             else -> {
-                bytes.write(char.toString().toByteArray(Charsets.UTF_8))
+                char.toString().encodeToByteArray().forEach(bytes::add)
                 index++
             }
         }
     }
-    return bytes.toString(Charsets.UTF_8)
+    return bytes.toByteArray().decodeToString()
 }
 
 private fun Char.isUnreservedInQuery(): Boolean =

@@ -44,7 +44,7 @@ class TitleShareLinkTest {
     }
 
     @Test
-    fun `host must match exactly, not merely end with an allowlisted name`() {
+    fun `host must match exactly - not merely end with an allowlisted name`() {
         assertFalse(TitleShareLink.isPublicArtwork("https://image.tmdb.org.evil.example/x.jpg"))
         assertFalse(TitleShareLink.isPublicArtwork("https://notimage.tmdb.org/x.jpg"))
     }

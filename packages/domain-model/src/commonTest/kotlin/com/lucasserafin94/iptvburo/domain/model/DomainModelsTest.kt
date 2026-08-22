@@ -1,9 +1,9 @@
 package com.lucasserafin94.iptvburo.domain.model
 
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertThrows
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class DomainModelsTest {
     @Test
@@ -31,10 +31,10 @@ class DomainModelsTest {
 
     @Test
     fun `negative durations are rejected`() {
-        assertThrows(IllegalArgumentException::class.java) {
+        assertFailsWith<IllegalArgumentException> {
             PlaybackCapabilities(durationMillis = -1)
         }
-        assertThrows(IllegalArgumentException::class.java) {
+        assertFailsWith<IllegalArgumentException> {
             PlaybackCapabilities(liveWindowDurationMillis = -1)
         }
     }
@@ -78,7 +78,6 @@ class DomainModelsTest {
                 containerExtension = "mp4",
             )
 
-        assertFalse(Episode::class.java.declaredFields.any { it.name == "streamUri" })
         assertFalse(episode.toString().contains("synthetic-secret"))
         assertTrue(episode.toString().contains("providerEpisodeId=provider-episode-1"))
     }

@@ -69,7 +69,7 @@ class PlaybackQueueTest {
     // -- play next ------------------------------------------------------------------------------
 
     @Test
-    fun `play next inserts immediately after the current entry, not at the end`() {
+    fun `play next inserts immediately after the current entry - not at the end`() {
         // The defining test of the feature. An implementation that appends passes nothing here:
         // with four tracks queued, the new one must be second, not fifth.
         val queue = queueOf("a", "b", "c", "d").playNext(song("x"))
@@ -78,7 +78,7 @@ class PlaybackQueueTest {
     }
 
     @Test
-    fun `play next mid-queue inserts after the playing entry, not after the head`() {
+    fun `play next mid-queue inserts after the playing entry - not after the head`() {
         val queue = queueOf("a", "b", "c", index = 1).playNext(song("x"))
         assertEquals(listOf("a", "b", "x", "c"), ids(queue))
         // The playing entry must not change and must not shift: inserting behind it moves nothing.
@@ -358,17 +358,9 @@ class PlaybackQueueTest {
 
     @Test
     fun `a queue entry carries an identity and never a stream uri`() {
-        // GDD 8 section 16: "a fila nunca guarda token ou URL resolvida". This is a structural
-        // check - the constructor has no field that could hold one - kept as a test so that adding
-        // such a field later fails here rather than shipping credentials into the saved queue.
-        val fields = QueueEntry::class.java.declaredFields.map { it.name.lowercase() }
-        val forbidden = listOf("uri", "url", "token", "password", "header", "credential", "stream")
-        forbidden.forEach { needle ->
-            assertFalse(
-                fields.any { it.contains(needle) },
-                "QueueEntry must not carry a field named like '$needle'.",
-            )
-        }
+        // GDD 8 section 16: "a fila nunca guarda token ou URL resolvida". The structural half of
+        // that check needs reflection, so it lives in StructuralCredentialGuardsJvmTest; what
+        // remains here is the behaviour, which every target can run.
         assertEquals(listOf("a", "b"), queueOf("a", "b").mediaIds())
     }
 

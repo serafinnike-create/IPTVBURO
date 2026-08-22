@@ -84,7 +84,7 @@ class LibraryMatchingPolicyTest {
     }
 
     @Test
-    fun `a title with no year is only possible, never claimed`() {
+    fun `a title with no year is only possible - never claimed`() {
         val result =
             LibraryMatchingPolicy.match(
                 local(title = "Duna"),

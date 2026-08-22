@@ -39,7 +39,7 @@ class ExternalContentLauncherTest {
     }
 
     @Test
-    fun `a stream address is refused, not opened`() {
+    fun `a stream address is refused - not opened`() {
         // This is the case the whole class exists for: something upstream handed BURO a playable
         // URL. Opening it would be playing a protected stream in our own player.
         listOf(

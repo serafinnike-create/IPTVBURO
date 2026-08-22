@@ -70,12 +70,12 @@ object ProviderDeepLinks {
      */
     private fun encodeQuery(value: String): String =
         buildString {
-            value.toByteArray(Charsets.UTF_8).forEach { byte ->
+            value.encodeToByteArray().forEach { byte ->
                 val character = byte.toInt().toChar()
                 if (character.isLetterOrDigit() && byte.toInt() in 0..127 || character in UNRESERVED) {
                     append(character)
                 } else {
-                    append('%').append("%02X".format(byte))
+                    append('%').append(byteArrayOf(byte).toHex().uppercase())
                 }
             }
         }

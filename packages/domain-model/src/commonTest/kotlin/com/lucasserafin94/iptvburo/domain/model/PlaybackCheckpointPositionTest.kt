@@ -31,7 +31,7 @@ class PlaybackCheckpointPositionTest {
     private val twoHoursMs = 2L * 60L * 60L * 1_000L
 
     @Test
-    fun `an early position is stored as partly watched, not as finished`() {
+    fun `an early position is stored as partly watched - not as finished`() {
         val repository = InMemoryProgressRepository()
         val checkpoint = SavePlaybackCheckpointUseCase(repository) { 1_000L }
 
@@ -95,7 +95,7 @@ class PlaybackCheckpointPositionTest {
      * is exactly the kind of mistake a test has to catch.
      */
     @Test
-    fun `progressPercent is a fraction from zero to one, not a percentage`() {
+    fun `progressPercent is a fraction from zero to one - not a percentage`() {
         val repository = InMemoryProgressRepository()
         val checkpoint = SavePlaybackCheckpointUseCase(repository) { 1_000L }
 

@@ -124,10 +124,9 @@ data class ParentalPin(
             value: String,
             salt: String,
         ): String {
-            val digest = java.security.MessageDigest.getInstance("SHA-256")
-            digest.update(salt.toByteArray(Charsets.UTF_8))
-            digest.update(value.toByteArray(Charsets.UTF_8))
-            return digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+            // Salt then value, concatenated — the same order and encoding the JVM version used,
+            // because these hashes are already stored and a changed one locks the household out.
+            return sha256(salt.encodeToByteArray() + value.encodeToByteArray()).toHex()
         }
     }
 }

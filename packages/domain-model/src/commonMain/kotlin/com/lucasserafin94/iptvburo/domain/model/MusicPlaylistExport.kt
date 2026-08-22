@@ -1,6 +1,5 @@
 package com.lucasserafin94.iptvburo.domain.model
 
-import java.util.Locale
 
 /**
  * What an export would disclose, presented to the user before anything is written.
@@ -65,7 +64,7 @@ data class MusicPlaylistExportWarning(
          * ("scheme://user:pass@host") is sensitive by definition.
          */
         fun isSensitive(uri: String): Boolean {
-            val value = uri.trim().lowercase(Locale.ROOT)
+            val value = uri.trim().lowercase()
             if (value.isEmpty()) return false
             if (value.startsWith("file:")) return false
             // "://user:pass@host" — userinfo is credentials by construction.
