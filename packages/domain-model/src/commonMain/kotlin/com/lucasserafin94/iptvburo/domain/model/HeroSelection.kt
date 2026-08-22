@@ -118,7 +118,9 @@ object HeroSelection {
                         .thenBy { candidate -> candidate.id },
                 ).take(POOL_SIZE)
 
-        val start = Math.floorMod(dayOfEpoch, ranked.size.toLong()).toInt()
+        // `mod` rather than `%`: the day counter can be negative for a clock set before the epoch,
+        // and `%` would then return a negative index. Kotlin's `mod` matches Math.floorMod.
+        val start = dayOfEpoch.mod(ranked.size.toLong()).toInt()
         return (0 until minOf(count, ranked.size)).map { offset ->
             ranked[(start + offset) % ranked.size]
         }

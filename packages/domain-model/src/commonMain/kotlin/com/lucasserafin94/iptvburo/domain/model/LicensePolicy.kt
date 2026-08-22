@@ -1,7 +1,8 @@
 package com.lucasserafin94.iptvburo.domain.model
 
-import java.time.Duration
-import java.time.Instant
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
+import kotlinx.datetime.Instant
 
 /**
  * When the app may be used, and when it must ask to be paid for.
@@ -22,7 +23,7 @@ import java.time.Instant
  */
 object LicensePolicy {
     /** Free days before the app locks. Long enough to watch something and decide. */
-    val TRIAL_DURATION: Duration = Duration.ofDays(7)
+    val TRIAL_DURATION: Duration = 7.days
 
     /**
      * How long a paid licence lasts.
@@ -30,7 +31,7 @@ object LicensePolicy {
      * Two years rather than for ever, and the app says why: the work of keeping a player working
      * against changing providers, codecs and operating systems does not stop after the sale.
      */
-    val PAID_DURATION: Duration = Duration.ofDays(730)
+    val PAID_DURATION: Duration = 730.days
 
     /**
      * How long a **paid** licence keeps working after the last successful check with the server.
@@ -39,7 +40,7 @@ object LicensePolicy {
      * person: someone who paid, whose internet is down. Fourteen days is long enough to cover a
      * holiday or an outage and short enough that a revoked licence stops working in a fortnight.
      */
-    val OFFLINE_GRACE: Duration = Duration.ofDays(14)
+    val OFFLINE_GRACE: Duration = 14.days
 
     /**
      * The same allowance during a trial, which is deliberately much shorter.
@@ -52,7 +53,7 @@ object LicensePolicy {
      * asymmetry is the right incentive, because the generous allowance becomes something a customer
      * gets *by* buying rather than something the trial already includes.
      */
-    val TRIAL_OFFLINE_GRACE: Duration = Duration.ofDays(2)
+    val TRIAL_OFFLINE_GRACE: Duration = 2.days
 
     /** The allowance that applies to [state]. */
     fun offlineGraceFor(state: EntitlementState): Duration =
@@ -65,7 +66,7 @@ object LicensePolicy {
      * in a while. Beyond that, the difference is more likely deliberate than accidental — and the
      * response is to require a live check rather than to accuse anyone.
      */
-    val CLOCK_TOLERANCE: Duration = Duration.ofDays(1)
+    val CLOCK_TOLERANCE: Duration = 1.days
 
     /**
      * What the app should do right now.
@@ -86,18 +87,18 @@ object LicensePolicy {
         // Beyond the offline window the app must hear from the server before running again. This
         // is what stops a customer who paid once from being copied onto ten machines with the
         // network unplugged.
-        if (snapshot.offlineValidUntil != null && now.isAfter(snapshot.offlineValidUntil)) {
+        if (snapshot.offlineValidUntil != null && now > snapshot.offlineValidUntil) {
             return LicenseDecision.Blocked(LicenseBlockReason.NEEDS_VERIFICATION)
         }
 
         return when (snapshot.state) {
             EntitlementState.ACTIVE, EntitlementState.GRACE -> {
                 val expiry = snapshot.expiresAt
-                if (expiry != null && now.isAfter(expiry)) {
+                if (expiry != null && now > expiry) {
                     LicenseDecision.Blocked(LicenseBlockReason.EXPIRED)
                 } else {
                     LicenseDecision.Allowed(
-                        remaining = expiry?.let { Duration.between(now, it) },
+                        remaining = expiry?.let { it - now },
                         isTrial = false,
                     )
                 }
@@ -105,10 +106,10 @@ object LicensePolicy {
 
             EntitlementState.TRIAL -> {
                 val ends = snapshot.trialEndsAt
-                if (ends == null || now.isAfter(ends)) {
+                if (ends == null || now > ends) {
                     LicenseDecision.Blocked(LicenseBlockReason.TRIAL_ENDED)
                 } else {
-                    LicenseDecision.Allowed(remaining = Duration.between(now, ends), isTrial = true)
+                    LicenseDecision.Allowed(remaining = ends - now, isTrial = true)
                 }
             }
 
@@ -140,7 +141,7 @@ object LicensePolicy {
         // Only backwards movement matters. A clock ahead of the server shortens the user's own
         // trial, which nobody does on purpose, and refusing to run for it would punish a machine
         // with a wrong time zone.
-        return localNow.isBefore(serverTime.minus(CLOCK_TOLERANCE))
+        return localNow < serverTime.minus(CLOCK_TOLERANCE)
     }
 
     /**

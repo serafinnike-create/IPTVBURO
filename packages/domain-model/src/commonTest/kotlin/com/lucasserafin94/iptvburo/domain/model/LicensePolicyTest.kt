@@ -1,7 +1,9 @@
 package com.lucasserafin94.iptvburo.domain.model
 
-import java.time.Duration
-import java.time.Instant
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -45,18 +47,18 @@ class LicensePolicyTest {
     fun `a trial with days left runs`() {
         val decision =
             LicensePolicy.decide(
-                snapshot(EntitlementState.TRIAL, trialEndsAt = now.plus(Duration.ofDays(3))),
+                snapshot(EntitlementState.TRIAL, trialEndsAt = now.plus(3.days)),
             )
 
         val allowed = assertIs<LicenseDecision.Allowed>(decision)
         assertTrue(allowed.isTrial)
-        assertEquals(Duration.ofDays(3), allowed.remaining)
+        assertEquals(3.days, allowed.remaining)
     }
 
     /** The exact boundary: the last moment of the trial still runs. */
     @Test
     fun `a trial is allowed up to its final instant`() {
-        val ends = now.plusSeconds(1)
+        val ends = now.plus(1.seconds)
 
         assertTrue(LicensePolicy.decide(snapshot(EntitlementState.TRIAL, trialEndsAt = ends)).allowsPlayback)
     }
@@ -65,7 +67,7 @@ class LicensePolicyTest {
     fun `an expired trial blocks`() {
         val decision =
             LicensePolicy.decide(
-                snapshot(EntitlementState.TRIAL, trialEndsAt = now.minusSeconds(1)),
+                snapshot(EntitlementState.TRIAL, trialEndsAt = now.minus(1.seconds)),
             )
 
         assertEquals(LicenseDecision.Blocked(LicenseBlockReason.TRIAL_ENDED), decision)
@@ -96,19 +98,19 @@ class LicensePolicyTest {
     fun `an active licence runs`() {
         val decision =
             LicensePolicy.decide(
-                snapshot(EntitlementState.ACTIVE, expiresAt = now.plus(Duration.ofDays(400))),
+                snapshot(EntitlementState.ACTIVE, expiresAt = now.plus(400.days)),
             )
 
         val allowed = assertIs<LicenseDecision.Allowed>(decision)
         assertFalse(allowed.isTrial)
-        assertEquals(Duration.ofDays(400), allowed.remaining)
+        assertEquals(400.days, allowed.remaining)
     }
 
     @Test
     fun `an expired paid licence blocks`() {
         assertEquals(
             LicenseDecision.Blocked(LicenseBlockReason.EXPIRED),
-            LicensePolicy.decide(snapshot(EntitlementState.ACTIVE, expiresAt = now.minusSeconds(1))),
+            LicensePolicy.decide(snapshot(EntitlementState.ACTIVE, expiresAt = now.minus(1.seconds))),
         )
     }
 
@@ -133,8 +135,8 @@ class LicensePolicyTest {
             LicensePolicy.decide(
                 snapshot(
                     EntitlementState.REVOKED,
-                    expiresAt = now.plus(Duration.ofDays(400)),
-                    offlineValidUntil = now.plus(Duration.ofDays(10)),
+                    expiresAt = now.plus(400.days),
+                    offlineValidUntil = now.plus(10.days),
                 ),
             )
 
@@ -145,7 +147,7 @@ class LicensePolicyTest {
     fun `a refunded licence blocks`() {
         assertEquals(
             LicenseDecision.Blocked(LicenseBlockReason.REVOKED),
-            LicensePolicy.decide(snapshot(EntitlementState.REFUNDED, expiresAt = now.plus(Duration.ofDays(400)))),
+            LicensePolicy.decide(snapshot(EntitlementState.REFUNDED, expiresAt = now.plus(400.days))),
         )
     }
 
@@ -160,8 +162,8 @@ class LicensePolicyTest {
             LicensePolicy.decide(
                 snapshot(
                     EntitlementState.ACTIVE,
-                    expiresAt = now.plus(Duration.ofDays(400)),
-                    offlineValidUntil = now.plus(Duration.ofDays(3)),
+                    expiresAt = now.plus(400.days),
+                    offlineValidUntil = now.plus(3.days),
                 ),
             )
 
@@ -179,8 +181,8 @@ class LicensePolicyTest {
             LicensePolicy.decide(
                 snapshot(
                     EntitlementState.ACTIVE,
-                    expiresAt = now.plus(Duration.ofDays(400)),
-                    offlineValidUntil = now.minusSeconds(1),
+                    expiresAt = now.plus(400.days),
+                    offlineValidUntil = now.minus(1.seconds),
                 ),
             )
 
@@ -232,9 +234,9 @@ class LicensePolicyTest {
                     state = EntitlementState.TRIAL,
                     trustedNow = now,
                     // Still inside the seven days, so the trial itself has not run out.
-                    trialEndsAt = now.plus(Duration.ofDays(4)),
+                    trialEndsAt = now.plus(4.days),
                     // But the last successful check was three days ago, past the two-day allowance.
-                    offlineValidUntil = now.minus(Duration.ofDays(1)),
+                    offlineValidUntil = now.minus(1.days),
                 ),
             )
 
@@ -248,8 +250,8 @@ class LicensePolicyTest {
                 LicenseSnapshot(
                     state = EntitlementState.TRIAL,
                     trustedNow = now,
-                    trialEndsAt = now.plus(Duration.ofDays(4)),
-                    offlineValidUntil = now.plus(Duration.ofDays(1)),
+                    trialEndsAt = now.plus(4.days),
+                    offlineValidUntil = now.plus(1.days),
                 ),
             )
 
@@ -291,7 +293,7 @@ class LicensePolicyTest {
     fun `a clock set well behind the server is suspect`() {
         val state = snapshot(EntitlementState.TRIAL, serverTimeAt = now)
 
-        assertTrue(LicensePolicy.isClockSuspect(state, localNow = now.minus(Duration.ofDays(30))))
+        assertTrue(LicensePolicy.isClockSuspect(state, localNow = now.minus(30.days)))
     }
 
     /** A wrong time zone or a dead battery is not tampering, and must not lock anyone out. */
@@ -299,7 +301,7 @@ class LicensePolicyTest {
     fun `a small backward drift is tolerated`() {
         val state = snapshot(EntitlementState.TRIAL, serverTimeAt = now)
 
-        assertFalse(LicensePolicy.isClockSuspect(state, localNow = now.minus(Duration.ofHours(20))))
+        assertFalse(LicensePolicy.isClockSuspect(state, localNow = now.minus(20.hours)))
     }
 
     /**
@@ -312,7 +314,7 @@ class LicensePolicyTest {
     fun `a clock ahead of the server is not suspect`() {
         val state = snapshot(EntitlementState.TRIAL, serverTimeAt = now)
 
-        assertFalse(LicensePolicy.isClockSuspect(state, localNow = now.plus(Duration.ofDays(30))))
+        assertFalse(LicensePolicy.isClockSuspect(state, localNow = now.plus(30.days)))
     }
 
     /** With no server time there is nothing to compare against, so nothing is claimed. */
@@ -320,7 +322,7 @@ class LicensePolicyTest {
     fun `without a server time nothing is suspect`() {
         val state = snapshot(EntitlementState.TRIAL, serverTimeAt = null)
 
-        assertFalse(LicensePolicy.isClockSuspect(state, localNow = now.minus(Duration.ofDays(365))))
+        assertFalse(LicensePolicy.isClockSuspect(state, localNow = now.minus(365.days)))
     }
 
     // -------------------------------------------------------------------------------------------
@@ -336,7 +338,7 @@ class LicensePolicyTest {
      */
     @Test
     fun `moving the local clock cannot extend a trial`() {
-        val trialEnds = now.plus(Duration.ofDays(2))
+        val trialEnds = now.plus(2.days)
 
         // The user sets their clock back a year. The trusted time still comes from the server, so
         // the decision is unchanged.
@@ -344,9 +346,9 @@ class LicensePolicyTest {
             LicensePolicy.decide(
                 LicenseSnapshot(
                     state = EntitlementState.TRIAL,
-                    trustedNow = now.plus(Duration.ofDays(3)),
+                    trustedNow = now.plus(3.days),
                     trialEndsAt = trialEnds,
-                    serverTimeAt = now.plus(Duration.ofDays(3)),
+                    serverTimeAt = now.plus(3.days),
                 ),
             )
 

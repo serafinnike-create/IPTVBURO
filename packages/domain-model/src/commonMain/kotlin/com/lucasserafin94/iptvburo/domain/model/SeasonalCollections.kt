@@ -1,7 +1,6 @@
 package com.lucasserafin94.iptvburo.domain.model
 
-import java.time.LocalDate
-import java.time.MonthDay
+import kotlinx.datetime.LocalDate
 
 /**
  * A themed shelf the home screen offers while the calendar is inside its window.
@@ -197,19 +196,19 @@ object SeasonalCollections {
         listOf(
             // The whole of December: providers publish their Christmas rows early, and the run-up
             // is when people actually browse for them.
-            Window(christmas, MonthDay.of(12, 1), MonthDay.of(12, 26)),
+            Window(christmas, MonthDay(12, 1), MonthDay(12, 26)),
             // Wraps the year end, which is why [Window.contains] cannot be a plain range check.
-            Window(newYear, MonthDay.of(12, 27), MonthDay.of(1, 6)),
+            Window(newYear, MonthDay(12, 27), MonthDay(1, 6)),
             // Halloween is a single night, but the shelf earns its place across the fortnight
             // leading to it; showing it in early October would just be a horror row.
-            Window(halloween, MonthDay.of(10, 18), MonthDay.of(11, 1)),
+            Window(halloween, MonthDay(10, 18), MonthDay(11, 1)),
             // Brazil keeps 12 June (Dia dos Namorados) as well as 14 February, and the app ships
             // in both markets, so both dates get a window.
-            Window(valentines, MonthDay.of(2, 7), MonthDay.of(2, 15)),
-            Window(valentines, MonthDay.of(6, 5), MonthDay.of(6, 13)),
+            Window(valentines, MonthDay(2, 7), MonthDay(2, 15)),
+            Window(valentines, MonthDay(6, 5), MonthDay(6, 13)),
             // The southern-hemisphere school break: July in Brazil, and the northern summer
             // holidays overlap it closely enough that one window serves both.
-            Window(schoolHolidays, MonthDay.of(7, 1), MonthDay.of(7, 31)),
+            Window(schoolHolidays, MonthDay(7, 1), MonthDay(7, 31)),
         )
 
     /**
@@ -220,12 +219,35 @@ object SeasonalCollections {
      */
     fun collectionsFor(date: LocalDate): List<SeasonalCollection> =
         windows
-            .filter { it.contains(MonthDay.of(date.monthValue, date.dayOfMonth)) }
+            .filter { it.contains(MonthDay(date.monthNumber, date.dayOfMonth)) }
             .map(Window::collection)
             .distinctBy(SeasonalCollection::id)
 
     /** The one shelf to show, or null. The home screen has room for a single seasonal row. */
     fun primaryCollectionFor(date: LocalDate): SeasonalCollection? = collectionsFor(date).firstOrNull()
+
+    /**
+     * A day in the year, with no year attached.
+     *
+     * `java.time.MonthDay` is not available on every target and kotlinx-datetime has no equivalent,
+     * so the seasonal windows carry their own. Comparable in calendar order, which is what the
+     * wrapping check below relies on: an ordinary window compares as a range, and one that crosses
+     * New Year is recognised precisely because `from` then sorts *after* `to`.
+     */
+    internal data class MonthDay(
+        val month: Int,
+        val day: Int,
+    ) : Comparable<MonthDay> {
+        init {
+            require(month in 1..12) { "month is outside 1..12" }
+            // Not validated against the month's real length: 29 February has to remain expressible,
+            // and no window here ends on a date that only some years have.
+            require(day in 1..31) { "day is outside 1..31" }
+        }
+
+        override fun compareTo(other: MonthDay): Int =
+            if (month != other.month) month.compareTo(other.month) else day.compareTo(other.day)
+    }
 
     private data class Window(
         val collection: SeasonalCollection,

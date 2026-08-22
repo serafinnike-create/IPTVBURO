@@ -1,5 +1,7 @@
 package com.lucasserafin94.iptvburo.domain.model
 
+import kotlin.jvm.JvmInline
+
 /**
  * Provider-independent identity for a piece of content.
  *

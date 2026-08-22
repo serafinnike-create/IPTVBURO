@@ -1,5 +1,7 @@
 package com.lucasserafin94.iptvburo.domain.model
 
+import kotlin.jvm.JvmInline
+
 /**
  * How much of the library the viewer wants kept on this machine.
  *

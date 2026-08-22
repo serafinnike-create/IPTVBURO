@@ -1,6 +1,6 @@
 package com.lucasserafin94.iptvburo.domain.model
 
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -18,7 +18,7 @@ class SeasonalCollectionsTest {
         month: Int,
         day: Int,
         year: Int = 2025,
-    ): List<String> = SeasonalCollections.collectionsFor(LocalDate.of(year, month, day)).map(SeasonalCollection::id)
+    ): List<String> = SeasonalCollections.collectionsFor(LocalDate(year, month, day)).map(SeasonalCollection::id)
 
     // -----------------------------------------------------------------------------------------
     // The occasions themselves
@@ -62,7 +62,7 @@ class SeasonalCollectionsTest {
     @Test
     fun `an ordinary March day has no seasonal shelf`() {
         assertEquals(emptyList(), idsOn(3, 15))
-        assertNull(SeasonalCollections.primaryCollectionFor(LocalDate.of(2025, 3, 15)))
+        assertNull(SeasonalCollections.primaryCollectionFor(LocalDate(2025, 3, 15)))
     }
 
     @Test
@@ -151,7 +151,7 @@ class SeasonalCollectionsTest {
 
     @Test
     fun `the primary collection is the first match of the day`() {
-        val date = LocalDate.of(2025, 12, 25)
+        val date = LocalDate(2025, 12, 25)
         assertEquals(
             SeasonalCollections.collectionsFor(date).first(),
             SeasonalCollections.primaryCollectionFor(date),
@@ -162,11 +162,11 @@ class SeasonalCollectionsTest {
     fun `every collection carries search terms in Portuguese and in English`() {
         // Providers mix languages inside a single playlist, so a term list in one language finds
         // only part of what the catalogue actually holds.
-        val christmas = assertNotNull(SeasonalCollections.primaryCollectionFor(LocalDate.of(2025, 12, 10)))
+        val christmas = assertNotNull(SeasonalCollections.primaryCollectionFor(LocalDate(2025, 12, 10)))
         assertTrue("natal" in christmas.searchTerms)
         assertTrue("christmas" in christmas.searchTerms)
 
-        val halloween = assertNotNull(SeasonalCollections.primaryCollectionFor(LocalDate.of(2025, 10, 25)))
+        val halloween = assertNotNull(SeasonalCollections.primaryCollectionFor(LocalDate(2025, 10, 25)))
         assertTrue("terror" in halloween.searchTerms)
         assertTrue("horror" in halloween.searchTerms)
     }
@@ -204,13 +204,13 @@ class SeasonalCollectionsTest {
 
     @Test
     fun `an unknown language falls back to English rather than to the identifier`() {
-        val christmas = assertNotNull(SeasonalCollections.primaryCollectionFor(LocalDate.of(2025, 12, 10)))
+        val christmas = assertNotNull(SeasonalCollections.primaryCollectionFor(LocalDate(2025, 12, 10)))
         assertEquals(christmas.title("en"), christmas.title("fr"))
     }
 
     private fun allCollections(): List<SeasonalCollection> =
         (1..12)
-            .flatMap { month -> (1..28).map { day -> LocalDate.of(2025, month, day) } }
+            .flatMap { month -> (1..28).map { day -> LocalDate(2025, month, day) } }
             .flatMap(SeasonalCollections::collectionsFor)
             .distinctBy(SeasonalCollection::id)
 }

@@ -96,7 +96,7 @@ fun availableGenres(items: List<BrowsableItem>): List<String> {
     items.forEach { item ->
         item.genre.orEmpty().split(',', '/', '|', ';').forEach { part ->
             val clean = part.trim()
-            if (clean.isNotEmpty()) byKey.putIfAbsent(clean.lowercase(), clean)
+            if (clean.isNotEmpty()) byKey.getOrPut(clean.lowercase()) { clean }
         }
     }
     return byKey.values.sortedBy { it.lowercase() }
