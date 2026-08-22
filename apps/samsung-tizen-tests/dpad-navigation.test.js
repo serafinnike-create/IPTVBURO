@@ -7,6 +7,15 @@ var JSDOM = require('jsdom').JSDOM;
 var fakeIndexedDb = require('fake-indexeddb');
 
 var APP_DIR = path.resolve(__dirname, '..', 'samsung-tizen');
+/*
+  As esperas são de 4 segundos, não de 1.
+
+  Este arquivo faz mais de cinquenta esperas e roda perto do fim de uma suíte de
+  cinquenta arquivos jsdom: com um segundo, uma delas estourava por lentidão da
+  máquina e derrubava a suíte inteira, enquanto o mesmo teste passava sozinho.
+  O limite continua existindo para que um travamento real falhe — só deixou de
+  confundir carga com defeito.
+*/
 /* A ordem vem do index.html, para a suíte não quebrar quando um módulo novo
    entra no app. Ver platform-failures.test.js. */
 var SCRIPT_FILES = (function () {
@@ -569,7 +578,7 @@ async function run() {
     window.BuroApp._activate(window.document.querySelector('[data-action="profile-save"]'));
     await waitFor(function () {
         return window.BuroApp.state.screen === 'SHELL' && window.BuroApp.state.section === 'PROFILES';
-    }, 1000);
+    }, 4000);
     check('nome, avatar e modo Kids podem ser editados com o controle remoto',
         window.BuroApp.state.profiles[0].name === 'Sala principal' &&
         window.BuroApp.state.profiles[0].avatarKey === 'ember' &&
@@ -606,7 +615,7 @@ async function run() {
     check('editor oferece foto somente quando existe USB montado',
         Boolean(window.document.querySelector('[data-action="profile-photo-choose"]')));
     window.BuroApp._activate(window.document.querySelector('[data-action="profile-photo-choose"]'));
-    await waitFor(function () { return window.document.querySelector('[data-action="profile-photo-select"]'); }, 1000);
+    await waitFor(function () { return window.document.querySelector('[data-action="profile-photo-select"]'); }, 4000);
     check('seletor mostra a imagem sem expor o caminho físico como texto',
         window.document.querySelectorAll('[data-action="profile-photo-select"]').length === 1 &&
         window.document.body.textContent.indexOf('/private/usb/') === -1);
@@ -614,12 +623,12 @@ async function run() {
         if (/^data:image\/jpeg;base64,/.test(source)) { success(profilePhotoData); }
     };
     window.BuroApp._activate(window.document.querySelector('[data-action="profile-photo-select"]'));
-    await waitFor(function () { return window.BuroApp.state.screen === 'PROFILE_FORM'; }, 1000);
+    await waitFor(function () { return window.BuroApp.state.screen === 'PROFILE_FORM'; }, 4000);
     check('seleção retorna ao formulário preservando o rascunho do perfil',
         window.document.getElementById('profile-name').value === 'Sala principal' &&
         Boolean(window.document.querySelector('.profile-photo-preview img')));
     window.BuroApp._activate(window.document.querySelector('[data-action="profile-save"]'));
-    await waitFor(function () { return window.BuroApp.state.screen === 'SHELL'; }, 1000);
+    await waitFor(function () { return window.BuroApp.state.screen === 'SHELL'; }, 4000);
     var storedPhotoProfile = await new Promise(function (resolve, reject) {
         window.BuroStorage.get('profiles', window.BuroApp.state.profiles[0].id, resolve, reject);
     });
@@ -642,14 +651,14 @@ async function run() {
     window.BuroApp._activate(window.document.querySelector('[data-action="profile-form"]'));
     window.document.getElementById('profile-name').value = 'Quarto';
     window.BuroApp._activate(window.document.querySelector('[data-action="profile-save"]'));
-    await waitFor(function () { return window.BuroApp.state.profiles.length === 2; }, 1000);
+    await waitFor(function () { return window.BuroApp.state.profiles.length === 2; }, 4000);
     window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="PROFILES"]'));
     window.BuroApp._activate(window.document.querySelector('[data-action="profile-edit"]'));
     window.BuroApp._activate(window.document.querySelector('[data-action="profile-delete"]'));
     check('a exclusão exige uma segunda confirmação',
         window.document.querySelector('[data-action="profile-delete"]').textContent === window.BuroI18n.t('confirmDeleteProfile'));
     window.BuroApp._activate(window.document.querySelector('[data-action="profile-delete"]'));
-    await waitFor(function () { return window.BuroApp.state.profiles.length === 1; }, 1000);
+    await waitFor(function () { return window.BuroApp.state.profiles.length === 1; }, 4000);
     check('perfil é excluído sem permitir que o app fique sem perfil',
         window.BuroApp.state.profiles.length === 1 && !window.document.querySelector('[data-action="profile-delete"]'));
 
@@ -676,14 +685,14 @@ async function run() {
     check('adicionar fonte oferece M3U do USB somente com volume montado',
         Boolean(window.document.querySelector('[data-action="source-usb-m3u"]')));
     window.BuroApp._activate(window.document.querySelector('[data-action="source-usb-m3u"]'));
-    await waitFor(function () { return window.document.querySelector('[data-action="source-usb-m3u-select"]'); }, 1000);
+    await waitFor(function () { return window.document.querySelector('[data-action="source-usb-m3u-select"]'); }, 4000);
     check('seletor M3U exibe nome e tamanho sem caminho físico',
         window.document.body.textContent.indexOf('minha-lista.m3u') >= 0 &&
         window.document.body.textContent.indexOf('/private/usb/') === -1);
     window.BuroApp._activate(window.document.querySelector('[data-action="source-usb-m3u-select"]'));
     await waitFor(function () {
         return window.BuroApp.state.sources.some(function (source) { return source.type === 'LOCAL_M3U'; });
-    }, 1000);
+    }, 4000);
     var localUsbSource = window.BuroApp.state.sources.filter(function (source) { return source.type === 'LOCAL_M3U'; })[0];
     var localUsbSecret = window.BuroStorage.secureGet(localUsbSource.id);
     check('arquivo USB cria fonte local e importa o catálogo pelo mesmo parser M3U',
@@ -1052,7 +1061,7 @@ async function run() {
         window.document.querySelectorAll('.nav-list [data-action="section"]').length === 15 &&
         Boolean(window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]')));
     window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]'));
-    await waitFor(function () { return window.document.querySelector('[data-action="subscription-title"]'); }, 1000);
+    await waitFor(function () { return window.document.querySelector('[data-action="subscription-title"]'); }, 4000);
     check('Assinaturas replica os quatro filtros e cinco regiões navegáveis por D-pad',
         window.document.querySelectorAll('[data-action="subscription-filter"]').length === 4 &&
         window.document.querySelectorAll('[data-action="subscription-region"]').length === 5 &&
@@ -1068,7 +1077,7 @@ async function run() {
     var subscriptionCallsAfterFirstVisit = subscriptionCalls.length;
     window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="HOME"]'));
     window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]'));
-    await waitFor(function () { return window.document.querySelector('[data-action="subscription-title"]'); }, 1000);
+    await waitFor(function () { return window.document.querySelector('[data-action="subscription-title"]'); }, 4000);
     check('reabrir Assinaturas no mesmo dia usa as prateleiras públicas sem outra consulta',
         subscriptionCalls.length === subscriptionCallsAfterFirstVisit &&
         window.BuroApp.state.screenData.shelves.length === 1 &&
@@ -1107,7 +1116,7 @@ async function run() {
         var expandedOrigin = window.document.querySelector('.subscription-expanded-grid [data-action="subscription-title"]');
         window.document.querySelector('.content.scrollable').scrollTop = 137;
         window.BuroApp._activate(expandedOrigin);
-        await waitFor(function () { return window.document.querySelector('[data-action="subscription-back"]'); }, 1000);
+        await waitFor(function () { return window.document.querySelector('[data-action="subscription-back"]'); }, 4000);
         check('detalhe externo abre no topo e entrega foco ao botão Voltar',
             window.document.querySelector('[data-action="subscription-back"]').classList.contains('focused') &&
             window.document.querySelector('.content.scrollable').scrollTop === 0);
@@ -1153,7 +1162,7 @@ async function run() {
     subscriptionRows[0].scrollLeft = 7;
     subscriptionRows[1].scrollLeft = 24;
     window.BuroApp._activate(shelfOrigin);
-    await waitFor(function () { return window.document.querySelector('[data-action="subscription-local"]'); }, 1000);
+    await waitFor(function () { return window.document.querySelector('[data-action="subscription-local"]'); }, 4000);
     check('título de prateleira abre com Ribbon e cabeçalho preservados pelo foco no Voltar',
         window.document.querySelector('[data-action="subscription-back"]').classList.contains('focused') &&
         window.document.querySelector('.content.scrollable').scrollTop === 0);
@@ -1198,7 +1207,7 @@ async function run() {
         return window.BuroApp.state.screenData.selected &&
             window.BuroApp.state.screenData.selected.title === 'Filme futuro' &&
             !window.BuroApp.state.screenData.selectionLoading;
-    }, 1000);
+    }, 4000);
     var subscriptionReminder = window.document.querySelector('[data-action="subscription-reminder"]');
     check('detalhe externo oferece lembrete mesmo antes de o título existir na lista',
         subscriptionReminder && !window.document.querySelector('[data-action="subscription-local"]') &&
@@ -1209,7 +1218,7 @@ async function run() {
         return window.BuroApp.state.reminders.some(function (row) {
             return row.title === 'Filme futuro' && row.identity === 'movie:filme futuro:2099';
         });
-    }, 1000);
+    }, 4000);
     subscriptionReminder = window.document.querySelector('[data-action="subscription-reminder"]');
     check('guardar lembrete externo persiste só identidade pública e atualiza o estado do botão',
         subscriptionReminder && subscriptionReminder.getAttribute('aria-pressed') === 'true' &&
@@ -1223,7 +1232,7 @@ async function run() {
     window.BuroApp._activate(subscriptionReminder);
     await waitFor(function () {
         return !window.BuroApp.state.reminders.some(function (row) { return row.title === 'Filme futuro'; });
-    }, 1000);
+    }, 4000);
     check('segundo clique remove o lembrete externo sem sair da tela',
         window.document.querySelector('[data-action="subscription-reminder"]').getAttribute('aria-pressed') === 'false' &&
         window.BuroApp.state.section === 'SUBSCRIPTIONS' && window.BuroApp.state.screenData.selected);
@@ -1313,7 +1322,7 @@ async function run() {
     await waitFor(function () {
         return window.BuroApp.state.screenData && window.BuroApp.state.screenData.query === 'Favorite only' &&
             !window.BuroApp.state.screenData.searching;
-    }, 1000);
+    }, 4000);
     check('pesquisa automática combina a última digitação em uma única consulta', automaticSearchCalls === 1);
     window.BuroStorage.searchPage = originalSearchPage;
     check('a pesquisa encontra item persistido que não estava na amostra inicial',
@@ -1330,18 +1339,18 @@ async function run() {
     }));
     window.document.getElementById('search-query').value = 'Paged Result';
     window.BuroApp._activate(window.document.querySelector('[data-action="search-run"]'));
-    await waitFor(function () { return window.document.querySelector('[data-action="search-next"]'); }, 1000);
+    await waitFor(function () { return window.document.querySelector('[data-action="search-next"]'); }, 4000);
     check('busca pagina o catálogo sem materializar todos os resultados',
         window.document.querySelectorAll('.media-card').length === 40 && window.BuroApp.state.screenData.page === 0);
     window.BuroApp._activate(window.document.querySelector('[data-action="search-next"]'));
-    await waitFor(function () { return window.document.querySelector('[data-action="search-previous"]') && !window.document.querySelector('.search-loading'); }, 1000);
+    await waitFor(function () { return window.document.querySelector('[data-action="search-previous"]') && !window.document.querySelector('.search-loading'); }, 4000);
     check('próxima página mostra os resultados restantes e permite voltar',
         window.document.querySelectorAll('.media-card').length === 5 && window.BuroApp.state.screenData.page === 1);
     window.BuroApp._activate(window.document.querySelector('[data-action="search-previous"]'));
-    await waitFor(function () { return window.BuroApp.state.screenData.page === 0 && !window.BuroApp.state.screenData.searching; }, 1000);
+    await waitFor(function () { return window.BuroApp.state.screenData.page === 0 && !window.BuroApp.state.screenData.searching; }, 4000);
     window.document.getElementById('search-query').value = 'Título que não existe';
     window.BuroApp._activate(window.document.querySelector('[data-action="search-run"]'));
-    await waitFor(function () { return !window.BuroApp.state.screenData.searching; }, 1000);
+    await waitFor(function () { return !window.BuroApp.state.screenData.searching; }, 4000);
     check('zero resultados tem mensagem própria, sem cartão genérico de erro',
         window.document.body.textContent.indexOf(window.BuroI18n.t('searchEmpty')) >= 0 &&
         !window.document.querySelector('.media-card'));
@@ -1425,7 +1434,7 @@ async function run() {
     await waitFor(function () {
         return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'home' &&
             !window.BuroApp.state.screenData.loading;
-    }, 1000);
+    }, 4000);
     check('a Home escolhe destaque presente somente no IndexedDB completo, fora da amostra do boot',
         window.document.querySelector('.real-home-hero h2').textContent === 'Destaque do catálogo inteiro' &&
         window.BuroApp.state.items.some(function (row) { return row.id === fullHomeItem.id; }));
@@ -1465,7 +1474,7 @@ async function run() {
     };
     window.BuroApp.state.screenData = null;
     window.BuroApp.render();
-    await waitFor(function () { return window.BuroApp.state.screenData && window.BuroApp.state.screenData.error; }, 1000);
+    await waitFor(function () { return window.BuroApp.state.screenData && window.BuroApp.state.screenData.error; }, 4000);
     check('falha ao recompor a Home conserva o cache visível e oferece Retry pelo D-pad',
         Boolean(window.document.querySelector('.home-cache-warning [data-action="home-retry"]')) &&
         Boolean(window.document.querySelector('.real-home-hero')));
@@ -1474,7 +1483,7 @@ async function run() {
     await waitFor(function () {
         return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'home' &&
             !window.BuroApp.state.screenData.loading;
-    }, 1000);
+    }, 4000);
 
     var pendingHomeFold;
     window.BuroStorage.fold = function (storeName, reducer, initial, success, failure) {
@@ -1482,7 +1491,7 @@ async function run() {
     };
     window.BuroApp.state.screenData = null;
     window.BuroApp.render();
-    await waitFor(function () { return Boolean(pendingHomeFold); }, 1000);
+    await waitFor(function () { return Boolean(pendingHomeFold); }, 4000);
     window.BuroApp._activate(window.document.querySelector('[data-action="section"][data-section="LIVE"]'));
     pendingHomeFold.success(pendingHomeFold.reducer(pendingHomeFold.result, {
         id: 'movie:home-late', sourceId: 'source-home', categoryId: 'cat-home-movies',
@@ -1520,7 +1529,7 @@ async function run() {
         window.document.querySelector('.catalogue-loading').getAttribute('role') === 'status' &&
         window.document.querySelector('.catalogue-skeleton-row').getAttribute('aria-hidden') === 'true' &&
         window.document.querySelector('.main-pane').getAttribute('aria-busy') === 'true');
-    await waitFor(function () { return catalogueRequests.length === 1; }, 1000);
+    await waitFor(function () { return catalogueRequests.length === 1; }, 4000);
     catalogueRequests[0].failure({ code: 'NETWORK_ERROR' });
     check('falha de categoria permanece visível e oferece nova tentativa por D-pad',
         Boolean(window.document.querySelector('.catalogue-error, .empty-state')) &&
@@ -1528,9 +1537,9 @@ async function run() {
         window.document.querySelector('.catalogue-error').getAttribute('role') === 'alert' &&
         window.document.querySelector('.main-pane').getAttribute('aria-busy') === 'false');
     window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-retry"]'));
-    await waitFor(function () { return catalogueRequests.length === 2; }, 1000);
+    await waitFor(function () { return catalogueRequests.length === 2; }, 4000);
     catalogueRequests[1].success([], {});
-    await waitFor(function () { return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'category'; }, 1000);
+    await waitFor(function () { return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'category'; }, 4000);
     check('resposta vazia é apresentada como categoria vazia, não como erro',
         window.document.body.textContent.indexOf(window.BuroI18n.t('noItems')) >= 0 &&
         !window.document.querySelector('[data-action="catalogue-retry"]'));
@@ -1540,12 +1549,12 @@ async function run() {
     var categoryKeep = { id: 'movie:category-keep', sourceId: 'source-home', categoryId: asyncCategory.id, contentType: 'MOVIE', name: 'Título estável' };
     var categoryRemove = { id: 'movie:category-remove', sourceId: 'source-home', categoryId: asyncCategory.id, contentType: 'MOVIE', name: 'Título removido' };
     window.BuroApp._activate(window.document.querySelector('[data-action="category-refresh"]'));
-    await waitFor(function () { return catalogueRequests.length === 3; }, 1000);
+    await waitFor(function () { return catalogueRequests.length === 3; }, 4000);
     catalogueRequests[2].success([categoryKeep, categoryRemove], {});
     await waitFor(function () {
         return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'category' &&
             window.BuroApp.state.screenData.items.length === 2;
-    }, 1000);
+    }, 4000);
     var categoryFavorite = { id: 'favorite:category-remove', profileId: window.BuroApp.state.activeProfile.id, itemId: categoryRemove.id };
     var categoryProgress = { id: 'progress:category-remove', profileId: window.BuroApp.state.activeProfile.id, itemId: categoryRemove.id, positionMs: 30000, durationMs: 120000 };
     window.BuroApp.state.favorites.push(categoryFavorite);
@@ -1554,12 +1563,12 @@ async function run() {
     await new Promise(function (resolve, reject) { window.BuroStorage.put('progress', categoryProgress, resolve, reject); });
     var categoryKeepUpdated = Object.assign({}, categoryKeep, { name: 'Título estável atualizado' });
     window.BuroApp._activate(window.document.querySelector('[data-action="category-refresh"]'));
-    await waitFor(function () { return catalogueRequests.length === 4; }, 1000);
+    await waitFor(function () { return catalogueRequests.length === 4; }, 4000);
     catalogueRequests[3].success([categoryKeepUpdated], {});
     await waitFor(function () {
         return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'category' &&
             window.BuroApp.state.screenData.items[0] && window.BuroApp.state.screenData.items[0].name === 'Título estável atualizado';
-    }, 1000);
+    }, 4000);
     var removedCategoryItem;
     await new Promise(function (resolve, reject) {
         window.BuroStorage.get('items', categoryRemove.id, function (row) { removedCategoryItem = row; resolve(); }, reject);
@@ -1571,7 +1580,7 @@ async function run() {
         !window.BuroApp.state.progress.some(function (row) { return row.id === categoryProgress.id; }));
 
     window.BuroApp._activate(window.document.querySelector('[data-action="category-refresh"]'));
-    await waitFor(function () { return catalogueRequests.length === 5; }, 1000);
+    await waitFor(function () { return catalogueRequests.length === 5; }, 4000);
     catalogueRequests[4].failure({ code: 'NETWORK_ERROR' });
     check('falha de atualização mantém o cache visível com aviso e Retry',
         window.BuroApp.state.screenData.kind === 'category' && window.BuroApp.state.screenData.refreshError &&
@@ -1580,7 +1589,7 @@ async function run() {
 
     window.BuroApp.state.screenData = null; window.BuroApp.render();
     window.BuroApp._openCategory('cat-async-stale');
-    await waitFor(function () { return catalogueRequests.length === 6; }, 1000);
+    await waitFor(function () { return catalogueRequests.length === 6; }, 4000);
     window.BuroApp._activate(window.document.querySelector('[data-action="section"][data-section="HOME"]'));
     catalogueRequests[5].success([{
         id: 'movie:late-response', sourceId: 'source-home', categoryId: 'cat-async-stale',
@@ -1620,7 +1629,7 @@ async function run() {
     window.BuroApp._activate(window.document.querySelector('[data-action="section"][data-section="DISCOVER"]'));
     check('Descobrir apresenta estado de carregamento durante a leitura por cursor',
         Boolean(window.document.querySelector('.search-loading')));
-    await waitFor(function () { return window.document.querySelector('.discover-intro'); }, 1000);
+    await waitFor(function () { return window.document.querySelector('.discover-intro'); }, 4000);
     check('Descobrir apresenta uma carta por vez, a próxima em profundidade e uma mão finita',
         window.document.querySelectorAll('.discover-card.current').length === 1 &&
         window.document.querySelectorAll('.discover-card.next').length <= 1 &&
@@ -1653,7 +1662,7 @@ async function run() {
         return window.BuroApp.state.favorites.some(function (row) { return row.itemId === keptDiscoverId; }) &&
             window.document.querySelector('.discover-card.current') &&
             window.document.querySelector('.discover-card.current').getAttribute('data-id') !== keptDiscoverId;
-    }, 1000);
+    }, 4000);
     check('Guardar persiste o favorito e só então avança a carta',
         window.BuroApp.state.favorites.some(function (row) { return row.itemId === keptDiscoverId; }));
     var detailedDiscoverId = window.document.querySelector('.discover-card.current').getAttribute('data-id');
@@ -1661,7 +1670,7 @@ async function run() {
     check('Detalhes abre a página normal sem julgar a carta',
         window.BuroApp.state.section === 'MOVIES' && window.BuroApp.state.screenData.kind === 'movie');
     press(window, 10009);
-    await waitFor(function () { return window.BuroApp.state.section === 'DISCOVER' && window.document.querySelector('.discover-intro'); }, 1000);
+    await waitFor(function () { return window.BuroApp.state.section === 'DISCOVER' && window.document.querySelector('.discover-intro'); }, 4000);
     check('RETURN restaura a mesma carta e o foco em Detalhes',
         window.document.querySelector('.discover-card.current').getAttribute('data-id') === detailedDiscoverId &&
         window.document.querySelector('[data-action="discover-details"]').classList.contains('focused'));
@@ -1679,7 +1688,7 @@ async function run() {
     await waitFor(function () {
         return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'discover' &&
             !window.BuroApp.state.screenData.loading;
-    }, 1000);
+    }, 4000);
     check('a rodada seguinte não oferece novamente o que já foi julgado na sessão',
         !window.BuroApp.state.screenData.deck.some(function (row) { return row.id === skippedDiscoverId; }));
     window.BuroApp.state.preferences.hiddenCategoryIds = [];
@@ -1689,7 +1698,7 @@ async function run() {
     await waitFor(function () {
         return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'home' &&
             !window.BuroApp.state.screenData.loading;
-    }, 1000);
+    }, 4000);
 
     var originalLoadMovieDetails = window.BuroXtream.loadMovieDetails;
     var originalLoadTmdbTitle = window.BuroTmdb.loadTitle;
@@ -1820,7 +1829,7 @@ async function run() {
         window.BuroApp.state.screen === 'PERSON' && Boolean(window.document.querySelector('.person-portrait')) &&
         window.document.body.textContent.indexOf('Biografia pública para a TV.') >= 0 &&
         window.document.querySelectorAll('.person-credit').length === 2);
-    await waitFor(function () { return window.document.querySelector('[data-action="person-local"]'); }, 1000);
+    await waitFor(function () { return window.document.querySelector('[data-action="person-local"]'); }, 4000);
     check('filmografia cruza todo o IndexedDB e marca título disponível no catálogo',
         window.document.querySelector('[data-action="person-local"]').getAttribute('data-id') === detailedMovieId &&
         window.document.body.textContent.indexOf(window.BuroI18n.t('personInLibrary')) >= 0);
@@ -2037,13 +2046,13 @@ async function run() {
         window.BuroApp.state.screenData.items.length === 200 &&
         window.document.querySelector('[data-action="category-load-more"]').parentNode.textContent.indexOf('200 / 450') >= 0);
     window.BuroApp._activate(window.document.querySelector('[data-action="category-load-more"]'));
-    await waitFor(function () { return window.BuroApp.state.screenData.items.length === 400; }, 1000);
+    await waitFor(function () { return window.BuroApp.state.screenData.items.length === 400; }, 4000);
     check('Carregar mais acrescenta um bloco e abre a próxima página mantendo 200 cards no DOM',
         window.BuroApp.state.screenData.cataloguePage === 1 &&
         window.document.querySelectorAll('.media-card').length === 200 &&
         window.document.querySelector('[data-action="category-load-more"]').classList.contains('focused'));
     window.BuroApp._activate(window.document.querySelector('[data-action="category-load-more"]'));
-    await waitFor(function () { return window.BuroApp.state.screenData.items.length === 450; }, 1000);
+    await waitFor(function () { return window.BuroApp.state.screenData.items.length === 450; }, 4000);
     check('último bloco encerra o cursor, mostra 50 cards e preserva navegação para trás',
         window.BuroApp.state.screenData.cataloguePage === 2 &&
         window.document.querySelectorAll('.media-card').length === 50 &&
@@ -2095,7 +2104,7 @@ async function run() {
     window.BuroApp._activate(window.document.querySelector('[data-action="download"]'));
     await waitFor(function () {
         return window.BuroDownloads.list().some(function (entry) { return entry.id === 'movie:m3u-direct'; });
-    }, 1000);
+    }, 4000);
     check('download M3U relê a fonte e encontra a mesma identidade mesmo após reordenação',
         downloadRequests[downloadRequests.length - 1].url.indexOf('/correct.mkv') >= 0 &&
         downloadRequests[downloadRequests.length - 1].fileName === 'movie-m3u-direct.mkv.part');
@@ -2149,7 +2158,7 @@ async function run() {
     window.BuroApp._activate(window.document.querySelector('.episode-download-item [data-action="download"]'));
     await waitFor(function () { return Boolean(window.document.querySelector(
         '.episode-download-item [data-action="download-cancel"][data-id="episode:bulk-s1e1"]'));
-    }, 1000);
+    }, 4000);
     check('download individual troca para Cancelar sem sair da temporada',
         Number(window.BuroApp.state.screenData.expandedSeason) === 1 &&
         window.BuroDownloads.stateFor(bulkSeriesScreenData.items[0]) === 'DOWNLOADING');
@@ -2158,7 +2167,7 @@ async function run() {
     check('episódio cancelado oferece nova tentativa no mesmo lugar',
         Boolean(window.document.querySelector('.episode-download-item [data-action="download-retry"]')));
     window.BuroApp._activate(window.document.querySelector('.episode-download-item [data-action="download-retry"]'));
-    await waitFor(function () { return window.BuroDownloads.stateFor(bulkSeriesScreenData.items[0]) === 'DOWNLOADING'; }, 1000);
+    await waitFor(function () { return window.BuroDownloads.stateFor(bulkSeriesScreenData.items[0]) === 'DOWNLOADING'; }, 4000);
     check('nova tentativa remove o estado terminal e cria outra transferência real',
         window.BuroDownloads.list().length === 1 &&
         Boolean(window.document.querySelector('.episode-download-item [data-action="download-cancel"]')));
@@ -2169,7 +2178,7 @@ async function run() {
         window.document.body.textContent.indexOf('2') >= 0 &&
         window.document.querySelector('[data-action="bulk-download-confirm"]').classList.contains('focused'));
     window.BuroApp._activate(window.document.querySelector('[data-action="bulk-download-confirm"]'));
-    await waitFor(function () { return window.BuroDownloads.list().length === 2; }, 1000);
+    await waitFor(function () { return window.BuroDownloads.list().length === 2; }, 4000);
     check('temporada entra na fila USB em ordem de reprodução sem expor URLs',
         window.BuroDownloads.list().map(function (entry) { return entry.id; }).join(',') ===
             'episode:bulk-s1e1,episode:bulk-s1e2' &&
@@ -2178,7 +2187,7 @@ async function run() {
     check('série inteira mantém a mesma seleção Android e inclui transferências em andamento',
         window.BuroApp.state.screenData.items.length === 3);
     window.BuroApp._activate(window.document.querySelector('[data-action="bulk-download-confirm"]'));
-    await waitFor(function () { return window.BuroDownloads.list().length === 3; }, 1000);
+    await waitFor(function () { return window.BuroDownloads.list().length === 3; }, 4000);
     check('segunda ação deduplica os dois episódios ativos e adiciona apenas a temporada restante',
         window.BuroDownloads.list().map(function (entry) { return entry.id; }).join(',') ===
             'episode:bulk-s1e1,episode:bulk-s1e2,episode:bulk-s2e1');
@@ -2294,7 +2303,7 @@ async function run() {
     await waitFor(function () {
         return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'series' &&
             window.BuroApp.state.screenData.items[0] && window.BuroApp.state.screenData.items[0].id === refreshedEpisode.id;
-    }, 1000);
+    }, 4000);
     var removedCachedEpisode;
     await new Promise(function (resolve, reject) {
         window.BuroStorage.get('items', cachedEpisode.id, function (row) { removedCachedEpisode = row; resolve(); }, reject);
@@ -2362,7 +2371,7 @@ async function run() {
     window.BuroApp._activate(window.document.querySelector('[data-action="source-rename"]'));
     await waitFor(function () {
         return window.BuroApp.state.sources.some(function (source) { return source.id === 'source-delete' && source.name === 'Fonte renomeada'; });
-    }, 1000);
+    }, 4000);
     check('renomear preserva identidade, credencial e contagem da fonte',
         window.BuroApp.state.sources.filter(function (source) { return source.id === 'source-delete'; })[0].channelCount === 1 &&
         Boolean(window.BuroStorage.secureGet('source-delete')));
@@ -2373,7 +2382,7 @@ async function run() {
     window.BuroApp._activate(window.document.querySelector('[data-action="source-delete"]'));
     await waitFor(function () {
         return !window.BuroApp.state.sources.some(function (source) { return source.id === 'source-delete'; });
-    }, 1000);
+    }, 4000);
     var deletedSource;
     var deletedItem;
     var cleanedProfile;
@@ -2432,13 +2441,13 @@ async function run() {
     await waitFor(function () {
         return heroDetailRequests.length === 1 && window.BuroApp.state.screenData &&
             window.BuroApp.state.screenData.kind === 'home' && !window.BuroApp.state.screenData.loading;
-    }, 1000);
+    }, 4000);
     var firstHeroScreenData = window.BuroApp.state.screenData;
     window.BuroApp._activate(window.document.querySelector('[data-action="section"][data-section="HOME"]'));
     await waitFor(function () {
         return window.BuroApp.state.screenData !== firstHeroScreenData && window.BuroApp.state.screenData &&
             window.BuroApp.state.screenData.kind === 'home' && !window.BuroApp.state.screenData.loading;
-    }, 1000);
+    }, 4000);
     await new Promise(function (resolve) { window.setTimeout(resolve, 20); });
     check('a Home aparece com texto de fallback antes dos detalhes do provedor',
         window.document.querySelector('.hero-synopsis').textContent === window.BuroI18n.t('homeHeroSynopsis'));
@@ -2455,7 +2464,7 @@ async function run() {
     await waitFor(function () {
         return window.document.querySelector('.hero-synopsis') &&
             window.document.querySelector('.hero-synopsis').textContent === 'Sinopse real e autorizada do destaque.';
-    }, 1000);
+    }, 4000);
     var enrichedHeroImage = window.document.querySelector('.real-home-hero .hero-art img');
     check('sinopse, fatos e backdrop reais atualizam apenas o destaque ativo',
         window.document.querySelector('.hero-metadata').textContent.indexOf('Drama') >= 0 &&
@@ -2468,7 +2477,7 @@ async function run() {
     check('falha do backdrop tenta o pôster antes do fundo local',
         enrichedHeroImage.src.indexOf('hero-poster.jpg') >= 0 &&
         !enrichedHeroImage.hasAttribute('data-artwork-fallback'));
-    await waitFor(function () { return heroDetailRequests.length === 2; }, 1000);
+    await waitFor(function () { return heroDetailRequests.length === 2; }, 4000);
     var staleHeroId = heroDetailRequests[1].item.id;
     window.BuroApp._activate(window.document.querySelector('[data-action="section"][data-section="LIVE"]'));
     heroDetailRequests[1].success({ synopsis: 'Resposta obsoleta', backdropUrl: 'https://images.public.test/stale.jpg' });
@@ -2641,14 +2650,14 @@ async function run() {
     press(window, 403);
     await waitFor(function () {
         return !window.BuroApp.state.favorites.some(function (favorite) { return favorite.itemId === 'movie:home-two'; });
-    }, 1000);
+    }, 4000);
     check('tecla vermelha remove o favorito sem fechar o player',
         window.document.body.classList.contains('playing') &&
         window.document.getElementById('player-favorite-label').textContent.indexOf(window.BuroI18n.t('addFavorite')) >= 0);
     press(window, 403);
     await waitFor(function () {
         return window.BuroApp.state.favorites.some(function (favorite) { return favorite.itemId === 'movie:home-two'; });
-    }, 1000);
+    }, 4000);
     check('tecla vermelha adiciona novamente e atualiza o overlay',
         window.document.getElementById('player-favorite-label').textContent.indexOf(window.BuroI18n.t('removeFavorite')) >= 0);
     press(window, 37);
@@ -2860,7 +2869,7 @@ async function run() {
     openedPlaybackUrl = null;
     window.BuroApp._activate(playFixture);
     window.BuroApp._activate(window.document.querySelector('[data-action="resume-restart"]'));
-    await waitFor(function () { return Boolean(openedPlaybackUrl); }, 1000);
+    await waitFor(function () { return Boolean(openedPlaybackUrl); }, 4000);
     check('filme 4K HDR DV ou HEVC prefere variante compatível da mesma fonte',
         openedPlaybackUrl.indexOf('/99.mp4') >= 0 &&
         window.document.getElementById('player-title').textContent === '[4K] Filme dois');

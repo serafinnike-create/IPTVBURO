@@ -1326,7 +1326,7 @@ var BuroApp = (function () {
             /* O indicador fica fora do <h1>: o título tem de continuar sendo
                exatamente o nome da seção, que é o que a tela anuncia. */
             '</h1>' + catalogueSyncChip() + topbarSubtitleHtml() + (topbarExtra || '') +
-            '<div class="topbar-status">' + downloadChipHtml() + licenceChipHtml() + clockHtml() + profileChipHtml() +
+            '<div class="topbar-status">' + refreshChipHtml() + downloadChipHtml() + licenceChipHtml() + clockHtml() + profileChipHtml() +
             notificationBellHtml() + '</div></header><section class="content ' + (scrollable ? 'scrollable' : '') + '">' +
             sharedTitleNoticeHtml() + content + '</section><div class="bottom-hint">' + t('useArrows') + '</div></main></div>';
     }
@@ -4095,6 +4095,40 @@ var BuroApp = (function () {
         minutes = Math.round(seconds / 60);
         if (minutes < 60) { return t('remainingMinutes').replace('{count}', minutes); }
         return t('remainingHours').replace('{count}', Math.round(minutes / 60));
+    }
+
+    /*
+      Atualizar o catalogo, na barra de cima — como no aplicativo do Windows.
+
+      Estava so dentro de Gerenciar fonte, a tres telas de distancia, e a lista
+      muda sozinha do lado do provedor: quem ve um filme faltando quer pedir a
+      lista de novo dali mesmo. O botao forca a varredura, pelo mesmo motivo que
+      o Windows forca (ver `refreshCatalog`): sem isso a fila pula toda categoria
+      completada nas ultimas 24 horas e o botao parece nao fazer nada.
+
+      Enquanto roda vira um indicador girando e nao reticencias: um catalogo
+      grande demora, e um "..." parado e indistinguivel de um botao que falhou.
+      Some quando nao ha fonte Xtream, porque ai nao ha o que atualizar.
+    */
+    function refreshChipHtml() {
+        var source = state.activeSource;
+        var status;
+        if (!source || source.type !== 'XTREAM') { return ''; }
+        status = catalogueSyncStatus(source);
+        if (status && status.state === 'RUNNING') {
+            return '<span class="topbar-chip refresh-chip busy" role="status" aria-label="' +
+                attr(t('refreshingCatalogue')) + '"><span class="boot-indicator"></span>' +
+                escapeHtml(catalogueSyncShortLabel(status)) + '</span>';
+        }
+        return '<button class="topbar-chip refresh-chip focusable" data-action="catalogue-refresh"' +
+            ' aria-label="' + attr(t('refreshCatalogue')) + '">⟳ ' +
+            escapeHtml(t('refreshCatalogue')) + '</button>';
+    }
+
+    /* Quanto falta, curto o bastante para caber na barra. */
+    function catalogueSyncShortLabel(status) {
+        if (!status || !status.total) { return t('refreshingCatalogue'); }
+        return status.completed + '/' + status.total;
     }
 
     function licenceChipHtml() {
@@ -7222,6 +7256,31 @@ var BuroApp = (function () {
         });
     }
 
+    /*
+      O botao "Atualizar" da barra de cima.
+
+      Pede a lista de novo ao provedor, forcando: sem `force` a fila pula toda
+      categoria completada nas ultimas 24 horas e o botao parece nao fazer nada
+      — exatamente o que aconteceu quando o usuario mandou atualizar e as capas
+      continuaram vazias. Mesma decisao do `refreshCatalog` do Windows.
+
+      Diferente de "Atualizar fonte" em Gerenciar fonte, que reautentica e
+      relista as categorias: aqui a fonte ja esta validada e o que se quer e o
+      conteudo dela.
+    */
+    function refreshCatalogueFromTopBar() {
+        var source = state.activeSource;
+        var status;
+        if (!source || source.type !== 'XTREAM') { return; }
+        status = catalogueSyncStatus(source);
+        if (status && status.state === 'RUNNING') { return; }
+        forgetHomeCache();
+        catalogueSizeMeasuredAt = 0;
+        startXtreamHydration(source, true);
+        showToast(t('catalogueSyncStarted'), false);
+        render();
+    }
+
     function refreshSource() {
         var draft = sourceManageDraft();
         var source = state.sources.filter(function (row) { return row.id === draft.sourceId; })[0];
@@ -7281,7 +7340,16 @@ var BuroApp = (function () {
             state.screen = 'SHELL'; state.section = 'SOURCES'; state.screenData = null;
             render(); showToast(t('sourceSaved'), false);
             retryPendingSharedTitle();
-            startXtreamHydration(source, false);
+            /*
+              Forcado, e nao a varredura normal.
+
+              A fila pula categoria completada ha menos de 24 horas, entao sem
+              `force` quem aperta "Atualizar" nao reprocessa nada e a tela fica
+              igual — foi o que aconteceu na TV. O aplicativo do Windows resolveu
+              isto do mesmo jeito e deixou a razao escrita em `refreshCatalog`:
+              quem apertou o botao quer o que o provedor tem agora.
+            */
+            startXtreamHydration(source, true);
         }, function (error) {
             try { BuroStorage.secureRemove(source.id); } catch (ignoredSecretCleanup) {}
             sourceFailed(error);
@@ -8974,6 +9042,7 @@ var BuroApp = (function () {
         else if (action === 'source-connect') { connectSource(element.getAttribute('data-type')); }
         else if (action === 'source-manage') { pushScreen('SOURCE_MANAGE', { sourceId: id, confirmDelete: false }); }
         else if (action === 'source-refresh') { refreshSource(); }
+        else if (action === 'catalogue-refresh') { refreshCatalogueFromTopBar(); }
         else if (action === 'catalogue-sync-cancel') {
             if (BuroCatalogueSync.cancel()) { showToast(t('catalogueSyncCancelledToast'), false); }
         }
@@ -9384,6 +9453,7 @@ var BuroApp = (function () {
         _friendlyError: friendlyError,
         _ratingsSection: ratingsSection,
         _downloadChipHtml: downloadChipHtml,
+        _refreshChipHtml: refreshChipHtml,
         _receiveRequestedAppControl: receiveRequestedAppControl,
         _resolvePendingSharedTitle: resolvePendingSharedTitle,
         _pendingSharedTitle: function () { return pendingSharedTitle; },

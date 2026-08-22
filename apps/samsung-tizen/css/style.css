@@ -326,6 +326,11 @@ body.playing .app-root { display: none; }
 .topbar-chip.focused { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(214,169,86,.18); }
 /* O chip de download: numero grande, velocidade e tempo embaixo, e a barra de
    progresso rente ao pe do chip. So aparece com algo baixando de facto. */
+/* O botao de atualizar. Enquanto roda vira indicador girando e contagem, e deixa
+   de receber foco — apertar de novo no meio da varredura nao faria nada. */
+.refresh-chip { display: flex; align-items: center; }
+.refresh-chip.busy { color: var(--gold); }
+.refresh-chip .boot-indicator { width: 14px; height: 14px; margin-right: 8px; border-width: 2px; }
 .download-chip { flex-direction: column; align-items: flex-start; position: relative; padding-bottom: 10px; }
 .download-chip-copy { display: flex; align-items: baseline; }
 .download-chip-copy strong { margin-right: 8px; color: var(--gold); font-size: 18px; font-weight: 700; }
