@@ -157,6 +157,7 @@ import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.time.Instant
+import kotlinx.datetime.toLocalDateTime
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -1177,9 +1178,11 @@ class DesktopAppState(
             return
         }
 
-        val zone = ZoneId.systemDefault()
-        val now = Instant.now()
-        val today = LocalDate.ofInstant(now, zone)
+        // kotlinx types throughout this block, because everything here feeds ReminderPolicy,
+        // which is multiplatform. The rest of the file keeps java.time for its own clock work.
+        val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val now = kotlin.time.Clock.System.now()
+        val today = now.toLocalDateTime(zone).date
         if (userStore.reminderLastShownOn() == today.toString()) {
             reminderNotice = null
             return
@@ -1187,10 +1190,10 @@ class DesktopAppState(
         // Before the chosen hour there is nothing to announce yet — that is what choosing an hour
         // means. nextNotificationAt returns tomorrow's slot once today's has passed, so today's
         // being in the future is exactly the test for "not yet".
-        if (LocalDate.ofInstant(
-                ReminderPolicy.nextNotificationAt(LocalTime.of(reminderHour, 0), now, zone),
-                zone,
-            ) == today
+        if (ReminderPolicy
+                .nextNotificationAt(kotlinx.datetime.LocalTime(reminderHour, 0), now, zone)
+                .toLocalDateTime(zone)
+                .date == today
         ) {
             reminderNotice = null
             return
@@ -1227,7 +1230,7 @@ class DesktopAppState(
                     kind = NotificationKind.REMINDER,
                     title = text.remindersTitle,
                     body = text.reminderNoticeBody.format(daily.total),
-                    createdAt = now.toEpochMilli(),
+                    createdAt = now.toEpochMilliseconds(),
                 ),
             )
         }

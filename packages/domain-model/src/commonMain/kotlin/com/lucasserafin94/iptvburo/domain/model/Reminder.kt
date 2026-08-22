@@ -1,10 +1,15 @@
 package com.lucasserafin94.iptvburo.domain.model
 
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.temporal.ChronoUnit
-import java.time.ZoneId
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.daysUntil
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * A title the viewer asked to be reminded about.
@@ -29,7 +34,7 @@ data class Reminder(
     val artworkUrl: String? = null,
     /** When the title is expected, for an upcoming one. Null for something already available. */
     val releaseDate: LocalDate? = null,
-    val createdAt: Instant = Instant.EPOCH,
+    val createdAt: Instant = Instant.fromEpochMilliseconds(0),
 )
 
 /**
@@ -89,11 +94,11 @@ object ReminderPolicy {
     fun digestFor(
         reminders: List<Reminder>,
         now: Instant,
-        zone: ZoneId,
+        zone: TimeZone,
     ): ReminderDigest {
         if (reminders.isEmpty()) return ReminderDigest.Silent
 
-        val today = LocalDate.ofInstant(now, zone)
+        val today = now.toLocalDateTime(zone).date
         val waiting = mutableListOf<Reminder>()
         val releasedToday = mutableListOf<Reminder>()
         val upcoming = mutableListOf<Pair<Reminder, Long>>()
@@ -106,13 +111,13 @@ object ReminderPolicy {
                 // On the day, and on any day after it. A release date that has passed means the
                 // title is out — announcing it only on the exact day would miss anyone whose phone
                 // was off, and "it is out" stays true afterwards.
-                !release.isAfter(today) -> releasedToday += reminder
+                release <= today -> releasedToday += reminder
 
                 else -> {
-                    // ChronoUnit, not Period: a Period splits into years, months and days, and
-                    // adding those with 30- and 365-day approximations gives a number that is
-                    // simply wrong — "faltam 29 dias" for a date 31 days away.
-                    val days = ChronoUnit.DAYS.between(today, release)
+                    // `daysUntil`, not a DatePeriod: a period splits into years, months and
+                    // days, and recombining those with 30- and 365-day approximations gives a
+                    // number that is simply wrong — "faltam 29 dias" for a date 31 days away.
+                    val days = today.daysUntil(release).toLong()
                     if (days <= COUNTDOWN_HORIZON_DAYS) upcoming += reminder to days
                 }
             }
@@ -141,14 +146,18 @@ object ReminderPolicy {
     fun nextNotificationAt(
         preferred: LocalTime,
         now: Instant,
-        zone: ZoneId,
+        zone: TimeZone,
     ): Instant {
-        val local = now.atZone(zone)
-        val todaySlot = local.toLocalDate().atTime(preferred).atZone(zone)
-        return if (todaySlot.toInstant().isAfter(now)) {
-            todaySlot.toInstant()
+        val today = now.toLocalDateTime(zone).date
+        // Built from the day's start rather than by attaching a time to a date, because a zone can
+        // skip the hour the user asked for: on a spring-forward morning 00:00 exists and, say,
+        // 00:30 does not. Adding the offset to the start of the day lands on the real instant that
+        // follows, which is what a reminder should do rather than failing to resolve.
+        val todaySlot = today.atStartOfDayIn(zone) + preferred.toSecondOfDay().seconds
+        return if (todaySlot > now) {
+            todaySlot
         } else {
-            todaySlot.plusDays(1).toInstant()
+            today.plus(1, DateTimeUnit.DAY).atStartOfDayIn(zone) + preferred.toSecondOfDay().seconds
         }
     }
 }

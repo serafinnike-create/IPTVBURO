@@ -1,9 +1,13 @@
 package com.lucasserafin94.iptvburo.domain.model
 
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlin.time.Instant
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atTime
+import kotlinx.datetime.plus
+import kotlinx.datetime.toInstant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -17,11 +21,11 @@ import kotlin.test.assertTrue
  * tested by waiting for a real date to arrive.
  */
 class ReminderPolicyTest {
-    private val zone = ZoneId.of("America/Sao_Paulo")
+    private val zone = TimeZone.of("America/Sao_Paulo")
 
     /** Midday local time, so a test never lands on a date boundary by accident. */
     private fun at(date: String): Instant =
-        LocalDate.parse(date).atTime(12, 0).atZone(zone).toInstant()
+        LocalDate.parse(date).atTime(12, 0).toInstant(zone)
 
     private fun reminder(
         title: String,
@@ -116,8 +120,13 @@ class ReminderPolicyTest {
     @Test
     fun `the horizon includes its own boundary`() {
         val onTheEdge =
-            reminder("Duna 3", release = LocalDate.parse("2026-08-13")
-                .plusDays(ReminderPolicy.COUNTDOWN_HORIZON_DAYS).toString())
+            reminder(
+                "Duna 3",
+                release =
+                    LocalDate.parse("2026-08-13")
+                        .plus(ReminderPolicy.COUNTDOWN_HORIZON_DAYS, DateTimeUnit.DAY)
+                        .toString(),
+            )
 
         val digest = ReminderPolicy.digestFor(listOf(onTheEdge), at("2026-08-13"), zone)
 
@@ -171,13 +180,13 @@ class ReminderPolicyTest {
     fun `today's slot is used when it has not passed`() {
         val next =
             ReminderPolicy.nextNotificationAt(
-                preferred = LocalTime.of(20, 0),
+                preferred = LocalTime(20, 0),
                 now = at("2026-08-13"),
                 zone = zone,
             )
 
         assertEquals(
-            LocalDate.parse("2026-08-13").atTime(20, 0).atZone(zone).toInstant(),
+            LocalDate.parse("2026-08-13").atTime(20, 0).toInstant(zone),
             next,
         )
     }
@@ -192,15 +201,15 @@ class ReminderPolicyTest {
     fun `a slot already past moves to tomorrow`() {
         val next =
             ReminderPolicy.nextNotificationAt(
-                preferred = LocalTime.of(9, 0),
+                preferred = LocalTime(9, 0),
                 now = at("2026-08-13"),
                 zone = zone,
             )
 
         assertEquals(
-            LocalDate.parse("2026-08-14").atTime(9, 0).atZone(zone).toInstant(),
+            LocalDate.parse("2026-08-14").atTime(9, 0).toInstant(zone),
             next,
         )
-        assertTrue(next.isAfter(at("2026-08-13")))
+        assertTrue(next > at("2026-08-13"))
     }
 }
