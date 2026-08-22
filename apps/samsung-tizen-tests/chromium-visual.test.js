@@ -773,6 +773,35 @@ async function main() {
     check('aba Filmes preserva o chrome fixo e sem overflow global', movieCategories.scrollWidth <= 1920 && movieCategories.scrollHeight <= 1080);
     check('prateleira de filmes produz um quadro PNG não vazio', await screenshotIsRendered('movie-categories'));
 
+    /*
+      Cada seletor abre debaixo do proprio chip, e a janela cabe na tela.
+
+      O relato foi "seletor nao abre onde eu click": a lista era um bloco solto
+      depois das duas barras, entao clicar em "Nota", na direita, abria a janela
+      debaixo de "Genero", na esquerda. Aqui isso e medido em pixels a 1920x1080,
+      que e a unica forma de provar que ela nasce no lugar certo e nao vaza pela
+      borda direita.
+    */
+    await evaluate("document.querySelector('[data-action=catalogue-pick-rating]').click(); true");
+    await waitFor("document.querySelector('.catalogue-options')");
+    var ratingPicker = await evaluate("(function(){"
+        + "var list=document.querySelector('.catalogue-options');"
+        + "var chip=document.querySelector('[data-action=catalogue-pick-rating]');"
+        + "var l=list.getBoundingClientRect(), c=chip.getBoundingClientRect();"
+        + "return { listLeft:Math.round(l.left), listRight:Math.round(l.right), listTop:Math.round(l.top),"
+        + " chipLeft:Math.round(c.left), chipBottom:Math.round(c.bottom), lists:document.querySelectorAll('.catalogue-options').length };"
+        + "}())");
+    check('a lista de Nota nasce alinhada ao chip de Nota, e nao a barra',
+        Math.abs(ratingPicker.listLeft - ratingPicker.chipLeft) <= 24);
+    check('e abre logo abaixo dele, nao noutra faixa da tela',
+        ratingPicker.listTop >= ratingPicker.chipBottom &&
+        ratingPicker.listTop - ratingPicker.chipBottom <= 40);
+    check('a janela nao vaza pela borda direita da TV',
+        ratingPicker.listRight <= 1920);
+    check('uma janela por vez', ratingPicker.lists === 1);
+    await evaluate("document.querySelector('[data-action=catalogue-pick-rating]').click(); true");
+    await waitFor("!document.querySelector('.catalogue-options')");
+
     /* A categoria continua alcançável; na prateleira ela é filtro, então o
        teste abre pelo mesmo caminho que o resto do app usa. */
     await evaluate("BuroApp._openCategory('visual-movies'); true");

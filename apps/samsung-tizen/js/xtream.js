@@ -83,8 +83,24 @@ var BuroXtream = (function () {
             name: row.name || row.title || 'Sem título',
             categoryId: categoryId,
             contentType: contentType,
-            // Arte de provedor pode conter token/URL assinada; não é persistida.
-            logoUrl: null,
+            /*
+              A capa, quando ela não carrega credencial.
+
+              Antes isto era `null` sempre, e a arte ia por um canal separado que
+              só existia em memória, com teto de 800 e descarte LRU. Num catálogo
+              de dezenas de milhares a varredura de fundo percorre as categorias
+              em sequência e as últimas expulsavam as primeiras: quem abria
+              Filmes via cartões de texto com uma ou outra capa, porque a página
+              mostrada é do começo do catálogo, que é o primeiro a ser descartado.
+
+              A preocupação que originou o `null` continua valendo e é a mesma
+              regra dos lembretes: `isStorableReminderArtwork` recusa
+              usuário:senha@host, qualquer query string e os caminhos
+              autenticados do próprio provedor (/movie/<usuario>/<senha>/<id>).
+              O que não passa nessa peneira continua só em memória, resolvido
+              tarde, como sempre foi.
+            */
+            logoUrl: row.stream_icon || row.cover || row.poster || null,
             genre: row.genre || null,
             year: row.year || null,
             rating: rating || null,

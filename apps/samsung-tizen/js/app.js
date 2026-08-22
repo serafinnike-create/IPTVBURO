@@ -313,13 +313,26 @@ var BuroApp = (function () {
         });
     }
 
+    /*
+      A capa de um título: a de memória primeiro, a gravada depois.
+
+      A memória tem teto e descarte LRU, entao num catalogo grande ela guarda o
+      que a varredura viu por ultimo. O `logoUrl` do item e o que sobrevive: so
+      entra ali arte que passou pela peneira de credencial, e e ele que faz a
+      prateleira do comeco do catalogo ter capa depois de a varredura terminar.
+    */
+    function artworkFor(item) {
+        if (!item) { return null; }
+        return safeArtworkUrl(artworkMemory[item.id]) || safeArtworkUrl(item.logoUrl);
+    }
+
     function artworkHtml(item, className) {
-        var url = item && artworkMemory[item.id];
+        var url = artworkFor(item);
         return url ? '<span class="' + (className || 'media-art') + '"><img src="' + attr(url) + '" alt=""></span>' : '';
     }
 
     function heroArtworkHtml(item, enrichment) {
-        var stored = item && safeArtworkUrl(artworkMemory[item.id]);
+        var stored = artworkFor(item);
         var backdrop = safeArtworkUrl(enrichment && enrichment.backdropUrl);
         var poster = safeArtworkUrl(enrichment && enrichment.artworkUrl) || stored;
         var primary = backdrop || poster;
@@ -339,13 +352,13 @@ var BuroApp = (function () {
 
     /* A capa vertical do título, quando existe uma. */
     function detailPosterHtml(item) {
-        var poster = item && safeArtworkUrl(artworkMemory[item.id]);
+        var poster = artworkFor(item);
         if (!poster) { return ''; }
         return '<span class="detail-poster"><img src="' + attr(poster) + '" alt=""></span>';
     }
 
     function detailArtworkHtml(item) {
-        var poster = item && safeArtworkUrl(artworkMemory[item.id]);
+        var poster = artworkFor(item);
         var backdrop = item && safeArtworkUrl(detailBackdropMemory[item.id]);
         if (!backdrop && !poster) { return ''; }
         return '<span class="detail-art"><img src="' + attr(backdrop || poster) + '"' +
@@ -2240,7 +2253,7 @@ var BuroApp = (function () {
         if (item && item.year) { facts.push(String(item.year)); }
         if (genres.length) { facts.push(genres.slice(0, 2).join(' · ')); }
         if (rating > 0) { facts.push('★ ' + rating.toFixed(1)); }
-        return '<article class="discover-card ' + layer + (artworkMemory[item.id] ? ' has-art' : '') +
+        return '<article class="discover-card ' + layer + (artworkFor(item) ? ' has-art' : '') +
             '" data-id="' + attr(item.id) + '"' + (layer === 'next' ? ' aria-hidden="true"' :
                 ' aria-label="' + attr(item.name) + '"') + '>' +
             artworkHtml(item, 'discover-art') + '<span class="badge">' + escapeHtml(item.contentType) +
@@ -2503,9 +2516,17 @@ var BuroApp = (function () {
         }
         var serviceLabel = scope.service || t('filterAll');
         var serviceIdentity = scope.service ? BuroProviders.identityForLabel(scope.service) : null;
-        var chips = '<button class="scope-chip focusable ' + (scope.genre ? 'selected' : '') +
+        /*
+          Cada chip carrega a sua propria lista, ancorada nele.
+
+          A lista era acrescentada depois das duas barras, num bloco so: clicar
+          em "Nota", la na direita, abria a janela debaixo de "Genero", la na
+          esquerda. Numa TV isso se le como o seletor errado ter aberto.
+        */
+        var chips = pickerSlot('genre', contentType,
+            '<button class="scope-chip focusable ' + (scope.genre ? 'selected' : '') +
             '" data-action="catalogue-pick-genre"><small>' + t('genreSelector') + '</small><strong>' +
-            escapeHtml(genreLabel) + '</strong></button>';
+            escapeHtml(genreLabel) + '</strong></button>');
         /*
           Três casos, na mesma ordem do Windows.
 
@@ -2517,9 +2538,10 @@ var BuroApp = (function () {
           aplica à lista dele.
         */
         if (parts.hasProviders || !currentServiceIndex().isEmpty()) {
-            chips += '<button class="scope-chip focusable ' + (scope.service ? 'selected' : '') +
+            chips += pickerSlot('service', contentType,
+                '<button class="scope-chip focusable ' + (scope.service ? 'selected' : '') +
                 '" data-action="catalogue-pick-service">' + providerBadge(serviceIdentity) +
-                '<small>' + t('serviceSelector') + '</small><strong>' + escapeHtml(serviceLabel) + '</strong></button>';
+                '<small>' + t('serviceSelector') + '</small><strong>' + escapeHtml(serviceLabel) + '</strong></button>');
         } else {
             chips += '<span class="scope-chip disabled"><small>' + t('serviceSelector') +
                 '</small><strong>' + escapeHtml(t(serviceIndexLoading ? 'servicesLoading' : 'servicesUnavailable')) +
@@ -2544,14 +2566,18 @@ var BuroApp = (function () {
           nem nota, e chips que não filtram nada só ocupam a tela.
         */
         return (contentType === 'LIVE' ? '' : catalogueYearBar(contentType)) +
-            '<div class="catalogue-scope-bar">' + chips + '</div>' +
-            catalogueOptionsHtml(contentType);
+            '<div class="catalogue-scope-bar">' + chips + '</div>';
     }
 
     /* As notas mínimas oferecidas. Estrelas inteiras e não um controle contínuo:
        a nota do provedor é grosseira e "pelo menos quatro estrelas" é a pergunta
        que as pessoas realmente fazem. Mesma escolha do Windows. */
     var CATALOGUE_RATINGS = [null, 9, 8, 7, 6, 5];
+
+    /* Quantas opções cabem na janela do seletor: 380px de altura por 56px de
+       cada chip, e é a partir daí que a contagem no rodapé passa a valer a pena.
+       Acompanha `.catalogue-options` no CSS. */
+    var OPTIONS_VISIBLE = 6;
 
     function catalogueYearBar(contentType) {
         var scope = catalogueScope(contentType);
@@ -2565,11 +2591,13 @@ var BuroApp = (function () {
             '<button class="scope-chip compact focusable ' + (scope.year === currentYear ? 'selected' : '') +
             '" data-action="catalogue-year-current"><strong>' +
             escapeHtml(t('releasesIn').replace('{year}', currentYear)) + '</strong></button>' +
-            '<button class="scope-chip compact focusable ' +
-            (scope.year != null && scope.year !== currentYear ? 'selected' : '') +
-            '" data-action="catalogue-pick-year"><strong>' + escapeHtml(yearLabel) + ' ▾</strong></button>' +
-            '<button class="scope-chip compact focusable ' + (scope.minimumRating != null ? 'selected' : '') +
-            '" data-action="catalogue-pick-rating"><strong>' + escapeHtml(ratingLabel) + ' ▾</strong></button>' +
+            pickerSlot('year', contentType,
+                '<button class="scope-chip compact focusable ' +
+                (scope.year != null && scope.year !== currentYear ? 'selected' : '') +
+                '" data-action="catalogue-pick-year"><strong>' + escapeHtml(yearLabel) + ' ▾</strong></button>') +
+            pickerSlot('rating', contentType,
+                '<button class="scope-chip compact focusable ' + (scope.minimumRating != null ? 'selected' : '') +
+                '" data-action="catalogue-pick-rating"><strong>' + escapeHtml(ratingLabel) + ' ▾</strong></button>') +
             '</div>';
     }
 
@@ -2582,6 +2610,21 @@ var BuroApp = (function () {
 
       Uma lista aberta por vez — duas ocupariam a tela inteira numa TV.
     */
+    /*
+      Um chip com a sua lista ancorada nele.
+
+      A lista fica dentro do contentor do chip e posicionada em relacao a ele,
+      entao ela abre onde o dedo tocou. Antes era um bloco solto depois das duas
+      barras: clicar em "Nota", na direita, abria a janela debaixo de "Genero",
+      na esquerda.
+    */
+    function pickerSlot(picker, contentType, chipHtml) {
+        var scope = catalogueScope(contentType);
+        var open = scope.openPicker === picker;
+        return '<span class="picker-slot' + (open ? ' open' : '') + '">' + chipHtml +
+            (open ? catalogueOptionsHtml(contentType) : '') + '</span>';
+    }
+
     function catalogueOptionsHtml(contentType) {
         var scope = catalogueScope(contentType);
         var open = scope.openPicker;
@@ -2637,13 +2680,25 @@ var BuroApp = (function () {
             });
         }
         if (!options.length) { return ''; }
+        /*
+          A contagem no rodapé quando a lista não cabe na janela.
+
+          A janela mostra cerca de seis opções e rola. Sem dizer quantas
+          existem, seis numa TV se leem como a lista inteira — foi exatamente o
+          relato: "em genero falta todos os generos", com dezesseis gêneros
+          presentes e seis visíveis. A janela continua pequena de propósito;
+          o que faltava era avisar que há mais abaixo.
+        */
         return '<div class="catalogue-options" role="listbox">' + options.map(function (option) {
             return '<button class="option-chip focusable ' + (option.selected ? 'selected' : '') +
                 '" role="option" aria-selected="' + (option.selected ? 'true' : 'false') +
                 '" data-action="catalogue-option" data-picker="' + attr(open) +
                 '" data-value="' + attr(option.value == null ? '' : option.value) + '">' +
                 escapeHtml(option.label) + '</button>';
-        }).join('') + '</div>';
+        }).join('') +
+            (options.length > OPTIONS_VISIBLE ? '<p class="options-count">' +
+                escapeHtml(t('optionsTotal').replace('{count}', options.length)) + '</p>' : '') +
+            '</div>';
     }
 
     /* Abre a lista de um seletor, ou a fecha se já era ela que estava aberta. */
@@ -2730,7 +2785,7 @@ var BuroApp = (function () {
             (item.contentType === 'SERIES' ? 'series-details' :
                 (item.contentType === 'LIVE' ? 'live-details' : 'play'));
         return '<button class="media-card focusable ' + (poster ? 'poster' : '') + ' ' + layout +
-            (artworkMemory[item.id] ? ' has-art' : '') + '" data-action="' + action + '" data-id="' + attr(item.id) + '">' +
+            (artworkFor(item) ? ' has-art' : '') + '" data-action="' + action + '" data-id="' + attr(item.id) + '">' +
             artworkHtml(item, 'media-art') + '<span class="badge">' + (favorite ? '★ · ' : '') +
             (playback && playback.completed ? '✓ · ' : '') + escapeHtml(item.contentType) + '</span><h3>' +
             escapeHtml(item.name) + '</h3><p>' + escapeHtml(metadata) + '</p>' +
@@ -3142,7 +3197,7 @@ var BuroApp = (function () {
         state.categories.forEach(function (category) { byId[category.id] = category; });
         (rows || []).forEach(function (item) {
             var category = byId[item.categoryId];
-            if (artworkMemory[item.id] || !category || seen[category.id]) { return; }
+            if (artworkFor(item) || !category || seen[category.id]) { return; }
             seen[category.id] = true;
             wanted.push(category);
         });
@@ -3180,8 +3235,9 @@ var BuroApp = (function () {
             window.setTimeout(function () { loadCatalogueShelf(contentType, false); }, 0);
         }
         heading = '<div class="section-heading catalogue-shelf-heading"><h2>' + t('catalogue') + '</h2>' +
-            '<button class="scope-chip compact focusable" data-action="catalogue-pick-density"><strong>' +
-            escapeHtml(catalogueDensityLabel(layout)) + ' ▾</strong></button>' +
+            pickerSlot('density', contentType,
+                '<button class="scope-chip compact focusable" data-action="catalogue-pick-density"><strong>' +
+                escapeHtml(catalogueDensityLabel(layout)) + ' ▾</strong></button>') +
             '<p>' + (scope.total == null ? '' : escapeHtml(t('shelfLoadedOf')
                 .replace('{loaded}', rows.length).replace('{total}', total))) + '</p></div>';
         if (!rows.length && scope.loading) {
@@ -3331,7 +3387,7 @@ var BuroApp = (function () {
         if (cached) {
             if (currentTitleMatches(item.id)) {
                 state.screenData.details = mergeTmdbDetails(state.screenData.details, cached);
-                if (!artworkMemory[item.id]) { rememberArtwork(item.id, cached.posterUrl); }
+                if (!artworkFor(item)) { rememberArtwork(item.id, cached.posterUrl); }
                 if (!detailBackdropMemory[item.id]) { rememberDetailBackdrop(item.id, cached.backdropUrl); }
                 render();
             }
@@ -3343,7 +3399,7 @@ var BuroApp = (function () {
             rememberTmdbDetails(item.id, metadata);
             if (!currentTitleMatches(item.id)) { return; }
             state.screenData.details = mergeTmdbDetails(state.screenData.details, metadata);
-            if (!artworkMemory[item.id]) { rememberArtwork(item.id, metadata.posterUrl); }
+            if (!artworkFor(item)) { rememberArtwork(item.id, metadata.posterUrl); }
             if (!detailBackdropMemory[item.id]) { rememberDetailBackdrop(item.id, metadata.backdropUrl); }
             render();
             enrichTitleFromCritics(item, metadata);
@@ -4992,6 +5048,30 @@ var BuroApp = (function () {
       O código sai em dígitos grandes e espaçados porque vai ser copiado de
       longe, à mão.
     */
+    /*
+      O QR da tela de pareamento, com o código já dentro do endereço.
+
+      Pedido do usuário: "seria mais rapido colocar qr code para ir mais rapido
+      pro site". A câmera abre a página com o campo do código já preenchido —
+      `/parear` aceita `?code=` — então sobra digitar só a chave, que é o que
+      não cabe num controle remoto.
+
+      O endereço e os seis dígitos continuam por extenso ao lado: nem toda
+      câmera lê QR de tela de TV, e digitar é a saída quando isso acontece.
+      Some sem alarde se a codificação falhar, pelo mesmo motivo.
+    */
+    function pairQrHtml(code) {
+        var url = BuroPairing.BASE + '/parear' +
+            (/^[0-9]{6}$/.test(String(code)) ? '?code=' + encodeURIComponent(code) : '');
+        var drawing = '';
+        var matrix;
+        try {
+            matrix = BuroQr.encode(url);
+            drawing = matrix ? BuroQr.svg(matrix) : '';
+        } catch (ignoredPairQr) { drawing = ''; }
+        return drawing ? '<div class="pair-qr" aria-hidden="true">' + drawing + '</div>' : '';
+    }
+
     function renderPairing() {
         var data = state.screenData || {};
         var body;
@@ -5003,12 +5083,13 @@ var BuroApp = (function () {
                 escapeHtml(t('pairStarting')) + '</p></div>';
         } else {
             body = '<div class="pair-panel"><p class="form-note">' + escapeHtml(t('pairHint')) + '</p>' +
+                '<div class="pair-body">' + pairQrHtml(data.code) +
                 '<ol class="pair-steps">' +
                 '<li><span>' + escapeHtml(t('pairStep1')) + '</span><strong class="pair-url">' +
                 escapeHtml(BuroPairing.phoneUrl()) + '</strong></li>' +
                 '<li><span>' + escapeHtml(t('pairStep2')) + '</span><strong class="pair-code">' +
                 escapeHtml(data.code) + '</strong></li>' +
-                '<li><span>' + escapeHtml(t('pairStep3')) + '</span></li></ol>' +
+                '<li><span>' + escapeHtml(t('pairStep3')) + '</span></li></ol></div>' +
                 '<p class="pair-waiting"><span class="boot-indicator"></span>' +
                 escapeHtml(t('pairWaiting')) + '</p>' +
                 '<p class="form-note">' + escapeHtml(t('pairExpiresIn').replace('{minutes}',
@@ -7478,7 +7559,7 @@ var BuroApp = (function () {
         state.categories.forEach(function (category) { byId[category.id] = category; });
         (data.result ? homeResultItems(data.result) : []).forEach(function (item) {
             var category = byId[item.categoryId];
-            if (artworkMemory[item.id] || !category || seen[category.id]) { return; }
+            if (artworkFor(item) || !category || seen[category.id]) { return; }
             if (artworkRequests[source.id + ':' + category.id]) { return; }
             seen[category.id] = true;
             wanted.push(category);
@@ -9318,6 +9399,8 @@ var BuroApp = (function () {
            em vez de repetir o número e quebrar a cada ajuste. */
         _catalogueBlockSize: function () { return CATALOGUE_BLOCK_SIZE; },
         _artworkFor: function (itemId) { return artworkMemory[itemId]; },
+        _rememberArtworkMap: rememberArtworkMap,
+        _artworkCount: function () { return Object.keys(artworkMemory).length; },
         _cacheSizes: function () {
             return {
                 artwork: Object.keys(artworkMemory).length,

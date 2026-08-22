@@ -176,7 +176,18 @@ var BuroDomain = (function () {
             contentType: input.contentType || CONTENT.UNKNOWN,
             providerItemId: input.providerItemId == null ? null : String(input.providerItemId),
             locator: input.locator || null,
-            logoUrl: input.logoUrl || null,
+            /*
+              A capa, peneirada aqui e não só em quem chama.
+
+              O item é gravado, então esta URL vai para o disco. A peneira recusa
+              usuário:senha@host, qualquer query string e os caminhos
+              autenticados do provedor (/movie/<usuario>/<senha>/<id>) — a mesma
+              regra dos lembretes. Fica neste ponto porque é por onde todo item
+              passa: um adapter novo que esqueça de filtrar não consegue gravar
+              credencial por descuido.
+            */
+            logoUrl: isStorableReminderArtwork(input && input.logoUrl) ?
+                trim(input.logoUrl) : null,
             genre: trim(input.genre) || null,
             year: input.year == null ? null : Number(input.year),
             rating: input.rating == null ? null : Number(input.rating),

@@ -165,6 +165,25 @@ async function run() {
         window.document.querySelector('.pair-url').textContent.indexOf('/parear') > 0);
     check('a tela diz que está esperando, em vez de parecer travada',
         Boolean(window.document.querySelector('.pair-waiting')));
+    /*
+      O QR poupa a parte mais lenta: achar o endereço no celular. Ele leva o
+      código dentro da URL, e `/parear` aceita `?code=`, então quem aponta a
+      câmera já chega com o campo preenchido e só cola a chave.
+
+      O endereço e os seis dígitos continuam por extenso ao lado — nem toda
+      câmera lê QR de tela de TV.
+    */
+    check('a tela oferece um QR para abrir o endereço',
+        Boolean(window.document.querySelector('.pair-qr svg')));
+    check('o QR é desenhado na própria TV, sem buscar imagem de fora',
+        !window.document.querySelector('.pair-qr img') &&
+        window.document.querySelector('.pair-qr').innerHTML.indexOf('http') < 0);
+    check('o QR não rouba o foco do D-pad: ele não é alvo de navegação',
+        !window.document.querySelector('.pair-qr .focusable') &&
+        window.document.querySelector('.pair-qr').getAttribute('aria-hidden') === 'true');
+    check('o endereço legível continua na tela, para quem não lê o QR',
+        window.document.querySelector('.pair-url').textContent.indexOf('/parear') > 0 &&
+        window.document.querySelector('.pair-code').textContent === '482913');
 
     process.stdout.write('A TV pergunta de novo enquanto ninguém enviou\n');
     await waitFor(function () {
