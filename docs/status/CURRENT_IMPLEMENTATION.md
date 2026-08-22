@@ -12,6 +12,11 @@
   numeração passou a ser compartilhada com o Windows a partir da 3.0.1; o APK é
   de depuração e não é versão de loja, e a numeração comum alinha as aplicações,
   não a maturidade
+- `packages/domain-model` compila para todos os alvos declarados desde
+  22/08/2026: JVM mais `iosArm64`, `iosSimulatorArm64` e `iosX64`. Antes só o
+  alvo JVM compilava — o `commonMain` usava `java.time`, `java.net.URI`,
+  `MessageDigest` e `Locale`. Isso não significa que exista um app iOS; apenas
+  que o domínio deixou de ser só-JVM
 - Milestone em validação: `0.2`, Android adaptativo e Compose Desktop
 
 ## Correções de 17 de agosto de 2026
