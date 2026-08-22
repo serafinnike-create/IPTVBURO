@@ -3,7 +3,7 @@ package com.lucasserafin94.iptvburo.desktop.license
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
-import java.time.Instant
+import kotlin.time.Instant
 import java.util.prefs.Preferences
 
 /**

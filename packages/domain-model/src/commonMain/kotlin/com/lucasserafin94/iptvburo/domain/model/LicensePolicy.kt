@@ -2,7 +2,7 @@ package com.lucasserafin94.iptvburo.domain.model
 
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * When the app may be used, and when it must ask to be paid for.

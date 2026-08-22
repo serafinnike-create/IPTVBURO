@@ -10,8 +10,6 @@ import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.Signature
 import java.security.spec.X509EncodedKeySpec
-import java.time.Duration
-import java.time.Instant
 import java.util.Base64
 import java.util.Collections
 import java.util.UUID
@@ -22,6 +20,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -203,7 +205,7 @@ class LicenseClientTest {
 
     @Test
     fun `offline fallback blocks when the local clock moved backwards beyond tolerance`() {
-        val status = offlineStatus(serverNow.minus(LicensePolicyClock.tolerance).minusSeconds(1))
+        val status = offlineStatus(serverNow.minus(LicensePolicyClock.tolerance).minus(1.seconds))
 
         assertFalse(status.allowsUse)
         assertEquals(LicenseBlockReason.NEEDS_VERIFICATION, status.blockReason)
@@ -224,8 +226,8 @@ class LicenseClientTest {
     fun `a legacy future local verification time cannot extend offline grace`() {
         val status =
             offlineStatus(
-                localNow = serverNow.plus(Duration.ofDays(15)),
-                storedVerifiedAt = serverNow.plus(Duration.ofDays(365)),
+                localNow = serverNow.plus(15.days),
+                storedVerifiedAt = serverNow.plus(365.days),
             )
 
         assertFalse(status.allowsUse)
@@ -241,7 +243,7 @@ class LicenseClientTest {
         withState { store, identityStore ->
             val identity = identityStore.getOrCreate()
             val payload =
-                """{"deviceId":"${identity.deviceId}","state":"TRIAL","serverTime":"$serverNow","trialEndsAt":"${serverNow.plus(Duration.ofDays(7))}"}"""
+                """{"deviceId":"${identity.deviceId}","state":"TRIAL","serverTime":"$serverNow","trialEndsAt":"${serverNow.plus(7.days)}"}"""
             store.write(
                 StoredLicense(
                     license = SignedLicense(payload, signServerPayload(payload)),
@@ -281,9 +283,9 @@ class LicenseClientTest {
     private fun signedEnvelope(deviceId: String, nonce: String, state: String): String {
         val timeFields =
             if (state == "TRIAL") {
-                "\"trialEndsAt\":\"${serverNow.plus(Duration.ofDays(7))}\""
+                "\"trialEndsAt\":\"${serverNow.plus(7.days)}\""
             } else {
-                "\"expiresAt\":\"${serverNow.plus(Duration.ofDays(730))}\""
+                "\"expiresAt\":\"${serverNow.plus(730.days)}\""
             }
         val payload =
             """{"deviceId":"$deviceId","nonce":"$nonce","serverTime":"$serverNow","state":"$state",$timeFields}"""

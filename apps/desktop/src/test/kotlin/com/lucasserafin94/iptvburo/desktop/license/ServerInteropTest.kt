@@ -5,12 +5,12 @@ import java.nio.charset.StandardCharsets
 import java.security.KeyFactory
 import java.security.Signature
 import java.security.spec.X509EncodedKeySpec
-import java.time.Instant
 import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.time.Instant
 
 /**
  * The client accepts what the server actually produces.

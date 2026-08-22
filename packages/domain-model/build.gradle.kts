@@ -31,7 +31,10 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.kotlinx.datetime)
+            // `api`, not `implementation`: these types appear in the module's own public signatures
+            // — LicenseSnapshot carries Instants, SeasonalCollections takes a LocalDate — so every
+            // consumer needs them on its compile classpath to say anything about them at all.
+            api(libs.kotlinx.datetime)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

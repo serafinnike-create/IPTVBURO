@@ -5,12 +5,12 @@ import java.nio.charset.StandardCharsets
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.Signature
-import java.time.Instant
 import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.time.Instant
 
 /**
  * The signature check, which is the only thing standing between a stored file and a free licence.

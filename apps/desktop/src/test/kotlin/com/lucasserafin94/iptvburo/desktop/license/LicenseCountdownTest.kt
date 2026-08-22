@@ -3,12 +3,15 @@ package com.lucasserafin94.iptvburo.desktop.license
 import com.lucasserafin94.iptvburo.domain.model.LicenseBlockReason
 import com.lucasserafin94.iptvburo.domain.model.LicenseDecision
 import java.nio.file.Path
-import java.time.Duration
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * The countdown shown in the header.
@@ -28,7 +31,7 @@ class LicenseCountdownTest {
 
     @Test
     fun `a full trial reports seven days`() {
-        assertEquals(7L, allowed(Duration.ofDays(7), isTrial = true).daysRemaining)
+        assertEquals(7L, allowed(7.days, isTrial = true).daysRemaining)
     }
 
     /**
@@ -39,30 +42,30 @@ class LicenseCountdownTest {
      */
     @Test
     fun `a partial day rounds up`() {
-        assertEquals(1L, allowed(Duration.ofHours(11), isTrial = true).daysRemaining)
-        assertEquals(1L, allowed(Duration.ofMinutes(5), isTrial = true).daysRemaining)
-        assertEquals(2L, allowed(Duration.ofHours(25), isTrial = true).daysRemaining)
+        assertEquals(1L, allowed(11.hours, isTrial = true).daysRemaining)
+        assertEquals(1L, allowed(5.minutes, isTrial = true).daysRemaining)
+        assertEquals(2L, allowed(25.hours, isTrial = true).daysRemaining)
     }
 
     @Test
     fun `an exact number of days does not gain one`() {
         // ofDays(2) is exactly 48 hours: it must be 2, not 3.
-        assertEquals(2L, allowed(Duration.ofDays(2), isTrial = true).daysRemaining)
-        assertEquals(30L, allowed(Duration.ofDays(30), isTrial = false).daysRemaining)
+        assertEquals(2L, allowed(2.days, isTrial = true).daysRemaining)
+        assertEquals(30L, allowed(30.days, isTrial = false).daysRemaining)
     }
 
     @Test
     fun `a two year licence counts in days`() {
         // 730 days rather than "2 years": a number somebody can act on, all the way down.
-        assertEquals(730L, allowed(Duration.ofDays(730), isTrial = false).daysRemaining)
-        assertEquals(359L, allowed(Duration.ofDays(359), isTrial = false).daysRemaining)
+        assertEquals(730L, allowed(730.days, isTrial = false).daysRemaining)
+        assertEquals(359L, allowed(359.days, isTrial = false).daysRemaining)
     }
 
     @Test
     fun `an elapsed duration is zero rather than negative`() {
         // Between the licence lapsing and the next check, the remaining time is negative. Showing
         // "-1 dias" would be worse than saying nothing.
-        assertEquals(0L, allowed(Duration.ofHours(-5), isTrial = true).daysRemaining)
+        assertEquals(0L, allowed((-5).hours, isTrial = true).daysRemaining)
     }
 
     @Test
@@ -84,8 +87,8 @@ class LicenseCountdownTest {
 
     @Test
     fun `a trial is distinguishable from a paid licence`() {
-        assertTrue(allowed(Duration.ofDays(7), isTrial = true).isTrial)
-        assertTrue(!allowed(Duration.ofDays(730), isTrial = false).isTrial)
+        assertTrue(allowed(7.days, isTrial = true).isTrial)
+        assertTrue(!allowed(730.days, isTrial = false).isTrial)
     }
 
     /**

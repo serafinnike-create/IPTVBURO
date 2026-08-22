@@ -312,6 +312,10 @@ dependencies {
     @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
     implementation(compose.materialIconsExtended)
     implementation(libs.kotlinx.coroutines.core)
+    // Declared here as well as inherited from :packages:domain-model. The licence path names
+    // kotlinx.datetime.Instant in its own signatures, and a module that uses a type directly should
+    // not depend on another module continuing to expose it.
+    implementation(libs.kotlinx.datetime)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.okhttp)

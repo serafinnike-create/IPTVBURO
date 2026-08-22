@@ -4,12 +4,12 @@ import com.lucasserafin94.iptvburo.domain.model.EntitlementState
 import java.nio.charset.StandardCharsets
 import java.security.KeyPairGenerator
 import java.security.Signature
-import java.time.Instant
 import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.time.Instant
 
 /**
  * The attacks the signature check alone does not stop.

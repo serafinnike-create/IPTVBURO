@@ -6,8 +6,9 @@ import com.lucasserafin94.iptvburo.domain.model.LicenseBlockReason
 import com.lucasserafin94.iptvburo.domain.model.LicenseDecision
 import com.lucasserafin94.iptvburo.domain.model.LicensePolicy
 import java.security.SecureRandom
-import java.time.Duration
-import java.time.Instant
+import kotlin.time.Duration
+import kotlin.time.Clock
+import kotlin.time.Instant
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 import okhttp3.MediaType.Companion.toMediaType
@@ -27,7 +28,7 @@ class LicenseClient(
     private val http: OkHttpClient = defaultHttpClient(),
     private val identityProvider: DeviceIdentityProvider = DeviceFingerprint,
     private val server: LicenseServerConfiguration = LicenseServerConfiguration.production(),
-    private val clock: () -> Instant = Instant::now,
+    private val clock: () -> Instant = Clock.System::now,
 ) {
     /** The launch check. It fails closed and never lets identity, network or parsing errors escape. */
     fun check(): LicenseStatus {
@@ -460,11 +461,11 @@ data class LicenseStatus(
     val daysRemaining: Long?
         get() = remaining?.let { left ->
             when {
-                left.isNegative || left.isZero -> 0L
+                left.isNegative() || left == Duration.ZERO -> 0L
                 // Rounded up from minutes, not hours: five minutes left is still a day remaining,
                 // and `toHours()` truncates it to zero — which would print "0 dias" beside an app
                 // that plainly still works.
-                else -> (left.toMinutes() + 1439) / 1440
+                else -> (left.inWholeMinutes + 1439) / 1440
             }
         }
 

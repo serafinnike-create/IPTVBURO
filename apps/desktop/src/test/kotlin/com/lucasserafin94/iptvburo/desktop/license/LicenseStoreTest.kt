@@ -2,8 +2,6 @@ package com.lucasserafin94.iptvburo.desktop.license
 
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration
-import java.time.Instant
 import java.util.UUID
 import java.util.prefs.Preferences
 import kotlin.io.path.deleteRecursively
@@ -11,6 +9,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Instant
 
 /**
  * The deletion attack, and what stops it.
@@ -127,7 +127,7 @@ class LicenseStoreTest {
         withStore { store, _, _, _ ->
             store.rememberFirstSeen(firstRun)
 
-            store.rememberFirstSeen(firstRun.plus(Duration.ofDays(30)))
+            store.rememberFirstSeen(firstRun.plus(30.days))
 
             assertEquals(firstRun, store.firstSeen(), "a later date must never overwrite an earlier one")
         }
@@ -139,7 +139,7 @@ class LicenseStoreTest {
         withStore { store, _, _, _ ->
             store.rememberFirstSeen(firstRun)
 
-            val earlier = firstRun.minus(Duration.ofDays(3))
+            val earlier = firstRun.minus(3.days)
             store.rememberFirstSeen(earlier)
 
             assertEquals(earlier, store.firstSeen())

@@ -4837,7 +4837,13 @@ class DesktopAppState(
         kidsMode: Boolean,
         lockedCategoryIdsByType: Map<XtreamContentType, Set<String>>,
     ): DailySeasonalShelf? {
-        val collection = SeasonalCollections.primaryCollectionFor(date) ?: return null
+        // Converted here rather than upstream: this screen's own date handling is JVM
+        // LocalDate — reminders, the clock, the day rollover — while the domain model is
+        // multiplatform and speaks kotlinx. The boundary is one line wide, so it lives here.
+        val collection =
+            SeasonalCollections.primaryCollectionFor(
+                kotlinx.datetime.LocalDate(date.year, date.monthValue, date.dayOfMonth),
+            ) ?: return null
         val found = LinkedHashMap<String, XtreamCatalogItem>()
         for (term in collection.searchTerms) {
             for (type in listOf(XtreamContentType.MOVIE, XtreamContentType.SERIES)) {
