@@ -2,6 +2,37 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [3.2.0] - 2026-08-24 (Windows)
+
+### Windows
+
+#### Corrigido
+
+- **A filmografia de um ator abria com programas de auditório.** A TMDb registra
+  uma ida ao *The Daily Show* como crédito de elenco igual a qualquer outro, e
+  esses programas têm popularidade altíssima. Ordenado só por popularidade, o
+  Wagner Moura aparecia com *The Daily Show*, *Late Night*, *The Kelly Clarkson
+  Show* e o *Globo de Ouro* no topo, enquanto *Tropa de Elite* e *Cidade Baixa*
+  ficavam lá embaixo. Agora participações como convidado (personagem "Self") e
+  aparições de um único episódio são descartadas.
+- **A aba Séries não conseguia filtrar por Netflix.** O índice de serviços pedia
+  à TMDb apenas os **filmes** de cada provedor, então as séries de um serviço
+  nunca eram buscadas — e a Netflix sumia do seletor. Agora os dois catálogos
+  são consultados.
+- **O índice de serviços era montado várias vezes para o mesmo serviço.** A TMDb
+  lista "Netflix" e "Netflix Standard with Ads" como provedores separados; 40
+  identificadores viram 8 serviços. Medido: de três minutos para cerca de trinta
+  segundos.
+
+#### Melhorado
+
+- **As temporadas começam fechadas.** Abrir a primeira por padrão colocava 18
+  episódios entre a sinopse e todo o resto da página. Um clique abre, outro
+  fecha. Série de uma temporada só continua aberta, porque não há escolha a
+  fazer.
+- **Elenco e títulos parecidos ficam juntos no fim da página de série**, depois
+  dos episódios — um filme termina no elenco, uma série não.
+
 ## [3.1.2] - 2026-08-23 (Windows)
 
 ### Windows

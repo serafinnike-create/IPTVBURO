@@ -3,11 +3,11 @@
 - Data da auditoria: 21 de agosto de 2026
 - Branch: `codex/windows-clean-release`
 - Baseline anterior: `v0.1.0-alpha.1`
-- Tag mais recente no repositório atual: `v3.1.2`
+- Tag mais recente no repositório atual: `v3.2.0`
 - Releases publicadas: `v2.0.0-alpha.7`, `v2.0.0-alpha.11`, `v2.0.0-alpha.12`
-  como prévia; `v3.0.0`, `v3.0.1`, `v3.0.3`, `v3.0.4`, `v3.0.5`, `v3.0.6`, `v3.1.0`, `v3.1.1` e `v3.1.2` como versões finais do Windows
+  como prévia; `v3.0.0`, `v3.0.1`, `v3.0.3`, `v3.0.4`, `v3.0.5`, `v3.0.6`, `v3.1.0`, `v3.1.1`, `v3.1.2` e `v3.2.0` como versões finais do Windows
   (a `v3.0.2` foi despublicada: atualizar por ela apagava o aplicativo)
-- Windows: `v3.1.2`; MSI ainda sem assinatura Authenticode
+- Windows: `v3.2.0`; MSI ainda sem assinatura Authenticode
 - Android/Android TV: `v3.0.1`, ainda prévia — a 3.0.2 é só do Windows. A
   numeração passou a ser compartilhada com o Windows a partir da 3.0.1; o APK é
   de depuração e não é versão de loja, e a numeração comum alinha as aplicações,
