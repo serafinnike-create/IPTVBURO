@@ -2535,9 +2535,19 @@ private fun SimilarTitlesShelf(
     }
     // A scrollbar, because a row that runs past the edge with no handle is the defect this app has
     // already fixed twice elsewhere.
+    //
+    // Styled like every other scrollbar here rather than left to the default. Compose's default
+    // track is a pale grey built for a light theme, and against this background it read as a white
+    // line across the foot of the window — reported as exactly that.
     HorizontalScrollbar(
         adapter = rememberScrollbarAdapter(shelfScroll),
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        style =
+            LocalScrollbarStyle.current.copy(
+                thickness = 8.dp,
+                unhoverColor = BuroColors.BorderSoft,
+                hoverColor = BuroColors.Primary,
+            ),
     )
 }
 

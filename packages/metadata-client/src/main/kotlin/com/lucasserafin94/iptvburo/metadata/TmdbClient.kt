@@ -814,9 +814,17 @@ class TmdbClient(
                 .addQueryParameter("api_key", key)
                 .addQueryParameter("language", language)
                 .build()
+        // Checked for JsonNull rather than cast. TMDb answers `"belongs_to_collection": null` for
+        // any film that is not part of a series, which is most films, and Gson represents that as
+        // JsonNull — on which `getAsJsonObject` throws ClassCastException rather than returning
+        // null. That exception escaped this function and killed the whole similarTitles call before
+        // the recommendations were ever requested, so every standalone film showed an empty shelf
+        // while a franchise film worked. The shelf looked broken; it was only ever this line.
         val collectionId =
             get(detailsUrl)
-                ?.getAsJsonObject("belongs_to_collection")
+                ?.get("belongs_to_collection")
+                ?.takeIf { it.isJsonObject }
+                ?.asJsonObject
                 ?.int("id")
                 ?: return emptyList()
 
