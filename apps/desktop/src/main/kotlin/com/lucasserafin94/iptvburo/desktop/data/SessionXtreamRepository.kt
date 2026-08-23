@@ -517,37 +517,42 @@ class SessionXtreamRepository(
     }
 
     /**
-     * Films whose cast includes [personName].
+     * Every film and series in the catalogue whose title is one of [normalisedTitles].
      *
-     * The provider only exposes the cast inside per-film details, so this costs one request per
-     * candidate. Sweeping a 30,000-item catalogue that way would take many minutes and hammer the
-     * provider, so the search is bounded: it walks the movie catalogue in catalogue order and stops
-     * at [limit] matches or once [MAX_CAST_LOOKUPS] films have been inspected. That trades
-     * completeness for a page that appears in seconds, which is the right trade for a filmography.
+     * This replaces asking the provider for each film's cast in turn, which is one request per
+     * film: against forty thousand it could only ever be capped, and a cap meant the answer was
+     * "the first four hundred rows" rather than "this actor's work".
+     *
+     * The catalogue is already in memory and the names are already normalised, so this is a set
+     * lookup per row — the same normalisation ServiceTitleIndex uses, so "Tropa de Elite 4K [DUB]"
+     * and "Tropa de Elite" are one title.
+     *
+     * Both catalogues, because an actor's credits mix films and series.
      */
-    fun findByCastMember(
-        personName: String,
+    fun findByTitles(
+        normalisedTitles: Set<String>,
         limit: Int,
     ): List<XtreamCatalogItem> {
-        val needle = personName.trim().lowercase()
-        if (needle.isBlank()) return emptyList()
-        val catalog = synchronized(lock) { catalogs[XtreamContentType.MOVIE] } ?: return emptyList()
-
+        if (normalisedTitles.isEmpty()) return emptyList()
+        val loaded =
+            synchronized(lock) {
+                listOf(XtreamContentType.MOVIE, XtreamContentType.SERIES)
+                    .mapNotNull { type -> catalogs[type] }
+            }
         val matches = ArrayList<XtreamCatalogItem>(limit)
-        var inspected = 0
-        for (index in 0 until catalog.size) {
-            if (matches.size >= limit || inspected >= MAX_CAST_LOOKUPS) break
-            val item = catalog.itemAt(index)
-            inspected += 1
-            val cast =
-                runCatching { movieDetails(item.providerId).cast }
-                    .getOrNull()
-                    ?.lowercase()
-                    ?: continue
-            if (cast.contains(needle)) matches += item
+        loaded.forEach { catalog ->
+            for (index in 0 until catalog.size) {
+                if (matches.size >= limit) return matches
+                // The name first, which is a field read; the item is only built once it matches,
+                // because itemAt allocates and this runs over the whole catalogue.
+                if (catalog.nameAt(index).normalisedForMatching() in normalisedTitles) {
+                    matches += catalog.itemAt(index)
+                }
+            }
         }
         return matches
     }
+
 
     /**
      * Every film and series in the loaded catalogue, as matching candidates.
@@ -964,8 +969,6 @@ class SessionXtreamRepository(
     }
 
     private companion object {
-        /** Bounds a cast sweep so a filmography cannot take minutes or flood the provider. */
-        const val MAX_CAST_LOOKUPS = 400
 
         /**
          * How many results a search returns.

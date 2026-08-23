@@ -130,6 +130,7 @@ import com.lucasserafin94.iptvburo.domain.model.UserStreamingPreference
 import com.lucasserafin94.iptvburo.domain.model.ViewerAffinity
 import com.lucasserafin94.iptvburo.domain.model.asExternalCandidate
 import com.lucasserafin94.iptvburo.domain.model.asLibraryCandidate
+import com.lucasserafin94.iptvburo.domain.model.normalisedForMatching
 import com.lucasserafin94.iptvburo.domain.model.shelfDeduplicationKey
 import com.lucasserafin94.iptvburo.metadata.CriticScores
 import com.lucasserafin94.iptvburo.metadata.CriticScoresClient
@@ -157,7 +158,6 @@ import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.time.Instant
-import kotlinx.datetime.toLocalDateTime
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -170,6 +170,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.toLocalDateTime
 
 /** Provider ids are reused between film and series catalogues, so both parts form the cache key. */
 internal fun heroSynopsisKey(
@@ -6113,9 +6114,29 @@ class DesktopAppState(
             }
         }
 
+        // Matched against the credits rather than swept for.
+        //
+        // The old sweep asked the provider for each film's cast in turn, which is one network
+        // request per film. Against a catalogue of forty thousand that is impossible, so it stopped
+        // after four hundred — always the same four hundred, from the top of the list — and showed
+        // whatever happened to be in them. Reported as an actor's page listing random films, and it
+        // was: under one percent of the library, chosen by position rather than by the person.
+        //
+        // TMDb has already named everything they are in. Turning that into "which of these do I
+        // own" is a lookup against the library, which is held in memory and costs nothing.
         val discovered =
             withContext(Dispatchers.Default) {
-                xtreamRepository.findByCastMember(cleanName, MAX_FILMOGRAPHY_ITEMS)
+                val creditNames =
+                    selectedPerson
+                        ?.credits
+                        .orEmpty()
+                        .mapNotNull { credit -> credit.title.normalisedForMatching().takeIf(String::isNotBlank) }
+                        .toHashSet()
+                if (creditNames.isEmpty()) {
+                    emptyList()
+                } else {
+                    xtreamRepository.findByTitles(creditNames, MAX_FILMOGRAPHY_ITEMS)
+                }
             }
         // The user may have navigated away while the sweep ran.
         if (selectedPerson?.name != cleanName) return
