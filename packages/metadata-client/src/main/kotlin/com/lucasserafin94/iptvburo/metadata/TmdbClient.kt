@@ -110,36 +110,48 @@ class TmdbClient(
     /**
      * The person TMDb knows by [name], or null when there is no confident match.
      *
-     * Only the first result is taken. Name searches are ambiguous and picking further down the list
-     * would confidently show the wrong person's face, which is worse than showing none.
+     * Prefers a result whose name matches [name] exactly (accents and case aside): TMDb's search
+     * is a general text match, not a lookup, and its own ranking is by popularity, not by how well
+     * a result's name matches the query. Taking `results.first()` unconditionally — the previous
+     * behaviour here — could return a more popular but differently-named person when the query is
+     * a substring or a near-match of theirs, silently attaching a stranger's face and filmography
+     * to the name the viewer actually tapped. Falling back to the first result when nothing matches
+     * exactly keeps the old "give the best available guess" behaviour for a name TMDb only has a
+     * fuzzy match for, rather than turning that case into "found nobody".
      */
     fun findPerson(name: String): TmdbPerson? {
         val key = apiKey?.takeIf(String::isNotBlank) ?: return null
-        if (name.isBlank()) return null
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) return null
 
         val url =
             baseUrl.newBuilder()
                 .addPathSegments("search/person")
                 .addQueryParameter("api_key", key)
-                .addQueryParameter("query", name.trim())
+                .addQueryParameter("query", trimmedName)
                 .addQueryParameter("language", language)
                 .addQueryParameter("include_adult", "false")
                 .build()
 
-        val root = get(url) ?: return null
-        val first =
-            root.getAsJsonArray("results")
-                ?.firstOrNull()
-                ?.takeIf { it.isJsonObject }
-                ?.asJsonObject
+        val results =
+            get(url)
+                ?.getAsJsonArray("results")
+                ?.mapNotNull { element -> element.takeIf { it.isJsonObject }?.asJsonObject }
                 ?: return null
 
-        val id = first.int("id") ?: return null
+        val normalizedQuery = trimmedName.normalizedForNameComparison()
+        val match =
+            results.firstOrNull { candidate ->
+                candidate.string("name")?.normalizedForNameComparison() == normalizedQuery
+            } ?: results.firstOrNull()
+            ?: return null
+
+        val id = match.int("id") ?: return null
         return TmdbPerson(
             id = id,
-            name = first.string("name") ?: name,
-            profileImageUrl = first.string("profile_path")?.let { path -> "$imageBaseUrl/w342$path" },
-            knownFor = first.string("known_for_department"),
+            name = match.string("name") ?: trimmedName,
+            profileImageUrl = match.string("profile_path")?.let { path -> "$imageBaseUrl/w342$path" },
+            knownFor = match.string("known_for_department"),
         )
     }
 
@@ -187,8 +199,22 @@ class TmdbClient(
                     posterUrl = credit.string("poster_path")?.let { path -> "$imageBaseUrl/w185$path" },
                     character = credit.string("character")?.takeIf(String::isNotBlank),
                     popularity = credit.double("popularity") ?: 0.0,
+                    episodeCount = credit.int("episode_count"),
                 )
-            }.sortedByDescending(TmdbCredit::popularity)
+            }
+            // Appearances as themselves are not a filmography.
+            //
+            // TMDb files a talk-show visit as a cast credit with the character "Self" — or "Self -
+            // Guest", "Self - Nominee" — and those shows carry enormous popularity numbers. Sorted
+            // by popularity alone, Wagner Moura's page opened with The Daily Show, Late Night, The
+            // Kelly Clarkson Show and the Golden Globes, while Tropa de Elite and Cidade Baixa sat
+            // far below. Reported as an actor's films looking random, and that is exactly what it
+            // looked like.
+            .filterNot { credit -> credit.character.orEmpty().startsWith("Self", ignoreCase = true) }
+            // A single episode of a long-running series is a guest spot too, whatever the character
+            // is called. A real part runs for more than one — Narcos is twenty, Narcos: México two.
+            .filterNot { credit -> credit.isSeries && credit.episodeCount == 1 }
+            .sortedByDescending(TmdbCredit::popularity)
             .distinctBy { credit -> credit.title.lowercase() }
             .take(limit)
     }
@@ -950,6 +976,14 @@ data class TmdbCredit(
     val posterUrl: String?,
     val character: String?,
     val popularity: Double,
+    /**
+     * How many episodes of a series this credit covers. Null for a film.
+     *
+     * Read because it separates a part from an appearance: TMDb files a talk-show visit as a cast
+     * credit like any other, and one episode of a long-running show is a guest spot whatever the
+     * character is called.
+     */
+    val episodeCount: Int? = null,
 )
 
 data class TmdbPersonDetails(
@@ -1116,3 +1150,18 @@ private fun JsonObject.int(name: String): Int? =
 
 private fun JsonObject.double(name: String): Double? =
     get(name)?.takeUnless { it.isJsonNull }?.asDouble
+
+/**
+ * A name reduced to what makes two spellings "the same person" for matching purposes: case and
+ * accents folded away, whitespace collapsed. A provider's cast string and TMDb's own record of a
+ * name routinely differ in exactly these ways ("José" vs "jose", doubled spaces from a sloppy
+ * export) without being different people.
+ */
+private fun String.normalizedForNameComparison(): String =
+    java.text.Normalizer.normalize(trim(), java.text.Normalizer.Form.NFD)
+        .replace(DIACRITIC_MARKS, "")
+        .lowercase()
+        .replace(WHITESPACE_RUN, " ")
+
+private val DIACRITIC_MARKS = Regex("\\p{Mn}+")
+private val WHITESPACE_RUN = Regex("\\s+")

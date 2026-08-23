@@ -34,16 +34,28 @@ class SimilarTitlesWiringTest {
     }
 
     @Test
-    fun `the shelf sits under the cast`() {
-        // Placement is the request: below the actors, where somebody who has finished reading is
-        // deciding what to watch next.
-        listOf("MovieDetailContent", "SeriesDetailContent").forEach { pane ->
-            val body = workspace.substringAfter("private fun $pane(")
-            val castAt = body.indexOf("CastButtons(")
-            val shelfAt = body.indexOf("SimilarTitlesShelf(")
-            assertTrue(castAt > 0, "$pane should draw the cast.")
-            assertTrue(shelfAt > castAt, "The shelf must come after the cast in $pane.")
-        }
+    fun `the shelf ends the film page, under the cast`() {
+        // A film ends with its cast, so the shelf follows it there.
+        val body = workspace.substringAfter("private fun MovieDetailContent(")
+        val castAt = body.indexOf("CastButtons(")
+        val shelfAt = body.indexOf("SimilarTitlesShelf(")
+        assertTrue(castAt > 0, "The film pane should draw the cast.")
+        assertTrue(shelfAt > castAt, "The shelf must come after the cast.")
+    }
+
+    @Test
+    fun `the shelf ends the series page, under the episodes`() {
+        // A series does not end with its cast — the episodes follow — and a shelf wedged between
+        // the two interrupts the thing the viewer opened the page for. Asked for in those terms.
+        val body = workspace.substringAfter("private fun SeriesDetailContent(")
+        val castAt = body.indexOf("CastButtons(")
+        val episodesAt = body.indexOf("EpisodeRow(")
+        val shelfAt = body.indexOf("SimilarTitlesShelf(")
+        assertTrue(castAt > 0 && episodesAt > 0, "The series pane draws a cast and episodes.")
+        assertTrue(
+            shelfAt > episodesAt,
+            "On a series the shelf belongs after the episode list, not between cast and seasons.",
+        )
     }
 
     @Test

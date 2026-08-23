@@ -3271,7 +3271,28 @@ class DesktopAppState(
             withContext(Dispatchers.IO) {
                 runCatching {
                     val client = TmdbClient(key)
-                    val services = client.watchProviderDirectory(region, forSeries = false)
+                    // Both catalogues, and both directories.
+                    //
+                    // This asked only for films, so a service's series were never fetched and the
+                    // Séries selector was filtering television against a list of films. Netflix
+                    // dropped out of it entirely — reported exactly that way — because none of its
+                    // series had ever been looked up to match against.
+                    //
+                    // The two directories overlap but are not the same: TMDb lists 85 providers for
+                    // films in BR and 68 for television. Distinct by provider id so a service in
+                    // both is still visited once.
+                    val services =
+                        (
+                            client.watchProviderDirectory(region, forSeries = false) +
+                                client.watchProviderDirectory(region, forSeries = true)
+                        )
+                            // One request per *service*, not per provider id. TMDb lists a service
+                            // several times over — "Netflix" and "Netflix Standard with Ads",
+                            // "Amazon Prime Video" and "Amazon Video" — and all of them fold to the
+                            // same label here, so fetching each id meant fetching the same
+                            // catalogue five times. Forty ids collapse to eight services, which is
+                            // the difference between three minutes and thirty seconds.
+                            .distinctBy { providerIdentityFor(it.name)?.label ?: it.name }
                     val byService = LinkedHashMap<String, MutableList<Pair<String, Int?>>>()
                     services.forEach { service ->
                         // Matched to the label this app recognises the service as, so the selector's
@@ -3281,16 +3302,20 @@ class DesktopAppState(
                         // Several pages, because one page is twenty titles and a filter built from
                         // twenty would miss almost everything the user owns. Stops early when a page
                         // comes back short, which means the service has no more to give.
-                        for (page in 1..SERVICE_INDEX_PAGES) {
-                            val batch =
-                                client.titlesOnProvider(
-                                    providerId = service.providerId,
-                                    region = region,
-                                    limit = SERVICE_INDEX_PAGE_SIZE,
-                                    page = page,
-                                )
-                            titles += batch.map { it.title to it.year }
-                            if (batch.size < SERVICE_INDEX_PAGE_SIZE) break
+                        // Films and series both, because the one selector filters both tabs.
+                        listOf(TmdbDiscoverKind.MOVIES, TmdbDiscoverKind.SERIES).forEach { kind ->
+                            for (page in 1..SERVICE_INDEX_PAGES) {
+                                val batch =
+                                    client.titlesOnProvider(
+                                        providerId = service.providerId,
+                                        region = region,
+                                        limit = SERVICE_INDEX_PAGE_SIZE,
+                                        kind = kind,
+                                        page = page,
+                                    )
+                                titles += batch.map { it.title to it.year }
+                                if (batch.size < SERVICE_INDEX_PAGE_SIZE) break
+                            }
                         }
                     }
                     ServiceTitleIndex.build(

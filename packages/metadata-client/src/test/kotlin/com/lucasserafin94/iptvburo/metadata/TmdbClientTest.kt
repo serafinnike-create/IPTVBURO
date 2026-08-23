@@ -93,6 +93,68 @@ class TmdbClientTest {
         assertEquals("https://images.test/w342/abc.jpg", person?.profileImageUrl)
     }
 
+    /**
+     * A search hit that does not match the query by name must not win over one that does, even
+     * when it comes first — TMDb ranks `search/person` by popularity, not by how well a result's
+     * name matches what was asked for. Taking the first result unconditionally previously attached
+     * a more-popular unrelated person's face and filmography to the name the viewer actually
+     * tapped, which is worse than the honest "no exact match" case this now falls back from.
+     */
+    @Test
+    fun `an exact name match wins over a more popular unrelated result listed first`() {
+        server.enqueue(
+            json(
+                """
+                {"results":[
+                    {"id":1,"name":"Someone Else Entirely","known_for_department":"Acting"},
+                    {"id":42,"name":"Wagner Moura","known_for_department":"Acting"}
+                ]}
+                """.trimIndent(),
+            ),
+        )
+
+        val person = client().findPerson("Wagner Moura")
+
+        assertEquals(42, person?.id)
+        assertEquals("Wagner Moura", person?.name)
+    }
+
+    /** Accents and case must not defeat the exact-match preference: they are the same name. */
+    @Test
+    fun `name matching ignores accents and case`() {
+        server.enqueue(
+            json(
+                """
+                {"results":[
+                    {"id":1,"name":"Unrelated Person","known_for_department":"Acting"},
+                    {"id":9,"name":"José", "known_for_department":"Acting"}
+                ]}
+                """.trimIndent(),
+            ),
+        )
+
+        val person = client().findPerson("jose")
+
+        assertEquals(9, person?.id)
+    }
+
+    /**
+     * Nothing matches by name at all: falls back to the first result rather than reporting no
+     * match, which is the old behaviour for a name TMDb only has a fuzzy hit for.
+     */
+    @Test
+    fun `falls back to the first result when nothing matches by name`() {
+        server.enqueue(
+            json(
+                """{"results":[{"id":5,"name":"Not Quite The Same Name","known_for_department":"Acting"}]}""",
+            ),
+        )
+
+        val person = client().findPerson("Completely Different Query")
+
+        assertEquals(5, person?.id)
+    }
+
     /** A person with no photo on file must still resolve; only the image is absent. */
     @Test
     fun `a person without a photo still resolves`() {

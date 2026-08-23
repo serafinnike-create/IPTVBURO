@@ -3043,17 +3043,6 @@ private fun SeriesDetailContent(
             // Portraits, the same as the film page. A series was showing its cast as one line of
             // comma-separated text, which is the raw field the provider sends rather than anything
             // the user can click.
-            details.cast?.let {
-                CastButtons(
-                    rawCast = it,
-                    onOpenPerson = onOpenPerson,
-                    photoFor = castPhotoFor,
-                    onRequestPhoto = onRequestCastPhoto,
-                )
-            }
-            // Under the cast, matching the film page.
-            SimilarTitlesShelf(similarTitles, onOpenSimilar, text, reclaimedInset)
-
             // Actions sit together above the episode list, matching the film page. Previously the
             // trailer was a full-width button buried between the metadata and the episodes, and
             // there was no way to favourite a series from its own page at all.
@@ -3200,8 +3189,14 @@ private fun SeriesDetailContent(
                 // showed five of twenty-four episodes and swallowed the wheel that should have
                 // scrolled the page.
                 val seasons = episodes.groupBy(XtreamEpisode::seasonNumber).toSortedMap()
+                // Closed to begin with, when there is a choice to make.
+                //
+                // Opening the first season by default put eighteen rows between the synopsis and
+                // everything below it, so a series with several seasons pushed the rest of the page
+                // — the shelf included — a long scroll away. With one season there is nothing to
+                // choose, so it stays open and the tabs are not drawn at all.
                 var openSeason by remember(details.providerId) {
-                    mutableStateOf(seasons.keys.firstOrNull())
+                    mutableStateOf(if (seasons.size > 1) null else seasons.keys.firstOrNull())
                 }
                 if (seasons.size > 1) {
                     FlowRow(
@@ -3212,7 +3207,9 @@ private fun SeriesDetailContent(
                         seasons.forEach { (season, seasonEpisodes) ->
                             val selected = season == openSeason
                             BuroInteractiveSurface(
-                                onClick = { openSeason = season },
+                                // Pressing the open season closes it, which is how every other
+                                // expander behaves and is the only way back to a short page.
+                                onClick = { openSeason = if (selected) null else season },
                                 shape = BuroRadius.Pill,
                                 background =
                                     if (selected) BuroColors.Primary else BuroColors.SurfaceHover,
@@ -3233,7 +3230,8 @@ private fun SeriesDetailContent(
                     }
                     Spacer(Modifier.height(BuroSpacing.Md))
                 }
-                val visible = seasons[openSeason] ?: episodes
+                val visible = if (openSeason == null) emptyList() else seasons[openSeason] ?: episodes
+                if (openSeason != null) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -3279,6 +3277,7 @@ private fun SeriesDetailContent(
                             )
                         }
                     }
+                }
                 }
                 Spacer(Modifier.height(BuroSpacing.Sm))
 
@@ -3326,6 +3325,27 @@ private fun SeriesDetailContent(
                     }
                 }
             }
+
+            // Moved down to sit against the shelf.
+            //
+            // The faces and the row of other titles are the same kind of thing — people and titles
+            // to go and look at — so they belong together at the foot of the page rather than with
+            // the ratings, which describe the series itself. Asked for in those terms.
+            details.cast?.let {
+                CastButtons(
+                    rawCast = it,
+                    onOpenPerson = onOpenPerson,
+                    photoFor = castPhotoFor,
+                    onRequestPhoto = onRequestCastPhoto,
+                )
+            }
+
+            // Last on the page, under the episodes.
+            //
+            // The film page puts it under the cast because that is where a film ends. A series does
+            // not end there — the episodes follow — and a shelf wedged between the cast and the
+            // seasons interrupts the thing the viewer came for. Asked for in exactly those terms.
+            SimilarTitlesShelf(similarTitles, onOpenSimilar, text, reclaimedInset)
 
             // Asked before anything is queued. This is the one control on the page that can start
             // eighty transfers and fill a disk, and it sits beside buttons that do something small
