@@ -70,6 +70,14 @@ data class CacheFillProgress(
     val total: Int = 0,
     val bytesWritten: Long = 0L,
     val state: CacheFillState = CacheFillState.IDLE,
+    /**
+     * Bytes per second, measured between two published reports, or null when there is not yet an
+     * interval to measure — the same "no honest figure rather than zero" rule the video download
+     * rate follows. Computed by whoever observes [CacheFillWorker]'s progress, not by the worker
+     * itself: the worker publishes a handful of times a second at most, cheaply, and the rate is a
+     * pure function of two consecutive [bytesWritten] readings and the time between them.
+     */
+    val bytesPerSecond: Long? = null,
 ) {
     /**
      * From 0.0 to 1.0, or null when there is nothing to measure yet.
