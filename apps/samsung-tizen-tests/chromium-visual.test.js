@@ -1320,22 +1320,32 @@ async function main() {
 
     await evaluate("BuroApp.state.screen='SHELL';BuroApp.state.section='MOVIES';BuroApp.state.screenData=null;BuroApp.render();BuroApp._openCategory('scale-movie-0');true");
     await waitFor("BuroApp.state.screenData && BuroApp.state.screenData.kind==='category' && BuroApp.state.screenData.items.length===200", 10000);
+    var scalePageSize = await evaluate("BuroApp._cataloguePageSize()");
     var scaleCategory = await evaluate("({items:BuroApp.state.screenData.items.length,total:BuroApp.state.screenData.catalogueTotalCount,hasMore:BuroApp.state.screenData.catalogueHasMore,domCards:document.querySelectorAll('.media-card').length,progressive:document.querySelector('.catalogue-progressive')&&document.querySelector('.catalogue-progressive').textContent,shells:document.querySelectorAll('#app .shell').length,scrollWidth:document.documentElement.scrollWidth,scrollHeight:document.documentElement.scrollHeight})");
     check('categoria grande abre somente os primeiros 200 de 1.000 itens',
         scaleCategory.items === 200 && scaleCategory.total === 1000 && scaleCategory.hasMore);
     check('controle progressivo informa a quantidade carregada e o total persistido',
         scaleCategory.progressive && scaleCategory.progressive.indexOf('200 / 1000') >= 0);
-    check('categoria grande materializa somente 200 cards no DOM', scaleCategory.domCards === 200);
+    /*
+      Lidos do banco e desenhados na tela sao numeros diferentes de proposito:
+      200 chegam da consulta — o mesmo conceito dos 200 do Android — e a pagina
+      desenha `CATALOGUE_PAGE_SIZE`. Ler em blocos grandes e barato; montar
+      cartoes prende o controle da TV, que foi o motivo de a pagina encolher.
+    */
+    check('categoria grande materializa uma pagina no DOM, nao o bloco lido',
+        scaleCategory.domCards === scalePageSize && scalePageSize < scaleCategory.items);
     check('catálogo de escala preserva shell único e sem overflow global',
         scaleCategory.shells === 1 && scaleCategory.scrollWidth <= 1920 && scaleCategory.scrollHeight <= 1080);
 
     await evaluate("document.querySelector('[data-action=category-load-more]').click();true");
-    await waitFor("BuroApp.state.screenData.items.length===400 && BuroApp.state.screenData.cataloguePage===1", 10000);
+    /* Sem exigir troca de pagina: com a pagina menor que o bloco lido, o que
+       chegou do banco ainda cabe nas paginas seguintes da mesma lista. */
+    await waitFor("BuroApp.state.screenData.items.length===400", 10000);
     var scaleSecondBlock = await evaluate("({items:BuroApp.state.screenData.items.length,domCards:document.querySelectorAll('.media-card').length,focused:document.querySelector('[data-action=category-load-more]').classList.contains('focused')})");
-    check('segundo bloco abre a página seguinte sem repetir os 200 anteriores',
+    check('segundo bloco chega inteiro sem repetir os 200 anteriores',
         scaleSecondBlock.items === 400 && await evaluate("new Set(BuroApp.state.screenData.items.map(function(row){return row.id;})).size===400"));
-    check('D-pad continua no carregamento progressivo com somente 200 cards visíveis',
-        scaleSecondBlock.domCards === 200 && scaleSecondBlock.focused);
+    check('D-pad continua no carregamento progressivo, com uma pagina no DOM',
+        scaleSecondBlock.domCards === scalePageSize && scaleSecondBlock.focused);
 
     for (var scaleLoaded = 600; scaleLoaded <= 1000; scaleLoaded += 200) {
         await evaluate("document.querySelector('[data-action=category-load-more]').click();true");
@@ -1344,10 +1354,14 @@ async function main() {
     var scaleCompleteCategory = await evaluate("({items:BuroApp.state.screenData.items.length,page:BuroApp.state.screenData.cataloguePage,domCards:document.querySelectorAll('.media-card').length,pages:document.querySelector('.catalogue-pagination')&&document.querySelector('.catalogue-pagination').getAttribute('aria-label'),hasLoadMore:Boolean(document.querySelector('[data-action=category-load-more]')),unique:new Set(BuroApp.state.screenData.items.map(function(row){return row.id;})).size})");
     check('quatro retomadas por cursor alcançam os 1.000 itens sem duplicação',
         scaleCompleteCategory.items === 1000 && scaleCompleteCategory.unique === 1000);
-    check('fim do cursor remove Carregar mais e conserva cinco páginas acessíveis',
-        !scaleCompleteCategory.hasLoadMore && scaleCompleteCategory.pages && scaleCompleteCategory.pages.indexOf('5') >= 0);
-    check('última página continua limitada a 200 cards no DOM',
-        scaleCompleteCategory.page === 4 && scaleCompleteCategory.domCards === 200);
+    /* Quantas paginas os mil itens rendem vem do tamanho da pagina, que o app
+       decide: fixar "cinco" aqui era congelar 1000/200 e quebrar assim que a
+       pagina encolheu para aliviar o DOM da TV. */
+    check('fim do cursor remove Carregar mais e conserva as paginas acessiveis',
+        !scaleCompleteCategory.hasLoadMore && scaleCompleteCategory.pages &&
+        scaleCompleteCategory.pages.indexOf(String(Math.ceil(1000 / scalePageSize))) >= 0);
+    check('a ultima pagina continua limitada a uma pagina de cards no DOM',
+        scaleCompleteCategory.domCards > 0 && scaleCompleteCategory.domCards <= scalePageSize);
 }
 
 async function cleanup() {

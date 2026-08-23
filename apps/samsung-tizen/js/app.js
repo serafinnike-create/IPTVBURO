@@ -104,7 +104,38 @@ var BuroApp = (function () {
     var sourceRefreshRequestId = 0;
     var SEARCH_PAGE_SIZE = 40;
     var SEARCH_DEBOUNCE_MILLIS = 300;
-    var CATALOGUE_PAGE_SIZE = 200;
+    /*
+      Quantos titulos uma categoria aberta mostra por pagina.
+
+      Eram duzentos, herdados de uma leitura equivocada da paridade com o
+      Android: la 200 e o limite da *consulta ao banco*
+      (`CatalogRepository.limit`, `ChannelDao.search`) — quantas linhas sao
+      buscadas, nao quantos cartoes sao desenhados. Aqui viraram duzentos
+      cartoes montados de uma vez, que e exatamente o peso que levou a
+      prateleira a carregar em blocos.
+
+      Quarenta e dois sao seis fileiras de sete: enchem a area visivel com folga
+      para rolar e deixam a pagina seguinte a um toque. Multiplo da fileira pelo
+      mesmo motivo do bloco da prateleira — uma fileira pela metade faz a pagina
+      parecer menor do que e.
+
+      A paridade com o Android continua, e do que importa: nenhuma das duas
+      plataformas prende o controle enquanto o DOM cresce.
+    */
+    var CATALOGUE_PAGE_SIZE = 42;
+
+    /*
+      Quantas linhas uma consulta ao banco traz por vez.
+
+      Separado do tamanho da pagina de proposito: ler e barato — e uma consulta
+      indexada — e desenhar nao, porque cada cartao vira DOM. Manter os dois no
+      mesmo numero fazia a TV consultar o banco a cada quarenta e dois titulos
+      quando a pagina encolheu, que e o oposto do que se queria.
+
+      Duzentos e o mesmo valor que o Android usa em `CatalogRepository.limit` e
+      `ChannelDao.search`, e ali sempre significou isto: linhas lidas.
+    */
+    var CATALOGUE_READ_SIZE = 200;
     /*
       Quantos títulos a prateleira acrescenta por vez.
 
@@ -7784,7 +7815,7 @@ var BuroApp = (function () {
         }
         state.sources.forEach(function (candidate) { if (candidate.id === category.sourceId) { source = candidate; } });
         requestId = beginCatalogueRequest('category', category.contentType, { category: category });
-        BuroStorage.categoryPage(category.sourceId, category.id, null, CATALOGUE_PAGE_SIZE, function (page) {
+        BuroStorage.categoryPage(category.sourceId, category.id, null, CATALOGUE_READ_SIZE, function (page) {
             /* Xtream e Stalker paginam no servidor: a categoria chega vazia da
                importação e só busca itens quando é aberta. M3U já vem inteira. */
             var lazy = source && (source.type === 'XTREAM' || source.type === 'STALKER');
@@ -8154,7 +8185,7 @@ var BuroApp = (function () {
     }
 
     function showRefreshedCategoryFromStorage(category, requestId, explicitRefresh, failed) {
-        BuroStorage.categoryPage(category.sourceId, category.id, null, CATALOGUE_PAGE_SIZE, function (page) {
+        BuroStorage.categoryPage(category.sourceId, category.id, null, CATALOGUE_READ_SIZE, function (page) {
             if (!catalogueRequestCurrent(requestId)) { return; }
             showStoredCategoryPage(category, page);
             if (explicitRefresh) { showToast(t('categoryRefreshed'), false); }
@@ -8302,7 +8333,7 @@ var BuroApp = (function () {
         data.catalogueLoadingMore = true;
         render();
         BuroStorage.categoryPage(category.sourceId, category.id, data.catalogueNextCursor,
-            CATALOGUE_PAGE_SIZE, function (page) {
+            CATALOGUE_READ_SIZE, function (page) {
                 var known = {};
                 var newFiltered;
                 var newPageCount;
@@ -9857,6 +9888,7 @@ var BuroApp = (function () {
         /* O tamanho do bloco muda para caber na fileira da TV; os testes leem daqui
            em vez de repetir o número e quebrar a cada ajuste. */
         _catalogueBlockSize: function () { return CATALOGUE_BLOCK_SIZE; },
+        _cataloguePageSize: function () { return CATALOGUE_PAGE_SIZE; },
         _artworkFor: function (itemId) { return artworkMemory[itemId]; },
         _rememberArtworkMap: rememberArtworkMap,
         _artworkCount: function () { return Object.keys(artworkMemory).length; },

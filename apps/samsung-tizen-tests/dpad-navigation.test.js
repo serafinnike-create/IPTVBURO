@@ -1979,9 +1979,21 @@ async function run() {
     window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-reset"]'));
     check('limpar filtros restaura todos os títulos', window.document.querySelectorAll('.media-card').length === 3);
 
+    /*
+      O tamanho da pagina vem do app, nao daqui.
+
+      Ele ja mudou uma vez — eram 200, herdados de uma leitura equivocada da
+      paridade com o Android, onde 200 e o limite da *consulta ao banco* e nao
+      de cartoes desenhados — e um numero fixo aqui quebrava a suite sem apontar
+      defeito. O catalogo do teste e duas paginas e sobra, para exercitar o
+      avanco e a ultima pagina curta seja qual for o tamanho.
+    */
+    var CATALOGUE_PAGE = window.BuroApp._cataloguePageSize();
+    var CATALOGUE_REMAINDER = 8;
+    var CATALOGUE_TOTAL = CATALOGUE_PAGE * 2 + CATALOGUE_REMAINDER;
     var pagedCatalogueRows = [];
     var catalogueIndex;
-    for (catalogueIndex = 0; catalogueIndex < 450; catalogueIndex += 1) {
+    for (catalogueIndex = 0; catalogueIndex < CATALOGUE_TOTAL; catalogueIndex += 1) {
         pagedCatalogueRows.push({
             id: 'movie:catalogue-page-' + catalogueIndex, sourceId: 'source-home', contentType: 'MOVIE',
             name: 'Filme paginado ' + ('000' + catalogueIndex).slice(-3)
@@ -1992,41 +2004,54 @@ async function run() {
         items: pagedCatalogueRows, cataloguePage: 0
     };
     window.BuroApp.render();
-    check('categoria extensa limita o DOM aos mesmos 200 itens por página usados no Android',
-        window.document.querySelectorAll('.media-card').length === 200 &&
+    /* A paridade com o Android que importa nao e o numero, e o comportamento:
+     nenhuma das duas plataformas monta o catalogo inteiro de uma vez. */
+    check('categoria extensa limita o DOM a uma pagina, como no Android',
+        window.document.querySelectorAll('.media-card').length === CATALOGUE_PAGE &&
         window.document.body.textContent.indexOf('Página 1 de 3') >= 0 &&
         Boolean(window.document.querySelector('[data-action="category-page-next"]')));
     window.BuroApp._activate(window.document.querySelector('[data-action="category-page-next"]'));
-    check('próxima página mantém 200 cards e foco repetível no controle remoto',
+    check('próxima página mantém a página cheia e foco repetível no controle remoto',
         window.BuroApp.state.screenData.cataloguePage === 1 &&
-        window.document.querySelectorAll('.media-card').length === 200 &&
+        window.document.querySelectorAll('.media-card').length === CATALOGUE_PAGE &&
         window.document.querySelector('[data-action="category-page-next"]').classList.contains('focused'));
     window.BuroApp._activate(window.document.querySelector('[data-action="category-page-next"]'));
     check('última página mostra somente o restante e deixa Voltar focado',
         window.BuroApp.state.screenData.cataloguePage === 2 &&
-        window.document.querySelectorAll('.media-card').length === 50 &&
+        window.document.querySelectorAll('.media-card').length === CATALOGUE_REMAINDER &&
         !window.document.querySelector('[data-action="category-page-next"]') &&
         window.document.querySelector('[data-action="category-page-previous"]').classList.contains('focused'));
     window.BuroApp._activate(window.document.querySelector('[data-action="category-page-previous"]'));
     check('página anterior volta sem perder nem duplicar itens do catálogo',
         window.BuroApp.state.screenData.cataloguePage === 1 &&
-        window.document.querySelectorAll('.media-card').length === 200 &&
-        window.BuroApp.state.screenData.items.length === 450);
+        window.document.querySelectorAll('.media-card').length === CATALOGUE_PAGE &&
+        window.BuroApp.state.screenData.items.length === CATALOGUE_TOTAL);
     window.BuroApp.state.screenData.cataloguePage = 2;
     window.BuroApp.render();
     window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-sort"]'));
-    check('alterar ordenação reinicia na primeira página sem mutar os 450 itens',
+    check('alterar ordenação reinicia na primeira página sem mutar o catálogo',
         window.BuroApp.state.screenData.cataloguePage === 0 &&
-        window.document.querySelectorAll('.media-card').length === 200 &&
-        window.BuroApp.state.screenData.items.length === 450);
+        window.document.querySelectorAll('.media-card').length === CATALOGUE_PAGE &&
+        window.BuroApp.state.screenData.items.length === CATALOGUE_TOTAL);
 
     var originalCategoryPage = window.BuroStorage.categoryPage;
+    /*
+      Este bloco mede outra coisa: quantas linhas sao *lidas do banco* por vez,
+      que e o mesmo conceito dos 200 do Android. Nao depende do tamanho da
+      pagina desenhada, entao tem os proprios dados em vez de reusar os de cima.
+    */
+    var PROGRESSIVE_READ = 200;
+    var PROGRESSIVE_TOTAL = 450;
     var progressiveCalls = 0;
-    var progressiveRows = pagedCatalogueRows.map(function (item, index) {
-        item.categoryId = 'cat-progressive';
-        item.sortOrder = index;
-        return item;
-    });
+    var progressiveIndex;
+    var progressiveRows = [];
+    for (progressiveIndex = 0; progressiveIndex < PROGRESSIVE_TOTAL; progressiveIndex += 1) {
+        progressiveRows.push({
+            id: 'movie:progressive-' + progressiveIndex, sourceId: 'source-home', contentType: 'MOVIE',
+            name: 'Filme progressivo ' + ('000' + progressiveIndex).slice(-3),
+            categoryId: 'cat-progressive', sortOrder: progressiveIndex
+        });
+    }
     window.BuroStorage.categoryPage = function (sourceId, categoryId, cursor, limit, success) {
         var start = progressiveCalls === 0 ? 200 : 400;
         var end = progressiveCalls === 0 ? 400 : 450;
@@ -2052,20 +2077,33 @@ async function run() {
         window.BuroApp.state.screenData.items.length === 200 &&
         window.document.querySelector('[data-action="category-load-more"]').parentNode.textContent.indexOf('200 / 450') >= 0);
     window.BuroApp._activate(window.document.querySelector('[data-action="category-load-more"]'));
-    await waitFor(function () { return window.BuroApp.state.screenData.items.length === 400; }, 4000);
-    check('Carregar mais acrescenta um bloco e abre a próxima página mantendo 200 cards no DOM',
-        window.BuroApp.state.screenData.cataloguePage === 1 &&
-        window.document.querySelectorAll('.media-card').length === 200 &&
+    await waitFor(function () {
+        return window.BuroApp.state.screenData.items.length === PROGRESSIVE_READ * 2;
+    }, 4000);
+    /*
+      Duas grandezas diferentes, de propósito: o bloco lido do banco é de 200 —
+      o mesmo conceito dos 200 do Android — e a página desenhada é menor. Ler em
+      blocos grandes é barato; montar cartões não é.
+
+      Por isso "Carregar mais" já não salta de página: com a página menor que o
+      bloco, o que chegou do banco ainda cabe nas páginas seguintes da mesma
+      lista. Antes, com página e bloco do mesmo tamanho, cada leitura empurrava
+      para a próxima página — era consequência do tamanho, não uma regra.
+    */
+    check('Carregar mais traz mais um bloco do banco sem inchar o DOM',
+        window.BuroApp.state.screenData.items.length === PROGRESSIVE_READ * 2 &&
+        window.document.querySelectorAll('.media-card').length === CATALOGUE_PAGE &&
         window.document.querySelector('[data-action="category-load-more"]').classList.contains('focused'));
     window.BuroApp._activate(window.document.querySelector('[data-action="category-load-more"]'));
-    await waitFor(function () { return window.BuroApp.state.screenData.items.length === 450; }, 4000);
-    check('último bloco encerra o cursor, mostra 50 cards e preserva navegação para trás',
-        window.BuroApp.state.screenData.cataloguePage === 2 &&
-        window.document.querySelectorAll('.media-card').length === 50 &&
-        !window.document.querySelector('[data-action="category-load-more"]') &&
-        window.document.querySelector('[data-action="category-page-previous"]').classList.contains('focused'));
+    await waitFor(function () {
+        return window.BuroApp.state.screenData.items.length === PROGRESSIVE_TOTAL;
+    }, 4000);
+    check('o último bloco encerra o cursor e o botão sai da tela',
+        window.BuroApp.state.screenData.items.length === PROGRESSIVE_TOTAL &&
+        window.document.querySelectorAll('.media-card').length === CATALOGUE_PAGE &&
+        !window.document.querySelector('[data-action="category-load-more"]'));
     check('blocos progressivos não repetem identidades',
-        new Set(window.BuroApp.state.screenData.items.map(function (item) { return item.id; })).size === 450 && progressiveCalls === 2);
+        new Set(window.BuroApp.state.screenData.items.map(function (item) { return item.id; })).size === PROGRESSIVE_TOTAL && progressiveCalls === 2);
     window.BuroStorage.categoryPage = originalCategoryPage;
 
     window.BuroApp.state.section = 'SERIES';
