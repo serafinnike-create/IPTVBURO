@@ -1629,7 +1629,11 @@ class DesktopAppState(
         if (!metadataClient.isConfigured) return
         val requested = title.trim()
         if (requested.isBlank()) return
-        if (audienceScoreFor == requested) return
+        // The same title asked for twice keeps the answer it already has rather than paying for
+        // it again — but only when that answer is actually still on hand. Reopening a film clears
+        // the shelf, and returning here on the strength of the remembered *name* left it empty for
+        // the rest of the session with nothing in flight to fill it.
+        if (audienceScoreFor == requested && similarTitles.isNotEmpty()) return
 
         audienceScoreFor = requested
         audienceScore = null

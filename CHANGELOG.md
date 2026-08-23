@@ -2,6 +2,23 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [3.1.1] - 2026-08-23 (Windows)
+
+### Windows
+
+#### Corrigido
+
+- **A prateleira de títulos parecidos ficava vazia ao reabrir um filme.** O
+  sintoma que permitiu achar isso foi a nota da TMDb estar visível e a
+  prateleira não: as duas dependem da mesma consulta, então a nota na tela
+  prova que a consulta rodou e reconheceu o filme.
+
+  A causa era a proteção que evita pagar duas vezes pela mesma nota. Ela
+  guardava o **nome** do título e voltava cedo quando ele repetia — correto
+  para a nota, que já estava em mãos, e errado para a prateleira, porque abrir
+  um filme limpa a prateleira antes. Na segunda visita ela era limpa e nada a
+  preenchia de volta, e continuava vazia pelo resto da sessão.
+
 ## [3.1.0] - 2026-08-22 (Windows)
 
 ### Windows
