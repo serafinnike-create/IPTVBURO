@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -28,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.download.DISPLAY_LOCALE
+import com.lucasserafin94.iptvburo.desktop.download.formatRate
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
@@ -95,6 +97,31 @@ fun CacheChoicePanel(
     modifier: Modifier = Modifier,
 ) {
     val text = strings.shareStrings.cache
+    var confirmingClear by remember { mutableStateOf(false) }
+
+    if (confirmingClear) {
+        AlertDialog(
+            onDismissRequest = { confirmingClear = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmingClear = false
+                        onClear()
+                    },
+                ) {
+                    Text(text.clear, color = BuroColors.Error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingClear = false }) {
+                    Text(strings.cancel, color = BuroColors.TextMuted)
+                }
+            },
+            title = { Text(text.clearTitle, color = BuroColors.Text) },
+            text = { Text(text.clearBody, color = BuroColors.TextMuted) },
+            containerColor = BuroColors.SurfaceRaised,
+        )
+    }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm)) {
         if (showTitle) {
@@ -247,12 +274,25 @@ private fun CacheProgressRow(
     val text = strings.shareStrings.cache
 
     Column(verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xxs)) {
+        // The count, the percentage, and how fast it is going.
+        //
+        // It said only "N de M", which answers "how far" only if you do the division yourself, and
+        // said nothing at all about speed — so a slow fill and a stalled one looked identical. The
+        // progress already carried a measured rate that nothing displayed. Same rule as the update
+        // download: a figure appears once it means something and is left out until then, because an
+        // estimate from the first moments swings wildly and reads as broken.
         Text(
             text =
                 if (progress.state == CacheFillState.COMPLETE) {
                     text.complete
                 } else {
-                    "${text.filling} — ${text.progress.format(progress.done, progress.total)}"
+                    buildList {
+                        add("${text.filling} — ${text.progress.format(progress.done, progress.total)}")
+                        progress.fraction?.let { done -> add("${(done * 100).toInt()}%") }
+                        progress.bytesPerSecond?.takeIf { rate -> rate > 0L }?.let { rate ->
+                            add(formatRate(rate))
+                        }
+                    }.joinToString("  ·  ")
                 },
             color = BuroColors.TextMuted,
             style = MaterialTheme.typography.bodySmall,

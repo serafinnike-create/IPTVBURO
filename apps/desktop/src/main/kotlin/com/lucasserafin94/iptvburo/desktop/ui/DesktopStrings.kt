@@ -752,6 +752,8 @@ data class DesktopStrings(
                             complete = "Tudo guardado.",
                             used = "Em uso: %s",
                             clear = "Limpar cache",
+                            clearTitle = "Limpiar el caché de portadas?",
+                            clearBody = "Las portadas guardadas se borrarán y habrá que descargarlas de nuevo. No se pierde nada de tu lista.",
                             restartNote = "Mudar o tamanho vale a partir da próxima vez que você abrir o app.",
                             percent = "%d%%",
                             refresh = "Actualizar",
@@ -1462,6 +1464,8 @@ data class DesktopStrings(
                             complete = "Tudo guardado.",
                             used = "Em uso: %s",
                             clear = "Limpar cache",
+                            clearTitle = "Limpar o cache de capas?",
+                            clearBody = "As capas já guardadas serão apagadas e precisarão ser baixadas de novo. Nada da sua lista é perdido.",
                             restartNote = "Mudar o tamanho vale a partir da próxima vez que você abrir o app.",
                             percent = "%d%%",
                             refresh = "Atualizar",
@@ -2172,6 +2176,8 @@ data class DesktopStrings(
                             complete = "Everything is stored.",
                             used = "In use: %s",
                             clear = "Clear cache",
+                            clearTitle = "Clear the cover cache?",
+                            clearBody = "The stored covers will be deleted and downloaded again as they are needed. Nothing in your library is lost.",
                             restartNote = "A change of size takes effect the next time you open the app.",
                             percent = "%d%%",
                             refresh = "Refresh",
@@ -2881,6 +2887,8 @@ data class DesktopStrings(
                             complete = "Alles gespeichert.",
                             used = "Belegt: %s",
                             clear = "Cache leeren",
+                            clearTitle = "Cover-Cache leeren?",
+                            clearBody = "Die gespeicherten Cover werden gelöscht und bei Bedarf erneut geladen. Aus Ihrer Liste geht nichts verloren.",
                             restartNote = "Eine Groessenaenderung gilt ab dem naechsten Start der App.",
                             percent = "%d%%",
                             refresh = "Aktualisieren",
@@ -3595,6 +3603,8 @@ data class DesktopStrings(
                             complete = "Tutto salvato.",
                             used = "In uso: %s",
                             clear = "Svuota cache",
+                            clearTitle = "Svuotare la cache delle copertine?",
+                            clearBody = "Le copertine salvate verranno eliminate e scaricate di nuovo quando serviranno. Non si perde nulla della tua lista.",
                             restartNote = "Il cambio di dimensione vale dalla prossima apertura dell'app.",
                             percent = "%d%%",
                             refresh = "Aggiorna",
@@ -4401,6 +4411,10 @@ data class CacheStrings(
     val used: String,
     /** Empties the cache. */
     val clear: String,
+    /** Title of the confirmation, because clearing throws away a fill that took minutes. */
+    val clearTitle: String,
+    /** What is lost by clearing, in plain terms. */
+    val clearBody: String,
     /** That a size change waits for the next launch, because Coil is built once per process. */
     val restartNote: String,
     /** Percentage on the always-visible bar. Takes a whole number. */
