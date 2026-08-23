@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -92,6 +93,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.CastSendState
 import com.lucasserafin94.iptvburo.desktop.CatalogLayout
@@ -1955,6 +1957,7 @@ internal fun XtreamItemDetail(
                 }
                 SeriesDetailContent(
                     status = seriesStatus,
+                    reclaimedInset = if (compact) 0.dp else POSTER_COLUMN_INSET,
                     similarTitles = similarTitles,
                     onOpenSimilar = onOpenSimilar,
                     // The same two the film page receives. Series had neither, so the page showed
@@ -2211,6 +2214,7 @@ internal fun XtreamItemDetail(
                 if (item.contentType == XtreamContentType.MOVIE) {
                     MovieDetailContent(
                         status = movieStatus,
+                        reclaimedInset = if (compact) 0.dp else POSTER_COLUMN_INSET,
                         audienceScore = audienceScore,
                         criticScores = criticScores,
                         onRetry = onLoadMovie,
@@ -2367,6 +2371,8 @@ private fun MovieDetailContent(
     onRequestCastPhoto: suspend (String) -> Unit = {},
     similarTitles: List<PersonCredit> = emptyList(),
     onOpenSimilar: suspend (PersonCredit) -> Unit = {},
+    /** How far the poster column indents this pane, so the shelf can climb back out of it. */
+    reclaimedInset: Dp = 0.dp,
 ) {
     when (status) {
         // Idle is not loading, and drawing it as though it were is what left this page spinning
@@ -2434,7 +2440,7 @@ private fun MovieDetailContent(
                 )
             }
             // Under the cast, because it answers "what next" rather than "what is this".
-            SimilarTitlesShelf(similarTitles, onOpenSimilar, strings)
+            SimilarTitlesShelf(similarTitles, onOpenSimilar, strings, reclaimedInset)
         }
     }
 }
@@ -2451,104 +2457,145 @@ private fun MovieDetailContent(
  * catalogue first and fall back to asking where it can be watched, rather than opening an empty
  * page. Reusing it also means the "searching…" behaviour is the one the user has already seen.
  */
+/**
+ * Everything holding the similar-titles shelf away from the left edge of the window.
+ *
+ * Three things stack up: the poster is 208dp, the gap after it is another 24, and the page itself
+ * is padded by 24 more. Prose wants all of that — a synopsis set against the whole window is
+ * genuinely harder to read — but a rail of posters does not, and indented it fitted three fewer
+ * cards while the left of the window sat empty.
+ *
+ * Named because two places have to agree about it: the layout that creates the inset and the shelf
+ * that climbs back out.
+ */
+private val POSTER_COLUMN_INSET = 208.dp + BuroSpacing.Lg + BuroSpacing.Lg
+
 @Composable
 private fun SimilarTitlesShelf(
     titles: List<PersonCredit>,
     onOpenCredit: suspend (PersonCredit) -> Unit,
     text: DesktopStrings,
+    /**
+     * How far this shelf sits inside the poster's column, so it can climb back out.
+     *
+     * Everything else on this page is prose and belongs in that narrower measure — a synopsis
+     * set against the whole window is genuinely harder to read. A rail of posters is not prose:
+     * indented it wasted the empty left of the window and fitted three fewer cards, which is what
+     * was reported. Zero on the compact layout, which has no poster column to escape.
+     */
+    reclaimedInset: Dp = 0.dp,
 ) {
     if (titles.isEmpty()) return
     val scope = rememberCoroutineScope()
     var openingTitle by remember { mutableStateOf<String?>(null) }
+    val shelfScroll = rememberScrollState()
 
     Spacer(Modifier.height(BuroSpacing.Md))
-    Text(
-        text.shareStrings.screens.similarTitles,
-        color = BuroColors.TextMuted,
-        style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-    )
-    val shelfScroll = rememberScrollState()
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(shelfScroll),
-        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
-    ) {
-        titles.forEach { similar ->
-            Column(
-                modifier =
-                    Modifier
-                        .width(120.dp)
-                        .clip(BuroRadius.Small)
-                        .clickable(enabled = openingTitle == null) {
-                            scope.launch {
-                                openingTitle = similar.title
-                                try {
-                                    onOpenCredit(similar)
-                                } finally {
-                                    openingTitle = null
-                                }
-                            }
-                        },
-            ) {
-                BuroRemoteArtwork(
-                    artworkUrl = similar.posterUrl,
-                    contentDescription = similar.title,
+    // `offset` rather than a negative padding: it moves this shelf alone and leaves the text above
+    // it measured as it was, which is the whole point of pulling only the rail out.
+    Column(modifier = Modifier.offset(x = -reclaimedInset)) {
+        Text(
+            text.shareStrings.screens.similarTitles,
+            color = BuroColors.TextMuted,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    // The parent's width plus what the poster column was holding back.
+                    .layout { measurable, constraints ->
+                        // The page's own padding is on the right as well, so the rail reclaims it
+                        // at both ends and runs the full width of the window.
+                        val widened =
+                            constraints.maxWidth + reclaimedInset.roundToPx() +
+                                BuroSpacing.Lg.roundToPx()
+                        val placeable =
+                            measurable.measure(constraints.copy(maxWidth = widened, minWidth = 0))
+                        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                    }
+                    .horizontalScroll(shelfScroll),
+            horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+        ) {
+            titles.forEach { similar ->
+                Column(
                     modifier =
                         Modifier
                             .width(120.dp)
-                            .aspectRatio(2f / 3f)
                             .clip(BuroRadius.Small)
-                            .background(BuroColors.SurfaceRaised),
-                    contentScale = ContentScale.Crop,
+                            .clickable(enabled = openingTitle == null) {
+                                scope.launch {
+                                    openingTitle = similar.title
+                                    try {
+                                        onOpenCredit(similar)
+                                    } finally {
+                                        openingTitle = null
+                                    }
+                                }
+                            },
                 ) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        XtreamMonogram(similar.title, 34)
+                    BuroRemoteArtwork(
+                        artworkUrl = similar.posterUrl,
+                        contentDescription = similar.title,
+                        modifier =
+                            Modifier
+                                .width(120.dp)
+                                .aspectRatio(2f / 3f)
+                                .clip(BuroRadius.Small)
+                                .background(BuroColors.SurfaceRaised),
+                        contentScale = ContentScale.Crop,
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            XtreamMonogram(similar.title, 34)
+                        }
                     }
-                }
-                // The card that was pressed says so while the catalogue is searched, because that
-                // sweep runs over tens of thousands of rows and silence reads as a dead click.
-                if (openingTitle == similar.title) {
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth().height(2.dp),
-                        color = BuroColors.Primary,
-                        trackColor = BuroColors.SurfaceRaised,
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = similar.title,
-                    color = BuroColors.Text,
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                similar.year?.let { year ->
+                    // The card that was pressed says so while the catalogue is searched, because
+                    // that sweep runs over tens of thousands of rows and silence reads as a dead
+                    // click.
+                    if (openingTitle == similar.title) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().height(2.dp),
+                            color = BuroColors.Primary,
+                            trackColor = BuroColors.SurfaceRaised,
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        text = year.toString(),
-                        color = BuroColors.TextSubtle,
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
+                        text = similar.title,
+                        color = BuroColors.Text,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                    similar.year?.let { year ->
+                        Text(
+                            text = year.toString(),
+                            color = BuroColors.TextSubtle,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
         }
+        // A scrollbar, because a row that runs past the edge with no handle is the defect this app
+        // has already fixed twice elsewhere.
+        //
+        // Styled like every other scrollbar here rather than left to the default. Compose's default
+        // track is a pale grey built for a light theme, and against this background it read as a
+        // white line across the foot of the window — reported as exactly that.
+        HorizontalScrollbar(
+            adapter = rememberScrollbarAdapter(shelfScroll),
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            style =
+                LocalScrollbarStyle.current.copy(
+                    thickness = 8.dp,
+                    unhoverColor = BuroColors.BorderSoft,
+                    hoverColor = BuroColors.Primary,
+                ),
+        )
     }
-    // A scrollbar, because a row that runs past the edge with no handle is the defect this app has
-    // already fixed twice elsewhere.
-    //
-    // Styled like every other scrollbar here rather than left to the default. Compose's default
-    // track is a pale grey built for a light theme, and against this background it read as a white
-    // line across the foot of the window — reported as exactly that.
-    HorizontalScrollbar(
-        adapter = rememberScrollbarAdapter(shelfScroll),
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        style =
-            LocalScrollbarStyle.current.copy(
-                thickness = 8.dp,
-                unhoverColor = BuroColors.BorderSoft,
-                hoverColor = BuroColors.Primary,
-            ),
-    )
 }
 
 @Composable
@@ -2873,6 +2920,8 @@ private fun SeriesDetailContent(
     similarTitles: List<PersonCredit> = emptyList(),
     /** The same route the film shelf uses, so a series outside this playlist still opens. */
     onOpenSimilar: suspend (PersonCredit) -> Unit = {},
+    /** How far the poster column indents this pane, so the shelf can climb back out of it. */
+    reclaimedInset: Dp = 0.dp,
     /** The audience score, once TMDb has answered. Null draws no ratings block at all. */
     audienceScore: TmdbAudienceScore? = null,
     /** The critics' scores, which appear under the audience one when they exist. */
@@ -3003,7 +3052,7 @@ private fun SeriesDetailContent(
                 )
             }
             // Under the cast, matching the film page.
-            SimilarTitlesShelf(similarTitles, onOpenSimilar, text)
+            SimilarTitlesShelf(similarTitles, onOpenSimilar, text, reclaimedInset)
 
             // Actions sit together above the episode list, matching the film page. Previously the
             // trailer was a full-width button buried between the metadata and the episodes, and
