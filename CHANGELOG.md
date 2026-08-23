@@ -2,6 +2,28 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [3.1.0] - 2026-08-22 (Windows)
+
+### Windows
+
+#### Adicionado
+
+- **Prateleira de títulos parecidos, abaixo do elenco**, em filmes e séries.
+
+  A **franquia vem primeiro**: abrir *Superman* (1978) mostra Superman I, II,
+  III e IV, em ordem de lançamento. Depois dela vêm as recomendações da TMDb —
+  o que as pessoas assistem junto —, porque as duas respondem perguntas
+  diferentes e a primeira costuma ser a que você quis fazer. Medido contra o
+  serviço real: perguntando sobre Superman, as recomendações respondem *The
+  Flash* e *Adão Negro*; a coleção responde os quatro Superman.
+
+  Séries não têm coleção na TMDb, então para elas a prateleira são as
+  recomendações.
+
+  Clicar num cartão usa o mesmo caminho da filmografia de um ator: procura na
+  sua lista primeiro e, se o título não estiver lá, leva para Assinaturas em
+  vez de abrir uma tela vazia.
+
 ## [3.0.6] - 2026-08-22 (Windows)
 
 ### Windows
