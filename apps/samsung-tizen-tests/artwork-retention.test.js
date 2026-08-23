@@ -241,6 +241,37 @@ async function run() {
             logoUrl: 'https://cdn.com/a.jpg?token=abc'
         }).logoUrl === null);
 
+    /*
+      A query string de dimensionamento, que antes derrubava a capa inteira.
+
+      Recusar toda query era seguro e caro demais: muito CDN serve `?w=300` ou
+      `?v=2`, sem credencial nenhuma, e essas capas nunca eram gravadas —
+      apareciam enquanto a memoria as tinha e sumiam depois. Era o "algumas
+      capas nao carregam".
+
+      A regra e uma lista de nomes permitidos: o que nao esta nela derruba a
+      URL, entao um nome novo de token nunca passa por esquecimento.
+    */
+    process.stdout.write('Query de tamanho passa; query com credencial nao' + String.fromCharCode(10));
+    check('dimensao e versao sao gravaveis',
+        window.BuroDomain.isStorableReminderArtwork('https://cdn.com/a.jpg?w=300') &&
+        window.BuroDomain.isStorableReminderArtwork('https://cdn.com/a.jpg?v=2') &&
+        window.BuroDomain.isStorableReminderArtwork('https://cdn.com/a.jpg?w=300&h=450'));
+    check('token, auth e URL assinada continuam recusados',
+        !window.BuroDomain.isStorableReminderArtwork('https://cdn.com/a.jpg?token=abc') &&
+        !window.BuroDomain.isStorableReminderArtwork('https://cdn.com/a.jpg?auth=xyz') &&
+        !window.BuroDomain.isStorableReminderArtwork('https://s.com/a.jpg?Expires=1&Signature=x'));
+    check('usuario e senha na query continuam recusados',
+        !window.BuroDomain.isStorableReminderArtwork('http://h/get.php?username=u&password=p'));
+    /* O valor tambem e conferido: um token nao vira inofensivo por estar num
+       parametro de nome conhecido. */
+    check('um token escondido num parametro de tamanho nao passa',
+        !window.BuroDomain.isStorableReminderArtwork('https://cdn.com/a.jpg?w=eyJhbGciOiJIUzI1NiJ9zzz'));
+    check('tamanho misturado com token derruba a URL inteira',
+        !window.BuroDomain.isStorableReminderArtwork('https://cdn.com/a.jpg?w=300&token=abc'));
+    check('uma query longa demais e recusada, venha o nome que vier',
+        !window.BuroDomain.isStorableReminderArtwork('https://cdn.com/a.jpg?a=1&b=2&c=3&d=4&e=5'));
+
     window.close();
 
     process.stdout.write('\n');

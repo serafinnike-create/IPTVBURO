@@ -694,9 +694,11 @@ async function main() {
 
     var boot = await evaluate("(function () { document.querySelector('[data-action=select-language][data-language=\"pt-BR\"]').click(); var panel = document.querySelector('.boot-panel'); var r = panel && panel.getBoundingClientRect(); return { screen: BuroApp.state.screen, dots: document.querySelectorAll('.boot-dot').length, progress: Number(document.querySelector('.boot-progress') && document.querySelector('.boot-progress').getAttribute('aria-valuenow')), rectangle: r && { left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height }, scrollWidth:document.documentElement.scrollWidth, scrollHeight:document.documentElement.scrollHeight }; }())");
     process.stdout.write('Carregamento cinematico\n');
-    /* Cinco passos: a varredura do catalogo entrou na abertura, para o app so
-       aparecer com as prateleiras cheias — ver BOOT_STEPS em js/app.js. */
-    check('selecao do idioma abre imediatamente a tela de carregamento', boot.screen === 'BOOT' && boot.dots === 5 && boot.progress >= 20 && boot.progress <= 100);
+    /* O numero de passos vem do app e nao daqui: `BOOT_STEPS` cresceu duas vezes
+       (a varredura do catalogo, depois a montagem da Home) e um numero fixo
+       neste teste quebrava a suite a cada vez sem apontar defeito nenhum. O que
+       importa e haver passos, e a barra ja ter saido do zero. */
+    check('selecao do idioma abre imediatamente a tela de carregamento', boot.screen === 'BOOT' && boot.dots >= 4 && boot.progress > 0 && boot.progress <= 100);
     check('painel de carregamento fica inteiro e sem overflow global', rectInside(boot.rectangle) && boot.scrollWidth <= 1920 && boot.scrollHeight <= 1080);
     check('a tela de carregamento produz um quadro PNG nao vazio', await screenshotIsRendered('boot'));
 
@@ -800,6 +802,45 @@ async function main() {
         ratingPicker.listRight <= 1920);
     check('uma janela por vez', ratingPicker.lists === 1);
     await evaluate("document.querySelector('[data-action=catalogue-pick-rating]').click(); true");
+    await waitFor("!document.querySelector('.catalogue-options')");
+
+    /*
+      Descer pela lista com o D-pad tem de rolar a janela.
+
+      So aqui isto pode ser medido: o jsdom nao calcula layout, entao
+      `getBoundingClientRect` devolve zeros e nenhuma decisao de rolagem
+      acontece. O relato do usuario foi sobre ano, nota, servico e genero —
+      "como se o aplicativo nao deixou ir mais pra baixo" — e a causa era
+      `verticalContentFor` nao reconhecer a janela do seletor, que e
+      `position: absolute` com `overflow-y: auto` propria.
+    */
+    await evaluate("document.querySelector('[data-action=catalogue-pick-genre]').click(); true");
+    await waitFor("document.querySelector('.catalogue-options')");
+    var genreScroll = await evaluate("(function(){"
+        + "var list=document.querySelector('.catalogue-options');"
+        + "var count=list.querySelectorAll('.focusable').length;"
+        /* A fixture visual tem poucos generos, entao a janela cabe inteira e a
+           rolagem nunca seria exercitada. Encolhe-la aqui reproduz o caso do
+           usuario — dezenas de generos e de anos — sem inventar dados. */
+        + "list.style.maxHeight='120px';"
+        + "var scrolls=list.scrollHeight > list.clientHeight;"
+        + "BuroApp._focusAction('catalogue-pick-genre');"
+        + "for (var i=0;i<12;i++){ var e=new KeyboardEvent('keydown',{bubbles:true,cancelable:true});"
+        + "Object.defineProperty(e,'keyCode',{get:function(){return 40;}}); document.dispatchEvent(e); }"
+        + "var focused=list.querySelector('.focused');"
+        + "var fr=focused && focused.getBoundingClientRect(); var lr=list.getBoundingClientRect();"
+        + "return { count:count, scrolls:scrolls, scrollTop:Math.round(list.scrollTop),"
+        + " focusedInside: !!(fr && fr.top >= lr.top - 1 && fr.bottom <= lr.bottom + 1) };"
+        + "}())");
+    check('a lista de genero passa a nao caber na janela',
+        genreScroll.scrolls);
+    check('descer pelo D-pad rola a janela do seletor',
+        genreScroll.scrollTop > 0);
+    /* O que a pessoa precisa: a opcao focada visivel. Rolar sem isso nao
+       resolveria nada. */
+    check('e a opcao focada fica dentro da area visivel da lista',
+        genreScroll.focusedInside);
+    await evaluate("document.querySelector('[data-action=catalogue-pick-genre]').click(); true");
     await waitFor("!document.querySelector('.catalogue-options')");
 
     /* A categoria continua alcançável; na prateleira ela é filtro, então o

@@ -101,7 +101,7 @@ async function run() {
     var episode;
     var progressBar;
 
-    await waitFor(function () { return window.BuroApp.state.ready; }, 1000);
+    await waitFor(function () { return window.BuroApp.state.ready; }, 4000);
     state = window.BuroApp.state;
     source = { id: 'source-library-large', name: 'Biblioteca grande', type: 'REMOTE_M3U' };
     profile = { id: 'profile-library-large', name: 'Sala', avatarKey: 'gold', isKids: false, sourceId: source.id };
@@ -241,7 +241,7 @@ async function run() {
     var seedEpisode = item('episode:000-parent-hydration', 'source-seed', 'series:zz-parent-hydration', 'EPISODE', 'Episódio salvo');
     var seedParent = item('series:zz-parent-hydration', 'source-seed', 'cat-seed', 'SERIES', 'Série salva');
     var writes = [];
-    await waitFor(function () { return seedWindow.BuroApp.state.ready; }, 1000);
+    await waitFor(function () { return seedWindow.BuroApp.state.ready; }, 4000);
     writes.push(call(seedWindow, seedWindow.BuroStorage.put, ['profiles', seedProfile]));
     writes.push(call(seedWindow, seedWindow.BuroStorage.put, ['items', seedEpisode]));
     writes.push(call(seedWindow, seedWindow.BuroStorage.put, ['items', seedParent]));
@@ -260,7 +260,7 @@ async function run() {
         language: 'pt-BR', languageSelected: true, acceptedLegal: true,
         activeProfileId: seedProfile.id, section: 'CONTINUE_WATCHING'
     });
-    await waitFor(function () { return reloaded.BuroApp.state.ready; }, 1500);
+    await waitFor(function () { return reloaded.BuroApp.state.ready; }, 4000);
     check('boot busca o pai da série quando apenas o episódio cabia na amostra inicial',
         reloaded.BuroApp.state.items.some(function (row) { return row.id === seedEpisode.id; }) &&
         reloaded.BuroApp.state.items.some(function (row) { return row.id === seedParent.id; }));

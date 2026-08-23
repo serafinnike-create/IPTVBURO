@@ -133,9 +133,18 @@ async function typeDownloadQuery(window, value) {
     if (window.document.activeElement !== input) { throw new Error('download search input is not D-pad reachable'); }
     input.value = value;
     input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    /*
+      Quatro segundos, nao um.
+
+      Este arquivo roda no meio de uma suite de cinquenta arquivos jsdom: com um
+      segundo a espera estourava por lentidao da maquina, a funcao saia antes do
+      redesenho e o `querySelector` seguinte recebia nulo — uma falha que nao
+      existia quando o arquivo rodava sozinho. O limite continua existindo para
+      que um travamento real falhe.
+    */
     await waitFor(function () {
         return window.document.getElementById('download-query') !== input;
-    }, 1000);
+    }, 4000);
 }
 
 async function run() {
@@ -160,7 +169,7 @@ async function run() {
     for (index = 90; index < 95; index += 1) { snapshot.push(downloadEntry(index, 'CANCELLED', null)); }
     firstActiveId = snapshot[80].id;
     window = loadApp(snapshot, activeStates);
-    await waitFor(function () { return window.BuroApp.state.ready && window.BuroUsb.hasStorage(); }, 1500);
+    await waitFor(function () { return window.BuroApp.state.ready && window.BuroUsb.hasStorage(); }, 4000);
     state = window.BuroApp.state;
     state.screen = 'SHELL';
     state.section = 'DOWNLOADS';

@@ -965,7 +965,11 @@ var BuroApp = (function () {
       tela pela metade. O aplicativo do Windows espera na abertura — ver
       `SplashScreen.kt`, que mostra progresso e contagem exatamente por isso.
     */
-    var BOOT_STEPS = ['profiles', 'catalogue', 'artwork', 'sweep', 'ready'];
+    /* `home` entra antes de `ready`: a Home era montada depois de a interface
+       aparecer, entao quem esperou a varredura inteira ainda encontrava
+       "Montando sua Home..." na primeira tela. O trabalho e o mesmo; o lugar
+       certo dele e a tela de carregamento, que existe para isso. */
+    var BOOT_STEPS = ['profiles', 'catalogue', 'artwork', 'sweep', 'home', 'ready'];
 
     function bootProgress(stepName, messageKey) {
         var index = 0;
@@ -999,6 +1003,17 @@ var BuroApp = (function () {
         var minimum = state.sources.length ? BOOT_POSTER_REVEAL_MILLIS : BOOT_MINIMUM_MILLIS;
         var remaining = Math.max(0, minimum - (Date.now() - bootStartedAt));
         bootProgress('ready', 'bootReady');
+        /*
+          A Home fica pronta aqui, e nao depois de a interface aparecer.
+
+          `startHomeLoad` guarda o resultado em `homeCache`, entao quando a
+          shell desenhar a secao HOME ela encontra o trabalho feito e nao
+          escreve "Montando sua Home...". Chamar de novo la e barato: o cache
+          responde.
+        */
+        if (targetScreen === 'SHELL' && (state.preferences.section || 'HOME') === 'HOME') {
+            startHomeLoad();
+        }
         window.setTimeout(function () {
             state.screen = targetScreen;
             if (targetScreen === 'SHELL') { state.section = state.preferences.section || 'HOME'; }
@@ -1131,9 +1146,34 @@ var BuroApp = (function () {
         if (done) { done(); }
     }
 
+    /*
+      Quanto do carregamento ja foi feito, de 0 a 100.
+
+      Cada passo vale uma fatia igual, e dentro do passo da varredura a fatia e
+      preenchida pela proporcao de categorias ja lidas. Sem isso a barra saltava
+      de vinte em vinte e ficava imovel durante a varredura — que e o passo
+      longo, minutos numa lista de dezenas de milhares — e uma barra parada e
+      lida como travamento, que foi o relato.
+    */
+    function bootProgressPercent(boot) {
+        var step = Math.max(0, Number(boot.index) || 0);
+        var total = Math.max(1, Number(boot.total) || BOOT_STEPS.length);
+        var slice = 100 / total;
+        var status = BOOT_STEPS[step] === 'sweep' && state.activeSource
+            ? catalogueSyncStatus(state.activeSource) : null;
+        var inner = status && status.total ? Math.min(1, status.completed / status.total) : 1;
+        return Math.min(100, Math.round(step * slice + slice * inner));
+    }
+
+    /* A varredura esta em curso: e quando a espera precisa de explicacao. */
+    function bootIsSweeping() {
+        var status = state.activeSource ? catalogueSyncStatus(state.activeSource) : null;
+        return Boolean(status && status.total && status.state === 'RUNNING');
+    }
+
     function renderBoot() {
         var boot = state.boot || { index: 0, total: BOOT_STEPS.length, messageKey: 'bootProfiles' };
-        var progressValue = Math.min(100, Math.round(((boot.index + 1) / boot.total) * 100));
+        var progressValue = bootProgressPercent(boot);
         var progressLabel = t(boot.messageKey);
         var dots = BOOT_STEPS.map(function (step, index) {
             var status = index < boot.index ? 'complete' : (index === boot.index ? 'active' : '');
@@ -1145,7 +1185,10 @@ var BuroApp = (function () {
             '<section class="boot-panel" role="status" aria-live="polite" aria-atomic="true">' +
             '<div class="boot-mark" aria-hidden="true"><span>B</span></div>' +
             '<p class="boot-brand">IPTV BURO</p>' +
-            '<p class="boot-message">' + progressLabel + '</p>' +
+            '<p class="boot-message">' + progressLabel +
+            /* A porcentagem junto do que esta sendo feito: um numero que anda
+               diz que o aparelho esta trabalhando, mesmo quando a etapa demora. */
+            ' <b class="boot-percent">' + progressValue + '%</b></p>' +
             /*
               A contagem, numa linha própria.
 
@@ -1156,6 +1199,16 @@ var BuroApp = (function () {
             */
             (bootDetail() ? '<p class="boot-detail">' + escapeHtml(bootDetail()) + '</p>' : '') +
             '<p class="boot-stage">' + t('bootStageLabel') + '</p>' +
+            /*
+              Por que a primeira vez demora.
+
+              Uma lista de dezenas de milhares de titulos leva minutos para ser
+              organizada, e sem explicacao isso se le como travamento. Dizer que
+              a proxima abertura e rapida transforma a espera em algo com fim
+              conhecido — e so aparece durante a varredura, que e quando a
+              pergunta existe.
+            */
+            (bootIsSweeping() ? '<p class="boot-note">' + escapeHtml(t('bootFirstRunNote')) + '</p>' : '') +
             '<div class="boot-indicator" aria-hidden="true"></div>' +
             '<div class="boot-progress" role="progressbar" aria-label="' + attr(progressLabel) +
             '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + progressValue + '">' +
@@ -3206,6 +3259,28 @@ var BuroApp = (function () {
         });
     }
 
+    /*
+      Aviso de que a lista ainda nao tem as capas gravadas.
+
+      Sem isto o sintoma — prateleira de cartoes de texto — nao distingue tres
+      causas muito diferentes: o provedor nao mandou arte, a peneira de
+      credencial recusou, ou as linhas sao antigas e ainda nao foram regravadas.
+      A terceira e a comum depois de uma atualizacao do aplicativo, e a saida e
+      um botao, nao esperar. Dizer isso poupa a pessoa de concluir que o app
+      esta quebrado.
+
+      Some assim que a maioria da pagina tem capa, que e quando a resposta ja
+      esta na tela e o aviso viraria ruido.
+    */
+    function shelfArtworkNote(rows) {
+        var withArt = 0;
+        if (!rows || rows.length < 4) { return ''; }
+        rows.forEach(function (item) { if (artworkFor(item)) { withArt += 1; } });
+        if (withArt * 2 >= rows.length) { return ''; }
+        return '<button class="shelf-art-note focusable" data-action="catalogue-refresh">' +
+            escapeHtml(t('artworkMissingHint')) + '</button>';
+    }
+
     /* Poster, compacto ou lista — o mesmo seletor de densidade do Windows. */
     function catalogueDensityLabel(layout) {
         if (layout === 'compact') { return t('catalogueCompact'); }
@@ -3238,6 +3313,7 @@ var BuroApp = (function () {
             pickerSlot('density', contentType,
                 '<button class="scope-chip compact focusable" data-action="catalogue-pick-density"><strong>' +
                 escapeHtml(catalogueDensityLabel(layout)) + ' ▾</strong></button>') +
+            shelfArtworkNote(rows) +
             '<p>' + (scope.total == null ? '' : escapeHtml(t('shelfLoadedOf')
                 .replace('{loaded}', rows.length).replace('{total}', total))) + '</p></div>';
         if (!rows.length && scope.loading) {
@@ -3260,7 +3336,36 @@ var BuroApp = (function () {
                 return heading + emptyState('B', t('noMatches'), t('noMatchesBody'),
                     'catalogue-scope-reset', t('clearFilters'));
             }
-            return heading + categoryCards(scopedCategories(contentType, categories));
+            /*
+              Zero titulos com a varredura em curso nao e um catalogo vazio: e um
+              catalogo que ainda nao chegou nesta aba. As primeiras categorias
+              lidas podem ser todas de outro tipo, entao Filmes fica em zero por
+              um bom tempo enquanto Ao Vivo ja tem conteudo.
+
+              Cair na lista de categorias ali era a resposta errada — o usuario
+              pediu a prateleira e recebeu uma tela diferente, sem explicacao.
+              Dizer que esta carregando, com a contagem andando, e a resposta
+              certa e some sozinha quando os titulos entram.
+            */
+            return heading +
+                /*
+                  O aviso vem antes das categorias, nao no lugar delas.
+
+                  Zero titulos com a varredura em curso nao e catalogo vazio: e
+                  catalogo que ainda nao chegou nesta aba — as primeiras
+                  categorias lidas podem ser todas de outro tipo. Sem dizer isso,
+                  a lista de categorias aparecia como se fosse a resposta final e
+                  o usuario a lia como a tela errada.
+
+                  Mas as categorias continuam ali: abrir uma delas e o que traz
+                  os titulos daquela agora, sem esperar a varredura chegar nela.
+                  Trocar uma coisa pela outra tirava essa saida.
+                */
+                (bootIsSweeping() ? '<div class="search-loading"><span class="boot-indicator"></span><p>' +
+                    escapeHtml(t('shelfWaitingSweep')) + '</p>' +
+                    (bootDetail() ? '<p class="form-note">' + escapeHtml(bootDetail()) + '</p>' : '') +
+                    '</div>' : '') +
+                categoryCards(scopedCategories(contentType, categories));
         }
         return heading + mediaCards(rows, layout, true) +
             (scope.hasMore ? '<div class="catalogue-pagination"><button class="button primary focusable"' +
@@ -6076,6 +6181,29 @@ var BuroApp = (function () {
         if (window.console && typeof window.console.info === 'function') {
             window.console.info('IPTVBURO_RUNTIME_READY screen=SHELL version=' + APP_VERSION_FALLBACK);
         }
+        reportArtworkCoverage();
+    }
+
+    /*
+      Quantos titulos do banco tem capa gravada.
+
+      Existe porque "as capas nao aparecem" e um sintoma com varias causas
+      possiveis — provedor sem arte, peneira recusando, linha antiga por
+      regravar — e sem contar nao da para saber qual. Uma linha no log responde
+      em vez de adivinhar. Nao imprime URL nenhuma: a contagem basta, e uma URL
+      de provedor no log e exatamente o que nao pode vazar.
+    */
+    function reportArtworkCoverage() {
+        if (!window.console || typeof window.console.info !== 'function') { return; }
+        BuroStorage.fold('items', function (acc, item) {
+            acc.total += 1;
+            if (item && item.logoUrl) { acc.withArt += 1; }
+            else if (item && item.contentType === 'MOVIE') { acc.moviesWithout += 1; }
+            return acc;
+        }, { total: 0, withArt: 0, moviesWithout: 0 }, function (result) {
+            window.console.info('IPTVBURO_ARTWORK total=' + result.total +
+                ' comCapa=' + result.withArt + ' filmesSemCapa=' + result.moviesWithout);
+        }, function () {});
     }
 
     function sectionTitle() {
@@ -6194,9 +6322,23 @@ var BuroApp = (function () {
         }
     }
 
+    /*
+      A caixa que rola verticalmente em volta de um elemento focado.
+
+      A janela do seletor vem primeiro por ser a mais proxima: ela tem
+      `max-height` e `overflow-y: auto`, e sem reconhece-la o foco descia para
+      uma opcao fora da area visivel sem nada rolar. Da TV isso se via como o
+      D-pad simplesmente parando — "quando eu vou com a seta do controle, era
+      pra mim conseguir ir pra baixo, mas eu nao consigo".
+
+      Ela nao pode ser alcancada pela regra de baixo: e `position: absolute`, e
+      o `.content.scrollable` que a envolve rolaria a pagina inteira em vez da
+      lista.
+    */
     function verticalContentFor(element) {
         var container = element && element.parentNode;
         while (container && container !== root) {
+            if (container.classList && container.classList.contains('catalogue-options')) { return container; }
             if (container.classList && container.classList.contains('content') &&
                     container.classList.contains('scrollable')) { return container; }
             container = container.parentNode;
@@ -6261,9 +6403,21 @@ var BuroApp = (function () {
         applyFocus();
     }
 
+    /*
+      Os alvos permitidos quando ha uma lista de seletor aberta: as opcoes dela
+      e o chip que a abriu. Nulo quando nao ha lista, e ai o D-pad percorre a
+      tela inteira como sempre.
+    */
+    function openPickerCandidates() {
+        var slot = root.querySelector ? root.querySelector('.picker-slot.open') : null;
+        if (!slot || !slot.querySelectorAll) { return null; }
+        return Array.prototype.slice.call(slot.querySelectorAll('.focusable:not([disabled])'));
+    }
+
     function moveDirectional(keyCode) {
         var K = BuroKeys.CODES;
         var current = focusables[focusIndex];
+        var candidates;
         var currentRect;
         var currentX;
         var currentY;
@@ -6275,6 +6429,18 @@ var BuroApp = (function () {
         currentX = currentRect.left + currentRect.width / 2;
         currentY = currentRect.top + currentRect.height / 2;
         hasGeometry = currentRect.width > 0 || currentRect.height > 0;
+        /*
+          Com uma lista de seletor aberta, o D-pad fica dentro dela.
+
+          A pontuacao abaixo pesa a distancia horizontal por 2,4, e a lista abre
+          ancorada no chip: descendo de um chip da direita, uma opcao da lista
+          perdia para qualquer elemento mais alinhado ao centro e o foco saltava
+          para fora. De quem esta no controle isso se via como nao dar para
+          escolher o ano, a nota, o servico nem o genero.
+
+          O chip que abriu continua no conjunto, para o UP fechar voltando nele.
+        */
+        candidates = openPickerCandidates();
         focusables.forEach(function (candidate, index) {
             var rect;
             var x;
@@ -6284,6 +6450,7 @@ var BuroApp = (function () {
             var valid;
             var score;
             if (index === focusIndex) { return; }
+            if (candidates && candidates.indexOf(candidate) < 0) { return; }
             rect = candidate.getBoundingClientRect();
             x = rect.left + rect.width / 2;
             y = rect.top + rect.height / 2;
@@ -9454,6 +9621,11 @@ var BuroApp = (function () {
         _ratingsSection: ratingsSection,
         _downloadChipHtml: downloadChipHtml,
         _refreshChipHtml: refreshChipHtml,
+        /* So para os testes: poe o foco num alvo pelo `data-action`, para
+           exercitar o D-pad a partir de onde a pessoa realmente esta. */
+        _focusAction: function (action) { refreshFocus(action, null); },
+        _bootProgressPercent: bootProgressPercent,
+        _bootSteps: function () { return BOOT_STEPS.slice(); },
         _receiveRequestedAppControl: receiveRequestedAppControl,
         _resolvePendingSharedTitle: resolvePendingSharedTitle,
         _pendingSharedTitle: function () { return pendingSharedTitle; },

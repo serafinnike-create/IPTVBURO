@@ -89,7 +89,7 @@ async function run() {
         onStatus: function (status) { statuses.push(status); },
         onComplete: function () { completeCount += 1; }
     });
-    await waitFor(function () { return pending.length === 1; }, 500);
+    await waitFor(function () { return pending.length === 1; }, 4000);
     check('somente os dez títulos da rotação entram na fila', startStatus.total === 10);
     check('fila começa pelo primeiro Hero e mantém uma requisição ativa',
         pending[0].item.id === candidates[0].id && maximumConcurrent === 1);
@@ -99,7 +99,7 @@ async function run() {
         artworkUrl: 'https://images.public.test/poster.jpg',
         backdropUrl: 'https://images.public.test/backdrop.jpg?token=memory-only'
     });
-    await waitFor(function () { return pending.length === 2; }, 500);
+    await waitFor(function () { return pending.length === 2; }, 4000);
     check('Filme recebe sinopse, fatos e backdrop no cache de sessão', (function () {
         var value = window.BuroHeroEnrichment.get(source.id, candidates[0].id);
         return value && value.synopsis === sentenceCut && value.genre === 'Drama' &&
@@ -108,11 +108,11 @@ async function run() {
     concurrent -= 1;
     pending[1].failure({ code: 'NETWORK_ERROR' });
     for (index = 2; index < 10; index += 1) {
-        await waitFor(function () { return pending.length > index; }, 500);
+        await waitFor(function () { return pending.length > index; }, 4000);
         concurrent -= 1;
         pending[index].success({ synopsis: 'Sinopse ' + index, artworkUrl: 'https://images.public.test/' + index + '.jpg' });
     }
-    await waitFor(function () { return completeCount === 1; }, 500);
+    await waitFor(function () { return completeCount === 1; }, 4000);
     check('falha de uma Série não impede os outros destaques',
         delivered.length === 9 && statuses[statuses.length - 1].failed === 1);
     check('filmes e séries compartilham a mesma fila sem misturar identidades',
@@ -144,7 +144,7 @@ async function run() {
         onItem: function () { cancelItems += 1; },
         onStatus: function (status) { cancelState = status.state; }
     });
-    await waitFor(function () { return Boolean(cancelPending); }, 500);
+    await waitFor(function () { return Boolean(cancelPending); }, 4000);
     cancelWindow.BuroHeroEnrichment.cancel();
     check('cancelamento aborta a chamada de detalhes ativa', abortCount === 1 && cancelState === 'CANCELLED');
     cancelPending.success({ synopsis: 'Resposta antiga', backdropUrl: 'https://images.public.test/late.jpg' });
@@ -163,12 +163,12 @@ async function run() {
     reboundWindow.BuroHeroEnrichment.start(source, [item(source.id, 100)], {
         getSecret: function () { return {}; }, onItem: function () { oldScreenItems += 1; }
     });
-    await waitFor(function () { return Boolean(reboundPending); }, 500);
+    await waitFor(function () { return Boolean(reboundPending); }, 4000);
     reboundWindow.BuroHeroEnrichment.start(source, [item(source.id, 100)], {
         getSecret: function () { return {}; }, onItem: function () { currentScreenItems += 1; }
     });
     reboundPending.success({ synopsis: 'Tela atual' });
-    await waitFor(function () { return currentScreenItems === 1; }, 500);
+    await waitFor(function () { return currentScreenItems === 1; }, 4000);
     check('recompor a mesma Home atualiza o callback sem duplicar a chamada de rede',
         oldScreenItems === 0 && currentScreenItems === 1);
 

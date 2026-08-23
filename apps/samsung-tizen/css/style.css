@@ -328,6 +328,14 @@ body.playing .app-root { display: none; }
    progresso rente ao pe do chip. So aparece com algo baixando de facto. */
 /* O botao de atualizar. Enquanto roda vira indicador girando e contagem, e deixa
    de receber foco — apertar de novo no meio da varredura nao faria nada. */
+/* O aviso de prateleira sem capa. E um botao porque a saida e uma acao — buscar
+   as imagens — e nao uma informacao para ler e ignorar. */
+.shelf-art-note {
+    margin: 0 0 0 18px; padding: 8px 16px;
+    border: 1px solid rgba(214,169,86,.42); border-radius: 999px;
+    background: rgba(214,169,86,.10); color: var(--gold); font-size: 16px; font-weight: 600;
+}
+.shelf-art-note.focused { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(214,169,86,.2); }
 .refresh-chip { display: flex; align-items: center; }
 .refresh-chip.busy { color: var(--gold); }
 .refresh-chip .boot-indicator { width: 14px; height: 14px; margin-right: 8px; border-width: 2px; }

@@ -119,7 +119,7 @@ async function run() {
     process.stdout.write('Integração do catálogo em segundo plano\n');
     window.BuroApp.render();
     window.BuroApp._activate(window.document.querySelector('[data-action="select-source"]'));
-    await waitFor(function () { return pending.length === 1; }, 500);
+    await waitFor(function () { return pending.length === 1; }, 4000);
     check('selecionar fonte inicia a fila automaticamente e prioriza filmes', pending[0].category.id === 'cat-movies');
     check('Fontes apresenta progresso real sem bloquear a navegação',
         window.document.querySelector('.source-sync-state.running') &&
@@ -147,12 +147,12 @@ async function run() {
     window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-sync-cancel"]'));
     await waitFor(function () {
         return window.BuroCatalogueSync.progress(source, categories).state === 'CANCELLED';
-    }, 500);
+    }, 4000);
     check('pausa da Home aborta a requisição e troca a ação para Continuar',
         aborts === 1 && window.document.querySelector('[data-action="catalogue-sync-resume"]'));
 
     window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-sync-resume"]'));
-    await waitFor(function () { return pending.length === 2; }, 500);
+    await waitFor(function () { return pending.length === 2; }, 4000);
     window.BuroApp._activate(window.document.querySelector('[data-action="section"][data-section="MOVIES"]'));
     window.BuroApp._activate(window.document.querySelector('[data-action="category"][data-id="cat-movies"]'));
     await new Promise(function (resolve) { setTimeout(resolve, 20); });
@@ -165,19 +165,19 @@ async function run() {
     }], { 'movie:background': 'https://images.public.test/movie.jpg' });
     await waitFor(function () {
         return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'category';
-    }, 500);
+    }, 4000);
     check('conclusão da categoria substitui o skeleton sem segundo download',
         window.document.body.textContent.indexOf('Filme completo') >= 0 &&
         pending.filter(function (request) { return request.category.id === 'cat-movies'; }).length === 2);
 
-    await waitFor(function () { return pending.length === 3; }, 500);
+    await waitFor(function () { return pending.length === 3; }, 4000);
     window.BuroApp._activate(window.document.querySelector('[data-action="section"][data-section="HOME"]'));
     pending[2].success([{
         id: 'series:background', sourceId: source.id, categoryId: 'cat-series', contentType: 'SERIES',
         name: 'Série completa', year: year - 1, rating: 8.8, addedAt: Date.now(), sortOrder: 0,
         locator: { kind: 'xtream', contentType: 'SERIES', providerItemId: '22', extension: 'mp4' }
     }], {});
-    await waitFor(function () { return pending.length === 4; }, 500);
+    await waitFor(function () { return pending.length === 4; }, 4000);
     pending[3].success([{
         id: 'live:background', sourceId: source.id, categoryId: 'cat-live', contentType: 'LIVE',
         name: 'Canal completo', sortOrder: 0,
@@ -186,7 +186,7 @@ async function run() {
     await waitFor(function () {
         return window.BuroCatalogueSync.progress(source, categories).state === 'COMPLETE' &&
             window.BuroApp.state.sources[0].channelCount === 3;
-    }, 1000);
+    }, 4000);
     check('conclusão atualiza a contagem persistida da fonte', window.BuroApp.state.sources[0].channelCount === 3);
     var stored = await call(window, window.BuroStorage.byIndex, ['items', 'bySource', source.id]);
     check('as três verticais ficam persistidas após transações por categoria',
@@ -196,7 +196,7 @@ async function run() {
     await waitFor(function () {
         return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'home' &&
             window.document.body.textContent.indexOf('Filme completo') >= 0;
-    }, 1000);
+    }, 4000);
     check('Home é recomposta do IndexedDB completo ao terminar a fila',
         !window.document.querySelector('.catalogue-sync-banner') &&
         window.document.body.textContent.indexOf('Filme completo') >= 0);

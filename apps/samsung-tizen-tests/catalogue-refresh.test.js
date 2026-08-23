@@ -212,6 +212,83 @@ async function run() {
         window.document.querySelector('.media-card img').getAttribute('src') ===
             'https://cdn.provedor.test/capas/filme.jpg');
 
+    /*
+      A prateleira avisa quando as capas ainda não foram gravadas.
+
+      Sem o aviso, uma prateleira de cartões de texto se lê como app quebrado —
+      e a causa comum, logo depois de uma atualização, é só que as linhas são
+      antigas. A saída é um toque, não esperar 24 horas.
+    */
+    process.stdout.write('A prateleira avisa quando falta capa, e oferece a saída\n');
+    window.close();
+    window = loadApp();
+    await reachShell(window);
+    await seed(window, 'XTREAM');
+    await new Promise(function (resolve, reject) {
+        var rows = [];
+        var index;
+        var item;
+        for (index = 0; index < 8; index += 1) {
+            item = window.BuroDomain.createItem({
+                sourceId: 's1', providerItemId: String(index), name: 'Filme ' + index,
+                categoryId: 'c1', contentType: 'MOVIE', year: 2024, rating: 8,
+                locator: { kind: 'xtream', contentType: 'MOVIE', providerItemId: String(index) }
+            });
+            item.id = 'sem-capa-' + index;
+            rows.push(item);
+        }
+        window.BuroStorage.putBatch('items', rows, resolve, reject);
+    });
+    window.BuroNetwork.json = function (options, success) { success([]); return { abort: function () {} }; };
+    window.BuroApp.state.section = 'MOVIES';
+    window.BuroApp.state.screenData = null;
+    window.BuroApp.render();
+    await waitFor(function () {
+        return window.document.querySelectorAll('.media-card').length === 8;
+    }, 8000);
+    check('prateleira sem capa nenhuma mostra o aviso',
+        Boolean(window.document.querySelector('.shelf-art-note')));
+    check('e o aviso é o próprio botão de buscar as imagens',
+        window.document.querySelector('.shelf-art-note')
+            .getAttribute('data-action') === 'catalogue-refresh');
+    check('o aviso é alcançável pelo D-pad, senão não seria uma saída',
+        window.document.querySelector('.shelf-art-note').classList.contains('focusable'));
+
+    /*
+      Aba ainda sem titulos, com a varredura em curso.
+
+      Cair na lista de categorias ali era a resposta errada: o usuario pediu a
+      prateleira de Filmes e recebeu uma tela de categorias, sem explicacao —
+      "nao deveria aparecer essa tela era para aparecer os filmes". Zero titulos
+      durante a varredura nao e catalogo vazio, e um catalogo que ainda nao
+      chegou nesta aba.
+    */
+    process.stdout.write('Aba vazia durante a varredura diz que esta carregando' + String.fromCharCode(10));
+    window.close();
+    window = loadApp();
+    await reachShell(window);
+    await seed(window, 'XTREAM');
+    window.BuroCatalogueSync.progress = function () {
+        return { state: 'RUNNING', completed: 10, total: 98, itemCount: 22691 };
+    };
+    window.BuroNetwork.json = function (options, success) { success([]); return { abort: function () {} }; };
+    window.BuroApp.state.section = 'MOVIES';
+    window.BuroApp.state.screenData = null;
+    window.BuroApp.render();
+    await waitFor(function () {
+        return Boolean(window.document.querySelector('.catalogue-shelf-heading'));
+    }, 8000);
+    await new Promise(function (r) { window.setTimeout(r, 200); });
+    check('a aba diz que esta organizando, e nao finge catalogo vazio',
+        Boolean(window.document.querySelector('.search-loading')));
+    /* As categorias continuam ali: abrir uma traz os titulos dela agora, sem
+       esperar a varredura chegar nela. Trocar uma coisa pela outra tirava essa
+       saida — foi o que `catalogue-sync-app` pegou. */
+    check('e as categorias continuam alcancaveis como atalho',
+        Boolean(window.document.querySelector('[data-action="category"]')));
+    check('e mostra o quanto ja foi, para a espera ter fim visivel',
+        (window.document.querySelector('.search-loading').textContent || '').indexOf('10') > 0);
+
     process.stdout.write('Sem fonte Xtream não há o que atualizar\n');
     window.close();
     window = loadApp();

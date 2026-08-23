@@ -98,24 +98,24 @@ async function run() {
     window.BuroCatalogueSync.start(source, categories(source.id), {
         getSecret: function () { return secret; }
     }, false);
-    await waitFor(function () { return pending.length === 1; }, 500);
+    await waitFor(function () { return pending.length === 1; }, 4000);
     check('filmes são priorizados antes de séries e TV ao vivo', pending[0].category.id === 'movies');
     check('somente uma requisição fica ativa', maximumConcurrent === 1);
     concurrent -= 1;
     pending[0].success([], {});
-    await waitFor(function () { return pending.length === 2; }, 500);
+    await waitFor(function () { return pending.length === 2; }, 4000);
     check('categoria vazia também avança o checkpoint', persisted[0].categoryId === 'movies' && persisted[0].items.length === 0);
     check('séries são a segunda prioridade', pending[1].category.id === 'series');
     concurrent -= 1;
     pending[1].success([{ id: 'series:1', sourceId: source.id, categoryId: 'series' }], {});
-    await waitFor(function () { return pending.length === 3; }, 500);
+    await waitFor(function () { return pending.length === 3; }, 4000);
     check('TV ao vivo é hidratada depois do catálogo editorial', pending[2].category.id === 'live');
     concurrent -= 1;
     pending[2].success([{ id: 'live:1', sourceId: source.id, categoryId: 'live' }], {});
     await waitFor(function () {
         var status = window.BuroCatalogueSync.progress(source, categories(source.id));
         return status.state === 'COMPLETE';
-    }, 500);
+    }, 4000);
     var complete = window.BuroCatalogueSync.progress(source, categories(source.id));
     check('conclusão informa todas as categorias e itens persistidos',
         complete.completed === 3 && complete.total === 3 && complete.itemCount === 2);
@@ -126,21 +126,21 @@ async function run() {
     window.BuroCatalogueSync.start(source, categories(source.id), { getSecret: function () { return secret; } }, false);
     await waitFor(function () {
         return window.BuroCatalogueSync.progress(source, categories(source.id)).state === 'COMPLETE';
-    }, 500);
+    }, 4000);
     check('reinício dentro da validade retoma sem baixar categorias concluídas', pending.length === requestCount);
 
     window.BuroCatalogueSync.start(source, categories(source.id), { getSecret: function () { return secret; } }, true);
-    await waitFor(function () { return pending.length === requestCount + 1; }, 500);
+    await waitFor(function () { return pending.length === requestCount + 1; }, 4000);
     check('atualização forçada reinicia a fotografia pela prioridade editorial',
         pending[pending.length - 1].category.id === 'movies');
     concurrent -= 1;
     pending[pending.length - 1].success([], {});
-    await waitFor(function () { return pending.length === requestCount + 2; }, 500);
+    await waitFor(function () { return pending.length === requestCount + 2; }, 4000);
     window.BuroCatalogueSync.cancel();
     check('pausar uma atualização forçada conserva a categoria já confirmada',
         window.BuroCatalogueSync.progress(source, categories(source.id)).completed === 1);
     window.BuroCatalogueSync.start(source, categories(source.id), { getSecret: function () { return secret; } }, false);
-    await waitFor(function () { return pending.length === requestCount + 3; }, 500);
+    await waitFor(function () { return pending.length === requestCount + 3; }, 4000);
     check('retomada após atualização parcial não repete a categoria confirmada',
         pending[pending.length - 1].category.id === 'series');
     window.BuroCatalogueSync.cancel();
@@ -156,7 +156,7 @@ async function run() {
     };
     cancelWindow.BuroStorage.replaceCategoryItems = function () { cancelPersistCount += 1; };
     cancelWindow.BuroCatalogueSync.start(source, categories(source.id), { getSecret: function () { return secret; } }, false);
-    await waitFor(function () { return Boolean(cancelPending); }, 500);
+    await waitFor(function () { return Boolean(cancelPending); }, 4000);
     check('cancelar aborta a requisição de rede ativa', cancelWindow.BuroCatalogueSync.cancel() && abortCount === 1);
     check('estado final distingue cancelamento de erro',
         cancelWindow.BuroCatalogueSync.progress(source, categories(source.id)).state === 'CANCELLED');
@@ -198,7 +198,7 @@ async function run() {
     }, false);
     await waitFor(function () {
         return storageWindow.BuroCatalogueSync.progress(source, [categories(source.id)[2]]).state === 'ERROR';
-    }, 500);
+    }, 4000);
     check('falha de persistência não é declarada como catálogo completo',
         storageWindow.BuroCatalogueSync.progress(source, [categories(source.id)[2]]).completed === 0);
     check('categoria sem transação confirmada permanece elegível para retomada',

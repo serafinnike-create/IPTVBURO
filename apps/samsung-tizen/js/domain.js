@@ -180,11 +180,11 @@ var BuroDomain = (function () {
               A capa, peneirada aqui e não só em quem chama.
 
               O item é gravado, então esta URL vai para o disco. A peneira recusa
-              usuário:senha@host, qualquer query string e os caminhos
-              autenticados do provedor (/movie/<usuario>/<senha>/<id>) — a mesma
-              regra dos lembretes. Fica neste ponto porque é por onde todo item
-              passa: um adapter novo que esqueça de filtrar não consegue gravar
-              credencial por descuido.
+              usuário:senha@host, os caminhos autenticados do provedor
+              (/movie/<usuario>/<senha>/<id>) e toda query string que não seja
+              puro dimensionamento de imagem — a mesma regra dos lembretes. Fica
+              neste ponto porque é por onde todo item passa: um adapter novo que
+              esqueça de filtrar não consegue gravar credencial por descuido.
             */
             logoUrl: isStorableReminderArtwork(input && input.logoUrl) ?
                 trim(input.logoUrl) : null,
@@ -468,6 +468,33 @@ var BuroDomain = (function () {
       endereço estático simples, e recusá-lo fazia cada lembrete ficar sem arte
       nenhuma, sendo que ali não havia credencial alguma para proteger.
     */
+    /* Parametros de imagem que nao identificam ninguem: dimensao, recorte,
+       qualidade, formato e versao. Qualquer outro nome derruba a URL. */
+    var IMAGE_QUERY_KEYS = {
+        w: true, h: true, width: true, height: true, size: true, s: true,
+        q: true, quality: true, fit: true, crop: true, format: true, fm: true,
+        v: true, ver: true, version: true, rev: true, dpr: true
+    };
+
+    function onlySizingParameters(url) {
+        var query = url.substring(url.indexOf('?') + 1);
+        var parts;
+        if (!query || query.length > 200) { return false; }
+        parts = query.split('&');
+        /* Poucos parametros: uma URL assinada costuma trazer varios, e limitar
+           aqui fecha a porta para uma combinacao inesperada. */
+        if (parts.length > 4) { return false; }
+        return parts.every(function (part) {
+            var name = part.split('=')[0].toLowerCase();
+            var value = part.substring(part.indexOf('=') + 1);
+            if (!name || !IMAGE_QUERY_KEYS[name]) { return false; }
+            /* O valor tambem e conferido: `w=300` passa, `w=<algo longo>` nao —
+               um token nao vira inofensivo por estar num parametro de nome
+               conhecido. */
+            return /^[A-Za-z0-9._-]{1,16}$/.test(value);
+        });
+    }
+
     function isStorableReminderArtwork(value) {
         var url = trim(value);
         if (!url || url.length > 4096) { return false; }
@@ -475,8 +502,22 @@ var BuroDomain = (function () {
         if (!/^https?:\/\//i.test(url)) { return false; }
         /* user:senha@host — a forma mais direta de carregar uma credencial. */
         if (/^https?:\/\/[^\/\s]*@/i.test(url)) { return false; }
-        /* Qualquer query string: é onde uma URL assinada guarda o token. */
-        if (url.indexOf('?') !== -1) { return false; }
+        /*
+          A query string, quando ela e so tamanho de imagem.
+
+          Recusar toda query era seguro e caro demais: muito CDN de capa serve
+          `?w=300`, `?v=2` ou `?format=webp`, que nao carregam credencial
+          nenhuma, e essas capas ficavam sem ser gravadas — apareciam enquanto a
+          memoria as tinha e sumiam depois, que era o "algumas capas nao
+          carregam".
+
+          A lista abaixo e de nomes permitidos, nao de nomes proibidos: um
+          parametro que nao esteja nela recusa a URL inteira. Assim um nome novo
+          de token nunca passa por esquecimento — o custo de errar para o lado
+          seguro e uma capa a menos, e o de errar para o outro e uma credencial
+          no disco.
+        */
+        if (url.indexOf('?') !== -1 && !onlySizingParameters(url)) { return false; }
         /* Os caminhos autenticados do próprio provedor, montados como
            /movie/<usuario>/<senha>/<id> — a forma que originou a preocupação. */
         if (/\/(live|movie|series)\//i.test(url)) { return false; }

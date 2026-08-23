@@ -137,7 +137,7 @@ async function run() {
     window.fetch = function () { fetchCount += 1; return Promise.reject(new Error('unexpected fetch')); };
     window.__setRequestedUri(appUri);
     window.dispatchEvent(new window.Event('appcontrol'));
-    await waitFor(function () { return window.document.querySelector('.shared-link-notice'); }, 1000);
+    await waitFor(function () { return window.document.querySelector('.shared-link-notice'); }, 4000);
     check('evento quente e recebido sem reiniciar a sessao',
         window.BuroApp._pendingSharedTitle() && window.BuroApp.state.screen === 'SHELL');
     check('outra fonte e categoria oculta nao viram atalho lateral',
@@ -152,12 +152,12 @@ async function run() {
         !window.document.querySelector('.shared-link-notice') && window.BuroApp._pendingSharedTitle());
 
     window.BuroApp._receiveRequestedAppControl(appUri);
-    await waitFor(function () { return window.document.querySelector('.shared-link-notice'); }, 1000);
+    await waitFor(function () { return window.document.querySelector('.shared-link-notice'); }, 4000);
     window.BuroApp.state.preferences.hiddenCategoryIds = [];
     window.BuroApp._activate(window.document.querySelector('[data-action="shared-retry"]'));
     await waitFor(function () {
         return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'movie';
-    }, 1000);
+    }, 4000);
     check('retry encontra o titulo decorado no IndexedDB da fonte ativa e abre os detalhes locais',
         window.BuroApp.state.screenData.parent.id === localItem.id &&
         window.BuroApp.state.items.some(function (item) { return item.id === localItem.id; }));

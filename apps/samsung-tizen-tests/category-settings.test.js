@@ -84,7 +84,7 @@ async function run() {
     var lockedButton;
     var persisted;
 
-    await waitFor(function () { return window.BuroApp.state.ready; }, 1000);
+    await waitFor(function () { return window.BuroApp.state.ready; }, 4000);
     state = window.BuroApp.state;
     source = { id: 'source-category-settings', name: 'Fonte ativa', type: 'XTREAM' };
     otherSource = { id: 'source-category-other', name: 'Outra fonte', type: 'XTREAM' };

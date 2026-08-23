@@ -87,7 +87,7 @@ function press(window, keyCode) {
 
 async function run() {
     var window = loadApp();
-    await waitFor(function () { return window.BuroApp.state.ready; }, 1000);
+    await waitFor(function () { return window.BuroApp.state.ready; }, 4000);
 
     process.stdout.write('Atualização M3U pela interface\n');
     var source = {
@@ -139,7 +139,7 @@ async function run() {
     await waitFor(function () {
         return window.BuroApp.state.sources[0].channelCount === 2 &&
             window.BuroApp.state.screenData && window.BuroApp.state.screenData.refreshSuccess;
-    }, 1000);
+    }, 4000);
     window.BuroNetwork.text = originalNetworkText;
     var storedItems = await call(window, window.BuroStorage.all, ['items']);
     var storedCategories = await call(window, window.BuroStorage.all, ['categories']);
@@ -165,7 +165,7 @@ async function run() {
     window.BuroApp._activate(window.document.querySelector('[data-action="source-refresh"]'));
     await waitFor(function () {
         return window.BuroApp.state.screenData && Boolean(window.BuroApp.state.screenData.refreshError);
-    }, 1000);
+    }, 4000);
     var itemsAfterFailure = await call(window, window.BuroStorage.all, ['items']);
     window.BuroNetwork.text = originalNetworkText;
     check('falha mantém a fotografia anterior inteira e mostra erro persistente',
@@ -213,7 +213,7 @@ async function run() {
     check('player mostra carregamento central enquanto prepara o stream',
         !window.document.getElementById('player-waiting').hidden &&
         window.document.body.classList.contains('playing'));
-    await waitFor(function () { return !window.document.getElementById('player-error-panel').hidden; }, 1000);
+    await waitFor(function () { return !window.document.getElementById('player-error-panel').hidden; }, 4000);
     check('falha permanece visível com causa e duas decisões',
         window.document.getElementById('player-error-message').textContent === window.BuroI18n.t('playbackConnectionError') &&
         window.document.querySelectorAll('[data-player-error-action]').length === 2);
@@ -226,7 +226,7 @@ async function run() {
     press(window, 10009);
     forcedPrepareError = { name: 'InvalidAccessError' };
     window.BuroApp._activate(playFixture);
-    await waitFor(function () { return !window.document.getElementById('player-error-panel').hidden; }, 1000);
+    await waitFor(function () { return !window.document.getElementById('player-error-panel').hidden; }, 4000);
     check('fonte inexistente ou inacessível não é confundida com falha de conexão',
         window.document.getElementById('player-error-message').textContent ===
             window.BuroI18n.t('playbackSourceUnavailableError'));

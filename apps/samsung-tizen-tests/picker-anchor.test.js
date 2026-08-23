@@ -150,6 +150,21 @@ function chipOwning(window) {
     return chip ? (chip.getAttribute('data-action') || '') : '(sem chip)';
 }
 
+function press(window, keyCode) {
+    var event = new window.KeyboardEvent('keydown', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'keyCode', { get: function () { return keyCode; } });
+    window.document.dispatchEvent(event);
+    event = new window.KeyboardEvent('keyup', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'keyCode', { get: function () { return keyCode; } });
+    window.document.dispatchEvent(event);
+}
+
+/* O rótulo da opção com foco — o que a pessoa vê realçado na TV. */
+function focusedOption(window) {
+    var node = window.document.querySelector('.catalogue-options .focused');
+    return node ? node.textContent.trim() : null;
+}
+
 async function run() {
     var window;
 
@@ -215,7 +230,106 @@ async function run() {
         !window.document.querySelector('[data-action="catalogue-pick-year"]') &&
         !window.document.querySelector('[data-action="catalogue-pick-rating"]'));
 
+    /*
+      Descer pela lista com o controle.
+
+      A pontuação direcional pesa a distância horizontal por 2,4 e a lista abre
+      ancorada no chip, então descendo de um chip da direita a opção perdia para
+      qualquer elemento mais alinhado ao centro: o foco saltava para fora, e da
+      TV isso se via como o D-pad não descer. Relato do usuário, sobre ano,
+      nota, serviço e gênero: "não consigo selecionar os outros anos… como se o
+      aplicativo não deixou ir mais pra baixo".
+    */
+    process.stdout.write('O D-pad desce pela lista, opção a opção\n');
+    await openSection(window, 'MOVIES');
+    /* Nota, e não ano: os itens semeados têm todos o mesmo ano, então aquela
+       lista teria duas entradas. Nota tem seis fixas, que é o caso real de uma
+       lista maior do que o passo do D-pad. */
+    activate(window, '[data-action="catalogue-pick-rating"]');
+    await waitFor(function () {
+        return window.document.querySelectorAll('.catalogue-options .focusable').length >= 5;
+    }, 8000);
+    /* O foco parte do chip que abriu a lista, como parte na TV de quem acabou
+       de apertar ENTER nele. */
+    window.BuroApp._focusAction('catalogue-pick-rating');
+    press(window, 40);
+    check('a primeira seta para baixo entra na lista',
+        Boolean(focusedOption(window)));
+    (function () {
+        var seen = [];
+        var step;
+        for (step = 0; step < 5; step += 1) {
+            seen.push(focusedOption(window));
+            press(window, 40);
+        }
+        check('cada seta avança uma opção, sem repetir nem sair fora',
+            seen.every(Boolean) && new Set(seen).size === seen.length);
+    }());
+    check('o foco continua dentro da lista depois de várias descidas',
+        Boolean(focusedOption(window)));
+
+    /*
+      Uma lista maior do que a janela — o caso real do usuário.
+
+      Ele tem títulos de dezenas de anos e dezenas de gêneros: a lista passa dos
+      380px e rola. Descer até o fim dela exige que a janela role junto, e nada
+      rolava: `verticalContentFor` só reconhecia `.content.scrollable`, e a
+      lista é `position: absolute` com `overflow-y: auto` própria. O foco ia
+      para uma opção fora da área visível e da TV isso se vê como o D-pad ter
+      parado.
+    */
+    process.stdout.write('Uma lista que não cabe na janela rola com o foco\n');
+    await new Promise(function (resolve, reject) {
+        var rows = [];
+        var year;
+        var item;
+        for (year = 1990; year <= 2026; year += 1) {
+            item = window.BuroDomain.createItem({
+                sourceId: 's1', providerItemId: 'y' + year, name: 'Filme ' + year,
+                categoryId: 'c1', contentType: 'MOVIE', year: year, rating: 8,
+                locator: { kind: 'xtream', contentType: 'MOVIE', providerItemId: 'y' + year }
+            });
+            item.id = 'ano-' + year;
+            rows.push(item);
+        }
+        window.BuroStorage.putBatch('items', rows, resolve, reject);
+    });
+    await openSection(window, 'MOVIES');
+    activate(window, '[data-action="catalogue-pick-year"]');
+    await waitFor(function () {
+        return window.document.querySelectorAll('.catalogue-options .focusable').length > 20;
+    }, 8000);
+    window.BuroApp._focusAction('catalogue-pick-year');
+    (function () {
+        var list = window.document.querySelector('.catalogue-options');
+        var visited = [];
+        var step;
+        for (step = 0; step < 14; step += 1) {
+            press(window, 40);
+            visited.push(focusedOption(window));
+        }
+        check('o foco desce por muitas opções sem sair da lista',
+            visited.every(Boolean) && new Set(visited).size === visited.length);
+        /*
+          Que a janela role de facto e medido em `chromium-visual.test.js`: aqui
+          o jsdom nao calcula layout, `getBoundingClientRect` devolve zeros e
+          nenhuma decisao de rolagem pode ser exercitada. O que este teste
+          guarda e o outro lado do mesmo defeito — o foco nao escapar da lista.
+        */
+        check('e a lista continua sendo a dona do foco no fim da descida',
+            Boolean(list) && Boolean(focusedOption(window)));
+    }());
+
     process.stdout.write('A lista diz quando há mais do que cabe\n');
+    /* A lista de ano ficou aberta no bloco acima, e um segundo toque no mesmo
+       chip fecha em vez de abrir. `openSection` redesenha mas o estado do
+       seletor vive no escopo da aba, então ele sobrevive ao redesenho. */
+    if (window.document.querySelector('.catalogue-options')) {
+        activate(window, '[data-action="catalogue-pick-year"]');
+        await waitFor(function () {
+            return !window.document.querySelector('.catalogue-options');
+        }, 8000);
+    }
     await openSection(window, 'MOVIES');
     activate(window, '[data-action="catalogue-pick-year"]');
     await waitFor(function () {
