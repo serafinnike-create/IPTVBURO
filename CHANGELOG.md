@@ -2,6 +2,30 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [3.1.2] - 2026-08-23 (Windows)
+
+### Windows
+
+#### Corrigido
+
+- **A prateleira de títulos parecidos ficava vazia em quase todo filme.** Era
+  uma única conversão de tipo.
+
+  A TMDb responde `"belongs_to_collection": null` para qualquer filme que não
+  faz parte de uma série — ou seja, a maioria dos filmes. O código lia esse
+  campo com `getAsJsonObject`, que **lança exceção** nesse caso em vez de
+  devolver vazio. E como a busca da franquia roda antes das recomendações, a
+  exceção derrubava a chamada inteira: as recomendações nunca chegavam a ser
+  pedidas.
+
+  Resultado: filme de franquia funcionava, filme avulso não mostrava nada. Foi
+  também por isso que passou pelos meus testes — Superman, Homem-Aranha e Duna
+  são todos franquias.
+
+  Medido no título reportado: *Tycus* agora traz 16 sugestões (Destruição
+  Final, A Noite do Cometa, Eclipse Mortal), e Superman continua trazendo os
+  seus quatro filmes na frente.
+
 ## [3.1.1] - 2026-08-23 (Windows)
 
 ### Windows
