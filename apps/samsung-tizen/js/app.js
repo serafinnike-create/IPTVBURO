@@ -3651,6 +3651,63 @@ var BuroApp = (function () {
         if (payload) { pushScreen('SHARE', payload); }
     }
 
+    /*
+      Manda este titulo para o celular ou o computador.
+
+      O que viaja e a identidade do titulo, nunca o video nem a credencial da
+      fonte — a outra ponta abre da lista dela. E a mesma decisao do
+      aplicativo do Windows, que tambem nao transmite fluxo.
+
+      Reaproveita `BuroShare.build`, entao o que sai daqui e exatamente o que o
+      QR de compartilhar ja mostrava: titulo, ano, arte publica e sinopse, com
+      `publicArtwork` recusando qualquer coisa que nao seja host publico.
+    */
+    function sendTitleToScreen(itemId) {
+        var data = state.screenData;
+        var item = data && data.parent;
+        var details = data && data.details || {};
+        var metadata;
+        var payload;
+        if (!item || item.id !== itemId || (data.kind !== 'movie' && data.kind !== 'series')) { return; }
+        metadata = tmdbDetailsMemory[item.id] || {};
+        payload = BuroShare.build({
+            kind: data.kind === 'series' ? 'SERIES' : 'MOVIE',
+            title: details.title || item.name, year: shareYear(item, details),
+            artworkUrl: metadata.posterUrl || artworkFor(item), description: details.plot
+        });
+        if (!payload) { return; }
+        startSendToScreen(payload);
+    }
+
+    /*
+      Pede um codigo e espera o outro aparelho reivindica-lo.
+
+      Sentido inverso do pareamento de chaves: la a TV espera receber, aqui ela
+      publica e o celular busca. O mesmo `open_title` do servidor atende os
+      dois, e o codigo continua valendo cinco minutos.
+    */
+    function startSendToScreen(payload) {
+        cancelPairing();
+        pushScreen('SEND_TO_SCREEN', { title: payload.title, year: payload.year, sending: true });
+        pairingRequest = BuroPairing.publish('open_title', payload.webUrl, {
+            code: function (code, seconds) {
+                if (state.screen !== 'SEND_TO_SCREEN') { return; }
+                state.screenData = {
+                    title: payload.title, year: payload.year, code: code, seconds: seconds
+                };
+                render();
+            },
+            failure: function (error) {
+                if (state.screen !== 'SEND_TO_SCREEN') { return; }
+                state.screenData = {
+                    title: payload.title, year: payload.year,
+                    error: (error && error.code) || 'PAIRING_FAILED'
+                };
+                render();
+            }
+        });
+    }
+
     function renderShare() {
         var value = state.screenData;
         var qr = value && value.qr;
@@ -5239,6 +5296,46 @@ var BuroApp = (function () {
         shell(body, t('pairTitle'), true);
     }
 
+    /*
+      A tela do "Enviar a tela": o codigo que o outro aparelho vai abrir.
+
+      Mesma forma da tela de parear — QR, endereco por extenso e os seis
+      digitos — porque e o mesmo gesto visto do outro lado: la o celular manda
+      para a TV, aqui a TV manda para o celular. O QR ja leva o codigo no
+      endereco, entao quem aponta a camera chega com o campo preenchido.
+
+      Nao ha espera: publicado o codigo, o lado da TV terminou. Por isso a tela
+      nao mostra "aguardando" — seria uma espera que nao existe.
+    */
+    function renderSendToScreen() {
+        var data = state.screenData || {};
+        var heading = data.title ? data.title + (data.year ? ' (' + data.year + ')' : '') : '';
+        var body;
+        if (data.error) {
+            body = emptyState('!', t(data.error === 'PAIRING_EXPIRED' ? 'pairExpired' : 'pairFailed'),
+                t('castHint'), 'back', t('back'));
+        } else if (!data.code) {
+            body = '<div class="search-loading"><span class="boot-indicator"></span><p>' +
+                escapeHtml(t('pairStarting')) + '</p></div>';
+        } else {
+            body = '<div class="pair-panel">' +
+                (heading ? '<p class="form-note">' +
+                    escapeHtml(t('castSending').replace('{title}', heading)) + '</p>' : '') +
+                '<div class="pair-body">' + pairQrHtml(data.code) +
+                '<ol class="pair-steps">' +
+                '<li><span>' + escapeHtml(t('pairStep1')) + '</span><strong class="pair-url">' +
+                escapeHtml(BuroPairing.phoneUrl()) + '</strong></li>' +
+                '<li><span>' + escapeHtml(t('pairStep2')) + '</span><strong class="pair-code">' +
+                escapeHtml(data.code) + '</strong></li>' +
+                '<li><span>' + escapeHtml(t('castStep3')) + '</span></li></ol></div>' +
+                '<p class="form-note">' + escapeHtml(t('pairExpiresIn').replace('{minutes}',
+                    Math.max(1, Math.round((Number(data.seconds) || 300) / 60)))) + '</p>' +
+                '<div class="action-row"><button class="button ghost focusable" data-action="back">' +
+                t('back') + '</button></div></div>';
+        }
+        shell(body, t('castAction'), true);
+    }
+
     function startPairing(kind) {
         cancelPairing();
         pushScreen('PAIRING', { kind: kind });
@@ -6236,6 +6333,7 @@ var BuroApp = (function () {
         else if (state.screen === 'TMDB_SETTINGS') { renderTmdbSettings(); }
         else if (state.screen === 'CRITICS_SETTINGS') { renderCriticsSettings(); }
         else if (state.screen === 'PAIRING') { renderPairing(); }
+        else if (state.screen === 'SEND_TO_SCREEN') { renderSendToScreen(); }
         else if (state.screen === 'CRITICS_GUIDE') { renderCriticsGuide(); }
         else if (state.screen === 'STORAGE_SETTINGS') { renderStorageSettings(); }
         else if (state.screen === 'NOTIFICATIONS') { renderNotifications(); }
@@ -8313,6 +8411,20 @@ var BuroApp = (function () {
         if (trailerId && BuroTrailer.available()) {
             glyphs += actionGlyph('trailer', item.id, '▷', t('trailer'), false);
         }
+        /*
+          Enviar a tela: manda *qual titulo*, nunca o video.
+
+          Cast nao existe no Tizen Web Runtime — nao ha como abrir um socket a
+          espera. Mas o aplicativo do Windows tambem nao transmite fluxo: ele
+          entrega a identidade do titulo e a outra ponta o abre da lista dela,
+          "so the other end plays from its own list and this machine's
+          credentials stay here". Isso a TV pode fazer, pelo mesmo pareamento por
+          codigo que ja traz chaves do celular — aqui no sentido inverso.
+
+          Fica antes de compartilhar: a ordem dos glifos acompanha o Android e
+          `reminders-app.test.js` verifica que compartilhar e o ultimo.
+        */
+        glyphs += actionGlyph('send-to-screen', item.id, '⇥', t('castAction'), false);
         glyphs += actionGlyph('share', item.id, '↗', t('share'), false);
         /*
           A volta, escrita — e fora da barra de glifos.
@@ -9274,6 +9386,7 @@ var BuroApp = (function () {
         else if (action === 'person-local') { openPersonLocal(id); }
         else if (action === 'person-credit') { openPersonCredit(element); }
         else if (action === 'share') { openTitleShare(id); }
+        else if (action === 'send-to-screen') { sendTitleToScreen(id); }
         else if (action === 'subscription-filter') { loadSubscriptions(element.getAttribute('data-kind')); }
         else if (action === 'subscription-region') {
             state.preferences.tmdbRegion = BuroTmdb.safeRegion(element.getAttribute('data-region'));

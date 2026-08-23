@@ -23,7 +23,10 @@ var BuroPairing = (function () {
     var REQUEST_TIMEOUT_MS = 12000;
     var MAX_RESPONSE_BYTES = 16 * 1024;
     /* O servidor aceita três; a TV só pede estes dois por enquanto. */
-    var KINDS = { tmdb_key: true, critics_key: true };
+    /* Os tipos que este cliente conhece. `open_title` e o unico que sai da TV
+       em vez de entrar nela: e por ele que "Enviar a tela" publica qual titulo
+       o outro aparelho deve abrir. */
+    var KINDS = { tmdb_key: true, critics_key: true, open_title: true };
 
     function post(path, body, success, failure) {
         return BuroNetwork.json({
@@ -108,9 +111,67 @@ var BuroPairing = (function () {
         return { cancel: stop };
     }
 
+    /*
+      Publica um valor sob um codigo, para o outro aparelho vir busca-lo.
+
+      Sentido inverso de `start`: la a TV pede um codigo e fica esperando alguem
+      enviar; aqui ela pede o codigo e ja deixa o valor no servidor, e quem
+      reivindica e o celular. Nao ha polling porque nao ha o que esperar — o
+      codigo aparece na tela e a TV terminou o seu lado.
+
+      Serve ao "Enviar a tela": o que viaja e a identidade do titulo, nunca o
+      video nem a credencial da fonte.
+    */
+    function publish(kind, value, callbacks) {
+        var handlers = callbacks || {};
+        var request = null;
+        var stopped = false;
+
+        function stop() {
+            stopped = true;
+            if (request && request.abort) { request.abort(); }
+            request = null;
+        }
+
+        function fail(error) {
+            if (stopped) { return; }
+            stop();
+            if (handlers.failure) { handlers.failure(error || { code: 'PAIRING_FAILED' }); }
+        }
+
+        if (!KINDS[kind]) {
+            if (handlers.failure) { handlers.failure({ code: 'PAIRING_KIND_INVALID' }); }
+            return { cancel: function () {} };
+        }
+
+        request = post('/v1/pair/start', { kind: kind }, function (payload) {
+            var seconds = Number(payload && payload.expiresInSeconds) || 300;
+            var code = String(payload && payload.code || '');
+            request = null;
+            if (stopped) { return; }
+            if (!/^[0-9]{6}$/.test(code)) { fail({ code: 'PAIRING_FAILED' }); return; }
+            /* O valor so e enviado depois de o codigo existir: publicar antes
+               deixaria um titulo no servidor sem ninguem para busca-lo. */
+            request = post('/v1/pair/submit', { code: code, kind: kind, payload: String(value || '') },
+                function () {
+                    request = null;
+                    if (stopped) { return; }
+                    if (handlers.code) { handlers.code(code, seconds); }
+                }, function (error) {
+                    request = null;
+                    fail(error);
+                });
+        }, function (error) {
+            request = null;
+            fail(error);
+        });
+
+        return { cancel: stop };
+    }
+
     /* O endereço que o usuário digita no celular. Curto de propósito: ele vai
        ser lido de longe e digitado à mão. */
     function phoneUrl() { return BASE.replace(/^https:\/\//, '') + '/parear'; }
 
-    return { start: start, phoneUrl: phoneUrl, BASE: BASE };
+    return { start: start, publish: publish, phoneUrl: phoneUrl, BASE: BASE };
 }());
