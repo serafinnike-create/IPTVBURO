@@ -753,6 +753,103 @@ class TmdbClient(
         )
     }
 
+    /**
+     * Titles TMDb considers close to [tmdbId] — the strip a film or series page shows under the
+     * cast.
+     *
+     * `recommendations` rather than `similar`: TMDb's own docs describe `similar` as a purely
+     * genre/keyword match, while `recommendations` is what actually surfaces a franchise's other
+     * entries (a Superman film recommends the other Superman films) alongside genuine lookalikes.
+     * Falls back to `similar` when recommendations comes back empty — a newer or more obscure
+     * title can have too little user activity for TMDb to have built recommendations for it yet,
+     * while the genre-based endpoint still has something to say.
+     */
+    fun similarTitles(
+        tmdbId: Int,
+        isSeries: Boolean = false,
+        limit: Int = 16,
+    ): List<TmdbDiscoveredTitle> {
+        val key = apiKey?.takeIf(String::isNotBlank) ?: return emptyList()
+        val mediaPath = if (isSeries) "tv" else "movie"
+
+        fun fetch(endpoint: String): List<TmdbDiscoveredTitle> {
+            val url =
+                baseUrl.newBuilder()
+                    .addPathSegments("$mediaPath/$tmdbId/$endpoint")
+                    .addQueryParameter("api_key", key)
+                    .addQueryParameter("language", language)
+                    .build()
+            return get(url).parseDiscoveredTitles(isSeries)
+        }
+
+        // The franchise first, then what people watch alongside it.
+        //
+        // These answer different questions and the first one is what a viewer usually means. Asked
+        // for other Superman films, `recommendations` returns The Flash and Adão Negro — related,
+        // popular, and not the sequels. The collection returns Superman I through IV, which is the
+        // list somebody looking at one of them wants. Measured against the live service rather
+        // than assumed.
+        //
+        // Series have no collections on TMDb, so for them this is recommendations as before.
+        val franchise = if (isSeries) emptyList() else franchiseTitles(tmdbId)
+        val related = fetch("recommendations").ifEmpty { fetch("similar") }
+        return (franchise + related).distinctBy { it.id }.take(limit)
+    }
+
+    /**
+     * The rest of the collection this film belongs to, in release order.
+     *
+     * TMDb calls a franchise a "collection" and only films have them. Two requests: the film's own
+     * details name the collection, and the collection lists its parts — there is no way to ask for
+     * both at once, and the details response carries only the collection's id and name.
+     *
+     * Empty when the film is in no collection, which is the ordinary case for anything that is not
+     * part of a series of films.
+     */
+    fun franchiseTitles(tmdbId: Int): List<TmdbDiscoveredTitle> {
+        val key = apiKey?.takeIf(String::isNotBlank) ?: return emptyList()
+        val detailsUrl =
+            baseUrl.newBuilder()
+                .addPathSegments("movie/$tmdbId")
+                .addQueryParameter("api_key", key)
+                .addQueryParameter("language", language)
+                .build()
+        val collectionId =
+            get(detailsUrl)
+                ?.getAsJsonObject("belongs_to_collection")
+                ?.int("id")
+                ?: return emptyList()
+
+        val collectionUrl =
+            baseUrl.newBuilder()
+                .addPathSegments("collection/$collectionId")
+                .addQueryParameter("api_key", key)
+                .addQueryParameter("language", language)
+                .build()
+        return get(collectionUrl)
+            ?.getAsJsonArray("parts")
+            ?.mapNotNull { element -> element.takeIf { it.isJsonObject }?.asJsonObject }
+            ?.mapNotNull { part ->
+                val id = part.int("id") ?: return@mapNotNull null
+                val title = part.string("title") ?: return@mapNotNull null
+                val year = part.string("release_date")?.take(4)?.toIntOrNull()
+                TmdbDiscoveredTitle(
+                    id = id,
+                    title = title,
+                    year = year,
+                    posterUrl = part.string("poster_path")?.let { path -> "$imageBaseUrl/w342$path" },
+                    overview = part.string("overview"),
+                    rating = part.double("vote_average"),
+                    isSeries = false,
+                    releaseDate = part.string("release_date"),
+                )
+            }
+            // Release order, so a franchise reads as one, two, three rather than in TMDb's own
+            // order — which put Superman III before Superman II.
+            ?.sortedBy { it.year ?: Int.MAX_VALUE }
+            .orEmpty()
+    }
+
     // findMovieId is gone. It existed only to recover an id that watchProviders' caller already
     // held, and searching by title was what made a translated name resolve to the wrong film and a
     // series resolve to nothing.

@@ -239,6 +239,22 @@ fun XtreamDailyHome(
                 personOpen = true
                 scope.launch { appState.openPerson(name) }
             },
+            // The same three flags the credit handler moves, for the same reason: selecting a
+            // title is not showing it, and the destination decides which screen is right. A title
+            // that is not in this playlist goes to Assinaturas rather than opening an empty page.
+            onOpenSimilar = { credit ->
+                when (appState.openCredit(credit)) {
+                    CreditDestination.PLAYLIST_ITEM -> {
+                        personOpen = false
+                        detailsOpen = true
+                    }
+                    CreditDestination.SUBSCRIPTIONS -> {
+                        personOpen = false
+                        detailsOpen = false
+                    }
+                    CreditDestination.NOWHERE -> Unit
+                }
+            },
         )
         return
     }

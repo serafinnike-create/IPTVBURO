@@ -277,6 +277,22 @@ fun XtreamWorkspace(
                 personOpen = true
                 scope.launch { appState.openPerson(name) }
             },
+            // The same three flags the credit handler moves, for the same reason: selecting a
+            // title is not showing it, and the destination decides which screen is right. A title
+            // that is not in this playlist goes to Assinaturas rather than opening an empty page.
+            onOpenSimilar = { credit ->
+                when (appState.openCredit(credit)) {
+                    CreditDestination.PLAYLIST_ITEM -> {
+                        personOpen = false
+                        detailsOpen = true
+                    }
+                    CreditDestination.SUBSCRIPTIONS -> {
+                        personOpen = false
+                        detailsOpen = false
+                    }
+                    CreditDestination.NOWHERE -> Unit
+                }
+            },
         )
         return
     }
@@ -1556,6 +1572,13 @@ internal fun XtreamInternalDetailsPage(
     onBack: () -> Unit,
     onOpenExternal: (PendingXtreamExternal) -> Unit,
     onOpenPerson: (String) -> Unit,
+    /**
+     * Opens a title from the similar-titles shelf.
+     *
+     * Passed in rather than handled here for the same reason [onOpenPerson] is: which screen to
+     * show afterwards is the caller's own state, and this page cannot reach it.
+     */
+    onOpenSimilar: suspend (PersonCredit) -> Unit = {},
     castPhotoFor: (String) -> String? = { null },
     onRequestCastPhoto: suspend (String) -> Unit = {},
 ) {
@@ -1658,6 +1681,8 @@ internal fun XtreamInternalDetailsPage(
                 onToggleReminder = { appState.toggleReminder(item) },
                 audienceScore = appState.audienceScore,
                 criticScores = appState.criticScores,
+                similarTitles = appState.similarTitles,
+                onOpenSimilar = onOpenSimilar,
                 onShare = {
                     // Built here rather than in the dialog, because this is where the loaded
                     // details are. The poster deliberately comes from the *details* rather than
@@ -1792,6 +1817,10 @@ internal fun XtreamItemDetail(
     hasReminder: Boolean = false,
     /** Marks or unmarks the title as one to be reminded about. Null hides the button. */
     onToggleReminder: (() -> Unit)? = null,
+    /** Other titles to open from this one. Empty when TMDb is not configured or knows of none. */
+    similarTitles: List<PersonCredit> = emptyList(),
+    /** The same route a filmography credit takes, so a title outside this playlist still opens. */
+    onOpenSimilar: suspend (PersonCredit) -> Unit = {},
     /** The audience score for this title, once TMDb has answered. Null draws no ratings block. */
     audienceScore: TmdbAudienceScore? = null,
     /** The critics' scores, when an OMDb key is set and that service knew the title. */
@@ -1926,6 +1955,8 @@ internal fun XtreamItemDetail(
                 }
                 SeriesDetailContent(
                     status = seriesStatus,
+                    similarTitles = similarTitles,
+                    onOpenSimilar = onOpenSimilar,
                     // The same two the film page receives. Series had neither, so the page showed
                     // the provider's own star and nothing else.
                     audienceScore = audienceScore,
@@ -2187,6 +2218,8 @@ internal fun XtreamItemDetail(
                         onOpenPerson = onOpenPerson,
                         castPhotoFor = castPhotoFor,
                         onRequestCastPhoto = onRequestCastPhoto,
+                        similarTitles = similarTitles,
+                        onOpenSimilar = onOpenSimilar,
                     )
                     Spacer(Modifier.height(18.dp))
                 }
@@ -2332,6 +2365,8 @@ private fun MovieDetailContent(
     onOpenPerson: (String) -> Unit,
     castPhotoFor: (String) -> String? = { null },
     onRequestCastPhoto: suspend (String) -> Unit = {},
+    similarTitles: List<PersonCredit> = emptyList(),
+    onOpenSimilar: suspend (PersonCredit) -> Unit = {},
 ) {
     when (status) {
         // Idle is not loading, and drawing it as though it were is what left this page spinning
@@ -2398,8 +2433,112 @@ private fun MovieDetailContent(
                     onRequestPhoto = onRequestCastPhoto,
                 )
             }
+            // Under the cast, because it answers "what next" rather than "what is this".
+            SimilarTitlesShelf(similarTitles, onOpenSimilar, strings)
         }
     }
+}
+
+/**
+ * Other titles worth opening from the one on screen — the rest of a franchise, then near misses.
+ *
+ * A horizontal row rather than a grid, and placed under the cast, because it answers "what next"
+ * rather than "what is this": somebody reading the synopsis has not decided yet, and somebody who
+ * has reached the bottom of the page has.
+ *
+ * Every card opens through the same path a filmography credit does. That matters more than it
+ * looks: the title may not be in this playlist at all, and that route already knows to search the
+ * catalogue first and fall back to asking where it can be watched, rather than opening an empty
+ * page. Reusing it also means the "searching…" behaviour is the one the user has already seen.
+ */
+@Composable
+private fun SimilarTitlesShelf(
+    titles: List<PersonCredit>,
+    onOpenCredit: suspend (PersonCredit) -> Unit,
+    text: DesktopStrings,
+) {
+    if (titles.isEmpty()) return
+    val scope = rememberCoroutineScope()
+    var openingTitle by remember { mutableStateOf<String?>(null) }
+
+    Spacer(Modifier.height(BuroSpacing.Md))
+    Text(
+        text.shareStrings.screens.similarTitles,
+        color = BuroColors.TextMuted,
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+    )
+    val shelfScroll = rememberScrollState()
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(shelfScroll),
+        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+    ) {
+        titles.forEach { similar ->
+            Column(
+                modifier =
+                    Modifier
+                        .width(120.dp)
+                        .clip(BuroRadius.Small)
+                        .clickable(enabled = openingTitle == null) {
+                            scope.launch {
+                                openingTitle = similar.title
+                                try {
+                                    onOpenCredit(similar)
+                                } finally {
+                                    openingTitle = null
+                                }
+                            }
+                        },
+            ) {
+                BuroRemoteArtwork(
+                    artworkUrl = similar.posterUrl,
+                    contentDescription = similar.title,
+                    modifier =
+                        Modifier
+                            .width(120.dp)
+                            .aspectRatio(2f / 3f)
+                            .clip(BuroRadius.Small)
+                            .background(BuroColors.SurfaceRaised),
+                    contentScale = ContentScale.Crop,
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        XtreamMonogram(similar.title, 34)
+                    }
+                }
+                // The card that was pressed says so while the catalogue is searched, because that
+                // sweep runs over tens of thousands of rows and silence reads as a dead click.
+                if (openingTitle == similar.title) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().height(2.dp),
+                        color = BuroColors.Primary,
+                        trackColor = BuroColors.SurfaceRaised,
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = similar.title,
+                    color = BuroColors.Text,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                similar.year?.let { year ->
+                    Text(
+                        text = year.toString(),
+                        color = BuroColors.TextSubtle,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+    // A scrollbar, because a row that runs past the edge with no handle is the defect this app has
+    // already fixed twice elsewhere.
+    HorizontalScrollbar(
+        adapter = rememberScrollbarAdapter(shelfScroll),
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+    )
 }
 
 @Composable
@@ -2720,6 +2859,10 @@ internal fun PersonFilmographyPage(
 @Composable
 private fun SeriesDetailContent(
     status: SeriesDetailsStatus,
+    /** Other series worth opening from this one. Empty when TMDb knows of none. */
+    similarTitles: List<PersonCredit> = emptyList(),
+    /** The same route the film shelf uses, so a series outside this playlist still opens. */
+    onOpenSimilar: suspend (PersonCredit) -> Unit = {},
     /** The audience score, once TMDb has answered. Null draws no ratings block at all. */
     audienceScore: TmdbAudienceScore? = null,
     /** The critics' scores, which appear under the audience one when they exist. */
@@ -2849,6 +2992,8 @@ private fun SeriesDetailContent(
                     onRequestPhoto = onRequestCastPhoto,
                 )
             }
+            // Under the cast, matching the film page.
+            SimilarTitlesShelf(similarTitles, onOpenSimilar, text)
 
             // Actions sit together above the episode list, matching the film page. Previously the
             // trailer was a full-width button buried between the metadata and the episodes, and

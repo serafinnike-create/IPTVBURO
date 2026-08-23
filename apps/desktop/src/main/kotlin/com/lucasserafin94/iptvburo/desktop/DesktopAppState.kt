@@ -1646,6 +1646,7 @@ class DesktopAppState(
             if (audienceScoreFor == requested) {
                 audienceScore = found
                 loadCriticScores(requested, found?.tmdbId)
+                loadSimilarTitles(requested, found?.tmdbId, isSeries)
             }
         }
     }
@@ -1670,6 +1671,59 @@ class DesktopAppState(
      * that into an IMDb id, and OMDb is keyed by the latter. Matching OMDb on title and year
      * instead would eventually put another film's Tomatometer on this page.
      */
+    /**
+     * Other titles worth opening from the one on screen: the rest of a franchise, then near misses.
+     *
+     * TMDb's `recommendations` first and `similar` only as a fallback — that is what the client
+     * already does. Recommendations are drawn from what people actually watch together, so for
+     * Superman they lead with the other Superman films; `similar` is genre-and-keyword matching,
+     * which is a weaker answer but better than an empty shelf.
+     */
+    var similarTitles by mutableStateOf<List<PersonCredit>>(emptyList())
+        private set
+
+    private var similarTitlesFor: String? = null
+
+    /**
+     * Chained onto the audience-score lookup, like the critics' scores and for the same reason.
+     *
+     * The join key is a TMDb id, and resolving a name to one costs a search request. That request
+     * has already been made by the time this runs, so asking again would be paying twice for an
+     * answer the caller is holding.
+     */
+    private fun loadSimilarTitles(requested: String, tmdbId: Int?, isSeries: Boolean) {
+        similarTitles = emptyList()
+        similarTitlesFor = requested
+        if (!metadataClient.isConfigured || tmdbId == null) return
+        streamingScope.launch {
+            val found =
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        metadataClient.similarTitles(tmdbId, isSeries)
+                    }
+                }.getOrElse { emptyList() }
+            // The viewer may have opened something else while this was in flight. Attaching one
+            // film's recommendations to another's page is worse than showing no shelf at all.
+            if (similarTitlesFor != requested) return@launch
+            similarTitles =
+                found
+                    // The title itself comes back from `similar` often enough to matter, and a
+                    // shelf that offers the film you are already looking at reads as a bug.
+                    .filterNot { it.title.equals(requested, ignoreCase = true) }
+                    .map { discovered ->
+                        PersonCredit(
+                            id = discovered.id,
+                            isSeries = discovered.isSeries,
+                            title = discovered.title,
+                            year = discovered.year,
+                            posterUrl = discovered.posterUrl,
+                            // A recommendation is not a role. The card shows the year instead.
+                            character = null,
+                        )
+                    }
+        }
+    }
+
     private fun loadCriticScores(requested: String, tmdbId: Int?) {
         criticScores = null
         val client = criticScoresClient ?: return
