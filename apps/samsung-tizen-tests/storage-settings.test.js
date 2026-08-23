@@ -174,9 +174,18 @@ async function run() {
         rows[0].textContent.indexOf('3') >= 0 && rows[0].textContent.indexOf('2') >= 0);
 
     process.stdout.write('A tela diz a verdade sobre onde as capas ficam\n');
-    check('o texto das capas afirma que nada é gravado na TV',
-        rows[1].textContent.indexOf('memória') >= 0 &&
-        rows[1].textContent.indexOf('não são gravadas') >= 0);
+    /*
+      O texto acompanhou o que o aplicativo passou a fazer.
+
+      Ele dizia que a capa nao era gravada e ficava so em memoria — verdade
+      ate a capa passar a ser guardada junto com o titulo, e ate existir a
+      copia opcional no pendrive. Um texto que descreve o comportamento antigo
+      e pior do que nenhum: manda a pessoa procurar a explicacao errada quando
+      algo nao aparece.
+    */
+    check('o texto das capas descreve onde elas ficam de verdade',
+        rows[1].textContent.indexOf('gravada') >= 0 &&
+        rows[1].textContent.indexOf('pendrive') >= 0);
     check('o texto dos downloads aponta o USB, não a TV',
         rows[2].textContent.indexOf('USB') >= 0);
 

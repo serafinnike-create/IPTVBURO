@@ -322,8 +322,26 @@ var BuroApp = (function () {
       prateleira do comeco do catalogo ter capa depois de a varredura terminar.
     */
     function artworkFor(item) {
+        var remote;
+        var local;
         if (!item) { return null; }
-        return safeArtworkUrl(artworkMemory[item.id]) || safeArtworkUrl(item.logoUrl);
+        /*
+          A copia no pendrive vem primeiro, quando existe.
+
+          Ela abre sem rede, o que numa TV com internet ruim e a diferenca entre
+          a prateleira desenhar de imediato e desenhar aos poucos. Sem pendrive
+          `localUrl` devolve nulo e tudo segue como antes.
+        */
+        local = typeof BuroArtworkCache !== 'undefined' ? BuroArtworkCache.localUrl(item.id) : null;
+        if (local) { return local; }
+        remote = safeArtworkUrl(artworkMemory[item.id]) || safeArtworkUrl(item.logoUrl);
+        /* Vista uma vez, guardada para a proxima: pedir a copia so quando a capa
+           aparece na tela evita baixar dezenas de milhares de imagens que
+           ninguem vai ver. */
+        if (remote && typeof BuroArtworkCache !== 'undefined') {
+            BuroArtworkCache.remember(item.id, remote);
+        }
+        return remote;
     }
 
     function artworkHtml(item, className) {
@@ -1063,6 +1081,12 @@ var BuroApp = (function () {
                 state.reminders = data.reminders || [];
                 refreshActiveReferences();
                 bootProgress('artwork', 'bootArtwork');
+                /* O cache no pendrive, se a pessoa o ligou: le a pasta uma vez e
+                   ja sabe quais capas nao precisa buscar de novo. Falha em
+                   silencio quando o pendrive nao esta la, que e o caso normal. */
+                if (state.preferences.artworkCacheEnabled) {
+                    BuroArtworkCache.attach(state.preferences.artworkCacheLimitMb, function () {});
+                }
                 /* Um quadro permite que o WebView pinte a arte antes de liberar o shell. */
                 window.setTimeout(finishInitialization, 16);
             }, function (error) {
@@ -5163,6 +5187,78 @@ var BuroApp = (function () {
             escapeHtml(value) + '</strong></div>';
     }
 
+    /* Megabytes legiveis: "512 MB" ou "1,4 GB", porque um numero de bytes numa
+       TV nao diz nada a ninguem. */
+    function formatCacheSize(bytes) {
+        var mb = Number(bytes) / (1024 * 1024);
+        if (!isFinite(mb) || mb <= 0) { return '0 MB'; }
+        if (mb >= 1024) { return (mb / 1024).toFixed(1).replace('.', ',') + ' GB'; }
+        return Math.round(mb) + ' MB';
+    }
+
+    /*
+      O painel do cache de capas no pendrive.
+
+      Depende de um aparelho que a pessoa precisa plugar, entao o painel diz o
+      estado antes de oferecer a acao: sem pendrive o botao nao aparece, e a
+      explicacao toma o lugar dele. Prometer uma funcao que nao pode funcionar
+      agora seria pior do que dizer o que falta.
+    */
+    function artworkCachePanelHtml() {
+        var status = BuroArtworkCache.status();
+        var body;
+        if (!status.hasStorage) {
+            body = '<p class="form-note">' + escapeHtml(t('artworkCacheNoUsb')) + '</p>';
+        } else if (!status.enabled) {
+            body = '<p class="form-note">' + escapeHtml(t('artworkCacheOffHint')) + '</p>' +
+                '<div class="action-row"><button class="button primary focusable" data-action="artwork-cache-on">' +
+                escapeHtml(t('artworkCacheEnable')) + '</button></div>';
+        } else {
+            body = '<p class="form-note">' +
+                escapeHtml(t('artworkCacheUsage')
+                    .replace('{count}', status.count)
+                    .replace('{size}', formatCacheSize(status.bytes))
+                    .replace('{limit}', status.limitMb + ' MB')) + '</p>' +
+                '<div class="action-row">' +
+                '<button class="button ghost focusable" data-action="artwork-cache-limit">' +
+                escapeHtml(t('artworkCacheLimit').replace('{limit}', status.limitMb + ' MB')) + '</button>' +
+                '<button class="button ghost focusable" data-action="artwork-cache-clear">' +
+                escapeHtml(t('artworkCacheClear')) + '</button>' +
+                '<button class="button ghost focusable" data-action="artwork-cache-off">' +
+                escapeHtml(t('artworkCacheDisable')) + '</button></div>';
+        }
+        return '<section class="tmdb-key-scope artwork-cache-panel"><h3>' +
+            escapeHtml(t('artworkCacheTitle')) + '</h3>' + body + '</section>';
+    }
+
+    /* Liga ou desliga o cache no pendrive, guardando a escolha. Desligar nao
+       apaga nada: quem desliga hoje pode religar amanha e achar as capas onde
+       deixou. */
+    function setArtworkCache(on) {
+        state.preferences.artworkCacheEnabled = Boolean(on);
+        savePreferences();
+        if (on) {
+            BuroArtworkCache.attach(state.preferences.artworkCacheLimitMb, function () { render(); });
+        } else {
+            BuroArtworkCache.detach();
+        }
+        render();
+    }
+
+    /* Os tamanhos oferecidos. Poucos e redondos: numa TV nao ha como digitar um
+       numero, e "quanto do meu pendrive" nao e uma pergunta de precisao. */
+    var ARTWORK_CACHE_STEPS = [256, 512, 1024, 2048, 4096];
+
+    function cycleArtworkCacheLimit() {
+        var current = BuroArtworkCache.safeLimitMb(state.preferences.artworkCacheLimitMb);
+        var index = ARTWORK_CACHE_STEPS.indexOf(current);
+        var next = ARTWORK_CACHE_STEPS[(index + 1) % ARTWORK_CACHE_STEPS.length];
+        state.preferences.artworkCacheLimitMb = next;
+        savePreferences();
+        BuroArtworkCache.attach(next, function () { render(); });
+        render();
+    }
+
     function renderStorageSettings() {
         var draft = state.screenData || {};
         var counts = draft.counts;
@@ -5179,7 +5275,8 @@ var BuroApp = (function () {
             storageRow(t('storageCatalogue'), catalogueValue, '') +
             storageRow(t('storageArtwork'), String(artworkOrder.length), t('storageArtworkHint')) +
             storageRow(t('storageDownloads'), String(downloadCount), t('storageDownloadsHint')) +
-            '</div><p class="form-note privacy">' + escapeHtml(t('storageClearHint')) + '</p>' +
+            '</div>' + artworkCachePanelHtml() +
+            '<p class="form-note privacy">' + escapeHtml(t('storageClearHint')) + '</p>' +
             '<div class="action-row"><button class="button ghost focusable" data-action="storage-measure">' +
             t('storageRefresh') + '</button>' +
             '<button class="button ' + (draft.confirmClear ? 'primary' : 'ghost') +
@@ -9443,6 +9540,13 @@ var BuroApp = (function () {
         else if (action === 'pair-critics') { startPairing('critics_key'); }
         else if (action === 'pair-retry') { startPairing((state.screenData && state.screenData.kind) || 'tmdb_key'); }
         else if (action === 'storage-settings') { pushScreen('STORAGE_SETTINGS', {}); measureStorage(); }
+        else if (action === 'artwork-cache-on') { setArtworkCache(true); }
+        else if (action === 'artwork-cache-off') { setArtworkCache(false); }
+        else if (action === 'artwork-cache-limit') { cycleArtworkCacheLimit(); }
+        else if (action === 'artwork-cache-clear') {
+            BuroArtworkCache.clear(function () { render(); });
+            showToast(t('artworkCacheCleared'), false);
+        }
         else if (action === 'storage-measure') { measureStorage(); }
         else if (action === 'storage-clear') { clearStoredCatalogue(); }
         else if (action === 'notifications') { openNotifications(); }

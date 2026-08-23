@@ -45,6 +45,10 @@ var BuroStorage = (function () {
             /* Os avisos do sino. Ficam nas preferências e não no IndexedDB
                porque são derivados: se sumirem, a próxima abertura reconstrói o
                digest do dia a partir dos lembretes. */
+            /* O cache de capas no pendrive: desligado ate alguem ligar, porque
+               depende de um aparelho que a pessoa precisa plugar. */
+            artworkCacheEnabled: false,
+            artworkCacheLimitMb: 512,
             notifications: []
         };
     }
