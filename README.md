@@ -9,7 +9,7 @@ Transforma fontes de mídia autorizadas pelo usuário em uma biblioteca organiza
 ![Status](https://img.shields.io/badge/status-em%20desenvolvimento-7c3aed)
 ![GDD](https://img.shields.io/badge/GDD-1.0%20%E2%86%92%209.0-2563eb)
 ![Android TV](https://img.shields.io/badge/Android%20TV-v3.0.1-3ddc84)
-![Windows](https://img.shields.io/badge/Windows-v3.2.0-e2b458)
+![Windows](https://img.shields.io/badge/Windows-v3.2.1-e2b458)
 ![Multiplataforma](https://img.shields.io/badge/escopo-universal-0f766e)
 ![Offline Mobile](https://img.shields.io/badge/Offline%20Vault-planejado-f59e0b)
 
@@ -43,7 +43,7 @@ Legenda: ✅ concluído · 🧪 em teste · 🚧 em implementação · 🧭 plan
 |---|---|
 | GDDs 1.0 a 9.0 | ✅ Documentados na `main` |
 | Aplicação Android/Android TV | 🧪 Prévia `v3.0.1`; APK de depuração, não é versão de loja |
-| Aplicação Windows | ✅ `v3.2.0`; MSI ainda sem assinatura Authenticode |
+| Aplicação Windows | ✅ `v3.2.1`; MSI ainda sem assinatura Authenticode |
 | **Onde assistir** (GDD 9) — prateleira por serviço, com capas | 🧪 Windows, dados reais do TMDb |
 | **Já está na sua lista** — o título encontrado no catálogo do usuário | 🧪 Só um casamento confiante produz a linha |
 | Redirecionamento ao serviço oficial | ✅ Nunca reproduz stream protegido; recusa endereço com token ou mídia |
@@ -108,15 +108,15 @@ As duas aplicações passam a compartilhar a numeração, e estão na mesma pág
 versão. O Android continua em prévia: o APK é de depuração e não é uma versão de
 loja.
 
-**➜ [Página da versão v3.2.0](https://github.com/serafinnike-create/IPTVBURO/releases/tag/v3.2.0)**
+**➜ [Página da versão v3.2.1](https://github.com/serafinnike-create/IPTVBURO/releases/tag/v3.2.1)**
 · [todas as versões](https://github.com/serafinnike-create/IPTVBURO/releases)
 
 | Plataforma | Baixar |
 |---|---|
-| Windows 10/11 (64 bits) | [`IPTV-BURO-v3.2.0-windows-x64.msi`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v3.2.0/IPTV-BURO-v3.2.0-windows-x64.msi) — sem assinatura, veja a nota abaixo |
+| Windows 10/11 (64 bits) | [`IPTV-BURO-v3.2.1-windows-x64.msi`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v3.2.1/IPTV-BURO-v3.2.1-windows-x64.msi) — sem assinatura, veja a nota abaixo |
 | Android / Android TV (prévia) | [`IPTV-BURO-v3.0.1-android-debug.apk`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v3.0.1/IPTV-BURO-v3.0.1-android-debug.apk) |
 
-O [`SHA256SUMS.txt`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v3.2.0/SHA256SUMS.txt)
+O [`SHA256SUMS.txt`](https://github.com/serafinnike-create/IPTVBURO/releases/download/v3.2.1/SHA256SUMS.txt)
 da mesma página permite conferir os dois arquivos.
 
 > [!NOTE]

@@ -2,6 +2,33 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [3.2.1] - 2026-08-24 (Windows)
+
+### Windows
+
+#### Corrigido
+
+- **"Disponível nesta lista" na página de um ator mostrava filmes aleatórios.**
+  A busca perguntava ao provedor o elenco de cada filme, uma requisição por
+  filme — inviável em 42 mil, então parava após 400. Sempre os mesmos 400, do
+  começo do catálogo, então a seção listava o que por acaso estivesse neles:
+  menos de 1% da sua lista, escolhido por posição e não pela pessoa.
+
+  Agora os créditos que a TMDb já forneceu são cruzados com o catálogo que já
+  está na memória: nenhuma requisição, a biblioteca inteira, e uma resposta que
+  é de fato sobre o ator.
+
+#### Melhorado
+
+- **O cache de capas mostra porcentagem e velocidade.** Antes dizia só "N de M",
+  e uma cópia lenta era indistinguível de uma travada. A velocidade já era
+  medida internamente e nunca era exibida.
+- **"Atualizar" e "Limpar" viraram botões de verdade.** Como texto simples, ao
+  lado de uma linha de texto cinza, pareciam parte da frase acima em vez de algo
+  para clicar.
+- **Limpar o cache agora pede confirmação**, dizendo o que se perde — as capas,
+  não a sua lista. Antes apagava minutos de download num clique só.
+
 ## [3.2.0] - 2026-08-24 (Windows)
 
 ### Windows
