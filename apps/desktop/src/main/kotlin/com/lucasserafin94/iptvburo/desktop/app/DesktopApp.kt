@@ -142,6 +142,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.LocalDesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.LocalProviderLogos
 import com.lucasserafin94.iptvburo.desktop.ui.strings
+import com.lucasserafin94.iptvburo.xtream.XtreamEpgProgram
 import com.lucasserafin94.iptvburo.desktop.update.DESKTOP_VERSION
 import com.lucasserafin94.iptvburo.desktop.update.DesktopRelease
 import com.lucasserafin94.iptvburo.desktop.update.GitHubReleaseUpdater
@@ -2288,6 +2289,7 @@ private fun CatalogWorkspace(
                         channel = appState.selectedChannel,
                         onOpenExternal = onOpenExternal,
                         modifier = Modifier.weight(1f),
+                        nowAndNext = appState.selectedChannelNowAndNext,
                     )
                 } else {
                     PaneDivider()
@@ -2457,6 +2459,14 @@ private fun ChannelDetail(
     channel: Channel?,
     onOpenExternal: (Channel) -> Unit,
     modifier: Modifier,
+    /**
+     * What is on now and next, when the playlist named a guide.
+     *
+     * Both halves are null for a list without one, and the block is then not drawn at all — an
+     * empty "Agora —" would read as a channel that is off air rather than as a list that carries
+     * no schedule.
+     */
+    nowAndNext: Pair<XtreamEpgProgram?, XtreamEpgProgram?> = null to null,
 ) {
     Box(
         modifier = modifier.fillMaxHeight().padding(24.dp),
@@ -2507,6 +2517,10 @@ private fun ChannelDetail(
             )
             Spacer(Modifier.height(8.dp))
             PlaybackStatus(channel)
+            if (nowAndNext.first != null || nowAndNext.second != null) {
+                Spacer(Modifier.height(18.dp))
+                ChannelGuideBlock(nowAndNext)
+            }
             Spacer(Modifier.height(24.dp))
             Button(
                 onClick = { onOpenExternal(channel) },
@@ -2527,6 +2541,54 @@ private fun ChannelDetail(
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
+    }
+}
+
+/** Now and next for a playlist channel, in the two lines the pane has room for. */
+@Composable
+private fun ChannelGuideBlock(nowAndNext: Pair<XtreamEpgProgram?, XtreamEpgProgram?>) {
+    val labels = strings.shareStrings.screens
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        nowAndNext.first?.let { program ->
+            GuideLine(labels.guideNow, program.title, BuroColors.Text)
+        }
+        nowAndNext.second?.let { program ->
+            Spacer(Modifier.height(6.dp))
+            GuideLine(labels.guideNext, program.title, BuroColors.TextSubtle)
+        }
+    }
+}
+
+@Composable
+private fun GuideLine(
+    label: String,
+    title: String,
+    titleColor: androidx.compose.ui.graphics.Color,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label.uppercase(),
+            color = BuroColors.TextSubtle,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            title,
+            color = titleColor,
+            style = MaterialTheme.typography.bodyMedium,
+            // The pane is narrow and a programme title can be long; weight(1f) is what keeps the
+            // title from squeezing the label down to one letter per line.
+            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

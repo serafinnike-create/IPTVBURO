@@ -10,6 +10,7 @@ import com.lucasserafin94.iptvburo.desktop.data.ArtworkCache
 import com.lucasserafin94.iptvburo.desktop.data.CatalogLoadProgress
 import com.lucasserafin94.iptvburo.desktop.data.FtpPlaylistReader
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
+import com.lucasserafin94.iptvburo.desktop.data.XmltvGuideSource
 import com.lucasserafin94.iptvburo.desktop.data.MusicLibraryLoader
 import com.lucasserafin94.iptvburo.desktop.data.RemotePlaylistProtocol
 import com.lucasserafin94.iptvburo.desktop.data.RemotePlaylistSource
@@ -188,6 +189,8 @@ class DesktopAppState(
     private val downloadManager: DesktopDownloadManager = DesktopDownloadManager(),
     private val sourceLibrary: XtreamSourceLibrary = XtreamSourceLibrary(),
     private val photoStore: ProfilePhotoStore = ProfilePhotoStore(),
+    /** The guide for playlists that name one in `url-tvg`. Xtream brings its own. */
+    private val xmltvGuideSource: XmltvGuideSource = XmltvGuideSource(),
     private val musicLoader: MusicLibraryLoader = MusicLibraryLoader(),
     private val playCountStore: MusicPlayCountStore = MusicPlayCountStore(),
     /**
@@ -2108,6 +2111,21 @@ class DesktopAppState(
                 ?.channels
                 ?.firstOrNull { it.id == selectedChannelId }
                 ?: visibleChannels.firstOrNull()
+
+    /**
+     * What is on now and next on the selected playlist channel, when its list brought a guide.
+     *
+     * Read straight from the loaded guide rather than kept in a status field: the lookup is a hash
+     * lookup on an id, so there is nothing to load and no in-flight state for the screen to show.
+     */
+    val selectedChannelNowAndNext: Pair<XtreamEpgProgram?, XtreamEpgProgram?>
+        get() {
+            if (!xmltvGuideSource.isLoaded) return null to null
+            val channel = selectedChannel ?: return null to null
+            return xmltvGuideSource
+                .shortEpg(channel.tvgId)
+                .nowAndNext(System.currentTimeMillis() / 1_000L)
+        }
 
     val selectedXtreamItem: XtreamCatalogItem?
         get() = dailySelectedItem ?: if (destination == DesktopDestination.HOME) {
@@ -5009,6 +5027,7 @@ class DesktopAppState(
             selectedSourceId = catalog.source.id
             selectedCategoryId = null
             selectedChannelId = catalog.channels.firstOrNull()?.id
+            loadGuideFor(catalog)
             searchQuery = ""
             importStatus =
                 ImportStatus.Success(
@@ -5064,6 +5083,7 @@ class DesktopAppState(
             selectedSourceId = catalog.source.id
             selectedCategoryId = null
             selectedChannelId = catalog.channels.firstOrNull()?.id
+            loadGuideFor(catalog)
             searchQuery = ""
             importStatus =
                 ImportStatus.Success(
@@ -5612,6 +5632,38 @@ class DesktopAppState(
             seriesDetailsStatus = SeriesDetailsStatus.Idle
             movieDetailsStatus = MovieDetailsStatus.Idle
             liveEpgStatus = LiveEpgStatus.Idle
+        }
+    }
+
+    /**
+     * Set when a playlist named a guide that could not be read, for the diagnostics panel.
+     *
+     * Not surfaced as an error: the list plays regardless, and the viewer has no action to take
+     * against a third-party address that is down.
+     */
+    var guideUnavailable by mutableStateOf(false)
+        private set
+
+    /**
+     * Loads the guide a freshly imported playlist points at, if it points at one.
+     *
+     * Deliberately quiet. The guide is an enhancement over a list that already works, and it is
+     * fetched from a third address that may simply be down — so a failure leaves the channels
+     * playing and the schedule absent, with nothing for the viewer to dismiss.
+     */
+    private suspend fun loadGuideFor(catalog: ImportedCatalog) {
+        if (catalog.epgUrls.isEmpty()) return
+        // Only the fetch is swallowed. Cancellation has to keep travelling — the alternative is a
+        // closing window that waits on a download of tens of megabytes — and there is no status to
+        // put back on the way out: this loader has no in-flight flag and no spinner, so nothing
+        // can be left stranded by leaving early.
+        try {
+            withContext(Dispatchers.IO) { xmltvGuideSource.load(catalog.epgUrls) }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Exception) {
+            // A guide that will not load leaves a list that still plays.
+            guideUnavailable = true
         }
     }
 
@@ -6398,6 +6450,8 @@ class DesktopAppState(
         val sourceId = selectedCatalog?.source?.id ?: return
         localRepository.forget(sourceId)
         catalogs = catalogs.filterNot { it.source.id == sourceId }
+        // The guide belongs to the list that named it, so it goes when the list does.
+        if (catalogs.isEmpty()) xmltvGuideSource.clear()
         selectedSourceId = catalogs.firstOrNull()?.source?.id ?: xtreamSummary?.sourceId
         selectedCategoryId = null
         selectedChannelId = catalogs.firstOrNull()?.channels?.firstOrNull()?.id
@@ -6427,6 +6481,7 @@ class DesktopAppState(
         xtreamRepository.clear()
         localRepository.clear()
         catalogs = emptyList()
+        xmltvGuideSource.clear()
         selectedSourceId = null
         clearXtreamUiState()
         xtreamStatus = XtreamStatus.Disconnected

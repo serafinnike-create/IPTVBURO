@@ -641,6 +641,8 @@ data class DesktopStrings(
                             importFailed = "No se pudo importar la lista. Comprueba que el archivo sea un M3U/M3U8 válido e inténtalo de nuevo.",
                             movieDetailsLoading = "Cargando la ficha de la película…",
                             epgLoading = "Cargando ahora y a continuación…",
+                            guideNow = "Agora",
+                            guideNext = "A seguir",
                             catchUpShow = "Rever (%1${'$'}s)",
                             catchUpHide = "Ocultar",
                             similarTitles = "Títulos parecidos",
@@ -1355,6 +1357,8 @@ data class DesktopStrings(
                             importFailed = "Não foi possível importar a lista. Verifique se o arquivo é M3U/M3U8 válido e tente novamente.",
                             movieDetailsLoading = "Carregando ficha do filme…",
                             epgLoading = "Carregando agora e próximo…",
+                            guideNow = "Agora",
+                            guideNext = "A seguir",
                             catchUpShow = "Rever (%1${'$'}s)",
                             catchUpHide = "Ocultar",
                             similarTitles = "Títulos parecidos",
@@ -2069,6 +2073,8 @@ data class DesktopStrings(
                             importFailed = "Could not import the playlist. Check that the file is valid M3U/M3U8 and try again.",
                             movieDetailsLoading = "Loading the film details…",
                             epgLoading = "Loading now and next…",
+                            guideNow = "Now",
+                            guideNext = "Next",
                             catchUpShow = "Watch again (%1${'$'}s)",
                             catchUpHide = "Hide",
                             similarTitles = "Similar titles",
@@ -2782,6 +2788,8 @@ data class DesktopStrings(
                             importFailed = "Die Liste konnte nicht importiert werden. Prüfen Sie, ob die Datei gültiges M3U/M3U8 ist, und versuchen Sie es erneut.",
                             movieDetailsLoading = "Filmdetails werden geladen…",
                             epgLoading = "Jetzt und danach werden geladen…",
+                            guideNow = "Jetzt",
+                            guideNext = "Danach",
                             catchUpShow = "Erneut ansehen (%1${'$'}s)",
                             catchUpHide = "Ausblenden",
                             similarTitles = "Ähnliche Titel",
@@ -3500,6 +3508,8 @@ data class DesktopStrings(
                             importFailed = "Impossibile importare la lista. Verifica che il file sia un M3U/M3U8 valido e riprova.",
                             movieDetailsLoading = "Caricamento della scheda del film…",
                             epgLoading = "Caricamento di ora e a seguire…",
+                            guideNow = "Ora",
+                            guideNext = "A seguire",
                             catchUpShow = "Rivedi (%1${'$'}s)",
                             catchUpHide = "Nascondi",
                             similarTitles = "Titoli simili",
@@ -4567,6 +4577,10 @@ data class ScreenStrings(
     val movieDetailsLoading: String,
     /** Shown while a channel's now-and-next guide is being fetched. */
     val epgLoading: String,
+    /** Labels what is on air now, on a playlist channel whose list brought a guide. */
+    val guideNow: String,
+    /** Labels what follows it. */
+    val guideNext: String,
     /** Opens the list of programmes the channel still has a recording of. Takes a count. */
     val catchUpShow: String,
     /** Closes it again. */

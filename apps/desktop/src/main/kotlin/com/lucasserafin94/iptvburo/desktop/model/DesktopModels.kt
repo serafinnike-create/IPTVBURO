@@ -14,6 +14,14 @@ data class ImportedCatalog(
     val categories: List<Category>,
     val channels: List<Channel>,
     val warnings: List<SafeImportWarning>,
+    /**
+     * Where this playlist says its programme guide lives, from `url-tvg`.
+     *
+     * A list carries its own guide or none at all, so this travels with the catalogue rather than
+     * being configured separately — the viewer should not have to find and paste an address their
+     * playlist already contains.
+     */
+    val epgUrls: List<String> = emptyList(),
 )
 
 data class SafeImportWarning(

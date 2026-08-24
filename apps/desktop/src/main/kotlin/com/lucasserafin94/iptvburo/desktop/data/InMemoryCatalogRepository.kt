@@ -98,6 +98,9 @@ class InMemoryCatalogRepository(
                 source = source,
                 categories = categoriesByName.values.toList(),
                 channels = channels.toList(),
+                // The playlist names its own guide; carrying it here is what lets an M3U source
+                // have a schedule at all.
+                epgUrls = summary.header.epgUrls,
                 warnings =
                     summary.warnings.map { warning ->
                         SafeImportWarning(
