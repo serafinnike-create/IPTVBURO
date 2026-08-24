@@ -772,6 +772,22 @@ async function main() {
     var movieCategories = await geometry(['.buro-ribbon', '.topbar', '.catalogue-scope-bar', '.catalogue-year-bar', '.media-card.poster']);
     process.stdout.write('Filmes e catálogo\n');
     check('aba Filmes exibe escopo e prateleira dentro da área da TV', movieCategories.rectangles.every(rectVisible));
+
+    /*
+      O cartao tem a proporcao de um poster de cinema.
+
+      A arte cobre o cartao inteiro, entao a proporcao do cartao e a da capa: um
+      cartao mais alto que 2:3 estica toda imagem verticalmente. Eram 168x268,
+      1,595 — 6% de deformacao em todo rosto do catalogo. O aplicativo do
+      Windows declara `aspectRatio(2f / 3f)` pelo mesmo motivo.
+    */
+    var posterShape = await evaluate("(function(){"
+        + "var card=document.querySelector('.media-card.poster');"
+        + "var r=card.getBoundingClientRect();"
+        + "return { width:Math.round(r.width), height:Math.round(r.height), ratio:r.height/r.width };"
+        + "}())");
+    check('o cartao de poster respeita a proporcao 2:3 do cinema',
+        Math.abs(posterShape.ratio - 1.5) < 0.02);
     check('aba Filmes preserva o chrome fixo e sem overflow global', movieCategories.scrollWidth <= 1920 && movieCategories.scrollHeight <= 1080);
     check('prateleira de filmes produz um quadro PNG não vazio', await screenshotIsRendered('movie-categories'));
 

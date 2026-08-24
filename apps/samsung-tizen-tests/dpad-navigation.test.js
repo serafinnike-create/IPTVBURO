@@ -95,6 +95,29 @@ function loadApp(preferences) {
     SCRIPT_FILES.forEach(function (file) {
         window.eval(fs.readFileSync(path.join(APP_DIR, file), 'utf8'));
     });
+    /*
+      Nenhuma chamada sai desta maquina.
+
+      O jsdom nao carrega imagem sozinho, mas o app faz XHR para o endereco
+      falso do provedor sempre que a rede simulada nao esta instalada — e
+      `getaddrinfo ENOTFOUND provider.test` custa o timeout do resolvedor a cada
+      vez. O arquivo passava em 35 segundos numa hora e estourava nove minutos
+      noutra, conforme o estado da rede da maquina; a variacao chegou a parecer
+      carga da suite e defeito do app, e nao era nem um nem outro.
+
+      Falhar de imediato e o que um teste quer: o codigo de erro e o mesmo que
+      uma TV sem internet recebe.
+    */
+    (function () {
+        var offline = function (options, success, failure) {
+            if (failure) {
+                window.setTimeout(function () { failure({ code: 'NETWORK', status: 0 }); }, 0);
+            }
+            return { abort: function () {} };
+        };
+        window.BuroNetwork.json = offline;
+        window.BuroNetwork.text = offline;
+    }());
     window.BuroApp.init();
 
     /* A primeira etapa do boot é síncrona e pode ser verificada sem temporização. */

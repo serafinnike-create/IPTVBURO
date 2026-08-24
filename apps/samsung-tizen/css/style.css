@@ -1058,7 +1058,11 @@ body.reduced-motion .download-fill { transition: none; }
 .media-art::after { background: linear-gradient(180deg, rgba(8,9,10,.16), rgba(8,9,10,.94)); }
 /* Oito por fileira na area util de ~1450px, como o aplicativo do Windows: com
    220px cabiam seis, e uma prateleira curta parece um catalogo pequeno. */
-.media-card.poster { width: 168px; height: 268px; padding: 18px; }
+/* 168x252 e a proporcao 2:3 do poster de cinema, que e a que o aplicativo do
+   Windows usa (`aspectRatio(2f / 3f)` em XtreamWorkspace). Eram 268px de altura,
+   1,595 em vez de 1,5: a arte cobre o cartao inteiro, entao esses 6% a mais
+   esticavam verticalmente toda capa — rostos mais compridos do que sao. */
+.media-card.poster { width: 168px; height: 252px; padding: 18px; }
 .media-card.poster h3 { font-size: 20px; }
 .media-card.poster p { font-size: 16px; }
 .media-card.poster .badge { padding: 5px 8px; font-size: 13px; }
