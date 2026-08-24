@@ -641,6 +641,8 @@ data class DesktopStrings(
                             importFailed = "No se pudo importar la lista. Comprueba que el archivo sea un M3U/M3U8 válido e inténtalo de nuevo.",
                             movieDetailsLoading = "Cargando la ficha de la película…",
                             epgLoading = "Cargando ahora y a continuación…",
+                            catchUpShow = "Rever (%1${'$'}s)",
+                            catchUpHide = "Ocultar",
                             similarTitles = "Títulos parecidos",
                             epgUnavailable = "El guía no está disponible; el canal sigue accesible.",
                             epgEmpty = "La fuente no informó ninguna programación.",
@@ -1353,6 +1355,8 @@ data class DesktopStrings(
                             importFailed = "Não foi possível importar a lista. Verifique se o arquivo é M3U/M3U8 válido e tente novamente.",
                             movieDetailsLoading = "Carregando ficha do filme…",
                             epgLoading = "Carregando agora e próximo…",
+                            catchUpShow = "Rever (%1${'$'}s)",
+                            catchUpHide = "Ocultar",
                             similarTitles = "Títulos parecidos",
                             epgUnavailable = "Guia indisponível; o canal continua acessível.",
                             epgEmpty = "Sem programação informada pela fonte.",
@@ -2065,6 +2069,8 @@ data class DesktopStrings(
                             importFailed = "Could not import the playlist. Check that the file is valid M3U/M3U8 and try again.",
                             movieDetailsLoading = "Loading the film details…",
                             epgLoading = "Loading now and next…",
+                            catchUpShow = "Watch again (%1${'$'}s)",
+                            catchUpHide = "Hide",
                             similarTitles = "Similar titles",
                             epgUnavailable = "No guide available; the channel still works.",
                             epgEmpty = "The source listed no programmes.",
@@ -2776,6 +2782,8 @@ data class DesktopStrings(
                             importFailed = "Die Liste konnte nicht importiert werden. Prüfen Sie, ob die Datei gültiges M3U/M3U8 ist, und versuchen Sie es erneut.",
                             movieDetailsLoading = "Filmdetails werden geladen…",
                             epgLoading = "Jetzt und danach werden geladen…",
+                            catchUpShow = "Erneut ansehen (%1${'$'}s)",
+                            catchUpHide = "Ausblenden",
                             similarTitles = "Ähnliche Titel",
                             epgUnavailable = "Kein Programmführer verfügbar; der Sender läuft weiterhin.",
                             epgEmpty = "Die Quelle hat kein Programm gemeldet.",
@@ -3492,6 +3500,8 @@ data class DesktopStrings(
                             importFailed = "Impossibile importare la lista. Verifica che il file sia un M3U/M3U8 valido e riprova.",
                             movieDetailsLoading = "Caricamento della scheda del film…",
                             epgLoading = "Caricamento di ora e a seguire…",
+                            catchUpShow = "Rivedi (%1${'$'}s)",
+                            catchUpHide = "Nascondi",
                             similarTitles = "Titoli simili",
                             epgUnavailable = "Guida non disponibile; il canale resta accessibile.",
                             epgEmpty = "La fonte non ha indicato alcun palinsesto.",
@@ -4557,6 +4567,10 @@ data class ScreenStrings(
     val movieDetailsLoading: String,
     /** Shown while a channel's now-and-next guide is being fetched. */
     val epgLoading: String,
+    /** Opens the list of programmes the channel still has a recording of. Takes a count. */
+    val catchUpShow: String,
+    /** Closes it again. */
+    val catchUpHide: String,
     /** Heading of the shelf of other titles to open from the one on screen. */
     val similarTitles: String,
     /** The source offers no guide for this channel; watching it still works. */

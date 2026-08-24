@@ -152,6 +152,7 @@ import com.lucasserafin94.iptvburo.metadata.TmdbAudienceScore
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
+import com.lucasserafin94.iptvburo.xtream.XtreamEpgProgram
 import com.lucasserafin94.iptvburo.xtream.XtreamEpisode
 import java.time.Year
 import kotlinx.coroutines.delay
@@ -2208,7 +2209,21 @@ internal fun XtreamItemDetail(
                 }
                 Spacer(Modifier.height(BuroSpacing.Lg))
                 if (item.contentType == XtreamContentType.LIVE) {
-                    LiveEpgContent(liveEpgStatus, onLoadEpg)
+                    LiveEpgContent(
+                        status = liveEpgStatus,
+                        onRetry = onLoadEpg,
+                        onPlayRecording = { program ->
+                            catchUpTargetFor(item, program)?.let { target ->
+                                onOpenExternal(
+                                    PendingXtreamExternal(
+                                        displayName = "${item.name} — ${program.title}",
+                                        target = target,
+                                        startPositionMillis = 0L,
+                                    ),
+                                )
+                            }
+                        },
+                    )
                     Spacer(Modifier.height(18.dp))
                 }
                 if (item.contentType == XtreamContentType.MOVIE) {
@@ -2267,10 +2282,54 @@ private fun Long?.asClockTime(): String =
         }
         ?: "—"
 
+/**
+ * The replay target for one past programme, or null when it cannot be played.
+ *
+ * The start is formatted in the machine's own local zone, which is a deliberate choice and not an
+ * oversight. Xtream's timeshift path takes wall-clock time rather than an epoch, and the guide it
+ * serves is already expressed in the provider's local time — the same clock the viewer is reading
+ * on screen. Converting to UTC here would ask for a programme an hour or three away from the one
+ * they pressed.
+ *
+ * Null when either time is missing: without both there is no start to ask for and no length to
+ * bound the request, and guessing one would produce a recording that begins in the wrong place.
+ */
+private fun catchUpTargetFor(
+    item: XtreamCatalogItem,
+    program: XtreamEpgProgram,
+): XtreamPlaybackTarget.CatchUp? {
+    val start = program.startEpochSeconds ?: return null
+    val end = program.endEpochSeconds ?: return null
+    val minutes = ((end - start) / 60L).toInt()
+    if (minutes <= 0) return null
+
+    val local = java.time.Instant.ofEpochSecond(start).atZone(java.time.ZoneId.systemDefault())
+    val startLocal = CATCH_UP_START_FORMAT.format(local)
+    return XtreamPlaybackTarget.CatchUp(
+        providerId = item.providerId,
+        startLocal = startLocal,
+        // Capped rather than refused: a guide occasionally reports a programme running for days,
+        // and clamping still plays the part that exists where refusing offers nothing at all.
+        durationMinutes = minutes.coerceAtMost(MAX_CATCH_UP_MINUTES),
+        // The start is part of the key, so two showings of the same programme are two entries in
+        // continue-watching rather than one that overwrites the other.
+        contentKey = "catchup:${item.contentIdentity().key}:$startLocal",
+    )
+}
+
+/** Xtream's timeshift path takes `YYYY-MM-DD:HH-MM`, and accepts nothing else. */
+private val CATCH_UP_START_FORMAT: java.time.format.DateTimeFormatter =
+    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd:HH-mm")
+
+/** Matches the client's own ceiling, so a clamp here cannot still be refused there. */
+private const val MAX_CATCH_UP_MINUTES = 720
+
 @Composable
 private fun LiveEpgContent(
     status: LiveEpgStatus,
     onRetry: () -> Unit,
+    /** Replays a programme the channel still has a recording of. */
+    onPlayRecording: (XtreamEpgProgram) -> Unit = {},
 ) {
     val text = strings
     when (status) {
@@ -2344,6 +2403,64 @@ private fun LiveEpgContent(
                                 Text(
                                     text = program.title,
                                     color = BuroColors.TextMuted,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // What has already aired, where the channel kept a recording of it.
+                //
+                // Its own section rather than part of the schedule above: that one answers "what is
+                // on", and mixing yesterday into it buries the answer. Empty for a channel with no
+                // recorder, so this cannot appear where pressing it would fail.
+                if (status.past.isNotEmpty()) {
+                    var catchUpOpen by remember(status) { mutableStateOf(false) }
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(onClick = { catchUpOpen = !catchUpOpen }) {
+                        Text(
+                            text =
+                                if (catchUpOpen) {
+                                    text.shareStrings.screens.catchUpHide
+                                } else {
+                                    text.shareStrings.screens.catchUpShow.format(status.past.size)
+                                },
+                            color = BuroColors.Text,
+                        )
+                    }
+                    if (catchUpOpen) {
+                        Spacer(Modifier.height(8.dp))
+                        status.past.forEach { program ->
+                            // The whole row is the control. A separate play button beside the title
+                            // would be a second target for one action, and the row is already the
+                            // thing being pointed at.
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(BuroRadius.Small)
+                                        .clickable { onPlayRecording(program) }
+                                        .padding(vertical = 5.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "▶",
+                                    color = BuroColors.Primary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.width(20.dp),
+                                )
+                                Text(
+                                    text = program.startEpochSeconds.asClockTime(),
+                                    color = BuroColors.Primary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.width(56.dp),
+                                )
+                                Text(
+                                    text = program.title,
+                                    color = BuroColors.Text,
                                     style = MaterialTheme.typography.bodyMedium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
