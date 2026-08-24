@@ -135,6 +135,9 @@ async function run() {
     var window;
     var counted;
     var rows;
+    var cacheStatus;
+    var cacheCalls;
+    var originalCache;
 
     process.stdout.write('O painel conta sem carregar o catálogo\n');
     window = loadApp({ language: 'pt-BR', languageSelected: true });
@@ -194,6 +197,69 @@ async function run() {
         Boolean(window.document.querySelector('.storage-row > div')) &&
         Boolean(window.document.querySelector('.storage-row strong')));
 
+    process.stdout.write('O preenchimento das capas mostra progresso e responde ao controle\n');
+    cacheStatus = {
+        enabled: true, ready: true, hasStorage: true, count: 2, bytes: 80000,
+        limitMb: 512, total: 4, done: 2, failed: 0, paused: false,
+        running: true, complete: false, pending: 2, active: 2, percent: 50,
+        bytesPerSecond: 3145728
+    };
+    cacheCalls = { pause: 0, resume: 0, fill: [] };
+    originalCache = {
+        status: window.BuroArtworkCache.status,
+        pause: window.BuroArtworkCache.pause,
+        resume: window.BuroArtworkCache.resume,
+        fill: window.BuroArtworkCache.fill
+    };
+    window.BuroArtworkCache.status = function () { return cacheStatus; };
+    window.BuroArtworkCache.pause = function () { cacheCalls.pause += 1; return true; };
+    window.BuroArtworkCache.resume = function () { cacheCalls.resume += 1; return true; };
+    window.BuroArtworkCache.fill = function (entries) { cacheCalls.fill = entries; return true; };
+    window.BuroApp.render();
+    check('a barra anuncia cinquenta por cento para leitor de tela',
+        window.document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow') === '50');
+    check('o andamento real mostra capas concluídas e total',
+        window.document.querySelector('.artwork-cache-state').textContent.indexOf('2') >= 0 &&
+        window.document.querySelector('.artwork-cache-state').textContent.indexOf('4') >= 0);
+    check('o andamento mostra a velocidade real do preenchimento',
+        window.document.querySelector('.artwork-cache-rate').textContent.indexOf('3,0 MB/s') >= 0);
+    click(window, '[data-action="artwork-cache-pause"]');
+    check('o botão de pausar chama o cache', cacheCalls.pause === 1);
+
+    cacheStatus.paused = true;
+    cacheStatus.running = false;
+    window.BuroApp.render();
+    check('pausado nao conserva na tela uma velocidade antiga',
+        !window.document.querySelector('.artwork-cache-rate'));
+    click(window, '[data-action="artwork-cache-resume"]');
+    check('o botão de continuar retoma a fila', cacheCalls.resume === 1);
+
+    cacheStatus.paused = false;
+    cacheStatus.complete = true;
+    cacheStatus.pending = 0;
+    cacheStatus.active = 0;
+    cacheStatus.done = 4;
+    cacheStatus.percent = 100;
+    window.BuroApp._rememberArtwork('cache-public', 'https://cdn.test/cache.jpg');
+    window.BuroApp.render();
+    check('ao terminar a tela oferece atualizar',
+        Boolean(window.document.querySelector('[data-action="artwork-cache-fill"]')) &&
+        window.document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow') === '100');
+    click(window, '[data-action="artwork-cache-fill"]');
+    check('atualizar envia as capas públicas conhecidas para a fila',
+        cacheCalls.fill.some(function (entry) {
+            return entry.id === 'cache-public' && entry.url === 'https://cdn.test/cache.jpg';
+        }));
+    check('a fila nunca recebe credencial ou token',
+        cacheCalls.fill.every(function (entry) {
+            return entry.url.indexOf('token=') < 0 && entry.url.indexOf('@') < 0;
+        }));
+    window.BuroArtworkCache.status = originalCache.status;
+    window.BuroArtworkCache.pause = originalCache.pause;
+    window.BuroArtworkCache.resume = originalCache.resume;
+    window.BuroArtworkCache.fill = originalCache.fill;
+    window.BuroApp.render();
+
     process.stdout.write('Limpar exige confirmação e preserva o que não é recuperável\n');
     click(window, '[data-action="storage-clear"]');
     check('o primeiro toque pede confirmação em vez de apagar',
@@ -239,7 +305,10 @@ async function run() {
         ['pt-BR', 'en', 'de', 'it', 'es'].every(function (language) {
             window.BuroI18n.setLanguage(language);
             return ['storageTitle', 'storageHint', 'storageCatalogue', 'storageArtworkHint',
-                'storageDownloadsHint', 'storageClearHint', 'storageCleared'].every(function (key) {
+                'storageDownloadsHint', 'storageClearHint', 'storageCleared',
+                'artworkCacheFilling', 'artworkCachePaused', 'artworkCacheComplete',
+                'artworkCacheFailed', 'artworkCacheStart', 'artworkCachePause',
+                'artworkCacheResume', 'artworkCacheRefresh'].every(function (key) {
                 var value = window.BuroI18n.t(key);
                 return Boolean(value) && value !== key;
             });

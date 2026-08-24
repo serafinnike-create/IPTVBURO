@@ -20,6 +20,7 @@ var SCRIPT_FILES = (function () {
 }());
 var passed = 0;
 var failures = [];
+var activeWindow = null;
 
 function check(label, condition) {
     if (condition) { passed += 1; process.stdout.write('  ok    ' + label + '\n'); }
@@ -143,7 +144,8 @@ async function typeDownloadQuery(window, value) {
       que um travamento real falhe.
     */
     await waitFor(function () {
-        return window.document.getElementById('download-query') !== input;
+        var replacement = window.document.getElementById('download-query');
+        return Boolean(replacement) && replacement !== input && replacement.value === value;
     }, 4000);
 }
 
@@ -169,7 +171,14 @@ async function run() {
     for (index = 90; index < 95; index += 1) { snapshot.push(downloadEntry(index, 'CANCELLED', null)); }
     firstActiveId = snapshot[80].id;
     window = loadApp(snapshot, activeStates);
-    await waitFor(function () { return window.BuroApp.state.ready && window.BuroUsb.hasStorage(); }, 4000);
+    activeWindow = window;
+    /* Aguarda o bootstrap inteiro terminar antes de forçar a seção sintética.
+       `ready` fica verdadeiro antes de a leitura assíncrona de perfis concluir;
+       sem este gate ela podia sobrescrever Downloads no meio da busca. */
+    await waitFor(function () {
+        return window.BuroApp.state.ready && window.BuroUsb.hasStorage() &&
+            window.BuroApp.state.screen === 'PROFILES';
+    }, 4000);
     state = window.BuroApp.state;
     state.screen = 'SHELL';
     state.section = 'DOWNLOADS';
@@ -226,6 +235,9 @@ async function run() {
         Boolean(window.document.getElementById('download-query')) &&
         window.document.body.textContent.indexOf(window.BuroI18n.t('downloadNoMatch')) >= 0);
     await typeDownloadQuery(window, '');
+    await waitFor(function () {
+        return Boolean(window.document.querySelector('[data-action="download-filter"][data-kind="ALL"]'));
+    }, 4000);
     window.BuroApp._activate(window.document.querySelector('[data-action="download-filter"][data-kind="ALL"]'));
 
     rateClock = 100000;
@@ -261,6 +273,7 @@ async function run() {
         Boolean(window.document.querySelector('[data-download-id="' + firstActiveId + '"] [data-action="download-remove"]')));
 
     window.close();
+    activeWindow = null;
     process.stdout.write('\n');
     if (failures.length) {
         process.stdout.write(failures.length + ' falha(s); ' + passed + ' passaram\n');
@@ -270,6 +283,7 @@ async function run() {
 }
 
 run().catch(function (error) {
-    process.stderr.write('Falha na suíte: ' + error.message + '\n');
+    if (activeWindow) { activeWindow.close(); activeWindow = null; }
+    process.stderr.write('Falha na suíte: ' + (error && error.stack ? error.stack : error.message) + '\n');
     process.exitCode = 1;
 });

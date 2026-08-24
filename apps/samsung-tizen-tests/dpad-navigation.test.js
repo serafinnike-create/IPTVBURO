@@ -130,7 +130,7 @@ function loadApp(preferences) {
             cinematic: Boolean(window.document.querySelector('.boot-backdrop')),
             panel: Boolean(window.document.querySelector('.boot-panel')),
             mark: Boolean(window.document.querySelector('.boot-mark')),
-            spinner: Boolean(window.document.querySelector('.boot-indicator')),
+            spinner: Boolean(window.document.querySelector('.boot-screen .boot-indicator')),
             dots: window.document.querySelectorAll('.boot-dot').length,
             message: message ? message.textContent : '',
             live: panel && panel.getAttribute('role') === 'status' &&
@@ -455,7 +455,8 @@ async function run() {
     check('o boot usa a arte cinematográfica original do Android', bootFrame.cinematic);
     check('o conteúdo fica no painel central equivalente ao Android', bootFrame.panel);
     check('a tela usa a marca circular vetorial equivalente ao Windows', bootFrame.mark);
-    check('há indicador circular em vez de porcentagem inventada', bootFrame.spinner);
+    check('a marca e a barra real substituem o spinner genérico',
+        !bootFrame.spinner && bootFrame.mark && bootFrame.progress && Number(bootFrame.progress.now) > 0);
     /*
       O numero de etapas vem de `BOOT_STEPS` e nao daqui.
 
@@ -1029,10 +1030,26 @@ async function run() {
         }) && (window.localStorage.getItem('iptvburo.preferences.v1') || '').indexOf(syntheticTmdbKey) === -1);
 
     var originalLoadSubscriptionShelves = window.BuroTmdb.loadShelves;
+    var originalLoadProviderDirectory = window.BuroTmdb.loadProviderDirectory;
     var originalLoadSubscriptionTitle = window.BuroTmdb.loadSubscriptionTitle;
     var originalLoadServiceCatalogue = window.BuroTmdb.loadServiceCatalogue;
     var subscriptionCalls = [];
+    var providerDirectoryCalls = [];
     var expandedCatalogueCall = null;
+    window.BuroTmdb.loadProviderDirectory = function (key, region, kind, locale, success) {
+        providerDirectoryCalls.push({ key: key, region: region, kind: kind, locale: locale });
+        success([{ providerId: kind === 'SERIES' ? 9 : 8,
+            id: kind === 'SERIES' ? 9 : 8,
+            providerName: kind === 'SERIES' ? 'Prime Video' : 'Netflix',
+            name: kind === 'SERIES' ? 'Prime Video' : 'Netflix',
+            providerLogoUrl: kind === 'SERIES' ?
+                'https://image.tmdb.org/t/p/w92/prime-video.jpg' :
+                'https://image.tmdb.org/t/p/w92/netflix.jpg',
+            logoUrl: kind === 'SERIES' ?
+                'https://image.tmdb.org/t/p/w92/prime-video.jpg' :
+                'https://image.tmdb.org/t/p/w92/netflix.jpg' }]);
+        return { abort: function () {} };
+    };
     window.BuroTmdb.loadShelves = function (key, region, kind, locale, progress, success) {
         var titles = [{
             tmdbId: 42, isSeries: kind === 'SERIES', title: kind === 'SERIES' ? 'Série externa' : 'Favorite only',
@@ -1089,6 +1106,39 @@ async function run() {
     check('Assinaturas surge como capability somente depois de configurar TMDb',
         window.document.querySelectorAll('.nav-list [data-action="section"]').length === 15 &&
         Boolean(window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]')));
+    window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="MOVIES"]'));
+    await waitFor(function () { return window.document.querySelector('[data-action="catalogue-provider-shortcut"]'); }, 4000);
+    var movieProviderShortcut = window.document.querySelector('[data-action="catalogue-provider-shortcut"]');
+    check('Filmes mostra a fileira visual do diretório TMDb com marca e nome do serviço',
+        providerDirectoryCalls.length === 1 && providerDirectoryCalls[0].kind === 'MOVIES' &&
+        movieProviderShortcut.textContent.indexOf('Netflix') >= 0 &&
+        movieProviderShortcut.querySelector('img').getAttribute('src') ===
+            'https://image.tmdb.org/t/p/w92/netflix.jpg');
+    window.BuroApp._activate(movieProviderShortcut);
+    check('atalho de Filmes abre imediatamente a grade completa com carregamento e Voltar focado',
+        window.BuroApp.state.section === 'SUBSCRIPTIONS' &&
+        window.BuroApp.state.screenData.expanded.providerId === 8 &&
+        window.BuroApp.state.screenData.expanded.loading &&
+        expandedCatalogueCall && expandedCatalogueCall.kind === 'MOVIES' &&
+        window.document.querySelector('[data-action="subscription-expanded-back"]').classList.contains('focused'));
+    expandedCatalogueCall.success([{ tmdbId: 808, isSeries: false, title: 'Filme do atalho', year: 2026 }]);
+    check('resposta do serviço preenche a mesma grade sem visitar Assinaturas antes',
+        !window.BuroApp.state.screenData.expanded.loading &&
+        window.document.body.textContent.indexOf('Filme do atalho') >= 0);
+    press(window, 10009);
+    check('Voltar do atalho carrega as prateleiras de Assinaturas do mesmo filtro',
+        !window.BuroApp.state.screenData.expanded && window.BuroApp.state.screenData.filter === 'MOVIES' &&
+        Boolean(window.document.querySelector('[data-action="subscription-title"]')));
+    window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="SERIES"]'));
+    await waitFor(function () { return window.document.querySelector('[data-action="catalogue-provider-shortcut"]'); }, 4000);
+    var seriesProviderShortcut = window.document.querySelector('[data-action="catalogue-provider-shortcut"]');
+    check('Séries usa diretório próprio e não reaproveita por engano os serviços de Filmes',
+        providerDirectoryCalls.length === 2 && providerDirectoryCalls[1].kind === 'SERIES' &&
+        seriesProviderShortcut.textContent.indexOf('Prime Video') >= 0);
+    window.BuroApp._activate(seriesProviderShortcut);
+    check('atalho de Séries abre o catálogo amplo com o tipo correto',
+        expandedCatalogueCall && expandedCatalogueCall.providerId === 9 && expandedCatalogueCall.kind === 'SERIES');
+    press(window, 10009);
     window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]'));
     await waitFor(function () { return window.document.querySelector('[data-action="subscription-title"]'); }, 4000);
     check('Assinaturas replica os quatro filtros e cinco regiões navegáveis por D-pad',
@@ -1286,6 +1336,7 @@ async function run() {
         window.document.querySelectorAll('.nav-list [data-action="section"]').length === 15 &&
         Boolean(window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]')));
     window.BuroTmdb.loadShelves = originalLoadSubscriptionShelves;
+    window.BuroTmdb.loadProviderDirectory = originalLoadProviderDirectory;
     window.BuroTmdb.loadSubscriptionTitle = originalLoadSubscriptionTitle;
     window.BuroTmdb.loadServiceCatalogue = originalLoadServiceCatalogue;
     window.BuroTmdb.validateKey = originalValidateTmdbKey;
@@ -1477,6 +1528,42 @@ async function run() {
         Boolean(window.document.querySelector('[data-home-rail="releases-previous"]')) &&
         Boolean(window.document.querySelector('[data-home-rail="new-classics"]')) &&
         Boolean(window.document.querySelector('[data-home-rail="recent"]')));
+    var directHeroPlay = window.document.querySelector('.real-home-hero [data-action="play"]');
+    var directHeroDetails = window.document.querySelector('.real-home-hero [data-action="movie-details"]');
+    check('Hero de filme oferece Assistir e Ver detalhes na mesma ordem do Windows',
+        Boolean(directHeroPlay) && Boolean(directHeroDetails) &&
+        directHeroPlay.nextElementSibling === directHeroDetails &&
+        directHeroPlay.getAttribute('data-id') === fullHomeItem.id &&
+        directHeroDetails.getAttribute('data-id') === fullHomeItem.id);
+    window.BuroApp.state.progress.push({
+        id: 'progress:home-direct-hero', profileId: window.BuroApp.state.activeProfile.id,
+        itemId: fullHomeItem.id, completed: false, updatedAt: Date.now(),
+        positionMs: 30000, durationMs: 120000
+    });
+    window.BuroApp._activate(directHeroPlay);
+    check('Assistir do Hero reutiliza a decisão de retomada antes do AVPlay',
+        window.BuroApp.state.screen === 'RESUME_PROMPT' &&
+        window.BuroApp.state.screenData.itemId === fullHomeItem.id &&
+        window.BuroApp.state.screenData.positionMs === 30000);
+    press(window, 10009);
+    window.BuroApp.state.progress = window.BuroApp.state.progress.filter(function (row) {
+        return row.id !== 'progress:home-direct-hero';
+    });
+    check('RETURN da retomada devolve a mesma Home com as duas ações do Hero',
+        window.BuroApp.state.screen === 'SHELL' && window.BuroApp.state.section === 'HOME' &&
+        Boolean(window.document.querySelector('.real-home-hero [data-action="play"]')) &&
+        Boolean(window.document.querySelector('.real-home-hero [data-action="movie-details"]')));
+    var heroMovieIndex = Number(window.BuroApp.state.screenData.heroIndex) || 0;
+    var heroSeriesIndex = (window.BuroApp.state.screenData.heroRotation || []).map(function (item) {
+        return item.contentType;
+    }).indexOf('SERIES');
+    window.BuroApp.state.screenData.heroIndex = heroSeriesIndex;
+    window.BuroApp.render();
+    check('Hero de série oferece detalhes sem inventar reprodução antes de escolher episódio',
+        heroSeriesIndex >= 0 && !window.document.querySelector('.real-home-hero [data-action="play"]') &&
+        Boolean(window.document.querySelector('.real-home-hero [data-action="series-details"]')));
+    window.BuroApp.state.screenData.heroIndex = heroMovieIndex;
+    window.BuroApp.render();
     check('Minha BURO e Ao Vivo permanecem destinos próprios e não substituem os trilhos editoriais da Home',
         !window.document.querySelector('[data-home-rail="favorites"]') &&
         !window.document.querySelector('[data-home-rail="live"]') &&
@@ -1490,12 +1577,21 @@ async function run() {
         return originalWindowSetTimeout(callback, delay);
     };
     window.BuroApp.render();
-    window.setTimeout = originalWindowSetTimeout;
     var firstHomeHero = window.document.querySelector('.real-home-hero h2').textContent;
     homeRotationCallback();
     check('hero diário gira entre destaques sem tirar o foco da Ribbon',
         window.document.querySelector('.real-home-hero h2').textContent !== firstHomeHero &&
         window.document.querySelector('[data-action="section"][data-section="HOME"]').classList.contains('focused'));
+    var currentHomeHeroAction = window.document.querySelector('.real-home-hero .focusable');
+    window.BuroApp._focusAction(currentHomeHeroAction.getAttribute('data-action'));
+    var focusedHomeHero = window.document.querySelector('.real-home-hero h2').textContent;
+    var focusedHomeHeroButton = window.document.querySelector('.real-home-hero .focusable.focused');
+    homeRotationCallback();
+    check('foco na linha de ações pausa o Hero e conserva o título ligado ao ENTER',
+        Boolean(focusedHomeHeroButton) &&
+        window.document.querySelector('.real-home-hero h2').textContent === focusedHomeHero &&
+        window.document.querySelector('.real-home-hero .focusable.focused') === focusedHomeHeroButton);
+    window.setTimeout = originalWindowSetTimeout;
 
     var originalHomeFold = window.BuroStorage.fold;
     window.BuroStorage.fold = function (storeName, reducer, initial, success, failure) {
@@ -1731,7 +1827,9 @@ async function run() {
 
     var originalLoadMovieDetails = window.BuroXtream.loadMovieDetails;
     var originalLoadTmdbTitle = window.BuroTmdb.loadTitle;
+    var originalLoadTmdbSimilar = window.BuroTmdb.loadSimilarTitles;
     var originalLoadTmdbPerson = window.BuroTmdb.loadPerson;
+    var similarLocalFixture = null;
     window.BuroApp.state.sources[0].type = 'XTREAM';
     await new Promise(function (resolve, reject) {
         window.BuroStorage.secureSave('source-home', {
@@ -1744,14 +1842,27 @@ async function run() {
             { apiKey: syntheticTmdbKey }, resolve, reject);
     });
     window.BuroTmdb.loadTitle = function (key, item, isSeries, locale, success) {
+        similarLocalFixture = window.BuroApp.state.items.filter(function (candidate) {
+            return candidate.id !== item.id && candidate.contentType === (isSeries ? 'SERIES' : 'MOVIE');
+        })[0];
         success({
             tmdbId: 42, title: 'Título TMDb', plot: 'Sinopse TMDb', backdropUrl: 'https://image.tmdb.org/t/p/w1280/tmdb.jpg',
             posterUrl: 'https://image.tmdb.org/t/p/w342/tmdb.jpg', genre: 'Aventura', duration: 122,
+            rating: 7.6, voteCount: 640,
             youtubeTrailerId: 'TmdbTrailer9', castMembers: [
                 { id: 7, name: 'Ana Exemplo', character: 'Lia', photoUrl: 'https://image.tmdb.org/t/p/w185/ana.jpg' },
                 { id: 8, name: 'Bruno Exemplo', character: 'Caio', photoUrl: null }
             ]
         });
+        return { abort: function () {} };
+    };
+    window.BuroTmdb.loadSimilarTitles = function (key, tmdbId, isSeries, locale, success) {
+        success([
+            { tmdbId: 510, isSeries: false, title: similarLocalFixture.name,
+                year: similarLocalFixture.year || null, posterUrl: 'https://image.tmdb.org/t/p/w342/similar-local.jpg' },
+            { tmdbId: 991, isSeries: false, title: 'Saga externa recomendada', year: 2026,
+                posterUrl: 'https://image.tmdb.org/t/p/w342/similar-external.jpg' }
+        ]);
         return { abort: function () {} };
     };
     window.BuroXtream.loadMovieDetails = function (secret, item, success, failure) {
@@ -1783,6 +1894,20 @@ async function run() {
         window.document.querySelector('.detail-art img').getAttribute('data-artwork-fallback').indexOf('poster.jpg') >= 0 &&
         JSON.stringify(window.BuroApp.state.items).indexOf('images.public.test') === -1 &&
         (window.localStorage.getItem('iptvburo.preferences.v1') || '').indexOf('images.public.test') === -1);
+    var progressiveDetailImage = window.document.querySelector('.detail-art img');
+    check('arte remota começa com placeholder em vez de piscar vazia',
+        progressiveDetailImage.classList.contains('buro-progressive-image') &&
+        !progressiveDetailImage.classList.contains('image-ready') &&
+        progressiveDetailImage.parentNode.classList.contains('buro-image-frame'));
+    progressiveDetailImage.dispatchEvent(new window.Event('error'));
+    check('falha do backdrop conserva o placeholder enquanto tenta o pôster',
+        progressiveDetailImage.getAttribute('src').indexOf('poster.jpg') >= 0 &&
+        !progressiveDetailImage.classList.contains('image-ready') &&
+        progressiveDetailImage.style.display !== 'none');
+    progressiveDetailImage.dispatchEvent(new window.Event('load'));
+    check('pôster resolvido é revelado e encerra o estado de carregamento',
+        progressiveDetailImage.classList.contains('image-ready') &&
+        progressiveDetailImage.parentNode.classList.contains('image-ready'));
     check('detalhe de filme replica fatos e progresso assistido do Android',
         window.document.querySelectorAll('.detail-fact').length === 4 &&
         window.document.querySelector('.detail-fact.rating').textContent.indexOf('8.7') >= 0 &&
@@ -1796,6 +1921,91 @@ async function run() {
         window.document.querySelector('.cast-chip small').textContent === 'Lia' &&
         window.document.body.textContent.indexOf('Fixture pública') >= 0 &&
         window.document.body.textContent.indexOf('Sinopse TMDb') === -1);
+    check('nota pública TMDb permanece separada da nota editorial da fonte',
+        window.document.querySelector('.detail-fact.rating').textContent.indexOf('8.7') >= 0 &&
+        window.document.querySelector('.detail-ratings .rating-value').textContent === '76%');
+    check('detalhe recebe franquia/recomendações TMDb como fileira navegável',
+        window.document.querySelectorAll('[data-action="similar-title"]').length === 2 &&
+        window.document.body.textContent.indexOf('Saga externa recomendada') >= 0);
+    var originalSimilarDetails = window.BuroApp.state.screenData;
+    var similarRow = window.document.querySelector('.similar-title-row');
+    window.document.querySelector('.content').scrollTop = 720;
+    similarRow.scrollLeft = 96;
+    window.BuroApp._activate(window.document.querySelector('[data-action="similar-title"][data-key="movie:510"]'));
+    await waitFor(function () {
+        return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'catalogue-loading' &&
+            window.BuroApp.state.screenData.parent.id === similarLocalFixture.id;
+    }, 4000);
+    check('título semelhante existente procura a biblioteca e abre a ficha local',
+        window.BuroApp.state.section === 'MOVIES' && movieDetailRequests.length === 3);
+    movieDetailRequests[2].success({ title: similarLocalFixture.name, plot: 'Ficha local semelhante', genre: 'Drama' }, null, null);
+    var firstSimilarDetails = window.BuroApp.state.screenData;
+    window.BuroApp._activate(window.document.querySelector('[data-action="similar-title"][data-key="movie:510"]'));
+    await waitFor(function () {
+        return movieDetailRequests.length === 4 && window.BuroApp.state.screenData.kind === 'catalogue-loading';
+    }, 4000);
+    movieDetailRequests[3].success({ title: similarLocalFixture.name, plot: 'Segunda ficha encadeada', genre: 'Drama' }, null, null);
+    press(window, 10009);
+    check('RETURN de recomendação encadeada volta primeiro à ficha imediatamente anterior',
+        window.BuroApp.state.screenData === firstSimilarDetails);
+    press(window, 10009);
+    check('RETURN da ficha semelhante restaura título, rolagens e foco da recomendação',
+        window.BuroApp.state.screenData === originalSimilarDetails &&
+        window.document.querySelector('.content').scrollTop === 720 &&
+        window.document.querySelector('.similar-title-row').scrollLeft === 96 &&
+        window.document.querySelector('[data-action="similar-title"][data-key="movie:510"]').classList.contains('focused'));
+    var originalSimilarSubscription = window.BuroTmdb.loadSubscriptionTitle;
+    window.BuroTmdb.loadSubscriptionTitle = function (key, title, region, locale, success) {
+        success({ details: { tmdbId: title.tmdbId, title: title.title, plot: 'Detalhe externo recomendado' },
+            offers: [], unknown: true });
+        return { abort: function () {} };
+    };
+    window.BuroApp._activate(window.document.querySelector('[data-action="similar-title"][data-key="movie:991"]'));
+    await waitFor(function () {
+        return window.BuroApp.state.section === 'SUBSCRIPTIONS' && window.BuroApp.state.screenData.selected;
+    }, 4000);
+    check('recomendação fora da lista abre Onde assistir em vez de uma ficha vazia',
+        window.BuroApp.state.screenData.selected.tmdbId === 991 &&
+        Boolean(window.document.querySelector('[data-action="subscription-back"]')));
+    window.BuroApp._activate(window.document.querySelector('[data-action="subscription-back"]'));
+    check('Voltar de Onde assistir restaura a ficha e a recomendação externa focada',
+        window.BuroApp.state.screenData === originalSimilarDetails &&
+        window.document.querySelector('[data-action="similar-title"][data-key="movie:991"]').classList.contains('focused'));
+    window.BuroTmdb.loadSubscriptionTitle = originalSimilarSubscription;
+    var remoteSimilarTitles = window.BuroApp.state.screenData.details.similarTitles;
+    var originalSimilarLocalGenre = similarLocalFixture.genre;
+    var crossSourceCategory = {
+        id: 'cross-source-similar-category', sourceId: 'source-other',
+        name: 'Filmes | Drama', contentType: 'MOVIE', sortOrder: 0
+    };
+    var crossSourceSimilar = {
+        id: 'cross-source-similar', sourceId: 'source-other',
+        categoryId: crossSourceCategory.id, contentType: 'MOVIE',
+        name: 'Titulo de outra fonte', genre: 'Drama', rating: 10, year: 2026
+    };
+    similarLocalFixture.genre = 'Drama';
+    window.BuroApp.state.categories.push(crossSourceCategory);
+    window.BuroApp.state.items.push(crossSourceSimilar);
+    window.BuroApp.state.screenData.details.similarTitles = [];
+    window.BuroApp.render();
+    var localFallbackCard = window.document.querySelector('[data-action="similar-title"][data-key^="local:"]');
+    check('enquanto a rede não responde, o fallback local usa o mesmo card navegável', Boolean(localFallbackCard));
+    check('fallback local nunca mistura um titulo pertencente a outra fonte',
+        !window.document.querySelector('[data-action="similar-title"][data-key="local:cross-source-similar"]') &&
+        window.document.body.textContent.indexOf('Titulo de outra fonte') === -1);
+    window.BuroApp.state.items.splice(window.BuroApp.state.items.indexOf(crossSourceSimilar), 1);
+    window.BuroApp.state.categories.splice(window.BuroApp.state.categories.indexOf(crossSourceCategory), 1);
+    window.BuroApp._activate(localFallbackCard);
+    await waitFor(function () { return movieDetailRequests.length === 5; }, 4000);
+    movieDetailRequests[4].success({ title: window.BuroApp.state.screenData.parent.name,
+        plot: 'Fallback local por gênero', genre: 'Drama' }, null, null);
+    press(window, 10009);
+    check('RETURN do fallback local volta à ficha anterior em vez do catálogo',
+        window.BuroApp.state.screenData === originalSimilarDetails &&
+        Boolean(window.document.querySelector('[data-action="similar-title"][data-key^="local:"]').classList.contains('focused')));
+    similarLocalFixture.genre = originalSimilarLocalGenre;
+    window.BuroApp.state.screenData.details.similarTitles = remoteSimilarTitles;
+    window.BuroApp.render();
     window.BuroApp.state.screenData.details.critics = {
         hasAny: true, tomatometer: 83, imdbRating: 8.7, metascore: 39
     };
@@ -1901,6 +2111,7 @@ async function run() {
         restoredHomeDetailOrigin.getAttribute('data-id') === homeDetailOrigin.getAttribute('data-id'));
     window.BuroXtream.loadMovieDetails = originalLoadMovieDetails;
     window.BuroTmdb.loadTitle = originalLoadTmdbTitle;
+    window.BuroTmdb.loadSimilarTitles = originalLoadTmdbSimilar;
     window.BuroTmdb.loadPerson = originalLoadTmdbPerson;
     window.BuroStorage.secureRemove('source-home');
     window.BuroApp.state.sources[0].type = 'REMOTE_M3U';
@@ -2518,6 +2729,9 @@ async function run() {
     await new Promise(function (resolve) { window.setTimeout(resolve, 20); });
     check('a Home aparece com texto de fallback antes dos detalhes do provedor',
         window.document.querySelector('.hero-synopsis').textContent === window.BuroI18n.t('homeHeroSynopsis'));
+    check('a conferência do cache conserva o mesmo destaque enquanto seus detalhes chegam',
+        ((window.BuroApp.state.screenData.heroRotation || [])[Number(window.BuroApp.state.screenData.heroIndex) || 0] || {}).id ===
+            heroDetailRequests[0].item.id && !heroDetailRequests[0].aborted);
     var heroButton = window.document.querySelector('.real-home-hero .button');
     for (var heroFocusAttempt = 0; heroFocusAttempt < 20 && !heroButton.classList.contains('focused'); heroFocusAttempt += 1) {
         press(window, 40);
@@ -2528,6 +2742,10 @@ async function run() {
         artworkUrl: 'https://images.public.test/hero-poster.jpg',
         backdropUrl: 'https://images.public.test/hero-backdrop.jpg?session=only'
     });
+    check('resposta do Hero entra no cache transitório',
+        Boolean(window.BuroHeroEnrichment.get(homeSource.id, enrichedHeroId)));
+    check('resposta do Hero recompõe a Home corrente mesmo após conferir o cache',
+        window.document.querySelector('.hero-synopsis').textContent === 'Sinopse real e autorizada do destaque.');
     await waitFor(function () {
         return window.document.querySelector('.hero-synopsis') &&
             window.document.querySelector('.hero-synopsis').textContent === 'Sinopse real e autorizada do destaque.';
@@ -2555,6 +2773,47 @@ async function run() {
         (window.localStorage.getItem('iptvburo.preferences.v1') || '').indexOf('hero-backdrop.jpg') === -1 &&
         (window.localStorage.getItem('iptvburo.preferences.v1') || '').indexOf('Sinopse real') === -1);
     window.BuroXtream.loadHeroDetails = originalLoadHeroDetails;
+
+    var originalHeroTmdbKey = window.BuroTmdb.keyForProfile;
+    var originalHeroTmdbLoad = window.BuroTmdb.loadTitle;
+    var tmdbHeroRequests = [];
+    homeSource.type = 'REMOTE_M3U';
+    window.BuroHeroEnrichment.clearSource(homeSource.id);
+    window.BuroTmdb.keyForProfile = function () { return 'synthetic-v4-token'; };
+    window.BuroTmdb.loadTitle = function (key, candidate, isSeries, locale, success, failure) {
+        var request = { key: key, item: candidate, isSeries: isSeries, locale: locale,
+            success: success, failure: failure, aborted: false };
+        tmdbHeroRequests.push(request);
+        return { abort: function () { request.aborted = true; } };
+    };
+    window.BuroApp.state.screen = 'SHELL';
+    window.BuroApp.state.section = 'HOME';
+    window.BuroApp.state.screenData = null;
+    window.BuroApp.render();
+    await waitFor(function () { return tmdbHeroRequests.length === 1; }, 4000);
+    var tmdbHeroItemId = tmdbHeroRequests[0].item.id;
+    check('fonte M3U usa o TMDb configurado para enriquecer o destaque da Home',
+        tmdbHeroRequests[0].key === 'synthetic-v4-token' &&
+        tmdbHeroRequests[0].locale === window.BuroApp.state.preferences.language &&
+        !tmdbHeroRequests[0].aborted);
+    tmdbHeroRequests[0].success({
+        plot: 'Sinopse pública usada como fallback da Home.', genre: 'Drama / Aventura', duration: 102,
+        rating: 7.8, posterUrl: 'https://image.tmdb.org/t/p/w342/home-poster.jpg',
+        backdropUrl: 'https://image.tmdb.org/t/p/w1280/home-backdrop.jpg'
+    });
+    await waitFor(function () {
+        return window.document.querySelector('.hero-synopsis') &&
+            window.document.querySelector('.hero-synopsis').textContent === 'Sinopse pública usada como fallback da Home.';
+    }, 4000);
+    check('fallback TMDb atualiza sinopse, duração, nota e backdrop sem persistir o token',
+        window.document.querySelector('.hero-metadata').textContent.indexOf('102 min') >= 0 &&
+        window.document.querySelector('.hero-metadata').textContent.indexOf('7.8') >= 0 &&
+        window.document.querySelector('.real-home-hero .hero-art img').src.indexOf('home-backdrop.jpg') >= 0 &&
+        (window.localStorage.getItem('iptvburo.preferences.v1') || '').indexOf('synthetic-v4-token') === -1 &&
+        Boolean(window.BuroHeroEnrichment.get(homeSource.id, tmdbHeroItemId)));
+    window.BuroTmdb.keyForProfile = originalHeroTmdbKey;
+    window.BuroTmdb.loadTitle = originalHeroTmdbLoad;
+    window.BuroHeroEnrichment.clearSource(homeSource.id);
     window.BuroStorage.secureRemove(homeSource.id);
 
     process.stdout.write('Lembretes abrem títulos locais\n');

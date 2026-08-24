@@ -443,6 +443,27 @@ function showSyntheticSubscriptions() {
     return titles.length;
 }
 
+function installSyntheticProviderDirectory() {
+    window.__visualOriginalTmdbKeyForProfile = BuroTmdb.keyForProfile;
+    window.__visualOriginalProviderDirectory = BuroTmdb.loadProviderDirectory;
+    BuroTmdb.keyForProfile = function () { return 'visualSyntheticTmdbKey1234567890'; };
+    BuroTmdb.loadProviderDirectory = function (key, region, kind, locale, success) {
+        success([
+            { id: 8, name: 'Netflix', logoUrl: 'https://image.tmdb.org/t/p/w92/netflix.jpg' },
+            { id: 9, name: 'Prime Video', logoUrl: 'https://image.tmdb.org/t/p/w92/prime-video.jpg' },
+            { id: 1899, name: 'HBO Max', logoUrl: 'https://image.tmdb.org/t/p/w92/hbo-max.jpg' }
+        ]);
+        return { abort: function () {} };
+    };
+    return true;
+}
+
+function restoreSyntheticProviderDirectory() {
+    BuroTmdb.keyForProfile = window.__visualOriginalTmdbKeyForProfile;
+    BuroTmdb.loadProviderDirectory = window.__visualOriginalProviderDirectory;
+    return true;
+}
+
 function showSyntheticSubscriptionDetail() {
     var state = BuroApp.state;
     var selected = {
@@ -753,11 +774,29 @@ async function main() {
 
     var seeded = await evaluate('(' + seedVisualCatalogue.toString() + ')()');
     await waitFor("BuroApp.state.screenData && BuroApp.state.screenData.kind === 'home' && !BuroApp.state.screenData.loading && document.querySelector('.real-home-hero')", 10000);
-    var realHome = await geometry(['.buro-ribbon', '.topbar', '.real-home-hero', '.home-rail-heading', '.media-card']);
-    var realHomeData = await evaluate("({ rails:document.querySelectorAll('.home-rail-heading').length, cards:document.querySelectorAll('.media-card').length, art:document.querySelectorAll('.media-card.has-art').length, progress:document.querySelectorAll('.media-progress').length, mainScroll:document.querySelector('.main-pane').scrollTop })");
+    await waitFor("document.querySelectorAll('.buro-progressive-image').length > 0 && Array.prototype.every.call(document.querySelectorAll('.buro-progressive-image'),function(image){return image.classList.contains('image-ready') || image.style.display === 'none';})", 10000);
+    /* A seleção editorial sintética começa por uma série. A referência Windows
+       não oferece Play direto para série porque ainda precisa resolver o
+       episódio; gira-se explicitamente até um filme para provar as duas ações
+       do Hero sem adulterar essa regra. */
+    await evaluate("(function(){var d=BuroApp.state.screenData;var i=(d.heroRotation||[]).map(function(x){return x.contentType;}).indexOf('MOVIE');if(i>=0){d.heroIndex=i;d.heroRotation[i].name='O Experimento Americano em Duas Fronteiras';BuroApp.render();}return i;})() >= 0");
+    await waitFor("document.querySelector('.real-home-hero [data-action=play]') && document.querySelector('.real-home-hero [data-action=movie-details]')", 10000);
+    await waitFor("Array.prototype.every.call(document.querySelectorAll('.real-home-hero .buro-progressive-image'),function(image){return image.classList.contains('image-ready') || image.style.display === 'none';})", 10000);
+    var realHome = await geometry(['.buro-ribbon', '.topbar', '.real-home-hero', '.home-hero-actions',
+        '.real-home-hero [data-action=play]', '.real-home-hero [data-action=movie-details]',
+        '.real-home-hero h2', '.home-rail-heading', '.media-card']);
+    var realHomeData = await evaluate("({ rails:document.querySelectorAll('.home-rail-heading').length, cards:document.querySelectorAll('.media-card').length, art:document.querySelectorAll('.media-card.has-art').length, progress:document.querySelectorAll('.media-progress').length, progressive:document.querySelectorAll('.buro-progressive-image').length, progressiveReady:document.querySelectorAll('.buro-progressive-image.image-ready').length, heroPlay:document.querySelectorAll('.real-home-hero [data-action=play]').length, heroDetails:document.querySelectorAll('.real-home-hero [data-action=movie-details]').length, mainScroll:document.querySelector('.main-pane').scrollTop })");
     process.stdout.write('Home com catálogo local sintético\n');
     check('catálogo visual persiste os 18 itens sem rede', seeded.sourceId === 'source-visual' && seeded.itemCount === 18);
     check('Home real monta hero, trilhos e cartões com arte local', realHomeData.rails >= 4 && realHomeData.cards >= 8 && realHomeData.art >= 8);
+    check('Hero real mantém Assistir e Ver detalhes visíveis como no Windows',
+        realHomeData.heroPlay === 1 && realHomeData.heroDetails === 1 && rectVisible(realHome.rectangles[3]));
+    check('título longo, sinopse e ações permanecem contidos dentro do Hero',
+        realHome.rectangles[4].bottom <= realHome.rectangles[2].bottom &&
+        realHome.rectangles[5].bottom <= realHome.rectangles[2].bottom &&
+        realHome.rectangles[6].bottom <= realHome.rectangles[2].bottom);
+    check('capas do primeiro quadro terminam o placeholder antes da captura',
+        realHomeData.progressive >= 8 && realHomeData.progressiveReady === realHomeData.progressive);
     check('progresso do perfil aparece na Home real', realHomeData.progress >= 1);
     check('Home real mantém Ribbon, topbar, hero e primeiro trilho visíveis', realHome.rectangles.every(rectVisible));
     check('Home real não desloca o painel principal nem cria overflow global', realHomeData.mainScroll === 0 && realHome.scrollWidth <= 1920 && realHome.scrollHeight <= 1080);
@@ -767,9 +806,13 @@ async function main() {
        categorias viraram filtro na barra em vez de um degrau antes dos
        pôsteres. O que continua sendo medido é o mesmo — a barra de escopo e
        os cartões cabem na tela da TV, sem deslocar o chrome. */
+    await evaluate('(' + installSyntheticProviderDirectory.toString() + ')()');
     await evaluate("document.querySelector('[data-action=section][data-section=MOVIES]').click(); true");
-    await waitFor("BuroApp.state.section === 'MOVIES' && document.querySelectorAll('.media-card.poster').length >= 1");
-    var movieCategories = await geometry(['.buro-ribbon', '.topbar', '.catalogue-scope-bar', '.catalogue-year-bar', '.media-card.poster']);
+    await waitFor("BuroApp.state.section === 'MOVIES' && document.querySelectorAll('.media-card.poster').length >= 1 && document.querySelectorAll('.catalogue-provider-shortcut').length === 3");
+    var movieCategories = await geometry(['.buro-ribbon', '.topbar', '.catalogue-provider-shortcuts',
+        '.catalogue-provider-shortcut', '.catalogue-scope-bar', '.catalogue-year-bar', '.media-card.poster']);
+    check('atalhos de servico mostram tres marcas e nomes antes dos filtros',
+        await evaluate("document.querySelectorAll('.catalogue-provider-shortcut').length===3 && document.querySelectorAll('.catalogue-provider-shortcut img').length===3 && /Netflix/.test(document.querySelector('.catalogue-provider-row').textContent)"));
     process.stdout.write('Filmes e catálogo\n');
     check('aba Filmes exibe escopo e prateleira dentro da área da TV', movieCategories.rectangles.every(rectVisible));
 
@@ -783,13 +826,28 @@ async function main() {
     */
     var posterShape = await evaluate("(function(){"
         + "var card=document.querySelector('.media-card.poster');"
-        + "var r=card.getBoundingClientRect();"
-        + "return { width:Math.round(r.width), height:Math.round(r.height), ratio:r.height/r.width };"
+        + "var art=card.querySelector('.media-art');"
+        + "var title=card.querySelector('h3');"
+        + "var c=card.getBoundingClientRect(), a=art.getBoundingClientRect(), t=title.getBoundingClientRect();"
+        + "return { ratio:a.height/a.width, artBottom:Math.round(a.bottom), titleTop:Math.round(t.top),"
+        + " cardBottom:Math.round(c.bottom), titleBottom:Math.round(t.bottom) };"
         + "}())");
-    check('o cartao de poster respeita a proporcao 2:3 do cinema',
+    check('a arte do cartao respeita a proporcao 2:3 do cinema',
         Math.abs(posterShape.ratio - 1.5) < 0.02);
+    /*
+      O nome fica abaixo da capa, nao sobre ela — como o `PosterCard` do Android,
+      que e uma Column. Escrito por cima, o nome tapava a parte de baixo do
+      poster, que e onde a distribuidora costuma desenhar o titulo: duas camadas
+      de texto no mesmo espaco.
+    */
+    check('o nome do titulo fica abaixo da capa, e nao sobre ela',
+        posterShape.titleTop >= posterShape.artBottom - 1);
+    check('e cabe dentro do cartao, sem transbordar a fileira',
+        posterShape.titleBottom <= posterShape.cardBottom + 1);
     check('aba Filmes preserva o chrome fixo e sem overflow global', movieCategories.scrollWidth <= 1920 && movieCategories.scrollHeight <= 1080);
     check('prateleira de filmes produz um quadro PNG não vazio', await screenshotIsRendered('movie-categories'));
+
+    await evaluate('(' + restoreSyntheticProviderDirectory.toString() + ')()');
 
     /*
       Cada seletor abre debaixo do proprio chip, e a janela cabe na tela.
@@ -877,6 +935,29 @@ async function main() {
     check('detalhe de filme abre o título correto com ação principal', movieDetailData.title === 'Aurora de Vidro' && movieDetailData.play === 1);
     check('detalhe de filme preserva chrome e conteúdo inicial visíveis', movieDetail.rectangles.every(rectVisible) && movieDetailData.mainScroll === 0);
     check('detalhe de filme produz um quadro PNG não vazio', await screenshotIsRendered('movie-detail'));
+
+    await evaluate("(function(){var d=BuroApp.state.screenData.details;d.similarTitles=[];for(var i=0;i<10;i+=1){d.similarTitles.push({tmdbId:700+i,isSeries:false,title:'Saga recomendada '+(i+1),year:2015+i,posterUrl:'https://image.tmdb.org/t/p/w342/similar-'+i+'.jpg'});}d.similarTitlesLoaded=true;BuroApp.render();var c=document.querySelector('.content.scrollable');var r=document.querySelector('.detail-related');c.scrollTop=Math.max(0,r.offsetTop-110);return true;}())");
+    await waitFor("document.querySelectorAll('[data-action=similar-title]').length === 10");
+    await evaluate("(function(){var c=document.querySelector('.content.scrollable');var r=document.querySelector('.detail-related');c.scrollTop=Math.max(0,r.offsetTop-110);return c.scrollTop;}())");
+    var similarDetail = await geometry(['.buro-ribbon', '.topbar', '.detail-related', '.similar-title-card']);
+    var similarDetailData = await evaluate("(function(){var row=document.querySelector('.similar-title-row');return {count:document.querySelectorAll('[data-action=similar-title]').length,overflow:row.scrollWidth>row.clientWidth,mainScroll:document.querySelector('.main-pane').scrollTop};}())");
+    check('títulos semelhantes TMDb formam trilho horizontal de dez capas',
+        similarDetailData.count === 10 && similarDetailData.overflow);
+    check('trilho semelhante conserva Ribbon, topbar, título e primeiro card no viewport',
+        similarDetail.rectangles.every(rectVisible) && similarDetailData.mainScroll === 0);
+    check('títulos semelhantes produzem um quadro PNG não vazio', await screenshotIsRendered('movie-similar-titles'));
+
+    await evaluate("(function(){BuroApp.state.screenData.details.similarTitles=[];BuroApp.render();var c=document.querySelector('.content.scrollable');var r=document.querySelector('.detail-related');c.scrollTop=Math.max(0,r.offsetTop-110);return true;}())");
+    await waitFor("document.querySelectorAll('[data-action=similar-title][data-key^=\"local:\"]').length === 3");
+    await evaluate("(function(){var c=document.querySelector('.content.scrollable');var r=document.querySelector('.detail-related');c.scrollTop=Math.max(0,r.offsetTop-110);return c.scrollTop;}())");
+    var localSimilarDetail = await geometry(['.buro-ribbon', '.topbar', '.detail-related', '.similar-title-card']);
+    var localSimilarData = await evaluate("({count:document.querySelectorAll('[data-action=similar-title][data-key^=\"local:\"]').length,mainScroll:document.querySelector('.main-pane').scrollTop})");
+    check('sem resposta TMDb, três títulos do mesmo gênero formam o fallback local',
+        localSimilarData.count === 3);
+    check('fallback local preserva chrome e primeiro card dentro da TV',
+        localSimilarDetail.rectangles.every(rectVisible) && localSimilarData.mainScroll === 0);
+    check('fallback local produz um quadro PNG não vazio',
+        await screenshotIsRendered('movie-local-similar-titles'));
 
     var episodeCount = await evaluate('(' + showSyntheticSeriesDetail.toString() + ')()');
     await waitFor("BuroApp.state.screenData && BuroApp.state.screenData.kind === 'series' && document.querySelector('.season-header')");
@@ -1057,11 +1138,19 @@ async function main() {
     check('fim do guia OMDb conserva Ribbon e topbar inteiras no viewport', criticsGuideChrome.rectangles.every(rectVisible) && await evaluate("window.scrollY === 0 && document.querySelector('.main-pane').scrollTop === 0"));
     check('fim do guia OMDb produz um quadro PNG válido', await screenshotIsRendered('omdb-guide-end'));
 
-    await evaluate("BuroApp.state.screen='STORAGE_SETTINGS'; BuroApp.state.screenData={counts:{items:18,categories:4},measuring:false}; BuroApp.render(); true");
+    await evaluate("BuroArtworkCache.status=function(){return {enabled:true,ready:true,hasStorage:true,count:12,bytes:480000,limitMb:512,total:24,done:12,failed:0,paused:false,running:true,complete:false,pending:12,active:2,percent:50,bytesPerSecond:3145728};}; BuroApp.state.screen='STORAGE_SETTINGS'; BuroApp.state.screenData={counts:{items:18,categories:4},measuring:false}; BuroApp.render(); true");
     await waitFor("document.querySelectorAll('.storage-row').length === 3");
-    var storageSettings = await geometry(['.buro-ribbon', '.topbar', '.tmdb-settings-panel', '.storage-list', '.storage-row', '[data-action=storage-clear]']);
-    check('armazenamento mostra catálogo, arte, downloads e limpeza no quadro', storageSettings.rectangles.every(rectVisible));
+    var storageSettings = await geometry(['.buro-ribbon', '.topbar', '.storage-row']);
+    check('armazenamento mantém chrome e primeira medição no primeiro quadro', storageSettings.rectangles.every(rectVisible));
     check('armazenamento produz um quadro PNG válido', await screenshotIsRendered('storage-settings'));
+    var artworkProgress = await evaluate("(function(){var content=document.querySelector('.content.scrollable');var target=document.querySelector('.artwork-cache-panel');content.scrollTop=Math.max(0,target.offsetTop-120);var bar=document.querySelector('[role=progressbar]');var button=document.querySelector('[data-action=artwork-cache-pause]');var rate=document.querySelector('.artwork-cache-rate');var br=bar.getBoundingClientRect();var rr=button.getBoundingClientRect();var sr=rate.getBoundingClientRect();return {value:bar.getAttribute('aria-valuenow'),rate:rate.textContent,bar:{left:br.left,top:br.top,right:br.right,bottom:br.bottom,width:br.width,height:br.height},button:{left:rr.left,top:rr.top,right:rr.right,bottom:rr.bottom,width:rr.width,height:rr.height},speed:{left:sr.left,top:sr.top,right:sr.right,bottom:sr.bottom,width:sr.width,height:sr.height}};}())");
+    check('cache de capas mostra progresso real e Pausar dentro do quadro',
+        artworkProgress.value === '50' && artworkProgress.rate.indexOf('3,0 MB/s') >= 0 &&
+        rectVisible(artworkProgress.bar) && rectVisible(artworkProgress.button) && rectVisible(artworkProgress.speed));
+    check('cache de capas em andamento produz um quadro PNG válido', await screenshotIsRendered('storage-artwork-progress'));
+    var storageClear = await evaluate("(function(){var content=document.querySelector('.content.scrollable');var target=document.querySelector('[data-action=storage-clear]');content.scrollTop=Math.max(0,target.offsetTop-180);var r=target.getBoundingClientRect();return {scroll:content.scrollTop,rect:{left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height},ribbon:document.querySelector('.buro-ribbon').getBoundingClientRect().top};}())");
+    check('rolagem alcança Limpar catálogo sem mover a Ribbon',
+        storageClear.scroll > 0 && rectVisible(storageClear.rect) && storageClear.ribbon === 0);
 
     var downloadCount = await evaluate('(' + showSyntheticDownloads.toString() + ')()');
     await waitFor("BuroApp.state.section === 'DOWNLOADS' && document.querySelectorAll('.download-row').length === 3");

@@ -478,7 +478,31 @@ body.playing .app-root { display: none; }
    e o texto do hero acima de tudo pelo z-index 2 da propria `.detail-hero`. */
 .hero-art img, .detail-art img, .media-art img { position: relative; z-index: 0; width: 100%; height: 100%; object-fit: cover; }
 .hero-art::after, .detail-art::after, .media-art::after { z-index: 1; }
-.real-home-hero .hero-art img { animation: hero-art-reveal 320ms ease-out; }
+.buro-image-frame,
+.buro-progressive-image {
+    background-color: #1a1d21;
+    background-image: linear-gradient(105deg, rgba(255,255,255,.025) 22%, rgba(214,169,86,.16) 42%, rgba(255,255,255,.025) 62%);
+    background-size: 220% 100%;
+    animation: buro-image-loading 1.35s ease-in-out infinite;
+}
+.buro-progressive-image {
+    opacity: .12;
+    transition: opacity 240ms ease-out;
+}
+.buro-progressive-image.image-ready {
+    opacity: 1;
+    background-image: none;
+    animation: none;
+}
+.buro-image-frame.image-ready {
+    background-image: none;
+    animation: none;
+}
+@keyframes buro-image-loading {
+    from { background-position: 125% 0; }
+    to { background-position: -125% 0; }
+}
+.real-home-hero .hero-art img.image-ready { animation: hero-art-reveal 320ms ease-out; }
 @keyframes hero-art-reveal { from { opacity: .18; } to { opacity: 1; } }
 .hero-kicker { color: var(--gold); font-size: 19px; font-weight: 800; letter-spacing: 2px; }
 .hero h2 { width: 800px; font-size: 54px; margin: 18px 0; }
@@ -487,12 +511,20 @@ body.playing .app-root { display: none; }
 .living-hero h2 { margin: 12px 0 8px; }
 .living-hero .hero-metadata { margin-bottom: 12px; color: var(--gold); font-size: 18px; font-weight: 700; }
 .living-hero .button { margin-top: 22px; }
-.real-home-hero { height: 390px; }
-.real-home-hero .hero-metadata { margin-bottom: 9px; color: var(--secondary); font-size: 19px; }
-.real-home-hero .hero-synopsis {
-    max-height: 78px; margin-bottom: 18px; overflow: hidden; color: var(--secondary); font-size: 18px; line-height: 1.45;
+.real-home-hero { height: 390px; padding: 30px 44px; }
+.real-home-hero h2 {
+    width: 820px; max-height: 104px; margin: 10px 0; overflow: hidden;
+    font-size: 48px; line-height: 1.08;
 }
-body.reduced-motion .real-home-hero .hero-art img { animation: none; }
+.real-home-hero .hero-metadata { margin-bottom: 6px; color: var(--secondary); font-size: 19px; }
+.real-home-hero .home-hero-actions { justify-content: flex-start; margin-top: 12px; }
+.real-home-hero .home-hero-actions .button { min-width: 170px; }
+.real-home-hero .hero-synopsis {
+    max-height: 52px; margin-bottom: 0; overflow: hidden; color: var(--secondary); font-size: 18px; line-height: 1.45;
+}
+body.reduced-motion .real-home-hero .hero-art img,
+body.reduced-motion .buro-image-frame,
+body.reduced-motion .buro-progressive-image { animation: none; transition: none; }
 .home-rail-heading { margin-top: 30px; }
 .home-loading {
     height: 500px; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -772,6 +804,31 @@ body.reduced-motion .discover-card.current { animation: none; }
 .pair-waiting { display: flex; align-items: center; color: var(--secondary); font-size: 22px; margin: 6px 0 18px; }
 .pair-waiting .boot-indicator { margin-right: 16px; }
 .catalogue-scope-bar { display: flex; flex-wrap: wrap; margin: 0 0 26px; }
+.catalogue-provider-shortcuts { width: 100%; margin: -18px 0 18px; }
+.catalogue-provider-shortcuts .section-heading { margin: 18px 0 12px; }
+.catalogue-provider-shortcuts .section-heading h2 { font-size: 23px; }
+.catalogue-provider-row {
+    width: 100%; display: flex; padding: 4px 4px 12px; overflow-x: auto; overflow-y: hidden;
+}
+.catalogue-provider-shortcut {
+    flex: 0 0 auto; height: 60px; min-width: 176px; max-width: 270px;
+    margin-right: 12px; padding: 0 16px; display: flex; align-items: center;
+    border: 3px solid #343741; border-radius: 16px; background: var(--elevated);
+    color: var(--text); text-align: left; cursor: none;
+}
+.catalogue-provider-shortcut > img {
+    flex: 0 0 38px; width: 38px; height: 38px; margin-right: 12px; padding: 3px;
+    border-radius: 9px; background: rgba(246,247,250,.92); object-fit: contain;
+}
+.catalogue-provider-shortcut .provider-badge { flex: 0 0 auto; margin: 0 12px 0 0; }
+.catalogue-provider-shortcut strong {
+    overflow: hidden; color: var(--text); font-size: 17px; font-weight: 750;
+    text-overflow: ellipsis; white-space: nowrap;
+}
+.catalogue-provider-shortcut.focused {
+    border-color: var(--ivory); background: var(--ivory); box-shadow: 0 0 0 3px rgba(214,169,86,.24);
+}
+.catalogue-provider-shortcut.focused strong { color: var(--canvas); }
 /* A linha de ano e nota fica acima da de genero/servico e usa chips menores:
    sao respostas curtas ("2026", "Nota 8+") e nao precisam do rotulo em cima. */
 .catalogue-year-bar { margin-bottom: 14px; }
@@ -855,9 +912,33 @@ body.reduced-motion .discover-card.current { animation: none; }
 }
 .category-card .provider-badge { position: absolute; top: 16px; right: 16px; margin: 0; }
 .category-card.has-provider { padding-right: 76px; }
-.detail-related { width: 100%; margin: 4px 0 12px; }
+.detail-related {
+    width: 100%; min-width: 0; max-width: 100%; margin: 4px 0 12px; overflow: hidden;
+}
 .detail-related h3 { margin: 0 0 16px; font-size: 24px; }
 .detail-related .card-row { margin: 0; }
+.similar-title-row {
+    width: 100%; padding: 2px 2px 12px; display: flex; overflow-x: auto; overflow-y: hidden;
+}
+.similar-title-card {
+    position: relative; flex: 0 0 160px; width: 160px; min-height: 304px; margin-right: 14px;
+    padding: 0 0 10px; overflow: hidden; border: 2px solid transparent; border-radius: 14px;
+    background: var(--surface); color: var(--text); text-align: left;
+}
+.similar-title-art {
+    width: 156px; height: 234px; display: flex; align-items: center; justify-content: center;
+    overflow: hidden; background: var(--elevated); color: var(--gold); font-size: 34px; font-weight: 900;
+}
+.similar-title-art img { width: 100%; height: 100%; object-fit: cover; }
+.similar-title-card strong, .similar-title-card small { display: block; margin: 9px 10px 0; }
+.similar-title-card strong { max-height: 42px; overflow: hidden; font-size: 16px; line-height: 1.3; }
+.similar-title-card small { margin-top: 4px; color: var(--muted); font-size: 13px; }
+.similar-title-opening {
+    position: absolute; top: 226px; left: 0; width: 42%; height: 4px; background: var(--gold);
+    animation: similar-title-search 900ms ease-in-out infinite alternate;
+}
+@keyframes similar-title-search { from { left: 0; } to { left: 58%; } }
+body.reduced-motion .similar-title-opening { animation: none; left: 29%; }
 /* Aviso de que a pagina esta magra por falta de chave, com o caminho para
    resolver ao lado do texto em vez de escondido nas configuracoes. */
 .detail-metadata-hint {
@@ -1058,14 +1139,52 @@ body.reduced-motion .download-fill { transition: none; }
 .media-art::after { background: linear-gradient(180deg, rgba(8,9,10,.16), rgba(8,9,10,.94)); }
 /* Oito por fileira na area util de ~1450px, como o aplicativo do Windows: com
    220px cabiam seis, e uma prateleira curta parece um catalogo pequeno. */
-/* 168x252 e a proporcao 2:3 do poster de cinema, que e a que o aplicativo do
-   Windows usa (`aspectRatio(2f / 3f)` em XtreamWorkspace). Eram 268px de altura,
-   1,595 em vez de 1,5: a arte cobre o cartao inteiro, entao esses 6% a mais
-   esticavam verticalmente toda capa — rostos mais compridos do que sao. */
-.media-card.poster { width: 168px; height: 252px; padding: 18px; }
-.media-card.poster h3 { font-size: 20px; }
-.media-card.poster p { font-size: 16px; }
-.media-card.poster .badge { padding: 5px 8px; font-size: 13px; }
+/*
+   O cartao de poster: a capa em cima, o nome embaixo dela — como no Android.
+
+   O nome ficava sobre a imagem, com um degrade escuro por baixo para continuar
+   legivel. Isso escondia justamente a parte de baixo do poster, que e onde
+   costuma estar o titulo desenhado pela distribuidora: duas camadas de texto
+   disputando o mesmo espaco. `PosterCard` no Android e uma Column — caixa 2:3
+   com a arte, depois o titulo, depois o ano — e e isso que se faz aqui.
+
+   168 de largura externa mantem os oito por fileira. Descontada a borda de foco
+   de 3px em cada lado, a arte util fica em 162x243 (2:3 exato, como
+   `aspectRatio(2f / 3f)`) e o cartao cresce para o nome e os metadados. */
+.media-card.poster {
+    width: 168px; height: auto; padding: 0;
+    justify-content: flex-start; overflow: visible;
+}
+.media-card.poster .media-art {
+    /* Os quatro `inset` sao zerados porque a regra generica de `.media-art` a
+       estica ate os quatro cantos do cartao; sem isto a caixa continuaria com a
+       altura do cartao inteiro, agora maior que a capa. */
+    position: relative; top: auto; right: auto; bottom: auto; left: auto;
+    /* O WebView das TVs antigas não entende a propriedade CSS moderna de
+       proporção. A largura útil é fixa em 162px depois das bordas; 243px mantém
+       exatamente 2:3 sem depender de recurso do Chromium 88. */
+    width: 100%; height: 243px;
+    border-radius: 14px; overflow: hidden; background: var(--elevated);
+}
+/* Sem degrade: nada mais e escrito por cima da capa, entao escurece-la so
+   apagaria detalhe da imagem. */
+.media-card.poster .media-art::after { display: none; }
+.media-card.poster h3 {
+    margin: 9px 0 0; font-size: 18px; line-height: 1.22;
+    /* Duas linhas no maximo, como o `maxLines = 2` do Android: um titulo longo
+       nao pode empurrar a fileira inteira para baixo. */
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.media-card.poster p { margin: 3px 0 0; font-size: 15px; }
+/* O selo volta para dentro da capa, no canto: ele e um marcador sobre a arte, e
+   nao parte do texto. */
+.media-card.poster .badge {
+    position: absolute; top: 8px; left: 8px; z-index: 3;
+    padding: 4px 7px; font-size: 12px;
+    background: rgba(8,9,10,.72);
+}
+.media-card.poster .media-progress { margin-top: 6px; }
 .media-card h3, .category-card h3, .source-card h3 { font-size: 25px; line-height: 1.18; }
 .media-card p, .category-card p, .source-card p { color: var(--muted); font-size: 19px; }
 .media-card .badge { align-self: flex-start; padding: 7px 11px; color: var(--gold); border: 1px solid rgba(214,169,86,.48); border-radius: 10px; font-size: 15px; font-weight: 800; }
@@ -1202,6 +1321,25 @@ body.reduced-motion .catalogue-sync-track span { transition: none; }
 .storage-row h3 { color: var(--text); font-size: 22px; }
 .storage-row p { margin-top: 6px; color: var(--muted); font-size: 18px; line-height: 1.4; }
 .storage-row strong { flex: none; color: var(--gold); font-size: 24px; font-weight: 700; text-align: right; }
+.artwork-cache-progress {
+    width: 100%; height: 9px; margin: 16px 0 8px; overflow: hidden;
+    border-radius: 5px; background: rgba(246,247,250,.14);
+}
+.artwork-cache-progress span {
+    display: block; height: 100%; border-radius: inherit; background: var(--gold);
+    transition: width 180ms linear;
+}
+.artwork-cache-state {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 0 0 14px; color: var(--secondary); font-size: 18px;
+}
+.artwork-cache-state > span { min-width: 0; }
+.artwork-cache-rate {
+    flex: none; margin-left: 24px; color: var(--gold); font-size: 19px;
+    font-variant-numeric: tabular-nums;
+}
+.artwork-cache-fill-actions { margin-bottom: 12px; }
+body.reduced-motion .artwork-cache-progress span { transition: none; }
 .section-heading.form-optional {
     display: block; margin: 6px 0 18px;
 }
@@ -1620,12 +1758,18 @@ body.reduced-motion .focusable.focused { transform: none; }
     top: -34px; right: -34px; bottom: -34px; left: -34px;
     z-index: -3;
     display: grid;
-    grid-template-columns: 1.5fr 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    opacity: .58;
-    filter: saturate(.78) brightness(.56);
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    opacity: .7;
+    filter: saturate(.8) brightness(.58);
     transform: scale(1.035);
+    animation: boot-wall-drift 20000ms ease-in-out infinite alternate;
 }
+.boot-backdrop.local {
+    display: block;
+    background: url('../assets/buro_category_atlas_v1.webp') center center / cover no-repeat;
+}
+.boot-backdrop.local span { display: none; }
 
 /* A borda transparente substitui o `gap`: o fundo escuro aparece entre os
    pôsteres do mesmo jeito, sem depender de suporte a grid moderno. */
@@ -1635,10 +1779,16 @@ body.reduced-motion .focusable.focused { transform: none; }
     border: 7px solid transparent;
     background-clip: padding-box;
 }
-.boot-backdrop span:nth-child(1) { grid-row: 1 / 3; background-image: url('../assets/buro_nocturne_hero.webp'); }
-.boot-backdrop span:nth-child(2) { background-image: url('../assets/buro_paper_sun.webp'); }
-.boot-backdrop span:nth-child(3) { background-image: url('../assets/buro_forest_signal.webp'); }
-.boot-backdrop span:nth-child(4) { grid-column: 2 / 4; background-image: url('../assets/buro_category_atlas_v1.webp'); }
+.boot-backdrop span:nth-child(4n+1) { background-image: url('../assets/buro_nocturne_hero.webp'); }
+.boot-backdrop span:nth-child(4n+2) { background-image: url('../assets/buro_paper_sun.webp'); }
+.boot-backdrop span:nth-child(4n+3) { background-image: url('../assets/buro_forest_signal.webp'); }
+.boot-backdrop span:nth-child(4n+4) { background-image: url('../assets/buro_category_atlas_v1.webp'); }
+.boot-backdrop span img { width: 100%; height: 100%; object-fit: cover; opacity: .78; }
+
+@keyframes boot-wall-drift {
+    from { transform: scale(1.06) translate3d(-8px, -5px, 0); }
+    to { transform: scale(1.10) translate3d(10px, 7px, 0); }
+}
 
 .boot-vignette {
     position: absolute;
@@ -1653,10 +1803,10 @@ body.reduced-motion .focusable.focused { transform: none; }
     width: 680px;
     min-height: 520px;
     padding: 40px 74px 36px;
-    border: 1px solid rgba(231,226,216,.16);
-    border-radius: 28px;
-    background: rgba(8,9,10,.88);
-    box-shadow: 0 30px 90px rgba(0,0,0,.48);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1725,6 +1875,7 @@ body.reduced-motion .focusable.focused { transform: none; }
 @keyframes boot-spin { to { transform: rotate(360deg); } }
 
 .boot-progress {
+    position: relative;
     width: 280px;
     height: 4px;
     margin-top: 24px;
@@ -1739,6 +1890,15 @@ body.reduced-motion .focusable.focused { transform: none; }
     background: var(--gold);
     transition: width 450ms ease-out;
 }
+.boot-progress::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0; left: -30%;
+    width: 30%;
+    background: linear-gradient(90deg, transparent, rgba(246,247,250,.72), transparent);
+    animation: boot-progress-sweep 1400ms linear infinite;
+}
+@keyframes boot-progress-sweep { to { left: 100%; } }
 
 .boot-dots { display: flex; margin-top: 22px; }
 .boot-dot { width: 7px; height: 7px; margin: 0 7px; border-radius: 50%; background: rgba(246,247,250,.18); }
@@ -1747,6 +1907,8 @@ body.reduced-motion .focusable.focused { transform: none; }
 
 body.reduced-motion .boot-indicator { animation: none; }
 body.reduced-motion .boot-mark { animation: none; }
+body.reduced-motion .boot-backdrop { animation: none; }
+body.reduced-motion .boot-progress::after { animation: none; display: none; }
 body.reduced-motion .boot-progress span { transition: none; }
 body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.reduced-transparency .player-status, body.reduced-transparency .player-topbar { background: #111319; }
 

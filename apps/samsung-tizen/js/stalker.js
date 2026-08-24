@@ -360,6 +360,10 @@ var BuroStalker = (function () {
                     safeCallback(failure, fail('MALFORMED_CATALOG'));
                     return;
                 }
+                total = numberValue(js.total_items);
+                if (total == null || total < rows.length) { total = rows.length; }
+                pageSize = numberValue(js.max_page_items);
+                if (pageSize == null || pageSize < rows.length) { pageSize = rows.length; }
                 rows.slice(0, MAX_ITEMS_PER_PAGE).forEach(function (row, index) {
                     var providerId = row && boundedText(row.id, 120);
                     var name = row && (boundedText(row.name, 240) || boundedText(row.o_name, 240));
@@ -390,14 +394,12 @@ var BuroStalker = (function () {
                         rating: rating,
                         /* Keep pages in portal order even when a portal omits
                            max_page_items or returns a shorter final page. */
-                        sortOrder: ((Math.floor(pageNumber) - 1) * MAX_ITEMS_PER_PAGE) + index,
+                        sortOrder: ((Math.floor(pageNumber) - 1) * Math.floor(pageSize)) + index,
                         locator: locator
                     }));
                 });
-                total = numberValue(js.total_items);
-                if (total == null || total < result.length) { total = result.length; }
-                pageSize = numberValue(js.max_page_items);
-                if (pageSize == null || pageSize < result.length) { pageSize = result.length; }
+                if (total < result.length) { total = result.length; }
+                if (pageSize < result.length) { pageSize = result.length; }
                 safeCallback(success, {
                     items: result,
                     totalItems: Math.floor(total),

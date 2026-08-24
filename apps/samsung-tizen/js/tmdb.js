@@ -11,6 +11,7 @@ var BuroTmdb = (function () {
     var TITLES_PER_SERVICE = 20;
     var MAX_EXPANDED_TITLES = 100;
     var MAX_EXPANDED_PAGES = 8;
+    var MAX_SIMILAR_TITLES = 16;
     /* Paginas por servico no indice de servicos. Cinco paginas sao cem titulos,
        o suficiente para o cruzamento render alguma coisa numa lista grande sem
        virar dezenas de requisicoes por servico numa TV. */
@@ -238,7 +239,11 @@ var BuroTmdb = (function () {
       carrega nada, sem dizer por que.
     */
     function isBearerToken(key) {
-        return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(clean(key));
+        key = clean(key);
+        /* A chave v3 é o único formato que deve viajar na query. O TMDb também
+           entrega tokens de leitura opacos, além do JWT tradicional; ambos vão
+           no header Bearer e, assim, não aparecem na URL do pedido. */
+        return Boolean(safeKey(key)) && !/^[a-f0-9]{32}$/i.test(key);
     }
 
     function url(path, key, params) {
@@ -472,6 +477,86 @@ var BuroTmdb = (function () {
         }).filter(function (row) { return row.tmdbId && row.title; });
     }
 
+    function collectionTitles(payload) {
+        return discoveredTitles({ results: Array.isArray(payload && payload.parts) ? payload.parts : [] }, false)
+            .sort(function (left, right) {
+                return (Number(left.year) || 9999) - (Number(right.year) || 9999) ||
+                    String(left.title).localeCompare(String(right.title));
+            });
+    }
+
+    function mergeSimilarTitles(franchise, related, currentId) {
+        var seen = {};
+        return (franchise || []).concat(related || []).filter(function (title) {
+            var identity = (title.isSeries ? 'series:' : 'movie:') + title.tmdbId;
+            if (!title.tmdbId || Number(title.tmdbId) === Number(currentId) || seen[identity]) { return false; }
+            seen[identity] = true;
+            return true;
+        }).slice(0, MAX_SIMILAR_TITLES);
+    }
+
+    /*
+      A fileira "Títulos parecidos" segue o mesmo contrato Android/Windows:
+      franquia primeiro, recomendações depois e `similar` somente quando as
+      recomendações estão vazias. Filmes consultam a coleção; séries não têm
+      coleção no TMDb. Tudo é cancelável e somente público/transitório.
+    */
+    function loadSimilarTitles(key, tmdbId, isSeries, locale, success, failure) {
+        var active = null;
+        var stopped = false;
+        var franchise = [];
+        var type = isSeries ? 'tv' : 'movie';
+        key = safeKey(key);
+        tmdbId = Math.floor(Number(tmdbId));
+        if (!key || !tmdbId || tmdbId < 1) {
+            failure({ code: 'TMDB_NOT_CONFIGURED' });
+            return null;
+        }
+
+        function publish(related) {
+            if (!stopped) { success(mergeSimilarTitles(franchise, related, tmdbId)); }
+        }
+
+        function loadGenreFallback() {
+            if (stopped) { return; }
+            active = request(type + '/' + tmdbId + '/similar', key,
+                { language: language(locale), page: 1 }, function (payload) {
+                    publish(discoveredTitles(payload, isSeries));
+                }, function (error) {
+                    if (franchise.length) { publish([]); }
+                    else if (!stopped) { failure(error); }
+                });
+        }
+
+        function loadRecommendations() {
+            if (stopped) { return; }
+            active = request(type + '/' + tmdbId + '/recommendations', key,
+                { language: language(locale), page: 1 }, function (payload) {
+                    var related = discoveredTitles(payload, isSeries);
+                    if (related.length) { publish(related); }
+                    else { loadGenreFallback(); }
+                }, function () { loadGenreFallback(); });
+        }
+
+        if (isSeries) { loadRecommendations(); }
+        else {
+            /* O detalhe já foi lido para montar a ficha, mas o adapter não
+               persiste a resposta bruta. Repetir apenas o id público mantém o
+               cache de domínio pequeno e evita guardar payload arbitrário. */
+            active = request('movie/' + tmdbId, key, { language: language(locale) }, function (payload) {
+                var collectionId = Math.floor(Number(payload && payload.belongs_to_collection &&
+                    payload.belongs_to_collection.id));
+                if (!collectionId) { loadRecommendations(); return; }
+                active = request('collection/' + collectionId, key, { language: language(locale) },
+                    function (collection) {
+                        franchise = collectionTitles(collection);
+                        loadRecommendations();
+                    }, function () { loadRecommendations(); });
+            }, function () { loadRecommendations(); });
+        }
+        return { abort: function () { stopped = true; if (active && active.abort) { active.abort(); } } };
+    }
+
     function directory(payload) {
         var rows = Array.isArray(payload && payload.results) ? payload.results : [];
         return rows.map(function (row) {
@@ -482,6 +567,36 @@ var BuroTmdb = (function () {
             };
         }).filter(function (row) { return row.id && row.name; })
             .sort(function (left, right) { return left.priority - right.priority; }).slice(0, MAX_SERVICES);
+    }
+
+    /*
+      Diretório leve usado pelos atalhos no topo de Filmes e Séries.
+
+      `loadShelves` também começa pelo diretório, mas depois consulta vinte
+      títulos de cada serviço. Para desenhar somente as marcas isso seria doze
+      requisições desnecessárias. Este contrato devolve apenas id, nome e logo
+      públicos e continua cancelável quando a pessoa troca de aba.
+    */
+    function loadProviderDirectory(key, region, kind, locale, success, failure) {
+        var active = null;
+        var stopped = false;
+        var isSeries;
+        key = safeKey(key);
+        region = safeRegion(region);
+        kind = String(kind || 'MOVIES').toUpperCase();
+        isSeries = kind === 'SERIES';
+        if (!key || (kind !== 'MOVIES' && kind !== 'SERIES')) {
+            failure({ code: 'TMDB_NOT_CONFIGURED' });
+            return null;
+        }
+        active = request(isSeries ? 'watch/providers/tv' : 'watch/providers/movie', key, {
+            language: language(locale), watch_region: region
+        }, function (payload) {
+            if (!stopped) { success(directory(payload)); }
+        }, function (error) {
+            if (!stopped) { failure(error && error.code ? error : { code: 'TMDB_UNAVAILABLE' }); }
+        });
+        return { abort: function () { stopped = true; if (active && active.abort) { active.abort(); } } };
     }
 
     function discoverParams(providerId, region, kind) {
@@ -782,10 +897,12 @@ var BuroTmdb = (function () {
     return {
         safeKey: safeKey, safeImdbId: safeImdbId, isBearerToken: isBearerToken, profileSecretId: profileSecretId, keyForProfile: keyForProfile,
         configuration: configuration, save: save, remove: remove, validateKey: validateKey,
-        loadTitle: loadTitle, loadPerson: loadPerson, image: image, safeRegion: safeRegion,
+        loadTitle: loadTitle, loadPerson: loadPerson, loadSimilarTitles: loadSimilarTitles,
+        image: image, safeRegion: safeRegion,
         supportedRegions: function () { return SUPPORTED_REGIONS.slice(); },
         readShelfCache: readShelfCache, writeShelfCache: writeShelfCache, clearShelfCache: clearShelfCache,
-        loadShelves: loadShelves, loadServiceCatalogue: loadServiceCatalogue,
+        loadShelves: loadShelves, loadProviderDirectory: loadProviderDirectory,
+        loadServiceCatalogue: loadServiceCatalogue,
         loadServiceTitles: loadServiceTitles,
         loadSubscriptionTitle: loadSubscriptionTitle,
         providerTarget: providerTarget

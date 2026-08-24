@@ -36,7 +36,10 @@ function makeWindow(options) {
     var files = {};
     window.__downloads = [];
     window.__deleted = [];
+    window.__downloadCallbacks = [];
     window.__files = files;
+    window.__now = 1000;
+    window.Date.now = function () { return window.__now; };
     window.tizen = {
         DownloadRequest: function (url, destination, name) {
             this.url = url; this.destination = destination; this.name = name;
@@ -44,6 +47,10 @@ function makeWindow(options) {
         download: {
             start: function (request, callbacks) {
                 window.__downloads.push({ url: request.url, name: request.name });
+                if (settings.deferred) {
+                    window.__downloadCallbacks.push({ request: request, callbacks: callbacks });
+                    return window.__downloads.length;
+                }
                 files[request.name] = { name: request.name, fileSize: settings.fileSize || 40000 };
                 if (callbacks && callbacks.oncompleted) {
                     callbacks.oncompleted(1, request.destination + '/' + request.name);
@@ -92,6 +99,22 @@ function makeWindow(options) {
         };
     }
     window.eval(fs.readFileSync(path.join(APP_DIR, 'js', 'artwork-cache.js'), 'utf8'));
+    window.__completeNextDownload = function (ok) {
+        var next = window.__downloadCallbacks.shift();
+        if (!next) { throw new Error('nenhum download pendente'); }
+        if (ok === false) {
+            next.callbacks.onfailed(1, 'NETWORK');
+            return;
+        }
+        files[next.request.name] = { name: next.request.name, fileSize: settings.fileSize || 40000 };
+        next.callbacks.oncompleted(1, next.request.destination + '/' + next.request.name);
+    };
+    window.__progressNextDownload = function (received, total, advanceMs) {
+        var next = window.__downloadCallbacks[0];
+        if (!next) { throw new Error('nenhum download pendente'); }
+        window.__now += Number(advanceMs) || 0;
+        next.callbacks.onprogress(1, received, total);
+    };
     return window;
 }
 
@@ -230,6 +253,61 @@ process.stdout.write('Um id estranho nunca vira nome de arquivo\n');
     cache.remember('nome com espaco', 'https://cdn.test/b.jpg');
     check('travessia de diretorio e nome invalido sao recusados',
         window.__downloads.length === 0);
+    window.close();
+}());
+
+process.stdout.write('Preenchimento completo mostra progresso e respeita pausa\n');
+(function () {
+    var window = makeWindow({ usb: true, deferred: true });
+    var cache = window.BuroArtworkCache;
+    var snapshots = [];
+    cache.attach(512, function () {});
+    cache.watch(function (status) { snapshots.push(status); });
+    cache.fill([
+        { id: 'a', url: 'https://cdn.test/a.jpg' },
+        { id: 'b', url: 'https://cdn.test/b.jpg' },
+        { id: 'c', url: 'https://cdn.test/c.jpg' },
+        { id: 'd', url: 'https://cdn.test/d.jpg' },
+        { id: 'd', url: 'https://cdn.test/repetida.jpg' },
+        { id: 'privada', url: 'https://cdn.test/e.jpg?token=segredo' }
+    ]);
+    check('a varredura deduplica e exclui URL privada do total',
+        cache.status().total === 4 && window.__downloads.length === 2);
+    check('duas capas por vez deixam a fila responsiva',
+        cache.status().active === 2 && cache.status().pending === 4);
+    window.__progressNextDownload(65536, 131072, 500);
+    check('o progresso da plataforma vira velocidade real em memoria',
+        cache.status().bytesPerSecond === 131072);
+    cache.pause();
+    check('pausar esconde uma velocidade que ja nao esta sendo medida',
+        cache.status().bytesPerSecond === null);
+    window.__completeNextDownload(true);
+    window.__completeNextDownload(true);
+    check('pausar deixa as duas restantes na fila',
+        cache.status().paused === true && cache.status().done === 2 &&
+        cache.status().pending === 2 && window.__downloads.length === 2);
+    check('a porcentagem real fica em cinquenta', cache.status().percent === 50);
+    cache.resume();
+    check('continuar inicia somente o que faltava', window.__downloads.length === 4);
+    window.__progressNextDownload(131072, 262144, 500);
+    check('continuar reinicia a janela da velocidade sem reaproveitar valor antigo',
+        cache.status().bytesPerSecond === 262144);
+    window.__completeNextDownload(true);
+    window.__completeNextDownload(false);
+    check('conclusao chega a cem e conserva a falha recuperavel',
+        cache.status().complete === true && cache.status().percent === 100 &&
+        cache.status().done === 4 && cache.status().failed === 1);
+    check('conclusao remove a velocidade da transferencia encerrada',
+        cache.status().bytesPerSecond === null);
+    check('observadores receberam o progresso', snapshots.length >= 6);
+    cache.fill([
+        { id: 'a', url: 'https://cdn.test/a.jpg' },
+        { id: 'b', url: 'https://cdn.test/b.jpg' },
+        { id: 'd', url: 'https://cdn.test/d.jpg' }
+    ]);
+    check('atualizar confere o que existe sem baixar de novo',
+        cache.status().total === 3 && cache.status().done === 2 && window.__downloads.length === 5);
+    window.__completeNextDownload(true);
     window.close();
 }());
 

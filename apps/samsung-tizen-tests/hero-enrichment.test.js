@@ -129,6 +129,48 @@ async function run() {
     check('reabrir a Home não repete sucessos, vazios ou falhas recentes',
         startStatus.state === 'COMPLETE' && pending.length === requestCount);
 
+    process.stdout.write('Fallback TMDb para fontes sem endpoint de detalhes\n');
+    var publicWindow = loadEngine();
+    var m3uSource = { id: 'source-m3u-hero', type: 'REMOTE_M3U' };
+    var publicPending = [];
+    var publicDelivered = [];
+    var secretReads = 0;
+    var m3uCandidates = [{
+        id: 'movie:m3u-hero', sourceId: m3uSource.id, contentType: 'MOVIE',
+        name: 'Filme público', year: 2026
+    }, {
+        id: 'series:m3u-hero', sourceId: m3uSource.id, contentType: 'SERIES',
+        name: 'Série pública', year: 2025
+    }];
+    startStatus = publicWindow.BuroHeroEnrichment.start(m3uSource, m3uCandidates, {
+        modeKey: 'tmdb',
+        getSecret: function () { secretReads += 1; throw new Error('não deveria ler segredo da fonte'); },
+        loadDetails: function (candidate, success, failure) {
+            var request = { item: candidate, success: success, failure: failure, aborted: false };
+            publicPending.push(request);
+            return { abort: function () { request.aborted = true; failure({ code: 'NETWORK_ABORTED' }); } };
+        },
+        onItem: function (candidate, value) { publicDelivered.push({ item: candidate, value: value }); }
+    });
+    await waitFor(function () { return publicPending.length === 1; }, 4000);
+    check('fonte M3U entra na mesma fila limitada por um loader público explícito',
+        startStatus.total === 2 && publicPending[0].item.id === 'movie:m3u-hero');
+    publicPending[0].success({
+        synopsis: 'Sinopse pública do TMDb.', genre: 'Drama', duration: '95 min', rating: 7.4,
+        artworkUrl: 'https://image.tmdb.org/t/p/w342/poster.jpg',
+        backdropUrl: 'https://image.tmdb.org/t/p/w1280/backdrop.jpg'
+    });
+    await waitFor(function () { return publicPending.length === 2; }, 4000);
+    publicPending[1].success({ synopsis: 'Série pública.' });
+    await waitFor(function () { return publicDelivered.length === 2; }, 4000);
+    check('fallback publica sinopse, nota e arte sem consultar a credencial da fonte', (function () {
+        var value = publicWindow.BuroHeroEnrichment.get(m3uSource.id, 'movie:m3u-hero');
+        return secretReads === 0 && value && value.synopsis === 'Sinopse pública do TMDb.' &&
+            value.rating === 7.4 && value.backdropUrl.indexOf('image.tmdb.org') >= 0;
+    }()));
+    check('fallback TMDb continua transitório e não grava metadados no armazenamento comum',
+        publicWindow.localStorage.length === 0);
+
     process.stdout.write('Cancelamento e resposta obsoleta\n');
     var cancelWindow = loadEngine();
     var cancelPending;
@@ -194,7 +236,7 @@ async function run() {
     check('excluir ou atualizar a fonte remove todos os metadados transitórios',
         boundedWindow.BuroHeroEnrichment.cacheSize() === 0);
 
-    window.close(); cancelWindow.close(); reboundWindow.close(); boundedWindow.close();
+    window.close(); publicWindow.close(); cancelWindow.close(); reboundWindow.close(); boundedWindow.close();
     process.stdout.write('\nResultado: ' + passed + ' passaram, ' + failures.length + ' falharam.\n');
     if (failures.length) { process.exitCode = 1; }
 }

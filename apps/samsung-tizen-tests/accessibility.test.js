@@ -81,6 +81,9 @@ check('movimento reduzido também desliga animações do boot',
     /body\.reduced-motion \.boot-mark\s*\{[^}]*animation:\s*none/s.test(css));
 check('movimento reduzido também desliga a entrada da carta de Descobrir',
     /body\.reduced-motion \.discover-card\.current\s*\{[^}]*animation:\s*none/s.test(css));
+check('movimento reduzido também desliga placeholder e revelação das capas',
+    /body\.reduced-motion \.buro-image-frame[^{]*\{[^}]*animation:\s*none;\s*transition:\s*none/s.test(css) &&
+    /body\.reduced-motion \.buro-progressive-image[^{]*\{[^}]*animation:\s*none;\s*transition:\s*none/s.test(css));
 check('controles compactos continuam acima do alvo mínimo de 44 px',
     /\.cast-chip\s*\{[^}]*min-height:\s*46px/s.test(css) &&
     /\.filter-chip\s*\{[^}]*min-height:\s*54px/s.test(css) &&

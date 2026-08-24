@@ -34,6 +34,7 @@ function loadApp(initialRequestedUri) {
     var dom;
     var window;
     var requestedUri = initialRequestedUri || '';
+    var requestedReadsRemaining = 0;
     var secureData = {};
     while (match) { scripts.push(match[1]); match = pattern.exec(html); }
     dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'https://iptvburo.test/' });
@@ -58,6 +59,10 @@ function loadApp(initialRequestedUri) {
                 return {
                     exit: function () {},
                     getRequestedAppControl: function () {
+                        if (requestedReadsRemaining > 0) {
+                            requestedReadsRemaining -= 1;
+                            return null;
+                        }
                         return requestedUri ? { appControl: { uri: requestedUri } } : null;
                     }
                 };
@@ -66,6 +71,10 @@ function loadApp(initialRequestedUri) {
         }
     };
     window.__setRequestedUri = function (value) { requestedUri = value; };
+    window.__setRequestedUriAfterReads = function (value, reads) {
+        requestedUri = value;
+        requestedReadsRemaining = reads;
+    };
     scripts.forEach(function (file) { window.eval(fs.readFileSync(path.join(APP_DIR, file), 'utf8')); });
     window.BuroApp.init();
     return window;
@@ -135,16 +144,20 @@ async function run() {
     appUri = 'iptvburo://title?id=' + encodeURIComponent(identity) + '&t=' + encodeURIComponent(title) +
         '&y=2024&img=' + encodeURIComponent('https://image.tmdb.org/t/p/w342/public.jpg');
     window.fetch = function () { fetchCount += 1; return Promise.reject(new Error('unexpected fetch')); };
-    window.__setRequestedUri(appUri);
-    window.dispatchEvent(new window.Event('appcontrol'));
+    window.__setRequestedUriAfterReads(appUri, 2);
+    window.dispatchEvent(new window.Event('focus'));
     await waitFor(function () { return window.document.querySelector('.shared-link-notice'); }, 4000);
-    check('evento quente e recebido sem reiniciar a sessao',
+    check('retomada quente consulta o pedido atrasado sem reiniciar a sessao',
         window.BuroApp._pendingSharedTitle() && window.BuroApp.state.screen === 'SHELL');
+    window.dispatchEvent(new window.Event('appcontrol'));
+    check('evento e retomada do mesmo pedido sao deduplicados',
+        window.document.querySelectorAll('.shared-link-notice').length === 1);
     check('outra fonte e categoria oculta nao viram atalho lateral',
         !window.BuroApp.state.screenData && window.document.querySelector('[data-action="shared-retry"]'));
     check('aviso persistente tem semantica acessivel e duas acoes D-pad',
         window.document.querySelector('.shared-link-notice').getAttribute('role') === 'alertdialog' &&
-        window.document.querySelectorAll('.shared-link-notice .focusable').length === 2);
+        window.document.querySelectorAll('.shared-link-notice .focusable').length === 2 &&
+        window.document.activeElement.getAttribute('data-action') === 'shared-retry');
     check('metadado recebido nao dispara consulta de imagem ou rede', fetchCount === 0);
 
     window.BuroApp._activate(window.document.querySelector('[data-action="shared-dismiss"]'));

@@ -124,6 +124,26 @@ function portal(window, overrides) {
         } else if (url.indexOf('action=get_categories') >= 0) {
             answer({ js: [{ id: '7', title: 'Ação' }] });
         } else if (url.indexOf('action=get_ordered_list') >= 0) {
+            if (options.totalItems) {
+                (function () {
+                    var match = /[?&]p=(\d+)/.exec(url);
+                    var page = Math.max(1, Number(match && match[1]) || 1);
+                    var pageSize = 200;
+                    var start = (page - 1) * pageSize;
+                    var end = Math.min(Number(options.totalItems), start + pageSize);
+                    var rows = [];
+                    var index;
+                    for (index = start; index < end; index += 1) {
+                        rows.push({
+                            id: String(1000 + index), name: 'Canal Sintético ' + index,
+                            cmd: 'ffmpeg http://portal.synthetic.invalid/stream/' + index + '?token=segredo',
+                            screenshot_uri: 'http://portal.synthetic.invalid/art/' + index + '.png'
+                        });
+                    }
+                    answer({ js: { total_items: Number(options.totalItems), max_page_items: pageSize, data: rows } });
+                }());
+                return { abort: function () {} };
+            }
             answer({
                 js: {
                     total_items: 1,
@@ -175,6 +195,9 @@ async function run() {
     var persisted;
     var hint;
     var sessionTokens;
+    var category;
+    var storedCategory;
+    var pageCalls;
 
     process.stdout.write('O portal aparece como fonte disponível\n');
     window = loadApp({ language: 'pt-BR', languageSelected: true });
@@ -284,6 +307,72 @@ async function run() {
     }).length;
     check('abrir a categoria não refez o handshake com a sessão ainda válida',
         sessionTokens === 1);
+    window.close();
+
+    process.stdout.write('A categoria percorre todas as páginas remotas sem reter comandos\n');
+    window = loadApp({ language: 'pt-BR', languageSelected: true });
+    await reachSourceForm(window);
+    click(window, '[data-action="source-form"][data-type="STALKER"]');
+    await waitFor(function () { return Boolean(window.document.querySelector('#source-mac')); }, 4000);
+    calls = portal(window, { totalItems: 450 });
+    typeInto(window, '#source-name', 'Portal paginado');
+    typeInto(window, '#source-portal', 'http://portal.synthetic.invalid/c/');
+    typeInto(window, '#source-mac', '00:1A:79:AB:CD:EF');
+    click(window, '[data-action="source-connect"][data-type="STALKER"]');
+    await waitFor(function () {
+        return window.BuroApp.state.sources.some(function (source) { return source.type === 'STALKER'; });
+    }, 6000);
+    category = window.BuroApp.state.categories.filter(function (row) { return row.contentType === 'LIVE'; })[0];
+    click(window, '.nav-list [data-action="section"][data-section="LIVE"]');
+    window.BuroApp._openCategory(category.id);
+    await waitFor(function () {
+        var data = window.BuroApp.state.screenData;
+        return data && data.kind === 'category' && data.items.length === 200 && data.catalogueRemoteHasMore;
+    }, 6000);
+    check('a primeira página mostra 200 de 450 e oferece continuação remota',
+        window.BuroApp.state.screenData.catalogueTotalCount === 450 &&
+        Boolean(window.document.querySelector('[data-action="category-load-more"]')));
+    click(window, '[data-action="category-load-more"]');
+    await waitFor(function () {
+        var data = window.BuroApp.state.screenData;
+        return data && data.kind === 'category' && data.items.length === 400 && !data.catalogueLoadingMore;
+    }, 6000);
+    click(window, '[data-action="category-load-more"]');
+    await waitFor(function () {
+        var data = window.BuroApp.state.screenData;
+        return data && data.kind === 'category' && data.items.length === 450 && !data.catalogueLoadingMore;
+    }, 6000);
+    pageCalls = calls.filter(function (request) {
+        return String(request.url).indexOf('action=get_ordered_list') >= 0;
+    }).map(function (request) {
+        var match = /[?&]p=(\d+)/.exec(String(request.url));
+        return Number(match && match[1]);
+    });
+    check('a TV pediu exatamente as páginas 1, 2 e 3 ao portal', pageCalls.join(',') === '1,2,3');
+    check('as três páginas formam 450 identidades únicas',
+        new Set(window.BuroApp.state.screenData.items.map(function (item) { return item.id; })).size === 450);
+    check('o botão desaparece quando o total remoto termina',
+        !window.BuroApp.state.screenData.catalogueRemoteHasMore &&
+        !window.document.querySelector('[data-action="category-load-more"]'));
+    check('a grade materializa no máximo uma página visual de cards',
+        window.document.querySelectorAll('.media-card').length <= 200);
+    check('nenhum comando, token de stream ou arte privada entrou no estado',
+        !/ffmpeg|segredo|portal\.synthetic\.invalid\/art/.test(JSON.stringify(window.BuroApp.state)));
+    storedCategory = await new Promise(function (resolve, reject) {
+        window.BuroStorage.get('categories', category.id, resolve, reject);
+    });
+    check('a página remota concluída fica registrada para a próxima abertura',
+        storedCategory.stalkerLoadedPage === 3 && storedCategory.stalkerTotalItems === 450 &&
+        storedCategory.stalkerPageSize === 200);
+    window.BuroApp._openCategory(category.id);
+    await waitFor(function () {
+        var data = window.BuroApp.state.screenData;
+        return data && data.kind === 'category' && data.items.length === 200;
+    }, 6000);
+    check('reabrir usa o catálogo local e não repete a primeira página remota',
+        calls.filter(function (request) {
+            return String(request.url).indexOf('action=get_ordered_list') >= 0;
+        }).length === 3 && !window.BuroApp.state.screenData.catalogueRemoteHasMore);
     window.close();
 
     process.stdout.write('Cada falha do portal tem a sua própria mensagem\n');

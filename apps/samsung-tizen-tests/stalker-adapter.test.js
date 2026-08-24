@@ -145,10 +145,10 @@ test('categorias descartam a pseudo-categoria All', function () {
     assert.strictEqual(categories[0].contentType, 'LIVE');
 });
 
-test('item persistivel nao contem cmd, artwork ou URL privada', function () {
+test('item persistivel informa pagina remota sem conter cmd, artwork ou URL privada', function () {
     const privateCommand = 'ffmpeg http://private.synthetic.invalid/ch/31915_';
     const transport = queueTransport([{ payload: { js: {
-        total_items: '120',
+        total_items: '450', max_page_items: '200',
         data: [{
             id: '31915', name: 'Movie One', category_id: '3', year: '1999',
             rating_imdb: '7.4', cmd: privateCommand,
@@ -159,10 +159,14 @@ test('item persistivel nao contem cmd, artwork ou URL privada', function () {
     let page;
     adapter.loadItems(validSecret(adapter), validSession(), 'source-1', 'MOVIE', {
         id: 'category-local-3', providerCategoryId: '3'
-    }, 1, function (value) { page = value; }, assert.fail);
+    }, 2, function (value) { page = value; }, assert.fail);
 
-    assert.strictEqual(page.totalItems, 120);
+    assert.strictEqual(page.totalItems, 450);
+    assert.strictEqual(page.page, 2);
+    assert.strictEqual(page.pageSize, 200);
+    assert.strictEqual(page.hasMore, true);
     assert.strictEqual(page.items.length, 1);
+    assert.strictEqual(page.items[0].sortOrder, 200);
     assert.strictEqual(page.items[0].logoUrl, null);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(page.items[0].locator)), {
         kind: 'stalker', contentType: 'MOVIE', providerItemId: '31915'

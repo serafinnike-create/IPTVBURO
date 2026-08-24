@@ -49,6 +49,16 @@ var BuroIdentity = (function () {
         return window.btoa(binary);
     }
 
+    /* Nonces e provas atravessam JSON, mas o contrato HTTP usa Base64URL sem
+       padding. As chaves SPKI/PKCS8 continuam no Base64 padrao exigido pelo
+       servidor e pelo KeyManager. */
+    function bytesToBase64Url(bytes) {
+        return bytesToBase64(bytes)
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
+    }
+
     function base64ToBytes(value) {
         var binary = window.atob(value);
         var bytes = new Uint8Array(binary.length);
@@ -186,7 +196,7 @@ var BuroIdentity = (function () {
     function newNonce() {
         var bytes = new Uint8Array(16);
         window.crypto.getRandomValues(bytes);
-        return bytesToBase64(bytes);
+        return bytesToBase64Url(bytes);
     }
 
     /*
@@ -205,7 +215,7 @@ var BuroIdentity = (function () {
             ).then(function (key) {
                 return window.crypto.subtle.sign(SIGN_PARAMS, key, payload);
             }).then(function (signature) {
-                done(bytesToBase64(new Uint8Array(signature)));
+                done(bytesToBase64Url(new Uint8Array(signature)));
             })['catch'](function () { failed({ code: 'PROOF_SIGNING_FAILED' }); });
         }, failed);
     }

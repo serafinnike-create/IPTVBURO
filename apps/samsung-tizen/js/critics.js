@@ -65,6 +65,24 @@ var BuroCritics = (function () {
         });
     }
 
+    /* Confere a chave antes de afirmar que ela foi salva. O OMDb costuma
+       devolver erro no próprio JSON, inclusive com HTTP 200, então as duas
+       camadas precisam ser verificadas. */
+    function validateKey(value, success, failure) {
+        var apiKey = safeKey(value);
+        if (!apiKey) { failure({ code: 'CRITICS_KEY_INVALID' }); return null; }
+        return BuroNetwork.json({
+            url: url('tt0111161', apiKey), maxBytes: MAX_RESPONSE_BYTES, timeoutMs: TIMEOUT_MS,
+            headers: { Accept: 'application/json' }
+        }, function (payload) {
+            if (payload && String(payload.Response || '').toLowerCase() === 'true') { success(apiKey); }
+            else { failure({ code: 'CRITICS_KEY_REJECTED' }); }
+        }, function (error) {
+            failure({ code: error && error.code === 'AUTH_REJECTED' ?
+                'CRITICS_KEY_REJECTED' : 'CRITICS_UNAVAILABLE' });
+        });
+    }
+
     function remove() {
         try { BuroStorage.secureRemove(SECRET_ID); clear(); return true; }
         catch (ignoredRemove) { return false; }
@@ -194,7 +212,7 @@ var BuroCritics = (function () {
 
     return {
         safeKey: safeKey, safeImdbId: safeImdbId, key: key, configured: configured,
-        save: save, remove: remove, clear: clear, scoresFor: scoresFor, markFor: markFor,
+        save: save, validateKey: validateKey, remove: remove, clear: clear, scoresFor: scoresFor, markFor: markFor,
         cached: cached, _scoresFrom: scoresFrom, _parsePercent: parsePercent
     };
 }());

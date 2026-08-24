@@ -88,13 +88,14 @@ var BuroHeroEnrichment = (function () {
         };
     }
 
-    function validCandidates(source, candidates) {
+    function validCandidates(source, candidates, customLoader) {
         var known = {};
         return (candidates || []).filter(function (item) {
             var locator = item && item.locator;
             if (!item || item.sourceId !== source.id || known[item.id] ||
                     ['MOVIE', 'SERIES'].indexOf(item.contentType) < 0 ||
-                    !locator || locator.kind !== 'xtream' || !locator.providerItemId) { return false; }
+                    (customLoader ? !cleanText(item.name, 240) :
+                        (!locator || locator.kind !== 'xtream' || !locator.providerItemId))) { return false; }
             known[item.id] = true;
             return true;
         }).slice(0, MAX_CANDIDATES);
@@ -145,21 +146,7 @@ var BuroHeroEnrichment = (function () {
         var key;
         var secret;
         var controller;
-        if (active !== job || job.finished) { return; }
-        if (job.cancelRequested) { finish(job, 'CANCELLED'); return; }
-        item = job.queue.shift() || null;
-        if (!item) { finish(job, 'COMPLETE'); return; }
-        job.current = item;
-        key = cacheKey(job.source.id, item.id);
-        notify(job);
-        try { secret = job.callbacks.getSecret(job.source.id); }
-        catch (error) {
-            remember(key, { status: 'ERROR', attemptedAt: Date.now() });
-            job.failed += 1; job.completed += 1; job.current = null;
-            window.setTimeout(function () { next(job); }, 0);
-            return;
-        }
-        controller = BuroXtream.loadHeroDetails(secret, item, function (details) {
+        function succeeded(details) {
             var value;
             secret = null;
             job.request = null;
@@ -174,7 +161,8 @@ var BuroHeroEnrichment = (function () {
             }
             notify(job);
             window.setTimeout(function () { next(job); }, 0);
-        }, function () {
+        }
+        function failed() {
             secret = null;
             job.request = null;
             if (active !== job || job.finished) { return; }
@@ -186,7 +174,22 @@ var BuroHeroEnrichment = (function () {
             job.current = null;
             notify(job);
             window.setTimeout(function () { next(job); }, 0);
-        });
+        }
+        if (active !== job || job.finished) { return; }
+        if (job.cancelRequested) { finish(job, 'CANCELLED'); return; }
+        item = job.queue.shift() || null;
+        if (!item) { finish(job, 'COMPLETE'); return; }
+        job.current = item;
+        key = cacheKey(job.source.id, item.id);
+        notify(job);
+        try {
+            if (typeof job.callbacks.loadDetails === 'function') {
+                controller = job.callbacks.loadDetails(item, succeeded, failed);
+            } else {
+                secret = job.callbacks.getSecret(job.source.id);
+                controller = BuroXtream.loadHeroDetails(secret, item, succeeded, failed);
+            }
+        } catch (error) { failed(error); return; }
         /* Também suporta adapters/mocks que respondem de forma síncrona. */
         if (!job.finished && job.current === item) { job.request = controller || null; }
     }
@@ -197,13 +200,16 @@ var BuroHeroEnrichment = (function () {
         var queue;
         var now = Date.now();
         var job;
-        if (!source || source.type !== 'XTREAM' || !BuroDomain.safeId(source.id)) {
+        var customLoader;
+        callbacks = callbacks || {};
+        customLoader = typeof callbacks.loadDetails === 'function';
+        if (!source || !BuroDomain.safeId(source.id) || (!customLoader && source.type !== 'XTREAM')) {
             throw new Error('SOURCE_TYPE_UNAVAILABLE');
         }
-        callbacks = callbacks || {};
-        if (typeof callbacks.getSecret !== 'function') { throw new Error('CREDENTIALS_REQUIRED'); }
-        rows = validCandidates(source, candidates);
-        signature = source.id + ':' + rows.map(function (item) { return item.id; }).join('|');
+        if (!customLoader && typeof callbacks.getSecret !== 'function') { throw new Error('CREDENTIALS_REQUIRED'); }
+        rows = validCandidates(source, candidates, customLoader);
+        signature = source.id + ':' + (customLoader ? String(callbacks.modeKey || 'custom') : 'provider') + ':' +
+            rows.map(function (item) { return item.id; }).join('|');
         if (active && active.state === 'RUNNING' && active.signature === signature) {
             /* A Home pode ser recomposta enquanto a mesma fila continua. */
             active.callbacks = callbacks;

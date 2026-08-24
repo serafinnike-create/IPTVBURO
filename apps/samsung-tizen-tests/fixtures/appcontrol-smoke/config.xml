@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets"
+        xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://iptvburo.com/tizen/appcontrol-smoke"
+        version="3.0.1"
+        viewmodes="maximized">
+    <name>IPTV BURO App Control Smoke</name>
+    <description>Diagnostico isolado de entrega de link publico para o IPTV BURO.</description>
+    <content src="index.html"/>
+    <tizen:application id="BUROCTL001.AppControlSmoke"
+                       package="BUROCTL001"
+                       required_version="6.0"/>
+    <tizen:profile name="tv-samsung"/>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+    <tizen:setting screen-orientation="landscape"
+                   context-menu="disable"
+                   background-support="disable"
+                   encryption="disable"
+                   hwkey-event="enable"/>
+    <access origin="http://10.0.2.2:43128" subdomains="false"/>
+</widget>

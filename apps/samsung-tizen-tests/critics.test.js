@@ -164,6 +164,28 @@ async function run() {
     check('sem chave o resultado é ausência, não erro', scores === null);
     check('sem chave nenhuma requisição sai da TV', requests.length === 0);
 
+    process.stdout.write('A chave é comprovada no OMDb antes de ser salva\n');
+    requests = [];
+    window.BuroNetwork.json = function (options, success) {
+        requests.push(options); success(omdbPayload()); return { abort: function () {} };
+    };
+    await new Promise(function (resolve, reject) {
+        window.BuroCritics.validateKey('abcd1234', resolve, reject);
+    });
+    check('a validação consulta um IMDb público e limita a resposta',
+        requests.length === 1 && requests[0].url.indexOf('i=tt0111161') > 0 &&
+        Number(requests[0].maxBytes) <= 1024 * 1024);
+    check('validar não grava a chave antes da confirmação da tela', window.BuroCritics.configured() === false);
+    window.BuroNetwork.json = function (options, success) {
+        success({ Response: 'False', Error: 'Invalid API key!' }); return { abort: function () {} };
+    };
+    await new Promise(function (resolve) {
+        window.BuroCritics.validateKey('abcd1234', function () { resolve('unexpected'); }, function (error) {
+            check('erro no corpo é rejeição de chave, não falso sucesso', error.code === 'CRITICS_KEY_REJECTED');
+            resolve();
+        });
+    });
+
     process.stdout.write('Com chave, a nota é buscada e a chave não vaza\n');
     await new Promise(function (resolve, reject) {
         window.BuroCritics.save('abcd1234', resolve, reject);

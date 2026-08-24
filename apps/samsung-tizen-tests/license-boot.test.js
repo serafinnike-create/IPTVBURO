@@ -125,6 +125,14 @@ async function run() {
         Boolean(registration && registration.publicKey && registration.installationId));
     check('o registro vai assinado com um nonce',
         Boolean(registration && registration.proof && registration.nonce));
+    check('validate e registro usam nonces Base64URL aceitos pelo servidor',
+        fresh.bodies.every(function (body) {
+            return body && /^[A-Za-z0-9_-]{22}$/.test(body.nonce || '');
+        }));
+    check('validate e registro usam provas Base64URL cruas aceitas pelo servidor',
+        fresh.bodies.every(function (body) {
+            return body && /^[A-Za-z0-9_-]{86}$/.test(body.proof || '');
+        }));
     check('nenhuma chave privada acompanha o registro',
         JSON.stringify(registration).indexOf('privateKey') === -1);
     fresh.window.close();

@@ -66,7 +66,7 @@ var section = window.BuroApp._ratingsSection;
 
 process.stdout.write('O painel aparece quando a nota vale alguma coisa\n');
 (function () {
-    var html = section({ rating: 7.6, voteCount: 12438 });
+    var html = section({ tmdbRating: 7.6, tmdbVoteCount: 12438 });
     check('a nota vira porcentagem, que é como se lê de relance',
         html.indexOf('76%') > 0);
     /*
@@ -86,11 +86,11 @@ process.stdout.write('O painel aparece quando a nota vale alguma coisa\n');
 
 process.stdout.write('Poucos votos não são uma nota\n');
 check('dezenove votos não desenham painel',
-    section({ rating: 9.5, voteCount: 19 }) === '');
+    section({ tmdbRating: 9.5, tmdbVoteCount: 19 }) === '');
 check('vinte votos já desenham',
-    section({ rating: 9.5, voteCount: 20 }).indexOf('95%') > 0);
+    section({ tmdbRating: 9.5, tmdbVoteCount: 20 }).indexOf('95%') > 0);
 check('a contagem exata aparece abaixo de mil',
-    section({ rating: 8, voteCount: 340 }).indexOf('340 votos') > 0);
+    section({ tmdbRating: 8, tmdbVoteCount: 340 }).indexOf('340 votos') > 0);
 
 process.stdout.write('Sem nota, o painel some em vez de dizer zero\n');
 /*
@@ -98,13 +98,15 @@ process.stdout.write('Sem nota, o painel some em vez de dizer zero\n');
   mas ninguém avaliou. "0%" se lê como veredito.
 */
 check('nota zero não vira "0%"',
-    section({ rating: 0, voteCount: 0 }) === '');
+    section({ tmdbRating: 0, tmdbVoteCount: 0 }) === '');
 check('nota zero com muitos votos também não',
-    section({ rating: 0, voteCount: 5000 }) === '');
+    section({ tmdbRating: 0, tmdbVoteCount: 5000 }) === '');
+check('nota do provedor não se apresenta como nota TMDb',
+    section({ rating: 9.9, voteCount: 5000 }) === '');
 check('ficha sem os campos não quebra',
     section({}) === '' && section(null) === '' && section(undefined) === '');
 check('valores inválidos não viram NaN na tela',
-    section({ rating: 'oito', voteCount: 'muitos' }) === '');
+    section({ tmdbRating: 'oito', tmdbVoteCount: 'muitos' }) === '');
 
 window.close();
 

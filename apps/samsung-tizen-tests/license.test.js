@@ -26,6 +26,10 @@ function check(label, condition) {
 
 function bytesToBase64(bytes) { return Buffer.from(bytes).toString('base64'); }
 
+function base64UrlToBuffer(value) {
+    return Buffer.from(String(value).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+}
+
 function makeWindow() {
     var dom = new JSDOM('<!doctype html><html><body></body></html>', {
         runScripts: 'outside-only', url: 'https://iptvburo.test/'
@@ -132,6 +136,9 @@ async function run() {
         window.BuroIdentity.sign('register', 'nonce-fixo', ok, no);
     });
 
+    check('a prova usa Base64URL cru de 64 bytes aceito pelo servidor',
+        /^[A-Za-z0-9_-]{86}$/.test(proof) && base64UrlToBuffer(proof).length === 64);
+
     check('a prova verifica contra a chave pública do dispositivo', await (async function () {
         var key = await nodeCrypto.webcrypto.subtle.importKey(
             'spki', Buffer.from(identity.publicKey, 'base64'),
@@ -141,7 +148,7 @@ async function run() {
         var canonical = 'iptvburo-device-proof-v1\nregister\n' + identity.deviceId + '\nnonce-fixo';
         return nodeCrypto.webcrypto.subtle.verify(
             { name: 'ECDSA', hash: 'SHA-256' }, key,
-            Buffer.from(proof, 'base64'), new TextEncoder().encode(canonical)
+            base64UrlToBuffer(proof), new TextEncoder().encode(canonical)
         );
     }()));
 
@@ -153,12 +160,15 @@ async function run() {
         var canonical = 'iptvburo-device-proof-v1\nvalidate\n' + identity.deviceId + '\nnonce-fixo';
         return !(await nodeCrypto.webcrypto.subtle.verify(
             { name: 'ECDSA', hash: 'SHA-256' }, key,
-            Buffer.from(proof, 'base64'), new TextEncoder().encode(canonical)
+            base64UrlToBuffer(proof), new TextEncoder().encode(canonical)
         ));
     }()));
 
-    check('cada chamada usa um nonce novo',
-        window.BuroIdentity.newNonce() !== window.BuroIdentity.newNonce());
+    var firstNonce = window.BuroIdentity.newNonce();
+    var secondNonce = window.BuroIdentity.newNonce();
+    check('cada chamada usa um nonce novo', firstNonce !== secondNonce);
+    check('o nonce usa os 16 bytes em Base64URL sem padding exigidos pelo servidor',
+        /^[A-Za-z0-9_-]{22}$/.test(firstNonce) && base64UrlToBuffer(firstNonce).length === 16);
 
     process.stdout.write('Verificação da licença\n');
     serverKeys = await nodeCrypto.webcrypto.subtle.generateKey(

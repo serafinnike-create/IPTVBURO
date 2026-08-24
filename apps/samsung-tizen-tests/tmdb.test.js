@@ -21,9 +21,13 @@ function run() {
     var secrets = {};
     var requests = [];
     var titleResult;
+    var similarResult;
+    var similarFallbackResult;
     var personResult;
     var movieShelves;
     var seriesShelves;
+    var movieProviders;
+    var seriesProviders;
     var weeklyShelves;
     var upcomingShelves;
     var subscriptionSelection;
@@ -46,7 +50,26 @@ function run() {
     window.BuroNetwork = {
         json: function (options, success, failure) {
             requests.push(options);
-            if (options.url.indexOf('/watch/providers/movie?') >= 0) {
+            if (options.url.indexOf('/movie/42/recommendations?') >= 0) {
+                success({ results: [
+                    { id: 43, title: 'Filme III', release_date: '1983-01-01', poster_path: '/three.jpg' },
+                    { id: 55, title: 'Recomendação pública', release_date: '2024-06-01', poster_path: '/recommended.jpg' }
+                ] });
+            } else if (options.url.indexOf('/collection/3?') >= 0) {
+                success({ parts: [
+                    { id: 43, title: 'Filme III', release_date: '1983-01-01', poster_path: '/three.jpg' },
+                    { id: 42, title: 'Filme sintético', release_date: '1980-01-01', poster_path: '/poster.jpg' },
+                    { id: 41, title: 'Filme I', release_date: '1978-01-01', poster_path: '/one.jpg' }
+                ] });
+            } else if (options.url.indexOf('/movie/99/recommendations?') >= 0) {
+                success({ results: [] });
+            } else if (options.url.indexOf('/movie/99/similar?') >= 0) {
+                success({ results: [
+                    { id: 90, title: 'Fallback por gênero', release_date: '2019-03-01', poster_path: '/fallback.jpg' }
+                ] });
+            } else if (options.url.indexOf('/movie/99?') >= 0) {
+                success({ id: 99, title: 'Filme sem franquia', belongs_to_collection: null });
+            } else if (options.url.indexOf('/watch/providers/movie?') >= 0) {
                 success({ results: [{ provider_id: 8, provider_name: 'Netflix', logo_path: '/netflix.jpg', display_priority: 1 }] });
             } else if (options.url.indexOf('/watch/providers/tv?') >= 0) {
                 success({ results: [{ provider_id: 9, provider_name: 'Prime Video', logo_path: '/prime-video.jpg', display_priority: 1 }] });
@@ -73,7 +96,9 @@ function run() {
             } else if (options.url.indexOf('/movie/42?') >= 0) {
                 success({
                     id: 42, title: 'Filme sintético', overview: 'Sinopse pública', release_date: '2025-02-03',
-                    backdrop_path: '/backdrop.jpg', poster_path: '/poster.jpg', vote_average: 8.4, runtime: 122,
+                    belongs_to_collection: { id: 3, name: 'Coleção sintética' },
+                    backdrop_path: '/backdrop.jpg', poster_path: '/poster.jpg', vote_average: 8.4,
+                    vote_count: 321, runtime: 122,
                     genres: [{ name: 'Drama' }, { name: 'Aventura' }],
                     credits: { cast: [
                         { id: 7, name: 'Ana Exemplo', character: 'Lia', profile_path: '/ana.jpg' },
@@ -125,6 +150,8 @@ function run() {
         window.BuroTmdb.isBearerToken(bearerToken) === true);
     check('uma chave v3 nao e confundida com token',
         window.BuroTmdb.isBearerToken(key) === false);
+    check('um token de leitura opaco também usa Bearer e não a URL',
+        window.BuroTmdb.isBearerToken('opaqueReadAccessToken0123456789ABCDEFGHIJ') === true);
     check('o token v4 passa na validacao de formato',
         window.BuroTmdb.safeKey(bearerToken) === bearerToken);
     (function () {
@@ -175,6 +202,24 @@ function run() {
             return entry.url.indexOf('username=') === -1 && entry.url.indexOf('password=') === -1 &&
                 entry.url.indexOf('provider.test') === -1;
         }));
+
+    process.stdout.write('Franquia e títulos semelhantes\n');
+    var similarHandle = window.BuroTmdb.loadSimilarTitles(key, 42, false, 'pt-BR',
+        function (value) { similarResult = value; }, function () {});
+    check('franquia vem em ordem de lançamento antes das recomendações e sem o título atual',
+        similarResult.length === 3 && similarResult[0].tmdbId === 41 && similarResult[1].tmdbId === 43 &&
+        similarResult[2].tmdbId === 55 && !similarResult.some(function (row) { return row.tmdbId === 42; }));
+    check('duplicata entre coleção e recomendação aparece uma única vez',
+        similarResult.filter(function (row) { return row.tmdbId === 43; }).length === 1);
+    check('consulta é cancelável e usa somente ids públicos nos endpoints',
+        similarHandle && typeof similarHandle.abort === 'function' &&
+        requests.some(function (entry) { return entry.url.indexOf('/collection/3?') >= 0; }) &&
+        requests.some(function (entry) { return entry.url.indexOf('/movie/42/recommendations?') >= 0; }));
+    window.BuroTmdb.loadSimilarTitles(key, 99, false, 'pt-BR',
+        function (value) { similarFallbackResult = value; }, function () {});
+    check('resposta vazia de recommendations recorre ao endpoint similar',
+        similarFallbackResult.length === 1 && similarFallbackResult[0].tmdbId === 90 &&
+        requests.some(function (entry) { return entry.url.indexOf('/movie/99/similar?') >= 0; }));
 
     process.stdout.write('Pessoa e filmografia\n');
     window.BuroTmdb.loadPerson(key, 'Ana Exemplo', 'pt-BR', function (value) { personResult = value; }, function () {});
@@ -271,6 +316,21 @@ function run() {
     check('limpar a chave TMDb pode remover todo o cache público associado', hasShelfCache && !hasShelfCacheEntry);
 
     process.stdout.write('Assinaturas e onde assistir\n');
+    var discoverRequestsBeforeDirectory = requests.filter(function (entry) {
+        return entry.url.indexOf('/discover/') >= 0;
+    }).length;
+    var providerDirectoryHandle = window.BuroTmdb.loadProviderDirectory(key, 'BR', 'MOVIES', 'pt-BR',
+        function (value) { movieProviders = value; }, function () {});
+    window.BuroTmdb.loadProviderDirectory(key, 'BR', 'SERIES', 'pt-BR',
+        function (value) { seriesProviders = value; }, function () {});
+    check('diretório leve expõe id, nome e marca públicos para Filmes e Séries',
+        movieProviders.length === 1 && movieProviders[0].id === 8 && movieProviders[0].name === 'Netflix' &&
+        movieProviders[0].logoUrl === 'https://image.tmdb.org/t/p/w92/netflix.jpg' &&
+        seriesProviders.length === 1 && seriesProviders[0].id === 9 && seriesProviders[0].name === 'Prime Video');
+    check('atalhos consultam somente o diretório e continuam canceláveis',
+        providerDirectoryHandle && typeof providerDirectoryHandle.abort === 'function' &&
+        requests.filter(function (entry) { return entry.url.indexOf('/discover/') >= 0; }).length ===
+            discoverRequestsBeforeDirectory);
     window.BuroTmdb.loadShelves(key, 'BR', 'MOVIES', 'pt-BR', function () {},
         function (value) { movieShelves = value; }, function () {});
     window.BuroTmdb.loadShelves(key, 'BR', 'SERIES', 'pt-BR', function () {},
