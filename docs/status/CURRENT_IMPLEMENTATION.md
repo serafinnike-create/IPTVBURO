@@ -1,13 +1,13 @@
 # Implementação atual do IPTV BURO
 
-- Data da auditoria: 21 de agosto de 2026
+- Data da auditoria: 24 de agosto de 2026
 - Branch: `codex/windows-clean-release`
 - Baseline anterior: `v0.1.0-alpha.1`
-- Tag mais recente no repositório atual: `v3.2.1`
+- Tag mais recente no repositório atual: `v3.3.0`
 - Releases publicadas: `v2.0.0-alpha.7`, `v2.0.0-alpha.11`, `v2.0.0-alpha.12`
-  como prévia; `v3.0.0`, `v3.0.1`, `v3.0.3`, `v3.0.4`, `v3.0.5`, `v3.0.6`, `v3.1.0`, `v3.1.1`, `v3.1.2`, `v3.2.0` e `v3.2.1` como versões finais do Windows
+  como prévia; `v3.0.0`, `v3.0.1`, `v3.0.3`, `v3.0.4`, `v3.0.5`, `v3.0.6`, `v3.1.0`, `v3.1.1`, `v3.1.2`, `v3.2.0`, `v3.2.1` e `v3.3.0` como versões finais do Windows
   (a `v3.0.2` foi despublicada: atualizar por ela apagava o aplicativo)
-- Windows: `v3.2.1`; MSI ainda sem assinatura Authenticode
+- Windows: `v3.3.0`; MSI ainda sem assinatura Authenticode
 - Android/Android TV: `v3.0.1`, ainda prévia — a 3.0.2 é só do Windows. A
   numeração passou a ser compartilhada com o Windows a partir da 3.0.1; o APK é
   de depuração e não é versão de loja, e a numeração comum alinha as aplicações,
@@ -18,6 +18,87 @@
   `MessageDigest` e `Locale`. Isso não significa que exista um app iOS; apenas
   que o domínio deixou de ser só-JVM
 - Milestone em validação: `0.2`, Android adaptativo e Compose Desktop
+
+## Samsung Tizen — atualização de 24 de agosto de 2026
+
+- A abertura foi alinhada ao Windows: catálogo, varredura, cache editorial da
+  Home, prateleiras TMDb configuradas, enriquecimento do primeiro Hero e capas
+  do primeiro quadro terminam antes de o shell aparecer. O mosaico usa até 12
+  capas públicas ou um atlas local e o progresso reflete seis etapas reais, sem
+  spinner genérico. Um erro anterior limitava o preview a quatro capas e tornava
+  inalcançável o limiar de nove para o mosaico real; o preview agora conserva até
+  12 artes.
+- A paginação Stalker/Ministra continua no servidor e no IndexedDB em blocos de
+  200, com cenário de 450 itens e proteção contra páginas remotas duplicadas.
+- Os contratos sintéticos TMDb/OMDb, compatibilidade ES5, acessibilidade e boot
+  passaram. No emulador, o TMDb real carregou prateleiras regionais, marcas e
+  capas; o OMDb real carregou a nota IMDb de um título. As credenciais permanecem
+  exclusivamente no Tizen KeyManager e não foram incluídas no repositório ou no
+  pacote.
+- Capas tardias em Home, catálogo, detalhes, retomada, pessoas e Assinaturas
+  agora mantêm placeholder até `load`, revelam a imagem suavemente e preservam
+  o fallback backdrop→pôster; movimento reduzido desliga shimmer e transição.
+- O Hero oferece `Assistir` direto para filmes/canais e `Ver detalhes` como no
+  Windows; séries continuam exigindo a escolha do episódio. Sua rotação pausa
+  enquanto qualquer ação descendente está focada. Título em duas linhas,
+  sinopse e as ações agora permanecem contidos no painel. A inspeção do WGT
+  instalado confirmou tanto o Hero de série quanto o de filme com as ações
+  corretas.
+- Títulos semelhantes agora seguem o contrato Android/Windows. Em filmes, a
+  coleção/franquia do TMDb vem primeiro em ordem de lançamento, seguida das
+  recomendações; `/similar` é usado somente se recomendações falharem ou vierem
+  vazias. Séries usam recomendações. O título atual e duplicatas são removidos e
+  a fileira fica limitada a 16 cards. Cada card procura primeiro a fonte local
+  ativa e, se o título não existir nela, abre Assinaturas/Onde assistir. RETURN
+  restaura ficha, foco e rolagens mesmo em navegação encadeada. Enquanto o TMDb
+  não responde ou não está configurado, o catálogo local fornece o mesmo card,
+  restrito à fonte, tipo e visibilidade parental. A nota pública TMDb também
+  permanece separada da avaliação editorial enviada pelo provedor.
+- Filmes e Séries agora exibem, antes dos filtros, o mesmo diretório visual de
+  serviços do Android: até 12 marcas públicas TMDb navegáveis por D-pad. O
+  clique abre diretamente a grade de até 100 títulos do serviço na região e no
+  tipo correntes, com loading visível; Filmes e Séries possuem diretórios
+  independentes. Somente id, nome e logo públicos ficam em memória, sem chave
+  ou catálogo externo persistido.
+- O smoke Chromium aprovou 269/269 verificações em 1920×1080, incluindo 960
+  trocas de tela e catálogo sintético de 12.000 itens.
+- O preenchimento opcional do cache de capas em USB agora mede a taxa recebida
+  pelo callback nativo do Tizen e mostra B/s, kB/s ou MB/s nas Configurações. A
+  medição é transitória, atualizada no máximo duas vezes por segundo e zerada ao
+  pausar, concluir, desligar ou limpar; nenhuma URL entra na telemetria.
+- Cartões sem arte conservam a mesma caixa 2:3 dos cartões carregados, evitando
+  salto de layout, e o trilho horizontal de semelhantes não pode mais alargar o
+  contêiner externo além do viewport.
+- A identidade Tizen agora serializa nonce e prova ECDSA como Base64URL sem
+  padding, exatamente como o Worker exige. Antes, Base64 comum fazia a
+  validação/inscrição falhar antes da prova criptográfica. Depois da correção,
+  o emulador deixou de mostrar `Dispositivo não registrado` e passou a mostrar
+  `Faltam 7 dias`, confirmando o primeiro registro e a licença assinada.
+- O WGT assinado de `20260824-182522` foi instalado no emulador e manteve o PID
+  3969 por 30 segundos. Tem 714.718 bytes, 39 entradas (37 payload + duas
+  assinaturas) e SHA-256
+  `F4E45B1A1753BB650384211C9DF7E0C1BBB72AF7846C32BE4B0E6260353882CC`.
+  Os 55 grupos posteriores ao gate de versão passaram no mesmo snapshot
+  estável em 156,7 segundos; D-pad soma 349 verificações, TMDb 44 e o smoke
+  visual 267. Na janela real, Filmes mostrou os atalhos, Netflix abriu `Tudo em
+  Netflix` com 100 capas e RETURN voltou às prateleiras do filtro Filmes.
+- A revisão `20260824-184638`, com a telemetria e os ajustes de layout, passou
+  nos 55 grupos pós-gate em 145,5 segundos. Cache de capas passou 32/32, painel
+  de armazenamento 27/27, compatibilidade antiga 38/38, D-pad 349/349, TMDb
+  44/44 e visual 269/269. O WGT assinado foi instalado na VM, manteve o PID
+  5187 por 30 segundos e a janela real mostrou a Home pronta com Hero, sinopse,
+  backdrop e capas renderizadas. O pacote tem 716.077 bytes, 39 entradas (37 de
+  payload e duas assinaturas), 37/37 payloads idênticos ao staging, zero padrão
+  de chave de metadados embutida e SHA-256
+  `3BBD2EC7683EE1F5528D9C6D697A35AA77F103ADC90C4F7CDBBDD3631008AC5C`.
+- O gate global de versão ainda falha porque Android está em 3.0.1 e Windows em
+  3.2.1; isso não foi alterado nesta etapa. TV física, latência em hardware,
+  formatos AVPlay, USB e um portal Stalker real continuam pendentes.
+- Canais Xtream que declaram `tv_archive` e uma duração positiva agora expõem
+  catch-up na ficha e no guia do player. A janela, o horário local e a duração
+  são validados antes do ENTER; a URL autenticada nasce somente no play e não
+  é persistida. A revisão `20260824-190924` passou 55/55 grupos pós-gate,
+  D-pad 353/353 e visual 270/270; o WGT manteve PID 6674 por 30 segundos.
 
 ## Correções de 17 de agosto de 2026
 

@@ -2,6 +2,26 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [3.3.0] - 2026-08-24 (Windows)
+
+### Windows
+
+#### Adicionado
+
+- **Catch-up: rever um programa que já passou.** No guia de um canal ao vivo,
+  se o seu provedor mantém gravação, aparece a lista do que já foi ao ar — um
+  clique reproduz desde o início.
+
+  Fica recolhido atrás de um botão, como a programação acima, porque a maioria
+  das visitas é para saber o que está passando agora. E **não aparece** em canal
+  sem gravação, para não oferecer um botão que falharia.
+
+  Só são oferecidos programas que terminaram e que começaram dentro da janela
+  que o próprio provedor declara — pedir mais antigo que isso o servidor recusa.
+
+  Uma gravação também pode ser **baixada**, ao contrário de um canal ao vivo:
+  ela tem fim, que é a diferença toda.
+
 ## [3.2.1] - 2026-08-24 (Windows)
 
 ### Windows
