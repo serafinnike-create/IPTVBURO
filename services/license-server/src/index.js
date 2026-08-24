@@ -31,6 +31,14 @@ import {
 } from './pairing.js';
 import { adminPage } from './admin-page.js';
 import {
+  saveProvisioning,
+  provisioningStatus,
+  claimProvisioning,
+  confirmProvisioning,
+  reportProvisioningError,
+  clearProvisioning,
+} from './provisioning.js';
+import {
   archiveDevice,
   adminBackup,
   cancelKey,
@@ -150,6 +158,10 @@ export default {
           return withCors(await handlePairingSubmit(request, env));
         case '/v1/pair/claim':
           return withCors(await handlePairingClaim(request, env));
+        case '/v1/provisioning/claim':
+          return withCors(await handleProvisioningClaim(request, env));
+        case '/v1/provisioning/confirm':
+          return withCors(await handleProvisioningConfirm(request, env));
         case '/v1/signing-key-check':
           return await handleSigningKeyCheck(request, env);
         case '/v1/stripe-webhook':
@@ -204,6 +216,8 @@ export default {
         case '/admin/revoke':
         case '/admin/archive':
         case '/admin/restore':
+        case '/admin/provisioning':
+        case '/admin/provisioning/clear':
         case '/admin/support':
         case '/admin/finance':
         case '/admin/alerts':
@@ -283,7 +297,42 @@ async function handleAdmin(request, env, url) {
       const deviceId = validDeviceId(url.searchParams.get('device'));
       if (!deviceId) return json({ error: 'bad_device' }, 400);
       const details = await deviceDetails(deviceId, env);
-      return details ? json(details) : json({ error: 'not_found' }, 404);
+      if (!details) return json({ error: 'not_found' }, 404);
+      /* Endereco e usuario, com a senha so como "definida": ela existe apenas
+         dentro do payload cifrado, e trocar um endereco que caiu nao exige ler
+         o que estava la antes. */
+      details.provisioning = await provisioningStatus(deviceId, env);
+      return json(details);
+    }
+
+    case '/admin/provisioning': {
+      const body = await readJson(request);
+      const deviceId = validDeviceId(body.device);
+      if (!deviceId) return json({ error: 'bad_device' }, 400);
+      const saved = await saveProvisioning(deviceId, body, administrator.actor, env);
+      if (saved.error) return json({ error: saved.error }, 400);
+      /* A senha nunca entra na auditoria — nem truncada. O que interessa a uma
+         trilha e quem aplicou, em qual aparelho e para qual servidor. */
+      await recordAdminAudit(
+        administrator.actor, 'DEVICE_PROVISIONED', deviceId,
+        `server:${saved.server.slice(0, 100)} user:${saved.username.slice(0, 60)}`,
+        request.cf?.country, env,
+      );
+      return json({ ok: true });
+    }
+
+    case '/admin/provisioning/clear': {
+      const body = await readJson(request);
+      const deviceId = validDeviceId(body.device);
+      if (!deviceId) return json({ error: 'bad_device' }, 400);
+      const cleared = await clearProvisioning(deviceId, env);
+      if (cleared) {
+        await recordAdminAudit(
+          administrator.actor, 'DEVICE_PROVISIONING_CLEARED', deviceId, null,
+          request.cf?.country, env,
+        );
+      }
+      return json({ ok: true, cleared });
     }
 
     case '/admin/support': {
@@ -640,6 +689,7 @@ async function handlePairPage(request, env) {
       code: /^[0-9]{6}$/.test(url.searchParams.get('code') ?? '')
         ? url.searchParams.get('code')
         : null,
+      kind: url.searchParams.get('kind') === 'open_title' ? 'open_title' : null,
     }));
   }
 
@@ -653,25 +703,26 @@ async function handlePairPage(request, env) {
 
   const code = String(form.get('code') ?? '').trim();
   const value = String(form.get('value') ?? '').trim();
+  const kind = form.get('kind') === 'open_title' ? 'open_title' : null;
 
   if (!/^[0-9]{6}$/.test(code)) {
-    return html(pairPage({ language, message: t.pairPageBadCode, code: null }), 400);
+    return html(pairPage({ language, message: t.pairPageBadCode, code: null, kind }), 400);
   }
   if (!value) {
-    return html(pairPage({ language, message: t.pairPageBadValue, code }), 400);
+    return html(pairPage({ language, message: kind ? t.pairTitlePageBadValue : t.pairPageBadValue, code, kind }), 400);
   }
 
   const outcome = await submitPairedPayload(code, value, env);
 
-  if (outcome.ok) return html(pairPage({ language, sent: true }));
+  if (outcome.ok) return html(pairPage({ language, sent: true, kind }));
 
   const message = outcome.error === 'unknown_code' ? t.pairPageUnknown
-    : outcome.error === 'already_sent' ? t.pairPageTaken
+    : outcome.error === 'already_sent' ? (kind ? t.pairTitlePageTaken : t.pairPageTaken)
     : outcome.error === 'too_many_attempts' ? t.pairPageUnknown
-    : outcome.error === 'invalid_payload' ? t.pairPageBadValue
+    : outcome.error === 'invalid_payload' ? (kind ? t.pairTitlePageBadValue : t.pairPageBadValue)
     : t.pairPageFailed;
 
-  return html(pairPage({ language, message, code }), 400);
+  return html(pairPage({ language, message, code, kind }), 400);
 }
 
 /**
@@ -860,6 +911,45 @@ async function rememberPendingPayment(env, checkout, deviceId, currency, now) {
  * the client's local file and letting it register again would hand out seven fresh days — the
  * attack the client's three markers guard against locally, refused here as well.
  */
+/**
+ * A televisao, ao abrir, pergunta se ha uma lista para aplicar.
+ *
+ * Autenticada pela mesma prova de posse da licenca, com acao propria: uma prova
+ * capturada durante o registro nao serve aqui, porque a assinatura se prende a
+ * acao. Sem isso, quem visse o codigo na tela de alguem poderia buscar a
+ * credencial daquele aparelho.
+ *
+ * Responde 204 quando nao ha nada — o caso comum, em toda abertura de todo
+ * aparelho que nunca foi provisionado.
+ */
+async function handleProvisioningClaim(request, env) {
+  const body = await readJson(request);
+  const proof = await verifyRegistrationProof(body, 'provisioning');
+  if (!proof.ok) return json({ error: proof.error }, proof.status);
+  const payload = await claimProvisioning(proof.deviceId, env);
+  if (!payload) return new Response(null, { status: 204 });
+  return json({ source: payload });
+}
+
+/**
+ * A televisao confirma que aplicou, e o payload e apagado.
+ *
+ * Separado do claim de proposito: uma entrega que se perde no caminho precisa
+ * poder ser tentada de novo na abertura seguinte. Marcar como aplicado no
+ * momento da entrega deixaria o cliente sem lista e sem como pedir de novo.
+ */
+async function handleProvisioningConfirm(request, env) {
+  const body = await readJson(request);
+  const proof = await verifyRegistrationProof(body, 'provisioning');
+  if (!proof.ok) return json({ error: proof.error }, proof.status);
+  if (body?.errorCode) {
+    await reportProvisioningError(proof.deviceId, body.errorCode, env);
+    return json({ ok: true, state: 'FAILED' });
+  }
+  const applied = await confirmProvisioning(proof.deviceId, env);
+  return json({ ok: true, state: applied ? 'APPLIED' : 'NONE' });
+}
+
 async function handleRegister(request, env) {
   const body = await readJson(request);
   const now = new Date();
@@ -1747,7 +1837,7 @@ async function redeemKey(deviceId, keyCode, env, now) {
 }
 
 /** Validates derivation and possession before the first key is pinned. */
-async function verifyRegistrationProof(body) {
+async function verifyRegistrationProof(body, action = 'register') {
   const deviceId = validDeviceId(body.deviceId);
   const nonce = validProofNonce(body.nonce);
   const installationId = validInstallationId(body.installationId);
@@ -1761,7 +1851,11 @@ async function verifyRegistrationProof(body) {
   const derived = await deriveDeviceId(publicKeyBytes, installationId);
   if (derived !== deviceId) return { ok: false, error: 'bad_identity', status: 400 };
 
-  const verified = await verifyDeviceProof(publicKeyBytes, proof, 'register', deviceId, nonce);
+  // The action is a parameter rather than a constant because the signature binds
+  // to it: a proof captured while registering cannot be replayed to fetch a
+  // provisioning payload, and vice versa. Callers that omit it keep signing
+  // 'register', so nothing already deployed changes meaning.
+  const verified = await verifyDeviceProof(publicKeyBytes, proof, action, deviceId, nonce);
   if (!verified) return { ok: false, error: 'invalid_proof', status: 401 };
   // The installation id travels on, because it is now anchored to the machine rather than drawn at
   // random: it is what lets a returning machine be recognised after its stored files were deleted.

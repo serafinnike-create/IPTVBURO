@@ -345,6 +345,21 @@ test('the phone page is a plain form that works without scripting', async () => 
   env.DB.close();
 });
 
+test('the open-title QR explains that the phone is sending a title link, not an API key', async () => {
+  const env = createEnv();
+  const response = await worker.fetch(
+    new Request('https://iptvburo.test/parear?code=246810&kind=open_title&lang=en'),
+    env,
+  );
+  const body = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(body, /title link/i);
+  assert.doesNotMatch(body, /TMDb or OMDb key/i);
+  assert.match(body, /name="kind" value="open_title"/);
+  assert.equal(body.includes('<script'), false, 'title pairing remains a no-script form');
+  env.DB.close();
+});
+
 test('codes are drawn without the bias a modulo would introduce', async () => {
   // Not a statistical test: rejection sampling is the thing being asserted, and what is checkable
   // cheaply is that the generator spans the range and does not repeat itself trivially.

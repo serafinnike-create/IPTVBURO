@@ -112,6 +112,13 @@ const COPY = {
     pairPageBadCode: 'O código tem seis dígitos.',
     pairPageBadValue: 'Cole uma chave antes de enviar.',
     pairPageFailed: 'Não foi possível enviar. Tente de novo.',
+    pairTitlePageTitle: 'Enviar título para a TV',
+    pairTitlePageLead: 'Digite o código mostrado na televisão e cole um link de título criado pelo IPTV BURO.',
+    pairTitlePageValue: 'Link do título',
+    pairTitlePageValueHint: 'Cole aqui o link do título',
+    pairTitlePageSent: 'Título enviado. Confira a televisão.',
+    pairTitlePageTaken: 'Este código já recebeu um título.',
+    pairTitlePageBadValue: 'Cole um link de título antes de enviar.',
   },
   en: {
     title: 'Activate IPTV BURO',
@@ -200,6 +207,13 @@ const COPY = {
     pairPageBadCode: 'The code is six digits.',
     pairPageBadValue: 'Paste a key before sending.',
     pairPageFailed: 'Could not send. Try again.',
+    pairTitlePageTitle: 'Send a title to the TV',
+    pairTitlePageLead: 'Enter the code shown on the television and paste a title link created by IPTV BURO.',
+    pairTitlePageValue: 'Title link',
+    pairTitlePageValueHint: 'Paste the title link here',
+    pairTitlePageSent: 'Title sent. Check the television.',
+    pairTitlePageTaken: 'This code already received a title.',
+    pairTitlePageBadValue: 'Paste a title link before sending.',
   },
   de: {
     title: 'IPTV BURO aktivieren',
@@ -288,6 +302,13 @@ const COPY = {
     pairPageBadCode: 'Der Code hat sechs Ziffern.',
     pairPageBadValue: 'Füge einen Schlüssel ein, bevor du sendest.',
     pairPageFailed: 'Senden nicht möglich. Versuche es erneut.',
+    pairTitlePageTitle: 'Titel an den Fernseher senden',
+    pairTitlePageLead: 'Gib den Code vom Fernseher ein und füge einen von IPTV BURO erstellten Titellink ein.',
+    pairTitlePageValue: 'Titellink',
+    pairTitlePageValueHint: 'Titellink hier einfügen',
+    pairTitlePageSent: 'Titel gesendet. Sieh auf den Fernseher.',
+    pairTitlePageTaken: 'Dieser Code hat bereits einen Titel erhalten.',
+    pairTitlePageBadValue: 'Füge vor dem Senden einen Titellink ein.',
   },
   it: {
     title: 'Attiva IPTV BURO',
@@ -375,6 +396,13 @@ const COPY = {
     pairPageBadCode: 'Il codice è di sei cifre.',
     pairPageBadValue: 'Incolla una chiave prima di inviare.',
     pairPageFailed: 'Invio non riuscito. Riprova.',
+    pairTitlePageTitle: 'Invia un titolo al televisore',
+    pairTitlePageLead: 'Inserisci il codice mostrato sul televisore e incolla un link titolo creato da IPTV BURO.',
+    pairTitlePageValue: 'Link del titolo',
+    pairTitlePageValueHint: 'Incolla qui il link del titolo',
+    pairTitlePageSent: 'Titolo inviato. Controlla il televisore.',
+    pairTitlePageTaken: 'Questo codice ha già ricevuto un titolo.',
+    pairTitlePageBadValue: 'Incolla un link del titolo prima di inviare.',
   },
 };
 
@@ -602,28 +630,35 @@ export function activatePage({ deviceId, language, message, done }) {
  * left unrestricted because it holds anything from a 32-character hex string to a 239-character
  * token, and guessing at the shape here would reject a credential the app itself accepts.
  */
-export function pairPage({ language, message, sent, code }) {
+export function pairPage({ language, message, sent, code, kind }) {
   const t = copyFor(language);
+  const titleMode = kind === 'open_title';
+  const pageTitle = titleMode ? t.pairTitlePageTitle : t.pairPageTitle;
+  const pageLead = titleMode ? t.pairTitlePageLead : t.pairPageLead;
+  const valueLabel = titleMode ? t.pairTitlePageValue : t.pairPageValue;
+  const valueHint = titleMode ? t.pairTitlePageValueHint : t.pairPageValueHint;
+  const sentCopy = titleMode ? t.pairTitlePageSent : t.pairPageSent;
 
   if (sent) {
-    return shell(t.pairPageTitle, language, `
+    return shell(pageTitle, language, `
       <div class="card">
         ${header()}
-        <h1>✓ ${escape(t.pairPageSent)}</h1>
+        <h1>✓ ${escape(sentCopy)}</h1>
       </div>
     `);
   }
 
-  return shell(t.pairPageTitle, language, `
+  return shell(pageTitle, language, `
     <div class="card">
       ${header()}
-      <h1>${escape(t.pairPageTitle)}</h1>
-      <p class="lead">${escape(t.pairPageLead)}</p>
+      <h1>${escape(pageTitle)}</h1>
+      <p class="lead">${escape(pageLead)}</p>
 
       ${message ? `<p class="error">${escape(message)}</p>` : ''}
 
       <form method="POST" action="/parear" class="stack">
         <input type="hidden" name="lang" value="${escape(language)}">
+        ${titleMode ? '<input type="hidden" name="kind" value="open_title">' : ''}
         <label>
           <span>${escape(t.pairPageCode)}</span>
           <input name="code" value="${escape(code ?? '')}" placeholder="000000"
@@ -631,8 +666,8 @@ export function pairPage({ language, message, sent, code }) {
                  required autocomplete="off" spellcheck="false">
         </label>
         <label>
-          <span>${escape(t.pairPageValue)}</span>
-          <input name="value" placeholder="${escape(t.pairPageValueHint)}"
+          <span>${escape(valueLabel)}</span>
+          <input name="value" placeholder="${escape(valueHint)}"
                  required autocomplete="off" spellcheck="false">
         </label>
         <button type="submit">${escape(t.pairPageSend)}</button>
