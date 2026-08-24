@@ -111,6 +111,8 @@ internal class XtreamCatalogStreamParser(
         var year: Int? = null
         var rating: Double? = null
         var addedAt: Long? = null
+        var archiveEnabled: Int? = null
+        var archiveDays: Int? = null
 
         reader.beginObject()
         while (reader.hasNext()) {
@@ -128,6 +130,11 @@ internal class XtreamCatalogStreamParser(
                     val fallback = reader.readScalarString()?.toDoubleOrNull()
                     if (rating == null) rating = fallback
                 }
+                // Both halves of catch-up. Providers spell the flag as 0/1 and sometimes as a
+                // string, which readScalarString already flattens, and the window arrives under two
+                // names depending on the panel build.
+                "tv_archive" -> archiveEnabled = reader.readScalarString()?.toIntOrNull()
+                "tv_archive_duration" -> archiveDays = reader.readScalarString()?.toIntOrNull()
                 "added" -> addedAt = reader.readScalarString()?.toLongOrNull()
                 "last_modified" -> {
                     val fallback = reader.readScalarString()?.toLongOrNull()
@@ -158,6 +165,10 @@ internal class XtreamCatalogStreamParser(
             year = year,
             rating = rating,
             addedAtEpochSeconds = addedAt,
+            // Only when the recorder is on *and* the window is real. A channel advertising the flag
+            // with a zero window has nothing to serve, and offering it would produce a button that
+            // always fails.
+            catchUpDays = archiveDays?.takeIf { days -> days > 0 && (archiveEnabled ?: 0) > 0 },
         )
     }
 

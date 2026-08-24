@@ -38,6 +38,15 @@ internal class CompactXtreamCatalog(
     private var hasRating = BooleanArray(INITIAL_CAPACITY)
 
     /**
+     * Days of catch-up per channel; zero means none, which is also the default.
+     *
+     * A plain IntArray rather than a nullable column: zero and absent mean the same thing here — a
+     * channel keeping no recording — so a parallel `has` array would carry no extra information and
+     * cost a bit per row across forty thousand.
+     */
+    private var catchUpDays = IntArray(INITIAL_CAPACITY)
+
+    /**
      * Content key to row, built on first lookup rather than on insert.
      *
      * Empty until something asks, which is the common case: most sessions never open the history
@@ -73,6 +82,10 @@ internal class CompactXtreamCatalog(
             ratings[index] = value
             hasRating[index] = true
         }
+        // Dropped here once, which made every channel look as though it kept no recording: the
+        // catalogue is rebuilt from these columns, so a field the columns do not hold is a field
+        // the app never sees again.
+        catchUpDays[index] = item.catchUpDays ?: 0
     }
 
     fun matches(
@@ -172,6 +185,7 @@ internal class CompactXtreamCatalog(
             year = years[index].takeIf { hasYear[index] },
             rating = ratings[index].takeIf { hasRating[index] },
             addedAtEpochSeconds = null,
+            catchUpDays = catchUpDays[index].takeIf { days -> days > 0 },
         )
     }
 
@@ -221,6 +235,7 @@ internal class CompactXtreamCatalog(
         hasYear = hasYear.copyOf(nextCapacity)
         ratings = ratings.copyOf(nextCapacity)
         hasRating = hasRating.copyOf(nextCapacity)
+        catchUpDays = catchUpDays.copyOf(nextCapacity)
         artworkOffsets = artworkOffsets.copyOf(nextCapacity)
         artworkLengths = artworkLengths.copyOf(nextCapacity)
     }

@@ -49,6 +49,9 @@ class DesktopDownloadManager(
         when (target) {
             is XtreamPlaybackTarget.CatalogItem -> target.contentType != XtreamContentType.LIVE
             is XtreamPlaybackTarget.Episode -> true
+            // A live channel cannot be downloaded because it has no end. A recorded programme does
+            // have one — that is the whole difference — so it is as downloadable as a film.
+            is XtreamPlaybackTarget.CatchUp -> true
         }
 
     fun isDownloaded(contentKey: String): Boolean = downloadedFile(contentKey) != null

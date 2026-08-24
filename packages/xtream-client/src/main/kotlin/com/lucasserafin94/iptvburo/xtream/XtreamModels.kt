@@ -42,6 +42,15 @@ data class XtreamCatalogItem(
     val year: Int?,
     val rating: Double?,
     val addedAtEpochSeconds: Long?,
+    /**
+     * How many days of catch-up this channel keeps, or null when it offers none.
+     *
+     * Xtream reports the flag and the window separately — `tv_archive` says whether the recorder is
+     * on and `tv_archive_duration` how far back it reaches — and a channel with the flag set but a
+     * zero window has nothing to play. Folded into one nullable here so a caller cannot check the
+     * flag and forget the window, which would offer a programme the provider will refuse.
+     */
+    val catchUpDays: Int? = null,
 ) {
     override fun toString(): String =
         "XtreamCatalogItem(" +

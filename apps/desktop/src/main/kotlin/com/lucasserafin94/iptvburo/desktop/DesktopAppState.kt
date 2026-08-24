@@ -5615,6 +5615,9 @@ class DesktopAppState(
         }
     }
 
+    /** Seconds in a day, for turning the provider's catch-up window into an epoch cut-off. */
+    private val SECONDS_PER_DAY = 86_400L
+
     suspend fun loadSelectedLiveEpg() {
         val selected = selectedXtreamItem ?: return
         if (selected.contentType != XtreamContentType.LIVE) return
@@ -5639,6 +5642,26 @@ class DesktopAppState(
                                     (program.endEpochSeconds ?: Long.MAX_VALUE) > nowSeconds
                                 }
                                 .sortedBy { program -> program.startEpochSeconds ?: Long.MAX_VALUE },
+                        // Only where there is something to play. A programme is offered when it has
+                        // finished, has both of its times, and started inside the window the
+                        // provider says it keeps — offering one older than that produces a button
+                        // the server refuses.
+                        past =
+                            if (selected.catchUpDays == null) {
+                                emptyList()
+                            } else {
+                                val earliest =
+                                    nowSeconds - selected.catchUpDays!!.toLong() * SECONDS_PER_DAY
+                                epg.programs
+                                    .filter { program ->
+                                        val start = program.startEpochSeconds
+                                        val end = program.endEpochSeconds
+                                        start != null && end != null && end <= nowSeconds && start >= earliest
+                                    }
+                                    // Most recent first: "what did I miss" is nearly always about
+                                    // the last few hours rather than about three days ago.
+                                    .sortedByDescending { program -> program.startEpochSeconds ?: 0L }
+                            },
                     )
             }
         }.onFailure { error ->
@@ -5919,6 +5942,10 @@ class DesktopAppState(
             when (target) {
                 is XtreamPlaybackTarget.CatalogItem -> target.containerExtension
                 is XtreamPlaybackTarget.Episode -> target.episode.containerExtension
+                // The timeshift endpoint serves a transport stream, the same as the live channel it
+                // was recorded from. Naming it anything else would write a .ts under an extension
+                // the player then refuses to open from the library.
+                is XtreamPlaybackTarget.CatchUp -> "ts"
             }
         val result =
             downloadManager.download(
@@ -6010,6 +6037,16 @@ class DesktopAppState(
         // a new playlist produced a new hash and every progress row was orphaned on disk. Progress
         // belongs to the user's library, not to whichever list is currently connected.
         return when (target) {
+            // A recorded programme is filed like a film: it has a beginning and an end, so stopping
+            // halfway and coming back to it is the same act. Its contentKey already carries the
+            // start time, so two showings of the same programme are two entries rather than one.
+            is XtreamPlaybackTarget.CatchUp ->
+                PlaybackProgressIdentity(
+                    profileId = profileId,
+                    sourceId = LIBRARY_SCOPE,
+                    contentId = target.contentKey,
+                    contentType = PlaybackContentType.MOVIE,
+                )
             is XtreamPlaybackTarget.CatalogItem -> {
                 if (target.contentType != XtreamContentType.MOVIE) return null
                 PlaybackProgressIdentity(
@@ -7105,6 +7142,15 @@ sealed interface LiveEpgStatus {
          * Defaulted to empty so a caller that only has now-and-next still compiles.
          */
         val schedule: List<XtreamEpgProgram> = emptyList(),
+        /**
+         * What has already finished, most recent first, when the channel keeps a recording of it.
+         *
+         * Kept apart from [schedule] rather than merged into it: the schedule answers "what is on",
+         * and opening it on this morning's programmes would bury that. This answers a different
+         * question — "what did I miss" — and is empty for a channel with no recorder, so the
+         * catch-up section simply does not appear where it cannot work.
+         */
+        val past: List<XtreamEpgProgram> = emptyList(),
     ) : LiveEpgStatus
 
     /** EPG is optional and must never block channel playback. */

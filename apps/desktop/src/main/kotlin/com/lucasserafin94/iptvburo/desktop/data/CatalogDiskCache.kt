@@ -91,6 +91,7 @@ internal class CatalogDiskCache(
                             year = input.readInt().takeIf { year -> year != NO_VALUE },
                             rating = input.readDouble().takeIf { rating -> rating >= 0.0 },
                             addedAtEpochSeconds = null,
+                            catchUpDays = input.readInt().takeIf { days -> days > 0 },
                         ),
                     )
                 }
@@ -140,6 +141,8 @@ internal class CatalogDiskCache(
                     output.writeInt(item.year ?: NO_VALUE)
                     // Negative stands for absent: a real rating is never below zero.
                     output.writeDouble(item.rating ?: -1.0)
+                    // Zero stands for "no recorder", which is what absent means for this field.
+                    output.writeInt(item.catchUpDays ?: 0)
                 }
             }
             Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING)
@@ -178,7 +181,10 @@ internal class CatalogDiskCache(
          * An older cache is then simply not read, rather than being read as though its fields meant
          * what the current ones mean — which would populate the library with nonsense.
          */
-        private const val FORMAT_VERSION = 1
+        // 2 added the catch-up window. A version-1 cache is simply not read: its rows end where
+        // this one expects another int, and reading past that would take a neighbouring field for
+        // a recording window.
+        private const val FORMAT_VERSION = 2
 
         /** Written for "no year". Providers never report one, so it cannot collide. */
         private const val NO_VALUE = Int.MIN_VALUE

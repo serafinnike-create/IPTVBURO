@@ -115,4 +115,25 @@ sealed interface XtreamPlaybackTarget {
     ) : XtreamPlaybackTarget {
         override fun toString(): String = "XtreamPlaybackTarget.Episode(<redacted>)"
     }
+
+    /**
+     * A programme replayed from a channel's catch-up recorder.
+     *
+     * Its own target rather than a CatalogItem with extra fields, because it is a different URL
+     * shape entirely — `/timeshift/…` rather than `/live/…` — and because the watch progress has to
+     * be filed separately: last night's film on a channel is not the channel.
+     *
+     * [startLocal] is already formatted as the provider expects, `YYYY-MM-DD:HH-MM` in the
+     * provider's own local time. Formatted by the caller because only it knows which zone the
+     * guide was reported in.
+     */
+    class CatchUp(
+        val providerId: String,
+        val startLocal: String,
+        val durationMinutes: Int,
+        override val contentKey: String,
+    ) : XtreamPlaybackTarget {
+        override fun toString(): String =
+            "XtreamPlaybackTarget.CatchUp(providerId=<redacted>, minutes=$durationMinutes)"
+    }
 }

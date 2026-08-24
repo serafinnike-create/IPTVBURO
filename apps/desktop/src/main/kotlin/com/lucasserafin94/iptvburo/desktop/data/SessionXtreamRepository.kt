@@ -758,6 +758,14 @@ class SessionXtreamRepository(
                             credentials = credentials,
                             episode = target.episode,
                         ).toUri()
+                is XtreamPlaybackTarget.CatchUp ->
+                    client
+                        .buildTimeshiftUrl(
+                            credentials = credentials,
+                            providerId = target.providerId,
+                            startLocal = target.startLocal,
+                            durationMinutes = target.durationMinutes,
+                        ).toUri()
             }
         }
 

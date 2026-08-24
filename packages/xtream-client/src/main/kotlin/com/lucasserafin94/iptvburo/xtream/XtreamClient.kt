@@ -303,6 +303,41 @@ class XtreamClient(
             .build()
     }
 
+    /**
+     * A past programme from a channel's catch-up recorder.
+     *
+     * Xtream's timeshift path is `/timeshift/user/pass/<minutes>/<start>/<id>.ts`, where the start
+     * is the provider's own local time in `YYYY-MM-DD:HH-MM` — not UTC, and not an epoch. The
+     * caller therefore has to hand over an already-formatted local start, because only it knows
+     * which zone the provider reports its guide in.
+     *
+     * The duration is in minutes and is the length of the programme rather than the size of the
+     * archive: asking for more than was recorded returns whatever exists, but asking for a whole
+     * day would have the server open a file measured in gigabytes.
+     */
+    fun buildTimeshiftUrl(
+        credentials: XtreamCredentials,
+        providerId: String,
+        startLocal: String,
+        durationMinutes: Int,
+    ): HttpUrl {
+        require(providerId.isNotBlank()) { "providerId cannot be blank" }
+        require(durationMinutes in 1..MAX_TIMESHIFT_MINUTES) { "durationMinutes is outside the safe range" }
+        // The shape is fixed, so anything else is either a caller's bug or an attempt to inject a
+        // path segment. Validated rather than escaped, because there is no legitimate variation.
+        require(TIMESHIFT_START.matches(startLocal)) { "startLocal must be YYYY-MM-DD:HH-MM" }
+        val endpoint = XtreamEndpointParser.parse(credentials.serverUrl)
+        return endpoint.baseUrl
+            .newBuilder()
+            .addPathSegment("timeshift")
+            .addPathSegment(credentials.username)
+            .addPathSegment(credentials.password)
+            .addPathSegment(durationMinutes.toString())
+            .addPathSegment(startLocal)
+            .addPathSegment("$providerId.ts")
+            .build()
+    }
+
     fun buildEpisodePlaybackUrl(
         credentials: XtreamCredentials,
         episode: XtreamEpisode,
@@ -743,6 +778,17 @@ class XtreamClient(
         XtreamClientException(XtreamFailureReason.INVALID_RESPONSE, message)
 
     private companion object {
+        /**
+         * The longest single catch-up request: twelve hours.
+         *
+         * Long enough for any programme, including a match that runs over, and short enough that a
+         * mistaken value cannot ask the provider to open a file measured in days.
+         */
+        const val MAX_TIMESHIFT_MINUTES = 720
+
+        /** `YYYY-MM-DD:HH-MM`, which is the only shape the timeshift path accepts. */
+        val TIMESHIFT_START = Regex("""\d{4}-\d{2}-\d{2}:\d{2}-\d{2}""")
+
         const val DEFAULT_USER_AGENT = "IPTV BURO/0.2"
 
         /**
