@@ -23,6 +23,7 @@ import com.lucasserafin94.iptvburo.desktop.platform.ProtocolRegistration
 import com.lucasserafin94.iptvburo.desktop.platform.SingleInstance
 import com.lucasserafin94.iptvburo.desktop.platform.WindowChrome
 import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
+import com.lucasserafin94.iptvburo.desktop.playback.TrailerBrowser
 import com.lucasserafin94.iptvburo.desktop.playback.VlcPluginCache
 import com.lucasserafin94.iptvburo.desktop.security.RememberedXtreamStore
 import coil3.ImageLoader
@@ -116,6 +117,17 @@ fun main(args: Array<String>) {
             // Below the UI: this is a startup optimisation and must never compete with drawing.
             priority = Thread.MIN_PRIORITY
         }.start()
+
+    // Chromium, started now so the first trailer does not have to wait for it.
+    //
+    // Only the first trailer of a session is slow, because it pays to start an entire embedded
+    // browser, and the window shows nothing while that happens — so pressing "Ver trailer" reads
+    // as the app having frozen. Reported as exactly that. Started here, the wait happens while the
+    // viewer is reading the home screen, where it costs nothing.
+    //
+    // Own thread, daemon, lowest priority: it is optional work, it must not hold the process open,
+    // and on a machine with no Chromium runtime it gives up cheaply and remembers that it did.
+    TrailerBrowser.warmUp()
 
     // Claims `iptvburo://` for this install, so a shared link opens the app rather than nothing.
     //

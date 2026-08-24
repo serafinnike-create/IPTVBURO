@@ -182,5 +182,35 @@ class TrailerBrowser {
 
         /** Whether an embedded trailer can be shown at all on this machine. */
         fun isAvailable(): Boolean = sharedApp() != null
+
+        /**
+         * Starts Chromium ahead of the first trailer, off the interface thread.
+         *
+         * Only the first trailer of a session is slow, and this is why: it pays for starting an
+         * entire embedded browser. The window gives no sign of it, so pressing "Ver trailer" looks
+         * like the app has frozen — reported as exactly that. Doing the work during boot, while the
+         * viewer is reading the home screen, moves the wait somewhere it costs nothing.
+         *
+         * Safe to call more than once and safe to call on a machine with no Chromium: [sharedApp]
+         * is synchronised, caches its result, and remembers a failure so this cannot become a
+         * repeated cost.
+         *
+         * A daemon thread deliberately. This is optional work, and a non-daemon thread part-way
+         * through starting Chromium would hold the process open after the window closed.
+         */
+        fun warmUp() {
+            if (warming.getAndSet(true)) return
+            Thread { runCatching { sharedApp() } }
+                .apply {
+                    name = "iptvburo-trailer-warmup"
+                    isDaemon = true
+                    // Below the interface, like the other startup work: this is an optimisation
+                    // and must never compete with drawing the window.
+                    priority = Thread.MIN_PRIORITY
+                }.start()
+        }
+
+        /** So a second call does not start a second thread racing the first into the lock. */
+        private val warming = AtomicBoolean(false)
     }
 }
