@@ -113,6 +113,7 @@ var BuroApp = (function () {
     var searchRequestId = 0;
     var searchDebounceTimer = null;
     var downloadSearchTimer = null;
+    var historySearchTimer = null;
     var sourceRefreshRequestId = 0;
     var SEARCH_PAGE_SIZE = 40;
     var SEARCH_DEBOUNCE_MILLIS = 300;
@@ -169,6 +170,7 @@ var BuroApp = (function () {
     var HISTORY_LIMIT = 60;
     var DOWNLOAD_PAGE_SIZE = 40;
     var DOWNLOAD_SEARCH_DEBOUNCE_MILLIS = 200;
+    var HISTORY_SEARCH_DEBOUNCE_MILLIS = 200;
     var currentPlayback = null;
     var playbackResolveRequestId = 0;
     /*
@@ -209,6 +211,8 @@ var BuroApp = (function () {
     var downloadCompact = false;
     var downloadPage = 0;
     var downloadQuery = '';
+    var historyQuery = '';
+    var progressMutationPending = false;
     var followFocusedDownloadOnRender = false;
     var state = {
         ready: false,
@@ -771,6 +775,10 @@ var BuroApp = (function () {
         if (!playback) { stopPlayback(); return; }
         position = playback.contentType === 'LIVE' ? 0 : Number(playback.positionMs) || 0;
         clearPlayerError();
+        if (playback.catchUpChannelId && playback.catchUpProgramme) {
+            beginCatchUp(playback.catchUpChannelId, playback.catchUpProgramme, position);
+            return;
+        }
         beginPlayback(playback.itemId, position);
     }
 
@@ -810,11 +818,12 @@ var BuroApp = (function () {
             playerMenuOptions.innerHTML = playerMenuState.options.map(function (option, index) {
                 return '<button class="player-menu-option player-guide-option ' +
                     (index === playerMenuState.position ? 'focused ' : '') + (option.selected ? 'selected current ' : '') +
-                    (option.past ? 'past' : '') + '" role="listitem"' +
+                    (option.past ? 'past ' : '') + (option.catchUp ? 'catch-up' : '') + '" role="listitem"' +
                     (option.selected ? ' aria-current="true"' : '') + ' tabindex="' +
                     (index === playerMenuState.position ? '0' : '-1') + '" data-player-option="' + index + '">' +
                     '<time>' + escapeHtml(option.time) + '</time><span><strong>' + escapeHtml(option.title) + '</strong>' +
-                    (option.description ? '<small>' + escapeHtml(option.description) + '</small>' : '') + '</span></button>';
+                    (option.description ? '<small>' + escapeHtml(option.description) + '</small>' : '') + '</span>' +
+                    (option.catchUp ? '<em>' + escapeHtml(t('catchUpPlay')) + '</em>' : '') + '</button>';
             }).join('');
         } else {
             playerMenuOptions.innerHTML = playerMenuState.options.map(function (option, index) {
@@ -846,9 +855,12 @@ var BuroApp = (function () {
 
     function openPlayerMenu(type) {
         var nowSeconds = Math.floor(Date.now() / 1000);
+        var guideChannel = type === 'GUIDE' && currentPlayback ?
+            findItemAndSource(currentPlayback.itemId).item : null;
         var options = type === 'SPEED' ? BuroPlayer.playbackRates().map(function (rate) {
             return { index: rate, label: rate + '×', selected: rate === BuroPlayer.playbackRate(), speed: true };
         }) : (type === 'GUIDE' ? playerSchedule().slice(0, 100).map(function (program, index) {
+            var catchUp = guideChannel ? BuroXtream.catchUpLocator(guideChannel.locator, program, nowSeconds) : null;
             return {
                 index: index,
                 label: String(program.title || ''), title: String(program.title || ''),
@@ -856,6 +868,7 @@ var BuroApp = (function () {
                 time: epgClock(program, false) + '–' + epgClock(program, true),
                 selected: epgIsNow(program, nowSeconds),
                 past: Number(program.endEpochSeconds) > 0 && Number(program.endEpochSeconds) <= nowSeconds,
+                catchUp: Boolean(catchUp), programme: program,
                 guide: true
             };
         }) : BuroPlayer.trackOptions(type));
@@ -893,7 +906,15 @@ var BuroApp = (function () {
         if (!playerMenuState) { return; }
         if (playerMenuState.empty) { closePlayerMenu(); return; }
         option = playerMenuState.options[playerMenuState.position];
-        if (option.guide) { closePlayerMenu(); return; }
+        if (option.guide) {
+            if (option.catchUp && currentPlayback) {
+                var channelId = currentPlayback.itemId;
+                closePlayerMenu();
+                beginCatchUp(channelId, option.programme, 0);
+                return;
+            }
+            closePlayerMenu(); return;
+        }
         selected = option.speed ? BuroPlayer.setPlaybackRate(option.index) :
             (option.off ? BuroPlayer.disableSubtitles() : BuroPlayer.selectTrack(playerMenuState.type, option.index));
         if (selected) {
@@ -1581,6 +1602,18 @@ var BuroApp = (function () {
             '</p><div class="action-row"><button class="button primary focusable" data-action="bulk-download-confirm">' +
             t('download') + '</button><button class="button ghost focusable" data-action="back">' + t('cancel') +
             '</button></div></section></main>';
+    }
+
+    function renderHistoryClearConfirm() {
+        var busy = Boolean(state.screenData && state.screenData.busy);
+        var profileName = state.activeProfile ? state.activeProfile.name : '';
+        root.innerHTML = '<main class="resume-screen"><section class="resume-panel history-clear-panel">' +
+            '<span class="hero-kicker">IPTV BURO</span><h1>' + escapeHtml(t('historyClearConfirmTitle')) +
+            '</h1><h2>' + escapeHtml(profileName) + '</h2><p>' + escapeHtml(t('historyClearConfirmBody')) +
+            '</p><div class="action-row"><button class="button danger focusable" data-action="history-clear-confirm"' +
+            (busy ? ' disabled' : '') + '>' + escapeHtml(busy ? t('loading') : t('historyClearAll')) +
+            '</button><button class="button ghost focusable" data-action="back"' + (busy ? ' disabled' : '') + '>' +
+            escapeHtml(t('cancel')) + '</button></div></section></main>';
     }
 
     function navHtml() {
@@ -4436,9 +4469,24 @@ var BuroApp = (function () {
         var episodeRows = episodes || [];
         details = details || { title: item.name };
         trailerId = BuroDomain.sanitizeYouTubeReference(details.youtubeTrailerId);
-        if (details.releaseDate || item.year) { facts.push(details.releaseDate || String(item.year)); }
+        /*
+          A mesma linha do aplicativo do Windows, na mesma ordem: lancamento,
+          duracao, genero, pais, nota.
+
+          A data leva o rotulo "Lancamento" porque sozinha ela e ambigua numa
+          ficha que tambem mostra temporadas e episodios — e a decisao do
+          `XtreamWorkspace`, onde a lista comeca com `"Lancamento $it"`.
+
+          O pais estava so na secao de baixo, junto do diretor. Ali ele exige
+          rolar; na linha de fatos e lido junto com o resto, que e onde alguem
+          decide se quer o filme.
+        */
+        if (details.releaseDate) {
+            facts.push(t('releaseDate').replace(/:$/, '') + ' ' + details.releaseDate);
+        } else if (item.year) { facts.push(String(item.year)); }
         if (detailDuration(details.duration)) { facts.push(detailDuration(details.duration)); }
         if (details.genre || item.genre) { facts.push(details.genre || item.genre); }
+        if (details.country) { facts.push(details.country); }
         if (detailRating(details.rating != null ? details.rating : item.rating)) {
             facts.push(detailRating(details.rating != null ? details.rating : item.rating));
         }
@@ -4451,10 +4499,12 @@ var BuroApp = (function () {
         }
         cast = detailCastNames(details.cast);
         castMembers = Array.isArray(details.castMembers) ? details.castMembers : [];
-        if (details.director || details.country) {
+        /* So o diretor: o pais subiu para a linha de fatos, onde e lido junto com
+           o resto em vez de exigir rolar ate aqui. Repeti-lo nos dois lugares
+           seria dizer a mesma coisa duas vezes na mesma tela. */
+        if (details.director) {
             supporting += '<section class="detail-credit-card"><h3>' + t('credits') + '</h3>' +
-                (details.director ? '<p><strong>' + t('director') + '</strong> ' + escapeHtml(details.director) + '</p>' : '') +
-                (details.country ? '<p><strong>' + t('country') + '</strong> ' + escapeHtml(details.country) + '</p>' : '') + '</section>';
+                '<p><strong>' + t('director') + '</strong> ' + escapeHtml(details.director) + '</p></section>';
         }
         if (castMembers.length || cast.length) {
             supporting += '<section class="detail-cast"><h3>' + t('castTitle') + '</h3><div>' +
@@ -4527,16 +4577,20 @@ var BuroApp = (function () {
     function renderLiveDetails(item, schedule) {
         var nowSeconds = Math.floor(Date.now() / 1000);
         var current = null;
-        var rows = schedule.map(function (program) {
+        var rows = schedule.map(function (program, index) {
             var isNow = epgIsNow(program, nowSeconds);
             var isPast = Number(program.endEpochSeconds) > 0 && Number(program.endEpochSeconds) <= nowSeconds;
+            var catchUp = BuroXtream.catchUpLocator(item.locator, program, nowSeconds);
+            var tag = catchUp ? 'button' : 'div';
             if (isNow) { current = program; }
-            return '<div class="epg-row ' + (isNow ? 'current' : '') + (isPast ? ' past' : '') + '"' +
+            return '<' + tag + ' class="epg-row ' + (isNow ? 'current' : '') + (isPast ? ' past' : '') +
+                (catchUp ? ' catch-up focusable' : '') + '"' +
+                (catchUp ? ' data-action="catch-up" data-id="' + attr(item.id) + '" data-program-index="' + index + '"' : '') +
                 (isNow ? ' aria-current="true"' : '') + '><time>' + escapeHtml(epgClock(program, false)) +
                 '<small>' + escapeHtml(epgClock(program, true)) + '</small></time><div><strong>' + escapeHtml(program.title) +
                 '</strong><p>' + escapeHtml(program.description || '') + '</p>' +
                 (isNow ? '<div class="epg-progress"><i style="width:' + epgProgress(program, nowSeconds).toFixed(2) + '%"></i></div>' : '') +
-                '</div><span>' + (isNow ? t('now') : '') + '</span></div>';
+                '</div><span>' + (isNow ? t('now') : (catchUp ? t('catchUpPlay') : '')) + '</span></' + tag + '>';
         }).join('');
         return '<div class="detail-hero live-detail">' + artworkHtml(item, 'detail-art') +
             '<span class="hero-kicker">' + t('live') + '</span><h2>' + escapeHtml(item.name) + '</h2>' +
@@ -5011,10 +5065,11 @@ var BuroApp = (function () {
         render();
     }
 
-    function transientLibraryItem(item, progressItemId) {
+    function transientLibraryItem(item, progressItemId, progressRowId) {
         var copy = {};
         Object.keys(item || {}).forEach(function (key) { copy[key] = item[key]; });
         copy._libraryProgressItemId = progressItemId;
+        copy._libraryProgressRowId = progressRowId;
         return copy;
     }
 
@@ -5039,8 +5094,17 @@ var BuroApp = (function () {
             }
             if (seen[item.id]) { return null; }
             seen[item.id] = true;
-            return transientLibraryItem(item, entry.itemId);
+            return transientLibraryItem(item, entry.itemId, entry.id);
         }).filter(function (item) { return Boolean(item) && itemVisible(item); });
+    }
+
+    /* Mesmo normalizador usado pela busca do Historico no Windows: acentos,
+       ano e decoracao de qualidade/idioma nao mudam a identidade do titulo. */
+    function historySearchKey(value) {
+        return BuroDomain.foldAccents(value || '')
+            .replace(/\b(19|20)[0-9]{2}\b/g, ' ')
+            .replace(/\b(4k|uhd|hd|sd|fhd|1080p?|720p?|480p?|2160p?|dublado|dual|legendado|leg|nacional|dub|bluray|blu ray|webrip|web dl|webdl|hdrip|dvdrip|remux|imax|extended|remastered|remasterizado)\b/g, ' ')
+            .replace(/[^a-z0-9]+/g, '');
     }
 
     function libraryKind(item) {
@@ -5087,6 +5151,56 @@ var BuroApp = (function () {
         start = page * LIBRARY_PAGE_SIZE;
         visible = filtered.slice(start, start + LIBRARY_PAGE_SIZE);
         return filterBar + mediaCards(visible) + paginationControls(
+            'library-page', page, pageCount, start, start + visible.length, filtered.length,
+            ' data-section="' + attr(section) + '"', 'library-pagination'
+        );
+    }
+
+    function progressCard(item, history) {
+        return '<div class="progress-card">' + mediaCard(item, 'poster') +
+            '<button class="button ghost progress-remove focusable" data-action="' +
+            (history ? 'history-remove' : 'continue-remove') + '" data-id="' +
+            attr(item._libraryProgressRowId) + '">' + escapeHtml(t('downloadRemove')) + '</button></div>';
+    }
+
+    function progressLibraryContent(section, items, history, title, emptyMessage) {
+        var filterBar = libraryFilterBar(section, items);
+        var filtered = filterLibraryItems(items, libraryFilters[section]);
+        var needle = history ? historySearchKey(historyQuery) : '';
+        var pageCount;
+        var page;
+        var start;
+        var visible;
+        var toolbar = '';
+        if (history) {
+            toolbar = '<div class="history-toolbar"><label for="history-query">' + escapeHtml(t('search')) +
+                '</label><input id="history-query" class="focusable" type="text" maxlength="80" value="' +
+                attr(historyQuery) + '" placeholder="' + attr(t('search')) + '">' +
+                (items.length ? '<button class="button ghost focusable" data-action="history-clear">' +
+                    escapeHtml(t('historyClearAll')) + '</button>' : '') + '</div>';
+        }
+        if (!items.length) {
+            libraryPages[section] = 0;
+            return toolbar + emptyState('>', title, emptyMessage, '', '');
+        }
+        if (needle) {
+            filtered = filtered.filter(function (item) {
+                return historySearchKey(item.name).indexOf(needle) >= 0;
+            });
+        }
+        if (!filtered.length) {
+            libraryPages[section] = 0;
+            return toolbar + filterBar + '<p class="history-no-match">' + escapeHtml(t('search')) + ': &quot;' +
+                escapeHtml(BuroDomain.trim(historyQuery)) + '&quot; &mdash; 0</p>';
+        }
+        pageCount = Math.max(1, Math.ceil(filtered.length / LIBRARY_PAGE_SIZE));
+        page = BuroDomain.clamp(Number(libraryPages[section]) || 0, 0, pageCount - 1);
+        libraryPages[section] = page;
+        start = page * LIBRARY_PAGE_SIZE;
+        visible = filtered.slice(start, start + LIBRARY_PAGE_SIZE);
+        return toolbar + filterBar + '<div class="card-row progress-card-row">' + visible.map(function (item) {
+            return progressCard(item, history);
+        }).join('') + '</div>' + paginationControls(
             'library-page', page, pageCount, start, start + visible.length, filtered.length,
             ' data-section="' + attr(section) + '"', 'library-pagination'
         );
@@ -5297,7 +5411,81 @@ var BuroApp = (function () {
         var items = progressItems(history);
         var title = history ? t('history') : t('continueWatching');
         var section = history ? 'HISTORY' : 'CONTINUE_WATCHING';
-        shell(libraryContent(section, items, '>', title, t(history ? 'historyEmpty' : 'continueEmpty')), title, true);
+        shell(progressLibraryContent(section, items, history, title,
+            t(history ? 'historyEmpty' : 'continueEmpty')), title, true);
+    }
+
+    function activeProgressRow(rowId) {
+        var profileId = state.activeProfile && state.activeProfile.id;
+        var found = null;
+        state.progress.some(function (row) {
+            if (row.id === rowId && row.profileId === profileId) { found = row; return true; }
+            return false;
+        });
+        return found;
+    }
+
+    /* Remover de Continuar nao apaga o que foi assistido: como no Windows,
+       conclui a linha, que sai desta lista e permanece consultavel no Historico. */
+    function forgetContinueProgress(rowId) {
+        var row = activeProgressRow(rowId);
+        var completed;
+        if (!row || progressMutationPending) { return; }
+        completed = {};
+        Object.keys(row).forEach(function (key) { completed[key] = row[key]; });
+        completed.completed = true;
+        completed.positionMs = Number(completed.durationMs) > 0 ? Number(completed.durationMs) :
+            Math.max(0, Number(completed.positionMs) || 0);
+        completed.updatedAt = Date.now();
+        progressMutationPending = true;
+        BuroStorage.put('progress', completed, function () {
+            state.progress = state.progress.map(function (entry) {
+                return entry.id === completed.id ? completed : entry;
+            });
+            progressMutationPending = false;
+            render();
+            showToast(t('continueRemoved'), false);
+        }, function () {
+            progressMutationPending = false;
+            showToast(t('historyChangeFailed'), true);
+        });
+    }
+
+    function forgetHistoryProgress(rowId) {
+        var row = activeProgressRow(rowId);
+        if (!row || progressMutationPending) { return; }
+        progressMutationPending = true;
+        BuroStorage.remove('progress', row.id, function () {
+            state.progress = state.progress.filter(function (entry) { return entry.id !== row.id; });
+            progressMutationPending = false;
+            render();
+            showToast(t('historyRemoved'), false);
+        }, function () {
+            progressMutationPending = false;
+            showToast(t('historyChangeFailed'), true);
+        });
+    }
+
+    function confirmClearHistory() {
+        var profileId = state.activeProfile && state.activeProfile.id;
+        if (!profileId || progressMutationPending || state.screen !== 'HISTORY_CLEAR_CONFIRM') { return; }
+        progressMutationPending = true;
+        state.screenData = state.screenData || {};
+        state.screenData.busy = true;
+        render();
+        BuroStorage.removeByIndex('progress', 'byProfile', profileId, function () {
+            state.progress = state.progress.filter(function (entry) { return entry.profileId !== profileId; });
+            progressMutationPending = false;
+            historyQuery = '';
+            libraryPages.HISTORY = 0;
+            goBack();
+            showToast(t('historyCleared'), false);
+        }, function () {
+            progressMutationPending = false;
+            state.screenData.busy = false;
+            render();
+            showToast(t('historyChangeFailed'), true);
+        });
     }
 
     function renderSources() {
@@ -7222,6 +7410,7 @@ var BuroApp = (function () {
         else if (state.screen === 'PROFILE_PHOTO_PICKER') { renderProfilePhotoPicker(); }
         else if (state.screen === 'RESUME_PROMPT') { renderResumePrompt(); }
         else if (state.screen === 'BULK_DOWNLOAD_CONFIRM') { renderBulkDownloadConfirm(); }
+        else if (state.screen === 'HISTORY_CLEAR_CONFIRM') { renderHistoryClearConfirm(); }
         else if (state.screen === 'SOURCE_CHOICE') { renderSourceChoice(); }
         else if (state.screen === 'SOURCE_USB_M3U') { renderUsbM3uPicker(); }
         else if (state.screen === 'SOURCE_FORM') { renderSourceForm(state.screenData.type); }
@@ -7606,6 +7795,12 @@ var BuroApp = (function () {
         downloadSearchTimer = null;
     }
 
+    function clearHistorySearchDebounce() {
+        if (!historySearchTimer) { return; }
+        window.clearTimeout(historySearchTimer);
+        historySearchTimer = null;
+    }
+
     /* A fila tem no máximo 200 entradas persistidas. Filtrar localmente é
        barato, mas um pequeno debounce evita reconstruir o DOM a cada evento
        intermediário do teclado virtual Samsung. A consulta nunca sai da TV. */
@@ -7617,8 +7812,19 @@ var BuroApp = (function () {
            os 200 ms de debounce. */
         root.oninput = function (event) {
             var input = event && (event.target || event.srcElement);
-            if (!input || input.id !== 'download-query' ||
-                    state.screen !== 'SHELL' || state.section !== 'DOWNLOADS') { return; }
+            if (!input || state.screen !== 'SHELL') { return; }
+            if (input.id === 'history-query' && state.section === 'HISTORY') {
+                historyQuery = String(input.value || '').substring(0, 80);
+                clearHistorySearchDebounce();
+                historySearchTimer = window.setTimeout(function () {
+                    historySearchTimer = null;
+                    if (state.screen !== 'SHELL' || state.section !== 'HISTORY' || !root) { return; }
+                    libraryPages.HISTORY = 0;
+                    render();
+                }, HISTORY_SEARCH_DEBOUNCE_MILLIS);
+                return;
+            }
+            if (input.id !== 'download-query' || state.section !== 'DOWNLOADS') { return; }
             downloadQuery = String(input.value || '').substring(0, 80);
             clearDownloadSearchDebounce();
             downloadSearchTimer = window.setTimeout(function () {
@@ -7868,6 +8074,7 @@ var BuroApp = (function () {
         var focused;
         var ribbonTarget;
         var reminderReturnId;
+        if (state.screen === 'HISTORY_CLEAR_CONFIRM' && progressMutationPending) { return; }
         if (state.screen === 'PERSON' && tmdbPersonRequest && tmdbPersonRequest.abort) {
             tmdbPersonRequest.abort(); tmdbPersonRequest = null;
         }
@@ -9291,6 +9498,8 @@ var BuroApp = (function () {
             libraryFilters[section] = 'ALL';
             libraryPages[section] = 0;
         });
+        clearHistorySearchDebounce();
+        historyQuery = '';
     }
 
     function changeLibraryPage(element, delta) {
@@ -9650,6 +9859,49 @@ var BuroApp = (function () {
             return;
         }
         beginPlayback(itemId, 0);
+    }
+
+    /*
+      Reprodução de um programa arquivado pelo próprio provedor.
+
+      O programa é transitório: guardamos somente canal e EPG na memória da
+      sessão. Usuário, senha e URL timeshift nascem aqui e seguem diretamente
+      ao AVPlay, sem entrar em item, progresso, localStorage ou IndexedDB.
+    */
+    function beginCatchUp(channelId, programme, startPositionMs) {
+        var found = findItemAndSource(channelId);
+        var nowSeconds = Math.floor(Date.now() / 1000);
+        var locator;
+        var secret;
+        var title;
+        var playback;
+        if (!found.item || !found.source || found.source.type !== 'XTREAM') {
+            showToast(t('catchUpUnavailable'), true); return;
+        }
+        locator = BuroXtream.catchUpLocator(found.item.locator, programme, nowSeconds);
+        if (!locator) { showToast(t('catchUpUnavailable'), true); return; }
+        try { secret = BuroStorage.secureGet(found.source.id); }
+        catch (error) { showToast(t('catchUpUnavailable'), true); return; }
+        playbackResolveRequestId += 1;
+        title = BuroDomain.trim(programme && programme.title) || found.item.name;
+        startPositionMs = Math.max(0, Number(startPositionMs) || 0);
+        currentPlayback = {
+            itemId: BuroDomain.id('catchup', channelId + ':' + locator.startEpochSeconds),
+            title: title, contentType: 'MOVIE', positionMs: startPositionMs,
+            durationMs: locator.durationMinutes * 60000, lastSavedAt: 0,
+            catchUpChannelId: channelId, catchUpProgramme: programme, skipProgress: true
+        };
+        playback = currentPlayback;
+        playerTitle.textContent = title;
+        overlay.hidden = false;
+        document.body.classList.add('playing');
+        root.setAttribute('aria-hidden', 'true');
+        preparePlayerOverlay();
+        updatePlayerTimeline(startPositionMs, playback.durationMs);
+        try { BuroPlayer.play(BuroXtream.resolveCatchUp(secret, locator), startPositionMs); }
+        catch (error) { playbackFailed({ code: 'PLAYBACK_SOURCE_UNAVAILABLE' }); }
+        secret = null;
+        locator = null;
     }
 
     function playSeriesPrimaryEpisode(itemId) {
@@ -10028,7 +10280,7 @@ var BuroApp = (function () {
         var playback = currentPlayback;
         var row;
         var replaced = false;
-        if (!profileId || !playback || playback.contentType === 'LIVE' ||
+        if (!profileId || !playback || playback.contentType === 'LIVE' || playback.skipProgress ||
                 (!completed && Number(playback.durationMs) <= 0)) { return false; }
         row = {
             id: BuroDomain.id('progress', profileId + ':' + playback.itemId),
@@ -10308,6 +10560,9 @@ var BuroApp = (function () {
         } else if (action === 'section') {
             homeLocalReturnData = null;
             if (element.getAttribute('data-section') !== 'DOWNLOADS') { clearDownloadSearchDebounce(); }
+            if (element.getAttribute('data-section') !== 'HISTORY') {
+                clearHistorySearchDebounce(); historyQuery = ''; libraryPages.HISTORY = 0;
+            }
             if (state.section === 'HOME' && element.getAttribute('data-section') !== 'HOME') {
                 BuroHeroEnrichment.cancel();
             }
@@ -10326,6 +10581,10 @@ var BuroApp = (function () {
             }
         } else if (action === 'library-page-next') { changeLibraryPage(element, 1);
         } else if (action === 'library-page-previous') { changeLibraryPage(element, -1);
+        } else if (action === 'continue-remove') { forgetContinueProgress(id);
+        } else if (action === 'history-remove') { forgetHistoryProgress(id);
+        } else if (action === 'history-clear') { pushScreen('HISTORY_CLEAR_CONFIRM', {});
+        } else if (action === 'history-clear-confirm') { confirmClearHistory();
         } else if (action === 'download-filter') {
             property = element.getAttribute('data-kind');
             downloadFilter = ['ALL', 'MOVIE', 'EPISODE'].indexOf(property) >= 0 ? property : 'ALL'; downloadPage = 0; render();
@@ -10411,6 +10670,14 @@ var BuroApp = (function () {
         } else if (action === 'bulk-download-confirm') { confirmBulkDownload();
         } else if (action === 'category') { openCategory(id); }
         else if (action === 'play') { playItem(id); }
+        else if (action === 'catch-up') {
+            var programmeIndex = Number(element.getAttribute('data-program-index'));
+            var liveData = state.screenData;
+            if (liveData && liveData.kind === 'live' && liveData.parent && liveData.parent.id === id &&
+                    isFinite(programmeIndex) && liveData.schedule && liveData.schedule[programmeIndex]) {
+                beginCatchUp(id, liveData.schedule[programmeIndex], 0);
+            }
+        }
         else if (action === 'series-primary-play') { playSeriesPrimaryEpisode(id); }
         else if (action === 'resume-continue') { chooseResume(true); }
         else if (action === 'resume-restart') { chooseResume(false); }
@@ -10686,6 +10953,9 @@ var BuroApp = (function () {
             onComplete: function () {
                 var visual = capturePlaybackReturnVisual();
                 var progressChanged = persistProgress(true);
+                /* LIVE e catch-up não gravam progresso; ainda assim o fim
+                   natural precisa encerrar a sessão em memória. */
+                currentPlayback = null;
                 clearPlayerError(); closePlayerMenu();
                 document.body.classList.remove('playing'); root.removeAttribute('aria-hidden'); overlay.hidden = true;
                 if (progressChanged) { refreshPlaybackReturnVisual(visual); }

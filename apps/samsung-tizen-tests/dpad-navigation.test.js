@@ -344,6 +344,33 @@ async function run() {
     window.BuroNetwork.json = originalNetworkJson;
     check('EPG Xtream decodifica título e mantém somente metadados',
         liveSchedule[0].title === 'News' && liveSchedule[0].startEpochSeconds === 100 && JSON.stringify(liveSchedule).indexOf('provider.test') === -1);
+    var archivedXtreamItem;
+    window.BuroNetwork.json = function (options, success) {
+        success([{ stream_id: 77, name: 'Canal com arquivo', tv_archive: '1', tv_archive_duration: '3' }]);
+    };
+    window.BuroXtream.loadItems(
+        { server: 'https://provider.test', username: 'u', password: 'p' }, 'source-public', 'LIVE',
+        { id: 'category-live', providerCategoryId: '2' },
+        function (items) { archivedXtreamItem = items[0]; }, function () {}
+    );
+    window.BuroNetwork.json = originalNetworkJson;
+    var catchUpLocator = window.BuroXtream.catchUpLocator(archivedXtreamItem.locator, {
+        startEpochSeconds: 1000, endEpochSeconds: 3700, start: '2026-08-24 20:30:00'
+    }, 4000);
+    check('Xtream só anuncia catch-up quando arquivo e duração positiva concordam',
+        archivedXtreamItem.locator.catchUpDays === 3 &&
+        window.BuroXtream.catchUpDays({ tv_archive: 0, tv_archive_duration: 3 }) === null &&
+        window.BuroXtream.catchUpDays({ tv_archive: 1, tv_archive_duration: 0 }) === null);
+    check('catch-up valida janela, duração e horário local antes de criar um alvo opaco',
+        catchUpLocator && catchUpLocator.durationMinutes === 45 && catchUpLocator.startLocal === '2026-08-24:20-30' &&
+        !window.BuroXtream.catchUpLocator(archivedXtreamItem.locator, {
+            startEpochSeconds: 1000, endEpochSeconds: 3700, start: '2026-08-24 20:30:00'
+        }, 4000 + 4 * 86400));
+    check('URL timeshift nasce somente na resolução tardia e segue o contrato do painel',
+        window.BuroXtream.resolveCatchUp(
+            { server: 'https://provider.test', username: 'u', password: 'p' }, catchUpLocator
+        ) === 'https://provider.test/timeshift/u/p/45/2026-08-24:20-30/77.ts' &&
+        JSON.stringify(archivedXtreamItem).indexOf('/timeshift/') === -1);
     check('proteção de vídeo reconhece as mesmas variantes de alto risco do Android',
         window.BuroDomain.hasHighRiskVideoTag('[4K] Filme') &&
         window.BuroDomain.hasHighRiskVideoTag('Filme H.265 HDR') &&
@@ -775,9 +802,33 @@ async function run() {
     check('Continuar assistindo filtra Filmes e Séries pelo D-pad',
         window.document.querySelectorAll('.media-card').length === 1 &&
         window.document.querySelector('.media-card').getAttribute('data-id') === 'movie:library-filter');
+    check('a ação Remover de Continuar é um alvo separado para o D-pad',
+        Boolean(window.document.querySelector('[data-action="continue-remove"]')));
+    window.BuroApp._focusAction('continue-remove');
+    window.BuroApp._onKeyDown({ keyCode: 13, preventDefault: function () {} });
+    await waitFor(function () {
+        return window.BuroApp.state.progress.some(function (row) {
+            return row.id === 'progress-filter-movie' && row.completed;
+        });
+    }, 2000);
+    check('ENTER do controle remove de Continuar sem apagar a linha de progresso',
+        !window.document.querySelector('[data-id="movie:library-filter"]') &&
+        window.BuroApp.state.progress.some(function (row) { return row.id === 'progress-filter-movie'; }));
     window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="HISTORY"]'));
     check('Histórico possui o mesmo seletor por tipo',
         window.document.querySelectorAll('[data-action="library-filter"]').length === 3);
+    check('busca, remoções e limpeza do Histórico são alcançáveis pelo controle',
+        Boolean(window.document.querySelector('#history-query')) &&
+        window.document.querySelectorAll('[data-action="history-remove"]').length === 2 &&
+        Boolean(window.document.querySelector('[data-action="history-clear"]')));
+    window.BuroApp._focusAction('history-clear');
+    window.BuroApp._onKeyDown({ keyCode: 13, preventDefault: function () {} });
+    check('ENTER do controle abre a confirmação de limpeza, sem apagar imediatamente',
+        window.BuroApp.state.screen === 'HISTORY_CLEAR_CONFIRM' &&
+        Boolean(window.document.querySelector('[data-action="history-clear-confirm"]')));
+    window.BuroApp._onKeyDown({ keyCode: window.BuroKeys.CODES.RETURN, preventDefault: function () {} });
+    check('RETURN cancela a confirmação e devolve ao Histórico',
+        window.BuroApp.state.screen === 'SHELL' && window.BuroApp.state.section === 'HISTORY');
     var fixtureIds = { 'movie:library-filter': true, 'series:library-filter': true, 'live:library-filter': true };
     window.BuroApp.state.items = window.BuroApp.state.items.filter(function (item) { return !fixtureIds[item.id]; });
     window.BuroApp.state.favorites = window.BuroApp.state.favorites.filter(function (row) { return !fixtureIds[row.itemId]; });
@@ -1908,13 +1959,21 @@ async function run() {
     check('pôster resolvido é revelado e encerra o estado de carregamento',
         progressiveDetailImage.classList.contains('image-ready') &&
         progressiveDetailImage.parentNode.classList.contains('image-ready'));
+    /* Cinco fatos, na ordem do Windows: lancamento, duracao, genero, pais, nota.
+       Eram quatro ate o pais subir da secao de creditos para ca, onde e lido
+       junto com o resto em vez de exigir rolar. Conferir o conteudo em vez da
+       contagem: o numero muda quando um campo entra, e isso nao e defeito. */
     check('detalhe de filme replica fatos e progresso assistido do Android',
-        window.document.querySelectorAll('.detail-fact').length === 4 &&
+        window.document.querySelectorAll('.detail-fact').length === 5 &&
+        window.document.querySelector('.detail-facts').textContent.indexOf('Brasil') >= 0 &&
         window.document.querySelector('.detail-fact.rating').textContent.indexOf('8.7') >= 0 &&
         parseFloat(window.document.querySelector('.detail-watch-progress i').style.width) === 50 &&
         window.document.body.textContent.indexOf('1:30:00') >= 0);
     check('créditos e elenco ganham seções próprias sem duplicar nomes',
         window.document.querySelector('.detail-credit-card').textContent.indexOf('Diretora Teste') >= 0 &&
+        /* O pais saiu daqui ao subir para a linha de fatos: repetido nos dois
+           lugares seria a mesma informacao duas vezes na mesma tela. */
+        window.document.querySelector('.detail-credit-card').textContent.indexOf('Brasil') < 0 &&
         window.document.querySelectorAll('.cast-chip').length === 2);
     check('TMDb enriquece o elenco com foto e personagem sem substituir dados válidos da fonte',
         window.document.querySelector('.cast-chip img').src.indexOf('image.tmdb.org') >= 0 &&
@@ -3128,16 +3187,27 @@ async function run() {
     var livePlayerItem = {
         id: 'live:player-guide', sourceId: 'source-home', categoryId: 'cat-home-live',
         contentType: 'LIVE', name: 'Canal com guia',
-        locator: { kind: 'xtream', contentType: 'LIVE', providerItemId: '77', extension: 'ts' }
+        locator: { kind: 'xtream', contentType: 'LIVE', providerItemId: '77', extension: 'ts', catchUpDays: 3 }
     };
     var livePlayerSchedule = [
-        { title: 'Programa encerrado', description: 'Resumo encerrado', startEpochSeconds: guideNow - 7200, endEpochSeconds: guideNow - 3600 },
+        { title: 'Programa encerrado', description: 'Resumo encerrado', startEpochSeconds: guideNow - 7200,
+            endEpochSeconds: guideNow - 3600, start: '2026-08-24 20:30:00' },
         { title: 'Programa atual', description: 'Resumo atual', startEpochSeconds: guideNow - 300, endEpochSeconds: guideNow + 300 },
         { title: 'Proximo programa', description: 'Resumo futuro', startEpochSeconds: guideNow + 300, endEpochSeconds: guideNow + 1800 }
     ];
     window.BuroApp.state.items.push(livePlayerItem);
+    window.BuroApp.state.sources[0].type = 'XTREAM';
+    await new Promise(function (resolve, reject) {
+        window.BuroStorage.secureSave('source-home', {
+            server: 'https://provider.test', username: 'synthetic-user', password: 'synthetic-pass'
+        }, resolve, reject);
+    });
     window.BuroApp.state.section = 'LIVE';
     window.BuroApp.state.screenData = { kind: 'live', parent: livePlayerItem, schedule: livePlayerSchedule };
+    window.BuroApp.render();
+    check('detalhe ao vivo transforma somente programa arquivado válido em ação focável',
+        window.document.querySelectorAll('.epg-row.catch-up[data-action="catch-up"]').length === 1 &&
+        window.document.querySelector('.epg-row.catch-up').textContent.indexOf(window.BuroI18n.t('catchUpPlay')) >= 0);
     var livePlayFixture = window.document.createElement('button');
     livePlayFixture.setAttribute('data-action', 'play');
     livePlayFixture.setAttribute('data-id', livePlayerItem.id);
@@ -3158,14 +3228,19 @@ async function run() {
         window.document.querySelector('#player-menu [aria-current="true"]').textContent.indexOf('Programa atual') >= 0);
     check('guia completo mantém programa encerrado atenuado e descrições como Android e Windows',
         window.document.querySelector('.player-guide-option.past').textContent.indexOf('Programa encerrado') >= 0 &&
-        window.document.querySelector('.player-guide-option.current small').textContent === 'Resumo atual');
+        window.document.querySelector('.player-guide-option.current small').textContent === 'Resumo atual' &&
+        window.document.querySelector('.player-guide-option.catch-up').textContent.indexOf(window.BuroI18n.t('catchUpPlay')) >= 0);
     check('rodapé do guia identifica o canal e nunca vaza undefined',
         window.document.getElementById('player-menu-hint').textContent.indexOf('Canal com guia') >= 0 &&
         window.document.getElementById('player-menu-hint').textContent.indexOf('undefined') === -1);
-    press(window, 39);
+    openedPlaybackUrl = null;
+    press(window, 38);
     press(window, 13);
-    check('D-pad percorre e fecha o guia sem interromper o canal',
-        window.document.getElementById('player-menu').hidden && window.BuroPlayer.isPlaying());
+    check('D-pad inicia o programa arquivado com título, seek VOD e URL timeshift tardia',
+        window.document.getElementById('player-menu').hidden && window.BuroPlayer.isPlaying() &&
+        window.document.getElementById('player-title').textContent === 'Programa encerrado' &&
+        !window.document.getElementById('player-speed-label').hidden &&
+        openedPlaybackUrl === 'https://provider.test/timeshift/synthetic-user/synthetic-pass/60/2026-08-24:20-30/77.ts');
     press(window, 10009);
 
     window.BuroApp.state.screenData = { kind: 'live', parent: livePlayerItem, schedule: [] };

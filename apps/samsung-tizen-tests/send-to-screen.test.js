@@ -138,7 +138,11 @@ function openMovieDetails(window) {
     window.BuroApp.state.section = 'MOVIES';
     window.BuroApp.state.screenData = {
         kind: 'movie', parent: item,
-        details: { title: 'Duna', plot: 'Paul Atreides chega a Arrakis.' }
+        details: {
+            title: 'Duna', plot: 'Paul Atreides chega a Arrakis.',
+            releaseDate: '2021-10-21', duration: '2h 35min', genre: 'Ficção científica',
+            country: 'Canadá', rating: 7.6, director: 'Denis Villeneuve'
+        }
     };
     return new Promise(function (resolve, reject) {
         window.BuroStorage.secureSave('s1', {
@@ -155,6 +159,26 @@ async function run() {
     window = loadApp();
     await reachShell(window);
     await openMovieDetails(window);
+    /*
+      A linha de fatos, na ordem do aplicativo do Windows.
+
+      `XtreamWorkspace` monta `Lançamento <data> • duração • gênero • país •
+      ★ nota`, e o país ficava só na seção de créditos da TV, que exige rolar.
+      Quem decide se quer o filme lê esta linha, não a de baixo.
+    */
+    check('a linha de fatos traz lançamento, duração, gênero, país e nota',
+        (function () {
+            var line = (window.document.querySelector('.detail-facts') || {}).textContent || '';
+            return line.indexOf('Lançamento') >= 0 && line.indexOf('2021-10-21') >= 0 &&
+                line.indexOf('Ficção') >= 0 && line.indexOf('Canadá') >= 0 &&
+                line.indexOf('★ 7.6') >= 0;
+        }()));
+    /* Dizer a mesma coisa duas vezes na mesma tela é ruído: o país saiu dos
+       créditos quando subiu para a linha. */
+    check('e o país não é repetido na seção de créditos',
+        ((window.document.querySelector('.detail-credit-card') || {}).textContent || '')
+            .indexOf('Canadá') < 0);
+
     check('a barra de ações tem "Enviar à tela"',
         Boolean(window.document.querySelector('[data-action="send-to-screen"]')));
     check('e ela é alcançável pelo D-pad',
