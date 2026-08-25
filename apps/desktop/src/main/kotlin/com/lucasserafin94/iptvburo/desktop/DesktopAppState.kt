@@ -970,6 +970,56 @@ class DesktopAppState(
     fun savedSources(): List<XtreamSource> = sourceLibrary.sources()
 
     /**
+     * Renames a saved playlist.
+     *
+     * The label is the only thing distinguishing one saved list from another on the profile screen,
+     * and the name a list is created with is often whatever was typed in a hurry. A blank name is
+     * refused rather than stored: it would leave an unlabelled row nobody could identify.
+     */
+    fun renameSavedSource(sourceId: String, label: String) {
+        if (label.isBlank()) return
+        sourceLibrary.rename(sourceId, label)
+        savedSourcesRevision += 1
+    }
+
+    /**
+     * Forgets a saved playlist and its credentials.
+     *
+     * Profiles that were using it keep working until they are next opened, and then have no list —
+     * so they are pointed away from it here rather than left holding an id for something that no
+     * longer exists. That reads as a broken profile, and the viewer would have no way to see why.
+     *
+     * The credentials go with it: [XtreamSourceLibrary.remove] clears the protected file, so
+     * forgetting a list actually forgets the password rather than orphaning it on disk.
+     */
+    fun removeSavedSource(sourceId: String) {
+        sourceLibrary.remove(sourceId)
+        val orphaned = profiles.filter { it.sourceId == sourceId }
+        if (orphaned.isNotEmpty()) {
+            profiles = profiles.map { profile ->
+                if (profile.sourceId == sourceId) profile.copy(sourceId = null) else profile
+            }
+            userStore.saveProfiles(profiles)
+        }
+        // The signed-in session belongs to the list that was just forgotten.
+        if (orphaned.any { it.id == activeProfileId }) {
+            xtreamRepository.clear()
+            xtreamStatus = XtreamStatus.Disconnected
+        }
+        savedSourcesRevision += 1
+    }
+
+    /**
+     * Bumped whenever the saved list changes.
+     *
+     * [savedSources] reads the store directly rather than holding state, so a screen showing it
+     * would not recompose when a list is renamed or removed — the row would sit there with its old
+     * name until something else redrew the screen. Reading this makes the change visible.
+     */
+    var savedSourcesRevision by mutableStateOf(0)
+        private set
+
+    /**
      * Signs in to an existing playlist and attaches it to a new profile.
      *
      * This is the household case: one subscription, several people, separate favourites.

@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -304,6 +305,10 @@ fun AccountSetupGate(
         musicPlaylist: Path?,
         metadataKey: String,
     ) -> Unit,
+    /** Renames a saved playlist. Its label is all that tells one from another on this screen. */
+    onRenameSaved: (sourceId: String, label: String) -> Unit = { _, _ -> },
+    /** Forgets a saved playlist and the password stored with it. */
+    onRemoveSaved: (sourceId: String) -> Unit = {},
 ) {
     // Hoisted out of this composable so a failed connection can return here with everything the
     // user typed still in place. Held in remember alone, the state died with the screen and the
@@ -318,6 +323,18 @@ fun AccountSetupGate(
     var musicPlaylist by draft.musicPlaylist
     var metadataKey by draft.metadataKey
     var revealPassword by remember { mutableStateOf(false) }
+
+    /** The saved list being renamed in place, and the name being typed for it. */
+    var renamingSourceId by remember { mutableStateOf<String?>(null) }
+    var renameDraft by remember { mutableStateOf("") }
+
+    /**
+     * The list awaiting confirmation before it is forgotten.
+     *
+     * Confirmed rather than immediate: removing one erases the password stored with it, and any
+     * profile using it is left without a list. Neither is recoverable from this screen.
+     */
+    var removingSource by remember { mutableStateOf<XtreamSource?>(null) }
 
     val canSubmit =
         profileName.isNotBlank() &&
@@ -384,17 +401,84 @@ fun AccountSetupGate(
                         modifier = Modifier.fillMaxWidth().padding(BuroSpacing.Md),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = source.label,
-                            color = if (selected) BuroColors.Primary else BuroColors.Text,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (selected) Text("✓", color = BuroColors.Primary)
+                        if (source.id == renamingSourceId) {
+                            // Edited in place rather than in a dialog: a dialog would cover the
+                            // other names at exactly the moment the point is telling them apart.
+                            OutlinedTextField(
+                                value = renameDraft,
+                                onValueChange = { renameDraft = it },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                onClick = {
+                                    onRenameSaved(source.id, renameDraft)
+                                    renamingSourceId = null
+                                },
+                            ) {
+                                Text("✓", color = BuroColors.Primary)
+                            }
+                            TextButton(onClick = { renamingSourceId = null }) {
+                                Text("✕", color = BuroColors.TextMuted)
+                            }
+                        } else {
+                            Text(
+                                text = source.label,
+                                color = if (selected) BuroColors.Primary else BuroColors.Text,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (selected) Text("✓", color = BuroColors.Primary)
+                            TextButton(
+                                onClick = {
+                                    renameDraft = source.label
+                                    renamingSourceId = source.id
+                                },
+                            ) {
+                                Text(
+                                    text = text.shareStrings.screens.setupRenameList,
+                                    color = BuroColors.TextSubtle,
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                            }
+                            TextButton(onClick = { removingSource = source }) {
+                                Text(
+                                    text = text.shareStrings.screens.setupRemoveList,
+                                    color = BuroColors.TextSubtle,
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                            }
+                        }
                     }
                 }
                 Spacer(Modifier.height(BuroSpacing.Xs))
             }
+        }
+
+        val doomed = removingSource
+        if (doomed != null) {
+            AlertDialog(
+                onDismissRequest = { removingSource = null },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onRemoveSaved(doomed.id)
+                            // The selection would otherwise point at a list that no longer
+                            // exists, and the form would try to reuse it on submit.
+                            if (reusedSourceId == doomed.id) reusedSourceId = null
+                            removingSource = null
+                        },
+                    ) {
+                        Text(text.shareStrings.screens.setupRemoveList, color = BuroColors.Primary)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { removingSource = null }) { Text(text.cancel) }
+                },
+                text = {
+                    Text(text.shareStrings.screens.setupRemoveListConfirm.format(doomed.label))
+                },
+            )
         }
 
         if (reusedSourceId == null) {

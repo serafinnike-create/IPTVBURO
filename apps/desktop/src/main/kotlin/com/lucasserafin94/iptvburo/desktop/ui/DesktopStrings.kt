@@ -635,6 +635,9 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            setupRenameList = "Renombrar",
+                            setupRemoveList = "Eliminar",
+                            setupRemoveListConfirm = "¿Eliminar la lista «%1${'$'}s»? La contraseña también se borra.",
                             importFileMissing = "El archivo seleccionado ya no existe.",
                             importAccessDenied = "El sistema no permitió leer ese archivo.",
                             importBlocked = "El acceso al archivo fue bloqueado por el sistema.",
@@ -1351,6 +1354,9 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            setupRenameList = "Renomear",
+                            setupRemoveList = "Remover",
+                            setupRemoveListConfirm = "Remover a lista «%1${'$'}s»? A senha também é apagada.",
                             importFileMissing = "O arquivo selecionado não existe mais.",
                             importAccessDenied = "O sistema não permitiu ler esse arquivo.",
                             importBlocked = "O acesso ao arquivo foi bloqueado pelo sistema.",
@@ -2067,6 +2073,9 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            setupRenameList = "Rename",
+                            setupRemoveList = "Remove",
+                            setupRemoveListConfirm = "Remove the list «%1${'$'}s»? Its password is erased too.",
                             importFileMissing = "The selected file no longer exists.",
                             importAccessDenied = "The system would not allow that file to be read.",
                             importBlocked = "Access to the file was blocked by the system.",
@@ -2782,6 +2791,9 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            setupRenameList = "Umbenennen",
+                            setupRemoveList = "Entfernen",
+                            setupRemoveListConfirm = "Liste «%1${'$'}s» entfernen? Das Passwort wird ebenfalls gelöscht.",
                             importFileMissing = "Die ausgewählte Datei existiert nicht mehr.",
                             importAccessDenied = "Das System hat das Lesen dieser Datei nicht erlaubt.",
                             importBlocked = "Der Zugriff auf die Datei wurde vom System blockiert.",
@@ -3502,6 +3514,9 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            setupRenameList = "Rinomina",
+                            setupRemoveList = "Rimuovi",
+                            setupRemoveListConfirm = "Rimuovere la lista «%1${'$'}s»? Anche la password viene cancellata.",
                             importFileMissing = "Il file selezionato non esiste più.",
                             importAccessDenied = "Il sistema non ha permesso di leggere quel file.",
                             importBlocked = "L'accesso al file è stato bloccato dal sistema.",
@@ -4567,6 +4582,12 @@ data class DownloadStrings(
  * there — `DesktopStrings` is at its enforced constructor limit.
  */
 data class ScreenStrings(
+    /** Renames a saved playlist, whose label is all that tells one from another. */
+    val setupRenameList: String,
+    /** Forgets a saved playlist and the password stored with it. */
+    val setupRemoveList: String,
+    /** Asks before forgetting one. Takes the list's name. */
+    val setupRemoveListConfirm: String,
     // Importing a playlist file.
     val importFileMissing: String,
     val importAccessDenied: String,

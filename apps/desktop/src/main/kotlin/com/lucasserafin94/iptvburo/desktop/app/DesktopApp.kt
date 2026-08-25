@@ -891,7 +891,12 @@ fun DesktopApp(
                 } else if (step is OnboardingStep.Account) {
                     AccountSetupGate(
                         text = text,
-                        savedSources = appState.savedSources(),
+                        // The revision is read so this recomposes when a list is renamed or
+                        // removed: savedSources reads the store directly and holds no state of
+                        // its own, so without it the row would keep its old name on screen.
+                        savedSources = appState.savedSourcesRevision.let { appState.savedSources() },
+                        onRenameSaved = appState::renameSavedSource,
+                        onRemoveSaved = appState::removeSavedSource,
                         // Hoisted above the step branch so a failed connection returns to a form
                         // that still holds everything the user typed.
                         draft = setupDraft,
