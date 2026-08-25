@@ -355,7 +355,14 @@ class DesktopDownloadManager(
         return rootDirectory.resolve("${safeName(contentKey)}.$extension")
     }
 
-    private fun safeName(contentKey: String): String =
+    /**
+     * The file name a content key is stored under.
+     *
+     * Public because the library has to recognise a row recovered under this name before the
+     * sidecar existed. Copying the rule there instead would let the two drift apart, and the only
+     * symptom would be the duplicate row coming back.
+     */
+    fun safeName(contentKey: String): String =
         contentKey.replace(UNSAFE_NAME, "_").take(120)
 
     private companion object {

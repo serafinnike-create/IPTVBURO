@@ -6000,13 +6000,29 @@ class DesktopAppState(
     fun refreshDownloadStates() {
         val stored = downloadManager.storedDownloads()
         if (stored.isEmpty() && downloads.isEmpty()) return
+
+        // A film recovered before its sidecar was written, now superseded by its real key.
+        //
+        // The copy is moved into place before the sidecar beside it is written, so a refresh
+        // landing in that window recovers the film under the sanitised file name —
+        // `movie_dupla-perigosa_2026` — which matches nothing else the app holds. Once the sidecar
+        // exists the same file comes back under `movie:dupla-perigosa:2026`, and keeping both left
+        // the film listed twice: once with its poster and once without. Reported from a real
+        // machine, with a screenshot of the two rows.
+        val supersededByRealKey =
+            stored.keys
+                .map(downloadManager::safeName)
+                .filter { sanitised -> !stored.containsKey(sanitised) }
+                .toSet()
+
         // Disk wins for keys we know nothing about; in-memory wins for the rest, since a running
         // download already has the live title and the sidecar is only written on completion.
-        downloadMetadata = stored + downloadMetadata
+        downloadMetadata = (stored + downloadMetadata) - supersededByRealKey
         // Anything on disk is complete, including a key still marked Running in memory: the file
         // being there is proof the transfer finished. Skipping those left the finished download
         // stuck at 100% with a Cancel button while its own copy appeared as a second row.
-        downloads = downloads + stored.keys.associateWith { DownloadState.Completed }
+        downloads =
+            (downloads + stored.keys.associateWith { DownloadState.Completed }) - supersededByRealKey
     }
 
     fun deleteDownload(contentKey: String) {
