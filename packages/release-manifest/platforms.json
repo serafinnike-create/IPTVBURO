@@ -1,11 +1,11 @@
 {
   "manifestVersion": 1,
-  "updatedAt": "2026-08-13T21:34:54+00:00",
+  "updatedAt": "2026-08-25T17:00:00+02:00",
   "platforms": [
     {
       "id": "android-tv",
       "status": "TESTING",
-      "version": "0.2.0-alpha.6",
+      "version": "3.4.0",
       "build": "PASSING",
       "hardware": "TV_PENDING",
       "notes": [
@@ -17,7 +17,7 @@
     {
       "id": "android-mobile",
       "status": "TESTING",
-      "version": "0.2.0-alpha.6",
+      "version": "3.4.0",
       "build": "PASSING",
       "hardware": "PARTIAL",
       "notes": [
@@ -55,18 +55,27 @@
     {
       "id": "samsung-tizen",
       "status": "HARDWARE_VALIDATION",
-      "version": "0.4.0-preview",
+      "version": "3.4.0-preview",
       "build": "PASSING",
       "hardware": "NOT_VALIDATED",
       "notes": [
+        "A revisao 20260824-184638 acrescenta velocidade real ao preenchimento do cache de capas USB, zera a telemetria em pausa/conclusao/desligamento/limpeza, reserva placeholder 2:3 para titulo sem arte e contem trilhos longos de semelhantes no viewport. A Home continua bloqueada ate compor o primeiro quadro. O WGT manteve o PID 5187 por 30 segundos e possui 716.077 bytes, SHA-256 3BBD2EC7683EE1F5528D9C6D697A35AA77F103ADC90C4F7CDBBDD3631008AC5C, 39 entradas, duas assinaturas, 37/37 payloads identicos e zero padrao de chave TMDb/OMDb embutida. Os 55 grupos pos-gate passaram em 145,5 segundos; cache 32/32, armazenamento 27/27, compatibilidade antiga 38/38, TMDb 44/44, D-pad 349/349 e visual 269/269. A janela real mostrou Hero, backdrop, sinopse e capas prontas.",
         "Shell completo: onboarding, perfis, fontes M3U e Xtream, catalogo sob demanda, detalhes, EPG, busca, downloads USB e licenca.",
-        "541 testes automatizados passam, todos contra simulacoes das APIs da TV.",
-        "A escrita de catalogo usa uma transacao IndexedDB por bloco de mil, devolvendo o controle entre blocos para o D-pad continuar respondendo durante a importacao.",
+        "Os 55 grupos funcionais posteriores ao gate de versao passam; o gate global continua vermelho somente pela divergencia preexistente Android 3.0.1/Windows 3.2.1. A Home sem fonte replica os tres trilhos ficticios Android em composicao 4/4/6, com progresso, paisagem/poster, detalhe individual e sem qualquer playback simulado; o foco rola somente o conteudo e preserva Ribbon/topbar. Descobrir usa o mesmo baralho finito e personalizado de 15 cartas do Android/Windows, e o card em profundidade conserva arte e volume sem sobrepor copy ou semantica ao card corrente; o catalogo separa genero de servico quando a fonte nomeia provedores, conserva o foco durante escolhas consecutivas pelo D-pad e acrescenta prateleiras de servico sem duplicar titulos na Home; a continuidade da Home representa progresso de episodio pela serie, deduplica episodios do mesmo titulo e usa o incompleto mais recente para ordem e barra; quando ha chave TMDb, a Home tambem termina com as prateleiras publicas de Assinaturas, sem bloquear o catalogo local, sem reproduzir titulo externo e restaurando o foco do card ao voltar; filmes, series e canais locais retornam dos detalhes reutilizando o mesmo modelo da Home, rolagem e foco, sem nova consulta IndexedDB; o detalhe de serie oferece Assistir/Continuar no topo, preferindo o primeiro episodio retomavel e iniciando na posicao anunciada; RETURN e fim natural do AVPlay atualizam imediatamente o progresso visivel sem perder foco ou rolagem; Ribbon, cards e prateleiras horizontais deslocam o proprio container para revelar o foco mesmo sem suporte completo ao objeto moderno de scrollIntoView; Configuracoes expoe simultaneamente os mesmos quatro tamanhos e cinco cores de legenda do Android, alem dos guias locais TMDb e OMDb; a central de avisos marca tudo como lido ao abrir e permite limpar a colecao inteira; notas da critica identificam RT, IMDb e MC com as faixas publicas 61/40 do Metascore; Assinaturas mostra marcas publicas TMDb, pagina Ver mais ate 100 titulos por servico, grava/remove lembrete externo e reutiliza por um dia prateleiras publicas separadas por regiao, filtro e idioma. Categorias grandes abrem 200 registros e retomam o indice ordenado em blocos de 200 sob demanda, sem duplicacao e com no maximo 200 cards no DOM. A suite ainda cobre as 672 mensagens em cinco idiomas, entrada compartilhada, foco/rolagem da Ribbon, prontidao sanitizada, bloqueio do player, credenciais TMDb v3/v4 e runners de app/smoke AVPlay.",
+        "A revisao 20260824-153120 acrescenta paridade de titulos semelhantes: filmes combinam franquia TMDb em ordem de lancamento com recommendations e recorrem a similar somente quando necessario; series usam recommendations. O merge remove o titulo atual, deduplica e limita a 16. Cada card procura primeiro a fonte local ativa e, se ausente, abre Assinaturas/Onde assistir; RETURN restaura ficha, foco e rolagens, inclusive em navegacao encadeada. Sem resposta TMDb, o mesmo componente usa fallback local por genero isolado por fonte e perfil. Nota TMDb e nota editorial do provedor permanecem separadas. No emulador real, Duelo com Bobby Flay abriu ofertas externas e Voltar restaurou The Voice Brasil no mesmo card. O WGT abriu no PID 15253, preservado por 30 segundos, e possui 712.364 bytes, SHA-256 BF5F9C489B829CFF0ACA0FB20C0405A3C71D4A228043D727B0BE2312B94763CC, 39 entradas, duas assinaturas, 37/37 payloads identicos e zero chave ou marcador de teste. Os 55 grupos pos-gate passaram em 159,1 segundos; TMDb 42/42, D-pad 343/343 e visual 266/266. TMDb e OMDb continuam somente no KeyManager.",
+        "A revisao 20260824-145026 bloqueia a abertura ate compor a Home, enriquecer o primeiro Hero, resolver prateleiras TMDb configuradas e aquecer ate 12 capas do primeiro quadro. Capas tardias mantem placeholder e fallback backdrop-poster ate a decodificacao em Home, catalogo, detalhes, retomada, pessoas e Assinaturas; movimento reduzido desliga shimmer e transicao. O Hero permite assistir filmes e canais diretamente, mantendo detalhes separados; series continuam resolvendo o episodio pela ficha. A rotacao pausa em qualquer acao descendente do Hero, portanto titulo, id e ENTER permanecem atomicos enquanto o usuario decide. O cache opcional em USB percorre toda arte publica descoberta, mostra progresso real e oferece Pausar, Continuar e Atualizar pelo D-pad, sem aceitar URL autenticada ou token. O WGT foi compilado, assinado, instalado e abriu no PID 12763, preservado por 30 segundos. Possui 39 entradas, 709.064 bytes, SHA-256 C86E4749DBCE745AB60975C8EDA40537B2F184144A79007DCFA293DEFE2DB571, duas assinaturas e 37/37 payloads identicos aos fontes. Os 55 grupos posteriores ao gate de versao passaram em 153,5 segundos, incluindo 28 testes do cache, 25 do painel, 333 de D-pad, 15 de acessibilidade, 260 verificacoes visuais e 680 mensagens por idioma. TMDb e OMDb permaneceram configurados no KeyManager e nenhum valor entrou no WGT. Uma ativacao intermediaria de 20260824-144825 trocou o PID durante a janela automatica; a repeticao do pacote instalado e a compilacao limpa 20260824-145026 permaneceram estaveis por 30 segundos.",
+        "A revisao 20260824-135724 bloqueia a abertura ate compor a Home, resolver prateleiras TMDb configuradas e aquecer ate 12 capas do primeiro quadro; falha ou timeout de arte usa fallback. O cache opcional em USB percorre toda arte publica descoberta, mostra progresso real e oferece Pausar, Continuar e Atualizar pelo D-pad, sem aceitar URL autenticada ou token. A paginacao Stalker percorre e persiste paginas remotas sem reter comandos ou tokens. O WGT foi compilado, assinado, instalado e abriu no PID 8027, preservado por 30 segundos; a janela real mostrou hero, continuidade e capas renderizadas. Possui 39 entradas, 707.506 bytes, SHA-256 8D4B043F37C8653E43343DB914C74EE1C04365AF6899A850B3AE5CC721DA7AB7, duas assinaturas e 37/37 payloads identicos aos fontes. Os 55 grupos posteriores ao gate de versao passaram, incluindo 28 testes do cache, 25 do painel, 325 de D-pad e 257 verificacoes visuais. TMDb e OMDb permaneceram configurados no KeyManager e nenhum valor entrou no WGT.",
+        "A revisao 20260820-233011, incluindo Home demonstrativa 4/4/6, validacao visual das rotas centrais e profundas, matriz visual em cinco idiomas, estabilidade de 960 trocas de tela e importacao responsiva de 12000 itens, foi compilada, assinada e instalada no emulador. O launcher devolveu o PID 27134 na abertura e novamente 30 segundos depois, comprovando que o processo nao reiniciou na janela automatica. O WGT possui 35 entradas, 648.682 bytes, SHA-256 14B4BA239AE7A44727DA7FE1041321EF0649FE637DF7B08B4D4EF513D4C32413 e nenhum diagnostico; seus 33/33 arquivos de payload sao identicos as fontes atuais por bytes.",
+        "O cache diario de Assinaturas persiste apenas id, titulo, tipo, ano, data, poster publico e marca de servico restrita ao CDN TMDb w92; chave TMDb, oferta, sinopse e URL externa nunca entram no registro. Data vencida, formato antigo ou JSON corrompido viram miss e resposta vazia nao substitui uma resposta valida.",
+        "Assinaturas abre titulo e Ver mais no topo com Voltar focado e, no retorno, restaura o provedor, card, scroll vertical e scroll horizontal exatos, inclusive para o mesmo titulo presente em servicos diferentes.",
+        "As mesmas fontes Web sao percorridas automaticamente em Chromium na area logica 1920x1080; 260 verificacoes e 79 capturas cobrem idioma, carregamento, aviso legal, perfil, Home demonstrativa e real, rotas de catalogo/detalhes e as telas profundas de perfil, fontes Xtream/M3U/Stalker, USB, PIN parental, categorias, TMDb/OMDb e guias, armazenamento, progresso e pausa do cache de capas, downloads, licenca, Assinaturas, pessoa, compartilhamento, retomada e os estados VOD/ao vivo, bloqueio, audio, legenda, velocidade, erro e trailer do player. Configuracoes, Stalker, retomada e erro do player sao repetidos em PT-BR, EN, DE, IT e ES. Um ciclo adicional executa 960 trocas de tela e mede retencao depois de coleta; outro grava 12000 itens pelo caminho real de importacao e valida responsividade, Home, busca e categoria paginada. O catalogo visual e sintetico e as artes HTTPS sao interceptadas localmente, sem playlist, segredo ou rede. Isso nao substitui imagem, som, animacao e framebuffer nativos nem uma TV fisica.",
+        "A escrita de catalogo usa uma transacao IndexedDB por bloco de mil, devolvendo o controle entre blocos para o D-pad continuar respondendo durante a importacao. O banco v4 acrescenta somente o indice composto de categoria, preserva os dados anteriores e permite carregar 200 itens por vez.",
         "Os caches de arte tem teto LRU de 800 entradas; sem isso a memoria crescia por toda a sessao e a TV entrava em coleta de lixo agressiva.",
         "A chave publica ECDSA do servidor esta embutida e conferida contra o deployment por license-deployment.test.js.",
-        "NADA foi executado em TV fisica ou emulador: AVPlay, tizen.download, tizen.filesystem e tizen.keymanager so foram exercitados contra mocks.",
-        "O roteiro de validacao em hardware esta em docs/VALIDACAO_TV_SAMSUNG.md e ainda nao foi executado.",
-        "dash, seek, hdr, pip e offline seguem declarados falsos por nao terem sido medidos no aparelho, nao por falta de implementacao."
+        "Em 20/08/2026 o pacote 3.0.1 foi compilado, assinado, instalado e aberto na VM tv-samsung-10.0-x86_64; o runner iniciou a VM desligada e concluiu o ciclo em 70,3 s com -SkipTests; idioma, aviso legal, criacao de perfil, Home e D-pad foram exercitados visualmente.",
+        "Um smoke isolado reutilizou player e teclas de producao no AVPlay real da VM: HLS publico tocou, pausou, retomou e executou +30/-10 s por setas e teclas Fast Forward/Rewind; outro ciclo enumerou 2 audios e 8 legendas, selecionou a segunda faixa de cada tipo e produziu buffers WebVTT. O runner remove o pacote de diagnostico no bloco finally para liberar o AVPlay antes de abrir o app normal. Imagem/som percebidos, codecs variados, tizen.download, tizen.filesystem e tizen.keymanager ainda exigem TV fisica ou cenarios autorizados adicionais.",
+        "O roteiro de validacao em hardware esta em docs/VALIDACAO_TV_SAMSUNG.md e foi iniciado no emulador, mas TV fisica continua sendo gate obrigatorio.",
+        "DASH, HDR, PiP e multiview permanecem indisponiveis por capability; seek e offline USB existem no codigo, condicionados ao runtime real."
       ]
     },
     {
@@ -90,7 +99,7 @@
     {
       "id": "windows",
       "status": "TESTING",
-      "version": "2.0.0-alpha.1",
+      "version": "3.4.0",
       "build": "PARTIAL",
       "hardware": "PARTIAL",
       "notes": [
