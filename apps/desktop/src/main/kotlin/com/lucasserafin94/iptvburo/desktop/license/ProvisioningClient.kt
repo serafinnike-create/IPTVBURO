@@ -32,6 +32,15 @@ class ProvisionedSource(
     val metadataKey: CharArray? = null,
     /** An OMDb key, on the same terms. */
     val criticsKey: CharArray? = null,
+    /**
+     * What to call this list, or null when the seller named none.
+     *
+     * Not a credential, so it is a plain String: it is drawn on screen, which is the whole point
+     * of it. Null falls back to naming the list after its host, which is what the app did before
+     * a seller could choose — and that reads as the server's own name rather than the one their
+     * customer was sold.
+     */
+    val listLabel: String? = null,
 ) {
     /**
      * Wipes the credentials.
@@ -114,6 +123,9 @@ class ProvisioningClient(
             // alphabet these keys use is a mis-paste rather than a key.
             metadataKey = source.string("metadataKey")?.takeIf(::looksLikeApiKey)?.toCharArray(),
             criticsKey = source.string("criticsKey")?.takeIf(::looksLikeApiKey)?.toCharArray(),
+            // Trimmed and capped because it is drawn in a row of its own: a long one would push
+            // the rest of the row off the screen.
+            listLabel = source.string("listLabel")?.take(MAX_LIST_LABEL),
         )
     }
 
@@ -202,6 +214,7 @@ class ProvisioningClient(
         val RANDOM = SecureRandom()
 
         const val MAX_API_KEY_LENGTH = 400
+        const val MAX_LIST_LABEL = 60
         val API_KEY = Regex("^[A-Za-z0-9._-]+$")
 
         /** `scheme://user:pass@host` — a password in the address. */

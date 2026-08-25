@@ -37,7 +37,11 @@ const SCHEMA = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
  * 0011: onze testes falharam por coluna inexistente, e o defeito estava no teste,
  * não no código que ele deveria proteger.
  */
-const MIGRATION = ['0010_device_provisioning.sql', '0011_provisioning_key_labels.sql']
+const MIGRATION = [
+  '0010_device_provisioning.sql',
+  '0011_provisioning_key_labels.sql',
+  '0012_provisioning_list_label.sql',
+]
   .map((name) => readFileSync(new URL('../migrations/' + name, import.meta.url), 'utf8'))
   .join('\n');
 
@@ -426,5 +430,66 @@ test('reenviar sem chave não apaga a que o cliente já tinha', async () => {
     Object.prototype.hasOwnProperty.call(claimed, 'metadataKey'), false,
     'a chave tem de estar ausente, para o aplicativo saber que não deve mexer nela',
   );
+  env.DB.close();
+});
+
+test('o nome da lista vai junto, para o cliente ver o que comprou', async () => {
+  const env = createEnv();
+  /* Sem isto o aplicativo deriva o nome do endereço — "cb.visualplay.online" —
+     que é como o servidor se chama, não como quem vendeu quer que apareça. */
+  await saveProvisioning(DEVICE, { ...CREDENTIAL, listLabel: 'Lista do Lucas' }, 'dono', env);
+  const claimed = await claimProvisioning(DEVICE, env);
+  assert.equal(claimed.listLabel, 'Lista do Lucas');
+  env.DB.close();
+});
+
+test('o painel lê o nome de volta, ao contrário da senha', async () => {
+  const env = createEnv();
+  await saveProvisioning(DEVICE, { ...CREDENTIAL, listLabel: 'Lista do Lucas' }, 'dono', env);
+  /* Um rótulo não é segredo: aparece na tela do cliente. Quem vendeu precisa
+     poder conferir o que mandou, inclusive depois de aplicado. */
+  assert.equal((await provisioningStatus(DEVICE, env)).listLabel, 'Lista do Lucas');
+  await claimProvisioning(DEVICE, env);
+  await confirmProvisioning(DEVICE, env);
+  assert.equal((await provisioningStatus(DEVICE, env)).listLabel, 'Lista do Lucas');
+  env.DB.close();
+});
+
+test('sem nome, a lista continua sendo aplicada', async () => {
+  const env = createEnv();
+  const saved = await saveProvisioning(DEVICE, CREDENTIAL, 'dono', env);
+  assert.equal(saved.ok, true);
+  const claimed = await claimProvisioning(DEVICE, env);
+  /* Ausente e não vazio: o aplicativo distingue os dois e cai para o endereço. */
+  assert.equal(Object.prototype.hasOwnProperty.call(claimed, 'listLabel'), false);
+  assert.equal((await provisioningStatus(DEVICE, env)).listLabel, null);
+  env.DB.close();
+});
+
+test('reenviar sem nome não renomeia a lista que o cliente já reconhece', async () => {
+  const env = createEnv();
+  /* O caso do endereço que caiu: quem vende reenvia só o servidor. */
+  await saveProvisioning(DEVICE, { ...CREDENTIAL, listLabel: 'Lista do Lucas' }, 'dono', env);
+  await claimProvisioning(DEVICE, env);
+  await confirmProvisioning(DEVICE, env);
+  await saveProvisioning(DEVICE, { ...CREDENTIAL, server: 'http://novo.com:8080' }, 'dono', env);
+  const claimed = await claimProvisioning(DEVICE, env);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(claimed, 'listLabel'), false,
+    'ausente para o aplicativo saber que não deve mexer no nome',
+  );
+  env.DB.close();
+});
+
+test('um nome absurdo ou sujo é ignorado, e a lista vai assim mesmo', async () => {
+  const env = createEnv();
+  /* Um nome errado nunca deve impedir o cliente de assistir: sem ele o
+     aplicativo cai para o endereço, que é o que fazia antes. */
+  for (const bad of ['x'.repeat(61), 'com\u0000nulo', 'quebra\nde linha', '   ']) {
+    await saveProvisioning(DEVICE, { ...CREDENTIAL, listLabel: bad }, 'dono', env);
+    const claimed = await claimProvisioning(DEVICE, env);
+    assert.equal(claimed.server, CREDENTIAL.server, `a lista deve ir mesmo assim: ${bad}`);
+    assert.equal(claimed.listLabel, undefined, `o nome inválido não pode passar: ${bad}`);
+  }
   env.DB.close();
 });

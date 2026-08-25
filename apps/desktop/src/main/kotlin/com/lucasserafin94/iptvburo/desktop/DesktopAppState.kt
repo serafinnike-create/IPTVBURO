@@ -5744,7 +5744,12 @@ class DesktopAppState(
             } ?: return
 
         try {
-            val entry = sourceLibrary.create(String(source.server).hostLabel())
+            // The name the seller chose, or the host when they chose none.
+            val entry =
+                sourceLibrary.create(
+                    source.listLabel?.takeIf(String::isNotBlank)
+                        ?: String(source.server).hostLabel(),
+                )
             withContext(Dispatchers.IO) {
                 sourceLibrary.store(entry.id).save(source.server, source.username, source.password)
             }

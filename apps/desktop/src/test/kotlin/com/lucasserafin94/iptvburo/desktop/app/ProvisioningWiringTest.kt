@@ -103,6 +103,21 @@ class ProvisioningWiringTest {
     }
 
     @Test
+    fun `the list is named by the seller when they chose a name`() {
+        // Falling back to the host names it after the server rather than after what the customer
+        // was sold, which is what the seller is trying to fix by choosing one.
+        val body = collectorBody()
+        assertTrue(
+            body.contains("source.listLabel?.takeIf(String::isNotBlank)"),
+            "the chosen name wins when there is one",
+        )
+        assertTrue(
+            body.contains("?: String(source.server).hostLabel()"),
+            "and the host is still the fallback, so a list with no name is not left blank",
+        )
+    }
+
+    @Test
     fun `a failure is reported so the seller can see it`() {
         assertTrue(collectorBody().contains("reportFailure("))
     }

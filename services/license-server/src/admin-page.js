@@ -608,6 +608,7 @@ export function adminPage() {
       ? '<p class="sub" style="margin:4px 0 10px">'
         + provisioningStateLabel(info.state) + ' · ' + esc(info.server || '—')
         + (info.username ? ' · ' + esc(info.username) : '')
+        + (info.listLabel ? ' · "' + esc(info.listLabel) + '"' : '')
         + (info.metadataKey ? ' · com chave TMDb' : '')
         + (info.criticsKey ? ' · com chave OMDb' : '')
         + (info.state === 'PENDING' ? ' · enviado ' + dateTime(info.created_at) + ', aguardando o cliente abrir o aplicativo' : '')
@@ -647,9 +648,12 @@ export function adminPage() {
        capa e sinopse. Deixadas em branco, não mexem no que o cliente já tiver. */
     const metadataKey = document.getElementById('prov-tmdb-' + key).value.trim();
     const criticsKey = document.getElementById('prov-omdb-' + key).value.trim();
+    /* Deixado em branco, o aplicativo deriva o nome do endereço — que é como o
+       servidor se chama, não como quem vendeu quer que a lista apareça. */
+    const listLabel = document.getElementById('prov-label-' + key).value.trim();
     const result = await api('/admin/provisioning', {
       device: device, server: server, username: username, password: password,
-      metadataKey: metadataKey, criticsKey: criticsKey,
+      listLabel: listLabel, metadataKey: metadataKey, criticsKey: criticsKey,
     });
     if (!result) return alert('Não foi possível enviar. Confira o endereço do servidor.');
     await refreshDetails(device);

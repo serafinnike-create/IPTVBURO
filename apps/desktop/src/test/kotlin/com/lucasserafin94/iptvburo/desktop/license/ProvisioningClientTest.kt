@@ -279,6 +279,34 @@ class ProvisioningClientTest {
     }
 
     @Test
+    fun `the list keeps the name the seller chose`() {
+        // Derived from the host otherwise, which is the server's own name rather than the one
+        // their customer was sold.
+        val body =
+            com.google.gson.JsonObject().apply {
+                add(
+                    "source",
+                    com.google.gson.JsonObject().apply {
+                        addProperty("server", "http://provedor.invalid")
+                        addProperty("username", "u")
+                        addProperty("password", "p")
+                        addProperty("listLabel", "Lista do Lucas")
+                    },
+                )
+            }.toString()
+        withServer(MockResponse().setResponseCode(200).setBody(body)) { client, _ ->
+            assertEquals("Lista do Lucas", assertNotNull(client.claim()).listLabel)
+        }
+    }
+
+    @Test
+    fun `no name sent means fall back, not blank`() {
+        withServer(sourceResponse()) { client, _ ->
+            assertNull(assertNotNull(client.claim()).listLabel)
+        }
+    }
+
+    @Test
     fun `an absent key is null, so it can mean leave alone`() {
         // A seller replacing a provider address that went down sends the three connection fields
         // and nothing else. That must not wipe a key the viewer configured themselves, so absent
