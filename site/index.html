@@ -18,7 +18,7 @@
   <title>IPTV BURO — Sua biblioteca, finalmente organizada</title>
   <link rel="icon" href="buro-mark.png">
   <link rel="canonical" href="https://iptvburo.pages.dev/">
-  <link rel="preload" href="assets/nocturne.webp" as="image" type="image/webp" fetchpriority="high">
+  <link rel="preload" href="assets/app-hero.webp" as="image" type="image/webp" fetchpriority="high">
   <link rel="stylesheet" href="styles.css">
   <script src="site.js" defer></script>
 </head>
@@ -60,10 +60,10 @@
 
   <main id="conteudo">
     <section class="hero" id="inicio" aria-labelledby="hero-title">
-      <div class="hero-art" aria-hidden="true">
-        <img src="assets/nocturne.webp" alt="" width="1920" height="1080" fetchpriority="high">
+      <div class="hero-backdrop" aria-hidden="true"></div>
+      <div class="hero-shot reveal" aria-hidden="true">
+        <img src="assets/app-hero.webp" alt="" width="900" height="790" fetchpriority="high">
       </div>
-      <div class="hero-scrim" aria-hidden="true"></div>
 
       <div class="hero-copy reveal">
         <p class="eyebrow"><span class="eyebrow-dot"></span><span data-i18n="heroEyebrow">PLAYER PREMIUM · SUA FONTE, SUA BIBLIOTECA</span></p>
@@ -181,11 +181,8 @@
         </ul>
       </div>
       <div class="motion-player reveal">
-        <video autoplay muted loop playsinline preload="metadata" poster="assets/multiscreen.webp" data-brand-video>
-          <source src="assets/buro-reel.mp4" type="video/mp4">
-        </video>
+        <img src="assets/app-hero.webp" alt="Interface do IPTV BURO" width="900" height="790" loading="lazy">
         <div class="video-caption"><span class="live-dot"></span><span data-i18n="motionCaption">Experiência visual IPTV BURO</span></div>
-        <button type="button" class="video-toggle" data-video-toggle aria-label="Pausar vídeo">Ⅱ</button>
       </div>
     </section>
 
@@ -200,7 +197,7 @@
 
       <div class="feature-story reveal">
         <div class="feature-story-art">
-          <img src="assets/poster-wall.webp" alt="Galeria cinematográfica de capas do IPTV BURO" width="1920" height="1080" loading="lazy">
+          <img src="assets/app-hero.webp" alt="Biblioteca do IPTV BURO organizada por categorias" width="900" height="790" loading="lazy">
         </div>
         <div class="feature-story-copy">
           <span class="number">01</span>
@@ -278,8 +275,7 @@
     </section>
 
     <section class="screens-section" aria-labelledby="screens-title">
-      <img src="assets/multiscreen.webp" alt="IPTV BURO em televisão, computador, tablet e celular" width="1920" height="1080" loading="lazy">
-      <div class="screens-scrim" aria-hidden="true"></div>
+      <div class="screens-backdrop" aria-hidden="true"></div>
       <div class="screens-copy reveal">
         <p class="kicker" data-i18n="screensKicker">UMA LINGUAGEM, VÁRIAS TELAS</p>
         <h2 id="screens-title" data-i18n="screensTitle">A mesma calma,<br>onde você estiver.</h2>
@@ -382,7 +378,6 @@
     </section>
 
     <section class="closing-section">
-      <div class="closing-art"><img src="assets/paper-sun.webp" alt="" width="1200" height="1600" loading="lazy"></div>
       <div class="closing-copy reveal">
         <img src="buro-mark.png" alt="" width="48" height="48">
         <p class="kicker">IPTV BURO</p>
