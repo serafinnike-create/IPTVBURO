@@ -25,18 +25,26 @@ const MAX_PAYLOAD_BYTES = 2048;
 const MAX_ATTEMPTS = 10;
 
 /**
- * A chave de cifra, derivada do identificador do aparelho.
+ * A chave de cifra, derivada do identificador do aparelho **e** de um segredo do
+ * servidor.
  *
- * O mesmo desenho do pareamento, com um sal próprio para que um registro de um
- * não possa ser lido como do outro. Não é segredo forte — o identificador
- * aparece na tela da televisão — e não pretende ser: protege o registro em
- * repouso contra quem lê a base sem saber de qual aparelho é cada linha, não
- * contra quem já tem o aparelho na frente.
+ * O pareamento (pairing.js) deriva sua chave só do código de seis dígitos, e isso
+ * é seguro ali porque o código em si nunca é guardado — só o hash — e a linha
+ * expira em cinco minutos. Este módulo copiou esse desenho derivando só do
+ * device_id, mas o device_id **não é segredo**: aparece na tela da televisão, na
+ * URL da página de compra e no QR code, e fica gravado na própria linha que traz
+ * o payload cifrado. Sem um segredo do servidor na derivação, quem lesse esta
+ * tabela — um vazamento de backup, um acesso indevido ao D1 — recalcularia a
+ * chave de cada linha a partir de dado público na própria linha, e a senha do
+ * Xtream do cliente sairia em claro. Com PROVISIONING_ENCRYPTION_KEY na mistura,
+ * ler a tabela não basta: também é preciso o segredo do Worker.
  */
-async function deriveKey(deviceId) {
+async function deriveKey(deviceId, env) {
+  const serverSecret = String(env?.PROVISIONING_ENCRYPTION_KEY ?? '');
+  if (!serverSecret) throw new Error('ProvisioningEncryptionKeyMissing');
   const material = await crypto.subtle.importKey(
     'raw',
-    new TextEncoder().encode(deviceId),
+    new TextEncoder().encode(`${serverSecret}:${deviceId}`),
     'PBKDF2',
     false,
     ['deriveKey'],
@@ -44,7 +52,7 @@ async function deriveKey(deviceId) {
   return await crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt: new TextEncoder().encode('iptvburo-provisioning-v1'),
+      salt: new TextEncoder().encode('iptvburo-provisioning-v2'),
       iterations: 100000,
       hash: 'SHA-256',
     },
@@ -72,8 +80,8 @@ function decodeBase64(value) {
   }
 }
 
-async function encryptPayload(deviceId, plaintext) {
-  const key = await deriveKey(deviceId);
+async function encryptPayload(deviceId, plaintext, env) {
+  const key = await deriveKey(deviceId, env);
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = new Uint8Array(
     await crypto.subtle.encrypt(
@@ -85,17 +93,18 @@ async function encryptPayload(deviceId, plaintext) {
   return { payload: encodeBase64(ciphertext), nonce: encodeBase64(nonce) };
 }
 
-async function decryptPayload(deviceId, payloadBase64, nonceBase64) {
+async function decryptPayload(deviceId, payloadBase64, nonceBase64, env) {
   const ciphertext = decodeBase64(payloadBase64);
   const nonce = decodeBase64(nonceBase64);
   if (!ciphertext || !nonce) return null;
   try {
-    const key = await deriveKey(deviceId);
+    const key = await deriveKey(deviceId, env);
     const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, key, ciphertext);
     return new TextDecoder().decode(plaintext);
   } catch {
-    // Uma etiqueta que não confere significa registro adulterado ou de outro
-    // aparelho. Os dois casos são "não".
+    // Uma etiqueta que não confere significa registro adulterado, de outro
+    // aparelho, ou cifrado antes da chave de servidor existir. Os três casos
+    // são "não".
     return null;
   }
 }
@@ -185,7 +194,7 @@ export async function saveProvisioning(deviceId, body, actor, env) {
     return { error: 'payload_too_large' };
   }
 
-  const sealed = await encryptPayload(deviceId, plaintext);
+  const sealed = await encryptPayload(deviceId, plaintext, env);
   await env.DB.prepare(
     `INSERT INTO device_provisioning
        (device_id, payload, payload_nonce, server_label, username_label, state,
@@ -273,7 +282,7 @@ export async function claimProvisioning(deviceId, env) {
     'UPDATE device_provisioning SET attempts = ?2 WHERE device_id = ?1',
   ).bind(deviceId, attempts).run();
 
-  const plaintext = await decryptPayload(deviceId, row.payload, row.payload_nonce);
+  const plaintext = await decryptPayload(deviceId, row.payload, row.payload_nonce, env);
   if (!plaintext) return null;
   try {
     return JSON.parse(plaintext);

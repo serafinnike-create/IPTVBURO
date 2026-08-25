@@ -82,8 +82,8 @@ class LocalD1 {
   }
 }
 
-function createEnv() {
-  return { DB: new LocalD1() };
+function createEnv(overrides = {}) {
+  return { DB: new LocalD1(), PROVISIONING_ENCRYPTION_KEY: 'fixture-provisioning-server-secret', ...overrides };
 }
 
 const DEVICE = 'SUMR-SRQG-H4BJ';
@@ -284,14 +284,44 @@ test('cancelar remove o que ainda não foi aplicado', async () => {
 });
 
 test('o payload de um aparelho não abre com a chave de outro', async () => {
-  const sealed = await PROVISIONING_INTERNALS.encryptPayload(DEVICE, 'segredo');
+  const env = createEnv();
+  const sealed = await PROVISIONING_INTERNALS.encryptPayload(DEVICE, 'segredo', env);
   assert.equal(
-    await PROVISIONING_INTERNALS.decryptPayload('OUTRO-APARELHO', sealed.payload, sealed.nonce),
+    await PROVISIONING_INTERNALS.decryptPayload('OUTRO-APARELHO', sealed.payload, sealed.nonce, env),
     null,
   );
   assert.equal(
-    await PROVISIONING_INTERNALS.decryptPayload(DEVICE, sealed.payload, sealed.nonce),
+    await PROVISIONING_INTERNALS.decryptPayload(DEVICE, sealed.payload, sealed.nonce, env),
     'segredo',
+  );
+});
+
+/**
+ * O ponto da auditoria: o device_id sozinho não pode ser a chave.
+ *
+ * Ele é público — aparece na tela da televisão, na URL da página de compra e no
+ * QR code — e fica gravado na própria linha que traz o payload cifrado. Se a
+ * derivação da chave dependesse só dele, qualquer leitura desta tabela (um
+ * vazamento de backup, um acesso indevido ao D1) recalcularia a chave de cada
+ * linha a partir de dado público na própria linha, e a senha do Xtream do
+ * cliente sairia em claro. Este teste prova que não basta mais: sem o segredo
+ * do servidor certo, nem sabendo o device_id o payload abre.
+ */
+test('sem o segredo do servidor, o device_id sozinho não decifra o payload', async () => {
+  const envA = createEnv({ PROVISIONING_ENCRYPTION_KEY: 'segredo-do-servidor-A' });
+  const sealed = await PROVISIONING_INTERNALS.encryptPayload(DEVICE, 'senha-do-cliente', envA);
+
+  const envB = createEnv({ PROVISIONING_ENCRYPTION_KEY: 'segredo-do-servidor-B' });
+  assert.equal(
+    await PROVISIONING_INTERNALS.decryptPayload(DEVICE, sealed.payload, sealed.nonce, envB),
+    null,
+    'o mesmo device_id, com o segredo de servidor errado, não deve decifrar nada',
+  );
+
+  await assert.rejects(
+    () => PROVISIONING_INTERNALS.encryptPayload(DEVICE, 'x', {}),
+    /ProvisioningEncryptionKeyMissing/,
+    'sem PROVISIONING_ENCRYPTION_KEY configurado, cifrar deve falhar alto e claro, não em silêncio',
   );
 });
 

@@ -9,6 +9,10 @@
 #   npx wrangler secret put ADMIN_MFA_ENCRYPTION_KEY # 32 random bytes in base64; encrypts TOTP seed
 #   npx wrangler secret put ADMIN_ALERT_WEBHOOK_URL  # optional; Slack/Discord-compatible incoming
 #                                                     # webhook URL, notified on CRITICAL alerts only
+#   npx wrangler secret put PROVISIONING_ENCRYPTION_KEY # any long random string; without it, saving
+#                                                        # a customer's Xtream password from the admin
+#                                                        # panel fails closed rather than encrypting
+#                                                        # with a key derivable from public data
 #   npx wrangler deploy
 #
 # Secrets are set with `wrangler secret`, never in this file. This file is committed; the signing
