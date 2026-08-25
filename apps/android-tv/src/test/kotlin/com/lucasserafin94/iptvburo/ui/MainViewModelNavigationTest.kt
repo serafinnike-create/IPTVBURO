@@ -11,6 +11,7 @@ import com.lucasserafin94.iptvburo.data.discovery.StreamingDiscoveryRepository
 import com.lucasserafin94.iptvburo.data.download.AndroidDownloadManager
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseStatus
+import com.lucasserafin94.iptvburo.data.licensing.AssignedPlaylist
 import com.lucasserafin94.iptvburo.data.licensing.RedeemFailure
 import com.lucasserafin94.iptvburo.data.licensing.RedeemOutcome
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
@@ -65,9 +66,9 @@ import com.lucasserafin94.iptvburo.domain.model.ParentalLock
 import com.lucasserafin94.iptvburo.domain.model.PlaybackProgressRepository
 import com.lucasserafin94.iptvburo.domain.model.SubtitlePresentation
 import java.io.InputStream
-import java.time.Duration
-import java.time.Instant
 import java.time.LocalTime
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Instant
 import javax.inject.Provider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -79,6 +80,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -166,7 +168,7 @@ class MainViewModelNavigationTest {
     }
 
     @Test
-    fun `movies selects an Xtream source and filters movie content`() = runTest {
+    fun `movies selects an Xtream source and opens every title with the filter bar in view`() = runTest {
         val local = source("local", SourceType.LOCAL_M3U)
         val xtream = source("xtream", SourceType.XTREAM)
         val repository = FakeCatalogRepository(sources = listOf(local, xtream))
@@ -176,15 +178,27 @@ class MainViewModelNavigationTest {
         viewModel.selectSection(AppSection.MOVIES)
         runCurrent()
 
+        // Skips the raw category grid (Action, 4K, …): Filmes/Séries open straight onto "every
+        // title", categoryId null, so the filter bar is already in view instead of behind a tap.
         assertEquals(
-            AppContent.Categories(
+            AppContent.Channels(
                 sourceId = xtream.id,
                 sourceName = xtream.name,
+                categoryId = null,
+                categoryName = "",
                 contentType = CatalogContentType.MOVIE,
             ),
             viewModel.state.value.content,
         )
-        assertEquals(CatalogContentType.MOVIE, repository.lastObservedContentType)
+        // No category grid is fetched for this destination any more, so there is nothing left to
+        // assert through observeCategories/lastObservedContentType — the destination assertion
+        // above, which already pins contentType = MOVIE, is what carries that check now.
+        //
+        // The last page request, not the only one: createViewModel's own startup already loads
+        // the home rails, which page independently at their own (smaller) size before this test
+        // ever calls selectSection. 200 is MainViewModel's own private PAGE_SIZE constant, not
+        // reachable from here.
+        assertEquals(0 to 200, repository.pageRequests.last())
     }
 
     @Test
@@ -220,8 +234,6 @@ class MainViewModelNavigationTest {
         val action = Category("action", "local", "Ação", contentType = CatalogContentType.MOVIE)
         val repository =
             FakeCatalogRepository(
-                // Xtream: MOVIES picks the first Xtream source and falls back to a placeholder
-                // when there is none, so an M3U source left this test with no categories at all.
                 sources = listOf(source("local", SourceType.XTREAM)),
                 categories = listOf(releases, action),
                 categoryCounts = mapOf(releases.id to 4, action.id to 3),
@@ -234,7 +246,9 @@ class MainViewModelNavigationTest {
         val viewModel = createViewModel(repository)
         runCurrent()
 
-        viewModel.selectSection(AppSection.MOVIES)
+        // Live, not Movies: Movies/Series now skip the category grid entirely and open straight
+        // onto every title, so this grid's own artwork logic is only still reachable through Live.
+        viewModel.selectSection(AppSection.LIVE)
         runCurrent()
 
         assertEquals(
@@ -689,6 +703,55 @@ class MainViewModelNavigationTest {
     }
 
     @Test
+    fun `a playlist the seller assigned is imported automatically after a valid licence check`() = runTest {
+        val assigned = AssignedPlaylist("http://provedor.example:8080", "cliente1", "senha1")
+        val licence = RecordingLicenseService(assignedPlaylist = assigned)
+        val repository = FakeCatalogRepository()
+        val viewModel = createViewModel(repository, licenseService = licence)
+        // These fixtures start with onboarding not yet accepted, which is what normally triggers
+        // the first licence check; a real boot with onboarding already accepted takes the same path
+        // through the same private checkLicense(), so calling the public entry point it shares with
+        // "try again" on the licence gate screen exercises the same code this feature hooks into.
+        viewModel.refreshLicense()
+        advanceUntilIdle()
+
+        assertEquals(1, repository.importXtreamCallCount)
+        assertEquals("http://provedor.example:8080", repository.lastXtreamRequest?.serverUrl)
+        assertEquals("cliente1", repository.lastXtreamRequest?.username)
+        assertEquals("senha1", repository.lastXtreamRequest?.password)
+        assertEquals(listOf(null), licence.confirmedFailureCodes)
+    }
+
+    @Test
+    fun `an already-applied assignment is not imported again on the next boot`() = runTest {
+        val assigned = AssignedPlaylist("http://provedor.example:8080", "cliente1", "senha1")
+        val licence = RecordingLicenseService(assignedPlaylist = assigned)
+        val repository =
+            FakeCatalogRepository(
+                existingXtreamSource = Triple("http://provedor.example:8080", "cliente1", "senha1"),
+            )
+        val viewModel = createViewModel(repository, licenseService = licence)
+        viewModel.refreshLicense()
+        advanceUntilIdle()
+
+        assertEquals(0, repository.importXtreamCallCount)
+        // Still confirmed: the customer already has it, so the panel should stop showing it pending.
+        assertEquals(listOf(null), licence.confirmedFailureCodes)
+    }
+
+    @Test
+    fun `no assignment on the server leaves an ordinary boot untouched`() = runTest {
+        val licence = RecordingLicenseService(assignedPlaylist = null)
+        val repository = FakeCatalogRepository()
+        val viewModel = createViewModel(repository, licenseService = licence)
+        viewModel.refreshLicense()
+        advanceUntilIdle()
+
+        assertEquals(0, repository.importXtreamCallCount)
+        assertEquals(emptyList<String?>(), licence.confirmedFailureCodes)
+    }
+
+    @Test
     fun `selecting a profile without sources opens source connection`() = runTest {
         val viewModel = createViewModel(FakeCatalogRepository())
         runCurrent()
@@ -842,7 +905,7 @@ private data object FakeSubtitleSettings : SubtitleSettings {
 private data object FakeLicenseService : AndroidLicenseService {
     override fun check(now: Instant): AndroidLicenseStatus =
         AndroidLicenseStatus(
-            decision = LicenseDecision.Allowed(Duration.ofDays(7), isTrial = true),
+            decision = LicenseDecision.Allowed(7.days, isTrial = true),
             deviceId = "TEST-TEST-TEST",
             offline = false,
             clockSuspect = false,
@@ -860,12 +923,15 @@ private data object FakeLicenseService : AndroidLicenseService {
  * refusal it answers with is arbitrary — what matters is that the call happened at all and that the
  * answer reaches the state.
  */
-private class RecordingLicenseService : AndroidLicenseService {
+private class RecordingLicenseService(
+    private val assignedPlaylist: AssignedPlaylist? = null,
+) : AndroidLicenseService {
     val redeemed = mutableListOf<String>()
+    val confirmedFailureCodes = mutableListOf<String?>()
 
     override fun check(now: Instant): AndroidLicenseStatus =
         AndroidLicenseStatus(
-            decision = LicenseDecision.Allowed(Duration.ofDays(7), isTrial = true),
+            decision = LicenseDecision.Allowed(7.days, isTrial = true),
             deviceId = "TEST-TEST-TEST",
             offline = false,
             clockSuspect = false,
@@ -874,6 +940,12 @@ private class RecordingLicenseService : AndroidLicenseService {
     override fun redeem(key: String, now: Instant): RedeemOutcome {
         redeemed += key
         return RedeemOutcome.Failed(RedeemFailure.ALREADY_USED)
+    }
+
+    override fun fetchAssignedPlaylist(): AssignedPlaylist? = assignedPlaylist
+
+    override fun confirmAssignedPlaylist(failureCode: String?) {
+        confirmedFailureCodes += failureCode
     }
 }
 
@@ -902,6 +974,7 @@ private class FakeCatalogRepository(
     private val seriesDetails: SeriesDetails? = null,
     private val movieDetails: MovieDetails? = null,
     private val xtreamImportGate: CompletableDeferred<Unit>? = null,
+    private val existingXtreamSource: Triple<String, String, String>? = null,
 ) : CatalogRepository {
     var lastObservedContentType: CatalogContentType? = null
     var observeChannelsCalls: Int = 0
@@ -910,6 +983,7 @@ private class FakeCatalogRepository(
     val resolveEpisodeRequests = mutableListOf<Episode>()
     var lastXtreamRequest: XtreamImportRequest? = null
     var afterXtreamProgress: ((XtreamImportStage) -> Unit)? = null
+    var importXtreamCallCount: Int = 0
 
     override fun observeSources(): Flow<List<Source>> = flowOf(sources)
 
@@ -976,6 +1050,7 @@ private class FakeCatalogRepository(
         request: XtreamImportRequest,
         onProgress: (XtreamImportStage) -> Unit,
     ): XtreamImportResult {
+        importXtreamCallCount += 1
         lastXtreamRequest = request
         XtreamImportStage.entries.forEach { stage ->
             onProgress(stage)
@@ -991,6 +1066,12 @@ private class FakeCatalogRepository(
             skippedItemCount = 0,
         )
     }
+
+    override suspend fun hasXtreamSource(
+        serverUrl: String,
+        username: String,
+        password: String,
+    ): Boolean = existingXtreamSource == Triple(serverUrl, username, password)
 
     override suspend fun loadSeriesDetails(
         sourceId: String,

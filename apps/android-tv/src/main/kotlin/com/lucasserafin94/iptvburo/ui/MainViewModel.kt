@@ -152,7 +152,12 @@ class MainViewModel @Inject constructor(
     private val backStack = ArrayDeque<AppContent>()
     private var catalogJob: Job? = null
     private var pageJob: Job? = null
-    private var actionJob: Job? = null
+    private var personJob: Job? = null
+    private var playbackJob: Job? = null
+    private var movieDetailsJob: Job? = null
+    private var seriesDetailsJob: Job? = null
+    private var loadFavoritesJob: Job? = null
+    private var providerLogoJob: Job? = null
     private var importJob: Job? = null
     private var homeJob: Job? = null
     private var bootBackdropJob: Job? = null
@@ -218,10 +223,24 @@ class MainViewModel @Inject constructor(
 
     /** One progress reading: how many bytes had arrived, and when. */
     private data class DownloadRateSample(val bytes: Long, val atEpochMillis: Long)
+
+    /** The artwork cache fill's own last reading, for the same rate measurement as a download. */
+    private var cacheFillRateSample: DownloadRateSample? = null
     private var seriesEpisodes: Map<String, Episode> = emptyMap()
     private val knownMovieChannels = LinkedHashMap<String, ChannelUi>()
     private val actorMovieIds = LinkedHashMap<String, LinkedHashSet<String>>()
     private var nextChannelCursor: CatalogCursor? = null
+
+    /**
+     * Category names for the "every title" screen, by category id.
+     *
+     * Only that screen needs this: a single named category already knows its own name and passes
+     * it straight through to every row. "Every title" mixes rows from every category at once, so
+     * each row needs its *own* category resolved — the genre filter and the genre a card shows
+     * both come from this, and both went blank when every row was stamped with one fixed name
+     * ("" for this screen) instead.
+     */
+    private var channelCategoryNames: Map<String, String> = emptyMap()
 
     init {
         // Runs alongside Room opening rather than after it, which is where most of a cold start
@@ -444,7 +463,51 @@ class MainViewModel @Inject constructor(
                         deviceId = status.deviceId.takeIf(String::isNotBlank),
                     )
                 }
+                if (status.allowsUse) applyAssignedPlaylistIfAny()
             }
+    }
+
+    /**
+     * Applies the playlist the seller assigned to this device from the admin panel, if any.
+     *
+     * Fire-and-forget by design: this is the automatic side of provisioning, running once per
+     * successful licence check, and nothing about the ordinary boot path may depend on it. A
+     * seller who never used the panel gets a 204/null on every launch, which is indistinguishable
+     * from a network hiccup and equally uninteresting — so failures here are logged, not surfaced.
+     */
+    private fun applyAssignedPlaylistIfAny() {
+        viewModelScope.launch {
+            runCatching {
+                val assigned = withContext(ioDispatcher) { licenseService.fetchAssignedPlaylist() }
+                    ?: return@runCatching
+                val alreadyApplied =
+                    withContext(ioDispatcher) {
+                        catalogRepository.hasXtreamSource(
+                            serverUrl = assigned.serverUrl,
+                            username = assigned.username,
+                            password = assigned.password,
+                        )
+                    }
+                if (!alreadyApplied) {
+                    catalogRepository.importXtream(
+                        XtreamImportRequest(
+                            displayName = PROVISIONED_SOURCE_NAME,
+                            serverUrl = assigned.serverUrl,
+                            username = assigned.username,
+                            password = assigned.password,
+                        ),
+                    )
+                }
+                withContext(ioDispatcher) { licenseService.confirmAssignedPlaylist() }
+            }.onFailure { error ->
+                logger.error(TAG, "Applying the seller-assigned playlist failed", error)
+                runCatching {
+                    withContext(ioDispatcher) {
+                        licenseService.confirmAssignedPlaylist(failureCode = "apply_failed")
+                    }
+                }
+            }
+        }
     }
 
     fun acceptLegalNotice() {
@@ -1104,6 +1167,37 @@ class MainViewModel @Inject constructor(
      */
     fun expandService(shelf: ProviderShelfUi) {
         val providerId = shelf.tmdbProviderId ?: return
+        openExpandedService(
+            providerId = providerId,
+            providerLabel = shelf.providerId,
+            providerName = shelf.providerName,
+            initialTitles = shelf.titles,
+        )
+    }
+
+    /**
+     * Opens a service's whole catalogue directly, from the shortcut row on Filmes/Séries.
+     *
+     * Unlike [expandService], there is no shelf here to draw while the request is in flight — the
+     * shortcut is offered before Assinaturas has been visited at all — so it starts from an empty
+     * list and a spinner instead of twenty titles already on hand.
+     */
+    fun openProviderShortcut(provider: com.lucasserafin94.iptvburo.data.discovery.DiscoveredProvider) {
+        selectSection(AppSection.SUBSCRIPTIONS)
+        openExpandedService(
+            providerId = provider.tmdbProviderId,
+            providerLabel = provider.label,
+            providerName = provider.label,
+            initialTitles = emptyList(),
+        )
+    }
+
+    private fun openExpandedService(
+        providerId: Int,
+        providerLabel: String,
+        providerName: String,
+        initialTitles: List<SubscriptionTitleUi>,
+    ) {
         expandedServiceJob?.cancel()
         // The shelf's own titles are shown immediately rather than a spinner over an empty page:
         // they are the first twenty of exactly the list being fetched, so the screen is useful
@@ -1114,9 +1208,9 @@ class MainViewModel @Inject constructor(
                     it.subscriptions.copy(
                         expandedService =
                             ExpandedServiceUi(
-                                providerId = shelf.providerId,
-                                providerName = shelf.providerName,
-                                titles = shelf.titles,
+                                providerId = providerLabel,
+                                providerName = providerName,
+                                titles = initialTitles,
                                 isLoading = true,
                             ),
                     ),
@@ -1141,7 +1235,7 @@ class MainViewModel @Inject constructor(
                     // Guarded: the viewer can close this or open another service while the pages
                     // are still arriving, and a late answer must not reopen what they left.
                     val open = current.subscriptions.expandedService ?: return@update current
-                    if (open.providerId != shelf.providerId) return@update current
+                    if (open.providerId != providerLabel) return@update current
                     current.copy(
                         subscriptions =
                             current.subscriptions.copy(
@@ -1650,8 +1744,8 @@ class MainViewModel @Inject constructor(
         }
         if (!mutableState.value.tmdbKeyConfigured) return
 
-        actionJob?.cancel()
-        actionJob =
+        personJob?.cancel()
+        personJob =
             viewModelScope.launch {
                 val apiKey = activeMetadataKey()
                 val enriched =
@@ -2215,14 +2309,14 @@ class MainViewModel @Inject constructor(
         categoryName: String?,
         originContent: AppContent,
     ) {
-        actionJob?.cancel()
+        playbackJob?.cancel()
         mutableState.update {
             it.copy(
                 isResolvingPlayback = true,
                 hasPlaybackError = false,
             )
         }
-        actionJob =
+        playbackJob =
             viewModelScope.launch {
                 runCatching {
                     requireNotNull(catalogRepository.getChannel(channelId)) {
@@ -2294,14 +2388,14 @@ class MainViewModel @Inject constructor(
             return
         }
         val originContent = mutableState.value.content as? AppContent.SeriesDetails ?: return
-        actionJob?.cancel()
+        playbackJob?.cancel()
         mutableState.update {
             it.copy(
                 isResolvingPlayback = true,
                 hasPlaybackError = false,
             )
         }
-        actionJob =
+        playbackJob =
             viewModelScope.launch {
                 runCatching {
                     catalogRepository.resolveEpisode(resolved)
@@ -2774,6 +2868,28 @@ class MainViewModel @Inject constructor(
                 AppSection.SERIES -> CatalogContentType.SERIES
                 else -> null
             }
+
+        // Movies and series skip the raw category grid (Action, 4K, …) and open straight onto
+        // "every title", filter bar already in view — the picker inside it covers genre, which is
+        // what that grid was a proxy for anyway. Live keeps the category grid: a live channel list
+        // has no genre/year/sort worth filtering by, only which bouquet it belongs to.
+        if (section == AppSection.MOVIES || section == AppSection.SERIES) {
+            val content =
+                AppContent.Channels(
+                    sourceId = source.id,
+                    sourceName = source.name,
+                    // Empty, the same value the synthetic "All" category carries — null id plus
+                    // this is the sentinel loadChannelsPageAfter and the title header both already
+                    // understand as "every title", so this needs no new case in either.
+                    categoryId = null,
+                    categoryName = "",
+                    contentType = contentType,
+                )
+            updateDestination(section, content)
+            loadInitialChannels(content)
+            return
+        }
+
         val content =
             AppContent.Categories(
                 sourceId = source.id,
@@ -2832,7 +2948,7 @@ class MainViewModel @Inject constructor(
     }
 
     private fun loadMovieDetails(content: AppContent.MovieDetails) {
-        actionJob?.cancel()
+        movieDetailsJob?.cancel()
         clearEphemeralSeries()
         mutableState.update {
             it.copy(
@@ -2843,7 +2959,7 @@ class MainViewModel @Inject constructor(
                 hasPlaybackError = false,
             )
         }
-        actionJob =
+        movieDetailsJob =
             viewModelScope.launch {
                 runCatching {
                     val providerDetails = catalogRepository.loadMovieDetails(
@@ -2910,6 +3026,7 @@ class MainViewModel @Inject constructor(
                             // Cleared so the previous title's badge and scores never linger here.
                             openTitleProviderLogoUrl = null,
                             openTitleCriticScores = null,
+                            openTitleSimilarTitles = emptyList(),
                             isMovieLoading = false,
                             hasMovieError = false,
                         )
@@ -2921,6 +3038,12 @@ class MainViewModel @Inject constructor(
                         isSeries = false,
                     )
                     loadCriticScores(
+                        content = content,
+                        title = details.title,
+                        releaseDate = details.releaseDate,
+                        isSeries = false,
+                    )
+                    loadSimilarTitles(
                         content = content,
                         title = details.title,
                         releaseDate = details.releaseDate,
@@ -3076,8 +3199,67 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /**
+     * The "you might also like" strip under the cast: franchise entries (Superman finds Superman
+     * II, III, …) and genre lookalikes alike, from TMDb.
+     *
+     * Runs after the page is drawn, exactly like the logo and critics lookups beside it — this is
+     * decoration on top of a page that already has its synopsis and cast, never something worth
+     * making the viewer wait for.
+     */
+    private fun loadSimilarTitles(
+        content: AppContent,
+        title: String,
+        releaseDate: String?,
+        isSeries: Boolean,
+    ) {
+        viewModelScope.launch {
+            val metadataKey = activeMetadataKey()
+            if (metadataKey.isNullOrBlank()) {
+                mutableState.update { it.copy(openTitleSimilarTitles = emptyList()) }
+                return@launch
+            }
+            val similar =
+                withContext(ioDispatcher) {
+                    runCatching {
+                        val client =
+                            TmdbClient(
+                                apiKey = metadataKey,
+                                client = okHttpClient,
+                                language = Locale.getDefault().toLanguageTag(),
+                            )
+                        val year = releaseDate?.take(4)?.toIntOrNull()
+                        val cleaned = title.compatibilityTitlePrefix()
+                        val tmdbId =
+                            client.findAudienceScore(cleaned, year, isSeries)?.tmdbId
+                                ?: client.findAudienceScore(cleaned, null, isSeries)?.tmdbId
+                                ?: return@runCatching emptyList()
+                        client.similarTitles(tmdbId, isSeries)
+                    }.getOrDefault(emptyList())
+                }
+            // Guarded for the same reason the logo lookup is: leaving the page before this returns
+            // must not attach another title's recommendations to whatever is open now.
+            if (mutableState.value.content != content) return@launch
+            mutableState.update {
+                it.copy(
+                    openTitleSimilarTitles =
+                        similar.map { discovered ->
+                            PersonCreditUi(
+                                title = discovered.title,
+                                year = discovered.year,
+                                posterUrl = discovered.posterUrl,
+                                character = null,
+                                externalId = discovered.id.toString(),
+                                isSeries = discovered.isSeries,
+                            )
+                        },
+                )
+            }
+        }
+    }
+
     private fun loadSeriesDetails(content: AppContent.SeriesDetails) {
-        actionJob?.cancel()
+        seriesDetailsJob?.cancel()
         clearEphemeralSeries()
         mutableState.update {
             it.copy(
@@ -3089,7 +3271,7 @@ class MainViewModel @Inject constructor(
                 hasPlaybackError = false,
             )
         }
-        actionJob =
+        seriesDetailsJob =
             viewModelScope.launch {
                 runCatching {
                     catalogRepository.loadSeriesDetails(
@@ -3105,6 +3287,8 @@ class MainViewModel @Inject constructor(
                             seriesDetails = seriesUi,
                             isSeriesLoading = false,
                             hasSeriesError = false,
+                            // Cleared so the previous series' strip never lingers on this one.
+                            openTitleSimilarTitles = emptyList(),
                         )
                     }
                     hydrateDownloadStates(
@@ -3120,6 +3304,7 @@ class MainViewModel @Inject constructor(
                     // viewer came for against something they merely notice.
                     loadProviderLogo(content, seriesUi.title, seriesUi.releaseDate, isSeries = true)
                     loadCriticScores(content, seriesUi.title, seriesUi.releaseDate, isSeries = true)
+                    loadSimilarTitles(content, seriesUi.title, seriesUi.releaseDate, isSeries = true)
                 }.onFailure { error ->
                     if (error is CancellationException) return@onFailure
                     logger.error(TAG, "Could not load series details", error)
@@ -3245,6 +3430,7 @@ class MainViewModel @Inject constructor(
         catalogJob?.cancel()
         pageJob?.cancel()
         nextChannelCursor = null
+        channelCategoryNames = emptyMap()
         mutableState.update {
             it.copy(
                 channels = emptyList(),
@@ -3263,7 +3449,25 @@ class MainViewModel @Inject constructor(
                 hasPlaybackError = false,
             )
         }
-        loadChannelsPage(content = content, cursor = null, append = false)
+        if (content.categoryId == null) {
+            // Awaited before the first page rather than fired in parallel: the category list is a
+            // handful of rows, cheap next to the tens of thousands a catalogue can hold, and
+            // resolving it after the first page landed would leave that page's own cards and the
+            // genre filter both blank until the *second* page arrived.
+            catalogJob =
+                viewModelScope.launch {
+                    channelCategoryNames =
+                        runCatching {
+                            catalogRepository.observeCategories(content.sourceId, content.contentType)
+                                .first()
+                                .associate { category -> category.id to category.name }
+                        }.getOrDefault(emptyMap())
+                    if (mutableState.value.content != content) return@launch
+                    loadChannelsPage(content = content, cursor = null, append = false)
+                }
+        } else {
+            loadChannelsPage(content = content, cursor = null, append = false)
+        }
     }
 
     private fun loadChannelsPage(
@@ -3295,7 +3499,17 @@ class MainViewModel @Inject constructor(
                     mutableState.update { state ->
                         val incoming =
                             page.items.map { channel ->
-                                channel.toCatalogUi(content.categoryName)
+                                // "Every title" (categoryId null) mixes rows from every category,
+                                // so each row's own category has to be resolved individually — the
+                                // fixed content.categoryName is "" there and would blank out both
+                                // the card's genre and the genre filter for every row.
+                                val categoryName =
+                                    if (content.categoryId == null) {
+                                        channel.categoryId?.let(channelCategoryNames::get).orEmpty()
+                                    } else {
+                                        content.categoryName
+                                    }
+                                channel.toCatalogUi(categoryName)
                             }.filterKidsContentIfNeeded(state.activeProfile)
                         state.copy(
                             channels =
@@ -3442,7 +3656,8 @@ class MainViewModel @Inject constructor(
                     val metadataConfigured = effectiveKey != null
                     // One request for the whole region's services, so every badge in the app can
                     // draw a real mark without asking TMDb about each title it belongs to.
-                    launch {
+                    providerLogoJob?.cancel()
+                    providerLogoJob = launch {
                         runCatching { providerLogoCatalogue.ensureLoaded(effectiveKey) }
                             .onFailure { error ->
                                 logger.error(TAG, "Could not load the provider logos", error)
@@ -3717,7 +3932,11 @@ class MainViewModel @Inject constructor(
                     identity = identity,
                     title = title,
                     artworkUrl = artwork,
-                    releaseDate = releaseDate,
+                    // Converted at the boundary: this view model's own ReminderTarget stays
+                    // java.time.LocalDate, while the repository below speaks kotlinx.datetime.
+                    releaseDate = releaseDate?.let {
+                        kotlinx.datetime.LocalDate(it.year, it.monthValue, it.dayOfMonth)
+                    },
                 )
             }.onFailure { error -> logger.error(TAG, "Could not toggle the reminder", error) }
             // Re-applied on every toggle rather than only on the first. The daily digest is unique
@@ -3950,6 +4169,13 @@ class MainViewModel @Inject constructor(
                     mutableState.update { it.copy(providerLogos = logos) }
                 }
         }
+        viewModelScope.launch {
+            providerLogoCatalogue.discoveredProviders
+                .catch { emit(emptyList()) }
+                .collect { providers ->
+                    mutableState.update { it.copy(discoveredProviders = providers) }
+                }
+        }
     }
 
     private fun observeCacheSettings() {
@@ -3980,7 +4206,7 @@ class MainViewModel @Inject constructor(
                 if (progress.total > 0) progress
                 else progress.copy(done = mark.done, total = mark.total)
             }.collect { progress ->
-                mutableState.update { it.copy(cacheProgress = progress) }
+                mutableState.update { it.copy(cacheProgress = progress.copy(bytesPerSecond = measureCacheFillRate(progress))) }
                 // Re-measured when the fill settles rather than on every tick: walking the
                 // directory is far dearer than the progress update that prompted it.
                 if (!progress.isRunning) refreshCacheUsage()
@@ -3998,6 +4224,33 @@ class MainViewModel @Inject constructor(
      * assertion fail on a `getApplicationContext` that is not mocked. Failing quietly here is also
      * the honest behaviour: a cache is an optimisation, and the app works without its progress bar.
      */
+    /**
+     * Bytes per second for the artwork cache fill, measured between this reading and the last one
+     * — the same rule the video download rate uses, and for the same reason: a rate averaged from
+     * the very start would keep reporting an early fast burst long after the connection slowed.
+     *
+     * Null while not running (nothing to measure) or before two readings far enough apart have
+     * arrived (an interval is required, not invented from one sample).
+     */
+    private fun measureCacheFillRate(progress: CacheFillProgress): Long? {
+        if (!progress.isRunning) {
+            cacheFillRateSample = null
+            return null
+        }
+        val now = System.currentTimeMillis()
+        val previous = cacheFillRateSample
+        val elapsedMillis = previous?.let { now - it.atEpochMillis } ?: 0L
+        if (previous == null || elapsedMillis < RATE_SAMPLE_MIN_MILLIS) {
+            if (previous == null) cacheFillRateSample = DownloadRateSample(progress.bytesWritten, now)
+            // Keeps the last figure while the next sample accumulates, so the number does not
+            // blink in and out between reports.
+            return mutableState.value.cacheProgress.bytesPerSecond
+        }
+        cacheFillRateSample = DownloadRateSample(progress.bytesWritten, now)
+        val delta = progress.bytesWritten - previous.bytes
+        return if (delta > 0L) delta * 1000L / elapsedMillis else null
+    }
+
     private fun cacheFillProgress(): Flow<CacheFillProgress> =
         flow {
             val progress =
@@ -4178,9 +4431,9 @@ class MainViewModel @Inject constructor(
 
     private fun loadFavorites() {
         val profileId = mutableState.value.activeProfile?.id ?: return
-        actionJob?.cancel()
+        loadFavoritesJob?.cancel()
         mutableState.update { it.copy(isCatalogLoading = true, hasCatalogError = false) }
-        actionJob = viewModelScope.launch {
+        loadFavoritesJob = viewModelScope.launch {
             runCatching { userLibraryRepository.loadFavorites(profileId) }
                 .onSuccess { items ->
                     mutableState.update {
@@ -4621,10 +4874,18 @@ class MainViewModel @Inject constructor(
     private fun cancelCatalogWork() {
         catalogJob?.cancel()
         pageJob?.cancel()
-        actionJob?.cancel()
+        personJob?.cancel()
+        playbackJob?.cancel()
+        movieDetailsJob?.cancel()
+        seriesDetailsJob?.cancel()
+        loadFavoritesJob?.cancel()
         catalogJob = null
         pageJob = null
-        actionJob = null
+        personJob = null
+        playbackJob = null
+        movieDetailsJob = null
+        seriesDetailsJob = null
+        loadFavoritesJob = null
         nextChannelCursor = null
     }
 
@@ -4853,6 +5114,9 @@ class MainViewModel @Inject constructor(
          * still typing.
          */
         const val MIN_INSPECTABLE_KEY = 6
+
+        /** Display name for a source the seller assigned remotely, never typed by the customer. */
+        const val PROVISIONED_SOURCE_NAME = "IPTV BURO"
 
         /**
          * How many home titles get a real synopsis fetched.

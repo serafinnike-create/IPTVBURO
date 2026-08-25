@@ -17,6 +17,9 @@ enum class AndroidDeviceProofAction(val wireValue: String) {
     REGISTER("register"),
     VALIDATE("validate"),
     REDEEM("redeem"),
+
+    /** Claiming or confirming a playlist the seller assigned from the admin panel. */
+    PROVISIONING("provisioning"),
 }
 
 /**

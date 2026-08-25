@@ -10,6 +10,7 @@ import com.lucasserafin94.iptvburo.data.local.entity.ChannelEntity
 import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
 import com.lucasserafin94.iptvburo.data.mapper.PlaylistEntityMapper
 import com.lucasserafin94.iptvburo.data.mapper.toDomain
+import com.lucasserafin94.iptvburo.data.security.ChannelFieldCipher
 import com.lucasserafin94.iptvburo.data.security.SourceConnectionStore
 import com.lucasserafin94.iptvburo.di.IoDispatcher
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
@@ -31,7 +32,9 @@ import com.lucasserafin94.iptvburo.stalker.StalkerMacAddress
 import com.lucasserafin94.iptvburo.xtream.XtreamClient
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import com.lucasserafin94.iptvburo.xtream.XtreamCredentials
+import com.lucasserafin94.iptvburo.xtream.XtreamEpgProgram
 import com.lucasserafin94.iptvburo.xtream.XtreamEpisode
+import com.lucasserafin94.iptvburo.xtream.XtreamShortEpg
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.UUID
@@ -43,6 +46,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -57,9 +61,23 @@ class RoomCatalogRepository @Inject constructor(
     private val xtreamClient: XtreamClient,
     private val stalkerClient: StalkerClient,
     private val sourceConnectionStore: SourceConnectionStore,
+    private val channelFieldCipher: ChannelFieldCipher,
     private val logger: AppLogger,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : CatalogRepository {
+    /**
+     * The last Xtream source's multi-day guide, indexed by channel id — filled once per source per
+     * process and reused, never per channel opened. Keyed alongside the source it was fetched for
+     * so switching sources (or reloading the same one) does not answer from a stale one; no TTL
+     * beyond that, since the guide is a bonus and re-fetching it costs a real request against
+     * something that can be tens of megabytes.
+     */
+    @Volatile
+    private var xmltvGuideCache: Map<String, List<XtreamEpgProgram>>? = null
+
+    @Volatile
+    private var xmltvGuideCacheSourceId: String? = null
+
     override fun observeSources(): Flow<List<Source>> =
         sourceDao.observeAll().map { entities -> entities.map(SourceEntity::toDomain) }
 
@@ -181,7 +199,11 @@ class RoomCatalogRepository @Inject constructor(
 
     override suspend fun getChannel(id: String): Channel? = withContext(ioDispatcher) {
         val entity = channelDao.getById(id) ?: return@withContext null
-        val channel = entity.toDomain()
+        // Decrypted here, at the one point that resolves a row for playback — not in
+        // ChannelEntity.toDomain(), which the catalogue listing also calls for every row on a
+        // page. A source other than local M3U never wrote an encrypted value into these fields,
+        // so decrypting is a harmless no-op for Xtream and Stalker rows.
+        val channel = entity.toDomain().decryptPlaybackFields()
         if (channel.contentType !in PLAYABLE_XTREAM_TYPES) {
             return@withContext channel
         }
@@ -218,7 +240,9 @@ class RoomCatalogRepository @Inject constructor(
         contentType: CatalogContentType,
     ): Channel? =
         withContext(ioDispatcher) {
-            channelDao.findByProviderItem(sourceId, providerItemId, contentType.name)?.toDomain()
+            channelDao.findByProviderItem(sourceId, providerItemId, contentType.name)
+                ?.toDomain()
+                ?.decryptPlaybackFields()
         }
 
     override suspend fun findCompatibleMovieAlternative(
@@ -230,8 +254,21 @@ class RoomCatalogRepository @Inject constructor(
             sourceId = sourceId,
             titlePrefix = titlePrefix.trim(),
             excludeChannelId = excludeChannelId,
-    )?.toDomain()
+        )?.toDomain()?.decryptPlaybackFields()
     }
+
+    /**
+     * Decrypts the fields [ChannelFieldCipher] may have encrypted at import time.
+     *
+     * A no-op for any row this cipher did not write — every Xtream/Stalker row, and every local
+     * M3U row imported before this cipher existed — so it is safe to call on every row this
+     * repository hands to a caller that might play it, not only ones known to be encrypted.
+     */
+    private fun Channel.decryptPlaybackFields(): Channel =
+        copy(
+            streamUri = channelFieldCipher.decrypt(streamUri).orEmpty(),
+            requestHeaders = requestHeaders.mapValues { (_, value) -> channelFieldCipher.decrypt(value).orEmpty() },
+        )
 
     override suspend fun loadForReleaseYear(
         sourceId: String,
@@ -256,9 +293,24 @@ class RoomCatalogRepository @Inject constructor(
             val source = sourceDao.getById(sourceId) ?: return@withContext LiveEpg()
             if (source.type != SourceType.XTREAM.name) return@withContext LiveEpg()
             val credentials = sourceConnectionStore.readXtream(sourceId) ?: return@withContext LiveEpg()
-            // The whole schedule, asked for at the provider's maximum rather than the default of
-            // eight: this is what a guide is, and the request costs the same either way.
-            val epg = xtreamClient.shortEpg(credentials, providerStreamId, limit = SCHEDULE_LIMIT)
+
+            // The multi-day guide first, when the provider publishes one: get_short_epg is capped
+            // by the panel itself to a few hours regardless of the limit asked for, so it can never
+            // show more than "today" even when that is what the viewer actually wants. Matched on
+            // the stream's own provider id, because most Xtream panels name xmltv.php's <channel>
+            // elements with that same id — this app does not capture a separate epg_channel_id
+            // today, so this is the one join available without a new column.
+            val guidePrograms = xmltvGuideFor(sourceId, credentials)[providerStreamId.trim().lowercase()]
+            val epg =
+                if (!guidePrograms.isNullOrEmpty()) {
+                    XtreamShortEpg(programs = guidePrograms, skippedProgramCount = 0)
+                } else {
+                    // The whole schedule, asked for at the provider's maximum rather than the
+                    // default of eight: this is what a guide is, and the request costs the same
+                    // either way. Falls back here whenever the guide has nothing for this channel
+                    // — no xmltv.php published at all, or one that names channels differently.
+                    xtreamClient.shortEpg(credentials, providerStreamId, limit = SCHEDULE_LIMIT)
+                }
             val (now, next) = epg.nowAndNext(System.currentTimeMillis() / 1_000L)
             LiveEpg(
                 now = now?.let { LiveProgram(it.title, it.description, it.startEpochSeconds, it.endEpochSeconds) },
@@ -269,6 +321,23 @@ class RoomCatalogRepository @Inject constructor(
                         .map { LiveProgram(it.title, it.description, it.startEpochSeconds, it.endEpochSeconds) },
             )
         }
+
+    /**
+     * The cached multi-day guide for [sourceId], fetching it once per source rather than once per
+     * channel opened — a guide covers every channel a panel has, so the first lookup after a
+     * source is opened (or re-opened after being switched away from) pays for all the ones after
+     * it in the same session.
+     */
+    private fun xmltvGuideFor(
+        sourceId: String,
+        credentials: XtreamCredentials,
+    ): Map<String, List<XtreamEpgProgram>> {
+        xmltvGuideCache?.takeIf { xmltvGuideCacheSourceId == sourceId }?.let { return it }
+        val guide = runCatching { xtreamClient.xmltvGuide(credentials) }.getOrDefault(emptyMap())
+        xmltvGuideCache = guide
+        xmltvGuideCacheSourceId = sourceId
+        return guide
+    }
 
     override suspend fun importPlaylist(
         displayName: String,
@@ -524,6 +593,26 @@ class RoomCatalogRepository @Inject constructor(
         result
     }
 
+    /**
+     * Compares against every stored Xtream source's decrypted credentials, because [SourceDao]
+     * has no query over them — they exist only inside [sourceConnectionStore]'s encrypted vault,
+     * by design, so there is nothing to match against in SQL. The device only ever holds a
+     * handful of sources, so decrypting each one here costs nothing worth avoiding.
+     */
+    override suspend fun hasXtreamSource(
+        serverUrl: String,
+        username: String,
+        password: String,
+    ): Boolean = withContext(ioDispatcher) {
+        sourceDao.observeAll().first()
+            .asSequence()
+            .filter { it.type == SourceType.XTREAM.name }
+            .mapNotNull { sourceConnectionStore.readXtream(it.id) }
+            .any {
+                it.serverUrl == serverUrl && it.username == username && it.password == password
+            }
+    }
+
     override suspend fun loadSeriesDetails(
         sourceId: String,
         providerSeriesId: String,
@@ -753,6 +842,7 @@ class RoomCatalogRepository @Inject constructor(
             var sortOrder = 0
             for (category in categoriesByProviderKey.values.filter { it.contentType == contentType.name }) {
                 var page = 1
+                var collectedInCategory = 0
                 while (page <= MAX_STALKER_PAGES) {
                     currentCoroutineContext().ensureActive()
                     val result =
@@ -764,6 +854,7 @@ class RoomCatalogRepository @Inject constructor(
                             page = page,
                         )
                     if (result.items.isEmpty()) break
+                    collectedInCategory += result.items.size
                     for (item in result.items) {
                         val command = item.command
                         if (command.isNullOrBlank()) {
@@ -793,7 +884,7 @@ class RoomCatalogRepository @Inject constructor(
                                 rating = item.rating,
                             )
                     }
-                    if (collected.size >= result.totalItems || result.items.size < STALKER_PAGE_HINT) break
+                    if (collectedInCategory >= result.totalItems || result.items.size < STALKER_PAGE_HINT) break
                     page += 1
                 }
             }

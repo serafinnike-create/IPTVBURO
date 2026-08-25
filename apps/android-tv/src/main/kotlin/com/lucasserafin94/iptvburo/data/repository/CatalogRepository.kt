@@ -126,6 +126,19 @@ interface CatalogRepository {
     ): XtreamImportResult
 
     /**
+     * Whether an Xtream source with exactly this address, username and password is already
+     * imported.
+     *
+     * Exists for remote provisioning: the server hands back the same assignment on every launch
+     * until the seller changes it, and [importXtream] always creates a new source rather than
+     * updating one in place, so calling it unconditionally would duplicate the source on every
+     * app start. The password has to be part of the comparison — "the provider's address went
+     * down, the seller entered a new password for it" is the case the feature exists for, and
+     * matching on address and username alone would silently ignore exactly that update.
+     */
+    suspend fun hasXtreamSource(serverUrl: String, username: String, password: String): Boolean = false
+
+    /**
      * Imports a Stalker/Ministra portal.
      *
      * Default implementation throws so existing fakes in tests keep compiling; the Room repository

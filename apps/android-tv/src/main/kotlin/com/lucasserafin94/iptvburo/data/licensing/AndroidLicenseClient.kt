@@ -13,9 +13,10 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.time.Duration
-import java.time.Instant
 import java.util.concurrent.TimeUnit
+import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 import okhttp3.MediaType.Companion.toMediaType
@@ -263,6 +264,88 @@ class AndroidLicenseClient @Inject constructor(
         }.getOrDefault(GooglePlayPurchaseSubmission.Unreachable)
     }
 
+    /**
+     * Asks whether the seller has assigned this device a playlist from the admin panel.
+     *
+     * Authenticated the same way as [check]'s registration path — device id, installation id and
+     * pinned public key, signed with a nonce — because the device code alone is not a secret: it
+     * is printed on the licence screen for the buy flow, so anyone who saw a photo of that screen
+     * would have it. Without proof of possession, that photo would be enough to steal a stranger's
+     * Xtream password; with it, only the physical device that owns the Keystore key can claim one.
+     *
+     * Null whenever there is nothing to apply or the server could not be reached — both are the
+     * ordinary case on every launch of every device that was never provisioned this way, so neither
+     * is worth surfacing as an error.
+     */
+    override fun fetchAssignedPlaylist(): AssignedPlaylist? {
+        val identity = runCatching { AndroidDeviceIdentityProvider.getOrCreate(context) }.getOrNull()
+            ?: return null
+        val nonce = freshNonce()
+        val body =
+            runCatching {
+                JsonObject().apply {
+                    addProperty("deviceId", identity.deviceId)
+                    addProperty("nonce", nonce)
+                    addProperty("proof", identity.proof(AndroidDeviceProofAction.PROVISIONING, nonce))
+                    addProperty("installationId", identity.installationId)
+                    addProperty("publicKey", identity.publicKeyDerBase64)
+                }
+            }.getOrNull() ?: return null
+
+        return runCatching {
+            http.newCall(
+                Request.Builder()
+                    .url(AndroidLicenseEndpoints.PROVISIONING_CLAIM)
+                    .post(body.toString().toRequestBody(JSON))
+                    .build(),
+            ).execute().use { response ->
+                // 204 is the common case: nothing was ever assigned to this device.
+                if (!response.isSuccessful) return@use null
+                val json = runCatching { JsonParser.parseString(response.body.string()).asJsonObject }
+                    .getOrNull() ?: return@use null
+                val source = json.get("source")?.takeUnless { it.isJsonNull }?.asJsonObject ?: return@use null
+                AssignedPlaylist(
+                    serverUrl = source.get("server")?.asString?.takeIf(String::isNotBlank) ?: return@use null,
+                    username = source.get("username")?.asString?.takeIf(String::isNotBlank) ?: return@use null,
+                    password = source.get("password")?.asString?.takeIf(String::isNotBlank) ?: return@use null,
+                )
+            }
+        }.getOrNull()
+    }
+
+    /**
+     * Tells the server this device applied (or failed to apply) the playlist it claimed.
+     *
+     * Deliberately its own call, and deliberately best-effort. The panel's pending record survives
+     * until this succeeds, so a confirmation lost to a dropped connection simply means the same
+     * playlist is handed over again next launch — a redundant import, never a silently missing one.
+     */
+    override fun confirmAssignedPlaylist(failureCode: String?) {
+        val identity = runCatching { AndroidDeviceIdentityProvider.getOrCreate(context) }.getOrNull()
+            ?: return
+        val nonce = freshNonce()
+        val body =
+            runCatching {
+                JsonObject().apply {
+                    addProperty("deviceId", identity.deviceId)
+                    addProperty("nonce", nonce)
+                    addProperty("proof", identity.proof(AndroidDeviceProofAction.PROVISIONING, nonce))
+                    addProperty("installationId", identity.installationId)
+                    addProperty("publicKey", identity.publicKeyDerBase64)
+                    if (failureCode != null) addProperty("errorCode", failureCode)
+                }
+            }.getOrNull() ?: return
+
+        runCatching {
+            http.newCall(
+                Request.Builder()
+                    .url(AndroidLicenseEndpoints.PROVISIONING_CONFIRM)
+                    .post(body.toString().toRequestBody(JSON))
+                    .build(),
+            ).execute().close()
+        }
+    }
+
     private fun acceptLive(
         licence: SignedAndroidLicense,
         deviceId: String,
@@ -378,7 +461,7 @@ class AndroidLicenseClient @Inject constructor(
 }
 
 interface AndroidLicenseService {
-    fun check(now: Instant = Instant.now()): AndroidLicenseStatus
+    fun check(now: Instant = Clock.System.now()): AndroidLicenseStatus
 
     /**
      * Redeems an activation key.
@@ -386,7 +469,7 @@ interface AndroidLicenseService {
      * Returns why it failed rather than a bare null, so the screen can tell a mistyped key from a
      * key already in use from having no signal — three problems with three different remedies.
      */
-    fun redeem(key: String, now: Instant = Instant.now()): RedeemOutcome
+    fun redeem(key: String, now: Instant = Clock.System.now()): RedeemOutcome
 
     /**
      * What [key] is, without redeeming it. Null when the server could not be asked.
@@ -398,8 +481,30 @@ interface AndroidLicenseService {
     fun submitGooglePlayPurchase(
         purchaseToken: String,
         accountId: String,
-        now: Instant = Instant.now(),
+        now: Instant = Clock.System.now(),
     ): GooglePlayPurchaseSubmission = GooglePlayPurchaseSubmission.Unreachable
+
+    /** The playlist the seller assigned to this device from the admin panel, if any. */
+    fun fetchAssignedPlaylist(): AssignedPlaylist? = null
+
+    /** Reports whether [fetchAssignedPlaylist]'s result was applied, so the panel stops offering it. */
+    fun confirmAssignedPlaylist(failureCode: String? = null) {}
+}
+
+/**
+ * An Xtream source the seller configured for this specific device from the admin panel.
+ *
+ * [toString] is redacted for the same reason every other credential holder in this app is: this
+ * value is briefly held in memory between being claimed from the server and being handed to
+ * [com.lucasserafin94.iptvburo.data.repository.CatalogRepository.importXtream], and a crash log or
+ * accidental log line must not be the second place this password ever appears in cleartext.
+ */
+data class AssignedPlaylist(
+    val serverUrl: String,
+    val username: String,
+    val password: String,
+) {
+    override fun toString(): String = "AssignedPlaylist(serverUrl=<redacted>, username=<redacted>, password=<redacted>)"
 }
 
 sealed interface GooglePlayPurchaseSubmission {
@@ -649,8 +754,8 @@ data class AndroidLicenseStatus(
 
 private fun Duration.roundedUpDays(): Long =
     when {
-        isNegative || isZero -> 0L
-        else -> (toMinutes() + 1_439L) / 1_440L
+        isNegative() || this == Duration.ZERO -> 0L
+        else -> (inWholeMinutes + 1_439L) / 1_440L
     }
 
 private class AndroidLicenseStore(context: Context) {
@@ -758,6 +863,8 @@ object AndroidLicenseEndpoints {
      */
     const val KEY_INFO = "https://$DOMAIN/v1/key-info"
     const val GOOGLE_PLAY_PURCHASE = "https://$DOMAIN/v1/google-play/purchase"
+    const val PROVISIONING_CLAIM = "https://$DOMAIN/v1/provisioning/claim"
+    const val PROVISIONING_CONFIRM = "https://$DOMAIN/v1/provisioning/confirm"
     const val SERVER_PUBLIC_KEY =
         "MCowBQYDK2VwAyEAXm01dKxc4kXNYaSYnVL0isza1EnYn+nYjyfNhnWoILw="
 
