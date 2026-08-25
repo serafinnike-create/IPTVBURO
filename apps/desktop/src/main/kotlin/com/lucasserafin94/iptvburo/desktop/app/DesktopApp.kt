@@ -250,6 +250,10 @@ fun DesktopApp(
     // round trip the customer pays for in latency.
     LaunchedEffect(Unit) {
         appState.checkLicense()
+        // A connection a reseller set up for this machine, if there is one. Almost every launch
+        // finds nothing, so this is silent; it runs after the licence check because the two share
+        // the same server and there is no reason to open two connections at once.
+        appState.collectProvisionedSource()
     }
 
     // The services' own marks, fetched once and read by every badge below through a

@@ -83,9 +83,9 @@ class ProvisioningClientTest {
         withServer(sourceResponse()) { client, _ ->
             val source = client.claim()
             assertNotNull(source)
-            assertEquals("http://provedor.invalid:8080", source.server)
-            assertEquals("cliente", source.username)
-            assertEquals("senha-do-cliente", source.password)
+            assertEquals("http://provedor.invalid:8080", String(source.server))
+            assertEquals("cliente", String(source.username))
+            assertEquals("senha-do-cliente", String(source.password))
         }
     }
 
@@ -265,13 +265,26 @@ class ProvisioningClientTest {
     }
 
     @Test
+    fun `clearing wipes the credentials rather than dropping the reference`() {
+        // Why these are char arrays at all: a String cannot be cleared, so a password put in one
+        // survives in the heap — and in any crash dump — until the collector happens to reclaim it.
+        withServer(sourceResponse()) { client, _ ->
+            val source = assertNotNull(client.claim())
+            source.clear()
+            assertEquals(" ".repeat(source.password.size), String(source.password))
+            assertEquals(" ".repeat(source.username.size), String(source.username))
+            assertEquals(" ".repeat(source.server.size), String(source.server))
+        }
+    }
+
+    @Test
     fun `the credentials never appear in a printed form`() {
         // This type reaches a log by accident, which is exactly what the rule is for.
         val printed =
             ProvisionedSource(
-                server = "http://provedor.invalid",
-                username = "cliente",
-                password = "senha-secreta",
+                server = "http://provedor.invalid".toCharArray(),
+                username = "cliente".toCharArray(),
+                password = "senha-secreta".toCharArray(),
             ).toString()
         assertFalse(printed.contains("senha-secreta"), "the password must never be printed")
         assertFalse(printed.contains("cliente"), "nor the username")

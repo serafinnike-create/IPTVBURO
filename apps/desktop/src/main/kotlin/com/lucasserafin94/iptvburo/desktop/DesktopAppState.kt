@@ -11,6 +11,8 @@ import com.lucasserafin94.iptvburo.desktop.data.CatalogLoadProgress
 import com.lucasserafin94.iptvburo.desktop.data.FtpPlaylistReader
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.XmltvGuideSource
+import com.lucasserafin94.iptvburo.desktop.license.DeviceFingerprint
+import com.lucasserafin94.iptvburo.desktop.license.ProvisioningClient
 import com.lucasserafin94.iptvburo.desktop.data.MusicLibraryLoader
 import com.lucasserafin94.iptvburo.desktop.data.RemotePlaylistProtocol
 import com.lucasserafin94.iptvburo.desktop.data.RemotePlaylistSource
@@ -191,6 +193,8 @@ class DesktopAppState(
     private val photoStore: ProfilePhotoStore = ProfilePhotoStore(),
     /** The guide for playlists that name one in `url-tvg`. Xtream brings its own. */
     private val xmltvGuideSource: XmltvGuideSource = XmltvGuideSource(),
+    /** Collects a connection a reseller set up for this machine. Usually finds nothing. */
+    private val provisioningClient: ProvisioningClient = ProvisioningClient(DeviceFingerprint),
     private val musicLoader: MusicLibraryLoader = MusicLibraryLoader(),
     private val playCountStore: MusicPlayCountStore = MusicPlayCountStore(),
     /**
@@ -5643,6 +5647,71 @@ class DesktopAppState(
      */
     var guideUnavailable by mutableStateOf(false)
         private set
+
+    /**
+     * Set when an operator's connection was collected and saved this launch.
+     *
+     * Only so the onboarding screen can say the list is already there rather than asking the
+     * viewer to type one in.
+     */
+    var provisionedSourceLabel by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * Collects a connection a reseller set up for this machine, and saves it as a new source.
+     *
+     * Runs once at startup. Almost every launch finds nothing — that is every machine no operator
+     * has ever configured — so it must be silent and must not delay the window.
+     *
+     * **Added, never substituted.** Whatever the viewer already had stays exactly where it was:
+     * this arrives from outside the machine, and a remote action that deletes someone's own
+     * playlists is not one this app performs. The new source becomes the selected one, which is
+     * what the customer who just asked for help is expecting to see.
+     */
+    suspend fun collectProvisionedSource() {
+        val source =
+            try {
+                withContext(Dispatchers.IO) { provisioningClient.claim() }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Exception) {
+                // Nothing was asked for and nothing is broken; the app opens as usual.
+                return
+            } ?: return
+
+        try {
+            val entry = sourceLibrary.create(String(source.server).hostLabel())
+            withContext(Dispatchers.IO) {
+                sourceLibrary.store(entry.id).save(source.server, source.username, source.password)
+            }
+            provisionedSourceLabel = entry.label
+            // Only once it is actually saved. Confirming at the moment of delivery would leave a
+            // customer whose app closed in between with no list and no way to ask again.
+            withContext(Dispatchers.IO) { provisioningClient.confirmApplied() }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Exception) {
+            // Reported so the seller sees it in their panel: their customer can only say that it
+            // did not work, and the wrong password they typed is visible only on their side.
+            withContext(Dispatchers.IO) {
+                runCatching { provisioningClient.reportFailure("apply_failed") }
+            }
+        } finally {
+            // The credentials are in the protected store now, or the attempt failed; either way
+            // they have no reason to stay in this process's memory.
+            source.clear()
+        }
+    }
+
+    /**
+     * A name for the list, taken from the address.
+     *
+     * The seller names nothing — their form has three fields, none of them a label — so the host
+     * is what is left. Never the whole address: it is shown on screen and can carry a query.
+     */
+    private fun String.hostLabel(): String =
+        runCatching { java.net.URI(this).host }.getOrNull()?.takeIf(String::isNotBlank)
+            ?: "Minha lista"
 
     /**
      * Loads the guide a freshly imported playlist points at, if it points at one.
