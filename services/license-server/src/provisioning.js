@@ -132,6 +132,29 @@ function validPassword(value) {
 }
 
 /**
+ * Uma chave de API, opcional.
+ *
+ * Vai junto porque resolve o mesmo problema pela mesma pessoa: quem não consegue
+ * cadastrar um servidor Xtream também não vai criar conta no TMDb e colar uma
+ * chave. Quem vende pode criar a conta e entregar o aplicativo já mostrando capa,
+ * elenco e sinopse.
+ *
+ * Devolve `null` tanto para "não enviou" quanto para "enviou algo inválido", e o
+ * chamador trata os dois do mesmo jeito: a lista é aplicada e a chave não. Uma
+ * chave errada nunca deve impedir o cliente de assistir.
+ *
+ * O limite cobre a v4 do TMDb, que é um token de 239 caracteres — bem maior do
+ * que a chave v3 de 32 que a maioria copia.
+ */
+function validApiKey(value) {
+  const text = String(value ?? '').trim();
+  if (!text || text.length > 400) return null;
+  // Só o alfabeto que essas chaves usam. Um valor com espaço ou aspas dentro não
+  // é uma chave: é engano de recorte, e viraria uma URL malformada no aplicativo.
+  return /^[A-Za-z0-9._-]+$/.test(text) ? text : null;
+}
+
+/**
  * Guarda o que a televisão vai aplicar.
  *
  * Um aparelho tem no máximo um provisionamento pendente: o painel sobrescreve o
@@ -145,7 +168,19 @@ export async function saveProvisioning(deviceId, body, actor, env) {
   const password = validPassword(body?.password);
   if (!server || !username || !password) return { error: 'bad_credentials' };
 
-  const plaintext = JSON.stringify({ server, username, password });
+  // Opcionais, e omitidas quando ausentes em vez de irem como null: o aplicativo
+  // trata "campo ausente" como "não mexer na chave que já está lá", de modo que
+  // reenviar só o endereço não apaga a chave que o cliente configurou sozinho.
+  const metadataKey = validApiKey(body?.metadataKey);
+  const criticsKey = validApiKey(body?.criticsKey);
+
+  const plaintext = JSON.stringify({
+    server,
+    username,
+    password,
+    ...(metadataKey ? { metadataKey } : {}),
+    ...(criticsKey ? { criticsKey } : {}),
+  });
   if (new TextEncoder().encode(plaintext).length > MAX_PAYLOAD_BYTES) {
     return { error: 'payload_too_large' };
   }
@@ -154,8 +189,9 @@ export async function saveProvisioning(deviceId, body, actor, env) {
   await env.DB.prepare(
     `INSERT INTO device_provisioning
        (device_id, payload, payload_nonce, server_label, username_label, state,
-        created_at, created_by, applied_at, attempts, last_error)
-     VALUES (?1, ?2, ?3, ?4, ?5, 'PENDING', ?6, ?7, NULL, 0, NULL)
+        created_at, created_by, applied_at, attempts, last_error,
+        has_metadata_key, has_critics_key)
+     VALUES (?1, ?2, ?3, ?4, ?5, 'PENDING', ?6, ?7, NULL, 0, NULL, ?8, ?9)
      ON CONFLICT(device_id) DO UPDATE SET
        payload = excluded.payload,
        payload_nonce = excluded.payload_nonce,
@@ -166,10 +202,15 @@ export async function saveProvisioning(deviceId, body, actor, env) {
        created_by = excluded.created_by,
        applied_at = NULL,
        attempts = 0,
-       last_error = NULL`,
-  ).bind(deviceId, sealed.payload, sealed.nonce, server, username, nowIso(), actor).run();
+       last_error = NULL,
+       has_metadata_key = excluded.has_metadata_key,
+       has_critics_key = excluded.has_critics_key`,
+  ).bind(
+    deviceId, sealed.payload, sealed.nonce, server, username, nowIso(), actor,
+    metadataKey ? 1 : 0, criticsKey ? 1 : 0,
+  ).run();
 
-  return { ok: true, server, username };
+  return { ok: true, server, username, metadataKey: !!metadataKey, criticsKey: !!criticsKey };
 }
 
 /**
@@ -182,7 +223,7 @@ export async function saveProvisioning(deviceId, body, actor, env) {
 export async function provisioningStatus(deviceId, env) {
   const row = await env.DB.prepare(
     `SELECT server_label, username_label, state, created_at, created_by, applied_at,
-            attempts, last_error
+            attempts, last_error, has_metadata_key, has_critics_key
        FROM device_provisioning WHERE device_id = ?1`,
   ).bind(deviceId).first();
   if (!row) return null;
@@ -190,6 +231,9 @@ export async function provisioningStatus(deviceId, env) {
     server: row.server_label,
     username: row.username_label,
     hasPassword: true,
+    // Só se foram enviadas, nunca o valor: o painel escreve e não lê, igual à senha.
+    metadataKey: !!row.has_metadata_key,
+    criticsKey: !!row.has_critics_key,
     state: row.state,
     createdAt: row.created_at,
     createdBy: row.created_by,

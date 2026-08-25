@@ -26,10 +26,20 @@ import {
 } from '../src/provisioning.js';
 
 const SCHEMA = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
-const MIGRATION = readFileSync(
-  new URL('../migrations/0010_device_provisioning.sql', import.meta.url),
-  'utf8',
-);
+/**
+ * As migrações posteriores ao schema, nomeadas — e todas elas.
+ *
+ * Não é a pasta inteira: `schema.sql` já traz o estado atual das tabelas antigas,
+ * e reaplicar as primeiras migrações falha com "duplicate column name". São só as
+ * que vieram depois dele.
+ *
+ * Uma migração nova precisa ser acrescentada aqui. Foi o que faltou ao criar a
+ * 0011: onze testes falharam por coluna inexistente, e o defeito estava no teste,
+ * não no código que ele deveria proteger.
+ */
+const MIGRATION = ['0010_device_provisioning.sql', '0011_provisioning_key_labels.sql']
+  .map((name) => readFileSync(new URL('../migrations/' + name, import.meta.url), 'utf8'))
+  .join('\n');
 
 class LocalD1Statement {
   constructor(database, sql) {
@@ -283,4 +293,108 @@ test('o payload de um aparelho não abre com a chave de outro', async () => {
     await PROVISIONING_INTERNALS.decryptPayload(DEVICE, sealed.payload, sealed.nonce),
     'segredo',
   );
+});
+
+test('as chaves de API vão junto, dentro do payload cifrado', async () => {
+  const env = createEnv();
+  /* Resolve o mesmo problema pela mesma pessoa: quem não cadastra um Xtream
+     também não cria conta no TMDb. Assim o aplicativo chega mostrando capa e
+     sinopse, sem o cliente configurar nada. */
+  await saveProvisioning(
+    DEVICE,
+    { ...CREDENTIAL, metadataKey: 'chave-tmdb-de-teste', criticsKey: 'chave-omdb' },
+    'dono@exemplo',
+    env,
+  );
+  const claimed = await claimProvisioning(DEVICE, env);
+  assert.equal(claimed.metadataKey, 'chave-tmdb-de-teste');
+  assert.equal(claimed.criticsKey, 'chave-omdb');
+  env.DB.close();
+});
+
+test('as chaves não ficam legíveis no banco', async () => {
+  const env = createEnv();
+  await saveProvisioning(
+    DEVICE, { ...CREDENTIAL, metadataKey: 'chave-tmdb-secreta', criticsKey: 'chave-omdb-secreta' },
+    'dono@exemplo', env,
+  );
+  /* São credenciais como a senha: existem só dentro do payload. O painel escreve
+     e nunca lê — trocar um endereço não exige recuperar a chave anterior. */
+  const row = env.DB.prepare('SELECT * FROM device_provisioning WHERE device_id = ?')
+    .bind(DEVICE).first();
+  const dump = JSON.stringify(row);
+  assert.ok(!dump.includes('chave-tmdb-secreta'));
+  assert.ok(!dump.includes('chave-omdb-secreta'));
+  env.DB.close();
+});
+
+test('o painel sabe que foram enviadas, sem poder lê-las', async () => {
+  const env = createEnv();
+  await saveProvisioning(
+    DEVICE, { ...CREDENTIAL, metadataKey: 'chave-tmdb-secreta' }, 'dono@exemplo', env,
+  );
+  const status = await provisioningStatus(DEVICE, env);
+  assert.equal(status.metadataKey, true, 'quem vendeu precisa poder dizer que mandou');
+  assert.equal(status.criticsKey, false);
+  assert.ok(!JSON.stringify(status).includes('chave-tmdb-secreta'));
+  env.DB.close();
+});
+
+test('o rótulo sobrevive à confirmação, quando o payload já sumiu', async () => {
+  const env = createEnv();
+  await saveProvisioning(
+    DEVICE, { ...CREDENTIAL, metadataKey: 'chave-tmdb' }, 'dono@exemplo', env,
+  );
+  await claimProvisioning(DEVICE, env);
+  await confirmProvisioning(DEVICE, env);
+  /* Sem coluna própria não haveria de onde deduzir isto depois: o payload é
+     esvaziado na confirmação. */
+  assert.equal((await provisioningStatus(DEVICE, env)).metadataKey, true);
+  env.DB.close();
+});
+
+test('uma lista sem chaves continua sendo aplicada', async () => {
+  const env = createEnv();
+  /* O caso comum: quem vende manda só a lista. As chaves são opcionais e a
+     ausência delas não pode impedir o cliente de assistir. */
+  const saved = await saveProvisioning(DEVICE, CREDENTIAL, 'dono@exemplo', env);
+  assert.equal(saved.ok, true);
+  const claimed = await claimProvisioning(DEVICE, env);
+  assert.deepEqual(claimed, CREDENTIAL, 'nem metadataKey nem criticsKey aparecem');
+  assert.equal((await provisioningStatus(DEVICE, env)).metadataKey, false);
+  env.DB.close();
+});
+
+test('uma chave inválida é ignorada, e a lista vai assim mesmo', async () => {
+  const env = createEnv();
+  /* Uma chave errada nunca deve impedir o cliente de assistir: sem ela o
+     aplicativo mostra a lista sem capa, que é o que já fazia antes. */
+  for (const bad of ['com espaco', 'aspas"dentro', '<script>', 'x'.repeat(401)]) {
+    await saveProvisioning(DEVICE, { ...CREDENTIAL, metadataKey: bad }, 'dono', env);
+    const claimed = await claimProvisioning(DEVICE, env);
+    assert.equal(claimed.server, CREDENTIAL.server, `a lista deve ir mesmo assim: ${bad}`);
+    assert.equal(claimed.metadataKey, undefined, `a chave inválida não pode passar: ${bad}`);
+  }
+  env.DB.close();
+});
+
+test('reenviar sem chave não apaga a que o cliente já tinha', async () => {
+  const env = createEnv();
+  /* O caso do endereço que caiu: quem vende reenvia só o servidor. O campo
+     ausente significa "não mexer", e não "apagar" — o aplicativo distingue os
+     dois porque a chave é omitida do payload em vez de ir como null. */
+  await saveProvisioning(DEVICE, { ...CREDENTIAL, metadataKey: 'chave-antiga' }, 'dono', env);
+  await claimProvisioning(DEVICE, env);
+  await confirmProvisioning(DEVICE, env);
+
+  await saveProvisioning(
+    DEVICE, { ...CREDENTIAL, server: 'http://novoprovedor.com:8080' }, 'dono', env,
+  );
+  const claimed = await claimProvisioning(DEVICE, env);
+  assert.equal(claimed.server, 'http://novoprovedor.com:8080');
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(claimed, 'metadataKey'), false,
+    'a chave tem de estar ausente, para o aplicativo saber que não deve mexer nela',
+  );
+  env.DB.close();
 });

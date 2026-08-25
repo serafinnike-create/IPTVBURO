@@ -71,6 +71,38 @@ class ProvisioningWiringTest {
     }
 
     @Test
+    fun `the metadata keys are applied when they are sent`() {
+        // The seller can hand over an app that already shows artwork and synopsis, for the same
+        // customer who could not set up the list in the first place.
+        val body = collectorBody()
+        assertTrue(body.contains("setMetadataApiKey("), "the TMDb key")
+        assertTrue(body.contains("setCriticScoresApiKey("), "and the OMDb one")
+    }
+
+    @Test
+    fun `a key that was not sent is left alone rather than cleared`() {
+        // A seller replacing a provider address that went down sends the three connection fields
+        // and nothing else. Treating absent as empty would wipe a key the viewer set up
+        // themselves, and they would have no idea why their artwork disappeared.
+        val body = collectorBody()
+        // The setters must be reached only from inside a null-guard on the key itself. Checking
+        // merely that "metadataKey?.let" appears is not enough: an unconditional
+        // setMetadataApiKey(source.metadataKey?.let(::String)) contains that text too, and clears
+        // the key on every launch that sends none.
+        listOf(
+            "source.metadataKey?.let { key -> userStore.setMetadataApiKey(String(key)) }",
+            "source.criticsKey?.let { key -> userStore.setCriticScoresApiKey(String(key)) }",
+        ).forEach { guarded ->
+            assertTrue(body.contains(guarded), "the setter must sit inside the guard: $guarded")
+        }
+        assertFalse(
+            body.contains("userStore.setMetadataApiKey(source."),
+            "an unconditional call would clear a key the viewer configured themselves",
+        )
+        assertFalse(body.contains("userStore.setCriticScoresApiKey(source."))
+    }
+
+    @Test
     fun `a failure is reported so the seller can see it`() {
         assertTrue(collectorBody().contains("reportFailure("))
     }

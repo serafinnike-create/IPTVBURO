@@ -608,6 +608,8 @@ export function adminPage() {
       ? '<p class="sub" style="margin:4px 0 10px">'
         + provisioningStateLabel(info.state) + ' · ' + esc(info.server || '—')
         + (info.username ? ' · ' + esc(info.username) : '')
+        + (info.metadataKey ? ' · com chave TMDb' : '')
+        + (info.criticsKey ? ' · com chave OMDb' : '')
         + (info.state === 'PENDING' ? ' · enviado ' + dateTime(info.created_at) + ', aguardando o cliente abrir o aplicativo' : '')
         + (info.state === 'APPLIED' ? ' · aplicado ' + dateTime(info.applied_at) : '')
         + (info.lastError ? ' · último erro: ' + esc(info.lastError) : '')
@@ -617,6 +619,9 @@ export function adminPage() {
       + '<label class="field" style="flex:2 1 260px"><span>Endereço do servidor</span><input id="prov-server-' + key + '" placeholder="http://provedor.exemplo:8080"></label>'
       + '<label class="field" style="flex:1 1 160px"><span>Usuário</span><input id="prov-user-' + key + '"></label>'
       + '<label class="field" style="flex:1 1 160px"><span>Senha</span><input id="prov-pass-' + key + '" type="password" autocomplete="new-password"></label>'
+      + '</div><div class="row" style="margin:0 0 10px">'
+      + '<label class="field" style="flex:1 1 240px"><span>Chave TMDb (opcional)</span><input id="prov-tmdb-' + key + '" placeholder="capas, elenco e sinopse"></label>'
+      + '<label class="field" style="flex:1 1 240px"><span>Chave OMDb (opcional)</span><input id="prov-omdb-' + key + '" placeholder="notas da critica"></label>'
       + '</div><div class="row" style="margin:0 0 16px">'
       + '<button type="button" onclick="saveProvisioning(\\'' + esc(device) + '\\')">Enviar para este aparelho</button>'
       + (info ? ' <button type="button" class="ghost" onclick="clearProvisioningUi(\\'' + esc(device) + '\\')">Cancelar envio</button>' : '')
@@ -637,7 +642,15 @@ export function adminPage() {
     if (!server || !username || !password) {
       return alert('Preencha endereço, usuário e senha antes de enviar.');
     }
-    const result = await api('/admin/provisioning', { device: device, server: server, username: username, password: password });
+    /* As chaves são opcionais e vão no mesmo envio: quem não consegue cadastrar um
+       Xtream também não vai criar conta no TMDb, e assim o aplicativo chega mostrando
+       capa e sinopse. Deixadas em branco, não mexem no que o cliente já tiver. */
+    const metadataKey = document.getElementById('prov-tmdb-' + key).value.trim();
+    const criticsKey = document.getElementById('prov-omdb-' + key).value.trim();
+    const result = await api('/admin/provisioning', {
+      device: device, server: server, username: username, password: password,
+      metadataKey: metadataKey, criticsKey: criticsKey,
+    });
     if (!result) return alert('Não foi possível enviar. Confira o endereço do servidor.');
     await refreshDetails(device);
   }

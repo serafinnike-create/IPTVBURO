@@ -545,8 +545,9 @@ export async function recordSecurityAlert(deviceId, kind, severity, detail, env)
 
 /**
  * Best-effort push of a CRITICAL alert to an external webhook (Slack, Discord, Telegram — anything
- * that accepts a JSON POST with a `text` field, which covers Slack- and Discord-compatible
- * incoming webhooks).
+ * that accepts a JSON POST body. Slack and Discord read the message from different fields —
+ * `text` and `content` respectively — and silently ignore whichever field they do not recognise,
+ * so sending both lets one URL work with either without configuration.
  *
  * Deliberately silent on failure: a webhook outage must never block or fail the request that
  * triggered the alert. The alert is already durable in `security_alerts` — this is a convenience
@@ -554,14 +555,14 @@ export async function recordSecurityAlert(deviceId, kind, severity, detail, env)
  */
 async function notifyAlertWebhook(kind, detail, deviceId, env) {
   if (!env.ADMIN_ALERT_WEBHOOK_URL) return;
-  const text = `🚨 IPTV BURO — alerta crítico: ${kind}`
+  const message = `🚨 IPTV BURO — alerta crítico: ${kind}`
     + (deviceId ? ` (dispositivo ${deviceId})` : '')
     + (detail ? `\n${detail}` : '');
   try {
     await fetch(env.ADMIN_ALERT_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text: message, content: message }),
     });
   } catch {
     // Network failure, DNS failure, webhook down — none of it is this request's problem.

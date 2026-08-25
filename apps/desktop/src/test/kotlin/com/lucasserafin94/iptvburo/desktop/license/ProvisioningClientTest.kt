@@ -265,15 +265,92 @@ class ProvisioningClientTest {
     }
 
     @Test
+    fun `the metadata keys arrive when the seller sent them`() {
+        // The same person who cannot set up an Xtream will not create a TMDb account and paste a
+        // key either, so the seller can hand over an app that already shows artwork and synopsis.
+        val body =
+            """{"source":{"server":"http://provedor.invalid","username":"u","password":"p",""" +
+                """"metadataKey":"chave-tmdb","criticsKey":"chave-omdb"}}"""
+        withServer(MockResponse().setResponseCode(200).setBody(body)) { client, _ ->
+            val source = assertNotNull(client.claim())
+            assertEquals("chave-tmdb", source.metadataKey?.let(::String))
+            assertEquals("chave-omdb", source.criticsKey?.let(::String))
+        }
+    }
+
+    @Test
+    fun `an absent key is null, so it can mean leave alone`() {
+        // A seller replacing a provider address that went down sends the three connection fields
+        // and nothing else. That must not wipe a key the viewer configured themselves, so absent
+        // and empty have to be distinguishable here.
+        withServer(sourceResponse()) { client, _ ->
+            val source = assertNotNull(client.claim())
+            assertNull(source.metadataKey)
+            assertNull(source.criticsKey)
+        }
+    }
+
+    @Test
+    fun `a key that is not shaped like one is dropped, and the list still arrives`() {
+        // A mis-paste in a request URL is a malformed address, not a failed lookup. And a bad key
+        // must never be why the customer cannot watch.
+        listOf("com espaco", "aspas\"dentro", "<script>", "a".repeat(401)).forEach { bad ->
+            // Built with the JSON writer rather than by hand: one of these values contains a
+            // quote, and hand-escaping it produced a malformed body that the client rejected
+            // outright — which looked like the key check working while nothing was being tested.
+            val source =
+                com.google.gson.JsonObject().apply {
+                    addProperty("server", "http://provedor.invalid")
+                    addProperty("username", "u")
+                    addProperty("password", "p")
+                    addProperty("metadataKey", bad)
+                }
+            val body = com.google.gson.JsonObject().apply { add("source", source) }.toString()
+
+            withServer(MockResponse().setResponseCode(200).setBody(body)) { client, _ ->
+                val claimed = assertNotNull(client.claim(), "the list must still arrive: $bad")
+                assertNull(claimed.metadataKey, "the bad key must not pass: $bad")
+            }
+        }
+    }
+
+    @Test
     fun `clearing wipes the credentials rather than dropping the reference`() {
         // Why these are char arrays at all: a String cannot be cleared, so a password put in one
         // survives in the heap — and in any crash dump — until the collector happens to reclaim it.
-        withServer(sourceResponse()) { client, _ ->
+        val body =
+            com.google.gson.JsonObject().apply {
+                add(
+                    "source",
+                    com.google.gson.JsonObject().apply {
+                        addProperty("server", "http://provedor.invalid")
+                        addProperty("username", "cliente")
+                        addProperty("password", "senha-do-cliente")
+                        addProperty("metadataKey", "chave-tmdb")
+                        addProperty("criticsKey", "chave-omdb")
+                    },
+                )
+            }.toString()
+
+        withServer(MockResponse().setResponseCode(200).setBody(body)) { client, _ ->
             val source = assertNotNull(client.claim())
             source.clear()
-            assertEquals(" ".repeat(source.password.size), String(source.password))
-            assertEquals(" ".repeat(source.username.size), String(source.username))
-            assertEquals(" ".repeat(source.server.size), String(source.server))
+            // Every field, the keys included: they are credentials too, and an earlier version of
+            // this test checked only the first three, which left the keys in the heap and stayed
+            // green when the wipe for them was removed.
+            listOfNotNull(
+                source.password,
+                source.username,
+                source.server,
+                source.metadataKey,
+                source.criticsKey,
+            ).forEach { field ->
+                assertEquals(
+                    "\u0000".repeat(field.size),
+                    String(field),
+                    "every character has to be overwritten, not merely dereferenced",
+                )
+            }
         }
     }
 

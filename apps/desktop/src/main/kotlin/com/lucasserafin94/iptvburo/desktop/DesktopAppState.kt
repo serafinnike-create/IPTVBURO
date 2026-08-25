@@ -5684,6 +5684,11 @@ class DesktopAppState(
             withContext(Dispatchers.IO) {
                 sourceLibrary.store(entry.id).save(source.server, source.username, source.password)
             }
+            // The metadata keys, when the seller set those up too. Applied only when sent: an
+            // absent key means "leave alone", so replacing a provider address that went down
+            // cannot wipe a key the viewer configured themselves.
+            source.metadataKey?.let { key -> userStore.setMetadataApiKey(String(key)) }
+            source.criticsKey?.let { key -> userStore.setCriticScoresApiKey(String(key)) }
             provisionedSourceLabel = entry.label
             // Only once it is actually saved. Confirming at the moment of delivery would leave a
             // customer whose app closed in between with no list and no way to ask again.

@@ -296,6 +296,7 @@ test('a CRITICAL alert posts to the configured webhook; lower severities do not'
     const body = JSON.parse(calls[0].init.body);
     assert.ok(body.text.includes('PAYMENT_DEVICE_CONFLICT'));
     assert.ok(body.text.includes('ABCD-EFGH-JKLM'));
+    assert.equal(body.content, body.text, 'Discord reads `content`; Slack reads `text` — send both');
   } finally {
     globalThis.fetch = originalFetch;
   }

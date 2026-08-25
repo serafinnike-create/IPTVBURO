@@ -47,6 +47,8 @@ class LiveProvisioningProbe {
             println("host        : $host")
             println("usuario     : ${source.username.size} caracteres")
             println("senha       : ${source.password.size} caracteres")
+            println("chave TMDb  : ${source.metadataKey?.let { "${it.size} caracteres" } ?: "nao enviada"}")
+            println("chave OMDb  : ${source.criticsKey?.let { "${it.size} caracteres" } ?: "nao enviada"}")
             println("")
             println("NAO confirmada: esta sonda nao aplica nem apaga o envio, para que")
             println("o teste possa ser repetido e para nao consumir o que o painel enviou.")
