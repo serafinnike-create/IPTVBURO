@@ -752,6 +752,45 @@ class MainViewModelNavigationTest {
     }
 
     @Test
+    fun `a seller-supplied TMDb and OMDb key is applied when the customer has none`() = runTest {
+        val assigned =
+            AssignedPlaylist(
+                "http://provedor.example:8080", "cliente1", "senha1",
+                metadataKey = "tmdb-key-from-seller",
+                criticsKey = "omdb-key-from-seller",
+            )
+        val licence = RecordingLicenseService(assignedPlaylist = assigned)
+        val keyStore = RecordingMetadataKeyStore()
+        val viewModel =
+            createViewModel(FakeCatalogRepository(), licenseService = licence, metadataKeyStore = keyStore)
+        viewModel.refreshLicense()
+        advanceUntilIdle()
+
+        assertEquals("tmdb-key-from-seller", keyStore.readShared())
+        assertEquals("omdb-key-from-seller", keyStore.readCritics())
+    }
+
+    @Test
+    fun `a seller-supplied key never overwrites one the customer already set themselves`() = runTest {
+        val assigned =
+            AssignedPlaylist(
+                "http://provedor.example:8080", "cliente1", "senha1",
+                metadataKey = "tmdb-key-from-seller",
+                criticsKey = "omdb-key-from-seller",
+            )
+        val licence = RecordingLicenseService(assignedPlaylist = assigned)
+        val keyStore = RecordingMetadataKeyStore(shared = "customers-own-tmdb-key")
+        val viewModel =
+            createViewModel(FakeCatalogRepository(), licenseService = licence, metadataKeyStore = keyStore)
+        viewModel.refreshLicense()
+        advanceUntilIdle()
+
+        assertEquals("customers-own-tmdb-key", keyStore.readShared())
+        // No key of their own for OMDb, so the seller's still fills the gap.
+        assertEquals("omdb-key-from-seller", keyStore.readCritics())
+    }
+
+    @Test
     fun `selecting a profile without sources opens source connection`() = runTest {
         val viewModel = createViewModel(FakeCatalogRepository())
         runCurrent()
@@ -806,6 +845,7 @@ class MainViewModelNavigationTest {
         logger: AppLogger = NoOpLogger,
         isTelevision: Boolean = false,
         licenseService: AndroidLicenseService = FakeLicenseService,
+        metadataKeyStore: MetadataKeyStore = FakeMetadataKeyStore,
     ): MainViewModel {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
@@ -858,7 +898,7 @@ class MainViewModelNavigationTest {
             // The manager resolves storage lazily, so these navigation assertions never touch it.
             downloadManager = AndroidDownloadManager(contextProvider, OkHttpClient(), dispatcher),
             licenseService = licenseService,
-            metadataKeyStore = FakeMetadataKeyStore,
+            metadataKeyStore = metadataKeyStore,
             // Builds no catalogue: FakeMetadataKeyStore has no key, so every discovery call is a
             // no-op and these navigation assertions never reach the network.
             streamingDiscoveryRepository = StreamingDiscoveryRepository(OkHttpClient(), NoShelfCache, dispatcher),
@@ -953,6 +993,20 @@ private data object FakeMetadataKeyStore : MetadataKeyStore {
     override fun save(profileId: String, apiKey: String) = Unit
     override fun read(profileId: String): String? = null
     override fun isConfigured(profileId: String): Boolean = false
+}
+
+/** Records what was saved, and lets a test seed a key the customer supposedly typed in already. */
+private class RecordingMetadataKeyStore(
+    private var shared: String? = null,
+    private var critics: String? = null,
+) : MetadataKeyStore {
+    override fun save(profileId: String, apiKey: String) = Unit
+    override fun read(profileId: String): String? = null
+    override fun isConfigured(profileId: String): Boolean = false
+    override fun saveShared(apiKey: String) { shared = apiKey }
+    override fun readShared(): String? = shared
+    override fun saveCritics(apiKey: String) { critics = apiKey }
+    override fun readCritics(): String? = critics
 }
 
 private data object FakePlaybackProgressRepository : PlaybackProgressRepository {

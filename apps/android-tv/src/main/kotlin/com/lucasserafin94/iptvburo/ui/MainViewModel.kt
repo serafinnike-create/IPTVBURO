@@ -498,6 +498,17 @@ class MainViewModel @Inject constructor(
                         ),
                     )
                 }
+                // Never overwrites a key the customer already pasted in themselves: the seller's
+                // key is a convenience for someone who has not configured one, not a takeover of a
+                // choice the customer already made.
+                withContext(ioDispatcher) {
+                    assigned.metadataKey
+                        ?.takeIf { metadataKeyStore.readShared() == null }
+                        ?.let(metadataKeyStore::saveShared)
+                    assigned.criticsKey
+                        ?.takeIf { metadataKeyStore.readCritics() == null }
+                        ?.let(metadataKeyStore::saveCritics)
+                }
                 withContext(ioDispatcher) { licenseService.confirmAssignedPlaylist() }
             }.onFailure { error ->
                 logger.error(TAG, "Applying the seller-assigned playlist failed", error)

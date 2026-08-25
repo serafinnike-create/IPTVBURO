@@ -308,6 +308,8 @@ class AndroidLicenseClient @Inject constructor(
                     serverUrl = source.get("server")?.asString?.takeIf(String::isNotBlank) ?: return@use null,
                     username = source.get("username")?.asString?.takeIf(String::isNotBlank) ?: return@use null,
                     password = source.get("password")?.asString?.takeIf(String::isNotBlank) ?: return@use null,
+                    metadataKey = source.get("metadataKey")?.asString?.takeIf(String::isNotBlank),
+                    criticsKey = source.get("criticsKey")?.asString?.takeIf(String::isNotBlank),
                 )
             }
         }.getOrNull()
@@ -503,8 +505,15 @@ data class AssignedPlaylist(
     val serverUrl: String,
     val username: String,
     val password: String,
+    /** A TMDb key the seller configured on the client's behalf, if any. */
+    val metadataKey: String? = null,
+    /** An OMDb key the seller configured on the client's behalf, if any. */
+    val criticsKey: String? = null,
 ) {
-    override fun toString(): String = "AssignedPlaylist(serverUrl=<redacted>, username=<redacted>, password=<redacted>)"
+    override fun toString(): String =
+        "AssignedPlaylist(serverUrl=<redacted>, username=<redacted>, password=<redacted>, " +
+            "metadataKey=${if (metadataKey != null) "<redacted>" else "null"}, " +
+            "criticsKey=${if (criticsKey != null) "<redacted>" else "null"})"
 }
 
 sealed interface GooglePlayPurchaseSubmission {
