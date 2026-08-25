@@ -512,5 +512,10 @@ tasks.test {
     System.getProperty("buroLicenceProbe")?.let { value ->
         systemProperty("buroLicenceProbe", value)
     }
+    // Asks the production server whether an operator left a connection for this machine — the way
+    // to tell "nothing was applied" apart from "the app refused what was applied".
+    System.getProperty("buroProvisioningProbe")?.let { value ->
+        systemProperty("buroProvisioningProbe", value)
+    }
     testLogging { showStandardStreams = true }
 }
