@@ -31,8 +31,15 @@ const TTL_SECONDS = 5 * 60;
 /** Wrong guesses a code tolerates before it is refused for good. */
 const MAX_ATTEMPTS = 5;
 
-/** What a phone may send. A television waiting for a key must not be handed a title to play. */
-const KINDS = new Set(['tmdb_key', 'critics_key', 'open_title']);
+/**
+ * What a phone may send. A television waiting for a key must not be handed a title to play.
+ *
+ * `xtream_source` is the one an operator sends rather than the viewer's own phone: a customer who
+ * cannot set up the list they bought reads out the code, and the seller applies the connection from
+ * the admin site. It travels the same letterbox as the rest and is encrypted the same way, so the
+ * server still cannot read what it is holding.
+ */
+const KINDS = new Set(['tmdb_key', 'critics_key', 'open_title', 'xtream_source']);
 
 /**
  * The ceiling on a payload.

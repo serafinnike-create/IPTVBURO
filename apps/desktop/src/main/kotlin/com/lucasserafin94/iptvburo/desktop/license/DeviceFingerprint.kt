@@ -33,6 +33,15 @@ enum class DeviceProofAction(val wireValue: String) {
     REGISTER("register"),
     VALIDATE("validate"),
     REDEEM("redeem"),
+
+    /**
+     * Collecting a connection an operator applied for this machine, and confirming it was applied.
+     *
+     * Its own action rather than a reuse of [VALIDATE] because the signature binds to the action:
+     * a proof captured from a launch check cannot be replayed to fetch someone's provider
+     * credentials. The server verifies against this same string.
+     */
+    PROVISIONING("provisioning"),
 }
 
 /**

@@ -44,6 +44,25 @@ object LicenseEndpoints {
     const val REDEEM = "https://$DOMAIN/v1/redeem"
 
     /**
+     * Collects a connection an operator applied for this machine, if there is one waiting.
+     *
+     * The case: someone buys a list from a reseller and cannot set it up — three fields, one of
+     * them a password. They read out the code the app shows, the seller fills the form in their
+     * own panel, and the connection arrives here on the next launch. Answers 204 almost always,
+     * which is every launch of every machine that no operator has configured.
+     */
+    const val PROVISIONING_CLAIM = "https://$DOMAIN/v1/provisioning/claim"
+
+    /**
+     * Tells the server the connection was applied, so it can be erased.
+     *
+     * Separate from the claim on purpose: a delivery lost on the way — the app closed before the
+     * source was saved — has to be retryable on the next launch. Erasing at the moment of delivery
+     * would leave the customer with no list and no way to ask for it again.
+     */
+    const val PROVISIONING_CONFIRM = "https://$DOMAIN/v1/provisioning/confirm"
+
+    /**
      * Describes a key without spending it, so the screen can say what it is before redeeming.
      *
      * Separate from [REDEEM] because looking must never be a side effect of asking: a customer

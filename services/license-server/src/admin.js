@@ -64,51 +64,96 @@ export function isAdmin(request, env) {
   return difference === 0;
 }
 
+const DEVICE_LIST_LIMIT = 100;
+
 /**
- * Every device in a given state, newest first.
+ * How a device list is ordered.
+ *
+ * "recent" (default) surfaces whoever just used the app — the shape support needs when chasing a
+ * fresh report. "expiring" surfaces whoever is about to lose access — the shape needed to reach a
+ * customer before they churn, which recency ordering buries at random depths in the list.
+ */
+function deviceOrderBy(sort) {
+  return sort === 'expiring'
+    // Devices with no expiry/trial date sort last, not first — NULL would otherwise collate before
+    // every real date and bury the list under rows there is nothing to act on.
+    ? `ORDER BY COALESCE(expires_at, trial_ends_at) IS NULL,
+               COALESCE(expires_at, trial_ends_at) ASC`
+    : 'ORDER BY COALESCE(last_seen_at, updated_at) DESC';
+}
+
+/**
+ * Every device in a given state, newest first (or soonest-to-expire, see [deviceOrderBy]).
  *
  * The summary counts were the only way in, and a count is not a list: seeing "3 em teste" with no
  * way to find out which three made the panel read as broken. This is what the numbers link to.
+ *
+ * Capped at [DEVICE_LIST_LIMIT] and paired with the true count so the panel can say "mostrando 100
+ * de 340" instead of silently presenting a truncated list as the whole answer.
  */
-export async function devicesByStatus(status, env) {
+export async function devicesByStatus(status, env, sort) {
   const wanted = String(status ?? '').toUpperCase();
+  const orderBy = deviceOrderBy(sort);
+
   if (wanted === 'ARCHIVED') {
-    const { results } = await env.DB.prepare(
-      `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
-       WHERE archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT 100`,
-    ).all();
-    return results ?? [];
+    const [{ results }, total] = await Promise.all([
+      env.DB.prepare(
+        `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
+         WHERE archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT ${DEVICE_LIST_LIMIT}`,
+      ).all(),
+      env.DB.prepare('SELECT COUNT(*) AS n FROM devices WHERE archived_at IS NOT NULL').first(),
+    ]);
+    return { devices: results ?? [], total: Number(total?.n ?? 0) };
   }
 
   if (wanted === 'ALL') {
-    const { results } = await env.DB.prepare(
-      `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
-       WHERE archived_at IS NULL ORDER BY COALESCE(last_seen_at, updated_at) DESC LIMIT 100`,
-    ).all();
-    return results ?? [];
+    const [{ results }, total] = await Promise.all([
+      env.DB.prepare(
+        `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
+         WHERE archived_at IS NULL ${orderBy} LIMIT ${DEVICE_LIST_LIMIT}`,
+      ).all(),
+      env.DB.prepare('SELECT COUNT(*) AS n FROM devices WHERE archived_at IS NULL').first(),
+    ]);
+    return { devices: results ?? [], total: Number(total?.n ?? 0) };
   }
 
-  if (!['TRIAL', 'ACTIVE', 'EXPIRED', 'REVOKED', 'REFUNDED'].includes(wanted)) return [];
+  if (!['TRIAL', 'ACTIVE', 'EXPIRED', 'REVOKED', 'REFUNDED'].includes(wanted)) {
+    return { devices: [], total: 0 };
+  }
 
-  const { results } = await env.DB.prepare(
-    `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
-     WHERE status = ? AND archived_at IS NULL
-     ORDER BY COALESCE(last_seen_at, updated_at) DESC LIMIT 100`,
-  )
-    .bind(wanted)
-    .all();
-  return results ?? [];
+  const [{ results }, total] = await Promise.all([
+    env.DB.prepare(
+      `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
+       WHERE status = ? AND archived_at IS NULL ${orderBy} LIMIT ${DEVICE_LIST_LIMIT}`,
+    )
+      .bind(wanted)
+      .all(),
+    env.DB.prepare('SELECT COUNT(*) AS n FROM devices WHERE status = ? AND archived_at IS NULL')
+      .bind(wanted)
+      .first(),
+  ]);
+  return { devices: results ?? [], total: Number(total?.n ?? 0) };
 }
 
 /** Everyone who has paid, for the third summary figure. */
-export async function paidDevices(env) {
-  const { results } = await env.DB.prepare(
-    `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
-     WHERE archived_at IS NULL
-       AND (stripe_session_id IS NOT NULL OR google_purchase_token_hash IS NOT NULL)
-     ORDER BY purchased_at DESC LIMIT 100`,
-  ).all();
-  return results ?? [];
+export async function paidDevices(env, sort) {
+  const orderBy = sort === 'expiring'
+    ? `ORDER BY COALESCE(expires_at, trial_ends_at) IS NULL,
+               COALESCE(expires_at, trial_ends_at) ASC`
+    : 'ORDER BY purchased_at DESC';
+  const [{ results }, total] = await Promise.all([
+    env.DB.prepare(
+      `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
+       WHERE archived_at IS NULL
+         AND (stripe_session_id IS NOT NULL OR google_purchase_token_hash IS NOT NULL)
+       ${orderBy} LIMIT ${DEVICE_LIST_LIMIT}`,
+    ).all(),
+    env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM devices WHERE archived_at IS NULL
+       AND (stripe_session_id IS NOT NULL OR google_purchase_token_hash IS NOT NULL)`,
+    ).first(),
+  ]);
+  return { devices: results ?? [], total: Number(total?.n ?? 0) };
 }
 
 /** Finds devices by code, model, manufacturer, platform, country, legacy MAC or note. */

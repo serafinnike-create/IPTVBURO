@@ -522,6 +522,18 @@ export function adminPage() {
     const target = document.getElementById('details-' + device.replace(/-/g, ''));
     if (!target.classList.contains('hidden')) { target.classList.add('hidden'); return; }
     target.classList.remove('hidden');
+    await renderDetails(device);
+  }
+
+  /** Repaints an already-open details panel, for after an edit inside it. A no-op if closed. */
+  async function refreshDetails(device) {
+    const target = document.getElementById('details-' + device.replace(/-/g, ''));
+    if (target.classList.contains('hidden')) return;
+    await renderDetails(device);
+  }
+
+  async function renderDetails(device) {
+    const target = document.getElementById('details-' + device.replace(/-/g, ''));
     target.textContent = 'A carregar histórico…';
     const result = await api('/admin/device?device=' + encodeURIComponent(device));
     if (!result) { target.textContent = 'Não foi possível carregar o histórico.'; return; }
@@ -534,6 +546,7 @@ export function adminPage() {
       + supportField('Pedido / referência', 'support-order-' + key, info.order_reference)
       + supportField('Nota de suporte', 'support-note-' + key, info.support_note)
       + '<button type="button" onclick="saveSupport(\\'' + esc(device) + '\\')">Salvar atendimento</button></div>'
+      + '<strong>Lista do cliente</strong>' + provisioningBlock(device, key, result.provisioning)
       + '<strong>Histórico</strong>'
       + (result.events.length ? '<ul class="timeline">'
       + result.events.map(function (entry) {
@@ -545,6 +558,60 @@ export function adminPage() {
   function supportField(label, id, value) {
     return '<label class="field" style="flex:1 1 190px"><span>' + esc(label) + '</span><input id="'
       + id + '" value="' + esc(value || '') + '"></label>';
+  }
+
+  /**
+   * O que o cliente comprou de longe: endereço, usuário e senha de um Xtream.
+   *
+   * A senha nunca chega até aqui depois de aplicada — o servidor a apaga assim que a
+   * televisão confirma — então o campo de senha começa sempre vazio. Deixá-lo em
+   * branco e salvar de novo reaplicaria o mesmo endereço com uma senha vazia, então o
+   * botão de salvar exige que os três campos estejam preenchidos.
+   */
+  function provisioningBlock(device, key, info) {
+    const status = info
+      ? '<p class="sub" style="margin:4px 0 10px">'
+        + provisioningStateLabel(info.state) + ' · ' + esc(info.server || '—')
+        + (info.username ? ' · ' + esc(info.username) : '')
+        + (info.state === 'PENDING' ? ' · enviado ' + dateTime(info.created_at) + ', aguardando o cliente abrir o aplicativo' : '')
+        + (info.state === 'APPLIED' ? ' · aplicado ' + dateTime(info.applied_at) : '')
+        + (info.lastError ? ' · último erro: ' + esc(info.lastError) : '')
+        + '</p>'
+      : '<p class="sub" style="margin:4px 0 10px">Nenhuma lista atribuída por aqui ainda.</p>';
+    return status + '<div class="row" style="margin:0 0 10px">'
+      + '<label class="field" style="flex:2 1 260px"><span>Endereço do servidor</span><input id="prov-server-' + key + '" placeholder="http://provedor.exemplo:8080"></label>'
+      + '<label class="field" style="flex:1 1 160px"><span>Usuário</span><input id="prov-user-' + key + '"></label>'
+      + '<label class="field" style="flex:1 1 160px"><span>Senha</span><input id="prov-pass-' + key + '" type="password" autocomplete="new-password"></label>'
+      + '</div><div class="row" style="margin:0 0 16px">'
+      + '<button type="button" onclick="saveProvisioning(\\'' + esc(device) + '\\')">Enviar para este aparelho</button>'
+      + (info ? ' <button type="button" class="ghost" onclick="clearProvisioningUi(\\'' + esc(device) + '\\')">Cancelar envio</button>' : '')
+      + '</div>';
+  }
+
+  function provisioningStateLabel(state) {
+    if (state === 'APPLIED') return '<span class="tag active">APLICADO</span>';
+    if (state === 'FAILED') return '<span class="tag over">FALHOU</span>';
+    return '<span class="tag trial">AGUARDANDO</span>';
+  }
+
+  async function saveProvisioning(device) {
+    const key = device.replace(/-/g, '');
+    const server = document.getElementById('prov-server-' + key).value.trim();
+    const username = document.getElementById('prov-user-' + key).value.trim();
+    const password = document.getElementById('prov-pass-' + key).value;
+    if (!server || !username || !password) {
+      return alert('Preencha endereço, usuário e senha antes de enviar.');
+    }
+    const result = await api('/admin/provisioning', { device: device, server: server, username: username, password: password });
+    if (!result) return alert('Não foi possível enviar. Confira o endereço do servidor.');
+    await refreshDetails(device);
+  }
+
+  async function clearProvisioningUi(device) {
+    if (!confirm('Cancelar o envio desta lista para ' + device + '?')) return;
+    const result = await api('/admin/provisioning/clear', { device: device });
+    if (!result) return alert('Não foi possível cancelar.');
+    await refreshDetails(device);
   }
 
   async function saveSupport(device) {

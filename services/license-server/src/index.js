@@ -381,7 +381,7 @@ async function handleAdmin(request, env, url) {
     }
 
     case '/admin/export': {
-      const devices = await devicesByStatus('ALL', env);
+      const { devices } = await devicesByStatus('ALL', env);
       const csv = devicesCsv(devices);
       await recordAdminAudit(
         administrator.actor, 'DEVICES_CSV_EXPORTED', null, `${devices.length} devices`,

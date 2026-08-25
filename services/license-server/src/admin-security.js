@@ -94,12 +94,12 @@ export async function authenticateAdmin(request, env) {
     }
   }
 
-  // Compatibility while MFA is not enrolled. The instant MFA is enabled, raw bearer tokens stop
-  // authorising data and mutation routes; they remain useful only for creating an MFA session.
-  const mfa = await env.DB.prepare('SELECT enabled_at FROM admin_mfa WHERE id = 1').first();
-  if (!mfa?.enabled_at && isAdmin(request, env)) {
-    return { actor: normaliseActor(request.headers.get('x-admin-actor')), method: 'token' };
-  }
+  // MFA is mandatory for every data and mutation route. A bearer token alone used to be enough
+  // until someone enrolled, which meant a leaked token was the whole story: no second factor, no
+  // session, nothing else standing between it and every customer record — including, once a
+  // provisioning payload starts passing through this panel, a customer's own Xtream credentials.
+  // The token by itself still opens exactly enough to enrol MFA (/admin/mfa/setup, /admin/mfa/confirm,
+  // /admin/session), which do not call this function; it stops here.
   return null;
 }
 

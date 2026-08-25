@@ -38,10 +38,14 @@ function request(token, session = '') {
   });
 }
 
-test('MFA enrollment requires a valid code before raw tokens lose data access', async () => {
+test('a bearer token alone never authorises data or mutation routes, enrolled or not', async () => {
   const env = environment();
   const adminRequest = request(env.ADMIN_TOKEN);
-  assert.equal((await authenticateAdmin(adminRequest, env)).method, 'token');
+  // Before MFA is even set up, the token must not unlock the admin API — otherwise a leaked
+  // token is the whole story for an administrator who has simply not enrolled yet, and once a
+  // provisioning payload can carry a customer's own Xtream password, "not yet enrolled" is not
+  // an acceptable gap. It still opens the setup endpoints, which call isAdmin() directly.
+  assert.equal(await authenticateAdmin(adminRequest, env), null);
 
   const setup = await beginMfaSetup(adminRequest, env);
   assert.equal(setup.ok, true);
