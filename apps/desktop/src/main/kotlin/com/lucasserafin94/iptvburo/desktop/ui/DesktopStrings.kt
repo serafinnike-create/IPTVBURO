@@ -635,6 +635,8 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            deviceCodeAction = "Código del dispositivo",
+                            deviceCodeHelp = "Envía este código a quien te vendió la lista y podrá configurarla por ti.",
                             setupRenameList = "Renombrar",
                             setupRemoveList = "Eliminar",
                             setupRemoveListConfirm = "¿Eliminar la lista «%1${'$'}s»? La contraseña también se borra.",
@@ -1354,6 +1356,8 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            deviceCodeAction = "Código do aparelho",
+                            deviceCodeHelp = "Envie este código a quem lhe vendeu a lista para que ele a configure por você.",
                             setupRenameList = "Renomear",
                             setupRemoveList = "Remover",
                             setupRemoveListConfirm = "Remover a lista «%1${'$'}s»? A senha também é apagada.",
@@ -2073,6 +2077,8 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            deviceCodeAction = "Device code",
+                            deviceCodeHelp = "Send this code to whoever sold you your playlist and they can set it up for you.",
                             setupRenameList = "Rename",
                             setupRemoveList = "Remove",
                             setupRemoveListConfirm = "Remove the list «%1${'$'}s»? Its password is erased too.",
@@ -2791,6 +2797,8 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            deviceCodeAction = "Gerätecode",
+                            deviceCodeHelp = "Senden Sie diesen Code an den Verkäufer Ihrer Liste, damit er sie einrichten kann.",
                             setupRenameList = "Umbenennen",
                             setupRemoveList = "Entfernen",
                             setupRemoveListConfirm = "Liste «%1${'$'}s» entfernen? Das Passwort wird ebenfalls gelöscht.",
@@ -3514,6 +3522,8 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            deviceCodeAction = "Codice del dispositivo",
+                            deviceCodeHelp = "Invia questo codice a chi ti ha venduto la lista perché la configuri per te.",
                             setupRenameList = "Rinomina",
                             setupRemoveList = "Rimuovi",
                             setupRemoveListConfirm = "Rimuovere la lista «%1${'$'}s»? Anche la password viene cancellata.",
@@ -4582,6 +4592,16 @@ data class DownloadStrings(
  * there — `DesktopStrings` is at its enforced constructor limit.
  */
 data class ScreenStrings(
+    /**
+     * Opens this machine's code, from the profile screen.
+     *
+     * Reachable before any playlist is configured, on purpose: the code is how a seller finds
+     * this install to set the list up remotely, and the person who needs that most is exactly
+     * the one who has not managed to configure anything yet.
+     */
+    val deviceCodeAction: String,
+    /** Explains what the code is for, on the screen that shows it. */
+    val deviceCodeHelp: String,
     /** Renames a saved playlist, whose label is all that tells one from another. */
     val setupRenameList: String,
     /** Forgets a saved playlist and the password stored with it. */

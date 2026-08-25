@@ -92,6 +92,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -978,6 +979,7 @@ fun DesktopApp(
                         onEditProfile = { profileId -> editingProfile = profileId },
                         onDelete = appState::deleteProfile,
                         onReset = appState::resetEverything,
+                        deviceCode = appState.deviceCode,
                         // Dismissable only when a profile is already active. On first launch there
                         // is nothing to fall back to, so the gate stays modal.
                         onDismiss =
@@ -2888,11 +2890,23 @@ private fun DesktopProfileGate(
     onDelete: (String) -> Unit,
     onReset: () -> Unit,
     onDismiss: (() -> Unit)?,
+    /**
+     * This machine's code, shown on request.
+     *
+     * Offered here, before any playlist exists, because the code is how a seller finds this
+     * install to configure it remotely — and the person who needs that most is exactly the one who
+     * has not managed to configure anything. It was previously reachable only through the licence
+     * screen, which opens either when the trial has run out or from the countdown chip, so during
+     * the free days the customer who needed help had no way to find it.
+     */
+    deviceCode: String,
 ) {
     var newName by remember { mutableStateOf("") }
     var kids by remember { mutableStateOf(false) }
     var avatar by remember { mutableStateOf(0) }
     var confirmingReset by remember { mutableStateOf(false) }
+    var showingDeviceCode by remember { mutableStateOf(false) }
+    var codeCopied by remember { mutableStateOf(false) }
     // Which profile is one tap away from being removed. Held here so tapping a second profile
     // cancels the first, rather than arming two at once.
     var confirmingDelete by remember { mutableStateOf<String?>(null) }
@@ -3090,10 +3104,66 @@ private fun DesktopProfileGate(
                     ) { Text(strings.resetConfirm, fontWeight = FontWeight.Bold) }
                 }
             } else {
-                TextButton(onClick = { confirmingReset = true }) {
-                    Text(strings.resetSettings, color = BuroColors.TextSubtle)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = {
+                            codeCopied = false
+                            showingDeviceCode = true
+                        },
+                    ) {
+                        Text(
+                            text = strings.shareStrings.screens.deviceCodeAction,
+                            color = BuroColors.TextSubtle,
+                        )
+                    }
+                    TextButton(onClick = { confirmingReset = true }) {
+                        Text(strings.resetSettings, color = BuroColors.TextSubtle)
+                    }
                 }
             }
+        }
+
+        if (showingDeviceCode) {
+            AlertDialog(
+                onDismissRequest = { showingDeviceCode = false },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            copyToClipboard(deviceCode)
+                            codeCopied = true
+                        },
+                    ) {
+                        Text(
+                            text = if (codeCopied) strings.licenseText.copied else "⧉",
+                            color = if (codeCopied) BuroColors.Success else BuroColors.Primary,
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showingDeviceCode = false }) {
+                        Text(strings.understood)
+                    }
+                },
+                title = { Text(strings.shareStrings.screens.deviceCodeAction) },
+                text = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = deviceCode,
+                            color = BuroColors.Primary,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                        Spacer(Modifier.height(BuroSpacing.Sm))
+                        Text(
+                            text = strings.shareStrings.screens.deviceCodeHelp,
+                            color = BuroColors.TextSubtle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                },
+            )
         }
     }
 }

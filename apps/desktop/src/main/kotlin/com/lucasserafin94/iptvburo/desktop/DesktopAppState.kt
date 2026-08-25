@@ -966,6 +966,20 @@ class DesktopAppState(
         onboarding = OnboardingStep.Account
     }
 
+    /**
+     * This machine's code, as the panel and the seller know it.
+     *
+     * Read straight from the identity rather than from the licence answer: it has to be shown
+     * before any licence check has come back, and on a machine with no network at all — which is
+     * one of the situations where somebody most needs to read it out for help.
+     *
+     * Empty only if the identity cannot be created, in which case the button that shows it is
+     * hidden rather than offering a blank code to read aloud.
+     */
+    val deviceCode: String by lazy {
+        runCatching { DeviceFingerprint.deviceId() }.getOrDefault("")
+    }
+
     /** Playlists already configured, offered so a new profile can reuse one. */
     fun savedSources(): List<XtreamSource> = sourceLibrary.sources()
 
