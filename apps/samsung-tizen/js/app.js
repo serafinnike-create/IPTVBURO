@@ -82,6 +82,7 @@ var BuroApp = (function () {
     var subscriptionReturnData = null;
     var similarTitleReturnStack = [];
     var subscriptionRequest = null;
+    var subscriptionRequestId = 0;
     var catalogueProviderDirectories = {
         MOVIE: { identity: '', rows: [], loading: false, failed: false, request: null },
         SERIES: { identity: '', rows: [], loading: false, failed: false, request: null }
@@ -96,11 +97,11 @@ var BuroApp = (function () {
     var pendingSharedTitle = null;
     var sharedTitleNoticeVisible = false;
     var sharedTitleResolving = false;
+    var sharedTitleNeedsResolution = false;
     var sharedTitleResolveId = 0;
     var appControlReceiveId = 0;
     var appControlReceiveTimer = null;
     var lastRequestedAppControlUri = '';
-    var lastRequestedAppControlAt = 0;
     var homeRequestId = 0;
     var homeHeroTimer = null;
     var homeEnrichmentTimer = null;
@@ -114,9 +115,12 @@ var BuroApp = (function () {
     var searchDebounceTimer = null;
     var downloadSearchTimer = null;
     var historySearchTimer = null;
+    var licenceKeyTimer = null;
+    var licenceKeyRequestId = 0;
     var sourceRefreshRequestId = 0;
     var SEARCH_PAGE_SIZE = 40;
     var SEARCH_DEBOUNCE_MILLIS = 300;
+    var LICENCE_KEY_DEBOUNCE_MILLIS = 600;
     /*
       Quantos titulos uma categoria aberta mostra por pagina.
 
@@ -172,6 +176,7 @@ var BuroApp = (function () {
     var DOWNLOAD_SEARCH_DEBOUNCE_MILLIS = 200;
     var HISTORY_SEARCH_DEBOUNCE_MILLIS = 200;
     var currentPlayback = null;
+    var playbackRetry = BuroPlaybackRetry.create({ delayMs: 1500, maxRetries: 1 });
     var playbackResolveRequestId = 0;
     /*
       Sessões de portal Stalker, por fonte, só em memória.
@@ -492,6 +497,63 @@ var BuroApp = (function () {
         applyPreferences();
     }
 
+    function activeTmdbRegion() {
+        var profileId = state.activeProfile && state.activeProfile.id;
+        var regions = state.preferences.tmdbRegionsByProfile;
+        if (profileId && regions && typeof regions === 'object' && !Array.isArray(regions) &&
+                Object.prototype.hasOwnProperty.call(regions, profileId)) {
+            return BuroTmdb.safeRegion(regions[profileId]);
+        }
+        return profileId ? 'BR' : BuroTmdb.safeRegion(state.preferences.tmdbRegion);
+    }
+
+    function resetCatalogueProviderDirectories() {
+        Object.keys(catalogueProviderDirectories).forEach(function (contentType) {
+            var directory = catalogueProviderDirectories[contentType];
+            if (directory.request && directory.request.abort) { directory.request.abort(); }
+            directory.identity = '';
+            directory.rows = [];
+            directory.loading = false;
+            directory.failed = false;
+            directory.request = null;
+        });
+    }
+
+    function invalidateStreamingRegionState() {
+        resetHomeStreamingShelves();
+        resetCatalogueProviderDirectories();
+        serviceIndexRequestId += 1;
+        if (serviceIndexRequest && serviceIndexRequest.abort) { serviceIndexRequest.abort(); }
+        serviceIndex = null;
+        serviceIndexBuiltFor = null;
+        serviceIndexLoading = false;
+        serviceIndexRequest = null;
+        subscriptionRequestId += 1;
+        if (subscriptionRequest && subscriptionRequest.abort) { subscriptionRequest.abort(); }
+        subscriptionRequest = null;
+    }
+
+    function changeActiveTmdbRegion(value) {
+        var profileId = state.activeProfile && state.activeProfile.id;
+        var region = BuroTmdb.safeRegion(value);
+        var existing = state.preferences.tmdbRegionsByProfile;
+        var regions = {};
+        if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+            Object.keys(existing).forEach(function (key) {
+                if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {
+                    regions[key] = BuroTmdb.safeRegion(existing[key]);
+                }
+            });
+        }
+        if (profileId) { regions[profileId] = region; }
+        state.preferences.tmdbRegionsByProfile = regions;
+        /* Mantido para downgrade/migracao de versoes antigas. */
+        state.preferences.tmdbRegion = region;
+        invalidateStreamingRegionState();
+        savePreferences();
+        return region;
+    }
+
     function applyPreferences() {
         var body = document.body;
         BuroI18n.setLanguage(state.preferences.language);
@@ -769,17 +831,19 @@ var BuroApp = (function () {
         updatePlayerErrorFocus();
     }
 
-    function retryPlayback() {
+    function retryPlayback(automatic) {
         var playback = currentPlayback;
         var position;
+        automatic = automatic === true;
         if (!playback) { stopPlayback(); return; }
+        if (!automatic) { playbackRetry.reset(); }
         position = playback.contentType === 'LIVE' ? 0 : Number(playback.positionMs) || 0;
         clearPlayerError();
         if (playback.catchUpChannelId && playback.catchUpProgramme) {
-            beginCatchUp(playback.catchUpChannelId, playback.catchUpProgramme, position);
+            beginCatchUp(playback.catchUpChannelId, playback.catchUpProgramme, position, automatic);
             return;
         }
-        beginPlayback(playback.itemId, position);
+        beginPlayback(playback.itemId, position, automatic);
     }
 
     function handlePlayerErrorKey(keyCode) {
@@ -1041,6 +1105,7 @@ var BuroApp = (function () {
             if (source.id === sourceId) { state.activeSource = source; }
         });
         if (!state.activeSource && state.sources.length) { state.activeSource = state.sources[0]; }
+        invalidateStreamingRegionState();
     }
 
     /* Mesmos estados universais usados pelo Android: perfil, catálogo, arte e pronto. */
@@ -1720,7 +1785,7 @@ var BuroApp = (function () {
 
     function ensureHomeStreamingShelves(done) {
         var profileId = state.activeProfile && state.activeProfile.id || '';
-        var region = BuroTmdb.safeRegion(state.preferences.tmdbRegion);
+        var region = activeTmdbRegion();
         var language = state.preferences.language;
         var identity = profileId + '|' + region + '|MOVIES|' + language;
         var key = BuroTmdb.keyForProfile(profileId);
@@ -2909,7 +2974,7 @@ var BuroApp = (function () {
     function catalogueScope(contentType) {
         if (!catalogueScopes[contentType]) {
             catalogueScopes[contentType] = {
-                genre: null, service: null, year: null, minimumRating: null,
+                query: '', genre: null, service: null, year: null, minimumRating: null,
                 layout: 'poster', rows: undefined, total: null, hasMore: false, loading: false
             };
         }
@@ -2933,6 +2998,7 @@ var BuroApp = (function () {
     var serviceIndexBuiltFor = null;
     var serviceIndexLoading = false;
     var serviceIndexRequest = null;
+    var serviceIndexRequestId = 0;
 
     function currentServiceIndex() {
         return serviceIndex || BuroServiceIndex.empty();
@@ -2952,7 +3018,7 @@ var BuroApp = (function () {
     function ensureCatalogueProviderDirectory(contentType) {
         var directoryState = catalogueProviderDirectory(contentType);
         var profileId = state.activeProfile && state.activeProfile.id || '';
-        var region = BuroTmdb.safeRegion(state.preferences.tmdbRegion);
+        var region = activeTmdbRegion();
         var language = state.preferences.language;
         var identity = profileId + '|' + region + '|' + contentType + '|' + language;
         var key = BuroTmdb.keyForProfile(profileId);
@@ -2996,7 +3062,7 @@ var BuroApp = (function () {
     function catalogueProviderShortcutsHtml(contentType) {
         var directoryState = catalogueProviderDirectory(contentType);
         var profileId = state.activeProfile && state.activeProfile.id || '';
-        var expectedIdentity = profileId + '|' + BuroTmdb.safeRegion(state.preferences.tmdbRegion) +
+        var expectedIdentity = profileId + '|' + activeTmdbRegion() +
             '|' + contentType + '|' + state.preferences.language;
         var configured = Boolean(BuroTmdb.keyForProfile(profileId));
         var rows;
@@ -3025,11 +3091,13 @@ var BuroApp = (function () {
 
     function ensureServiceIndex(contentType) {
         var key = BuroTmdb.keyForProfile(state.activeProfile && state.activeProfile.id);
-        var region = BuroTmdb.safeRegion(state.preferences.tmdbRegion);
-        var cacheKey = key ? region : null;
+        var region = activeTmdbRegion();
+        var cacheKey = key ? region + '|' + contentType : null;
+        var requestId;
         if (!key || serviceIndexLoading) { return; }
         if (serviceIndexBuiltFor === cacheKey && serviceIndex && !serviceIndex.isEmpty()) { return; }
         serviceIndexLoading = true;
+        requestId = ++serviceIndexRequestId;
         /* Sem `render()` aqui: esta função é chamada de dentro do desenho da
            barra, e redesenhar no meio do desenho é recursão. O "procurando"
            aparece no próximo quadro, que os retornos abaixo provocam. */
@@ -3048,20 +3116,26 @@ var BuroApp = (function () {
             }
             return accumulator;
         }, [], function (library) {
+            if (requestId !== serviceIndexRequestId) { return; }
             if (!library.length) { serviceIndexLoading = false; render(); return; }
             serviceIndexRequest = BuroTmdb.loadServiceTitles(key, region, state.preferences.language,
                 null, function (byService) {
                     var built = BuroServiceIndex.build(byService, library);
+                    if (requestId !== serviceIndexRequestId) { return; }
                     serviceIndexLoading = false;
                     serviceIndexRequest = null;
                     if (!built.isEmpty()) { serviceIndex = built; serviceIndexBuiltFor = cacheKey; }
                     render();
                 }, function () {
+                    if (requestId !== serviceIndexRequestId) { return; }
                     serviceIndexLoading = false;
                     serviceIndexRequest = null;
                     render();
                 });
-        }, function () { serviceIndexLoading = false; render(); });
+        }, function () {
+            if (requestId !== serviceIndexRequestId) { return; }
+            serviceIndexLoading = false; render();
+        });
     }
 
     /*
@@ -3126,7 +3200,7 @@ var BuroApp = (function () {
             */
             if (contentType !== 'LIVE') { ensureServiceIndex(contentType); }
         }
-        if (scope.genre || scope.service || scope.year != null || scope.minimumRating != null) {
+        if (scope.query || scope.genre || scope.service || scope.year != null || scope.minimumRating != null) {
             chips += '<button class="scope-chip clear focusable" data-action="catalogue-scope-reset">' +
                 t('clearFilters') + '</button>';
         }
@@ -3140,6 +3214,46 @@ var BuroApp = (function () {
         */
         return (contentType === 'LIVE' ? '' : catalogueYearBar(contentType)) +
             '<div class="catalogue-scope-bar">' + chips + '</div>';
+    }
+
+    /*
+      Busca dentro da aba, no mesmo lugar do campo do Windows.
+
+      Ela compartilha o predicado da prateleira com ano, nota, genero e
+      servico. Assim a contagem, o bloco carregado e o texto digitado nunca
+      descrevem consultas diferentes. O campo fica no catalogo — Pesquisa
+      continua existindo para procurar entre todos os tipos de midia.
+    */
+    function catalogueSearchBar(contentType) {
+        var scope = catalogueScope(contentType);
+        return '<div class="catalogue-search"><span aria-hidden="true">⌕</span>' +
+            '<input id="catalogue-query" class="focusable" type="search" maxlength="80"' +
+            ' autocomplete="off" aria-label="' + attr(t('catalogueSearchHint')) + '" placeholder="' +
+            attr(t('catalogueSearchHint')) + '" value="' + attr(scope.query || '') + '"></div>';
+    }
+
+    /*
+      A faixa de tipos do catálogo do Windows, sem criar uma segunda navegação.
+
+      Cada aba dispara a mesma ação `section` da Ribbon; portanto fonte ativa,
+      cancelamento de pedidos, preferência persistida e restauração de foco
+      continuam num único caminho. `aria-selected` descreve a seleção dentro do
+      tablist, enquanto a Ribbon conserva `aria-current="page"`.
+    */
+    function catalogueToolbar(contentType) {
+        var tabs = [
+            { type: 'LIVE', section: 'LIVE', label: 'live' },
+            { type: 'MOVIE', section: 'MOVIES', label: 'movies' },
+            { type: 'SERIES', section: 'SERIES', label: 'series' }
+        ];
+        return '<div class="catalogue-toolbar"><div class="catalogue-type-tabs" role="tablist" aria-label="' +
+            attr(t('catalogue')) + '">' + tabs.map(function (tab) {
+                var selected = tab.type === contentType;
+                return '<button class="catalogue-type-tab focusable ' + (selected ? 'selected' : '') +
+                    '" role="tab" aria-selected="' + (selected ? 'true' : 'false') +
+                    '" data-action="section" data-section="' + tab.section + '">' +
+                    escapeHtml(t(tab.label)) + '</button>';
+            }).join('') + '</div>' + catalogueSearchBar(contentType) + '</div>';
     }
 
     /* As notas mínimas oferecidas. Estrelas inteiras e não um controle contínuo:
@@ -3493,7 +3607,17 @@ var BuroApp = (function () {
 
     function renderFilteredCategory(data) {
         var filterBar = catalogueFilterBar(data.items || [], data);
-        var filtered = BuroDomain.applyCatalogueFilter(data.items || [], data.catalogueFilter);
+        var selectedFilter = data.catalogueFilter || { genre: null, year: null, sort: 'provider' };
+        /* Filtra antes de agrupar, como o repositorio Windows: se a primeira
+           copia nao satisfaz ano/genero, uma copia valida ainda pode aparecer.
+           A ordenacao visual vem depois e nao troca a variante escolhida. */
+        var filtered = BuroDomain.applyCatalogueFilter(data.items || [], {
+            genre: selectedFilter.genre, year: selectedFilter.year, sort: 'provider'
+        });
+        if (state.preferences.collapseDuplicateTitles !== false) {
+            filtered = BuroDomain.collapseShelfDuplicates(filtered);
+        }
+        filtered = BuroDomain.applyCatalogueFilter(filtered, { sort: selectedFilter.sort });
         var pageCount = Math.max(1, Math.ceil(filtered.length / CATALOGUE_PAGE_SIZE));
         var page = BuroDomain.clamp(Number(data.cataloguePage) || 0, 0, pageCount - 1);
         var start = page * CATALOGUE_PAGE_SIZE;
@@ -3585,7 +3709,8 @@ var BuroApp = (function () {
             return;
         }
         if (state.screenData && state.screenData.kind === 'live') {
-            shell(renderLiveDetails(state.screenData.parent, state.screenData.schedule || []), state.screenData.parent.name, true);
+            shell(renderLiveDetails(state.screenData.parent, state.screenData.schedule || [],
+                Boolean(state.screenData.epgLoading)), state.screenData.parent.name, true);
             return;
         }
         if (state.screenData && state.screenData.kind === 'movie') {
@@ -3620,7 +3745,8 @@ var BuroApp = (function () {
               As categorias continuam alcançáveis: escolher um gênero na barra é
               o mesmo que abrir aquela categoria.
             */
-            shell(catalogueProviderShortcutsHtml(contentType) + catalogueScopeBar(contentType, categories) +
+            shell(catalogueToolbar(contentType) + catalogueProviderShortcutsHtml(contentType) +
+                catalogueScopeBar(contentType, categories) +
                 catalogueShelf(contentType, categories), t(titleKey), true);
         }());
     }
@@ -3642,6 +3768,7 @@ var BuroApp = (function () {
     function catalogueMatcher(contentType, categories) {
         var scope = catalogueScope(contentType);
         var sourceId = state.activeSource && state.activeSource.id;
+        var needle = BuroDomain.foldAccents(BuroDomain.trim(scope.query || ''));
         var allowed = null;
         var allowedItems = null;
         var snapshot = catalogueVisibilitySnapshot();
@@ -3666,12 +3793,30 @@ var BuroApp = (function () {
         return function (item) {
             if (!item || item.contentType !== contentType) { return false; }
             if (sourceId && item.sourceId !== sourceId) { return false; }
+            if (needle && BuroDomain.foldAccents(item.name || '').indexOf(needle) < 0) { return false; }
             if (!snapshotItemVisible(snapshot, item)) { return false; }
             if (allowed && !allowed[item.categoryId]) { return false; }
             if (allowedItems && !allowedItems[item.id]) { return false; }
             if (scope.genre && item.categoryId !== scope.genre) { return false; }
             if (scope.year != null && Number(item.year) !== scope.year) { return false; }
             if (scope.minimumRating != null && !(Number(item.rating) >= scope.minimumRating)) { return false; }
+            return true;
+        };
+    }
+
+    /* Um predicado novo para cada passada no IndexedDB. Contagem e pagina
+       percorrem o store separadamente; compartilhar `seen` entre as duas faria
+       a contagem consumir todas as chaves e devolver uma pagina vazia. */
+    function catalogueDuplicateMatcher(matcher) {
+        var seen = Object.create(null);
+        if (state.preferences.collapseDuplicateTitles === false) { return matcher; }
+        return function (item) {
+            var key;
+            if (!matcher(item)) { return false; }
+            key = BuroDomain.shelfItemDeduplicationKey(item);
+            if (!key) { return true; }
+            if (Object.prototype.hasOwnProperty.call(seen, key)) { return false; }
+            seen[key] = true;
             return true;
         };
     }
@@ -3711,7 +3856,7 @@ var BuroApp = (function () {
 
         function withTotal(total) {
             if (requestId !== catalogueShelfRequestId) { return; }
-            BuroStorage.wherePage('items', matcher, offset, CATALOGUE_BLOCK_SIZE, function (result) {
+            BuroStorage.wherePage('items', catalogueDuplicateMatcher(matcher), offset, CATALOGUE_BLOCK_SIZE, function (result) {
                 var fresh = result.rows || [];
                 if (requestId !== catalogueShelfRequestId) { return; }
                 scope.loading = false;
@@ -3739,7 +3884,7 @@ var BuroApp = (function () {
            store inteiro, e repetir isso a cada dez títulos seria o oposto de
            aliviar a TV. */
         if (more && scope.total != null) { withTotal(scope.total); return; }
-        BuroStorage.countWhere('items', matcher, withTotal, function () {
+        BuroStorage.countWhere('items', catalogueDuplicateMatcher(matcher), withTotal, function () {
             if (requestId !== catalogueShelfRequestId) { return; }
             scope.loading = false;
             scope.rows = [];
@@ -3858,7 +4003,7 @@ var BuroApp = (function () {
               Se o catálogo inteiro está vazio, as categorias são de fato a única
               saída, porque abrir uma delas é o que traz os títulos.
             */
-            if (Number(scope.total) > 0 || scope.genre || scope.service ||
+            if (Number(scope.total) > 0 || scope.query || scope.genre || scope.service ||
                     scope.year != null || scope.minimumRating != null) {
                 return heading + emptyState('B', t('noMatches'), t('noMatchesBody'),
                     'catalogue-scope-reset', t('clearFilters'));
@@ -3936,6 +4081,7 @@ var BuroApp = (function () {
         var contentType = state.section === 'LIVE' ? 'LIVE' :
             (state.section === 'MOVIES' ? 'MOVIE' : 'SERIES');
         var scope = catalogueScope(contentType);
+        scope.query = '';
         scope.genre = null;
         scope.service = null;
         scope.year = null;
@@ -3945,6 +4091,16 @@ var BuroApp = (function () {
            tem para onde voltar: cai no primeiro chip, que é o de gênero. */
         focusIndex = 0;
         render();
+    }
+
+    function invalidateCatalogueShelves() {
+        catalogueShelfRequestId += 1;
+        Object.keys(catalogueScopes).forEach(function (contentType) {
+            catalogueScopes[contentType].rows = undefined;
+            catalogueScopes[contentType].total = null;
+            catalogueScopes[contentType].hasMore = false;
+            catalogueScopes[contentType].loading = false;
+        });
     }
 
     function detailDuration(value) {
@@ -4304,11 +4460,21 @@ var BuroApp = (function () {
         var raw = typeof rawOverride === 'string' ? rawOverride : requestedAppControlUri();
         var value = BuroShare.parseIncoming(raw);
         if (!value) { return false; }
-        if (raw === lastRequestedAppControlUri && Date.now() - lastRequestedAppControlAt < 5000) { return true; }
+        /*
+          getRequestedAppControl() conserva o último pedido mesmo depois de o
+          consumidor tratá-lo. `focus` e `visibilitychange` podem, portanto,
+          reler a mesma URI minutos depois. O limite antigo de cinco segundos
+          transformava "Fechar aviso" numa pausa: o painel voltava sozinho no
+          próximo foco. Enquanto o título continua pendente, a mesma URI é o
+          mesmo pedido, independentemente do tempo transcorrido. Uma URI nova
+          ainda substitui a anterior; depois de encontrar o título o pending é
+          limpo e o mesmo link pode ser recebido de novo legitimamente.
+        */
+        if (raw === lastRequestedAppControlUri && pendingSharedTitle) { return true; }
         lastRequestedAppControlUri = raw;
-        lastRequestedAppControlAt = Date.now();
         pendingSharedTitle = value;
         sharedTitleNoticeVisible = false;
+        sharedTitleNeedsResolution = true;
         sharedTitleResolveId += 1;
         resolvePendingSharedTitle();
         return true;
@@ -4331,11 +4497,14 @@ var BuroApp = (function () {
         var wanted = pendingSharedTitle;
         var snapshot;
         var requestId;
-        if (!wanted || sharedTitleResolving || !state.ready || state.screen !== 'SHELL' ||
+        if (!wanted || !sharedTitleNeedsResolution || sharedTitleResolving || !state.ready || state.screen !== 'SHELL' ||
                 !state.preferences || !state.preferences.acceptedLegal || !state.activeProfile || !state.activeSource) { return; }
         snapshot = catalogueVisibilitySnapshot();
         requestId = sharedTitleResolveId;
         sharedTitleResolving = true;
+        /* Um miss fica parado até a ação explícita de retry. Isso impede que
+           qualquer render reabra um aviso que o usuário acabou de fechar. */
+        sharedTitleNeedsResolution = false;
         BuroStorage.fold('items', function (found, item) {
             return sharedTitleCandidate(snapshot, wanted, found, item);
         }, null, function (found) {
@@ -4353,6 +4522,7 @@ var BuroApp = (function () {
             }
             pendingSharedTitle = null;
             sharedTitleNoticeVisible = false;
+            sharedTitleNeedsResolution = false;
             mergeItems([found]);
             showToast(t('sharedOpening').replace('{title}', wanted.title), false);
             if (found.contentType === 'SERIES') { openSeriesById(found.id, state.section); }
@@ -4375,6 +4545,7 @@ var BuroApp = (function () {
     function retryPendingSharedTitle() {
         if (!pendingSharedTitle) { return; }
         sharedTitleNoticeVisible = false;
+        sharedTitleNeedsResolution = true;
         sharedTitleResolveId += 1;
         resolvePendingSharedTitle();
     }
@@ -4574,7 +4745,7 @@ var BuroApp = (function () {
         return BuroDomain.clamp((nowSeconds - start) / (end - start) * 100, 0, 100);
     }
 
-    function renderLiveDetails(item, schedule) {
+    function renderLiveDetails(item, schedule, epgLoading) {
         var nowSeconds = Math.floor(Date.now() / 1000);
         var current = null;
         var rows = schedule.map(function (program, index) {
@@ -4601,7 +4772,9 @@ var BuroApp = (function () {
             attr(item.id) + '">' + t('watchLive') + '</button><button class="button ghost focusable" data-action="favorite" data-id="' +
             attr(item.id) + '">' + (isFavorite(item.id) ? t('removeFavorite') : t('addFavorite')) +
             '</button></div></div><div class="section-heading"><h2>' + t('programmeGuide') + '</h2><p>' + schedule.length +
-            '</p></div><div class="epg-list">' + (rows || '<p class="form-message">' + t('epgUnavailable') + '</p>') + '</div>';
+            '</p></div><div class="epg-list" aria-live="polite">' +
+            (rows || (epgLoading ? '<div class="search-loading"><span class="boot-indicator"></span><p>' +
+                t('loading') + '</p></div>' : '<p class="form-message">' + t('epgUnavailable') + '</p>')) + '</div>';
     }
 
     function renderSearch() {
@@ -4950,11 +5123,13 @@ var BuroApp = (function () {
     */
     function clockHtml() {
         var now = new Date();
-        var hours = ('0' + now.getHours()).slice(-2);
+        var uses24HourClock = state.preferences.uses24HourClock !== false;
+        var hours = uses24HourClock ? ('0' + now.getHours()).slice(-2) : String((now.getHours() % 12) || 12);
         var minutes = ('0' + now.getMinutes()).slice(-2);
+        var period = uses24HourClock ? '' : (now.getHours() < 12 ? ' AM' : ' PM');
         var days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
         var months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-        return '<div class="topbar-clock"><strong>' + hours + ':' + minutes + '</strong><small>' +
+        return '<div class="topbar-clock"><strong>' + hours + ':' + minutes + period + '</strong><small>' +
             escapeHtml(t('day' + days[now.getDay()]) + ', ' + now.getDate() + ' ' +
                 t('month' + months[now.getMonth()])) + '</small></div>';
     }
@@ -5157,8 +5332,17 @@ var BuroApp = (function () {
     }
 
     function progressCard(item, history) {
-        return '<div class="progress-card">' + mediaCard(item, 'poster') +
-            '<button class="button ghost progress-remove focusable" data-action="' +
+        var row = activeProgressRow(item && item._libraryProgressRowId);
+        var direct = '';
+        var target = row ? findItemAndSource(row.itemId).item : null;
+        if (!history && target && (target.contentType === 'MOVIE' || target.contentType === 'EPISODE')) {
+            direct = '<button class="button primary progress-action focusable" data-action="continue-play" data-id="' +
+                attr(row.id) + '">' + escapeHtml(t('resumeFrom').replace('{time}', formatPlaybackTime(row.positionMs))) +
+                '</button><button class="button ghost progress-action focusable" data-action="continue-restart" data-id="' +
+                attr(row.id) + '">' + escapeHtml(t('startOver')) + '</button>';
+        }
+        return '<div class="progress-card">' + mediaCard(item, 'poster') + direct +
+            '<button class="button ghost progress-action progress-remove focusable" data-action="' +
             (history ? 'history-remove' : 'continue-remove') + '" data-id="' +
             attr(item._libraryProgressRowId) + '">' + escapeHtml(t('downloadRemove')) + '</button></div>';
     }
@@ -5198,7 +5382,8 @@ var BuroApp = (function () {
         libraryPages[section] = page;
         start = page * LIBRARY_PAGE_SIZE;
         visible = filtered.slice(start, start + LIBRARY_PAGE_SIZE);
-        return toolbar + filterBar + '<div class="card-row progress-card-row">' + visible.map(function (item) {
+        return toolbar + filterBar + '<div class="card-row progress-card-row' +
+            (history ? '' : ' continue-progress-row') + '">' + visible.map(function (item) {
             return progressCard(item, history);
         }).join('') + '</div>' + paginationControls(
             'library-page', page, pageCount, start, start + visible.length, filtered.length,
@@ -5680,6 +5865,43 @@ var BuroApp = (function () {
             settingCard('subtitleBackground', 'subtitleBackground') + '</div></section>';
     }
 
+    function clockChoice(value, labelKey, selected) {
+        return '<button class="subtitle-choice focusable ' + (selected ? 'selected' : '') +
+            '" data-action="clock-format" data-value="' + attr(value) + '" aria-pressed="' +
+            (selected ? 'true' : 'false') + '"><strong>' + escapeHtml(t(labelKey)) + '</strong></button>';
+    }
+
+    function clockSettingsPanel() {
+        var uses24HourClock = state.preferences.uses24HourClock !== false;
+        return '<div class="section-heading"><h2>' + t('clockLabel') + '</h2></div>' +
+            '<section class="subtitle-settings-card clock-settings-card"><p>' + t('clockHint') +
+            '</p><div class="subtitle-choice-row">' +
+            clockChoice('24', 'clock24h', uses24HourClock) +
+            clockChoice('12', 'clock12h', !uses24HourClock) + '</div></section>';
+    }
+
+    function regionSettingsPanel() {
+        var selectedRegion = activeTmdbRegion();
+        var regions = BuroTmdb.supportedRegions().map(function (region) {
+            var selected = selectedRegion === region;
+            return '<button class="subtitle-choice focusable ' + (selected ? 'selected' : '') +
+                '" data-action="settings-region" data-region="' + attr(region) + '" aria-pressed="' +
+                (selected ? 'true' : 'false') + '"><strong>' + escapeHtml(region) + '</strong></button>';
+        }).join('');
+        return '<div class="section-heading"><h2>' + t('subscriptionsRegion') + '</h2></div>' +
+            '<section class="subtitle-settings-card region-settings-card"><p>' + t('settingsRegionHint') +
+            '</p><div class="subtitle-choice-row">' + regions + '</div></section>';
+    }
+
+    function duplicateSettingsPanel() {
+        var enabled = state.preferences.collapseDuplicateTitles !== false;
+        return '<div class="section-heading"><h2>' + t('duplicatesLabel') + '</h2></div>' +
+            '<div class="settings-grid"><button class="setting-card focusable ' + (enabled ? 'on' : '') +
+            '" data-action="collapse-duplicates" aria-pressed="' + (enabled ? 'true' : 'false') + '">' +
+            '<div><h3>' + t('duplicatesToggle') + '</h3><p>' + t('duplicatesHint') +
+            '</p></div><span class="toggle"><span></span></span></button></div>';
+    }
+
     /*
       Estado da licença em uma linha, com o motivo do bloqueio quando houver.
 
@@ -5723,7 +5945,12 @@ var BuroApp = (function () {
         var decision = BuroLicense.decide();
         var deviceId = BuroLicense.deviceId() ||
             (BuroIdentity.publicSummary() ? BuroIdentity.publicSummary().deviceId : '');
-        var pending = state.screenData && state.screenData.busy;
+        var data = state.screenData || {};
+        var pending = Boolean(data.busy);
+        var draft = String(data.licenceDraft || '').substring(0, 32);
+        var usable = data.keyInfoKey === draft && data.keyInfo &&
+            ['available', 'yours'].indexOf(data.keyInfo.state) >= 0;
+        var info = licenceKeyInfoPresentation(data);
 
         root.innerHTML = '<main class="gate-screen"><div class="brand-mark">B</div>' +
             '<h1>' + t('licence') + '</h1>' +
@@ -5732,13 +5959,110 @@ var BuroApp = (function () {
             '<strong>' + escapeHtml(deviceId || '—') + '</strong></div>' +
             licencePurchaseHtml(deviceId) +
             '<div class="field"><label>' + t('licenceKey') + '</label>' +
-            '<input id="licence-key" class="focusable" maxlength="32" autocomplete="off"></div>' +
+            '<input id="licence-key" class="focusable" maxlength="32" autocomplete="off" value="' +
+            attr(draft) + '"><div class="form-message licence-key-state ' + info.className + '">' +
+            escapeHtml(info.message) + '</div></div>' +
             '<div class="action-row">' +
             '<button class="button primary focusable" data-action="licence-redeem"' +
-            (pending ? ' disabled' : '') + '>' +
+            (pending || !usable ? ' disabled' : '') + '>' +
             (pending ? t('licenceChecking') : t('licenceRedeem')) + '</button>' +
+            (data.keyInfoError ? '<button class="button ghost focusable" data-action="licence-inspect">' +
+                t('licenceKeyRetry') + '</button>' : '') +
             '<button class="button ghost focusable" data-action="back">' + t('back') + '</button>' +
             '</div></main>';
+    }
+
+    function licenceKeyInfoPresentation(data) {
+        var info = data && data.keyInfo;
+        var key;
+        var message = '';
+        if (data && data.inspecting) {
+            return { message: t('licenceKeyInspecting'), className: '' };
+        }
+        if (data && data.keyInfoError) {
+            return { message: t(data.keyInfoError === 'offline' ? 'licenceOffline' : 'licenceUnavailable'), className: 'error' };
+        }
+        if (!info || data.keyInfoKey !== data.licenceDraft) { return { message: '', className: '' }; }
+        key = {
+            available: 'licenceKeyAvailable',
+            yours: 'licenceKeyYours',
+            in_use: 'licenceKeyInUse',
+            expired: 'licenceKeyExpired',
+            unknown: 'licenceKeyUnknown'
+        }[info.state];
+        message = key ? t(key) : '';
+        message = message.replace('{days}', info.grantDays == null ? '—' : String(info.grantDays));
+        return {
+            message: message,
+            className: ['available', 'yours'].indexOf(info.state) >= 0 ? 'success' : 'error'
+        };
+    }
+
+    function clearLicenceKeyTimer(invalidate) {
+        if (licenceKeyTimer) { window.clearTimeout(licenceKeyTimer); licenceKeyTimer = null; }
+        if (invalidate) { licenceKeyRequestId += 1; }
+    }
+
+    function inspectLicenceKey(value, requestId) {
+        var data = state.screenData || {};
+        if (state.screen !== 'LICENCE' || requestId !== licenceKeyRequestId ||
+                String(data.licenceDraft || '') !== value) { return; }
+        data.inspecting = true;
+        data.keyInfoError = null;
+        state.screenData = data;
+        render();
+        BuroLicense.keyInfo(value, function (info) {
+            if (state.screen !== 'LICENCE' || requestId !== licenceKeyRequestId ||
+                    !state.screenData || state.screenData.licenceDraft !== value) { return; }
+            state.screenData.inspecting = false;
+            state.screenData.keyInfo = info;
+            state.screenData.keyInfoKey = value;
+            state.screenData.keyInfoError = null;
+            render();
+        }, function (error) {
+            var offline = error && ['NETWORK_ERROR', 'NETWORK_TIMEOUT', 'LICENSE_UNREACHABLE'].indexOf(error.code) >= 0;
+            if (state.screen !== 'LICENCE' || requestId !== licenceKeyRequestId ||
+                    !state.screenData || state.screenData.licenceDraft !== value) { return; }
+            state.screenData.inspecting = false;
+            state.screenData.keyInfo = null;
+            state.screenData.keyInfoKey = '';
+            state.screenData.keyInfoError = offline ? 'offline' : 'failed';
+            render();
+        });
+    }
+
+    function scheduleLicenceKeyInspection(value, immediate) {
+        var code = BuroDomain.trim(String(value || '')).toUpperCase().substring(0, 32);
+        var requestId;
+        var data = state.screenData || {};
+        clearLicenceKeyTimer(true);
+        requestId = licenceKeyRequestId;
+        data.licenceDraft = code;
+        data.inspecting = false;
+        data.keyInfo = null;
+        data.keyInfoKey = '';
+        data.keyInfoError = null;
+        state.screenData = data;
+        if (code.length < 6) { return; }
+        licenceKeyTimer = window.setTimeout(function () {
+            licenceKeyTimer = null;
+            inspectLicenceKey(code, requestId);
+        }, immediate ? 0 : LICENCE_KEY_DEBOUNCE_MILLIS);
+    }
+
+    function bindLicenceKeyInput() {
+        var input = root && root.querySelector ? root.querySelector('#licence-key') : null;
+        if (!input || state.screen !== 'LICENCE') { return; }
+        input.addEventListener('input', function () {
+            var message;
+            var redeem;
+            scheduleLicenceKeyInspection(input.value, false);
+            input.value = state.screenData.licenceDraft;
+            message = root.querySelector('.licence-key-state');
+            redeem = root.querySelector('[data-action="licence-redeem"]');
+            if (message) { message.textContent = ''; message.className = 'form-message licence-key-state'; }
+            if (redeem) { redeem.disabled = true; }
+        });
     }
 
     /*
@@ -5766,17 +6090,25 @@ var BuroApp = (function () {
 
     function redeemLicenceKey() {
         var field = document.getElementById('licence-key');
-        var value = field ? field.value : '';
+        var value = BuroDomain.trim(field ? field.value : '').toUpperCase();
+        var data = state.screenData || {};
         if (!value) { showToast(t('licenceKeyInvalid'), true); return; }
+        if (!data.keyInfo || data.keyInfoKey !== value ||
+                ['available', 'yours'].indexOf(data.keyInfo.state) < 0) {
+            scheduleLicenceKeyInspection(value, true);
+            return;
+        }
 
-        state.screenData = { busy: true };
+        data.busy = true;
+        state.screenData = data;
         render();
         BuroLicense.redeem(value, function () {
             state.screenData = null;
             showToast(t('licenceRedeemed'));
             render();
         }, function (error) {
-            state.screenData = null;
+            data.busy = false;
+            state.screenData = data;
             showToast(licenceError(error), true);
             render();
         });
@@ -5818,13 +6150,17 @@ var BuroApp = (function () {
             escapeHtml(t('settingsVersion').replace('{version}', version)) + '</p></div><p>' +
             escapeHtml(t('settingsLegal')) + '</p></section>' +
             licenceSection() +
+            '<div class="section-heading"><h2>' + t('receiverTitle') + '</h2></div><div class="settings-grid">' +
+            '<button class="setting-card focusable" data-action="pair-title"><div><h3>' + t('receiverAction') +
+            '</h3><p>' + t('receiverHint') + '</p></div><strong>›</strong></button></div>' +
             '<div class="section-heading"><h2>' + t('metadata') + '</h2></div><div class="settings-grid">' +
             '<button class="setting-card focusable ' + (tmdbConfiguration.effective ? 'on' : '') +
             '" data-action="tmdb-settings"><div><h3>' + t('tmdbTitle') + '</h3><p>' +
             (tmdbConfiguration.effective ? t('configured') : t('notConfigured')) + '</p></div><strong>TMDb</strong></button>' +
-            '<button class="setting-card focusable ' + (BuroCritics.configured() ? 'on' : '') +
+             '<button class="setting-card focusable ' + (BuroCritics.configured() ? 'on' : '') +
             '" data-action="critics-settings"><div><h3>' + t('criticsTitle') + '</h3><p>' +
             (BuroCritics.configured() ? t('configured') : t('notConfigured')) + '</p></div><strong>OMDb</strong></button></div>' +
+            regionSettingsPanel() +
             '<div class="section-heading"><h2>' + t('contentProtection') + '</h2></div><div class="settings-grid">' +
             '<button class="setting-card focusable" data-action="parental-form"><div><h3>' + t('parentalPin') +
             '</h3><p>' + (state.preferences.parentalPin ? t('configured') : t('notConfigured')) + '</p></div><strong>PIN</strong></button>' +
@@ -5834,6 +6170,7 @@ var BuroApp = (function () {
             '</p></div><span class="toggle"><span></span></span></button>' +
             '<button class="setting-card focusable" data-action="category-settings"><div><h3>' + t('categoryControl') +
             '</h3><p>' + manageableCategories.length + '</p></div><strong>›</strong></button></div>' +
+            duplicateSettingsPanel() +
             subtitleSettings +
             '<div class="section-heading"><h2>' + t('storageTitle') + '</h2></div><div class="settings-grid">' +
             '<button class="setting-card focusable" data-action="storage-settings"><div><h3>' +
@@ -5841,6 +6178,7 @@ var BuroApp = (function () {
             '<div class="section-heading"><h2>' + t('settings') + '</h2></div><div class="settings-grid">' +
             settingCard('reducedMotion', 'reducedMotion') + settingCard('highContrast', 'highContrast') +
             settingCard('removeTransparency', 'reducedTransparency') + '</div>' +
+            clockSettingsPanel() +
             '<div class="section-heading settings-language-heading"><div><h2>' + t('language') + '</h2><p>' +
             t('settingsLanguageHint') + '</p></div></div><div class="settings-language-list">' + languages + '</div>' +
             '<div class="section-heading"><h2>' + t('activeProfile') + '</h2></div>' +
@@ -6150,9 +6488,10 @@ var BuroApp = (function () {
       câmera lê QR de tela de TV, e digitar é a saída quando isso acontece.
       Some sem alarde se a codificação falhar, pelo mesmo motivo.
     */
-    function pairQrHtml(code) {
+    function pairQrHtml(code, kind) {
         var url = BuroPairing.BASE + '/parear' +
-            (/^[0-9]{6}$/.test(String(code)) ? '?code=' + encodeURIComponent(code) : '');
+            (/^[0-9]{6}$/.test(String(code)) ? '?code=' + encodeURIComponent(code) : '') +
+            (kind === 'open_title' ? '&kind=open_title' : '');
         var drawing = '';
         var matrix;
         try {
@@ -6164,22 +6503,27 @@ var BuroApp = (function () {
 
     function renderPairing() {
         var data = state.screenData || {};
+        var receivingTitle = data.kind === 'open_title';
+        var hintKey = receivingTitle ? 'receiverHint' : 'pairHint';
+        var titleKey = receivingTitle ? 'receiverTitle' : 'pairTitle';
+        var step3Key = receivingTitle ? 'receiverStep3' : 'pairStep3';
         var body;
         if (data.error) {
-            body = emptyState('!', t(data.error === 'PAIRING_EXPIRED' ? 'pairExpired' : 'pairFailed'),
-                t('pairHint'), 'pair-retry', t('pairRetry'));
+            body = emptyState('!', t(data.error === 'PAIRING_EXPIRED' ? 'pairExpired' :
+                (data.error === 'PAIRING_PAYLOAD_INVALID' ? 'receiverInvalid' : 'pairFailed')),
+                t(hintKey), 'pair-retry', t('pairRetry'));
         } else if (!data.code) {
             body = '<div class="search-loading"><span class="boot-indicator"></span><p>' +
                 escapeHtml(t('pairStarting')) + '</p></div>';
         } else {
-            body = '<div class="pair-panel"><p class="form-note">' + escapeHtml(t('pairHint')) + '</p>' +
-                '<div class="pair-body">' + pairQrHtml(data.code) +
+            body = '<div class="pair-panel"><p class="form-note">' + escapeHtml(t(hintKey)) + '</p>' +
+                '<div class="pair-body">' + pairQrHtml(data.code, data.kind) +
                 '<ol class="pair-steps">' +
                 '<li><span>' + escapeHtml(t('pairStep1')) + '</span><strong class="pair-url">' +
                 escapeHtml(BuroPairing.phoneUrl()) + '</strong></li>' +
                 '<li><span>' + escapeHtml(t('pairStep2')) + '</span><strong class="pair-code">' +
                 escapeHtml(data.code) + '</strong></li>' +
-                '<li><span>' + escapeHtml(t('pairStep3')) + '</span></li></ol></div>' +
+                '<li><span>' + escapeHtml(t(step3Key)) + '</span></li></ol></div>' +
                 '<p class="pair-waiting"><span class="boot-indicator"></span>' +
                 escapeHtml(t('pairWaiting')) + '</p>' +
                 '<p class="form-note">' + escapeHtml(t('pairExpiresIn').replace('{minutes}',
@@ -6187,7 +6531,7 @@ var BuroApp = (function () {
                 '<div class="action-row"><button class="button ghost focusable" data-action="back">' +
                 t('cancel') + '</button></div></div>';
         }
-        shell(body, t('pairTitle'), true);
+        shell(body, t(titleKey), true);
     }
 
     /*
@@ -6266,6 +6610,23 @@ var BuroApp = (function () {
     */
     function applyPairedValue(kind, value) {
         var profileId = state.activeProfile && state.activeProfile.id;
+        var receivedTitle;
+        if (kind === 'open_title') {
+            receivedTitle = BuroShare.parsePairingPayload(value);
+            if (!receivedTitle) {
+                state.screenData = { kind: kind, error: 'PAIRING_PAYLOAD_INVALID' };
+                render();
+                return;
+            }
+            pendingSharedTitle = receivedTitle;
+            sharedTitleNoticeVisible = false;
+            sharedTitleNeedsResolution = true;
+            sharedTitleResolveId += 1;
+            goBack();
+            showToast(t('receiverReceived').replace('{title}', receivedTitle.title), false);
+            resolvePendingSharedTitle();
+            return;
+        }
         if (kind === 'critics_key') {
             BuroCritics.save(value, function () {
                 clearTmdbDetails();
@@ -6548,10 +6909,12 @@ var BuroApp = (function () {
 
     function loadSubscriptions(kind, force) {
         var key = BuroTmdb.keyForProfile(state.activeProfile && state.activeProfile.id);
-        var region = BuroTmdb.safeRegion(state.preferences.tmdbRegion);
+        var region = activeTmdbRegion();
         var cached;
+        var requestId;
         kind = String(kind || 'MOVIES').toUpperCase();
         if (subscriptionRequest && subscriptionRequest.abort) { subscriptionRequest.abort(); }
+        requestId = ++subscriptionRequestId;
         cached = !force && key ? BuroTmdb.readShelfCache(region, kind, state.preferences.language) : null;
         state.screenData = {
             kind: 'subscriptions', filter: kind, region: region, loading: !cached,
@@ -6575,21 +6938,24 @@ var BuroApp = (function () {
         if (cached) { return; }
         subscriptionRequest = BuroTmdb.loadShelves(key, region, kind, state.preferences.language,
             function (completed, total, visible) {
-                if (state.section !== 'SUBSCRIPTIONS' || !state.screenData || state.screenData.filter !== kind) { return; }
+                if (requestId !== subscriptionRequestId || state.section !== 'SUBSCRIPTIONS' || !state.screenData ||
+                        state.screenData.filter !== kind || state.screenData.region !== region) { return; }
                 state.screenData.completedServices = completed;
                 state.screenData.totalServices = total;
                 state.screenData.visibleServices = visible;
                 render();
             }, function (shelves) {
+                if (requestId !== subscriptionRequestId || state.section !== 'SUBSCRIPTIONS' || !state.screenData ||
+                        state.screenData.filter !== kind || state.screenData.region !== region) { return; }
                 subscriptionRequest = null;
-                if (state.section !== 'SUBSCRIPTIONS' || !state.screenData || state.screenData.filter !== kind) { return; }
                 state.screenData.loading = false;
                 state.screenData.shelves = shelves;
                 BuroTmdb.writeShelfCache(region, kind, state.preferences.language, shelves);
                 render();
             }, function (error) {
+                if (requestId !== subscriptionRequestId || state.section !== 'SUBSCRIPTIONS' || !state.screenData ||
+                        state.screenData.filter !== kind || state.screenData.region !== region) { return; }
                 subscriptionRequest = null;
-                if (state.section !== 'SUBSCRIPTIONS' || !state.screenData || state.screenData.filter !== kind) { return; }
                 state.screenData.loading = false;
                 state.screenData.error = error && error.code || 'TMDB_UNAVAILABLE';
                 render();
@@ -6693,7 +7059,7 @@ var BuroApp = (function () {
         var regions;
         var body;
         if (!data || data.kind !== 'subscriptions') {
-            state.screenData = { kind: 'subscriptions', filter: 'MOVIES', region: BuroTmdb.safeRegion(state.preferences.tmdbRegion),
+            state.screenData = { kind: 'subscriptions', filter: 'MOVIES', region: activeTmdbRegion(),
                 loading: true, shelves: [], selected: null };
             window.setTimeout(function () { loadSubscriptions('MOVIES'); }, 0);
             data = state.screenData;
@@ -6784,7 +7150,7 @@ var BuroApp = (function () {
         state.screen = 'SHELL';
         state.screenData = {
             kind: 'subscriptions', filter: 'MOVIES',
-            region: BuroTmdb.safeRegion(state.preferences.tmdbRegion),
+            region: activeTmdbRegion(),
             loading: false, shelves: homeStreamingShelves, selected: null
         };
         selectSubscriptionTitle(title, { screen: 'HOME', data: homeData, key: key });
@@ -6861,7 +7227,7 @@ var BuroApp = (function () {
         savePreferences();
         state.screenData = {
             kind: 'subscriptions', filter: filter,
-            region: BuroTmdb.safeRegion(state.preferences.tmdbRegion),
+            region: activeTmdbRegion(),
             loading: false, shelves: [], selected: null, directShortcut: true
         };
         startExpandedSubscription({
@@ -6995,7 +7361,7 @@ var BuroApp = (function () {
         var key = BuroTmdb.keyForProfile(state.activeProfile && state.activeProfile.id);
         if (!data || data.kind !== 'subscriptions') {
             data = { kind: 'subscriptions', filter: title.isSeries ? 'SERIES' : 'MOVIES',
-                region: BuroTmdb.safeRegion(state.preferences.tmdbRegion), shelves: [], loading: false };
+                region: activeTmdbRegion(), shelves: [], loading: false };
             state.screenData = data;
         }
         if (subscriptionRequest && subscriptionRequest.abort) { subscriptionRequest.abort(); }
@@ -7118,7 +7484,7 @@ var BuroApp = (function () {
         };
         state.screen = 'SHELL'; state.section = 'SUBSCRIPTIONS';
         state.screenData = { kind: 'subscriptions', filter: title.isSeries ? 'SERIES' : 'MOVIES',
-            region: BuroTmdb.safeRegion(state.preferences.tmdbRegion), shelves: [], loading: false };
+            region: activeTmdbRegion(), shelves: [], loading: false };
         selectSubscriptionTitle(title, { screen: 'PERSON', data: personData });
     }
 
@@ -7248,7 +7614,7 @@ var BuroApp = (function () {
             state.screen = 'SHELL';
             state.section = 'SUBSCRIPTIONS';
             state.screenData = { kind: 'subscriptions', filter: title.isSeries ? 'SERIES' : 'MOVIES',
-                region: BuroTmdb.safeRegion(state.preferences.tmdbRegion), shelves: [], loading: false };
+                region: activeTmdbRegion(), shelves: [], loading: false };
             selectSubscriptionTitle(title, { screen: 'TITLE', value: returned });
         }, function () {
             if (state.screenData !== data) { return; }
@@ -7438,8 +7804,11 @@ var BuroApp = (function () {
         bindSearchInput();
         bindDownloadSearchInput();
         bindStalkerForm();
+        bindLicenceKeyInput();
         reportRuntimeReady();
-        if (pendingSharedTitle && !sharedTitleNoticeVisible) { resolvePendingSharedTitle(); }
+        if (pendingSharedTitle && sharedTitleNeedsResolution && !sharedTitleNoticeVisible) {
+            resolvePendingSharedTitle();
+        }
     }
 
     function focusIdentity(element) {
@@ -7668,7 +8037,7 @@ var BuroApp = (function () {
             'profile-avatar': true, 'profile-source': true, 'library-filter': true,
             'download-filter': true, 'download-compact': true, favorite: true,
             reminder: true, 'subtitle-size-select': true, 'subtitle-colour-select': true,
-            language: true, 'subscription-filter': true, 'subscription-region': true
+            language: true, 'subscription-filter': true, 'subscription-region': true, 'settings-region': true
         };
         if (!root || !root.querySelectorAll) { return; }
 
@@ -7812,7 +8181,30 @@ var BuroApp = (function () {
            os 200 ms de debounce. */
         root.oninput = function (event) {
             var input = event && (event.target || event.srcElement);
+            var catalogueType;
+            var scope;
             if (!input || state.screen !== 'SHELL') { return; }
+            if (input.id === 'catalogue-query' && !state.screenData &&
+                    ['LIVE', 'MOVIES', 'SERIES'].indexOf(state.section) >= 0) {
+                catalogueType = currentCatalogueType();
+                scope = catalogueScope(catalogueType);
+                scope.query = String(input.value || '').substring(0, 80);
+                clearSearchDebounce();
+                searchDebounceTimer = window.setTimeout(function () {
+                    searchDebounceTimer = null;
+                    if (state.screen !== 'SHELL' || state.screenData ||
+                            currentCatalogueType() !== catalogueType) { return; }
+                    /* Invalida tambem uma leitura do filtro anterior que ainda
+                       esteja percorrendo o IndexedDB. */
+                    scope.rows = undefined;
+                    scope.total = null;
+                    scope.hasMore = false;
+                    scope.loading = false;
+                    scope.openPicker = null;
+                    render();
+                }, SEARCH_DEBOUNCE_MILLIS);
+                return;
+            }
             if (input.id === 'history-query' && state.section === 'HISTORY') {
                 historyQuery = String(input.value || '').substring(0, 80);
                 clearHistorySearchDebounce();
@@ -8074,6 +8466,7 @@ var BuroApp = (function () {
         var focused;
         var ribbonTarget;
         var reminderReturnId;
+        if (state.screen === 'LICENCE') { clearLicenceKeyTimer(true); }
         if (state.screen === 'HISTORY_CLEAR_CONFIRM' && progressMutationPending) { return; }
         if (state.screen === 'PERSON' && tmdbPersonRequest && tmdbPersonRequest.abort) {
             tmdbPersonRequest.abort(); tmdbPersonRequest = null;
@@ -8301,6 +8694,10 @@ var BuroApp = (function () {
                     state.favorites = state.favorites.filter(function (row) { return row.profileId !== profileId; });
                     state.progress = state.progress.filter(function (row) { return row.profileId !== profileId; });
                     state.reminders = state.reminders.filter(function (row) { return row.profileId !== profileId; });
+                    if (state.preferences.tmdbRegionsByProfile &&
+                            Object.prototype.hasOwnProperty.call(state.preferences.tmdbRegionsByProfile, profileId)) {
+                        delete state.preferences.tmdbRegionsByProfile[profileId];
+                    }
                     if (state.preferences.activeProfileId === profileId) {
                         state.preferences.activeProfileId = state.profiles[0].id;
                     }
@@ -8387,6 +8784,7 @@ var BuroApp = (function () {
             state.progress = state.progress.filter(function (row) { return !itemIds[row.itemId]; });
             state.profiles.forEach(function (profile) { if (profile.sourceId === sourceId) { profile.sourceId = null; } });
             delete playlistMemory[sourceId];
+            BuroXmltv.clear(sourceId);
             refreshActiveReferences();
             savePreferences();
             state.backStack = [];
@@ -8477,6 +8875,125 @@ var BuroApp = (function () {
         }, failure);
     }
 
+    /*
+      A lista que o vendedor configurou no painel, aplicada na abertura.
+
+      Quem vende IPTV vende para gente que nao consegue cadastrar um servidor
+      Xtream no controle remoto. O cliente le o codigo do aparelho na tela de
+      Licenca e manda por mensagem; quem vendeu preenche no painel; na proxima
+      abertura a lista esta aqui.
+
+      Silencioso quando nao ha nada — o caso comum de toda abertura — e
+      silencioso tambem quando falha: a pessoa nao pediu isto e uma mensagem de
+      erro sobre um provisionamento que ela nem sabe que existe seria ruido. O
+      que falhou vai para o painel, onde ha quem possa corrigir.
+
+      So aplica quando nao ha fonte nenhuma. Uma TV que ja tem lista configurada
+      — pela propria pessoa ou por um provisionamento anterior — nao pode ter a
+      escolha dela trocada por baixo.
+    */
+    function applyAssignedSource() {
+        if (state.sources.length) { return; }
+        BuroLicense.fetchAssignedSource(function (assigned) {
+            if (!assigned || state.sources.length) { return; }
+            connectAssignedXtream(assigned);
+        }, function () { /* Sem rede, sem provisionamento: tenta na proxima. */ });
+    }
+
+    /*
+      Valida antes de gravar, pelo mesmo caminho de quem digita no formulario.
+
+      Autenticar primeiro importa aqui mais do que ali: quem digitou esta olhando
+      para a tela e ve o erro, enquanto isto acontece sozinho. Uma credencial
+      errada gravada em silencio daria ao cliente um aplicativo que abre e nao
+      mostra nada, sem pista do motivo.
+    */
+    function connectAssignedXtream(assigned) {
+        var secret;
+        var source;
+        try {
+            secret = BuroXtream.credentials({
+                server: assigned.server, username: assigned.username, password: assigned.password
+            });
+            source = BuroDomain.createSourceMetadata({ name: assignedSourceName(assigned), type: 'XTREAM' });
+        } catch (invalid) {
+            BuroLicense.confirmAssignedSource('bad_credentials');
+            return;
+        }
+        BuroXtream.authenticate(secret, function () {
+            BuroStorage.secureSave(source.id, secret, function () {
+                loadAssignedCategorySets(secret, source, ['LIVE', 'MOVIE', 'SERIES'], [], assigned);
+            }, function () { BuroLicense.confirmAssignedSource('store_failed'); });
+        }, function (error) {
+            /* O painel precisa saber que o endereco nao respondeu: e quem
+               vendeu que consegue trocar por outro. */
+            BuroLicense.confirmAssignedSource((error && error.code) || 'auth_failed');
+        });
+    }
+
+    /* O nome da fonte vem do endereco, sem a credencial: e o que a pessoa vera
+       na lista de fontes, e nao pode virar um lugar onde a senha aparece. */
+    function assignedSourceName(assigned) {
+        var host = String(assigned.server || '').replace(/^https?:\/\//i, '').split(/[/:?]/)[0];
+        return (host || 'IPTV').substring(0, 40);
+    }
+
+    function loadAssignedCategorySets(secret, source, remaining, collected, assigned) {
+        var contentType;
+        if (!remaining.length) { persistAssignedSource(source, collected, assigned); return; }
+        contentType = remaining.shift();
+        BuroXtream.loadCategories(secret, contentType, function (categories) {
+            categories.forEach(function (category) { category.sourceId = source.id; });
+            loadAssignedCategorySets(secret, source, remaining, collected.concat(categories), assigned);
+        }, function () {
+            /* Um tipo de conteudo que o provedor nao oferece nao invalida os
+               outros: segue com o que deu. */
+            loadAssignedCategorySets(secret, source, remaining, collected, assigned);
+        });
+    }
+
+    /*
+      Grava e segue, sem trocar a tela.
+
+      Diferente de `persistSource`, que navega para Fontes e mostra um aviso:
+      aquilo responde a um gesto de quem estava configurando. Aqui a pessoa esta
+      abrindo o aplicativo, e a resposta certa e a lista simplesmente estar la.
+    */
+    function persistAssignedSource(source, categories, assigned) {
+        BuroStorage.replaceSourceCatalogue(source, categories, [], true, function () {
+            state.sources.push(source);
+            state.categories = state.categories.concat(categories);
+            assignSourceToProfile(source);
+            state.activeSource = source;
+            applyAssignedKeys(assigned);
+            /* So agora o servidor pode apagar o que guardou: ate aqui, uma falha
+               ainda poderia ser tentada de novo na proxima abertura. */
+            BuroLicense.confirmAssignedSource(null);
+            startXtreamHydration(source, true);
+            render();
+        }, function () { BuroLicense.confirmAssignedSource('store_failed'); });
+    }
+
+    /*
+      As chaves de metadados que vieram no mesmo pacote.
+
+      Pelo mesmo motivo da lista: quem nao consegue cadastrar um servidor tambem
+      nao vai criar conta no TMDb. Sao opcionais, e uma chave recusada nao
+      impede a lista de funcionar — o cliente fica sem capa, nao sem canal.
+
+      Nunca sobrescreve uma chave que a pessoa ja escolheu: quem configurou a
+      propria conta fez uma escolha, e ela vale mais do que a nossa.
+    */
+    function applyAssignedKeys(assigned) {
+        var profileId = state.activeProfile && state.activeProfile.id;
+        if (assigned.metadataKey && !BuroTmdb.keyForProfile(profileId)) {
+            BuroTmdb.save('shared', profileId, assigned.metadataKey, function () {}, function () {});
+        }
+        if (assigned.criticsKey && !BuroCritics.configured()) {
+            BuroCritics.save(assigned.criticsKey, function () {}, function () {});
+        }
+    }
+
     function connectXtream(source) {
         var secret;
         try {
@@ -8545,6 +9062,15 @@ var BuroApp = (function () {
         };
     }
 
+    /* A lista pode anunciar o XMLTV no cabeçalho. Ele acompanha o seletor
+       secreto da fonte e nunca a fotografia persistível do catálogo. */
+    function m3uSecretWithGuide(secret, parsed) {
+        var next = {};
+        Object.keys(secret || {}).forEach(function (key) { next[key] = secret[key]; });
+        next.epgUrls = BuroXmltv.safeUrls(parsed && parsed.header && parsed.header.epgUrls);
+        return next;
+    }
+
     function readM3uSource(source, secret, success, failure) {
         if (source.type === 'LOCAL_M3U') {
             BuroUsb.resolvePlaylist(secret, success, failure); return;
@@ -8582,7 +9108,8 @@ var BuroApp = (function () {
             selector = {
                 playlistToken: descriptor.key,
                 fileName: descriptor.name,
-                fileSize: Number(descriptor.size) || 0
+                fileSize: Number(descriptor.size) || 0,
+                epgUrls: BuroXmltv.safeUrls(snapshot.parsed.header && snapshot.parsed.header.epgUrls)
             };
             BuroStorage.secureSave(source.id, selector, function () {
                 selector = null;
@@ -8608,7 +9135,7 @@ var BuroApp = (function () {
             playlistMemory[source.id] = snapshot.parsed.entries;
             rememberM3uArtwork(snapshot.parsed.entries);
             source.channelCount = snapshot.items.length;
-            BuroStorage.secureSave(source.id, { url: url }, function () {
+            BuroStorage.secureSave(source.id, m3uSecretWithGuide({ url: url }, snapshot.parsed), function () {
                 persistSource(source, snapshot.categories, snapshot.items);
             }, sourceFailed);
         }, sourceFailed);
@@ -8752,9 +9279,16 @@ var BuroApp = (function () {
         } else if (source.type === 'REMOTE_M3U' || source.type === 'LOCAL_M3U') {
             readM3uSource(source, secret, function (text) {
                 var snapshot;
+                var updatedSecret;
                 try { snapshot = m3uSnapshot(source, text); }
                 catch (error) { failed(error); return; }
-                finishSourceRefresh(requestId, source, snapshot.categories, snapshot.items, true, snapshot.parsed.entries);
+                updatedSecret = m3uSecretWithGuide(secret, snapshot.parsed);
+                BuroStorage.secureSave(source.id, updatedSecret, function () {
+                    updatedSecret = null;
+                    BuroXmltv.clear(source.id);
+                    finishSourceRefresh(requestId, source, snapshot.categories, snapshot.items, true,
+                        snapshot.parsed.entries);
+                }, function (error) { updatedSecret = null; failed(error); });
             }, failed);
         } else { failed(new Error('SOURCE_TYPE_UNAVAILABLE')); }
     }
@@ -9862,19 +10396,44 @@ var BuroApp = (function () {
     }
 
     /*
+      A linha de Continuar conhece a identidade realmente reproduzida. Quando
+      um episodio e apresentado pela capa da serie pai, abrir pelo id do card
+      tocaria a serie, nao o episodio salvo. As acoes diretas recebem o id da
+      linha de progresso, validam novamente o perfil ativo e so entao resolvem
+      o item real, mantendo URL e credencial no mesmo caminho tardio do player.
+    */
+    function playProgressRow(rowId, restart) {
+        var row;
+        var found;
+        var position;
+        var duration;
+        if (state.screen !== 'SHELL' || state.section !== 'CONTINUE_WATCHING') { return; }
+        row = activeProgressRow(rowId);
+        if (!row || row.completed) { return; }
+        found = findItemAndSource(row.itemId);
+        if (!found.item || !found.source ||
+                (found.item.contentType !== 'MOVIE' && found.item.contentType !== 'EPISODE')) { return; }
+        position = restart ? 0 : Math.max(0, Number(row.positionMs) || 0);
+        duration = Math.max(0, Number(row.durationMs) || 0);
+        if (duration > 0) { position = Math.min(position, duration); }
+        beginPlayback(found.item.id, position);
+    }
+
+    /*
       Reprodução de um programa arquivado pelo próprio provedor.
 
       O programa é transitório: guardamos somente canal e EPG na memória da
       sessão. Usuário, senha e URL timeshift nascem aqui e seguem diretamente
       ao AVPlay, sem entrar em item, progresso, localStorage ou IndexedDB.
     */
-    function beginCatchUp(channelId, programme, startPositionMs) {
+    function beginCatchUp(channelId, programme, startPositionMs, preserveRetryBudget) {
         var found = findItemAndSource(channelId);
         var nowSeconds = Math.floor(Date.now() / 1000);
         var locator;
         var secret;
         var title;
         var playback;
+        if (preserveRetryBudget !== true) { playbackRetry.reset(); }
         if (!found.item || !found.source || found.source.type !== 'XTREAM') {
             showToast(t('catchUpUnavailable'), true); return;
         }
@@ -9992,9 +10551,10 @@ var BuroApp = (function () {
         });
     }
 
-    function beginPlayback(itemId, startPositionMs) {
+    function beginPlayback(itemId, startPositionMs, preserveRetryBudget) {
         var found = findItemAndSource(itemId);
         var requestId;
+        if (preserveRetryBudget !== true) { playbackRetry.reset(); }
         if (!found.item || !found.source) { showToast(t('unavailable'), true); return; }
         if (found.source.type === 'XTREAM' && found.item.contentType === 'SERIES') {
             openSeries(found.item, found.source); return;
@@ -10015,6 +10575,7 @@ var BuroApp = (function () {
     function beginOfflinePlayback(downloadId, startPositionMs) {
         var entry = BuroDownloads.list().filter(function (candidate) { return candidate.id === downloadId; })[0];
         var playback;
+        playbackRetry.reset();
         if (!entry || entry.state !== 'COMPLETED') { showToast(t('unavailable'), true); return; }
         currentPlayback = {
             itemId: entry.id, title: entry.name, contentType: entry.contentType, positionMs: Math.max(0, Number(startPositionMs) || 0),
@@ -10109,6 +10670,10 @@ var BuroApp = (function () {
         var requestId;
         if (!found.item || !found.source) { return; }
         state.section = 'LIVE';
+        if (found.source.type === 'REMOTE_M3U' || found.source.type === 'LOCAL_M3U') {
+            openM3uLiveDetails(found.item, found.source, originSection);
+            return;
+        }
         if (found.source.type !== 'XTREAM') {
             state.screenData = { kind: 'live', parent: found.item, schedule: [], originSection: originSection };
             focusIndex = 0; render(); return;
@@ -10121,6 +10686,63 @@ var BuroApp = (function () {
             state.screenData = { kind: 'live', parent: found.item, schedule: schedule, originSection: originSection };
             focusIndex = 0; render();
         }, function (error) { failCatalogueRequest(requestId, error); });
+    }
+
+    function m3uGuideRequestCurrent(requestId, itemId) {
+        return state.screen === 'SHELL' && state.screenData && state.screenData.kind === 'live' &&
+            state.screenData.requestId === requestId && state.screenData.parent &&
+            state.screenData.parent.id === itemId;
+    }
+
+    function finishM3uGuide(requestId, item, schedule) {
+        if (!m3uGuideRequestCurrent(requestId, item.id)) { return; }
+        state.screenData.schedule = (schedule || []).slice(0, 100);
+        state.screenData.epgLoading = false;
+        focusIndex = 0;
+        render();
+    }
+
+    function loadM3uGuideIds(source, item, requestId, secret) {
+        var currentTvgId = BuroDomain.trim(item.locator && item.locator.tvgId);
+        var initial = { ids: [], seen: {} };
+        function addId(accumulator, candidate) {
+            var value = BuroDomain.trim(candidate && candidate.locator && candidate.locator.tvgId);
+            var key = value.toLowerCase();
+            if (value && !accumulator.seen[key] && accumulator.ids.length < 20000) {
+                accumulator.seen[key] = true;
+                accumulator.ids.push(value);
+            }
+            return accumulator;
+        }
+        function requestGuide(result) {
+            if (!m3uGuideRequestCurrent(requestId, item.id)) { return; }
+            if (!result.seen[currentTvgId.toLowerCase()]) { result = addId(result, item); }
+            BuroXmltv.load(source.id, secret.epgUrls, result.ids, function () {
+                finishM3uGuide(requestId, item, BuroXmltv.schedule(source.id, currentTvgId));
+            }, function () { finishM3uGuide(requestId, item, []); });
+        }
+        BuroStorage.foldByIndex('items', 'byType', [source.id, 'LIVE'], addId, initial,
+            requestGuide, function () { requestGuide(addId(initial, item)); });
+    }
+
+    function openM3uLiveDetails(item, source, originSection) {
+        var requestId = ++catalogueRequestId;
+        var tvgId = BuroDomain.trim(item.locator && item.locator.tvgId);
+        var secret;
+        var cached;
+        try { secret = BuroStorage.secureGet(source.id); }
+        catch (error) { secret = null; }
+        cached = tvgId ? BuroXmltv.schedule(source.id, tvgId) : [];
+        state.screenData = {
+            kind: 'live', parent: item, schedule: cached.slice(0, 100),
+            epgLoading: Boolean(!cached.length && tvgId && secret && BuroXmltv.safeUrls(secret.epgUrls).length),
+            originSection: originSection, requestId: requestId
+        };
+        focusIndex = 0;
+        render();
+        if (!state.screenData.epgLoading) { return; }
+        loadM3uGuideIds(source, item, requestId, secret);
+        secret = null;
     }
 
     function openSeries(item, source, originOverride) {
@@ -10245,9 +10867,24 @@ var BuroApp = (function () {
     }
 
     function playbackFailed(error) {
+        var scheduled;
         persistProgress(false);
         closePlayerMenu();
+        resetPlayerControlsLock();
         BuroPlayer.stop();
+        scheduled = Boolean(currentPlayback) && playbackRetry.schedule(error, function () {
+            if (currentPlayback && document.body.classList.contains('playing')) { retryPlayback(true); }
+        });
+        if (scheduled) {
+            clearPlayerError();
+            playerStatus.classList.remove('error');
+            playerStatus.textContent = t('retryPlayback');
+            playerWaiting.hidden = false;
+            playerWaitingLabel.textContent = t('retryPlayback');
+            overlay.setAttribute('aria-busy', 'true');
+            showPlayerControls();
+            return;
+        }
         showPlayerError(error);
     }
 
@@ -10255,6 +10892,7 @@ var BuroApp = (function () {
         var visual = capturePlaybackReturnVisual();
         var progressChanged;
         playbackResolveRequestId += 1;
+        playbackRetry.reset();
         resetPlayerControlsLock();
         progressChanged = persistProgress(false);
         currentPlayback = null;
@@ -10559,6 +11197,7 @@ var BuroApp = (function () {
             }
         } else if (action === 'section') {
             homeLocalReturnData = null;
+            clearSearchDebounce();
             if (element.getAttribute('data-section') !== 'DOWNLOADS') { clearDownloadSearchDebounce(); }
             if (element.getAttribute('data-section') !== 'HISTORY') {
                 clearHistorySearchDebounce(); historyQuery = ''; libraryPages.HISTORY = 0;
@@ -10582,6 +11221,8 @@ var BuroApp = (function () {
         } else if (action === 'library-page-next') { changeLibraryPage(element, 1);
         } else if (action === 'library-page-previous') { changeLibraryPage(element, -1);
         } else if (action === 'continue-remove') { forgetContinueProgress(id);
+        } else if (action === 'continue-play') { playProgressRow(id, false);
+        } else if (action === 'continue-restart') { playProgressRow(id, true);
         } else if (action === 'history-remove') { forgetHistoryProgress(id);
         } else if (action === 'history-clear') { pushScreen('HISTORY_CLEAR_CONFIRM', {});
         } else if (action === 'history-clear-confirm') { confirmClearHistory();
@@ -10693,8 +11334,12 @@ var BuroApp = (function () {
         else if (action === 'send-to-screen') { sendTitleToScreen(id); }
         else if (action === 'subscription-filter') { loadSubscriptions(element.getAttribute('data-kind')); }
         else if (action === 'subscription-region') {
-            state.preferences.tmdbRegion = BuroTmdb.safeRegion(element.getAttribute('data-region'));
-            savePreferences(); loadSubscriptions(state.screenData.filter);
+            changeActiveTmdbRegion(element.getAttribute('data-region'));
+            loadSubscriptions(state.screenData.filter);
+        }
+        else if (action === 'settings-region') {
+            changeActiveTmdbRegion(element.getAttribute('data-region'));
+            render();
         }
         else if (action === 'subscription-retry') { loadSubscriptions(state.screenData.filter, true); }
         else if (action === 'subscription-title') {
@@ -10727,12 +11372,22 @@ var BuroApp = (function () {
         else if (action === 'download-remove') { BuroDownloads.remove(id); render(); }
         else if (action === 'licence-activate') { pushScreen('LICENCE'); }
         else if (action === 'licence-redeem') { redeemLicenceKey(); }
+        else if (action === 'licence-inspect') {
+            scheduleLicenceKeyInspection(state.screenData && state.screenData.licenceDraft, true);
+        }
         else if (action === 'search-run') { runSearch(); }
         else if (action === 'search-next') { changeSearchPage(1); }
         else if (action === 'search-previous') { changeSearchPage(-1); }
         else if (action === 'search-retry') { changeSearchPage(0); }
         else if (action === 'toggle-setting') {
             property = element.getAttribute('data-property'); state.preferences[property] = !state.preferences[property]; savePreferences(); render();
+        } else if (action === 'clock-format') {
+            state.preferences.uses24HourClock = element.getAttribute('data-value') !== '12';
+            savePreferences(); render();
+        } else if (action === 'collapse-duplicates') {
+            state.preferences.collapseDuplicateTitles = state.preferences.collapseDuplicateTitles === false;
+            invalidateCatalogueShelves();
+            savePreferences(); render();
         } else if (action === 'tmdb-settings') { pushScreen('TMDB_SETTINGS', {}); }
         else if (action === 'tmdb-guide') { openTmdbGuide(); }
         else if (action === 'tmdb-guide-open') { openExternalOffer(TMDB_SIGNUP_URL); }
@@ -10743,6 +11398,7 @@ var BuroApp = (function () {
         else if (action === 'critics-guide-open') { openOfficialCriticsSite(); }
         else if (action === 'critics-save') { saveCriticsKey(); }
         else if (action === 'critics-clear') { clearCriticsKey(); }
+        else if (action === 'pair-title') { startPairing('open_title'); }
         else if (action === 'pair-tmdb') { startPairing('tmdb_key'); }
         else if (action === 'pair-critics') { startPairing('critics_key'); }
         else if (action === 'pair-retry') { startPairing((state.screenData && state.screenData.kind) || 'tmdb_key'); }
@@ -11014,10 +11670,18 @@ var BuroApp = (function () {
             */
             BuroLicense.validate(function () {
                 if (state.ready) { render(); }
+                /* Depois da licenca, e nao antes: o provisionamento so faz
+                   sentido para um aparelho que o servidor ja conhece, e e o
+                   registro que o apresenta. */
+                applyAssignedSource();
             }, function (error) {
                 if (!error || error.status !== 404) { return; }
                 BuroLicense.register(function () {
                     if (state.ready) { render(); }
+                    /* Um aparelho recem-registrado e justamente o caso de quem
+                       acabou de comprar: e a primeira abertura que vai buscar a
+                       lista que o vendedor deixou pronta. */
+                    applyAssignedSource();
                 }, function () {
                     /*
                       Silencioso de propósito: o app abre normalmente e a tela
@@ -11052,6 +11716,7 @@ var BuroApp = (function () {
         _ratingsSection: ratingsSection,
         _downloadChipHtml: downloadChipHtml,
         _refreshChipHtml: refreshChipHtml,
+        _applyAssignedSource: applyAssignedSource,
         /* So para os testes: poe o foco num alvo pelo `data-action`, para
            exercitar o D-pad a partir de onde a pessoa realmente esta. */
         _focusAction: function (action) { refreshFocus(action, null); },

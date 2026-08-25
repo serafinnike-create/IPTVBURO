@@ -22,7 +22,10 @@ var BuroLicense = (function () {
     var ENDPOINTS = {
         register: BASE + '/v1/register',
         validate: BASE + '/v1/validate',
-        redeem: BASE + '/v1/redeem'
+        redeem: BASE + '/v1/redeem',
+        keyInfo: BASE + '/v1/key-info',
+        provisioningClaim: BASE + '/v1/provisioning/claim',
+        provisioningConfirm: BASE + '/v1/provisioning/confirm'
     };
 
     /*
@@ -188,6 +191,71 @@ var BuroLicense = (function () {
         }, failed);
     }
 
+    /*
+      Uma lista que o vendedor configurou no painel, para esta TV.
+
+      Existe porque quem vende IPTV vende para gente que nao consegue cadastrar
+      um servidor Xtream no controle remoto: tres campos, um deles uma senha. O
+      cliente le o codigo do aparelho na tela de Licenca, manda por mensagem, e
+      quem vendeu preenche no painel. Aqui a TV so pergunta se ha algo para ela.
+
+      Nao usa `call`: aquele caminho exige um envelope assinado pelo servidor,
+      que faz sentido para licenca — onde a resposta decide se o aplicativo abre
+      — e nao aqui, onde a resposta e uma configuracao que a TV vai validar
+      conectando de verdade. A prova de posse continua sendo exigida no pedido:
+      o codigo aparece na tela, entao ele sozinho nunca pode bastar.
+
+      Silencio (204) e o caso comum: toda abertura de todo aparelho que nunca
+      foi provisionado. Por isso `done(null)` em vez de erro.
+    */
+    function fetchAssignedSource(done, failed) {
+        withProof('provisioning', function (body) {
+            BuroNetwork.json({
+                url: ENDPOINTS.provisioningClaim,
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            }, function (payload) {
+                done(payload && payload.source ? payload.source : null);
+            }, function (error) {
+                /* 204 chega aqui como corpo vazio em alguns runtimes: nada para
+                   aplicar nao e falha. */
+                if (error && (error.status === 204 || error.status === 404)) { done(null); return; }
+                failed({ code: (error && error.code) || 'PROVISIONING_FAILED',
+                    status: (error && error.status) || 0 });
+            });
+        }, failed);
+    }
+
+    /*
+      Confirma que a lista foi aplicada, e o servidor apaga o que guardou.
+
+      Separado da busca de proposito: uma entrega que se perde — a TV desligada
+      no meio, a rede caindo — precisa poder ser tentada de novo na proxima
+      abertura. Confirmar na entrega deixaria o cliente sem lista e sem como
+      pedir de novo.
+
+      `errorCode` conta ao painel o que deu errado, para quem vendeu poder
+      corrigir o endereco em vez de o cliente ficar sem saber por que nao
+      funcionou.
+    */
+    function confirmAssignedSource(errorCode, done, failed) {
+        withProof('provisioning', function (body) {
+            if (errorCode) { body.errorCode = String(errorCode).slice(0, 60); }
+            BuroNetwork.json({
+                url: ENDPOINTS.provisioningConfirm,
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            }, function () { if (done) { done(); } },
+            function (error) {
+                if (failed) {
+                    failed({ code: (error && error.code) || 'PROVISIONING_FAILED' });
+                }
+            });
+        }, failed || function () {});
+    }
+
     function register(done, failed) {
         withProof('register', function (body, nonce) {
             call(ENDPOINTS.register, body, nonce, done, failed);
@@ -211,6 +279,59 @@ var BuroLicense = (function () {
             delete body.installationId;
             body.key = code;
             call(ENDPOINTS.redeem, body, nonce, done, failed);
+        }, failed);
+    }
+
+    /*
+      Consulta a chave sem consumi-la.
+
+      Diferente de register/validate/redeem, esta rota devolve apenas um estado
+      informativo e não um documento de licença. Por isso a resposta não entra
+      em `call`, não é persistida e nunca pode alterar `decide()`. A requisição
+      continua autenticada pela prova da própria TV para que o servidor possa
+      distinguir `yours` de `in_use`.
+    */
+    function keyInfo(keyCode, done, failed) {
+        var code = String(keyCode || '').trim().toUpperCase();
+        if (!code) { failed({ code: 'KEY_REQUIRED' }); return; }
+        if (code.length > 32) { failed({ code: 'KEY_REQUIRED' }); return; }
+        withProof('validate', function (body) {
+            delete body.publicKey;
+            delete body.installationId;
+            body.key = code;
+            BuroNetwork.json({
+                url: ENDPOINTS.keyInfo,
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+                maxBytes: 4096
+            }, function (response) {
+                var states = ['unknown', 'expired', 'available', 'yours', 'in_use'];
+                var grantDays = response && response.grantDays;
+                var validUntil = response && response.validUntil;
+                if (!response || states.indexOf(response.state) < 0 ||
+                        (grantDays != null && (!isFinite(grantDays) || Math.floor(grantDays) !== grantDays ||
+                            grantDays < 1 || grantDays > 3650)) ||
+                        (validUntil != null && (typeof validUntil !== 'string' || validUntil.length > 64 ||
+                            !isFinite(Date.parse(validUntil))))) {
+                    failed({ code: 'KEY_INFO_MALFORMED', status: 0 });
+                    return;
+                }
+                done({
+                    state: response.state,
+                    grantDays: grantDays == null ? null : grantDays,
+                    validUntil: validUntil == null ? null : validUntil
+                });
+            }, function (error) {
+                if (error && error.status === 404) {
+                    done({ state: 'unknown', grantDays: null, validUntil: null });
+                    return;
+                }
+                failed({
+                    code: (error && error.code) || 'LICENSE_UNREACHABLE',
+                    status: (error && error.status) || 0
+                });
+            });
         }, failed);
     }
 
@@ -273,6 +394,9 @@ var BuroLicense = (function () {
         register: register,
         validate: validate,
         redeem: redeem,
+        fetchAssignedSource: fetchAssignedSource,
+        confirmAssignedSource: confirmAssignedSource,
+        keyInfo: keyInfo,
         snapshot: snapshot,
         decide: decide,
         deviceId: deviceId,
