@@ -1,4 +1,4 @@
-import { isAdmin } from './admin.js';
+import { isAdmin, recordFailedAdminLogin } from './admin.js';
 
 const SESSION_HOURS = 8;
 const encoder = new TextEncoder();
@@ -54,7 +54,11 @@ export async function confirmMfaSetup(request, code, env) {
 }
 
 export async function createAdminSession(request, body, env) {
-  if (!isAdmin(request, env)) return { ok: false, status: 401, error: 'unauthorized' };
+  const country = request.cf?.country;
+  if (!isAdmin(request, env)) {
+    await recordFailedAdminLogin('bad_token', country, env);
+    return { ok: false, status: 401, error: 'unauthorized' };
+  }
   const mfa = await env.DB.prepare('SELECT * FROM admin_mfa WHERE id = 1').first();
   if (mfa?.enabled_at) {
     if (!env.ADMIN_MFA_ENCRYPTION_KEY) {
@@ -62,6 +66,7 @@ export async function createAdminSession(request, body, env) {
     }
     const secret = await decryptSecret(mfa.secret_ciphertext, env.ADMIN_MFA_ENCRYPTION_KEY);
     if (!(await verifyTotp(secret, body?.code))) {
+      await recordFailedAdminLogin('bad_mfa', country, env);
       return { ok: false, status: 401, error: 'mfa_required' };
     }
   }

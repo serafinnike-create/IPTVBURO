@@ -9,6 +9,7 @@ import {
   confirmMfaSetup,
   createAdminSession,
 } from '../src/admin-security.js';
+import { listAdminAudit } from '../src/admin.js';
 
 const SCHEMA = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
 
@@ -16,6 +17,7 @@ class Statement {
   constructor(database, sql) { this.statement = database.prepare(sql); this.values = []; }
   bind(...values) { this.values = values; return this; }
   async first() { return this.statement.get(...this.values) ?? null; }
+  async all() { return { results: this.statement.all(...this.values) }; }
   async run() {
     const result = this.statement.run(...this.values);
     return { meta: { changes: Number(result.changes ?? 0) } };
@@ -63,6 +65,19 @@ test('a bearer token alone never authorises data or mutation routes, enrolled or
   const session = await authenticateAdmin(request(env.ADMIN_TOKEN, signedIn.token), env);
   assert.equal(session.actor, 'Lucas');
   assert.equal(session.method, 'session');
+});
+
+test('a rejected sign-in is recorded, a successful one is not', async () => {
+  const env = environment();
+  await createAdminSession(request('wrong-token-entirely'), {}, env);
+  const afterBadToken = await listAdminAudit(env);
+  assert.equal(afterBadToken.filter((entry) => entry.action === 'ADMIN_LOGIN_REJECTED').length, 1);
+  assert.equal(afterBadToken[0].detail, 'bad_token');
+
+  const signedIn = await createAdminSession(request(env.ADMIN_TOKEN), { actor: 'Lucas' }, env);
+  assert.equal(signedIn.ok, true);
+  const afterGoodLogin = await listAdminAudit(env);
+  assert.equal(afterGoodLogin.filter((entry) => entry.action === 'ADMIN_LOGIN_REJECTED').length, 1);
 });
 
 function totp(secret, nowMs) {

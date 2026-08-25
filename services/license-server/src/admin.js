@@ -135,6 +135,21 @@ export async function devicesByStatus(status, env, sort) {
   return { devices: results ?? [], total: Number(total?.n ?? 0) };
 }
 
+/**
+ * Every non-archived device, unpaginated, for the CSV/backup export.
+ *
+ * A support-facing list caps itself at [DEVICE_LIST_LIMIT] because nobody reads past the first
+ * screen — but "export" means the whole ledger, and silently truncating a download at 100 rows
+ * would make the file wrong without saying so.
+ */
+export async function allDevicesForExport(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT ${ADMIN_DEVICE_COLUMNS} FROM devices
+     WHERE archived_at IS NULL ORDER BY COALESCE(last_seen_at, updated_at) DESC`,
+  ).all();
+  return results ?? [];
+}
+
 /** Everyone who has paid, for the third summary figure. */
 export async function paidDevices(env, sort) {
   const orderBy = sort === 'expiring'
@@ -416,6 +431,15 @@ export async function summary(env) {
   const archived = await env.DB.prepare(
     'SELECT COUNT(*) AS n FROM devices WHERE archived_at IS NOT NULL',
   ).first();
+  // Active or trial devices lapsing within a week — the number that says how many customers are
+  // about to lose access, and therefore how many are worth reaching before that happens rather than
+  // after. "expired" only ever counts what has *already* been lost.
+  const expiringSoon = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM devices
+     WHERE archived_at IS NULL AND status IN ('ACTIVE', 'TRIAL')
+       AND COALESCE(expires_at, trial_ends_at) IS NOT NULL
+       AND COALESCE(expires_at, trial_ends_at) BETWEEN datetime('now') AND datetime('now', '+7 days')`,
+  ).first();
   return {
     active: active?.n ?? 0,
     trial: trial?.n ?? 0,
@@ -423,6 +447,7 @@ export async function summary(env) {
     revoked: revoked?.n ?? 0,
     expired: expired?.n ?? 0,
     archived: archived?.n ?? 0,
+    expiringSoon: expiringSoon?.n ?? 0,
   };
 }
 
@@ -501,17 +526,78 @@ export async function recordSecurityAlert(deviceId, kind, severity, detail, env)
        AND observed_at >= datetime('now', '-24 hours') LIMIT 1`,
   ).bind(deviceId || null, kind).first();
   if (existing) return false;
+  const cleanSeverity = ['INFO', 'WARNING', 'CRITICAL'].includes(severity) ? severity : 'INFO';
+  const cleanKind = supportText(kind, 60) || 'unknown';
+  const cleanDetail = supportText(detail, 500);
   await env.DB.prepare(
     `INSERT INTO security_alerts (device_id, kind, severity, detail, observed_at)
      VALUES (?, ?, ?, ?, ?)`,
-  ).bind(
-    deviceId || null,
-    supportText(kind, 60) || 'unknown',
-    ['INFO', 'WARNING', 'CRITICAL'].includes(severity) ? severity : 'INFO',
-    supportText(detail, 500),
-    new Date().toISOString(),
-  ).run();
+  ).bind(deviceId || null, cleanKind, cleanSeverity, cleanDetail, new Date().toISOString()).run();
+
+  // A CRITICAL alert sits unread until someone opens the panel and clicks "Alertas" — for a single
+  // administrator, that can be days. This is the one severity worth pushing to somewhere already
+  // being watched, so it does not depend on remembering to check.
+  if (cleanSeverity === 'CRITICAL') {
+    await notifyAlertWebhook(cleanKind, cleanDetail, deviceId, env);
+  }
   return true;
+}
+
+/**
+ * Best-effort push of a CRITICAL alert to an external webhook (Slack, Discord, Telegram — anything
+ * that accepts a JSON POST with a `text` field, which covers Slack- and Discord-compatible
+ * incoming webhooks).
+ *
+ * Deliberately silent on failure: a webhook outage must never block or fail the request that
+ * triggered the alert. The alert is already durable in `security_alerts` — this is a convenience
+ * notification, not the record of truth.
+ */
+async function notifyAlertWebhook(kind, detail, deviceId, env) {
+  if (!env.ADMIN_ALERT_WEBHOOK_URL) return;
+  const text = `🚨 IPTV BURO — alerta crítico: ${kind}`
+    + (deviceId ? ` (dispositivo ${deviceId})` : '')
+    + (detail ? `\n${detail}` : '');
+  try {
+    await fetch(env.ADMIN_ALERT_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+  } catch {
+    // Network failure, DNS failure, webhook down — none of it is this request's problem.
+  }
+}
+
+/**
+ * Notes a rejected admin login attempt and raises an alert once they cluster.
+ *
+ * There is exactly one administrator and one valid token, so any volume of failed sign-ins is
+ * either that person mistyping — rare, and self-limiting after a try or two — or somebody guessing
+ * against the token or the TOTP code. `admin_audit` already exists for "what did the administrator
+ * do"; a rejected attempt has no authenticated actor, so it is recorded there as a system entry
+ * rather than requiring a table of its own for one counter.
+ */
+export async function recordFailedAdminLogin(reason, country, env) {
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO admin_audit (actor, action, device_id, detail, country, created_at)
+     VALUES ('sistema', 'ADMIN_LOGIN_REJECTED', NULL, ?, ?, ?)`,
+  ).bind(
+    supportText(reason, 60) || 'unknown',
+    /^[A-Z]{2}$/.test(String(country ?? '').toUpperCase()) ? String(country).toUpperCase() : null,
+    now,
+  ).run();
+
+  const recent = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM admin_audit
+     WHERE action = 'ADMIN_LOGIN_REJECTED' AND created_at >= datetime('now', '-15 minutes')`,
+  ).first();
+  if (Number(recent?.n ?? 0) >= 5) {
+    await recordSecurityAlert(
+      null, 'REPEATED_ADMIN_LOGIN_FAILURES', 'CRITICAL',
+      `${recent.n} tentativas de login administrativo recusadas em 15 minutos`, env,
+    );
+  }
 }
 
 export async function recordFailedRedemption(deviceId, reason, env) {

@@ -61,7 +61,7 @@ export function adminPage() {
   .login button[type="submit"] { justify-self: start; padding-left: 22px; padding-right: 22px; }
   /* Says where the code comes from, because "MFA" alone leaves people waiting for an e-mail. */
   .field > .hint { color: var(--muted); font-size: 12px; line-height: 1.45; }
-  .stats { display: grid; grid-template-columns: repeat(6, minmax(110px, 1fr)); gap: 8px; }
+  .stats { display: grid; grid-template-columns: repeat(7, minmax(110px, 1fr)); gap: 8px; }
   /* Buttons, not captions: each figure opens the list behind it. Styled flat so the panel still
      reads as a summary rather than as a row of controls. */
   .stat {
@@ -195,6 +195,7 @@ export function adminPage() {
         <label class="field"><span>Plataforma</span><select id="platformFilter" onchange="applyLocalFilters()"><option value="">Todas</option><option value="WINDOWS">Windows</option><option value="ANDROID">Android</option><option value="TIZEN">Samsung Tizen</option><option value="WEBOS">LG webOS</option></select></label>
         <label class="field"><span>País</span><input id="countryFilter" maxlength="2" placeholder="BR" oninput="applyLocalFilters()" style="width:90px"></label>
         <label class="field"><span>Atualização</span><select id="updateFilter" onchange="applyLocalFilters()"><option value="">Todas</option><option value="outdated">Desatualizados</option><option value="current">Atualizados</option></select></label>
+        <label class="field"><span>Ordenar por</span><select id="sortOrder" onchange="refreshDevices()"><option value="recent">Uso recente</option><option value="expiring">Vence primeiro</option></select></label>
         <button type="button" class="ghost" onclick="downloadAdmin('/admin/export')">Exportar CSV</button>
         <button type="button" class="ghost" onclick="downloadAdmin('/admin/backup')">Backup JSON</button>
       </div>
@@ -314,7 +315,8 @@ export function adminPage() {
       + stat(response.paid, 'pagaram', 'paid')
       + stat(response.revoked, 'bloqueados', 'REVOKED')
       + stat(response.expired, 'expirados', 'EXPIRED')
-      + stat(response.archived, 'apagados', 'ARCHIVED');
+      + stat(response.archived, 'apagados', 'ARCHIVED')
+      + expiringStat(response.expiringSoon);
     await listByStatus('ALL');
   }
 
@@ -327,6 +329,19 @@ export function adminPage() {
   function stat(value, label, status) {
     return '<button type="button" class="stat" onclick="listByStatus(\\'' + status + '\\')">'
       + '<b>' + value + '</b><span>' + label + '</span></button>';
+  }
+
+  /** Who is about to lose access. Opens sorted by soonest expiry rather than by recent use, because
+      the point of clicking this figure is to see who to reach first. */
+  function expiringStat(value) {
+    return '<button type="button" class="stat" onclick="showExpiringSoon()">'
+      + '<b' + (Number(value) > 0 ? ' style="color:var(--bad)"' : '') + '>' + (value ?? 0)
+      + '</b><span>vencem em 7 dias</span></button>';
+  }
+
+  async function showExpiringSoon() {
+    document.getElementById('sortOrder').value = 'expiring';
+    await listByStatus('ALL');
   }
 
   async function api(path, body) {
@@ -350,6 +365,7 @@ export function adminPage() {
 
   let currentDevicePath = '/admin/list?status=ALL';
   let currentDevices = [];
+  let currentTotal = null;
 
   async function search() {
     const query = document.getElementById('query').value.trim();
@@ -361,17 +377,29 @@ export function adminPage() {
   async function listByStatus(status) {
     document.getElementById('query').value = '';
     document.getElementById('deviceFilter').value = status;
-    await showDevices('/admin/list?status=' + encodeURIComponent(status));
+    await showDevices(listPath(status));
+  }
+
+  /** Builds a /admin/list path carrying the current sort choice. */
+  function listPath(status) {
+    const sort = document.getElementById('sortOrder').value;
+    return '/admin/list?status=' + encodeURIComponent(status) + '&sort=' + encodeURIComponent(sort);
   }
 
   async function refreshDevices() {
+    // A sort change while a search or a specific status is showing should not silently switch back
+    // to "all" — only the ordering of the current view should change.
+    if (/^\\/admin\\/list\\?status=/.test(currentDevicePath)) {
+      currentDevicePath = listPath(document.getElementById('deviceFilter').value || 'ALL');
+    }
     await showDevices(currentDevicePath);
     const summary = await api('/admin/summary');
     if (summary) {
       document.getElementById('stats').innerHTML =
         stat(summary.active, 'ativos', 'ACTIVE') + stat(summary.trial, 'em teste', 'TRIAL')
         + stat(summary.paid, 'pagaram', 'paid') + stat(summary.revoked, 'bloqueados', 'REVOKED')
-        + stat(summary.expired, 'expirados', 'EXPIRED') + stat(summary.archived, 'apagados', 'ARCHIVED');
+        + stat(summary.expired, 'expirados', 'EXPIRED') + stat(summary.archived, 'apagados', 'ARCHIVED')
+        + expiringStat(summary.expiringSoon);
     }
   }
 
@@ -388,6 +416,7 @@ export function adminPage() {
       return;
     }
     currentDevices = data.devices;
+    currentTotal = typeof data.total === 'number' ? data.total : null;
     applyLocalFilters();
   }
 
@@ -405,7 +434,13 @@ export function adminPage() {
       if (update === 'current' && (outdated || !device.app_version)) return false;
       return true;
     });
-    count.textContent = visible.length + (visible.length === 1 ? ' dispositivo' : ' dispositivos');
+    // The server caps a list at 100 rows. Showing "100 dispositivos" as if that were everyone would
+    // hide the fact that a real 340-device state looks identical to the panel — the truncation has
+    // to be visible, not just silently applied.
+    const truncated = currentTotal != null && currentDevices.length < currentTotal;
+    count.textContent = truncated
+      ? 'Mostrando ' + currentDevices.length + ' de ' + currentTotal + ' dispositivos — refine a busca ou o filtro para ver os demais.'
+      : visible.length + (visible.length === 1 ? ' dispositivo' : ' dispositivos');
     target.innerHTML = visible.length
       ? '<div class="device-list">' + visible.map(deviceCard).join('') + '</div>'
       : '<p class="sub">Nada encontrado.</p>';
@@ -844,7 +879,12 @@ export function adminPage() {
   }
 
   function alertLabel(value) {
-    return { RAPID_COUNTRY_CHANGE: 'Mudança rápida de país', REPEATED_INVALID_KEYS: 'Muitas chaves inválidas', PAYMENT_DEVICE_CONFLICT: 'Pagamento em outro aparelho' }[value] || value;
+    return {
+      RAPID_COUNTRY_CHANGE: 'Mudança rápida de país',
+      REPEATED_INVALID_KEYS: 'Muitas chaves inválidas',
+      PAYMENT_DEVICE_CONFLICT: 'Pagamento em outro aparelho',
+      REPEATED_ADMIN_LOGIN_FAILURES: 'Muitas tentativas de login administrativo recusadas',
+    }[value] || value;
   }
 
   /** Days as something readable: "30 dias", "1 ano", "2 anos". */

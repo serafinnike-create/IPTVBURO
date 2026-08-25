@@ -41,6 +41,7 @@ import {
 import {
   archiveDevice,
   adminBackup,
+  allDevicesForExport,
   cancelKey,
   createKeys,
   deviceDetails,
@@ -381,7 +382,7 @@ async function handleAdmin(request, env, url) {
     }
 
     case '/admin/export': {
-      const { devices } = await devicesByStatus('ALL', env);
+      const devices = await allDevicesForExport(env);
       const csv = devicesCsv(devices);
       await recordAdminAudit(
         administrator.actor, 'DEVICES_CSV_EXPORTED', null, `${devices.length} devices`,
@@ -401,10 +402,11 @@ async function handleAdmin(request, env, url) {
       // What the summary counts link to. `paid` is not a status but a question about the ledger,
       // so it is named separately rather than being squeezed into the status filter.
       const wanted = String(url.searchParams.get('status') ?? '').toLowerCase();
-      const devices = wanted === 'paid'
-        ? await paidDevices(env)
-        : await devicesByStatus(wanted, env);
-      return json({ devices });
+      const sort = url.searchParams.get('sort') === 'expiring' ? 'expiring' : 'recent';
+      const { devices, total } = wanted === 'paid'
+        ? await paidDevices(env, sort)
+        : await devicesByStatus(wanted, env, sort);
+      return json({ devices, total });
     }
 
     case '/admin/grant': {

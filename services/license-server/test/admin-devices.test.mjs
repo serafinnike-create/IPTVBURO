@@ -11,6 +11,7 @@ import {
   listAdminAudit,
   listSecurityAlerts,
   recordAdminAudit,
+  recordFailedAdminLogin,
   recordSecurityAlert,
   resolveSecurityAlert,
   restoreDevice,
@@ -107,8 +108,8 @@ test('admin delete archives and blocks without erasing trial or history', async 
   const deviceId = insertDevice(env);
 
   assert.equal(await archiveDevice(deviceId, 'duplicate test install', env), true);
-  assert.equal((await devicesByStatus('ALL', env)).length, 0);
-  const [archived] = await devicesByStatus('ARCHIVED', env);
+  assert.equal((await devicesByStatus('ALL', env)).devices.length, 0);
+  const { devices: [archived] } = await devicesByStatus('ARCHIVED', env);
   assert.equal(archived.device_id, deviceId);
   assert.equal(archived.status, 'REVOKED');
   assert.ok(archived.archived_at);
@@ -124,10 +125,37 @@ test('restoring an archived device does not silently reactivate it', async () =>
   await archiveDevice(deviceId, 'cleanup', env);
 
   assert.equal(await restoreDevice(deviceId, env), true);
-  const [restored] = await devicesByStatus('REVOKED', env);
+  const { devices: [restored] } = await devicesByStatus('REVOKED', env);
   assert.equal(restored.device_id, deviceId);
   assert.equal(restored.status, 'REVOKED');
   assert.equal(restored.archived_at, null);
+});
+
+test('a device list reports how many rows exist in total, not just how many it returned', async () => {
+  const env = environment();
+  insertDevice(env, { deviceId: 'AAAA-1111-0000', status: 'ACTIVE' });
+  insertDevice(env, { deviceId: 'AAAA-2222-0000', status: 'ACTIVE' });
+
+  const result = await devicesByStatus('ACTIVE', env);
+  assert.equal(result.devices.length, 2);
+  assert.equal(result.total, 2);
+});
+
+test('sorting by "expiring" orders soonest-to-lapse first, with no-expiry rows last', async () => {
+  const env = environment();
+  const now = new Date();
+  const soon = new Date(now.getTime() + 1 * 86400000).toISOString();
+  const later = new Date(now.getTime() + 10 * 86400000).toISOString();
+
+  insertDevice(env, { deviceId: 'AAAA-LATE-0000', status: 'ACTIVE', trialEnds: later });
+  env.DB.database.prepare('UPDATE devices SET expires_at = ? WHERE device_id = ?')
+    .run(later, 'AAAA-LATE-0000');
+  insertDevice(env, { deviceId: 'AAAA-SOON-0000', status: 'ACTIVE', trialEnds: soon });
+  env.DB.database.prepare('UPDATE devices SET expires_at = ? WHERE device_id = ?')
+    .run(soon, 'AAAA-SOON-0000');
+
+  const { devices } = await devicesByStatus('ACTIVE', env, 'expiring');
+  assert.deepEqual(devices.map((device) => device.device_id), ['AAAA-SOON-0000', 'AAAA-LATE-0000']);
 });
 
 test('summary includes blocked, expired and archived operational queues', async () => {
@@ -144,7 +172,32 @@ test('summary includes blocked, expired and archived operational queues', async 
     revoked: 0,
     expired: 1,
     archived: 1,
+    expiringSoon: 0,
   });
+});
+
+test('summary counts active and trial devices lapsing within a week, and only those', async () => {
+  const env = environment();
+  const now = new Date();
+  const inThreeDays = new Date(now.getTime() + 3 * 86400000).toISOString();
+  const inThirtyDays = new Date(now.getTime() + 30 * 86400000).toISOString();
+  const yesterday = new Date(now.getTime() - 86400000).toISOString();
+
+  insertDevice(env, { deviceId: 'AAAA-0001-0000', status: 'ACTIVE', trialEnds: inThreeDays });
+  env.DB.database.prepare('UPDATE devices SET expires_at = ? WHERE device_id = ?')
+    .run(inThreeDays, 'AAAA-0001-0000');
+  insertDevice(env, { deviceId: 'AAAA-0002-0000', status: 'TRIAL', trialEnds: inThreeDays });
+  // Active but not expiring soon: excluded.
+  insertDevice(env, { deviceId: 'AAAA-0003-0000', status: 'ACTIVE', trialEnds: inThirtyDays });
+  env.DB.database.prepare('UPDATE devices SET expires_at = ? WHERE device_id = ?')
+    .run(inThirtyDays, 'AAAA-0003-0000');
+  // Already lapsed: excluded, because "expiringSoon" means still time to act, not already gone.
+  insertDevice(env, { deviceId: 'AAAA-0004-0000', status: 'EXPIRED', trialEnds: yesterday });
+  // Revoked with a near expiry: excluded, revoking already answered the question.
+  insertDevice(env, { deviceId: 'AAAA-0005-0000', status: 'REVOKED', trialEnds: inThreeDays });
+
+  const result = await summary(env);
+  assert.equal(result.expiringSoon, 2);
 });
 
 test('support labels and audit do not alter entitlement or expose private identity fields', async () => {
@@ -208,6 +261,58 @@ test('security alerts deduplicate for 24 hours and can be resolved with an audit
   const [resolved] = await listSecurityAlerts(env);
   assert.ok(resolved.resolved_at);
   assert.equal(resolved.resolution_note, 'VPN confirmada');
+});
+
+test('five rejected admin logins within 15 minutes raise one CRITICAL alert', async () => {
+  const env = environment();
+  for (let i = 0; i < 4; i += 1) await recordFailedAdminLogin('bad_token', 'BR', env);
+  assert.equal((await listSecurityAlerts(env)).length, 0);
+
+  await recordFailedAdminLogin('bad_mfa', 'BR', env);
+  const alerts = await listSecurityAlerts(env);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].kind, 'REPEATED_ADMIN_LOGIN_FAILURES');
+  assert.equal(alerts[0].severity, 'CRITICAL');
+  assert.equal(alerts[0].device_id, null);
+
+  const audit = await listAdminAudit(env);
+  assert.equal(audit.filter((entry) => entry.action === 'ADMIN_LOGIN_REJECTED').length, 5);
+});
+
+test('a CRITICAL alert posts to the configured webhook; lower severities do not', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { calls.push({ url, init }); return { ok: true }; };
+  try {
+    const env = environment();
+    env.ADMIN_ALERT_WEBHOOK_URL = 'https://hooks.example/incoming';
+
+    await recordSecurityAlert('ABCD-EFGH-JKLM', 'RAPID_COUNTRY_CHANGE', 'WARNING', 'BR → DE', env);
+    assert.equal(calls.length, 0, 'a WARNING alert must not page anyone');
+
+    await recordSecurityAlert('ABCD-EFGH-JKLM', 'PAYMENT_DEVICE_CONFLICT', 'CRITICAL', 'conflito', env);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://hooks.example/incoming');
+    const body = JSON.parse(calls[0].init.body);
+    assert.ok(body.text.includes('PAYMENT_DEVICE_CONFLICT'));
+    assert.ok(body.text.includes('ABCD-EFGH-JKLM'));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('a CRITICAL alert with no webhook configured is recorded without attempting a request', async () => {
+  const originalFetch = globalThis.fetch;
+  let called = false;
+  globalThis.fetch = async () => { called = true; return { ok: true }; };
+  try {
+    const env = environment();
+    await recordSecurityAlert(null, 'REPEATED_ADMIN_LOGIN_FAILURES', 'CRITICAL', 'x', env);
+    assert.equal(called, false);
+    assert.equal((await listSecurityAlerts(env)).length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('backup omits device keys, purchase tokens and unused activation codes', async () => {
