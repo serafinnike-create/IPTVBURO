@@ -156,6 +156,7 @@
     <string name="sources_xtream_stage_saving">Wird sicher auf diesem Gerät gespeichert…</string>
     <string name="license_title">Gerätelizenz</string>
     <string name="license_device_code">Gerätecode</string>
+    <string name="license_device_code_help">Senden Sie diesen Code an den Verkäufer Ihrer Liste, damit er sie einrichten kann.</string>
     <string name="license_generating">wird erzeugt…</string>
     <string name="license_state_unavailable">Bereit zur Aktivierung</string>
     <string name="license_how_title">So aktivierst du</string>

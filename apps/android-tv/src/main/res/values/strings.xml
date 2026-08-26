@@ -183,6 +183,7 @@
     <string name="a11y_channel">Open %1$s</string>
     <string name="license_title">Device licence</string>
     <string name="license_device_code">Device code</string>
+    <string name="license_device_code_help">Send this code to whoever sold you your playlist and they can set it up for you.</string>
     <string name="license_generating">generating…</string>
     <string name="license_state_unavailable">Ready to activate</string>
     <string name="license_how_title">How to activate</string>

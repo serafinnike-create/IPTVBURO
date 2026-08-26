@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.security.XtreamSource
+import com.lucasserafin94.iptvburo.xtream.XtreamSubscriptionParser
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveSurface
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
@@ -525,7 +526,21 @@ fun AccountSetupGate(
             Spacer(Modifier.height(BuroSpacing.Sm))
             OnboardingField(
                 value = server,
-                onValueChange = { server = it.trim() },
+                onValueChange = { pasted ->
+                    // A pasted subscription link fills all three fields instead of having its
+                    // credentials thrown away. Sellers hand out a single get.php URL far more
+                    // often than three separate fields, and this form used to keep only the host
+                    // — leaving somebody to pick their own username out of a query string by
+                    // hand. The login dialog and the Android app already did this.
+                    val link = XtreamSubscriptionParser.parse(pasted)
+                    if (link == null) {
+                        server = pasted.trim()
+                    } else {
+                        server = link.endpoint.baseUrl.toString()
+                        username = link.username
+                        password = link.password
+                    }
+                },
                 label = text.serverLabel,
             )
             Spacer(Modifier.height(BuroSpacing.Sm))

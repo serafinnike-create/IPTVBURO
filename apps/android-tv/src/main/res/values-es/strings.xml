@@ -204,6 +204,7 @@
     <string name="sources_xtream_stage_saving">Guardando de forma segura en este dispositivo…</string>
     <string name="license_title">Licencia de este dispositivo</string>
     <string name="license_device_code">Código del dispositivo</string>
+    <string name="license_device_code_help">Envía este código a quien te vendió la lista y podrá configurarla por ti.</string>
     <string name="license_generating">generando…</string>
     <string name="license_state_unavailable">Listo para activar</string>
     <string name="license_how_title">Cómo activar</string>

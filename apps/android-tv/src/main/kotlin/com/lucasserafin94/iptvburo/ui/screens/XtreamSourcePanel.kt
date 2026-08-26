@@ -74,6 +74,18 @@ internal fun XtreamSourceDialog(
     ) -> Unit,
     onCancelImport: () -> Unit,
     onDismiss: () -> Unit,
+    /**
+     * This machine's code, shown beside the fields rather than behind a button.
+     *
+     * A television has no clipboard: the code is read off the screen and sent by message, so
+     * hiding it behind a press would only add a step. It sits here because this is the screen
+     * somebody who cannot fill in three fields is actually looking at, and the code is what gets
+     * whoever sold them the list to fill those fields in for them.
+     *
+     * Blank until the set has registered, and then nothing is drawn: an empty code read aloud
+     * finds nobody in the panel.
+     */
+    deviceCode: String = "",
     modifier: Modifier = Modifier,
 ) {
     var displayName by remember { mutableStateOf("") }
@@ -169,6 +181,26 @@ internal fun XtreamSourceDialog(
                             fontSize = 15.sp,
                             lineHeight = 21.sp,
                         )
+                        if (deviceCode.isNotBlank()) {
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                text = stringResource(R.string.license_device_code),
+                                color = BuroTextSecondary,
+                                fontSize = 13.sp,
+                            )
+                            Text(
+                                text = deviceCode,
+                                color = BuroAccent,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                text = stringResource(R.string.license_device_code_help),
+                                color = BuroTextSecondary,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                            )
+                        }
                         Spacer(Modifier.height(22.dp))
                         XtreamTextField(
                             value = displayName,
