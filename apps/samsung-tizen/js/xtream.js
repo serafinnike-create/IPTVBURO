@@ -41,7 +41,7 @@ var BuroXtream = (function () {
     }
 
     function authenticate(secret, success, failure) {
-        BuroNetwork.json({ url: apiUrl(secret), maxBytes: 2 * 1024 * 1024 }, function (payload) {
+        BuroNetwork.json({ url: apiUrl(secret), maxBytes: 2 * 1024 * 1024, pinHost: true }, function (payload) {
             var user = payload && payload.user_info;
             var auth = user && (user.auth === 1 || user.auth === '1');
             var status = user && String(user.status || '').toLowerCase();
@@ -53,7 +53,7 @@ var BuroXtream = (function () {
     function loadCategories(secret, contentType, success, failure) {
         var contract = ACTIONS[contentType];
         if (!contract) { failure({ code: 'CONTENT_TYPE_INVALID' }); return; }
-        BuroNetwork.json({ url: apiUrl(secret, contract.categories), maxBytes: 4 * 1024 * 1024 }, function (payload) {
+        BuroNetwork.json({ url: apiUrl(secret, contract.categories), maxBytes: 4 * 1024 * 1024, pinHost: true }, function (payload) {
             if (!Array.isArray(payload)) { failure({ code: 'MALFORMED_CATEGORIES' }); return; }
             success(payload.map(function (row, index) {
                 var providerId = row.category_id == null ? String(index) : String(row.category_id);
@@ -116,7 +116,8 @@ var BuroXtream = (function () {
         return BuroNetwork.json({
             url: apiUrl(secret, contract.items, category.providerCategoryId),
             maxBytes: 16 * 1024 * 1024,
-            timeoutMs: 30000
+            timeoutMs: 30000,
+            pinHost: true
         }, function (payload) {
             var artwork = {};
             var items;
@@ -138,7 +139,7 @@ var BuroXtream = (function () {
             failure({ code: 'LOCATOR_INVALID' }); return;
         }
         url = apiUrl(secret, 'get_series_info') + '&series_id=' + encodeURIComponent(locator.providerItemId);
-        return BuroNetwork.json({ url: url, maxBytes: 16 * 1024 * 1024, timeoutMs: 30000 }, function (payload) {
+        return BuroNetwork.json({ url: url, maxBytes: 16 * 1024 * 1024, timeoutMs: 30000, pinHost: true }, function (payload) {
             var groups = payload && payload.episodes;
             var info = payload && payload.info ? payload.info : {};
             var rows = [];
@@ -197,7 +198,7 @@ var BuroXtream = (function () {
             failure({ code: 'LOCATOR_INVALID' }); return null;
         }
         url = apiUrl(secret, 'get_series_info') + '&series_id=' + encodeURIComponent(locator.providerItemId);
-        return BuroNetwork.json({ url: url, maxBytes: 16 * 1024 * 1024, timeoutMs: 30000 }, function (payload) {
+        return BuroNetwork.json({ url: url, maxBytes: 16 * 1024 * 1024, timeoutMs: 30000, pinHost: true }, function (payload) {
             var info;
             if (!payload || typeof payload !== 'object') { failure({ code: 'MALFORMED_CATALOG' }); return; }
             info = payload.info && typeof payload.info === 'object' ? payload.info : {};
@@ -213,7 +214,7 @@ var BuroXtream = (function () {
             failure({ code: 'LOCATOR_INVALID' }); return;
         }
         url = apiUrl(secret, 'get_vod_info') + '&vod_id=' + encodeURIComponent(locator.providerItemId);
-        return BuroNetwork.json({ url: url, maxBytes: 4 * 1024 * 1024, timeoutMs: 30000 }, function (payload) {
+        return BuroNetwork.json({ url: url, maxBytes: 4 * 1024 * 1024, timeoutMs: 30000, pinHost: true }, function (payload) {
             var info = payload && payload.info ? payload.info : {};
             var movie = payload && payload.movie_data ? payload.movie_data : {};
             success({
@@ -272,7 +273,7 @@ var BuroXtream = (function () {
             failure({ code: 'LOCATOR_INVALID' }); return;
         }
         url = apiUrl(secret, 'get_short_epg') + '&stream_id=' + encodeURIComponent(locator.providerItemId) + '&limit=12';
-        BuroNetwork.json({ url: url, maxBytes: 2 * 1024 * 1024, timeoutMs: 18000 }, function (payload) {
+        BuroNetwork.json({ url: url, maxBytes: 2 * 1024 * 1024, timeoutMs: 18000, pinHost: true }, function (payload) {
             var rows = payload && Array.isArray(payload.epg_listings) ? payload.epg_listings : [];
             success(rows.slice(0, 12).map(function (row) {
                 return {
