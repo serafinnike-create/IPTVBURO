@@ -238,6 +238,9 @@ fun DesktopApp(
     // failure screens: state held there was discarded, so a wrong password emptied the whole form
     // and hid which field was actually wrong.
     val setupDraft = remember { AccountSetupDraft() }
+    // Asked for from the playlist form, which is where somebody who cannot fill in three fields
+    // actually gives up. The profile gate behind it has its own.
+    var setupShowingDeviceCode by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -898,6 +901,8 @@ fun DesktopApp(
                         savedSources = appState.savedSourcesRevision.let { appState.savedSources() },
                         onRenameSaved = appState::renameSavedSource,
                         onRemoveSaved = appState::removeSavedSource,
+                        deviceCode = appState.deviceCode,
+                        onShowDeviceCode = { setupShowingDeviceCode = true },
                         // Hoisted above the step branch so a failed connection returns to a form
                         // that still holds everything the user typed.
                         draft = setupDraft,
@@ -989,6 +994,12 @@ fun DesktopApp(
                                 null
                             },
                     )
+                }
+
+                // Drawn outside the step chain so it sits over the form rather than replacing
+                // it: somebody reading out their code is in the middle of filling those fields in.
+                if (setupShowingDeviceCode) {
+                    DeviceCodeDialog(appState.deviceCode) { setupShowingDeviceCode = false }
                 }
 
                 // Purchase details, opened from the countdown chip while the app still works. The
@@ -2906,7 +2917,6 @@ private fun DesktopProfileGate(
     var avatar by remember { mutableStateOf(0) }
     var confirmingReset by remember { mutableStateOf(false) }
     var showingDeviceCode by remember { mutableStateOf(false) }
-    var codeCopied by remember { mutableStateOf(false) }
     // Which profile is one tap away from being removed. Held here so tapping a second profile
     // cancels the first, rather than arming two at once.
     var confirmingDelete by remember { mutableStateOf<String?>(null) }
@@ -3105,12 +3115,7 @@ private fun DesktopProfileGate(
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(
-                        onClick = {
-                            codeCopied = false
-                            showingDeviceCode = true
-                        },
-                    ) {
+                    TextButton(onClick = { showingDeviceCode = true }) {
                         Text(
                             text = strings.shareStrings.screens.deviceCodeAction,
                             color = BuroColors.TextSubtle,
@@ -3124,48 +3129,64 @@ private fun DesktopProfileGate(
         }
 
         if (showingDeviceCode) {
-            AlertDialog(
-                onDismissRequest = { showingDeviceCode = false },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            copyToClipboard(deviceCode)
-                            codeCopied = true
-                        },
-                    ) {
-                        Text(
-                            text = if (codeCopied) strings.licenseText.copied else "⧉",
-                            color = if (codeCopied) BuroColors.Success else BuroColors.Primary,
-                        )
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showingDeviceCode = false }) {
-                        Text(strings.understood)
-                    }
-                },
-                title = { Text(strings.shareStrings.screens.deviceCodeAction) },
-                text = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = deviceCode,
-                            color = BuroColors.Primary,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                        )
-                        Spacer(Modifier.height(BuroSpacing.Sm))
-                        Text(
-                            text = strings.shareStrings.screens.deviceCodeHelp,
-                            color = BuroColors.TextSubtle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                },
-            )
+            DeviceCodeDialog(deviceCode) { showingDeviceCode = false }
         }
     }
+}
+
+/**
+ * This machine's code, with a way to copy it.
+ *
+ * One composable rather than one per screen: it is offered from the profile gate and again from the
+ * playlist form, and two copies would drift — the likeliest drift being one of them quietly losing
+ * the line that says what the code is for, which is the half that makes it useful.
+ */
+@Composable
+private fun DeviceCodeDialog(
+    deviceCode: String,
+    onDismiss: () -> Unit,
+) {
+    var copied by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    copyToClipboard(deviceCode)
+                    copied = true
+                },
+            ) {
+                Text(
+                    text = if (copied) strings.licenseText.copied else "⧉",
+                    color = if (copied) BuroColors.Success else BuroColors.Primary,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(strings.understood) }
+        },
+        title = { Text(strings.shareStrings.screens.deviceCodeAction) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = deviceCode,
+                    color = BuroColors.Primary,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                )
+                Spacer(Modifier.height(BuroSpacing.Sm))
+                // Without this the code is a string of characters that means nothing to whoever
+                // is reading it off the screen.
+                Text(
+                    text = strings.shareStrings.screens.deviceCodeHelp,
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        },
+    )
 }
 
 /**

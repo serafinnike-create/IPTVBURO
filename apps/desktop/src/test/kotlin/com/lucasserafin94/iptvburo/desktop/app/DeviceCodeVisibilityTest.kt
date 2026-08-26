@@ -32,6 +32,45 @@ class DeviceCodeVisibilityTest {
     }
 
     @Test
+    fun `the playlist form offers it too, not only the screen behind it`() {
+        // Where somebody who cannot fill in three fields actually gives up. Offering the code only
+        // on the profile gate means they have to go back to a screen they already left.
+        val onboarding = read("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/OnboardingFlow.kt")
+        assertTrue(
+            onboarding.contains("text.shareStrings.screens.deviceCodeAction"),
+            "the form itself has to offer it",
+        )
+        assertTrue(app.contains("deviceCode = appState.deviceCode,"), "and be given the code")
+        assertTrue(
+            app.contains("onShowDeviceCode = { setupShowingDeviceCode = true }"),
+            "and a way to ask for it",
+        )
+        assertTrue(
+            app.contains("if (setupShowingDeviceCode) {"),
+            "and the dialog has to actually be drawn, or the button does nothing",
+        )
+    }
+
+    @Test
+    fun `a machine with no code yet offers nothing rather than something blank`() {
+        // It is read aloud. A blank code finds nobody in the panel and wastes the customer's time
+        // on a support message that cannot be acted on.
+        val onboarding = read("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/OnboardingFlow.kt")
+        assertTrue(onboarding.contains("if (deviceCode.isNotBlank()) {"))
+    }
+
+    @Test
+    fun `both screens show the same dialog rather than a copy each`() {
+        // Two copies drift, and the likeliest drift is one of them losing the line that says what
+        // the code is for — the half that makes it useful to the person reading it.
+        assertTrue(app.contains("private fun DeviceCodeDialog("), "one composable")
+        assertTrue(
+            app.split("DeviceCodeDialog(").size - 1 >= 3,
+            "declared once and used from both screens",
+        )
+    }
+
+    @Test
     fun `the code does not depend on a licence answer`() {
         // It has to be readable before the first check comes back, and on a machine with no
         // network — which is one of the situations where somebody most needs to read it out.

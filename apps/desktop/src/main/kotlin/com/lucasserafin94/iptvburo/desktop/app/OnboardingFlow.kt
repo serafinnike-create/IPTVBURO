@@ -305,6 +305,15 @@ fun AccountSetupGate(
         musicPlaylist: Path?,
         metadataKey: String,
     ) -> Unit,
+    /**
+     * This machine's code, and the request to show it.
+     *
+     * Offered on the form itself, not only on the profile screen behind it. This is where somebody
+     * who cannot fill in three fields actually gives up, and the code is what gets whoever sold
+     * them the list to fill those fields in for them.
+     */
+    deviceCode: String = "",
+    onShowDeviceCode: () -> Unit = {},
     /** Renames a saved playlist. Its label is all that tells one from another on this screen. */
     onRenameSaved: (sourceId: String, label: String) -> Unit = { _, _ -> },
     /** Forgets a saved playlist and the password stored with it. */
@@ -490,6 +499,24 @@ fun AccountSetupGate(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(BuroSpacing.Xs))
+            // Beside the fields somebody is stuck on, rather than only on the screen behind this
+            // one. Hidden when there is no identity yet: a blank code is worse than no offer,
+            // because it is read aloud and finds nobody.
+            if (deviceCode.isNotBlank()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onShowDeviceCode) {
+                        Text(
+                            text = text.shareStrings.screens.deviceCodeAction,
+                            color = BuroColors.TextSubtle,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
+            }
             OnboardingField(
                 value = listLabel,
                 onValueChange = { listLabel = it.take(40) },
