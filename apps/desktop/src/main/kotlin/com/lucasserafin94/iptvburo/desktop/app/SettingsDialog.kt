@@ -98,6 +98,8 @@ fun SettingsDialog(
     onOpenTmdbGuide: () -> Unit = {},
     /** Opens the page where OMDb issues its key. */
     onOpenOmdbSite: () -> Unit = {},
+    /** Opens theporndb.net, where the adult-artwork key is issued. */
+    onOpenAdultKeySite: () -> Unit = {},
     /** And the guide for it, which exists mainly to explain the activation email. */
     onOpenOmdbGuide: () -> Unit = {},
 ) {
@@ -404,6 +406,67 @@ fun SettingsDialog(
                                             BuroColors.TextSubtle
                                         },
                                     style = MaterialTheme.typography.labelSmall,
+                                )
+
+                                // Artwork for the one catalogue TMDb answers nothing for. Its own
+                                // key, because it is a different service — and the viewer's own,
+                                // because a key shipped inside an installer is a published key.
+                                Spacer(Modifier.height(BuroSpacing.Md))
+                                Text(
+                                    text = ratings.adultKeyTitle,
+                                    color = BuroColors.Text,
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = ratings.adultKeyBody,
+                                    color = BuroColors.TextSubtle,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                                Spacer(Modifier.height(BuroSpacing.Xs))
+                                OutlinedTextField(
+                                    value = appState.adultMetadataApiKey,
+                                    onValueChange = appState::updateAdultMetadataApiKey,
+                                    singleLine = true,
+                                    placeholder = {
+                                        Text(ratings.adultKeyPlaceholder, color = BuroColors.TextSubtle)
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = BuroRadius.Small,
+                                    colors =
+                                        TextFieldDefaults.colors(
+                                            focusedTextColor = BuroColors.Text,
+                                            unfocusedTextColor = BuroColors.Text,
+                                            focusedContainerColor = BuroColors.Surface,
+                                            unfocusedContainerColor = BuroColors.Surface,
+                                            focusedIndicatorColor = BuroColors.Primary,
+                                            unfocusedIndicatorColor = BuroColors.BorderSoft,
+                                            cursorColor = BuroColors.Primary,
+                                        ),
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text =
+                                        if (appState.adultMetadataApiKey.isNotBlank()) {
+                                            ratings.adultKeySaved
+                                        } else {
+                                            ratings.adultKeyAbsent
+                                        },
+                                    color =
+                                        if (appState.adultMetadataApiKey.isNotBlank()) {
+                                            BuroColors.Success
+                                        } else {
+                                            BuroColors.TextSubtle
+                                        },
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = ratings.adultKeySite,
+                                    color = BuroColors.TextMuted,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    textDecoration = TextDecoration.Underline,
+                                    modifier = Modifier.clickable(onClick = onOpenAdultKeySite),
                                 )
                             }
                         }

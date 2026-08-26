@@ -235,3 +235,11 @@ private fun omdbGuideSteps(text: DesktopStrings): List<KeyGuideStep> {
  * there has to find this page themselves — which is the gap the guide exists to close.
  */
 const val OMDB_API_KEY_URL: String = "https://www.omdbapi.com/apikey.aspx"
+
+/**
+ * Where a ThePornDB key is issued.
+ *
+ * The account page rather than the home page: somebody who has just read that they need a key
+ * should land where the key is, not on a catalogue.
+ */
+const val ADULT_METADATA_KEY_URL: String = "https://theporndb.net/user/api-tokens"

@@ -141,6 +141,7 @@ import com.lucasserafin94.iptvburo.metadata.CriticScores
 import com.lucasserafin94.iptvburo.metadata.CriticScoresClient
 import com.lucasserafin94.iptvburo.metadata.TMDB_NAMESPACE
 import com.lucasserafin94.iptvburo.metadata.TMDB_SERIES_NAMESPACE
+import com.lucasserafin94.iptvburo.metadata.AdultArtworkClient
 import com.lucasserafin94.iptvburo.metadata.TmdbAudienceScore
 import com.lucasserafin94.iptvburo.metadata.TmdbClient
 import com.lucasserafin94.iptvburo.metadata.TmdbDiscoverKind
@@ -282,6 +283,30 @@ class DesktopAppState(
 
     var criticScoresApiKey by mutableStateOf(userStore.criticScoresApiKey().orEmpty())
         private set
+
+    /**
+     * The viewer's ThePornDB key, or blank.
+     *
+     * Blank is the shipped state and stays a working app: those rows keep the title card they
+     * already draw. No key travels with the installer — one inside a file anybody unpacks is a
+     * published key, and the account suspended for its abuse would be the one that issued it.
+     */
+    var adultMetadataApiKey by mutableStateOf(userStore.adultMetadataApiKey().orEmpty())
+        private set
+
+    /** The client, present only while a key is. */
+    var adultArtworkClient by mutableStateOf(
+        userStore.adultMetadataApiKey()?.takeIf(String::isNotBlank)?.let(::AdultArtworkClient),
+    )
+        private set
+
+    /** Stores the key and rebuilds the client, so pasting one takes effect without a restart. */
+    fun updateAdultMetadataApiKey(value: String) {
+        val clean = value.trim()
+        userStore.setAdultMetadataApiKey(clean)
+        adultMetadataApiKey = clean
+        adultArtworkClient = clean.takeIf(String::isNotBlank)?.let(::AdultArtworkClient)
+    }
 
     /**
      * Stores the OMDb key and rebuilds the client, so pasting one takes effect without a restart.

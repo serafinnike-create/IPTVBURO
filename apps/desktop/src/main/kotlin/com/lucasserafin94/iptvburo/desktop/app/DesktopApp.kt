@@ -1168,6 +1168,9 @@ fun DesktopApp(
                     onOpenTmdbSettings = { openUriExternally(java.net.URI(TMDB_API_SETTINGS_URL)) },
                     onOpenTmdbGuide = { tmdbGuideOpen = true },
                     onOpenOmdbSite = { openUriExternally(java.net.URI(OMDB_API_KEY_URL)) },
+                    onOpenAdultKeySite = {
+                        openUriExternally(java.net.URI(ADULT_METADATA_KEY_URL))
+                    },
                     onOpenOmdbGuide = { omdbGuideOpen = true },
                 )
             }

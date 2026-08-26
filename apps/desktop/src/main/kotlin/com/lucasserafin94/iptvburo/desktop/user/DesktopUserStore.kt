@@ -688,6 +688,24 @@ class DesktopUserStore(
      */
     fun criticScoresApiKey(): String? = preferences.get(KEY_CRITIC_KEY, null)?.takeIf(String::isNotBlank)
 
+    /**
+     * The ThePornDB key, which is what covers a catalogue TMDb deliberately excludes.
+     *
+     * TMDb answers nothing for these titles — the app asks it not to, and TMDb's own guidance is
+     * that applications should not fetch them — so an adult category arrives with no artwork at
+     * all. This is the only way to fill it, and it is the viewer's own account: there is no key
+     * shipped with the app, because a key inside an installer is a published key, and the account
+     * suspended when somebody abuses it would be the one that issued it.
+     *
+     * Absent by default, which leaves those rows drawn with the title fallback exactly as now.
+     */
+    fun adultMetadataApiKey(): String? = preferences.get(KEY_ADULT_KEY, null)?.takeIf(String::isNotBlank)
+
+    fun setAdultMetadataApiKey(value: String?) {
+        val clean = value?.trim().orEmpty()
+        if (clean.isBlank()) preferences.remove(KEY_ADULT_KEY) else preferences.put(KEY_ADULT_KEY, clean)
+    }
+
     fun setCriticScoresApiKey(value: String?) {
         val clean = value?.trim().orEmpty()
         if (clean.isBlank()) preferences.remove(KEY_CRITIC_KEY) else preferences.put(KEY_CRITIC_KEY, clean)
@@ -1065,6 +1083,7 @@ class DesktopUserStore(
         const val KEY_TERMS_ACCEPTED = "terms-accepted"
         const val KEY_METADATA_KEY = "metadata-api-key"
         const val KEY_CRITIC_KEY = "critic-scores-api-key"
+        const val KEY_ADULT_KEY = "adult-metadata-api-key"
         const val KEY_ACTIVATION_KEY = "activation-key"
         const val KEY_AUDIO_OUTPUT = "audio-output"
         const val KEY_LEGACY_FAVORITES = "favorites"
