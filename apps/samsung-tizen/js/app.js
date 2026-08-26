@@ -1572,7 +1572,11 @@ var BuroApp = (function () {
             shell('<p class="profile-help">' + t('manageProfiles') + '</p><div class="profile-row">' + cards + '</div>', t('profiles'), true);
         } else {
             root.innerHTML = '<main class="gate-screen"><div class="brand-mark">B</div><h1>' + t('profiles') +
-                '</h1><div class="profile-row">' + cards + '</div></main>';
+                '</h1><div class="profile-row">' + cards + '</div>' +
+                // Antes de existir qualquer lista, porque e o cliente sem lista que
+                // precisa de mandar o codigo a quem lha vendeu.
+                '<button class="button ghost focusable" data-action="device-code">' +
+                escapeHtml(t('deviceCode')) + '</button></main>';
         }
     }
 
@@ -6501,6 +6505,30 @@ var BuroApp = (function () {
         return drawing ? '<div class="pair-qr" aria-hidden="true">' + drawing + '</div>' : '';
     }
 
+    /**
+     * O codigo deste aparelho, para quem nao consegue configurar sozinho.
+     *
+     * E assim que quem vendeu a lista encontra esta televisao no painel e a
+     * configura de longe. Precisa estar alcancavel antes de existir qualquer
+     * lista: quem mais precisa disto e exatamente quem ainda nao conseguiu
+     * configurar nada, e ate agora o codigo so aparecia na tela de licenca.
+     *
+     * Numa televisao nao ha como copiar. O codigo e lido da tela e enviado por
+     * mensagem, entao e desenhado grande, no mesmo estilo do pareamento.
+     */
+    function renderDeviceCode() {
+        var code = BuroLicense.deviceId();
+        var body = code
+            ? '<div class="pair-panel"><p class="form-note">' + escapeHtml(t('deviceCodeHelp')) +
+              '</p><div class="pair-body"><strong class="pair-code">' + escapeHtml(code) +
+              '</strong></div></div>'
+            // Sem identidade nao ha o que ler em voz alta, e um espaco em branco
+            // seria pior do que dizer que ainda nao esta pronto.
+            : '<div class="pair-panel"><p class="form-note">' + escapeHtml(t('deviceCodeHelp')) +
+              '</p></div>';
+        shell(body, t('deviceCode'), true);
+    }
+
     function renderPairing() {
         var data = state.screenData || {};
         var receivingTitle = data.kind === 'open_title';
@@ -7788,6 +7816,7 @@ var BuroApp = (function () {
         else if (state.screen === 'TMDB_SETTINGS') { renderTmdbSettings(); }
         else if (state.screen === 'CRITICS_SETTINGS') { renderCriticsSettings(); }
         else if (state.screen === 'PAIRING') { renderPairing(); }
+        else if (state.screen === 'DEVICE_CODE') { renderDeviceCode(); }
         else if (state.screen === 'SEND_TO_SCREEN') { renderSendToScreen(); }
         else if (state.screen === 'CRITICS_GUIDE') { renderCriticsGuide(); }
         else if (state.screen === 'STORAGE_SETTINGS') { renderStorageSettings(); }
@@ -11154,6 +11183,7 @@ var BuroApp = (function () {
             savePreferences();
             initializeData();
         } else if (action === 'legal-accept') { acceptLegal(); }
+        else if (action === 'device-code') { pushScreen('DEVICE_CODE', {}); }
         else if (action === 'profile-form') {
             if (state.profiles.length >= MAX_PROFILES) { showToast(t('profileLimit'), true); }
             else { pushScreen('PROFILE_FORM', { avatarKey: 'gold', sourceId: null, kids: false, photoDataUrl: null }); }

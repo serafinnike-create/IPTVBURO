@@ -8,6 +8,18 @@ var path = require('path');
 var pathToFileURL = require('url').pathToFileURL;
 
 var APP_DIR = path.resolve(__dirname, '..', 'samsung-tizen');
+
+/* Lida do config.xml, nao escrita a mao.
+   Estava fixa em '3.0.1' e quebrou no dia em que o produto subiu para 3.4.0 —
+   uma falha do teste, nao do aplicativo, e do tipo que reaparece a cada
+   lancamento. O config.xml e a fonte unica da versao; a paridade entre as
+   plataformas ja e verificada por version-parity.test.js. */
+var APP_VERSION = (function () {
+    var config = fs.readFileSync(path.join(APP_DIR, 'config.xml'), 'utf8');
+    var match = /<widget[\s\S]*?\sversion="([^"]+)"/.exec(config);
+    if (!match) { throw new Error('nao foi possivel ler a versao do config.xml'); }
+    return match[1];
+}());
 var APP_URL = pathToFileURL(path.join(APP_DIR, 'index.html')).href;
 var SAFE_X = 64;
 var SAFE_Y = 46;
@@ -363,15 +375,22 @@ function prepareVisualLibraries() {
     var state = BuroApp.state;
     var profileId = state.activeProfile.id;
     var now = Date.now();
+    var continuedEpisode = BuroDomain.createItem({
+        id: 'episode-archive-4', sourceId: state.activeSource.id, categoryId: 'series-archive',
+        name: 'Arquivo Âmbar — Episódio 4', contentType: 'EPISODE', providerItemId: 'episode-archive-4',
+        locator: { kind: 'xtream', contentType: 'EPISODE', providerItemId: 'episode-archive-4', season: 1, episode: 4, extension: 'mp4' },
+        sortOrder: 4, addedAt: now - 4000
+    });
     function item(id) {
         return state.items.filter(function (candidate) { return candidate.id === id; })[0];
     }
     state.favorites = ['movie-aurora', 'series-horizon', 'live-studio'].map(function (itemId, index) {
         return { id: 'visual-favorite-' + index, profileId: profileId, itemId: itemId, createdAt: now - index * 1000 };
     });
+    state.items.push(continuedEpisode);
     state.progress = [
         { id: 'visual-progress-1', profileId: profileId, itemId: 'movie-atlas', positionMs: 2520000, durationMs: 6000000, completed: false, updatedAt: now },
-        { id: 'visual-progress-2', profileId: profileId, itemId: 'series-archive', positionMs: 1320000, durationMs: 3120000, completed: false, updatedAt: now - 1000 },
+        { id: 'visual-progress-2', profileId: profileId, itemId: continuedEpisode.id, positionMs: 1320000, durationMs: 3120000, completed: false, updatedAt: now - 1000 },
         { id: 'visual-progress-3', profileId: profileId, itemId: 'movie-forest', positionMs: 5940000, durationMs: 5940000, completed: true, updatedAt: now - 2000 }
     ];
     state.reminders = [
@@ -539,7 +558,8 @@ function showSyntheticPlayer(itemId) {
     item.locator = {
         kind: 'xtream', contentType: item.contentType,
         providerItemId: item.contentType === 'LIVE' ? 'visual-live' : 'visual-movie',
-        extension: item.contentType === 'LIVE' ? 'ts' : 'mp4'
+        extension: item.contentType === 'LIVE' ? 'ts' : 'mp4',
+        catchUpDays: item.locator && item.locator.catchUpDays
     };
     BuroStorage.secureGet = function () {
         return { server: 'https://visual.invalid', username: 'synthetic', password: 'synthetic' };
@@ -745,7 +765,8 @@ async function main() {
     var home = await geometry(['.buro-ribbon', '.topbar', '.demo-notice', '.living-hero', '.topbar-status', '[data-action=notifications]']);
     var runtimeReady = await evaluate("document.querySelector('#app').getAttribute('data-runtime-ready')");
     process.stdout.write('Home sem fonte\n');
-    check('shell anuncia runtime 3.0.1 e nao cria overflow global', runtimeReady === '3.0.1' && home.scrollWidth <= 1920 && home.scrollHeight <= 1080);
+    check('shell anuncia o runtime ' + APP_VERSION + ' e nao cria overflow global',
+        runtimeReady === APP_VERSION && home.scrollWidth <= 1920 && home.scrollHeight <= 1080);
     check('ribbon e topbar full bleed ficam inteiras no quadro da TV', rectVisible(home.rectangles[0]) && rectVisible(home.rectangles[1]));
     check('aviso e hero permanecem inteiros no quadro da TV', rectVisible(home.rectangles[2]) && rectVisible(home.rectangles[3]));
     /* O chip "Samsung Tizen" deu lugar ao bloco de estado — licenca, relogio,
@@ -789,6 +810,8 @@ async function main() {
     process.stdout.write('Home com catálogo local sintético\n');
     check('catálogo visual persiste os 18 itens sem rede', seeded.sourceId === 'source-visual' && seeded.itemCount === 18);
     check('Home real monta hero, trilhos e cartões com arte local', realHomeData.rails >= 4 && realHomeData.cards >= 8 && realHomeData.art >= 8);
+    check('Hero real ocupa a mesma faixa cinematográfica de 42–58% usada no Windows', await evaluate("(function(){var hero=document.querySelector('.real-home-hero');var content=document.querySelector('.content');if(!hero||!content){return false;}var usable=content.getBoundingClientRect().height;var ratio=hero.getBoundingClientRect().height/usable;return ratio>=0.42&&ratio<=0.58;}())"));
+    check('Hero real preserva três linhas de sinopse e o degradê vertical até a primeira prateleira', await evaluate("(function(){var synopsis=document.querySelector('.real-home-hero .hero-synopsis');var art=document.querySelector('.real-home-hero .hero-art');if(!synopsis||!art){return false;}var line=parseFloat(getComputedStyle(synopsis).lineHeight);var max=parseFloat(getComputedStyle(synopsis).maxHeight);var vertical=getComputedStyle(art,'::before').backgroundImage;return max>=line*2.9&&max<=line*3.1&&vertical.indexOf('linear-gradient')>=0;}())"));
     check('Hero real mantém Assistir e Ver detalhes visíveis como no Windows',
         realHomeData.heroPlay === 1 && realHomeData.heroDetails === 1 && rectVisible(realHome.rectangles[3]));
     check('título longo, sinopse e ações permanecem contidos dentro do Hero',
@@ -809,11 +832,15 @@ async function main() {
     await evaluate('(' + installSyntheticProviderDirectory.toString() + ')()');
     await evaluate("document.querySelector('[data-action=section][data-section=MOVIES]').click(); true");
     await waitFor("BuroApp.state.section === 'MOVIES' && document.querySelectorAll('.media-card.poster').length >= 1 && document.querySelectorAll('.catalogue-provider-shortcut').length === 3");
-    var movieCategories = await geometry(['.buro-ribbon', '.topbar', '.catalogue-provider-shortcuts',
-        '.catalogue-provider-shortcut', '.catalogue-scope-bar', '.catalogue-year-bar', '.media-card.poster']);
+    var movieCategories = await geometry(['.buro-ribbon', '.topbar', '.catalogue-toolbar',
+        '.catalogue-type-tabs', '.catalogue-type-tab', '.catalogue-search', '#catalogue-query',
+        '.catalogue-provider-shortcuts', '.catalogue-provider-shortcut',
+        '.catalogue-scope-bar', '.catalogue-year-bar', '.media-card.poster']);
     check('atalhos de servico mostram tres marcas e nomes antes dos filtros',
         await evaluate("document.querySelectorAll('.catalogue-provider-shortcut').length===3 && document.querySelectorAll('.catalogue-provider-shortcut img').length===3 && /Netflix/.test(document.querySelector('.catalogue-provider-row').textContent)"));
     process.stdout.write('Filmes e catálogo\n');
+    check('abas e busca formam a mesma faixa superior do catálogo Windows',
+        await evaluate("(function(){var tabs=document.querySelector('.catalogue-type-tabs').getBoundingClientRect();var box=document.querySelector('.catalogue-search').getBoundingClientRect();var years=document.querySelector('.catalogue-year-bar').getBoundingClientRect();var input=document.querySelector('#catalogue-query');return document.querySelectorAll('.catalogue-type-tab').length===3&&document.querySelectorAll('.catalogue-type-tab[aria-selected=true]').length===1&&Math.abs(tabs.top-box.top)<=2&&Math.abs(tabs.bottom-box.bottom)<=2&&input.placeholder===BuroI18n.t('catalogueSearchHint')&&box.bottom<years.top;}())"));
     check('aba Filmes exibe escopo e prateleira dentro da área da TV', movieCategories.rectangles.every(rectVisible));
 
     /*
@@ -933,6 +960,7 @@ async function main() {
     var movieDetailData = await evaluate("({ title:document.querySelector('.detail-hero h2').textContent, mainScroll:document.querySelector('.main-pane').scrollTop, play:document.querySelectorAll('.detail-actions [data-action=play]').length })");
     process.stdout.write('Detalhes de filme e série\n');
     check('detalhe de filme abre o título correto com ação principal', movieDetailData.title === 'Aurora de Vidro' && movieDetailData.play === 1);
+    check('sinopse da ficha usa a leitura de 24 px do Windows, não o tamanho padrão do navegador', await evaluate("(function(){var copy=document.querySelector('.detail-hero-copy > p');if(!copy){return false;}var style=getComputedStyle(copy);return parseFloat(style.fontSize)===24&&Math.abs(parseFloat(style.lineHeight)-34.8)<0.2&&parseFloat(style.maxWidth)===1040;}())"));
     check('detalhe de filme preserva chrome e conteúdo inicial visíveis', movieDetail.rectangles.every(rectVisible) && movieDetailData.mainScroll === 0);
     check('detalhe de filme produz um quadro PNG não vazio', await screenshotIsRendered('movie-detail'));
 
@@ -973,9 +1001,11 @@ async function main() {
     await evaluate("document.querySelector('[data-action=section][data-section=SETTINGS]').click(); true");
     await waitFor("BuroApp.state.section === 'SETTINGS' && document.querySelector('.settings-about-card')");
     var settings = await geometry(['.buro-ribbon', '.topbar', '.settings-about-card', '.setting-card']);
-    var settingsData = await evaluate("({ cards:document.querySelectorAll('.setting-card').length, languages:document.querySelectorAll('.settings-language-option').length, profiles:document.querySelectorAll('.settings-active-profile').length, mainScroll:document.querySelector('.main-pane').scrollTop, contentScroll:document.querySelector('.content.scrollable').scrollTop })");
+    var settingsData = await evaluate("(function(){ var receiver=document.querySelector('[data-action=pair-title]'); var r=receiver.getBoundingClientRect(); return { cards:document.querySelectorAll('.setting-card').length, languages:document.querySelectorAll('.settings-language-option').length, profiles:document.querySelectorAll('.settings-active-profile').length, mainScroll:document.querySelector('.main-pane').scrollTop, contentScroll:document.querySelector('.content.scrollable').scrollTop, receiverText:receiver.textContent, receiverExpected:BuroI18n.t('receiverAction'), receiver:{left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height} }; }())");
     process.stdout.write('Configurações\n');
     check('Configurações mostra cartões, cinco idiomas e perfil ativo', settingsData.cards >= 7 && settingsData.languages === 5 && settingsData.profiles === 1);
+    check('Receber título aparece no primeiro quadro e cabe inteiro na área da TV',
+        settingsData.receiverText.indexOf(settingsData.receiverExpected) >= 0 && rectVisible(settingsData.receiver));
     check('topo de Configurações mantém chrome, resumo e primeiro cartão visíveis', settings.rectangles.every(rectVisible) && settingsData.mainScroll === 0 && settingsData.contentScroll === 0);
     check('Configurações produz um quadro PNG não vazio', await screenshotIsRendered('settings'));
     var settingsLower = await evaluate("(function(){ var content=document.querySelector('.content.scrollable'); var target=document.querySelector('.settings-language-list'); content.scrollTop=Math.max(0,target.offsetTop-180); var r=target.getBoundingClientRect(); return { scroll:content.scrollTop, language:{left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}, ribbon:document.querySelector('.buro-ribbon').getBoundingClientRect().top }; }())");
@@ -1026,15 +1056,29 @@ async function main() {
 
     await evaluate("document.querySelector('[data-action=section][data-section=CONTINUE_WATCHING]').click(); true");
     await waitFor("BuroApp.state.section === 'CONTINUE_WATCHING' && document.querySelectorAll('.media-card').length === 2");
-    var continuing = await geometry(['.buro-ribbon', '.topbar', '.library-filter-bar', '.media-card', '.media-progress']);
-    check('Continuar assistindo mostra dois títulos incompletos com barras visíveis', continuing.rectangles.every(rectVisible));
+    var continuing = await geometry(['.buro-ribbon', '.topbar', '.library-filter-bar', '.media-card', '.media-progress', '[data-action=continue-play]', '[data-action=continue-restart]', '.progress-remove']);
+    check('Continuar assistindo mostra dois títulos, barras e três decisões visíveis',
+        continuing.rectangles.every(rectVisible) && await evaluate("document.querySelectorAll('[data-action=continue-play]').length === 2 && document.querySelectorAll('[data-action=continue-restart]').length === 2 && document.querySelectorAll('[data-action=continue-remove]').length === 2"));
+    var continueDpad = await evaluate("(function(){var card=document.querySelector('.progress-card .media-card');var actions=[];BuroApp._focusAction(card.getAttribute('data-action'));for(var i=0;i<3;i++){var e=new KeyboardEvent('keydown',{bubbles:true,cancelable:true});Object.defineProperty(e,'keyCode',{get:function(){return 40;}});document.dispatchEvent(e);var focused=document.querySelector('.focused');actions.push(focused&&focused.getAttribute('data-action'));}return actions;}())");
+    check('setas percorrem capa, Continuar, início e Remover no mesmo bloco',
+        continueDpad.join(',') === 'continue-play,continue-restart,continue-remove');
     check('Continuar assistindo produz um quadro PNG válido', await screenshotIsRendered('continue-watching'));
 
     await evaluate("document.querySelector('[data-action=section][data-section=HISTORY]').click(); true");
     await waitFor("BuroApp.state.section === 'HISTORY' && document.querySelectorAll('.media-card').length === 3");
-    var history = await geometry(['.buro-ribbon', '.topbar', '.library-filter-bar', '.media-card']);
-    check('Histórico reúne incompletos e concluído com filtro por tipo', history.rectangles.every(rectVisible));
+    var history = await geometry(['.buro-ribbon', '.topbar', '.history-toolbar', '#history-query', '[data-action=history-clear]', '.library-filter-bar', '.media-card', '.progress-remove']);
+    check('Histórico reúne busca, limpeza, filtros e remoções dentro do quadro',
+        history.rectangles.every(rectVisible) && await evaluate("document.querySelectorAll('[data-action=history-remove]').length === 3"));
+    var historyDpad = await evaluate("(function(){var input=document.querySelector('#history-query');input.focus();BuroApp._focusAction('history-clear');var focused=document.querySelector('.focused');return focused&&focused.getAttribute('data-action');}())");
+    check('limpeza do Histórico recebe foco real do D-pad', historyDpad === 'history-clear');
     check('Histórico produz um quadro PNG válido', await screenshotIsRendered('history'));
+    await evaluate("document.querySelector('[data-action=history-clear]').click(); true");
+    await waitFor("BuroApp.state.screen === 'HISTORY_CLEAR_CONFIRM' && document.querySelector('[data-action=history-clear-confirm]')");
+    var historyConfirm = await geometry(['.resume-panel', '.resume-panel h1', '.resume-panel p', '[data-action=history-clear-confirm]', '[data-action=back]']);
+    check('confirmação de limpeza explica e mantém as duas decisões visíveis', historyConfirm.rectangles.every(rectVisible));
+    check('confirmação de limpeza produz um quadro PNG válido', await screenshotIsRendered('history-clear-confirm'));
+    await evaluate("document.querySelector('[data-action=back]').click(); true");
+    await waitFor("BuroApp.state.screen === 'SHELL' && BuroApp.state.section === 'HISTORY'");
 
     await evaluate("document.querySelector('[data-action=section][data-section=REMINDERS]').click(); true");
     await waitFor("BuroApp.state.section === 'REMINDERS' && document.querySelectorAll('.reminder-row').length === 2");
@@ -1090,6 +1134,13 @@ async function main() {
     check('formulário Xtream produz um quadro PNG válido', await screenshotIsRendered('source-xtream'));
 
     process.stdout.write('Configurações profundas\n');
+    await evaluate("BuroApp.state.screen='LICENCE'; BuroApp.state.section='SETTINGS'; BuroApp.state.screenData={licenceDraft:'CHAVE-SINTETICA',keyInfoKey:'CHAVE-SINTETICA',keyInfo:{state:'available',grantDays:730,validUntil:null}}; BuroApp.render(); true");
+    await waitFor("document.querySelector('.licence-key-state') && document.querySelector('[data-action=licence-redeem]:not([disabled])')");
+    var licenceKeyInfo = await geometry(['.gate-screen', '.licence-purchase', '#licence-key', '.licence-key-state', '[data-action=licence-redeem]']);
+    check('licença mostra QR, chave consultada e confirmação dentro do quadro',
+        licenceKeyInfo.rectangles.every(rectVisible) && await evaluate("document.querySelector('.licence-key-state').textContent.indexOf('730')>=0 && document.querySelector('#licence-key').value==='CHAVE-SINTETICA'"));
+    check('consulta da chave produz um quadro PNG válido', await screenshotIsRendered('licence-key-info'));
+
     await evaluate("BuroApp.state.screen='PARENTAL_FORM'; BuroApp.state.section='SETTINGS'; BuroApp.state.screenData={}; BuroApp.render(); true");
     await waitFor("document.querySelector('[data-action=parental-save]')");
     var parental = await geometry(['.buro-ribbon', '.topbar', '.form-panel', '#new-pin', '[data-action=parental-save]']);
@@ -1264,7 +1315,7 @@ async function main() {
     var speedMenu = await geometry(['.player-menu', '#player-menu-title', '.player-menu-option.focused']);
     check('menu de velocidade apresenta somente 1× e 2× compatíveis com AVPlay', speedMenu.rectangles.every(rectVisible) && await evaluate("document.querySelector('#player-menu-options').textContent.indexOf('1×')>=0 && document.querySelector('#player-menu-options').textContent.indexOf('2×')>=0"));
     check('menu de velocidade produz um quadro PNG válido', await screenshotIsRendered('player-speed-menu'));
-    await evaluate("BuroApp._onKeyDown({keyCode:10009,preventDefault:function(){}}); BuroApp._playbackFailed({code:'PLAYBACK_CONNECTION'}); true");
+    await evaluate("BuroApp._onKeyDown({keyCode:10009,preventDefault:function(){}}); BuroApp._playbackFailed({code:'PLAYBACK_UNSUPPORTED'}); true");
     await waitFor("!document.querySelector('#player-error-panel').hidden");
     var playerError = await geometry(['.player-error-panel', '#player-error-title', '#player-error-message', '#player-error-retry', '#player-error-back']);
     check('erro de player mantém causa, Tentar novamente e Voltar acessíveis', playerError.rectangles.every(rectVisible) && await evaluate("document.activeElement === document.querySelector('#player-error-retry')"));
@@ -1272,13 +1323,14 @@ async function main() {
     await evaluate("BuroApp._onKeyDown({keyCode:10009,preventDefault:function(){}}); true");
 
     var guideNow = Math.floor(Date.now() / 1000);
-    await evaluate("(function(now){var item=BuroApp.state.items.filter(function(row){return row.id==='live-studio';})[0];BuroApp.state.screen='SHELL';BuroApp.state.section='LIVE';BuroApp.state.screenData={kind:'live',parent:item,schedule:[{title:'Programa encerrado',description:'Resumo anterior',startEpochSeconds:now-3600,endEpochSeconds:now-1800},{title:'Programa atual',description:'Resumo em exibição',startEpochSeconds:now-300,endEpochSeconds:now+900},{title:'Próximo programa',description:'Resumo seguinte',startEpochSeconds:now+900,endEpochSeconds:now+2700}]};BuroApp.render();return true;})(" + guideNow + ")");
+    await evaluate("(function(now){var item=BuroApp.state.items.filter(function(row){return row.id==='live-studio';})[0];item.locator={kind:'xtream',contentType:'LIVE',providerItemId:'77',extension:'ts',catchUpDays:3};BuroApp.state.screen='SHELL';BuroApp.state.section='LIVE';BuroApp.state.screenData={kind:'live',parent:item,schedule:[{title:'Programa encerrado',description:'Resumo anterior',startEpochSeconds:now-3600,endEpochSeconds:now-1800,start:'2026-08-24 20:30:00'},{title:'Programa atual',description:'Resumo em exibição',startEpochSeconds:now-300,endEpochSeconds:now+900},{title:'Próximo programa',description:'Resumo seguinte',startEpochSeconds:now+900,endEpochSeconds:now+2700}]};BuroApp.render();return true;})(" + guideNow + ")");
     var livePlayerReady = await evaluate('(' + showSyntheticPlayer.toString() + ")('live-studio')");
     await waitFor("document.body.classList.contains('playing')");
     await evaluate("BuroApp._onKeyDown({keyCode:404,preventDefault:function(){}}); true");
     await waitFor("!document.querySelector('#player-menu').hidden && document.querySelector('#player-menu').classList.contains('guide')");
     var guideMenu = await geometry(['.player-menu.guide', '#player-menu-title', '.player-guide-option.current', '.player-guide-option.past']);
     check('player ao vivo mostra guia atual, passado e próximo dentro do quadro', livePlayerReady && guideMenu.rectangles.every(rectVisible));
+    check('programa arquivado aparece como ação de catch-up legível no guia', await evaluate("document.querySelector('.player-guide-option.catch-up') && document.querySelector('.player-guide-option.catch-up em').textContent===BuroI18n.t('catchUpPlay')"));
     check('rodapé visual do guia identifica o canal e nunca exibe undefined', await evaluate("document.querySelector('#player-menu-hint').textContent.indexOf('Estúdio Norte')>=0 && document.querySelector('#player-menu-hint').textContent.indexOf('undefined')<0"));
     check('programa atual focado mantém fundo claro e texto escuro legível', await evaluate("(function(){var row=document.querySelector('.player-guide-option.current.focused');var style=getComputedStyle(row);return style.backgroundColor==='rgb(246, 247, 250)'&&style.color==='rgb(21, 23, 24)';}())"));
     check('guia do player ao vivo produz um quadro PNG válido', await screenshotIsRendered('player-live-guide'));
@@ -1308,6 +1360,16 @@ async function main() {
     for (var visualLanguageIndex = 0; visualLanguageIndex < visualLanguages.length; visualLanguageIndex += 1) {
         var visualLanguage = visualLanguages[visualLanguageIndex];
         var languageLiteral = JSON.stringify(visualLanguage.tag);
+
+        await evaluate("(function(language){BuroApp.state.preferences.language=language;BuroI18n.setLanguage(language);BuroApp.state.screen='SHELL';BuroApp.state.section='CONTINUE_WATCHING';BuroApp.state.screenData=null;BuroApp.render();return true;})(" + languageLiteral + ")");
+        await waitFor("document.querySelector('[data-action=continue-play]') && document.documentElement.lang === " + languageLiteral);
+        var multilingualContinue = await geometry(['.buro-ribbon', '.topbar', '[data-action=continue-play]', '[data-action=continue-restart]', '[data-action=continue-remove]']);
+        check(visualLanguage.tag + ' mantém as três decisões de continuidade inteiras na TV',
+            multilingualContinue.rectangles.every(rectVisible) && multilingualContinue.rectangles.slice(2).every(function (rectangle) {
+                return rectangle.height >= 46;
+            }) && multilingualContinue.scrollWidth <= 1920 && multilingualContinue.scrollHeight <= 1080);
+        check(visualLanguage.tag + ' gera PNG válido de Continuar assistindo',
+            await screenshotIsRendered('locale-' + visualLanguage.slug + '-continue'));
 
         await evaluate("(function(language){BuroApp.state.preferences.language=language;BuroI18n.setLanguage(language);BuroApp.state.screen='SHELL';BuroApp.state.section='SETTINGS';BuroApp.state.screenData=null;BuroApp.render();return true;})(" + languageLiteral + ")");
         await waitFor("document.querySelector('.settings-about-card') && document.documentElement.lang === " + languageLiteral);
@@ -1350,12 +1412,12 @@ async function main() {
         await evaluate("BuroPlayer.stop();BuroApp.state.progress=BuroApp.state.progress.filter(function(row){return row.itemId!=='movie-aurora';});document.body.classList.remove('playing');document.querySelector('#av-player').style.display='none';document.documentElement.style.background='#050608';document.body.style.background='#050608';true");
         await evaluate('(' + showSyntheticPlayer.toString() + ")('movie-aurora')");
         await waitFor("document.body.classList.contains('playing')");
-        await evaluate("BuroApp._playbackFailed({code:'PLAYBACK_CONNECTION'});true");
+        await evaluate("BuroApp._playbackFailed({code:'PLAYBACK_UNSUPPORTED'});true");
         await waitFor("!document.querySelector('#player-error-panel').hidden");
         var multilingualPlayerError = await geometry(['.player-error-panel', '#player-error-title', '#player-error-message', '#player-error-retry', '#player-error-back']);
         check(visualLanguage.tag + ' mantém erro e ações do player dentro do viewport', multilingualPlayerError.rectangles.every(rectVisible));
         check(visualLanguage.tag + ' localiza a falha do player sem chave exposta',
-            await evaluate("document.querySelector('#player-error-title').textContent===BuroI18n.t('playbackErrorTitle') && document.querySelector('#player-error-message').textContent===BuroI18n.t('playbackConnectionError')"));
+            await evaluate("document.querySelector('#player-error-title').textContent===BuroI18n.t('playbackErrorTitle') && document.querySelector('#player-error-message').textContent===BuroI18n.t('playbackUnsupportedError')"));
         check(visualLanguage.tag + ' gera PNG válido do erro de player',
             await screenshotIsRendered('locale-' + visualLanguage.slug + '-player-error'));
         await evaluate("BuroApp._onKeyDown({keyCode:10009,preventDefault:function(){}});true");

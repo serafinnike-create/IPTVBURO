@@ -7,6 +7,17 @@ var JSDOM = require('jsdom').JSDOM;
 var fakeIndexedDb = require('fake-indexeddb');
 
 var APP_DIR = path.resolve(__dirname, '..', 'samsung-tizen');
+
+/* Lida do config.xml, nao escrita a mao: estava fixa em '3.0.1' e quebrou
+   quando o produto subiu para 3.4.0. Nao confundir com a versao de fixture mais
+   abaixo, que o proprio teste injeta em getAppInfo e confere — essa e coerente
+   consigo mesma e deve continuar fixa. */
+var APP_VERSION = (function () {
+    var config = fs.readFileSync(path.join(APP_DIR, 'config.xml'), 'utf8');
+    var match = /<widget[\s\S]*?\sversion="([^"]+)"/.exec(config);
+    if (!match) { throw new Error('nao foi possivel ler a versao do config.xml'); }
+    return match[1];
+}());
 /*
   As esperas são de 4 segundos, não de 1.
 
@@ -385,7 +396,7 @@ async function run() {
         var stepKeys = [
             'legalBody', 'legalBodyTwo', 'legalBodyThree', 'legalPrivacy', 'legalAccept',
             'bootProfiles', 'bootCatalogue', 'bootArtwork', 'bootReady', 'bootStageLabel',
-            'catalogueLayout', 'layoutPoster', 'layoutCompact', 'layoutList', 'catalogueSort',
+            'catalogueLayout', 'layoutPoster', 'layoutCompact', 'layoutList', 'catalogueSort', 'catalogueSearchHint',
             'sortProvider', 'sortTitleAsc', 'sortTitleDesc', 'sortYearDesc', 'sortYearAsc',
             'sortRatingDesc', 'filterGenre', 'filterYear', 'filterAll', 'clearFilters',
             'noFilterResults', 'season', 'manageSource', 'sourceUpdated', 'sourceDeleted',
@@ -541,8 +552,8 @@ async function run() {
     check('cria perfil e abre o shell', Boolean(window.document.querySelector('.shell')));
     check('o runtime anuncia uma vez que o shell terminou o boot',
         window.__runtimeReadyMessages.length === 1 &&
-        window.__runtimeReadyMessages[0] === 'IPTVBURO_RUNTIME_READY screen=SHELL version=3.0.1' &&
-        window.document.getElementById('app').getAttribute('data-runtime-ready') === '3.0.1');
+        window.__runtimeReadyMessages[0] === 'IPTVBURO_RUNTIME_READY screen=SHELL version=' + APP_VERSION &&
+        window.document.getElementById('app').getAttribute('data-runtime-ready') === APP_VERSION);
     check('o marcador de prontidão não expõe perfil, fonte nem credencial',
         window.__runtimeReadyMessages[0].indexOf('Sala') === -1 &&
         window.__runtimeReadyMessages[0].indexOf('source-') === -1 &&
@@ -804,7 +815,16 @@ async function run() {
         window.document.querySelector('.media-card').getAttribute('data-id') === 'movie:library-filter');
     check('a ação Remover de Continuar é um alvo separado para o D-pad',
         Boolean(window.document.querySelector('[data-action="continue-remove"]')));
-    window.BuroApp._focusAction('continue-remove');
+    check('Continuar e Assistir do início são decisões diretas e focáveis',
+        Boolean(window.document.querySelector('[data-action="continue-play"]')) &&
+        Boolean(window.document.querySelector('[data-action="continue-restart"]')));
+    window.BuroApp._focusAction('continue-play');
+    window.BuroApp._onKeyDown({ keyCode: window.BuroKeys.CODES.DOWN, preventDefault: function () {} });
+    check('seta para baixo percorre Continuar até Assistir do início',
+        window.document.querySelector('.focused').getAttribute('data-action') === 'continue-restart');
+    window.BuroApp._onKeyDown({ keyCode: window.BuroKeys.CODES.DOWN, preventDefault: function () {} });
+    check('a próxima seta alcança Remover no mesmo bloco',
+        window.document.querySelector('.focused').getAttribute('data-action') === 'continue-remove');
     window.BuroApp._onKeyDown({ keyCode: 13, preventDefault: function () {} });
     await waitFor(function () {
         return window.BuroApp.state.progress.some(function (row) {
@@ -2206,6 +2226,41 @@ async function run() {
     window.BuroApp.state.section = 'MOVIES';
     window.BuroApp.state.screenData = null;
     window.BuroApp.render();
+    var catalogueTabs = Array.prototype.slice.call(window.document.querySelectorAll('.catalogue-type-tab'));
+    check('catálogo repete as três abas internas do Windows com semântica de tablist',
+        catalogueTabs.length === 3 &&
+        window.document.querySelector('.catalogue-type-tabs').getAttribute('role') === 'tablist' &&
+        catalogueTabs.filter(function (tab) { return tab.getAttribute('aria-selected') === 'true'; }).length === 1 &&
+        catalogueTabs[1].getAttribute('aria-selected') === 'true');
+    window.BuroApp._activate(catalogueTabs[2]);
+    check('aba interna de Séries reutiliza a navegação e sincroniza a Ribbon',
+        window.BuroApp.state.section === 'SERIES' &&
+        window.document.querySelector('.catalogue-type-tab[data-section="SERIES"]').getAttribute('aria-selected') === 'true' &&
+        window.document.querySelector('.nav-item.selected').getAttribute('data-section') === 'SERIES');
+    window.BuroApp._activate(window.document.querySelector('.catalogue-type-tab[data-section="MOVIES"]'));
+    var inlineCatalogueSearch = window.document.querySelector('#catalogue-query');
+    check('Filmes abre com busca contextual como o catalogo do Windows',
+        inlineCatalogueSearch && inlineCatalogueSearch.classList.contains('focusable') &&
+        inlineCatalogueSearch.getAttribute('placeholder') === window.BuroI18n.t('catalogueSearchHint'));
+    inlineCatalogueSearch.value = 'catalogo inteiro';
+    inlineCatalogueSearch.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await waitFor(function () {
+        var titles = Array.prototype.slice.call(window.document.querySelectorAll('.media-card h3'));
+        return titles.length === 1 && titles[0].textContent === fullHomeItem.name;
+    }, 4000);
+    check('busca contextual combina texto e tipo sem sair da aba Filmes',
+        window.BuroApp.state.section === 'MOVIES' && !window.BuroApp.state.screenData &&
+        Boolean(window.document.querySelector('[data-action="catalogue-scope-reset"]')));
+    inlineCatalogueSearch = window.document.querySelector('#catalogue-query');
+    inlineCatalogueSearch.value = 'titulo que nao existe 93847';
+    inlineCatalogueSearch.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await waitFor(function () {
+        return Boolean(window.document.querySelector('.empty-state')) &&
+            Boolean(window.document.querySelector('[data-action="catalogue-scope-reset"]'));
+    }, 4000);
+    check('busca contextual vazia explica o resultado sem voltar aos cartoes de categoria',
+        window.document.querySelectorAll('.category-card').length === 0);
+    window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-scope-reset"]'));
     var scopeGenreChip = window.document.querySelector('[data-action="catalogue-pick-genre"]');
     var scopeFocusables = Array.prototype.slice.call(window.document.querySelectorAll('.focusable:not([disabled])'));
     var scopeFocusedIndex = scopeFocusables.indexOf(window.document.querySelector('.focusable.focused'));
@@ -3276,10 +3331,12 @@ async function run() {
         window.document.getElementById('player-title').textContent === '[4K] Filme dois');
     await hold(window, 13, 950);
     window.BuroApp._playbackFailed({ code: 'PLAYBACK_CONNECTION' });
-    check('erro de reprodução remove o bloqueio para deixar Retry e Voltar acessíveis',
+    check('tentativa automática remove o bloqueio e anuncia a recuperação',
         window.document.getElementById('player-lock-panel').hidden &&
         !window.document.getElementById('player-overlay').classList.contains('controls-locked') &&
-        !window.document.getElementById('player-error-panel').hidden);
+        window.document.getElementById('player-error-panel').hidden &&
+        !window.document.getElementById('player-waiting').hidden &&
+        window.document.getElementById('player-waiting-label').textContent === window.BuroI18n.t('retryPlayback'));
     press(window, 10009);
 
     window.BuroStorage.secureRemove('source-home');
