@@ -1731,6 +1731,46 @@ class DesktopAppState(
      * Cleared first, so a page never shows the previous film's score while this one is in flight —
      * which is the kind of error nobody notices and everybody is misled by.
      */
+    /**
+     * A cover fetched for a title the playlist gave none for, or null.
+     *
+     * Held per title rather than written into the catalogue: the catalogue is the provider's own
+     * data and a fetched cover is not, so mixing them would leave a disk cache full of artwork
+     * that a changed key can no longer explain.
+     */
+    var adultArtworkUrl by mutableStateOf<String?>(null)
+        private set
+
+    private var adultArtworkFor: String? = null
+
+    /**
+     * Looks up a cover for [title] when the provider sent none.
+     *
+     * Only when there is no artwork already: a title the playlist covered is not worth a request,
+     * and a fetched image replacing a provider's own would be the app overruling the list.
+     *
+     * Silent on failure, like the rest of the metadata here — the details screen already draws a
+     * readable card for a title with no cover, and an error about a service the viewer may not
+     * have heard of would be worse than the card.
+     */
+    fun loadAdultArtwork(title: String, existingArtwork: String?) {
+        if (!existingArtwork.isNullOrBlank()) return
+        val client = adultArtworkClient ?: return
+        val wanted = title.trim()
+        if (wanted.isEmpty() || adultArtworkFor == wanted) return
+
+        adultArtworkFor = wanted
+        adultArtworkUrl = null
+        streamingScope.launch {
+            val found =
+                runCatching { withContext(Dispatchers.IO) { client.posterFor(wanted) } }
+                    .getOrNull()
+            // Only if the viewer is still on the title this was asked for: opening a second one
+            // while the first is in flight would otherwise put the wrong cover on the screen.
+            if (adultArtworkFor == wanted) adultArtworkUrl = found
+        }
+    }
+
     fun loadAudienceScore(
         title: String,
         year: Int?,
@@ -5969,6 +6009,9 @@ class DesktopAppState(
                 // TMDb lookup, and a page that waited for it would be slower for something that is
                 // an ornament next to the synopsis and the cast.
                 loadAudienceScore(selected.name.editorialTitle(), selected.year)
+                // A cover for the catalogue TMDb answers nothing for. Only when the provider sent
+                // none, and only with a key: without one this returns immediately.
+                loadAdultArtwork(selected.name.editorialTitle(), selected.artworkUrl)
                 details.cast.castNames().forEach { person ->
                     movieAppearances
                         .getOrPut(person.lowercase(Locale.ROOT), ::LinkedHashMap)[selected.providerId] = selected
@@ -6024,6 +6067,7 @@ class DesktopAppState(
                     year = selected.year,
                     isSeries = true,
                 )
+                loadAdultArtwork(selected.name.editorialTitle(), selected.artworkUrl)
             } else {
                 // Same reason as the film loader: the answer belongs to a title that is no longer
                 // showing, so it is dropped — but the status has to come back with it, or the guard

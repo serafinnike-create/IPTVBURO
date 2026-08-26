@@ -85,6 +85,56 @@ class AdultArtworkKeyTest {
     }
 
     @Test
+    fun `a fetched cover actually reaches the screen`() {
+        // The defect this exists for: the field, the store and the client were all built and
+        // nothing ever called the client, so pasting a key changed nothing. Every hop is checked,
+        // because each one of them alone compiles and does nothing.
+        val workspace =
+            read("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/XtreamWorkspace.kt")
+        assertTrue(
+            state.contains("loadAdultArtwork(selected.name.editorialTitle(), selected.artworkUrl)"),
+            "the details loaders have to ask for it",
+        )
+        assertTrue(
+            workspace.contains("fetchedArtworkUrl = appState.adultArtworkUrl"),
+            "the value has to be passed to the detail screen",
+        )
+        assertTrue(
+            workspace.contains("item.artworkUrl ?: richArtwork ?: fetchedArtworkUrl"),
+            "and actually used when drawing the poster",
+        )
+    }
+
+    @Test
+    fun `a cover the playlist already carries is never replaced`() {
+        // The playlist is the viewer's own data; a fetched cover is a guess about it, however
+        // good. Ordering matters, so this reads the whole expression rather than its parts.
+        val workspace =
+            read("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/XtreamWorkspace.kt")
+        assertTrue(workspace.contains("item.artworkUrl ?: richArtwork ?: fetchedArtworkUrl"))
+
+        val body =
+            state
+                .substringAfter("fun loadAdultArtwork(title: String, existingArtwork: String?) {")
+                .substringBefore("\n    }")
+        assertTrue(
+            body.contains("if (!existingArtwork.isNullOrBlank()) return"),
+            "a covered title is not worth a request either",
+        )
+    }
+
+    @Test
+    fun `a cover arriving late does not land on another title`() {
+        // Opening a second title while the first is in flight would otherwise put the wrong cover
+        // on the screen — and on this catalogue that is a worse mistake than showing none.
+        val body =
+            state
+                .substringAfter("fun loadAdultArtwork(title: String, existingArtwork: String?) {")
+                .substringBefore("\n    }")
+        assertTrue(body.contains("if (adultArtworkFor == wanted) adultArtworkUrl = found"))
+    }
+
+    @Test
     fun `the key never reaches a log line`() {
         assertTrue(
             client.contains("""override fun toString(): String = "AdultArtworkClient(configured=${'$'}isConfigured)""""),

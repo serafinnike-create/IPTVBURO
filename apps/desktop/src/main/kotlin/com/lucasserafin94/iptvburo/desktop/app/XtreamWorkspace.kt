@@ -1670,6 +1670,7 @@ internal fun XtreamInternalDetailsPage(
                 item = item,
                 castPhotoFor = appState::castPhotoFor,
                 onRequestCastPhoto = appState::ensureCastPhoto,
+                fetchedArtworkUrl = appState.adultArtworkUrl,
                 movieStatus = appState.movieDetailsStatus,
                 seriesStatus = appState.seriesDetailsStatus,
                 liveEpgStatus = appState.liveEpgStatus,
@@ -1815,6 +1816,13 @@ internal fun XtreamItemDetail(
     onOpenPerson: (String) -> Unit,
     castPhotoFor: (String) -> String? = { null },
     onRequestCastPhoto: suspend (String) -> Unit = {},
+    /**
+     * A cover fetched for a title the playlist gave none for, or null.
+     *
+     * Passed rather than read from state so this stays a function of its arguments, like every
+     * other value here. Null is the ordinary case: no key, or a title the provider covered.
+     */
+    fetchedArtworkUrl: String? = null,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     /** Whether this profile asked to be reminded about the title. */
@@ -1898,7 +1906,10 @@ internal fun XtreamItemDetail(
                             ?: seriesStatus.details.artworkUrl
                     else -> null
                 }
-            val posterUrl = item.artworkUrl ?: richArtwork
+            // The provider first, then TMDb, then the adult source. Ordered so a cover the
+            // list already carries is never replaced by a fetched one: the playlist is the
+            // viewer own data and this is a guess about it, however good.
+            val posterUrl = item.artworkUrl ?: richArtwork ?: fetchedArtworkUrl
 
             // Poster beside the copy on a wide window, stacked when compact. The GDD's "decisão
             // rápida" list has to be readable before any scrolling happens.
