@@ -156,3 +156,39 @@ test('a manual grant rejects unbounded durations', async () => {
     /between 1 and 3650/,
   );
 });
+
+test('o painel lê os campos que provisioningStatus realmente devolve', () => {
+  const page = adminPage();
+
+  /*
+    O painel lia `info.created_at` e `info.applied_at`, mas provisioningStatus
+    devolve `createdAt` e `appliedAt`. Ler o nome errado dá `undefined`, e o
+    formatador transforma `undefined` em "—", então a linha dizia "enviado —,
+    aguardando o cliente" e parecia que a data não existia. Um defeito que só se
+    vê olhando para a tela, o que é exatamente o que um teste deve substituir.
+  */
+  assert.ok(!page.includes('info.created_at'), 'snake_case não existe nesse objeto');
+  assert.ok(!page.includes('info.applied_at'), 'snake_case não existe nesse objeto');
+  assert.ok(page.includes('info.createdAt'), 'a data do envio tem de aparecer');
+  assert.ok(page.includes('info.appliedAt'), 'a data da aplicação também');
+});
+
+test('a lista enviada pode ser removida mesmo depois de aplicada', () => {
+  const page = adminPage();
+
+  /*
+    Quem vende precisa poder trocar a lista de um cliente por outra. Se o botão
+    só aparecesse enquanto o envio está pendente, uma lista já aplicada ficaria
+    presa: não haveria como remover nem como mandar outra por cima.
+  */
+  assert.ok(page.includes('clearProvisioningUi'), 'existe a ação de remover');
+  const block = page.split('function provisioningBlock')[1].split('function provisioningStateLabel')[0];
+  assert.ok(
+    block.includes("(info ? ' <button"),
+    'o botão aparece para qualquer registro, não só para o pendente',
+  );
+  assert.ok(
+    !block.includes("info.state === 'PENDING' ? ' <button"),
+    'condicionar ao pendente prenderia uma lista já aplicada',
+  );
+});

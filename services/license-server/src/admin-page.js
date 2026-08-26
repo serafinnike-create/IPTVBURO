@@ -611,8 +611,8 @@ export function adminPage() {
         + (info.listLabel ? ' · "' + esc(info.listLabel) + '"' : '')
         + (info.metadataKey ? ' · com chave TMDb' : '')
         + (info.criticsKey ? ' · com chave OMDb' : '')
-        + (info.state === 'PENDING' ? ' · enviado ' + dateTime(info.created_at) + ', aguardando o cliente abrir o aplicativo' : '')
-        + (info.state === 'APPLIED' ? ' · aplicado ' + dateTime(info.applied_at) : '')
+        + (info.state === 'PENDING' ? ' · enviado ' + dateTime(info.createdAt) + ', aguardando o cliente abrir o aplicativo' : '')
+        + (info.state === 'APPLIED' ? ' · aplicado ' + dateTime(info.appliedAt) : '')
         + (info.lastError ? ' · último erro: ' + esc(info.lastError) : '')
         + '</p>'
       : '<p class="sub" style="margin:4px 0 10px">Nenhuma lista atribuída por aqui ainda.</p>';
