@@ -19,6 +19,7 @@ import com.lucasserafin94.iptvburo.desktop.data.RemotePlaylistProtocol
 import com.lucasserafin94.iptvburo.desktop.data.RemotePlaylistSource
 import com.lucasserafin94.iptvburo.desktop.data.ServiceTitleIndex
 import com.lucasserafin94.iptvburo.desktop.data.SessionXtreamRepository
+import com.lucasserafin94.iptvburo.desktop.data.SwitchingCatalogueRepository
 import com.lucasserafin94.iptvburo.desktop.data.StreamingShelfDiskCache
 import com.lucasserafin94.iptvburo.desktop.data.WebDavPlaylistReader
 import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
@@ -985,6 +986,20 @@ class DesktopAppState(
      */
     val deviceCode: String by lazy {
         runCatching { DeviceFingerprint.deviceId() }.getOrDefault("")
+    }
+
+    /**
+     * Points the next connection at a Stalker portal rather than an Xtream server.
+     *
+     * Called by the source form before it connects, because the two protocols want different
+     * things: a portal takes an address and a MAC where Xtream takes a username and a password.
+     * Silently ignored when the repository cannot switch, which is the case in tests that inject a
+     * single-protocol double — a form that refused to connect there would fail tests about
+     * something else entirely.
+     */
+    fun useStalkerForNextConnection(stalker: Boolean) {
+        val switching = xtreamRepository as? SwitchingCatalogueRepository ?: return
+        if (stalker) switching.useStalker() else switching.useXtream()
     }
 
     /** Playlists already configured, offered so a new profile can reuse one. */

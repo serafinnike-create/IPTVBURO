@@ -18,7 +18,7 @@ import java.awt.GraphicsEnvironment
 import com.lucasserafin94.iptvburo.desktop.app.DesktopApp
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.PlatformContextHolder
-import com.lucasserafin94.iptvburo.desktop.data.SessionXtreamRepository
+import com.lucasserafin94.iptvburo.desktop.data.SwitchingCatalogueRepository
 import com.lucasserafin94.iptvburo.desktop.platform.ProtocolRegistration
 import com.lucasserafin94.iptvburo.desktop.platform.SingleInstance
 import com.lucasserafin94.iptvburo.desktop.platform.WindowChrome
@@ -142,7 +142,10 @@ fun main(args: Array<String>) {
         }.start()
 
     val localRepository = InMemoryCatalogRepository()
-    val xtreamRepository = SessionXtreamRepository()
+    // Both protocols, with the open subscription deciding which answers. One repository lives
+    // for the life of the app, so choosing at startup would leave somebody with an Xtream account
+    // and a Stalker portal able to use only whichever was picked first.
+    val xtreamRepository = SwitchingCatalogueRepository()
     val rememberedXtreamStore = RememberedXtreamStore()
     val userStore = DesktopUserStore()
 

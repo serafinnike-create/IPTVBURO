@@ -15,7 +15,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.material3.Checkbox
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -30,8 +35,22 @@ import com.lucasserafin94.iptvburo.xtream.XtreamSubscriptionParser
 fun XtreamLoginDialog(
     onDismiss: () -> Unit,
     onConnect: (XtreamLoginInput) -> Unit,
+    /**
+     * Told which protocol the next connection speaks, before it is attempted.
+     *
+     * The repository is chosen for the whole app, so the form has to say which one this
+     * subscription is before handing over credentials that only one of them can read.
+     */
+    onProtocolChosen: (stalker: Boolean) -> Unit = {},
 ) {
     val form = remember { SecureXtreamLoginForm() }
+    /**
+     * Whether this is a Stalker/Ministra portal rather than an Xtream server.
+     *
+     * Off by default: the great majority of subscriptions are Xtream, and someone who has never
+     * heard of a portal should not have to think about the question.
+     */
+    var portal by remember { mutableStateOf(false) }
     DisposableEffect(form) {
         onDispose(form::clear)
     }
@@ -74,16 +93,41 @@ fun XtreamLoginDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    "Aceita o endereço do servidor ou uma URL completa get.php/player_api.php. Ao conectar, os dados são cifrados pelo Windows para este usuário.",
+                    if (portal) {
+                        "Informe o endereço do portal e o MAC cadastrado nele. Ao conectar, os dados são cifrados pelo Windows para este usuário."
+                    } else {
+                        "Aceita o endereço do servidor ou uma URL completa get.php/player_api.php. Ao conectar, os dados são cifrados pelo Windows para este usuário."
+                    },
                     color = BuroColors.TextMuted,
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                // A portal is a different protocol, not a different server, so it is chosen rather
+                // than detected: the address alone does not say which one it is.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = portal,
+                        onCheckedChange = { chosen ->
+                            portal = chosen
+                            onProtocolChosen(chosen)
+                        },
+                    )
+                    Text(
+                        "Portal Stalker/Ministra (MAC)",
+                        color = BuroColors.Text,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 OutlinedTextField(
                     value = form.server.text,
                     onValueChange = form::acceptServerInput,
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Servidor") },
-                    placeholder = { Text("http://servidor:porta") },
+                    label = { Text(if (portal) "Portal" else "Servidor") },
+                    placeholder = {
+                        Text(if (portal) "http://portal:porta/c/" else "http://servidor:porta")
+                    },
                     singleLine = true,
                 )
                 if (form.usesPlainHttp) {
@@ -103,7 +147,11 @@ fun XtreamLoginDialog(
                     value = form.username.text,
                     onValueChange = form.username::replace,
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Usuário") },
+                    // A portal identifies a subscriber by the MAC registered on it, which travels
+                    // in the same field: the form collects three values either way, and only their
+                    // meaning changes.
+                    label = { Text(if (portal) "MAC" else "Usuário") },
+                    placeholder = { if (portal) Text("00:1A:79:00:00:00") },
                     singleLine = true,
                 )
                 OutlinedTextField(

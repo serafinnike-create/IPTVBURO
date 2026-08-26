@@ -1151,6 +1151,7 @@ fun DesktopApp(
                     onConnect = { input ->
                         scope.launch { appState.connectXtream(input) }
                     },
+                    onProtocolChosen = appState::useStalkerForNextConnection,
                 )
             }
 
