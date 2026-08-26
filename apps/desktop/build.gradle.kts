@@ -298,6 +298,7 @@ java {
 dependencies {
     implementation(project(":packages:domain-model"))
     implementation(project(":packages:playlist-parser"))
+    implementation(project(":packages:stalker-client"))
     implementation(project(":packages:xtream-client"))
     implementation(project(":packages:metadata-client"))
     // Chromium, for playing trailers inside the app. YouTube refuses to play anywhere except a real
