@@ -42,6 +42,16 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
 import com.lucasserafin94.iptvburo.desktop.ui.strings
+import androidx.compose.foundation.focusable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import com.lucasserafin94.iptvburo.domain.model.DiscoveryVerdict
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 
@@ -77,8 +87,49 @@ fun DiscoveryScreen(
     val text = strings.shareStrings.discovery
     val top = deck.firstOrNull()
 
+    /**
+     * The screen has to hold focus to receive keys at all.
+     *
+     * Requested once, when the deck first has something on it. Without this the handler below is
+     * attached and simply never fires, which looks exactly like the keys not being wired up.
+     */
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(top != null) {
+        if (top != null) runCatching { focusRequester.requestFocus() }
+    }
+
     Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(BuroSpacing.Lg),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .focusRequester(focusRequester)
+                .focusable()
+                // The same three decisions the buttons offer, and the same directions the swipe
+                // already uses: right keeps, left skips. A third way to do what is already
+                // possible, for somebody whose hands are on the keyboard.
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val card = top ?: return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.DirectionLeft -> {
+                            onDecide(card, DiscoveryVerdict.SKIPPED)
+                            true
+                        }
+                        Key.DirectionRight -> {
+                            onDecide(card, DiscoveryVerdict.KEPT)
+                            true
+                        }
+                        Key.DirectionUp -> {
+                            onOpenDetails(card)
+                            true
+                        }
+                        // Down is not handled here. It closes the details page, and by the time
+                        // there is one to close this screen is no longer showing — so it lives on
+                        // the window's own handler, which sees every screen.
+                        else -> false
+                    }
+                }.verticalScroll(rememberScrollState())
+                .padding(BuroSpacing.Lg),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
     ) {

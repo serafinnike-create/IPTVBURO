@@ -377,6 +377,17 @@ fun DesktopApp(
                             return@onPreviewKeyEvent true
                         }
 
+                        // Down closes a title opened from elsewhere and returns there, which for a
+                        // card opened from Descobrir means going back to the deck. Here rather
+                        // than on that screen because by the time there is a page to close, that
+                        // screen is no longer the one showing.
+                        //
+                        // Only swallowed when it actually closed something: a down press with no
+                        // title open has to keep scrolling the list under it.
+                        if (event.key == Key.DirectionDown && appState.closeOpenedTitle()) {
+                            return@onPreviewKeyEvent true
+                        }
+
                         if (
                             !appState.isXtreamSelected ||
                             !event.isCtrlPressed

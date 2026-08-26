@@ -1463,8 +1463,15 @@ private fun XtreamCatalogCard(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = if (live) ContentScale.Fit else ContentScale.Crop,
                 ) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        XtreamMonogram(title, if (live) 52 else 62)
+                    // A live channel keeps its monogram: those cards are wide and short, and a
+                    // channel name reads fine as initials. A film card is a poster, where two
+                    // letters say nothing — reported with a screenshot of a grid full of them.
+                    if (live) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            XtreamMonogram(title, 52)
+                        }
+                    } else {
+                        XtreamPosterFallback(title)
                     }
                 }
                 item.rating?.takeIf { it > 0.0 }?.let { rating ->
