@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.io.path.readText
 import kotlin.test.assertTrue
 
 class GitHubReleaseUpdaterTest {
@@ -280,5 +281,38 @@ class GitHubReleaseUpdaterTest {
 
             assertIs<UpdateCheckResult.Failed>(result)
         }
+    }
+
+    @Test
+    fun `a build already installed is not offered again`() {
+        // The root of the 25/08/2026 report. A 3.3.0 window was still open after 3.4.0 had been
+        // installed, so it compared the release against itself and offered an update to a version
+        // Windows already had. The installer then met its own ProductCode and refused.
+        //
+        // The baseline has to be whichever is further ahead — the build running or the one
+        // registered — so an update is offered only when it is genuinely newer than what is on the
+        // machine.
+        assertTrue(isNewerVersion("3.4.0", "3.3.0"), "3.4.0 is newer than a running 3.3.0")
+        assertFalse(
+            isNewerVersion("3.4.0", "3.4.0"),
+            "but not newer than a 3.4.0 already installed, which is the case that failed",
+        )
+
+        // The arithmetic above was already right; what was missing is the caller using it against
+        // the installed version. Read from the source because the check runs inside a network
+        // call, and asserting the arithmetic alone passed while the caller still compared against
+        // itself — a test that could not fail.
+        val source =
+            java.nio.file.Path
+                .of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/update/GitHubReleaseUpdater.kt")
+                .readText()
+        assertTrue(
+            source.contains("val baseline =") && source.contains("installedVersion()"),
+            "the baseline has to consider what Windows has registered",
+        )
+        assertTrue(
+            source.contains("isNewerVersion(tag, baseline)"),
+            "and the release has to be compared against that baseline, not against the running build",
+        )
     }
 }

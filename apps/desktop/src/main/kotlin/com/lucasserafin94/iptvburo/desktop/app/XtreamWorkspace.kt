@@ -92,6 +92,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -1917,12 +1918,7 @@ internal fun XtreamItemDetail(
                                 .background(BuroColors.SurfaceRaised),
                         contentScale = ContentScale.Crop,
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            XtreamMonogram(item.name, 86)
-                        }
+                        XtreamPosterFallback(item.name)
                     }
                     Spacer(Modifier.width(BuroSpacing.Lg))
                 }
@@ -2663,9 +2659,7 @@ private fun SimilarTitlesShelf(
                                 .background(BuroColors.SurfaceRaised),
                         contentScale = ContentScale.Crop,
                     ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            XtreamMonogram(similar.title, 34)
-                        }
+                        XtreamPosterFallback(similar.title)
                     }
                     // The card that was pressed says so while the catalogue is searched, because
                     // that sweep runs over tens of thousands of rows and silence reads as a dead
@@ -2945,9 +2939,7 @@ internal fun PersonFilmographyPage(
                                         .background(BuroColors.SurfaceRaised),
                                 contentScale = ContentScale.Crop,
                             ) {
-                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    XtreamMonogram(credit.title, 34)
-                                }
+                                XtreamPosterFallback(credit.title)
                             }
                             // The card that was pressed says so while the catalogue is searched.
                             if (openingCredit == credit.title) {
@@ -3876,6 +3868,55 @@ private fun EpisodeDownloadControl(
             }
     }
 }
+
+/**
+ * What fills a poster whose artwork never arrived.
+ *
+ * A monogram is right for a 48px row thumbnail and wrong for a full poster: two letters floating
+ * in a 208dp rectangle says nothing about the film, and a shelf of them is unreadable. Whole
+ * categories arrive with no artwork at all — adult catalogues nearly always, and plenty of
+ * regional ones — so this is the normal appearance of those rows rather than an edge case.
+ *
+ * The title is drawn instead, over a tint derived from the title itself so neighbouring cards
+ * differ and the shelf reads as a set of distinct things. The same idea as the discovery shelf's
+ * own fallback, which had this right already.
+ */
+@Composable
+private fun XtreamPosterFallback(name: String) {
+    // Derived from the name so a card keeps its colour between launches. Unsigned before the
+    // modulo: hashCode is often negative, and a negative index crashes rather than wraps.
+    val tint = POSTER_FALLBACK_TINTS[(name.hashCode().toUInt() % POSTER_FALLBACK_TINTS.size.toUInt()).toInt()]
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        listOf(tint.copy(alpha = 0.34f), BuroColors.Surface),
+                    ),
+                ).padding(BuroSpacing.Sm),
+    ) {
+        Text(
+            text = name,
+            color = BuroColors.Text,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            // Four lines and then an ellipsis: a long provider title would otherwise overflow the
+            // card and draw over the one beside it.
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.align(Alignment.Center).fillMaxWidth(),
+        )
+    }
+}
+
+/** Enough hues that neighbouring cards differ, all muted enough to sit under white text. */
+private val POSTER_FALLBACK_TINTS =
+    listOf(
+        Color(0xFF6C5CE7), Color(0xFF0984E3), Color(0xFF00B894),
+        Color(0xFFD63031), Color(0xFFE17055), Color(0xFF6D4C41),
+    )
 
 @Composable
 private fun XtreamMonogram(

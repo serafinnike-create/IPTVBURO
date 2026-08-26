@@ -121,4 +121,33 @@ class UpdateScriptSafetyTest {
             "With no registered ProductCode there is nothing to remove, and guessing is dangerous.",
         )
     }
+
+    @Test
+    fun `a version that is already installed does not trigger a removal`() {
+        // Reported 25/08/2026: the download ran, the removal ran, and nothing was installed.
+        //
+        // 3.4.0 had been installed while a 3.3.0 window stayed open. That window offered an update
+        // to 3.4.0, the installer met an already-registered 3.4.0 with the same ProductCode, and
+        // Windows refused with 1638. Treating that as an ordinary failure sent the script into the
+        // removal branch, which took away a working app to make room for an install that was then
+        // refused for the same reason.
+        //
+        // 1638 means "the thing you are installing is already here", so the right answer is to
+        // verify and relaunch, never to remove.
+        val commands =
+            script()
+                .lines()
+                .filterNot { it.trimStart().startsWith("rem ") }
+        val guard = commands.indexOfFirst { it.contains("errorlevel 1638") }
+        val removal = commands.indexOfFirst { it.contains("msiexec.exe /x") }
+        assertTrue(guard >= 0, "1638 has to be recognised at all")
+        assertTrue(
+            removal < 0 || guard < removal,
+            "the guard has to come before the removal, or the app is gone before it is checked",
+        )
+        assertTrue(
+            commands[guard].contains("goto :verify"),
+            "an already-installed version means verify and relaunch, not remove",
+        )
+    }
 }

@@ -79,6 +79,16 @@ class GitHubReleaseUpdater(
                     // Preview MSIs deliberately remain unsigned for now. Keeping the channel
                     // decision here means that exception cannot leak into a stable installation.
                     val runningPreview = isPreviewVersion(currentVersion)
+                    // Whichever is further ahead: the build running, or the one Windows has
+                    // registered. They differ when a newer build was installed while an older
+                    // window stayed open, and comparing against the running one alone offered an
+                    // update to a version already installed. Windows refuses that with error 1316
+                    // — after the script has already removed the old product, so the download runs,
+                    // the removal runs, and nothing is installed. Reported on 25/08/2026.
+                    val baseline =
+                        installedVersion()
+                            ?.takeIf { candidate -> isNewerVersion(candidate, currentVersion) }
+                            ?: currentVersion
                     val candidates =
                         releases.mapNotNull { element ->
                             val release = element.asJsonObject
@@ -87,7 +97,7 @@ class GitHubReleaseUpdater(
                             val previewRelease =
                                 release["prerelease"]?.asBoolean == true || isPreviewVersion(tag)
                             if (!runningPreview && previewRelease) return@mapNotNull null
-                            if (!isNewerVersion(tag, currentVersion)) return@mapNotNull null
+                            if (!isNewerVersion(tag, baseline)) return@mapNotNull null
                             // A release can carry more than one installer: the versioned artefact
                             // and a legacy name from the packaging task. Picking the first match
                             // would sometimes install an older build than the tag advertises, so
@@ -388,6 +398,11 @@ internal fun writeUpdateScript(
         echo Atualizando o IPTV BURO...
         msiexec.exe /i "${installer.toAbsolutePath()}" /passive /norestart
         if not errorlevel 1 goto :verify
+        rem 1638: this exact version is already installed. Removing the old product to "fix" that
+        rem is the wrong move — the conflict is with a product that is already the one wanted, so
+        rem the removal takes away a working app and the retry hits the same refusal. The app on
+        rem disk is already what the update was trying to install, so verify and relaunch.
+        if errorlevel 1638 if not errorlevel 1639 goto :verify
         $retryAfterRemoval
         goto :verify
 
@@ -443,6 +458,33 @@ internal val PRODUCT_CODE = Regex("\\{[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-F
  *
  * Returns null when nothing is registered, in which case the script simply installs.
  */
+/**
+ * The version Windows currently has registered, which is not always the one running.
+ *
+ * They differ whenever a build is installed while an older copy is still open — which is exactly
+ * what happened on 25/08/2026: 3.4.0 was installed at 22:07, a 3.3.0 window stayed open, and at
+ * 23:09 that window offered an update to 3.4.0 because it compared against *itself*. The installer
+ * then tried to lay 3.4.0 over an already-registered 3.4.0 with the same ProductCode, and Windows
+ * refused with error 1316 and status 1603 — the download ran, the removal ran, and nothing was
+ * installed.
+ *
+ * Null when nothing is registered or the value cannot be read, which the caller treats as "no
+ * opinion" and falls back to the running version.
+ */
+internal fun installedVersion(): String? =
+    UNINSTALL_KEYS.firstNotNullOfOrNull { key ->
+        runCatching {
+            val process =
+                ProcessBuilder("reg", "query", key, "/s", "/f", "IPTVBURO")
+                    .redirectErrorStream(true)
+                    .start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            process.waitFor()
+            // The value line reads "DisplayVersion    REG_SZ    3.4.0".
+            Regex("""DisplayVersion\s+REG_SZ\s+(\S+)""").find(output)?.groupValues?.get(1)
+        }.getOrNull()
+    }
+
 internal fun installedProductCode(): String? =
     // Verified against a real install: this MSI registers under HKLM even though it installs
     // per-user into LOCALAPPDATA. HKCU is searched too, since the hive is a packaging detail that
