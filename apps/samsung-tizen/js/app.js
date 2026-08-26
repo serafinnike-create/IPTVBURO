@@ -8921,10 +8921,23 @@ var BuroApp = (function () {
       — pela propria pessoa ou por um provisionamento anterior — nao pode ter a
       escolha dela trocada por baixo.
     */
+    /*
+      A lista que quem vendeu enviou, acrescentada as que ja existem.
+
+      Antes isto desistia assim que houvesse qualquer fonte, para nao trocar a
+      lista de quem tinha configurado a propria. A intencao estava certa e o
+      efeito era outro: uma vez que o cliente tinha lista, quem vendeu nao
+      conseguia mais mandar nenhuma — nem a segunda assinatura que ele acabara de
+      comprar, nem a substituta de um endereco que caiu.
+
+      Agora ela entra ao lado. O que continua valendo, e e o que importa, e que
+      nada do cliente e apagado: a escolha dele permanece na lista de fontes, e
+      so a fonte selecionada muda. Uma entrega que apagasse a lista de alguem
+      seria pior do que uma que nao chega.
+    */
     function applyAssignedSource() {
-        if (state.sources.length) { return; }
         BuroLicense.fetchAssignedSource(function (assigned) {
-            if (!assigned || state.sources.length) { return; }
+            if (!assigned) { return; }
             connectAssignedXtream(assigned);
         }, function () { /* Sem rede, sem provisionamento: tenta na proxima. */ });
     }

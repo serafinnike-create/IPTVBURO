@@ -152,25 +152,35 @@ async function run() {
         window.__confirmations.length === 1 && window.__confirmations[0] === null);
     window.close();
 
-    process.stdout.write('Quem já tem lista não tem a dele trocada\n');
+    process.stdout.write('Quem já tem lista recebe a nova ao lado da dele\n');
     window = loadApp();
     await reachShell(window);
     /*
-      O ponto mais importante deste arquivo. Uma TV já configurada — pela
-      própria pessoa ou por um provisionamento anterior — não pode ter a escolha
-      dela substituída sozinha.
+      O ponto mais importante deste arquivo, e o que ele guarda mudou de forma.
+
+      Antes o aplicativo recusava qualquer envio se já houvesse uma fonte. A
+      intenção era não trocar a lista de quem tinha configurado a própria, e o
+      efeito era outro: quem vendeu não conseguia mandar nem a segunda assinatura
+      que o cliente acabara de comprar, nem a substituta de um endereço que caiu.
+
+      O que continua valendo é o que importa: **nada do cliente é apagado**. A
+      lista dele permanece, a nova entra ao lado, e só a fonte selecionada muda.
+      Uma entrega que apagasse a lista de alguém seria pior do que uma que não
+      chega, porque não há como desfazer.
     */
     window.BuroApp.state.sources = [{
         id: 'minha', name: 'Minha lista', type: 'XTREAM', channelCount: 1, createdAt: 1, updatedAt: null
     }];
     window.__fetched = 0;
     window.BuroApp._applyAssignedSource();
-    await new Promise(function (resolve) { window.setTimeout(resolve, 120); });
-    check('nem chega a perguntar ao servidor',
-        window.__fetched === 0);
-    check('e a fonte existente continua sendo a única',
-        window.BuroApp.state.sources.length === 1 &&
-        window.BuroApp.state.sources[0].id === 'minha');
+    await waitFor(function () { return window.BuroApp.state.sources.length > 1; }, 8000)
+        .catch(function () {});
+    check('agora pergunta ao servidor mesmo com lista configurada',
+        window.__fetched === 1);
+    check('a lista do cliente continua lá',
+        window.BuroApp.state.sources.some(function (item) { return item.id === 'minha'; }));
+    check('e a enviada entra ao lado, sem apagar nada',
+        window.BuroApp.state.sources.length === 2);
     window.close();
 
     process.stdout.write('Sem nada para aplicar, a abertura segue igual\n');
