@@ -35,7 +35,7 @@ import java.util.EnumMap
  */
 class SessionXtreamRepository(
     private val client: XtreamClient = XtreamClient(),
-) {
+) : CatalogueRepository {
     private val lock = Any()
     private var generation = 0L
     private var credentialVault: CredentialVault? = null
@@ -87,9 +87,9 @@ class SessionXtreamRepository(
      * The callback receives a fraction of *this* phase, 0..1, not of overall startup — the caller
      * knows where this phase sits in the whole sequence and scales accordingly.
      */
-    fun authenticateAndLoadInitial(
+    override fun authenticateAndLoadInitial(
         input: XtreamLoginInput,
-        onProgress: (fraction: Float, detail: XtreamLoadStage) -> Unit = { _, _ -> },
+        onProgress: (fraction: Float, detail: XtreamLoadStage) -> Unit,
     ): XtreamSessionSummary {
         val nextVault =
             try {
@@ -176,16 +176,16 @@ class SessionXtreamRepository(
      *   is explicitly asking for what the provider has now, and answering from a file would make
      *   that button appear broken.
      */
-    fun loadCatalog(
+    override fun loadCatalog(
         contentType: XtreamContentType,
-        forceRefresh: Boolean = false,
+        forceRefresh: Boolean,
         /**
          * Reports items as they are parsed, so the splash can move while this runs.
          *
          * Ignored on the disk-cache path below, which returns in milliseconds — there is nothing to
          * report and a caller that saw progress events for it would show a bar flashing past.
          */
-        onProgress: CatalogLoadListener? = null,
+        onProgress: CatalogLoadListener?,
     ): XtreamSessionSummary {
         synchronized(lock) {
             catalogs[contentType]?.let { return summaryLocked() }
@@ -248,12 +248,12 @@ class SessionXtreamRepository(
     private fun fetchLockFor(contentType: XtreamContentType): Any =
         synchronized(lock) { fetchLocks.getOrPut(contentType) { Any() } }
 
-    fun categories(contentType: XtreamContentType): List<XtreamCategory> =
+    override fun categories(contentType: XtreamContentType): List<XtreamCategory> =
         synchronized(lock) {
             categories[contentType].orEmpty()
         }
 
-    fun itemByProviderId(contentType: XtreamContentType, providerId: String): XtreamCatalogItem? =
+    override fun itemByProviderId(contentType: XtreamContentType, providerId: String): XtreamCatalogItem? =
         synchronized(lock) { catalogs[contentType]?.itemByProviderId(providerId) }
 
     /**
@@ -262,7 +262,7 @@ class SessionXtreamRepository(
      * Progress and favourites are recorded by content key rather than provider id, because the id
      * is per-playlist numbering: the same film has a different one in another list.
      */
-    fun itemByContentKey(contentType: XtreamContentType, contentKey: String): XtreamCatalogItem? {
+    override fun itemByContentKey(contentType: XtreamContentType, contentKey: String): XtreamCatalogItem? {
         val catalog = synchronized(lock) { catalogs[contentType] } ?: return null
         // Indexed rather than scanned. This used to walk the catalogue building a full
         // XtreamCatalogItem per row just to read its identity — 41,698 objects per lookup on a real
@@ -278,16 +278,16 @@ class SessionXtreamRepository(
     /**
      * Returns one small page without allocating a complete filtered copy of a large catalog.
      */
-    fun page(
+    override fun page(
         contentType: XtreamContentType,
         categoryId: String?,
         query: String,
         requestedPage: Int,
-        pageSize: Int = DEFAULT_PAGE_SIZE,
-        releaseYear: Int? = null,
-        minimumRating: Double? = null,
-        allowedIdentities: Set<ContentIdentity>? = null,
-        kidsMode: Boolean = false,
+        pageSize: Int,
+        releaseYear: Int?,
+        minimumRating: Double?,
+        allowedIdentities: Set<ContentIdentity>?,
+        kidsMode: Boolean,
         /**
          * Categories behind the PIN that has not been entered this session.
          *
@@ -295,7 +295,7 @@ class SessionXtreamRepository(
          * with no category selected the catalogue lists everything, and a search matches across all
          * of them. A lock that only guarded the rail left every locked title one search away.
          */
-        lockedCategoryIds: Set<String> = emptySet(),
+        lockedCategoryIds: Set<String>,
         /**
          * Collapses a provider's repeated copies of one film into a single card.
          *
@@ -312,7 +312,7 @@ class SessionXtreamRepository(
          * Dedup keeps the first copy of each title, and the catalogue's own order decides which that
          * is, so the result is stable from one page turn to the next.
          */
-        collapseDuplicates: Boolean = false,
+        collapseDuplicates: Boolean,
         /**
          * Restricts the page to these `localContentId` values, or null for no restriction.
          *
@@ -323,7 +323,7 @@ class SessionXtreamRepository(
          * Null rather than an empty set for "no filter". An empty set is a real answer — the service
          * carries nothing this library holds — and must produce an empty page rather than everything.
          */
-        allowedLocalIds: Set<String>? = null,
+        allowedLocalIds: Set<String>?,
     ): XtreamCatalogPage {
         require(pageSize in 1..MAX_PAGE_SIZE) { "Invalid page size." }
         val catalogItems =
@@ -468,7 +468,7 @@ class SessionXtreamRepository(
         )
     }
 
-    fun seriesDetails(seriesId: String): XtreamSeriesDetails =
+    override fun seriesDetails(seriesId: String): XtreamSeriesDetails =
         withCredentials { credentials ->
             client.seriesDetails(credentials, seriesId)
         }
@@ -489,9 +489,9 @@ class SessionXtreamRepository(
      * Reads only what is already in memory — no request leaves the machine, so this works while
      * offline and cannot leak the query to the provider.
      */
-    fun search(
+    override fun search(
         query: String,
-        limit: Int = DEFAULT_SEARCH_LIMIT,
+        limit: Int,
     ): List<XtreamCatalogItem> {
         // Normalised, not raw. `contains` compares code points, so on a Portuguese catalogue
         // "chefao" found nothing while "Chefão" sat right there. The same normaliser the library
@@ -529,7 +529,7 @@ class SessionXtreamRepository(
      *
      * Both catalogues, because an actor's credits mix films and series.
      */
-    fun findByTitles(
+    override fun findByTitles(
         normalisedTitles: Set<String>,
         limit: Int,
     ): List<XtreamCatalogItem> {
@@ -574,12 +574,12 @@ class SessionXtreamRepository(
      * back-filled, so "recently added" and "new" are different questions — and the one the user is
      * asking is what came out this year.
      */
-    fun releasesForYear(
+    override fun releasesForYear(
         type: XtreamContentType,
         year: Int,
         limit: Int,
         kidsMode: Boolean,
-        lockedCategoryIds: Set<String> = emptySet(),
+        lockedCategoryIds: Set<String>,
         /**
          * Which day's selection to show, as a rotation offset.
          *
@@ -595,7 +595,7 @@ class SessionXtreamRepository(
          * Zero keeps the old behaviour, which is what callers that want a stable "best of the year"
          * list — a full catalogue view rather than a Home shelf — should pass.
          */
-        rotation: Int = 0,
+        rotation: Int,
     ): List<XtreamCatalogItem> {
         if (synchronized(lock) { catalogs[type] } == null) {
             runCatching { loadCatalog(type) }
@@ -652,7 +652,7 @@ class SessionXtreamRepository(
      * a page having filtered the item first. Keeping this check in the repository also gives those
      * Home rows the category names needed by the conservative Kids policy.
      */
-    fun isAllowedForBrowsing(
+    override fun isAllowedForBrowsing(
         item: XtreamCatalogItem,
         kidsMode: Boolean,
         lockedCategoryIds: Set<String>,
@@ -666,10 +666,10 @@ class SessionXtreamRepository(
         return FamilyContentPolicy.isAllowedForKids(item.name, item.categoryIds.map(categoryNames::get))
     }
 
-    fun libraryMatchCandidates(
-        kidsMode: Boolean = false,
-        lockedCategoryIds: Set<String> = emptySet(),
-        lockedCategoryIdsByContentType: Map<XtreamContentType, Set<String>> = emptyMap(),
+    override fun libraryMatchCandidates(
+        kidsMode: Boolean,
+        lockedCategoryIds: Set<String>,
+        lockedCategoryIdsByContentType: Map<XtreamContentType, Set<String>>,
     ): List<LibraryCandidate> {
         // Fetched if they are not in memory yet. Assinaturas can be the first screen a user opens,
         // and the film and series catalogues are only loaded when their own sections are visited —
@@ -721,12 +721,12 @@ class SessionXtreamRepository(
         return candidates
     }
 
-    fun movieDetails(movieId: String): XtreamMovieDetails =
+    override fun movieDetails(movieId: String): XtreamMovieDetails =
         withCredentials { credentials ->
             client.movieDetails(credentials, movieId)
         }
 
-    fun shortEpg(streamId: String): XtreamShortEpg =
+    override fun shortEpg(streamId: String): XtreamShortEpg =
         withCredentials { credentials ->
             client.shortEpg(credentials, streamId)
         }
@@ -737,7 +737,7 @@ class SessionXtreamRepository(
      * Callers must invoke this only after an explicit user confirmation and immediately hand the
      * result to the OS. The repository never retains the returned URI.
      */
-    fun buildConfirmedPlaybackUri(target: XtreamPlaybackTarget): URI =
+    override fun buildConfirmedPlaybackUri(target: XtreamPlaybackTarget): URI =
         withCredentials { credentials ->
             when (target) {
                 is XtreamPlaybackTarget.CatalogItem ->
@@ -781,7 +781,7 @@ class SessionXtreamRepository(
         }
     }
 
-    fun summary(): XtreamSessionSummary? =
+    override fun summary(): XtreamSessionSummary? =
         synchronized(lock) {
             if (credentialVault == null || account == null || sourceId == null) {
                 null
@@ -805,7 +805,7 @@ class SessionXtreamRepository(
      * place would have the next load answer from it and make the refresh a no-op. A test caught
      * that before it shipped.
      */
-    fun clearCatalogCache() {
+    override fun clearCatalogCache() {
         synchronized(lock) {
             // Only the item catalogues. Categories are fetched during connect, not by loadCatalog,
             // so clearing them here emptied the category rail down to "Todas" with no way to
@@ -823,12 +823,12 @@ class SessionXtreamRepository(
      * one. This is for signing out: leaving a subscription's entire catalogue on disk after the
      * user has deliberately disconnected would be a surprise.
      */
-    fun clearIncludingDiskCache() {
+    override fun clearIncludingDiskCache() {
         clear()
         diskCache.clear()
     }
 
-    fun clear() {
+    override fun clear() {
         val oldVault =
             synchronized(lock) {
                 generation += 1

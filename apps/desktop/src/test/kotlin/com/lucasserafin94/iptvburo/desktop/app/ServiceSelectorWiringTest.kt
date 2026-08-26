@@ -29,6 +29,16 @@ class ServiceSelectorWiringTest {
     private val repository =
         read("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/data/SessionXtreamRepository.kt")
 
+    /**
+     * The contract, which is where the parameter's default now lives.
+     *
+     * Kotlin forbids a default on an overriding function, so extracting [CatalogueRepository] moved
+     * every default from the class to the interface. The capability is unchanged; only the file
+     * that declares it moved.
+     */
+    private val contract =
+        read("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/data/CatalogueRepository.kt")
+
     /** The index is built, and only for the tab that needs it. */
     @Test
     fun `the film tab builds a service index`() {
@@ -78,7 +88,11 @@ class ServiceSelectorWiringTest {
             "The chosen service is never passed to the page fetch, so the grid would not change.",
         )
         assertTrue(
-            repository.contains("allowedLocalIds: Set<String>? = null"),
+            contract.contains("allowedLocalIds: Set<String>? = null"),
+            "The contract does not offer a filter by library id.",
+        )
+        assertTrue(
+            repository.contains("allowedLocalIds: Set<String>?"),
             "The repository cannot filter by library id.",
         )
     }

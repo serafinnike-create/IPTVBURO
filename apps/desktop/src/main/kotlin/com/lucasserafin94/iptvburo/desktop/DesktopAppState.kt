@@ -9,6 +9,7 @@ import com.lucasserafin94.iptvburo.desktop.build.BUNDLED_TMDB_KEY
 import com.lucasserafin94.iptvburo.desktop.data.ArtworkCache
 import com.lucasserafin94.iptvburo.desktop.data.CatalogLoadProgress
 import com.lucasserafin94.iptvburo.desktop.data.FtpPlaylistReader
+import com.lucasserafin94.iptvburo.desktop.data.CatalogueRepository
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.XmltvGuideSource
 import com.lucasserafin94.iptvburo.desktop.license.DeviceFingerprint
@@ -184,7 +185,13 @@ internal fun heroSynopsisKey(
 @Stable
 class DesktopAppState(
     private val localRepository: InMemoryCatalogRepository,
-    private val xtreamRepository: SessionXtreamRepository,
+    /**
+     * The subscription, whichever protocol it speaks.
+     *
+     * Typed as the contract rather than the Xtream class so a Stalker repository can take its
+     * place without this file knowing. Everything below asks the same 19 questions either way.
+     */
+    private val xtreamRepository: CatalogueRepository,
     private val rememberedXtreamStore: RememberedXtreamStore,
     private val userStore: DesktopUserStore = DesktopUserStore(),
     private val playbackProgressCoordinator: DesktopPlaybackProgressCoordinator = DesktopPlaybackProgressCoordinator(),
