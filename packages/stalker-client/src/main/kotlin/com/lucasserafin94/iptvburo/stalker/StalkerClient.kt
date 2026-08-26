@@ -7,6 +7,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
@@ -32,6 +33,15 @@ class StalkerClient(
         httpClient.newBuilder()
             .followRedirects(false)
             .followSslRedirects(false)
+            // OkHttp's per-read readTimeout resets on every byte received, so it never fires
+            // against a portal (malicious or merely congested) that paces its response just under
+            // whatever interval is configured — confirmed by dynamic testing against XtreamClient's
+            // equivalent gap, which this class shared: no callTimeout was set anywhere, including
+            // the injectable default OkHttpClient(), which carries no timeouts at all. callTimeout
+            // bounds the call's total wall-clock duration regardless of pacing. Applied here rather
+            // than left to whatever the caller injects, so every StalkerClient gets the protection
+            // even when a custom client is passed in for other reasons (e.g. tests).
+            .callTimeout(DEFAULT_CALL_TIMEOUT_MINUTES, TimeUnit.MINUTES)
             .build()
 
     init {
@@ -345,6 +355,13 @@ class StalkerClient(
 
         /** Stalker calls are paged; a larger body is treated as an unsafe or malformed response. */
         const val DEFAULT_MAXIMUM_RESPONSE_BYTES = 8 * 1024 * 1024
+
+        /**
+         * Bounds the whole call. OkHttp's readTimeout resets on every byte received and so never
+         * fires against a portal pacing its response just under that interval; callTimeout is the
+         * one setting that bounds total wall-clock duration regardless of pacing.
+         */
+        const val DEFAULT_CALL_TIMEOUT_MINUTES = 5L
 
         /** Pulls the stream URL out of `ffmpeg http://host/path extra args`. */
         fun extractUrl(command: String): String? =

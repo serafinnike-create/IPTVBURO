@@ -8,6 +8,7 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.concurrent.TimeUnit
+import com.lucasserafin94.iptvburo.playlist.XmltvParser
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -34,6 +35,14 @@ class XtreamClient(
             .connectTimeout(DEFAULT_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .readTimeout(DEFAULT_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .writeTimeout(DEFAULT_WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            // readTimeout resets on every byte received, so it never fires against a server (hostile
+            // or merely congested) that paces its response just under that interval — dynamic testing
+            // against a mock server trickling one byte every two seconds confirmed this hangs the
+            // calling thread indefinitely with only readTimeout set. callTimeout bounds the whole
+            // call's wall-clock duration regardless of pacing, which is the property actually needed
+            // here. Kept generous: it must comfortably outlast a large catalog on a slow connection,
+            // not just a login handshake.
+            .callTimeout(DEFAULT_CALL_TIMEOUT_MINUTES, TimeUnit.MINUTES)
             .followRedirects(false)
             .followSslRedirects(false)
             .retryOnConnectionFailure(true)
@@ -272,6 +281,83 @@ class XtreamClient(
                 }
             }
         return XtreamShortEpg(programs, skipped + (listings.size - MAXIMUM_SHORT_EPG_LIMIT).coerceAtLeast(0))
+    }
+
+    /**
+     * The provider's full multi-day guide, from `xmltv.php` — the same file TiviMate and IPTV
+     * Smarters read, and the reason [shortEpg] alone cannot show more than the next few hours:
+     * `get_short_epg` is capped by the provider itself regardless of the `limit` requested, while
+     * `xmltv.php` carries whatever window the panel was configured to publish, often several days.
+     *
+     * Returned as programmes by channel id (lower-cased, matching how a caller should look them
+     * up) rather than as a single flat list: a guide this size is only ever consulted for one
+     * channel at a time, and building the index once here is what makes that lookup free instead
+     * of a linear scan repeated per channel opened.
+     *
+     * Failure is silence — an empty map, never a thrown exception. The guide is a bonus a provider
+     * may not even publish, and a panel that is slow or unreachable for it must not be confused
+     * with one that is down for anything else the app actually depends on.
+     */
+    fun xmltvGuide(credentials: XtreamCredentials): Map<String, List<XtreamEpgProgram>> {
+        if (credentials.username.isBlank() || credentials.password.isBlank()) return emptyMap()
+        return runCatching {
+            val endpoint = XtreamEndpointParser.parse(credentials.serverUrl)
+            val url =
+                endpoint.baseUrl
+                    .newBuilder()
+                    .addPathSegment("xmltv.php")
+                    .addQueryParameter("username", credentials.username)
+                    .addQueryParameter("password", credentials.password)
+                    .build()
+            val request =
+                Request.Builder()
+                    .url(url)
+                    .header("User-Agent", userAgent)
+                    // The parser sniffs gzip from the first bytes itself, so the header is asked
+                    // for explicitly rather than left to OkHttp's transparent (and then hidden)
+                    // decompression — the same reasoning the desktop guide fetch already applies.
+                    .header("Accept-Encoding", "gzip")
+                    .get()
+                    .build()
+            // A dedicated client for this one call rather than the shared one: a guide can run to
+            // tens of megabytes on a slow host, and the 60-second read timeout every other Xtream
+            // call uses would abort a perfectly healthy download partway through. newBuilder()
+            // keeps every other setting — the redirect and retry policy this class was built
+            // with — and changes only the timeouts, including callTimeout: the shared client's
+            // bound exists for ordinary calls and would otherwise cut off a guide the read timeout
+            // alone was just widened to allow.
+            val guideClient = httpClient.newBuilder()
+                .readTimeout(XMLTV_READ_TIMEOUT_MINUTES, TimeUnit.MINUTES)
+                .callTimeout(XMLTV_READ_TIMEOUT_MINUTES, TimeUnit.MINUTES)
+                .build()
+            guideClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@runCatching emptyMap()
+                val declaredLength = response.body.contentLength()
+                if (declaredLength > maximumResponseBytes) return@runCatching emptyMap()
+                val bounded = MaximumBytesInputStream(response.body.byteStream(), maximumResponseBytes.toLong())
+                val collected = HashMap<String, MutableList<XtreamEpgProgram>>()
+                // Errors from the parse itself (the byte ceiling above, a malformed tail, the
+                // connection dropping mid-stream) are swallowed here rather than by the outer
+                // runCatching, so whatever was already collected survives instead of being thrown
+                // away — a guide truncated at the ceiling is still a guide, and discarding it would
+                // turn "a very large file" into "no schedule at all" for no benefit.
+                runCatching {
+                    XmltvParser.parse(bounded) { programme ->
+                        collected
+                            .getOrPut(programme.channelId.trim().lowercase()) { mutableListOf() }
+                            .add(
+                                XtreamEpgProgram(
+                                    title = programme.title.take(MAXIMUM_EPG_TEXT_LENGTH),
+                                    description = programme.description?.take(MAXIMUM_EPG_DESCRIPTION_LENGTH),
+                                    startEpochSeconds = programme.startEpochSeconds,
+                                    endEpochSeconds = programme.endEpochSeconds,
+                                ),
+                            )
+                    }
+                }
+                collected
+            }
+        }.getOrDefault(emptyMap())
     }
 
     fun buildPlaybackUrl(
@@ -836,6 +922,17 @@ class XtreamClient(
         const val DEFAULT_CONNECT_TIMEOUT_SECONDS = 15L
         const val DEFAULT_READ_TIMEOUT_SECONDS = 60L
         const val DEFAULT_WRITE_TIMEOUT_SECONDS = 30L
+
+        /**
+         * Bounds the whole call, unlike [DEFAULT_READ_TIMEOUT_SECONDS] which resets on every byte
+         * received and so never fires against a server pacing its response just under that
+         * interval. Wide enough to comfortably outlast a large catalogue arriving slowly, not tuned
+         * to ordinary calls — those fail fast on their own well before this ever matters.
+         */
+        const val DEFAULT_CALL_TIMEOUT_MINUTES = 5L
+
+        /** How long xmltvGuide() alone waits per read, matching the desktop guide fetch's own. */
+        const val XMLTV_READ_TIMEOUT_MINUTES = 3L
         const val READ_BUFFER_SIZE = 32 * 1024
 
         /**
