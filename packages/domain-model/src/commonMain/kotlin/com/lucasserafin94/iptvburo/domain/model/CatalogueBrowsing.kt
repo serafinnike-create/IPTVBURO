@@ -75,10 +75,18 @@ data class BrowsableItem(
 data class CatalogueFilter(
     val genre: String? = null,
     val year: Int? = null,
+    /**
+     * The lowest rating to include, or null for no floor.
+     *
+     * A floor rather than an exact match: rating is continuous, so "8" as a value nobody's title
+     * exactly has would filter out everything, where "8 or above" is the question a viewer
+     * actually means to ask.
+     */
+    val minRating: Double? = null,
     val sort: CatalogueSort = CatalogueSort.PROVIDER,
 ) {
     val isActive: Boolean
-        get() = genre != null || year != null || sort != CatalogueSort.PROVIDER
+        get() = genre != null || year != null || minRating != null || sort != CatalogueSort.PROVIDER
 }
 
 /**
@@ -132,7 +140,11 @@ fun applyCatalogueFilter(
             val genreMatches =
                 genreKey == null || item.genre?.lowercase()?.contains(genreKey) == true
             val yearMatches = filter.year == null || item.year == filter.year
-            genreMatches && yearMatches
+            // An unrated item never satisfies a rating floor: showing it anyway would produce a
+            // "rated 8+" shelf that includes titles nobody has actually rated.
+            val ratingMatches =
+                filter.minRating == null || (item.rating != null && item.rating >= filter.minRating)
+            genreMatches && yearMatches && ratingMatches
         }
 
     val byTitle = compareBy<BrowsableItem> { it.title.lowercase() }.thenBy(BrowsableItem::id)

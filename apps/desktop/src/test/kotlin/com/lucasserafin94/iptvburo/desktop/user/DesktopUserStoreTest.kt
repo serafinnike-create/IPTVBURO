@@ -592,15 +592,20 @@ class DesktopUserStoreTest {
     }
 
     @Test
-    fun `a profile with no lock configured has none`() {
+    fun `a profile with no lock configured gets the shipped one`() {
         val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
         try {
             val store = DesktopUserStore(node)
             store.saveProfiles(listOf(DesktopProfile("mine", "Lucas", false)))
 
+            // Adult categories are closed from the first launch. A lock nobody switched on is a
+            // lock that protects nobody, and the household this exists for is exactly the one that
+            // will never open Settings.
             val lock = store.parentalLock("mine")
-            assertTrue(!lock.hasPin, "a profile that never set a PIN must not appear to have one")
-            assertTrue(lock.lockedCategoryIds.isEmpty())
+            assertTrue(lock.hasPin, "the shipped PIN applies until somebody chooses their own")
+            assertTrue(lock.usingDefaultPin, "and the screen has to be able to say it is 0000")
+            assertTrue(lock.lockAdultCategories, "which is what the shipped PIN is for")
+            assertTrue(lock.lockedCategoryIds.isEmpty(), "no individual category is locked yet")
         } finally {
             node.removeNode()
         }
@@ -630,7 +635,12 @@ class DesktopUserStoreTest {
             store.setParentalLock("a", StoredParentalLock(salt = "s", hash = "h", lockedCategoryIds = setOf("1")))
 
             assertTrue(store.parentalLock("a").hasPin)
-            assertTrue(!store.parentalLock("b").hasPin, "the lock leaked to another profile")
+            // Both have a PIN now — b has the shipped one — so what proves isolation is that b
+            // did not inherit a's chosen PIN.
+            assertTrue(
+                store.parentalLock("b").usingDefaultPin,
+                "the lock leaked to another profile",
+            )
         } finally {
             node.removeNode()
         }

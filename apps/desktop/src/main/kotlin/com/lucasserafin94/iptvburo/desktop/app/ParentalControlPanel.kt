@@ -128,6 +128,19 @@ fun ParentalControlPanel(appState: DesktopAppState) {
 
         // Offered only once a PIN exists: a switch that locks categories with no way to open them
         // would shut the user out of their own catalogue.
+        // Said plainly while the shipped PIN is still in place. The lock is real from the first
+        // launch, and 0000 is public knowledge — leaving that unsaid would let somebody believe
+        // their catalogue is protected by a secret.
+        if (appState.usingDefaultParentalPin) {
+            Spacer(Modifier.height(BuroSpacing.Xxs))
+            Text(
+                text = text.settingsText.parentalDefaultPin,
+                color = BuroColors.Warning,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
         if (hasPin) {
             Spacer(Modifier.height(BuroSpacing.Xxs))
             Row(

@@ -131,6 +131,13 @@ data class SettingsStrings(
     val parentalNewPin: String,
     val parentalWrongPin: String,
     val parentalPinSaved: String,
+    /**
+     * Says the profile is still on the shipped PIN.
+     *
+     * Shown because 0000 is public knowledge. The lock is real and works from the first launch;
+     * this is what stops it being mistaken for a secret.
+     */
+    val parentalDefaultPin: String,
     val parentalPinFormat: String,
     val parentalLockAdult: String,
     val parentalLocked: String,
@@ -1102,6 +1109,7 @@ data class DesktopStrings(
                         parentalCurrentPin = "Contraseña actual",
                         parentalNewPin = "Contraseña nueva",
                         parentalWrongPin = "Contraseña incorrecta.",
+                        parentalDefaultPin = "Bloqueo activo con la contraseña estándar 0000. Elija la suya para que no sea adivinada.",
                         parentalPinSaved = "✓ Contraseña guardada.",
                         parentalPinFormat = "La contraseña debe tener 4 números.",
                         parentalLockAdult = "Bloquear categorías para adultos automáticamente",
@@ -1823,6 +1831,7 @@ data class DesktopStrings(
                         parentalCurrentPin = "Senha atual",
                         parentalNewPin = "Nova senha",
                         parentalWrongPin = "Senha incorreta.",
+                        parentalDefaultPin = "Bloqueio ativo com a senha padrão 0000. Escolha a sua para que ninguém a adivinhe.",
                         parentalPinSaved = "✓ Senha salva.",
                         parentalPinFormat = "A senha precisa ter 4 números.",
                         parentalLockAdult = "Bloquear categorias adultas automaticamente",
@@ -2544,6 +2553,7 @@ data class DesktopStrings(
                         parentalCurrentPin = "Current PIN",
                         parentalNewPin = "New PIN",
                         parentalWrongPin = "Wrong PIN.",
+                        parentalDefaultPin = "Locked with the standard PIN 0000. Choose your own so it cannot be guessed.",
                         parentalPinSaved = "✓ PIN saved.",
                         parentalPinFormat = "The PIN must be four digits.",
                         parentalLockAdult = "Lock adult categories automatically",
@@ -3263,6 +3273,7 @@ data class DesktopStrings(
                         parentalCurrentPin = "Aktuelle PIN",
                         parentalNewPin = "Neue PIN",
                         parentalWrongPin = "Falsche PIN.",
+                        parentalDefaultPin = "Sperre aktiv mit der Standard-PIN 0000. Wählen Sie eine eigene, damit sie nicht erraten wird.",
                         parentalPinSaved = "✓ PIN gespeichert.",
                         parentalPinFormat = "Die PIN muss vier Ziffern haben.",
                         parentalLockAdult = "Erwachsenenkategorien automatisch sperren",
@@ -3990,6 +4001,7 @@ data class DesktopStrings(
                         parentalCurrentPin = "PIN attuale",
                         parentalNewPin = "Nuovo PIN",
                         parentalWrongPin = "PIN errato.",
+                        parentalDefaultPin = "Blocco attivo con il PIN standard 0000. Scegline uno tuo perché non venga indovinato.",
                         parentalPinSaved = "✓ PIN salvato.",
                         parentalPinFormat = "Il PIN deve avere quattro cifre.",
                         parentalLockAdult = "Blocca automaticamente le categorie per adulti",

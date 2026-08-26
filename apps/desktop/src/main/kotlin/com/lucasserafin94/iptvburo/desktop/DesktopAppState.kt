@@ -3521,6 +3521,19 @@ class DesktopAppState(
             }
         }
 
+    /**
+     * Whether this profile is still on the PIN the app ships with.
+     *
+     * Read by the settings screen, which has to say so: the lock works from the first launch, and
+     * 0000 is public knowledge.
+     */
+    val usingDefaultParentalPin: Boolean
+        get() {
+            @Suppress("UNUSED_EXPRESSION")
+            parentalRevision
+            return userStore.parentalLock(activeProfileId).usingDefaultPin
+        }
+
     /** Whether this profile has a PIN at all. Without one nothing can be asked for. */
     val hasParentalPin: Boolean
         get() {
@@ -3831,7 +3844,11 @@ class DesktopAppState(
         val profileId = activeProfileId ?: return false
         val stored = userStore.parentalLock(profileId)
 
-        if (stored.hasPin) {
+        // Replacing a PIN somebody chose needs that PIN. Replacing the shipped one does not:
+        // 0000 is printed on the settings screen, so demanding it would be theatre — and it would
+        // turn "choose a PIN" into "type the one everybody knows, then choose a PIN" for every
+        // first-time user.
+        if (stored.hasPin && !stored.usingDefaultPin) {
             val salt = stored.salt ?: return false
             val hash = stored.hash ?: return false
             if (currentPin == null || !ParentalPin(salt, hash).matches(currentPin)) return false

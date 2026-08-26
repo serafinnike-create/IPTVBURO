@@ -57,6 +57,21 @@ class CatalogueBrowsingTest {
     }
 
     @Test
+    fun `filtering by minimum rating keeps only titles at or above it`() {
+        val filtered = applyCatalogueFilter(items, CatalogueFilter(minRating = 8.0))
+
+        // 8.4 and 8.3 clear the floor; 7.2 does not, and the unrated title never can.
+        assertEquals(listOf("2", "3"), filtered.map(BrowsableItem::id))
+    }
+
+    @Test
+    fun `an unrated title never satisfies a rating floor`() {
+        val filtered = applyCatalogueFilter(items, CatalogueFilter(minRating = 0.0))
+
+        assertTrue("4" !in filtered.map(BrowsableItem::id))
+    }
+
+    @Test
     fun `an empty filter is the whole catalogue rather than nothing`() {
         val filtered = applyCatalogueFilter(items, CatalogueFilter())
 

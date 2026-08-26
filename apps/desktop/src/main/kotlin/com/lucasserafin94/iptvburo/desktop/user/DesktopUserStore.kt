@@ -7,6 +7,7 @@ import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import com.lucasserafin94.iptvburo.domain.model.CacheBudget
 import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
 import com.lucasserafin94.iptvburo.domain.model.SeriesWatermark
+import com.lucasserafin94.iptvburo.domain.model.ParentalPin
 import java.util.prefs.Preferences
 
 /**
@@ -78,10 +79,37 @@ data class StoredParentalLock(
     val hash: String? = null,
     val lockAdultCategories: Boolean = true,
     val lockedCategoryIds: Set<String> = emptySet(),
+    /**
+     * Whether this is the PIN everybody ships with rather than one somebody chose.
+     *
+     * Adult categories are locked from the first launch, because a lock nobody has switched on is
+     * a lock that protects nobody — and the household this exists for is exactly the one that will
+     * never open Settings. But 0000 is public knowledge, so the screen says so and asks for a real
+     * one. It protects by default without pretending to be a secret.
+     */
+    val usingDefaultPin: Boolean = false,
 ) {
     val hasPin: Boolean
         get() = !salt.isNullOrBlank() && !hash.isNullOrBlank()
 }
+
+/**
+ * The PIN a profile has until somebody sets their own.
+ *
+ * Four zeroes because it has to be memorable enough to be told over the telephone by whoever sold
+ * the subscription — the same support conversation the device code exists for.
+ */
+const val DEFAULT_PARENTAL_PIN = "0000"
+
+/**
+ * The salt the shipped PIN is hashed with.
+ *
+ * Fixed rather than random, because this hash is computed on every read instead of being stored,
+ * and a fresh salt each time would produce a different hash each time. It is not protecting
+ * anything: the PIN it hashes is printed in the app's own settings screen. A chosen PIN gets a
+ * random salt, which is where the salt actually matters.
+ */
+private const val DEFAULT_PARENTAL_SALT = "iptvburo-default-parental-pin"
 
 enum class DesktopLanguage(val tag: String) {
     PORTUGUESE_BRAZIL("pt-BR"),
@@ -461,8 +489,30 @@ class DesktopUserStore(
      * The PIN is stored as salt and hash, never in the clear. It is a weak secret — four digits —
      * but it is often a number the user reuses, and a preferences file is not the place for it.
      */
+    /**
+     * The lock a profile has before anybody configures one: adult categories closed behind 0000.
+     *
+     * Built rather than stored, so an install that predates this gets it too — the alternative is
+     * writing a PIN into everybody's preferences on upgrade, which is a migration for something
+     * that can simply be computed.
+     */
+    private fun defaultParentalLock(): StoredParentalLock {
+        val pin = ParentalPin.of(DEFAULT_PARENTAL_PIN, DEFAULT_PARENTAL_SALT) ?: return StoredParentalLock()
+        return StoredParentalLock(
+            salt = pin.salt,
+            hash = pin.hash,
+            lockAdultCategories = true,
+            usingDefaultPin = true,
+        )
+    }
+
     fun parentalLock(profileId: String?): StoredParentalLock {
-        val raw = profileId?.let { preferences.get(parentalKey(it), null) } ?: return StoredParentalLock()
+        // Nothing stored means nobody has chosen a PIN, and the shipped one applies. Answered here
+        // rather than at each caller so every screen and every filter sees the same lock: one that
+        // is off until Settings is opened protects only the households that did not need it.
+        val raw =
+            profileId?.let { preferences.get(parentalKey(it), null) }
+                ?: return defaultParentalLock()
         val parts = raw.split('|')
         return StoredParentalLock(
             salt = parts.getOrNull(0)?.takeIf(String::isNotBlank),
