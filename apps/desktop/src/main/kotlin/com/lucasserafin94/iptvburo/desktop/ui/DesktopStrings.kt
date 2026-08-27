@@ -642,6 +642,8 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            setupMissingProfileName = "Escriba el nombre del perfil para continuar",
+                            setupMissingConnection = "Complete el servidor, el usuario y la contraseña, o elija una lista ya configurada",
                             diagnosticsAction = "Diagnóstico",
                             diagnosticsTitle = "Diagnóstico de conexión",
                             diagnosticsLatencyGood = "Latencia baja: los canales cambian sin espera",
@@ -1403,6 +1405,8 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            setupMissingProfileName = "Escreva o nome do perfil para continuar",
+                            setupMissingConnection = "Preencha servidor, usuário e senha, ou escolha uma lista já configurada",
                             diagnosticsAction = "Diagnóstico",
                             diagnosticsTitle = "Diagnóstico da ligação",
                             diagnosticsLatencyGood = "Latência baixa: os canais trocam sem espera",
@@ -2164,6 +2168,8 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            setupMissingProfileName = "Enter a profile name to continue",
+                            setupMissingConnection = "Fill in the server, username and password, or pick a playlist you already have",
                             diagnosticsAction = "Diagnostics",
                             diagnosticsTitle = "Connection diagnostics",
                             diagnosticsLatencyGood = "Low latency: channels change without waiting",
@@ -2924,6 +2930,8 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            setupMissingProfileName = "Geben Sie einen Profilnamen ein, um fortzufahren",
+                            setupMissingConnection = "Server, Benutzer und Passwort ausfüllen oder eine vorhandene Liste wählen",
                             diagnosticsAction = "Diagnose",
                             diagnosticsTitle = "Verbindungsdiagnose",
                             diagnosticsLatencyGood = "Niedrige Latenz: Kanäle wechseln ohne Wartezeit",
@@ -3689,6 +3697,8 @@ data class DesktopStrings(
                         ),
                     screens =
                         ScreenStrings(
+                            setupMissingProfileName = "Inserisci un nome profilo per continuare",
+                            setupMissingConnection = "Compila server, utente e password, oppure scegli una lista già configurata",
                             diagnosticsAction = "Diagnostica",
                             diagnosticsTitle = "Diagnostica della connessione",
                             diagnosticsLatencyGood = "Latenza bassa: i canali cambiano senza attesa",
@@ -4808,6 +4818,15 @@ data class DownloadStrings(
  * there — `DesktopStrings` is at its enforced constructor limit.
  */
 data class ScreenStrings(
+    /**
+     * Why Continuar is disabled.
+     *
+     * A disabled button that says nothing is the defect: somebody filled in the whole
+     * list at the bottom of a scrolling form and had nothing happen, with the one empty
+     * field off the top of the screen.
+     */
+    val setupMissingProfileName: String,
+    val setupMissingConnection: String,
     /**
      * The connection test, beside the button that refreshes the lists.
      *

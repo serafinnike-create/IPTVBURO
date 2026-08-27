@@ -34,7 +34,15 @@ import com.lucasserafin94.iptvburo.xtream.XtreamSubscriptionParser
 @Composable
 fun XtreamLoginDialog(
     onDismiss: () -> Unit,
-    onConnect: (XtreamLoginInput) -> Unit,
+    /**
+     * Connects, with the name this list should carry.
+     *
+     * The name is not a credential, so it travels as a plain string rather than through the secure
+     * buffer: it is drawn on screen, which is the whole point of it.
+     *
+     * Blank means "name it after the host", which is what the app did before the field existed.
+     */
+    onConnect: (XtreamLoginInput, listLabel: String) -> Unit,
     /**
      * Told which protocol the next connection speaks, before it is attempted.
      *
@@ -51,6 +59,15 @@ fun XtreamLoginDialog(
      * heard of a portal should not have to think about the question.
      */
     var portal by remember { mutableStateOf(false) }
+
+    /**
+     * What this list is called in the sources list.
+     *
+     * The form asked for the address, the user and the password and never for a name, so every
+     * subscription added this way was labelled after its host — "cb.visualplay.online" — which is
+     * what the server calls itself, not what the person recognises.
+     */
+    var listLabel by remember { mutableStateOf("") }
     DisposableEffect(form) {
         onDispose(form::clear)
     }
@@ -63,7 +80,7 @@ fun XtreamLoginDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onConnect(form.consume())
+                    onConnect(form.consume(), listLabel.trim())
                     onDismiss()
                 },
                 enabled = form.canSubmit,
@@ -120,6 +137,17 @@ fun XtreamLoginDialog(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
+                // Before the address, because it is the one field about the person's own library
+                // rather than about the provider's server.
+                OutlinedTextField(
+                    value = listLabel,
+                    // Forty, the same cap the onboarding form uses: it is a label in a row, and a
+                    // longer one pushes the rest of that row off the screen.
+                    onValueChange = { listLabel = it.take(40) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(strings.setupListName) },
+                    singleLine = true,
+                )
                 OutlinedTextField(
                     value = form.server.text,
                     onValueChange = form::acceptServerInput,

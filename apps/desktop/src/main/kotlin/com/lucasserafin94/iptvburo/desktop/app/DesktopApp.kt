@@ -1163,8 +1163,8 @@ fun DesktopApp(
             if (showXtreamLogin) {
                 XtreamLoginDialog(
                     onDismiss = { showXtreamLogin = false },
-                    onConnect = { input ->
-                        scope.launch { appState.connectXtream(input) }
+                    onConnect = { input, listLabel ->
+                        scope.launch { appState.connectXtream(input, listLabel) }
                     },
                     onProtocolChosen = appState::useStalkerForNextConnection,
                 )

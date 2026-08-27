@@ -346,13 +346,22 @@ fun AccountSetupGate(
      */
     var removingSource by remember { mutableStateOf<XtreamSource?>(null) }
 
-    val canSubmit =
-        profileName.isNotBlank() &&
-            if (reusedSourceId != null) {
-                true
-            } else {
-                server.isNotBlank() && username.isNotBlank() && password.isNotBlank()
-            }
+    /**
+     * What is still missing, or null when the form is ready.
+     *
+     * A disabled button that says nothing is the complaint here: somebody filled in the whole list
+     * at the bottom of a scrolling form, pressed Continuar and had nothing happen, with the one
+     * empty field — the profile name — off the top of the screen. The button now says which.
+     */
+    val missing =
+        when {
+            profileName.isBlank() -> text.shareStrings.screens.setupMissingProfileName
+            reusedSourceId != null -> null
+            server.isBlank() || username.isBlank() || password.isBlank() ->
+                text.shareStrings.screens.setupMissingConnection
+            else -> null
+        }
+    val canSubmit = missing == null
 
     OnboardingScaffold(step = 1, onDismiss = onDismiss) {
         Text(
@@ -653,6 +662,18 @@ fun AccountSetupGate(
                 ),
         ) {
             Text(text.setupContinue, fontWeight = FontWeight.Bold)
+        }
+        // Under the button, not above it: it is the answer to "why did nothing happen when I
+        // pressed that", so it belongs where the eye already is.
+        missing?.let { reason ->
+            Spacer(Modifier.height(BuroSpacing.Sm))
+            Text(
+                text = reason,
+                color = BuroColors.TextMuted,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

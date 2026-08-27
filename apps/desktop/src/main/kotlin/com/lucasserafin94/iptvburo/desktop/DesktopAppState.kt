@@ -5410,6 +5410,14 @@ class DesktopAppState(
     suspend fun connectXtream(
         input: XtreamLoginInput,
         /**
+         * What to call this list, or blank to name it after its host.
+         *
+         * The connect form never asked, so every subscription added that way was labelled
+         * "cb.visualplay.online" — what the server calls itself, not what the person recognises.
+         * Blank keeps that old behaviour for anyone who leaves the field empty.
+         */
+        listLabel: String = "",
+        /**
          * Reports what the connection is doing, for the splash screen.
          *
          * Defaulted so the ordinary login path — where the user is watching a form, not a progress
@@ -5437,6 +5445,21 @@ class DesktopAppState(
                     xtreamRepository.authenticateAndLoadInitial(input, onProgress)
                 }
             }.onSuccess { summary ->
+                // Recorded in the library so it appears by name under "usar uma lista ja
+                // configurada", the same as one added during onboarding. Before this, a
+                // subscription connected from the form was usable but nameless — it never showed
+                // up in that list at all.
+                runCatching {
+                    val entry =
+                        sourceLibrary.create(
+                            listLabel.ifBlank { String(rememberedServer).hostLabel() },
+                        )
+                    withContext(Dispatchers.IO) {
+                        sourceLibrary
+                            .store(entry.id)
+                            .save(rememberedServer, rememberedUsername, rememberedPassword)
+                    }
+                }
                 // A transient DPAPI/filesystem problem must not discard an already authenticated
                 // in-memory session. The next successful login can retry persistence.
                 runCatching {
