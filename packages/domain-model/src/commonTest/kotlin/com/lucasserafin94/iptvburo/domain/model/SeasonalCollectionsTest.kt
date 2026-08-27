@@ -163,12 +163,51 @@ class SeasonalCollectionsTest {
         // Providers mix languages inside a single playlist, so a term list in one language finds
         // only part of what the catalogue actually holds.
         val christmas = assertNotNull(SeasonalCollections.primaryCollectionFor(LocalDate(2025, 12, 10)))
-        assertTrue("natal" in christmas.searchTerms)
+        assertTrue("natalin" in christmas.searchTerms)
         assertTrue("christmas" in christmas.searchTerms)
 
         val halloween = assertNotNull(SeasonalCollections.primaryCollectionFor(LocalDate(2025, 10, 25)))
         assertTrue("terror" in halloween.searchTerms)
         assertTrue("horror" in halloween.searchTerms)
+    }
+
+    @Test
+    fun `no term matches an unrelated everyday title`() {
+        // The class comment promises terms long enough to be safe as substrings, naming "natal"
+        // as the example that would drag in "Natalie" and "fatal". The list carried "natal"
+        // anyway, so both platforms that match with a plain `contains` — the phone in
+        // RealHomeCatalog, the desktop through its repository search — really did open December
+        // with "Natalie" on a Christmas shelf.
+        //
+        // This test is the promise made checkable. It is written against the decoys rather than
+        // against one term, so a future addition that reintroduces the problem fails here.
+        // "amores" is not on this list on purpose: it *should* match "amor", because a romance
+        // is exactly what the Valentines shelf is for. A decoy has to be a title with no
+        // seasonal connection at all, which is what makes the match wrong rather than broad.
+        val decoys = listOf("natalie", "atracao fatal", "fatal", "natalia")
+        allCollections().forEach { collection ->
+            collection.searchTerms.forEach { term ->
+                decoys.forEach { decoy ->
+                    assertTrue(
+                        !decoy.contains(term),
+                        "term '$term' of ${collection.id} matches the unrelated title '$decoy'",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `the christmas terms still catch the words they exist for`() {
+        // Removing a term must not cost the matches it was carrying: "natalin" has to keep
+        // finding the inflections, which is the whole reason the shorter form was there.
+        val christmas = assertNotNull(SeasonalCollections.primaryCollectionFor(LocalDate(2025, 12, 10)))
+        listOf("ferias natalinas", "especial natalino", "comedia natalina").forEach { title ->
+            assertTrue(
+                christmas.searchTerms.any { title.contains(it) },
+                "no christmas term matches '$title'",
+            )
+        }
     }
 
     @Test

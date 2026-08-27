@@ -58,8 +58,12 @@ object SeasonalCollections {
                 ),
             searchTerms =
                 listOf(
-                    "natal",
-                    "natalino",
+                    // "natal" is deliberately absent, and this is the rule the comment above
+                    // promises. A plain `contains` on it matches "Natalie" and "fatal", and both
+                    // are ordinary catalogue titles — the shelf then opens December with a film
+                    // that has nothing to do with the season. "natalin" covers what the word is
+                    // actually for: natalino, natalina, natalinas.
+                    "natalin",
                     "christmas",
                     "xmas",
                     "papai noel",
