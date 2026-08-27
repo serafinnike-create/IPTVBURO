@@ -50,6 +50,8 @@ var BuroApp = (function () {
     var sleepTimerEndsAt = null;
     var sleepTimerMinutes = null;
     var sleepTimerAtEpisodeEnd = false;
+    var playerSubtitleDelayTimer = null;
+    var subtitleOffsetMs = 0;
     var playerControlsTimer = null;
     var playerEnterTimer = null;
     var playerEnterPressActive = false;
@@ -220,7 +222,7 @@ var BuroApp = (function () {
         { tag: 'it', name: 'Italiano' },
         { tag: 'es', name: 'Español' }
     ];
-    var APP_VERSION_FALLBACK = '3.6.3';
+    var APP_VERSION_FALLBACK = '3.7.0';
 
     /*
       Quanto tempo o teste fica visivel mesmo quando acaba antes.
@@ -744,6 +746,27 @@ var BuroApp = (function () {
 
     function showPlayerSubtitle(value, durationMs) {
         var text = cleanSubtitleText(value);
+        /*
+          O atraso escolhido, quando o firmware nao o aplica na fonte.
+
+          Positivo adia a legenda; negativo mostra ja, porque o instante dela ja
+          passou e nao ha como voltar no tempo. Uma legenda adiada substitui a
+          anterior no mesmo lugar, entao guardar o temporizador basta.
+        */
+        var offset = BuroPlayer.subtitleOffset ? BuroPlayer.subtitleOffset() : 0;
+        if (offset > 0 && !BuroPlayer.subtitleOffsetHandledNatively && text) {
+            if (playerSubtitleDelayTimer) { window.clearTimeout(playerSubtitleDelayTimer); }
+            playerSubtitleDelayTimer = window.setTimeout(function () {
+                playerSubtitleDelayTimer = null;
+                drawPlayerSubtitle(text, durationMs);
+            }, offset);
+            return;
+        }
+        drawPlayerSubtitle(text, durationMs);
+    }
+
+    function drawPlayerSubtitle(rawText, durationMs) {
+        var text = rawText;
         var size = ['small', 'medium', 'large', 'huge'].indexOf(state.preferences.subtitleSize) >= 0 ?
             state.preferences.subtitleSize : 'medium';
         var colour = ['white', 'yellow', 'grey', 'green', 'cyan'].indexOf(state.preferences.subtitleColour) >= 0 ?
@@ -1057,6 +1080,46 @@ var BuroApp = (function () {
         return options;
     }
 
+    /*
+      Aplica o atraso e o guarda para a proxima vez.
+
+      Guardado **por fonte**, e nao por titulo nem global: quando uma lista
+      dessincroniza e porque o provedor remuxa o material do mesmo jeito em tudo
+      o que serve, entao o valor que acertou um filme costuma acertar o resto.
+      Global seria pior — duas fontes com problemas diferentes brigariam.
+    */
+    function applySubtitleOffset(milliseconds) {
+        var sourceId = state.activeSource && state.activeSource.id;
+        var applied = BuroPlayer.setSubtitleOffset(milliseconds);
+        var offsets;
+        if (sourceId) {
+            offsets = state.preferences.subtitleOffsets || {};
+            if (applied === 0) { delete offsets[sourceId]; } else { offsets[sourceId] = applied; }
+            state.preferences.subtitleOffsets = offsets;
+            savePreferences();
+        }
+        updateSubtitleOffsetLabel();
+        showToast(applied === 0 ? t('subtitleSyncReset') :
+            t('subtitleSyncSet').replace('{seconds}', (applied / 1000).toFixed(1)), false);
+        return applied;
+    }
+
+    /* O rotulo so aparece com o ajuste em uso: um valor de zero permanente na
+       barra seria ruido em toda reproducao normal. */
+    function updateSubtitleOffsetLabel() {
+        var offset = BuroPlayer.subtitleOffset ? BuroPlayer.subtitleOffset() : 0;
+        if (!playerSubtitleLabel) { return; }
+        if (!offset) { return; }
+        playerSubtitleLabel.textContent = '▼ ' + t('subtitleTrack') + ' ' +
+            t('subtitleSyncSet').replace('{seconds}', (offset / 1000).toFixed(1));
+    }
+
+    /* Ao abrir uma reproducao, o valor gravado para esta fonte volta a valer. */
+    function restoreSubtitleOffset() {
+        var sourceId = state.activeSource && state.activeSource.id;
+        var offsets = state.preferences.subtitleOffsets || {};
+        BuroPlayer.setSubtitleOffset(sourceId && offsets[sourceId] ? offsets[sourceId] : 0);
+    }
     function clearSleepTimer() {
         if (sleepTimerTicker) { window.clearInterval(sleepTimerTicker); sleepTimerTicker = null; }
         sleepTimerEndsAt = null;
@@ -1201,6 +1264,24 @@ var BuroApp = (function () {
         if (type === 'SLEEP' && !currentPlayback) { return; }
         if (type === 'TEXT') {
             options.unshift({ index: null, label: t('subtitlesOff'), selected: false, off: true });
+            /*
+              O ajuste de sincronia no fim da lista de faixas.
+
+              Numa lista IPTV a legenda dessincroniza com frequencia — o
+              provedor remuxa o arquivo e o offset embutido deixa de valer — e
+              sem ajuste a unica saida e desliga-la. Fica depois das faixas
+              porque escolher a lingua e o caso comum; corrigir o atraso e o
+              caso do dia ruim.
+            */
+            /* So com faixa de legenda para ajustar: sem nenhuma, o controle
+               prometeria corrigir um texto que nao vai aparecer. */
+            if (options.length > 1) {
+                options.push({ index: -500, label: t('subtitleEarlier'), selected: false, offset: true });
+                options.push({ index: 500, label: t('subtitleLater'), selected: false, offset: true });
+                if (BuroPlayer.subtitleOffset && BuroPlayer.subtitleOffset() !== 0) {
+                    options.push({ index: 0, label: t('subtitleSyncReset'), selected: false, offset: true });
+                }
+            }
         }
         if (type === 'SPEED' && !options.length) { return; }
         if (!options.length && type !== 'GUIDE') {
@@ -1247,6 +1328,16 @@ var BuroApp = (function () {
         if (option.openSleep) {
             closePlayerMenu();
             openPlayerMenu('SLEEP');
+            return;
+        }
+        /*
+          O ajuste de sincronia e cumulativo e nao fecha o menu: acertar uma
+          legenda leva varios toques, e fechar a cada meio segundo obrigaria a
+          reabrir o menu inteiro entre eles.
+        */
+        if (option.offset) {
+            applySubtitleOffset(option.index === 0 ? 0 : BuroPlayer.subtitleOffset() + option.index);
+            openPlayerMenu('TEXT');
             return;
         }
         if (option.sleep) {
@@ -11324,6 +11415,7 @@ var BuroApp = (function () {
           caminhos.
         */
         cancelNextEpisode(true);
+        restoreSubtitleOffset();
         if (!found.item) { return; }
         decision = BuroDomain.resumeDecision(progress && progress.entry, found.item.contentType !== 'LIVE');
         if (decision.kind === 'resume') {
@@ -12730,6 +12822,8 @@ var BuroApp = (function () {
         _setCurrentPlaybackForTest: function (playback) { currentPlayback = playback; },
         _openPlayerMenu: openPlayerMenu,
         _setSleepTimer: setSleepTimer,
+        _applySubtitleOffset: applySubtitleOffset,
+        _restoreSubtitleOffset: restoreSubtitleOffset,
         _beginNextEpisodeCountdown: beginNextEpisodeCountdown,
         _onKeyDown: onKeyDown,
         _onKeyUp: onKeyUp,
