@@ -492,6 +492,7 @@ private fun IptvBuroRoot(
                     }
                 },
                 onOpenPersonCredit = viewModel::openPersonCredit,
+                onOpenProviderShortcut = viewModel::openProviderShortcut,
                 onSelectLanguage = { tag -> AppLocaleController.applySelection(activity, tag) },
                 guard =
                     CatalogueGuardUi(
@@ -541,6 +542,7 @@ private fun IptvBuroRoot(
                 onLoadMore = viewModel::loadMoreChannels,
                 onRetryCatalog = viewModel::retryCatalog,
                 onRefreshCatalog = viewModel::refreshCatalog,
+                onRunDiagnostics = viewModel::runDiagnostics,
                 onOpenHomeItem = viewModel::openStory,
                 onRememberHomeFocus = viewModel::rememberLastFocusedHomeItem,
                 onBack = { viewModel.goBack() },

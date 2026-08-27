@@ -2,6 +2,8 @@ package com.lucasserafin94.iptvburo.di
 
 import com.lucasserafin94.iptvburo.core.logging.AndroidAppLogger
 import com.lucasserafin94.iptvburo.core.logging.AppLogger
+import com.lucasserafin94.iptvburo.data.diagnostics.ProviderProbe
+import com.lucasserafin94.iptvburo.data.diagnostics.XtreamProviderProbe
 import com.lucasserafin94.iptvburo.data.discovery.DataStoreShelfCache
 import com.lucasserafin94.iptvburo.data.discovery.ShelfCache
 import com.lucasserafin94.iptvburo.data.preferences.CatalogueGuard
@@ -24,7 +26,9 @@ import com.lucasserafin94.iptvburo.data.preferences.PlaybackSessionStore
 import com.lucasserafin94.iptvburo.data.reminders.ReminderScheduling
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
 import com.lucasserafin94.iptvburo.data.repository.RoomCatalogRepository
+import com.lucasserafin94.iptvburo.data.security.AndroidKeystoreChannelFieldCipher
 import com.lucasserafin94.iptvburo.data.security.AndroidKeystoreSourceConnectionStore
+import com.lucasserafin94.iptvburo.data.security.ChannelFieldCipher
 import com.lucasserafin94.iptvburo.data.security.SourceConnectionStore
 import com.lucasserafin94.iptvburo.data.security.AndroidMetadataKeyStore
 import com.lucasserafin94.iptvburo.data.security.MetadataKeyStore
@@ -100,6 +104,22 @@ abstract class DataBindingsModule {
     abstract fun bindSourceConnectionStore(
         implementation: AndroidKeystoreSourceConnectionStore,
     ): SourceConnectionStore
+
+    /**
+     * The measurements behind the diagnostics screen.
+     *
+     * Behind an interface so the tester can be exercised without a socket: those readings decide
+     * what somebody is told about their own connection, and that is worth testing directly.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindProviderProbe(implementation: XtreamProviderProbe): ProviderProbe
+
+    @Binds
+    @Singleton
+    abstract fun bindChannelFieldCipher(
+        implementation: AndroidKeystoreChannelFieldCipher,
+    ): ChannelFieldCipher
 
     @Binds
     @Singleton

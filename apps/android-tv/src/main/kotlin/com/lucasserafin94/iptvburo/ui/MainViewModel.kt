@@ -29,6 +29,7 @@ import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.data.licensing.RedeemOutcome
 import com.lucasserafin94.iptvburo.data.security.MetadataKeyStore
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
+import com.lucasserafin94.iptvburo.data.diagnostics.ConnectionTester
 import com.lucasserafin94.iptvburo.data.repository.DownloadRateReporter
 import com.lucasserafin94.iptvburo.data.repository.LiveProgram
 import com.lucasserafin94.iptvburo.data.repository.CatalogCursor
@@ -122,6 +123,7 @@ import okhttp3.OkHttpClient
 class MainViewModel @Inject constructor(
     @param:ApplicationContext private val contextProvider: Provider<Context>,
     private val catalogRepository: CatalogRepository,
+    private val connectionTester: ConnectionTester,
     private val downloadRateReporter: DownloadRateReporter,
     private val onboardingPreferences: OnboardingPreferences,
     private val userLibraryRepository: UserLibraryRepository,
@@ -2500,6 +2502,24 @@ class MainViewModel @Inject constructor(
             else -> Unit
         }
     }
+
+    /**
+     * Runs the connection test against the subscription now in use.
+     *
+     * Suspending rather than returning through the state: the screen shows the work happening while
+     * it waits, and routing several seconds of measurement through the UI state would make every
+     * other part of the screen recompose for readings only one panel wants.
+     */
+    suspend fun runDiagnostics(): ConnectionTester.Report =
+        connectionTester.run(
+            // The first Xtream subscription: an M3U file has no server to measure against, and
+            // this app merges its sources rather than having one active at a time.
+            sourceId =
+                state.value.sources
+                    .firstOrNull { source -> source.type == SourceType.XTREAM }
+                    ?.id,
+            loadedItems = state.value.channels.size,
+        )
 
     /** Explicit user refresh: starts the current catalogue page again instead of appending. */
     fun refreshCatalog() {

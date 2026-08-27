@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayCircle
@@ -156,6 +157,7 @@ import com.lucasserafin94.iptvburo.ui.SubscriptionsKindUi
 import com.lucasserafin94.iptvburo.ui.StalkerFailureUi
 import com.lucasserafin94.iptvburo.ui.XtreamImportStageUi
 import com.lucasserafin94.iptvburo.ui.WatchHistoryUi
+import com.lucasserafin94.iptvburo.data.diagnostics.ConnectionTester
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroMarqueeText
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
@@ -256,6 +258,7 @@ fun AppShellScreen(
     onOpenPerson: (String) -> Unit,
     /** Opens a filmography entry on the "where to watch" page. */
     onOpenPersonCredit: (PersonCreditUi) -> Unit,
+    onOpenProviderShortcut: (com.lucasserafin94.iptvburo.data.discovery.DiscoveredProvider) -> Unit,
     onRequestCastPhotos: (List<String>) -> Unit,
     onCatalogueFilterChange: (CatalogueFilter) -> Unit,
     onCatalogueLayoutChange: (CatalogueLayout) -> Unit,
@@ -298,6 +301,13 @@ fun AppShellScreen(
     onLoadMore: () -> Unit,
     onRetryCatalog: () -> Unit,
     onRefreshCatalog: () -> Unit,
+    /**
+     * Runs the connection test, or null where the app cannot measure yet.
+     *
+     * A suspending lambda rather than a result, so the screen owns when it runs and can show the
+     * work happening — the measurement deliberately takes several seconds.
+     */
+    onRunDiagnostics: (suspend () -> ConnectionTester.Report?)? = null,
     onOpenHomeItem: (String) -> Unit,
     onRememberHomeFocus: (String?) -> Unit,
     onBack: () -> Unit,
@@ -305,6 +315,9 @@ fun AppShellScreen(
 ) {
     val ribbonFocusRequester = remember { FocusRequester() }
     var showXtreamModal by remember { mutableStateOf(false) }
+
+    /** The connection test, opened from the top bar beside the refresh button. */
+    var diagnosticsOpen by remember { mutableStateOf(false) }
     var xtreamSuccessVersionAtOpen by remember {
         mutableLongStateOf(state.importSuccessVersion)
     }
@@ -432,6 +445,8 @@ fun AppShellScreen(
                     episodeProgress = state.episodeProgress,
                     castPhotos = state.castPhotos,
                     onRequestCastPhotos = onRequestCastPhotos,
+                    similarTitles = state.openTitleSimilarTitles,
+                    onOpenSimilarTitle = onOpenPersonCredit,
                     onOpenPerson = onOpenPerson,
                     onRetry = onRetryCatalog,
                     onBack = onBack,
@@ -486,6 +501,8 @@ fun AppShellScreen(
                     onCancelDownload = { onCancelDownload(movieKey) },
                     onDeleteDownload = { onDeleteDownload(movieKey) },
                     downloadState = state.downloads[movieKey] ?: DownloadStateUi.Idle,
+                    similarTitles = state.openTitleSimilarTitles,
+                    onOpenSimilarTitle = onOpenPersonCredit,
                     onOpenPerson = onOpenPerson,
                     onRetry = onRetryCatalog,
                     onBack = onBack,
@@ -523,6 +540,10 @@ fun AppShellScreen(
                         // The shelves are the slowest part of a home refresh and the last to
                         // finish, so their flag is the honest one to spin on.
                         isRefreshing = state.subscriptions.isLoading || state.isCatalogLoading,
+                        // Only once there is something to measure against; before that the test
+                        // could say nothing the boot screen has not already said.
+                        onOpenDiagnostics =
+                            onRunDiagnostics?.let { { diagnosticsOpen = true } },
                     )
                 } else {
                     BuroRibbon(
@@ -659,6 +680,24 @@ fun AppShellScreen(
                             // grid has to agree with it.
                             channels = visibleChannels,
                             layout = state.catalogueLayout,
+                            // Only on "every title" for Filmes/Séries: a category already narrows
+                            // to one thing, and a Netflix shortcut inside "Ação" would suggest a
+                            // wider catalogue than that screen is showing.
+                            headerAction =
+                                if (content.categoryId == null &&
+                                    content.contentType in
+                                        setOf(CatalogContentType.MOVIE, CatalogContentType.SERIES) &&
+                                    state.discoveredProviders.isNotEmpty()
+                                ) {
+                                    {
+                                        ProviderShortcutRow(
+                                            providers = state.discoveredProviders,
+                                            onOpenProvider = onOpenProviderShortcut,
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
                             filterBar = {
                                 CatalogueFilterBar(
                                     filter = state.catalogueFilter,
@@ -874,6 +913,19 @@ fun AppShellScreen(
     //
     // Not dismissible by tapping away: both answers are real and are remembered, so a stray tap
     // outside must not be recorded as a decision — the viewer has to pick one or the other.
+    // The connection test, over whatever the viewer was on. In a Dialog for the same reason the
+    // cast sheet is: it is a short errand that should sit above the page it started from.
+    onRunDiagnostics?.let { runTest ->
+        if (diagnosticsOpen) {
+            androidx.compose.ui.window.Dialog(onDismissRequest = { diagnosticsOpen = false }) {
+                DiagnosticsDialog(
+                    runTest = runTest,
+                    onClose = { diagnosticsOpen = false },
+                )
+            }
+        }
+    }
+
     if (state.cacheChoicePending && state.activeProfile != null && state.bootStage == BootStageUi.READY) {
         androidx.compose.ui.window.Dialog(
             onDismissRequest = {},
@@ -940,6 +992,8 @@ fun AppShellScreen(
             onSubmit = onImportXtreamSource,
             onCancelImport = onCancelXtreamImport,
             onDismiss = { showXtreamModal = false },
+            // Shown on the form itself, which is where somebody who cannot fill it in gives up.
+            deviceCode = state.deviceId.orEmpty(),
         )
     }
 
@@ -1001,6 +1055,8 @@ private fun MobileAppBar(
     onRefresh: (() -> Unit)? = null,
     /** Shows a spinner in place of the icon while the rails are being rebuilt. */
     isRefreshing: Boolean = false,
+    /** Opens the connection test. Null on screens that carry their own header. */
+    onOpenDiagnostics: (() -> Unit)? = null,
 ) {
     Row(
         modifier =
@@ -1083,6 +1139,26 @@ private fun MobileAppBar(
                             tint = BuroTextPrimary,
                         )
                     }
+                }
+            }
+        }
+        // The connection test, beside the refresh button.
+        //
+        // The two answer the same complaint from opposite ends: "my list is wrong" and "the picture
+        // keeps freezing". Somebody who cannot tell which of the two they have will try both, and
+        // both are here.
+        onOpenDiagnostics?.let { openDiagnostics ->
+            FocusSurface(
+                onClick = openDiagnostics,
+                modifier = Modifier.size(42.dp),
+                backgroundColor = Color.Transparent,
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.NetworkCheck,
+                        contentDescription = stringResource(R.string.diagnostics_action),
+                        tint = BuroTextPrimary,
+                    )
                 }
             }
         }
@@ -4635,6 +4711,60 @@ private fun CriticsSettingsCard(
             compact = compact,
             onSave = onSave,
         )
+    }
+}
+
+/**
+ * The Netflix/Prime/… row above the filter bar on Filmes and Séries.
+ *
+ * Unlike [PlatformShortcuts], which only ever finds a service when a provider's own category name
+ * happens to match one, this reads TMDb's real directory ([DiscoveredProvider]) — so it draws
+ * regardless of how the IPTV source organises its categories, which for most playlists is by
+ * genre and never names a service at all.
+ *
+ * Sized for a normal window rather than reading `compactPortrait` from its caller: this is passed
+ * as a plain lambda into [ChannelsContent]'s `headerAction` slot, which invokes it from inside its
+ * own `BoxWithConstraints` — a size read at the call site here would be measuring the wrong box.
+ */
+@Composable
+private fun ProviderShortcutRow(
+    providers: List<com.lucasserafin94.iptvburo.data.discovery.DiscoveredProvider>,
+    onOpenProvider: (com.lucasserafin94.iptvburo.data.discovery.DiscoveredProvider) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        providers.forEach { provider ->
+            val identity =
+                providerIdentityFor(provider.label)?.copy(logoUrl = provider.logoUrl)
+                    ?: ProviderIdentity(
+                        monogram = provider.label.take(1).uppercase(),
+                        label = provider.label,
+                        colour = BuroSurfaceRaised,
+                        logoUrl = provider.logoUrl,
+                    )
+            FocusSurface(
+                onClick = { onOpenProvider(provider) },
+                modifier = Modifier.height(56.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxHeight().padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ProviderMark(provider = identity, size = 30.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = identity.label,
+                        color = BuroTextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
     }
 }
 

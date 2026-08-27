@@ -5,7 +5,12 @@ import android.content.ContextWrapper
 import android.content.res.Configuration
 import android.content.res.Resources
 import com.lucasserafin94.iptvburo.core.logging.AppLogger
+import com.lucasserafin94.iptvburo.data.diagnostics.ConnectionTester
+import com.lucasserafin94.iptvburo.data.diagnostics.ProviderProbe
 import com.lucasserafin94.iptvburo.data.discovery.NoShelfCache
+import com.lucasserafin94.iptvburo.data.security.SourceConnectionStore
+import com.lucasserafin94.iptvburo.stalker.StalkerCredentials
+import com.lucasserafin94.iptvburo.xtream.XtreamCredentials
 import com.lucasserafin94.iptvburo.data.discovery.ProviderLogoCatalogue
 import com.lucasserafin94.iptvburo.data.discovery.StreamingDiscoveryRepository
 import com.lucasserafin94.iptvburo.data.download.AndroidDownloadManager
@@ -960,9 +965,50 @@ class MainViewModelNavigationTest {
             catalogueGuardPreferences = FakeCatalogueGuard,
             subtitlePreferences = FakeSubtitleSettings,
             logger = logger,
+            // A real tester over fakes: these assertions never open the diagnostics screen, and a
+            // null context degrades its local readings to "unknown" exactly as a device with no
+            // connectivity service does.
+            connectionTester =
+                ConnectionTester(
+                    context = null,
+                    probe = NoNetworkProbe,
+                    sourceConnectionStore = NoStoredCredentials,
+                    ioDispatcher = dispatcher,
+                ),
             ioDispatcher = dispatcher,
         )
     }
+}
+
+/** Answers nothing, because these tests never ask. */
+private object NoNetworkProbe : ProviderProbe {
+    override fun transfer(
+        credentials: XtreamCredentials,
+        budgetMillis: Long,
+    ): Pair<Long, Long>? = null
+
+    override fun latency(
+        credentials: XtreamCredentials,
+        attempts: Int,
+    ): List<Int> = emptyList()
+}
+
+private object NoStoredCredentials : SourceConnectionStore {
+    override fun saveXtream(
+        sourceId: String,
+        credentials: XtreamCredentials,
+    ) = Unit
+
+    override fun readXtream(sourceId: String): XtreamCredentials? = null
+
+    override fun saveStalker(
+        sourceId: String,
+        credentials: StalkerCredentials,
+    ) = Unit
+
+    override fun readStalker(sourceId: String): StalkerCredentials? = null
+
+    override fun remove(sourceId: String) = Unit
 }
 
 /** Nothing hidden, nothing locked, no PIN: the state a fresh install is in. */
