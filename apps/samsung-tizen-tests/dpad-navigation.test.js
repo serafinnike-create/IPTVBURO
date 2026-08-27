@@ -3165,8 +3165,21 @@ async function run() {
     check('velocidade aparece somente quando AVPlay expõe a capability e o item não é ao vivo',
         window.BuroPlayer.playbackRateAvailable() && !window.document.getElementById('player-speed-label').hidden);
     press(window, 405);
+    /*
+      Contar as opcoes deixou de responder a pergunta: o menu amarelo passou a
+      ser o menu de reproducao e leva tambem a entrada do temporizador de sono.
+
+      O que o teste quer saber continua sendo quais **velocidades** o AVPlay
+      aceita, entao ele passa a ler os rotulos com '×' — e verifica que nenhuma
+      taxa fracionaria e prometida, que era o ponto original.
+    */
+    var speedLabels = Array.prototype.slice.call(
+        window.document.querySelectorAll('#player-menu [data-player-option]')
+    ).map(function (button) { return button.textContent; }).filter(function (label) {
+        return label.indexOf('×') >= 0;
+    });
     check('tecla amarela abre apenas as velocidades inteiras compatíveis com AVPlay',
-        window.document.querySelectorAll('#player-menu [data-player-option]').length === 2);
+        speedLabels.length === 2 && speedLabels.join(',') === '1×,2×');
     press(window, 39);
     press(window, 13);
     check('D-pad aplica 2× e atualiza o overlay sem prometer taxas fracionárias',

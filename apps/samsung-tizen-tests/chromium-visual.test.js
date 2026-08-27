@@ -1349,7 +1349,9 @@ async function main() {
     check('menu de legendas inclui Desligadas e duas faixas sem recorte', subtitleMenu.rectangles.every(rectVisible));
     check('menu de legendas produz um quadro PNG válido', await screenshotIsRendered('player-subtitle-menu'));
     await evaluate("BuroApp._onKeyDown({keyCode:10009,preventDefault:function(){}}); BuroApp._onKeyDown({keyCode:405,preventDefault:function(){}}); true");
-    await waitFor("!document.querySelector('#player-menu').hidden && document.querySelectorAll('#player-menu [data-player-option]').length === 2");
+    /* O menu amarelo passou a ser o de reproducao e leva tambem a entrada do
+       temporizador de sono, entao a espera conta as velocidades e nao o total. */
+    await waitFor("!document.querySelector('#player-menu').hidden && document.querySelectorAll('#player-menu [data-player-option]').length >= 2");
     var speedMenu = await geometry(['.player-menu', '#player-menu-title', '.player-menu-option.focused']);
     check('menu de velocidade apresenta somente 1× e 2× compatíveis com AVPlay', speedMenu.rectangles.every(rectVisible) && await evaluate("document.querySelector('#player-menu-options').textContent.indexOf('1×')>=0 && document.querySelector('#player-menu-options').textContent.indexOf('2×')>=0"));
     check('menu de velocidade produz um quadro PNG válido', await screenshotIsRendered('player-speed-menu'));

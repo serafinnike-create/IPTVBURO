@@ -12725,6 +12725,11 @@ var BuroApp = (function () {
            reproducao real, que o AVPlay nao entrega fora de uma TV. */
         _nextEpisodeTargetForTest: function(){return nextEpisodeTarget;},
         _nextEpisodeAfter: nextEpisodeAfter,
+        /* Expostas para o teste do temporizador: o menu so abre sobre uma
+           sessao de reproducao, que o AVPlay nao entrega fora de uma TV. */
+        _setCurrentPlaybackForTest: function (playback) { currentPlayback = playback; },
+        _openPlayerMenu: openPlayerMenu,
+        _setSleepTimer: setSleepTimer,
         _beginNextEpisodeCountdown: beginNextEpisodeCountdown,
         _onKeyDown: onKeyDown,
         _onKeyUp: onKeyUp,
