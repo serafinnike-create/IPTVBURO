@@ -719,7 +719,10 @@ body.reduced-motion .discover-card.current { animation: none; }
 .critic-score small { display: block; margin-top: 3px; color: var(--muted); font-size: 15px; letter-spacing: .04em; }
 /* A volta, abaixo da barra de acoes. Separada dela porque nao e uma acao sobre
    o titulo, e porque a ordem dos glifos acompanha o Android. */
-.detail-back-row { margin-top: 18px; }
+/* A barra de saida da ficha, alinhada a esquerda acima de tudo — como a Row de
+   62dp do `XtreamWorkspace`. A margem negativa a alinha com o recuo do hero, que
+   sangra 64px para fora do painel. */
+.detail-back-row { margin: 0 0 12px; display: flex; justify-content: flex-start; }
 .detail-watch-progress { width: 640px; margin-top: 20px; }
 .detail-watch-progress > div { height: 5px; overflow: hidden; border-radius: 3px; background: rgba(246,247,250,.22); }
 .detail-watch-progress i { display: block; height: 100%; background: var(--gold); }
@@ -763,9 +766,13 @@ body.reduced-motion .discover-card.current { animation: none; }
    (cancelar, continuar, assistir, tentar novamente) e carrega porcentagem. */
 .detail-action-bar .button { min-height: 64px; }
 .detail-support { width: 100%; display: flex; align-items: flex-start; flex-wrap: wrap; margin-top: 24px; }
-.detail-credit-card, .detail-cast { margin: 0 20px 20px 0; padding: 22px 24px; border: 1px solid #30333d; border-radius: 18px; background: var(--surface); }
-.detail-credit-card { width: 380px; }
-.detail-cast { width: 700px; }
+.detail-credit-card { margin: 0 20px 20px 0; padding: 22px 24px; border: 1px solid #30333d; border-radius: 18px; background: var(--surface); width: 380px; }
+/* O elenco sai da caixa e ocupa a linha, como no aplicativo do Windows.
+   La `CastButtons` e um `FlowRow` sobre o fundo da pagina: so o rotulo e as
+   faces, fluindo na largura toda. Aqui a largura fixa de 700px com borda e
+   fundo espremia as mesmas faces em quatro colunas e deixava o resto da linha
+   vazio — o cartao sugeria um limite que o conteudo nao tem. */
+.detail-cast { flex: 1 0 100%; width: 100%; margin: 0 0 20px; padding: 0; border: 0; background: none; }
 .detail-support h3 { margin: 0 0 14px; font-size: 21px; }
 /* Titulos parecidos ocupam a linha inteira embaixo dos cartoes de apoio, e nao
    uma coluna ao lado deles: e uma prateleira, mesma forma da Home. */

@@ -4744,6 +4744,22 @@ var BuroApp = (function () {
         }).join('') + '</div>';
     }
 
+    /*
+      A saida da ficha, no alto e a esquerda.
+
+      O RETURN do controle ja faz isto e continua fazendo. O botao existe porque
+      o aplicativo do Windows tem um — uma barra propria acima da ficha, com o
+      rotulo escrito — e porque quem usa mouse ou teclado numa TV nao tem RETURN
+      a mao.
+
+      No alto e nao no fim: uma saida no rodape so e encontrada por quem ja rolou
+      a pagina inteira, e quem quer sair normalmente quer sair antes disso.
+    */
+    function detailBackBar() {
+        return '<div class="detail-back-row"><button class="button ghost focusable" data-action="back">← ' +
+            escapeHtml(t('backToCatalogue')) + '</button></div>';
+    }
+
     function renderTitleDetails(item, details, isSeries, episodes) {
         var facts = [];
         var cast;
@@ -4815,7 +4831,7 @@ var BuroApp = (function () {
             supporting += '<section class="detail-related"><h3>' + t('similarTitles') + '</h3>' +
                 externalSimilarCards(related) + '</section>';
         }
-        return '<div class="detail-page"><div class="detail-hero">' + detailArtworkHtml(item) +
+        return '<div class="detail-page">' + detailBackBar() + '<div class="detail-hero">' + detailArtworkHtml(item) +
             /*
               O pôster ao lado do texto, como no aplicativo do Windows.
 
@@ -10377,19 +10393,20 @@ var BuroApp = (function () {
         glyphs += actionGlyph('send-to-screen', item.id, '⇥', t('castAction'), false);
         glyphs += actionGlyph('share', item.id, '↗', t('share'), false);
         /*
-          A volta, escrita — e fora da barra de glifos.
+          A volta nao esta aqui: ela e desenhada por `detailBackBar()`, no topo
+          da pagina.
 
-          O RETURN do controle já faz isto e continua fazendo; o botão existe
-          porque o aplicativo do Windows tem um e porque quem usa mouse ou
-          teclado numa TV não tem RETURN à mão. Fica depois da barra e não
-          dentro dela: a ordem dos glifos é a mesma do Android — favoritar,
-          lembrete, …, compartilhar por último — e é verificada em
-          `reminders-app.test.js`. Uma volta enfiada ali dentro quebraria essa
-          paridade e poria um botão de sair no meio das ações do título.
+          Ficava no fim do hero, depois dos glifos, e isso a punha no meio da
+          tela — abaixo da sinopse e das acoes, acima do elenco. O aplicativo do
+          Windows a poe numa barra propria no alto, alinhada a esquerda, antes de
+          qualquer conteudo da ficha, que e onde se procura por uma saida.
+
+          Fora da barra de glifos ela continua, e pelo motivo de sempre: a ordem
+          favoritar, lembrete, …, compartilhar por ultimo e a do Android e
+          `reminders-app.test.js` a verifica. Um botao de sair no meio das acoes
+          do titulo quebraria as duas coisas.
         */
-        return primary + '<div class="detail-action-bar">' + glyphs + '</div>' +
-            '<div class="detail-back-row"><button class="button ghost focusable" data-action="back">← ' +
-            escapeHtml(t('backToCatalogue')) + '</button></div>';
+        return primary + '<div class="detail-action-bar">' + glyphs + '</div>';
     }
 
     function downloadControls(item, compact) {
