@@ -3236,6 +3236,19 @@ async function run() {
     window.BuroApp._activate(firstEpisodeCard);
     avListener.oncurrentplaytime(110000);
     avListener.onstreamcompleted();
+    /*
+      O fim de um episodio agora oferece o proximo em vez de fechar o player.
+
+      A serie deste bloco tem um episodio seguinte, entao a contagem aparece.
+      Recusa-la com uma tecla qualquer devolve o comportamento que o resto
+      deste teste sempre verificou — e e por isso que a recusa acontece aqui,
+      antes das asserçoes: elas continuam medindo a volta ao detalhe, com foco,
+      rolagem e a marca de assistido.
+    */
+    check('fim natural oferece o proximo episodio em vez de fechar',
+        !window.document.getElementById('player-next-panel').hidden);
+    press(window, 38);
+    press(window, 10009);
     var completedEpisodeCard = window.document.querySelector('[data-action="play"][data-id="' + primarySeriesFirst.id + '"]');
     var completedEpisodeRow = completedEpisodeCard.parentNode.parentNode;
     check('fim natural recompõe o episódio como assistido sem sair do detalhe',

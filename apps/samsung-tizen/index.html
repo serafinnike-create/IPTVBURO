@@ -43,6 +43,13 @@
                 <small id="player-programme" hidden></small>
             </span>
         </div>
+        <!-- O que vem a seguir quando um episodio termina. aria-live porque o
+             painel aparece sozinho: um leitor de tela precisa anuncia-lo sem
+             que nada tenha recebido foco. -->
+        <section id="player-next-panel" class="player-next-panel" role="status" aria-live="polite" hidden>
+            <p id="player-next-title" class="player-next-title"></p>
+            <p id="player-next-countdown" class="player-next-countdown"></p>
+        </section>
         <div id="player-waiting" class="player-waiting" role="status" aria-live="polite" aria-atomic="true">
             <span class="boot-indicator" aria-hidden="true"></span>
             <p id="player-waiting-label">Carregando&hellip;</p>

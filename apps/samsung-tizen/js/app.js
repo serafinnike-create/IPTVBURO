@@ -40,6 +40,11 @@ var BuroApp = (function () {
     var playerErrorActive = false;
     var playerErrorFocus = 0;
     var playerMenuState = null;
+    var playerNextPanel;
+    var playerNextTitle;
+    var playerNextCountdown;
+    var nextEpisodeTimer = null;
+    var nextEpisodeTarget = null;
     var playerControlsTimer = null;
     var playerEnterTimer = null;
     var playerEnterPressActive = false;
@@ -143,6 +148,10 @@ var BuroApp = (function () {
       A paridade com o Android continua, e do que importa: nenhuma das duas
       plataformas prende o controle enquanto o DOM cresce.
     */
+    /* Dez segundos entre um episodio e o proximo: o bastante para ler o titulo
+       e desistir, curto o bastante para nao virar espera. */
+    var NEXT_EPISODE_SECONDS = 10;
+
     var CATALOGUE_PAGE_SIZE = 42;
 
     /*
@@ -892,6 +901,100 @@ var BuroApp = (function () {
             return true;
         }
         return false;
+    }
+
+    /*
+      O episodio seguinte ao que acabou de terminar.
+
+      Le `state.screenData.items`, que e a lista da serie aberta — o player e uma
+      sobreposicao e nao troca de tela, entao ela continua ali durante a
+      reproducao. Fora de uma serie devolve nulo, e e assim que um filme nao
+      encadeia com coisa nenhuma.
+
+      A ordem e por temporada e depois por episodio, e nao a ordem em que o
+      provedor mandou: listas Xtream chegam desordenadas com frequencia, e
+      encadear na ordem de chegada levaria do episodio 3 ao 11.
+    */
+    function nextEpisodeAfter(itemId) {
+        var data = state.screenData;
+        var rows;
+        var current = null;
+        var next = null;
+        if (!data || data.kind !== 'series' || !Array.isArray(data.items)) { return null; }
+        rows = data.items.filter(function (episode) {
+            return episode && episode.contentType === 'EPISODE' && itemVisible(episode);
+        }).slice().sort(function (left, right) {
+            var leftSeason = Number(left.locator && left.locator.season) || 0;
+            var rightSeason = Number(right.locator && right.locator.season) || 0;
+            if (leftSeason !== rightSeason) { return leftSeason - rightSeason; }
+            return (Number(left.locator && left.locator.episode) || 0) -
+                (Number(right.locator && right.locator.episode) || 0);
+        });
+        rows.some(function (episode, index) {
+            if (episode.id !== itemId) { return false; }
+            current = episode;
+            next = rows[index + 1] || null;
+            return true;
+        });
+        /* O ultimo episodio da serie nao encadeia: nao ha para onde ir, e
+           insistir mostraria uma contagem que termina em nada. */
+        return current && next ? next : null;
+    }
+
+    /*
+      A contagem antes de encadear.
+
+      Nao encadeia direto porque quem acabou de ver um episodio pode querer
+      parar, e uma TV que decide sozinha por voce e pior do que uma que pergunta.
+      Dez segundos e o bastante para ler o titulo e desistir, e curto o bastante
+      para nao virar espera.
+
+      O RETURN cancela e volta a ficha, que e o comportamento de sempre; o ENTER
+      comeca imediatamente, para quem nao quer esperar.
+    */
+    function beginNextEpisodeCountdown(next) {
+        var remaining = NEXT_EPISODE_SECONDS;
+
+        function paint() {
+            if (!playerNextPanel) { return; }
+            playerNextPanel.hidden = false;
+            playerNextTitle.textContent = t('playerNextUp') + ' · ' + nextEpisodeLabel(next);
+            playerNextCountdown.textContent = t('playerNextIn').replace('{seconds}', String(remaining));
+        }
+
+        function tick() {
+            remaining -= 1;
+            if (remaining > 0) { paint(); return; }
+            cancelNextEpisode(false);
+            playItem(next.id);
+        }
+
+        cancelNextEpisode(false);
+        nextEpisodeTarget = next;
+        paint();
+        nextEpisodeTimer = window.setInterval(tick, 1000);
+    }
+
+    /* O rotulo do que vem a seguir: T2 E5 e o nome, se houver. O numero sozinho
+       nao diz o bastante para alguem decidir continuar. */
+    function nextEpisodeLabel(episode) {
+        var locator = episode && episode.locator || {};
+        var season = Number(locator.season) > 0 ? Number(locator.season) : null;
+        var number = Number(locator.episode) > 0 ? Number(locator.episode) : null;
+        var marker = season && number ? 'T' + season + ' E' + number : (number ? 'E' + number : '');
+        var name = episode && episode.name ? String(episode.name) : '';
+        return marker && name ? marker + ' · ' + name : (marker || name);
+    }
+
+    /*
+      Encerra a contagem. `hide` falso mantem o painel para quem chamou decidir —
+      usado quando o encadeamento vai comecar e o painel some junto com o
+      overlay.
+    */
+    function cancelNextEpisode(hide) {
+        if (nextEpisodeTimer) { window.clearInterval(nextEpisodeTimer); nextEpisodeTimer = null; }
+        nextEpisodeTarget = null;
+        if (hide !== false && playerNextPanel) { playerNextPanel.hidden = true; }
     }
 
     function closePlayerMenu() {
@@ -10799,6 +10902,17 @@ var BuroApp = (function () {
         var found = findItemAndSource(itemId);
         var progress = playbackProgress(itemId);
         var decision;
+        /*
+          Comecar qualquer reproducao encerra a contagem pendente.
+
+          O encadeamento ja a cancela antes de chamar aqui, mas uma reproducao
+          iniciada por outro caminho — a pessoa abriu outro titulo — deixava o
+          alvo de pe. Com ele de pe o tratador de teclas do player responde a
+          contagem e engole todo o resto: no canal ao vivo seguinte, a tecla
+          verde deixava de abrir o guia. Cancelar na raiz vale para todos os
+          caminhos.
+        */
+        cancelNextEpisode(true);
         if (!found.item) { return; }
         decision = BuroDomain.resumeDecision(progress && progress.entry, found.item.contentType !== 'LIVE');
         if (decision.kind === 'resume') {
@@ -11306,6 +11420,10 @@ var BuroApp = (function () {
         var progressChanged;
         playbackResolveRequestId += 1;
         playbackRetry.reset();
+        /* Sair leva a contagem junto: um temporizador vivo depois do player
+           fechado abriria o proximo episodio por cima da tela que a pessoa
+           acabou de escolher. */
+        cancelNextEpisode(true);
         resetPlayerControlsLock();
         progressChanged = persistProgress(false);
         currentPlayback = null;
@@ -11884,6 +12002,7 @@ var BuroApp = (function () {
     function onKeyDown(event) {
         var K = BuroKeys.CODES;
         var active = document.activeElement;
+        var chosenNext;
         if (BuroTrailer.isOpen()) {
             if (event.keyCode === K.RETURN || event.keyCode === K.STOP) { BuroTrailer.close(); }
             else if (event.keyCode === K.ENTER || event.keyCode === K.PLAY_PAUSE ||
@@ -11898,6 +12017,30 @@ var BuroApp = (function () {
         if (document.body.classList.contains('playing')) {
             if (playerErrorActive) {
                 if (handlePlayerErrorKey(event.keyCode)) { event.preventDefault(); }
+                return;
+            }
+            /*
+              A contagem para o proximo episodio responde antes de tudo.
+
+              ENTER comeca ja, para quem nao quer esperar os dez segundos.
+              RETURN cancela e fecha o player, que e o que RETURN sempre fez
+              ali. Qualquer outra tecla tambem cancela a contagem, sem fazer
+              mais nada: quem mexe no controle esta decidindo por si, e o app
+              nao deve continuar contando por baixo dessa decisao.
+            */
+            if (nextEpisodeTarget) {
+                if (event.keyCode === K.ENTER || event.keyCode === K.PLAY_PAUSE ||
+                        event.keyCode === K.PLAY) {
+                    chosenNext = nextEpisodeTarget;
+                    cancelNextEpisode(false);
+                    playItem(chosenNext.id);
+                } else if (event.keyCode === K.RETURN || event.keyCode === K.STOP) {
+                    cancelNextEpisode(true);
+                    stopPlayback();
+                } else {
+                    cancelNextEpisode(true);
+                }
+                event.preventDefault();
                 return;
             }
             showPlayerControls();
@@ -11988,6 +12131,9 @@ var BuroApp = (function () {
         playerMenuTitle = document.getElementById('player-menu-title');
         playerMenuOptions = document.getElementById('player-menu-options');
         playerMenuHint = document.getElementById('player-menu-hint');
+        playerNextPanel = document.getElementById('player-next-panel');
+        playerNextTitle = document.getElementById('player-next-title');
+        playerNextCountdown = document.getElementById('player-next-countdown');
         playerWaiting = document.getElementById('player-waiting');
         playerWaitingLabel = document.getElementById('player-waiting-label');
         playerErrorPanel = document.getElementById('player-error-panel');
@@ -12024,11 +12170,29 @@ var BuroApp = (function () {
             onSubtitle: showPlayerSubtitle,
             onComplete: function () {
                 var visual = capturePlaybackReturnVisual();
-                var progressChanged = persistProgress(true);
+                var finishedId = currentPlayback && currentPlayback.itemId;
+                var progressChanged;
+                var next;
+                progressChanged = persistProgress(true);
                 /* LIVE e catch-up não gravam progresso; ainda assim o fim
                    natural precisa encerrar a sessão em memória. */
                 currentPlayback = null;
                 clearPlayerError(); closePlayerMenu();
+                /*
+                  Um episodio que termina oferece o proximo, em vez de devolver
+                  a pessoa a ficha para procura-lo. Numa serie de vinte
+                  episodios essa procura acontecia vinte vezes.
+
+                  O progresso e gravado antes: se a contagem for aceita, o
+                  episodio que acabou ja esta marcado como visto, e o proximo
+                  comeca com a lista correta atras dele.
+                */
+                next = finishedId ? nextEpisodeAfter(finishedId) : null;
+                if (next) {
+                    if (progressChanged) { refreshPlaybackReturnVisual(visual); }
+                    beginNextEpisodeCountdown(next);
+                    return;
+                }
                 document.body.classList.remove('playing'); root.removeAttribute('aria-hidden'); overlay.hidden = true;
                 if (progressChanged) { refreshPlaybackReturnVisual(visual); }
             }
@@ -12125,6 +12289,11 @@ var BuroApp = (function () {
         render: render,
         state: state,
         _activate: activate,
+        /* Expostas para o teste: o encadeamento so acontece no fim de uma
+           reproducao real, que o AVPlay nao entrega fora de uma TV. */
+        _nextEpisodeTargetForTest: function(){return nextEpisodeTarget;},
+        _nextEpisodeAfter: nextEpisodeAfter,
+        _beginNextEpisodeCountdown: beginNextEpisodeCountdown,
         _onKeyDown: onKeyDown,
         _onKeyUp: onKeyUp,
         _playbackFailed: playbackFailed,

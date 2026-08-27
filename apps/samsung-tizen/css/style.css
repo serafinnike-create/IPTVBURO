@@ -2032,3 +2032,20 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
     width: 190px; height: 190px; display: grid; place-items: center; border-radius: 20px;
     background: var(--elevated); color: var(--error); font-size: 72px; font-weight: 800;
 }
+
+/* O painel do proximo episodio.
+
+   Canto inferior direito, acima da barra de controles: e um convite, nao um
+   dialogo, e nao deve cobrir a imagem final do episodio que a pessoa acabou de
+   ver. Nao recebe foco — as teclas sao tratadas direto, porque numa TV a pessoa
+   ja tem o controle na mao e um alvo focavel exigiria navegar ate ele. */
+.player-next-panel {
+    position: absolute; right: 64px; bottom: 210px; z-index: 6;
+    max-width: 620px; padding: 22px 28px;
+    border: 1px solid rgba(214,169,86,.38); border-radius: 18px;
+    background: rgba(8,10,12,.86);
+    box-shadow: 0 20px 46px rgba(0,0,0,.55);
+}
+.player-next-panel[hidden] { display: none; }
+.player-next-title { margin: 0 0 8px; color: var(--gold); font-size: 26px; font-weight: 800; }
+.player-next-countdown { margin: 0; color: var(--secondary); font-size: 19px; }
