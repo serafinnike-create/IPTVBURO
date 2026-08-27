@@ -310,19 +310,33 @@ class DesktopAppState(
      *
      * Present only while a key is, and rebuilt with the client so a pasted key takes effect at
      * once — and so a key that is removed cannot go on serving covers it fetched.
+     *
+     * Built on first use rather than in the constructor. It needs `streamingScope`, which is
+     * declared far below this and is therefore still null while these properties initialise —
+     * constructing it here threw on startup, and no test caught it because a test builds the shelf
+     * directly with a scope already in hand.
      */
-    var adultArtworkShelf by mutableStateOf(newAdultArtworkShelf(adultArtworkClient))
-        private set
+    private var adultArtworkShelfOrNull: AdultArtworkShelf? = null
 
-    private fun newAdultArtworkShelf(client: AdultArtworkClient?): AdultArtworkShelf? =
-        client?.let {
-            AdultArtworkShelf(
-                client = it,
-                scope = streamingScope,
-                // Each answer nudges the revision so the cards holding a placeholder redraw. One
-                // signal per answer, not per card.
-                onFound = { adultArtworkRevision += 1 },
-            )
+    private var adultArtworkShelfClient: AdultArtworkClient? = null
+
+    val adultArtworkShelf: AdultArtworkShelf?
+        get() {
+            val client = adultArtworkClient ?: return null
+            // Rebuilt when the key changed, so a pasted one takes effect without a restart and a
+            // replaced one cannot go on serving covers the previous key fetched.
+            if (adultArtworkShelfClient !== client) {
+                adultArtworkShelfClient = client
+                adultArtworkShelfOrNull =
+                    AdultArtworkShelf(
+                        client = client,
+                        scope = streamingScope,
+                        // Each answer nudges the revision so cards holding a placeholder redraw.
+                        // One signal per answer, not per card.
+                        onFound = { adultArtworkRevision += 1 },
+                    )
+            }
+            return adultArtworkShelfOrNull
         }
 
     /** Bumped as covers arrive, so a grid drawn before the answer redraws once it has one. */
@@ -335,7 +349,10 @@ class DesktopAppState(
         userStore.setAdultMetadataApiKey(clean)
         adultMetadataApiKey = clean
         adultArtworkClient = clean.takeIf(String::isNotBlank)?.let(::AdultArtworkClient)
-        adultArtworkShelf = newAdultArtworkShelf(adultArtworkClient)
+        // The shelf follows the client on next use; drop the old one so a replaced key cannot go
+        // on serving covers the previous one fetched.
+        adultArtworkShelfOrNull = null
+        adultArtworkShelfClient = null
     }
 
     /**
