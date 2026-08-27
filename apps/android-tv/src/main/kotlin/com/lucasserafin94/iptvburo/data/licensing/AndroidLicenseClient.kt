@@ -304,13 +304,7 @@ class AndroidLicenseClient @Inject constructor(
                 val json = runCatching { JsonParser.parseString(response.body.string()).asJsonObject }
                     .getOrNull() ?: return@use null
                 val source = json.get("source")?.takeUnless { it.isJsonNull }?.asJsonObject ?: return@use null
-                AssignedPlaylist(
-                    serverUrl = source.get("server")?.asString?.takeIf(String::isNotBlank) ?: return@use null,
-                    username = source.get("username")?.asString?.takeIf(String::isNotBlank) ?: return@use null,
-                    password = source.get("password")?.asString?.takeIf(String::isNotBlank) ?: return@use null,
-                    metadataKey = source.get("metadataKey")?.asString?.takeIf(String::isNotBlank),
-                    criticsKey = source.get("criticsKey")?.asString?.takeIf(String::isNotBlank),
-                )
+                assignedPlaylistFrom(source)
             }
         }.getOrNull()
     }
@@ -462,6 +456,43 @@ class AndroidLicenseClient @Inject constructor(
     }
 }
 
+/**
+ * Reads a delivery the seller left for this device, or null when there is nothing usable in it.
+ *
+ * Free of the client so it can be tested without an Android [Context]: this is the rule that
+ * decides whether a customer's list gets replaced, and it deserves to be exercised directly.
+ *
+ * A delivery need not carry a connection. A seller whose customer already has a working list may
+ * send only an API key or only a name for it — demanding the address and password again just to
+ * hand over a key is what was reported. But the three connection fields travel together or not at
+ * all: an address with no password is not a partial delivery, it is a list that will never open.
+ */
+internal fun assignedPlaylistFrom(source: JsonObject): AssignedPlaylist? {
+    fun text(field: String): String? =
+        source.get(field)?.takeUnless { it.isJsonNull }?.asString?.takeIf(String::isNotBlank)
+
+    val serverUrl = text("server")
+    val username = text("username")
+    val password = text("password")
+    val metadataKey = text("metadataKey")
+    val criticsKey = text("criticsKey")
+    val listLabel = text("listLabel")
+
+    val credentials = serverUrl != null && username != null && password != null
+    if (!credentials && (serverUrl != null || username != null || password != null)) return null
+    // Something has to have arrived, or the device confirms and erases a delivery it never applied.
+    if (!credentials && metadataKey == null && criticsKey == null && listLabel == null) return null
+
+    return AssignedPlaylist(
+        serverUrl = serverUrl,
+        username = username,
+        password = password,
+        metadataKey = metadataKey,
+        criticsKey = criticsKey,
+        listLabel = listLabel,
+    )
+}
+
 interface AndroidLicenseService {
     fun check(now: Instant = Clock.System.now()): AndroidLicenseStatus
 
@@ -502,13 +533,27 @@ interface AndroidLicenseService {
  * accidental log line must not be the second place this password ever appears in cleartext.
  */
 data class AssignedPlaylist(
-    val serverUrl: String,
-    val username: String,
-    val password: String,
+    /**
+     * The connection, or null when the seller sent none.
+     *
+     * Null is a real case, not a parse failure: a delivery may carry only an API key or only a
+     * name, for a customer whose list already works. The three are null together or present
+     * together — half a credential never connects.
+     */
+    val serverUrl: String?,
+    val username: String?,
+    val password: String?,
     /** A TMDb key the seller configured on the client's behalf, if any. */
     val metadataKey: String? = null,
     /** An OMDb key the seller configured on the client's behalf, if any. */
     val criticsKey: String? = null,
+    /**
+     * What to call this list, or null when the seller named none.
+     *
+     * Not a credential — it is drawn on screen, which is the whole point of it — so it is not
+     * redacted below.
+     */
+    val listLabel: String? = null,
 ) {
     override fun toString(): String =
         "AssignedPlaylist(serverUrl=<redacted>, username=<redacted>, password=<redacted>, " +

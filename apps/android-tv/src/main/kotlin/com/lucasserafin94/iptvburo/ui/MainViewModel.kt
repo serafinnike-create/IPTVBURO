@@ -480,23 +480,33 @@ class MainViewModel @Inject constructor(
             runCatching {
                 val assigned = withContext(ioDispatcher) { licenseService.fetchAssignedPlaylist() }
                     ?: return@runCatching
-                val alreadyApplied =
-                    withContext(ioDispatcher) {
-                        catalogRepository.hasXtreamSource(
-                            serverUrl = assigned.serverUrl,
-                            username = assigned.username,
-                            password = assigned.password,
+                // A delivery need not carry a connection at all: a seller whose customer already
+                // has a working list may send only an API key, or only a name for it. Demanding
+                // the address and password again just to hand over a key is what was reported.
+                val serverUrl = assigned.serverUrl
+                val username = assigned.username
+                val password = assigned.password
+                if (serverUrl != null && username != null && password != null) {
+                    val alreadyApplied =
+                        withContext(ioDispatcher) {
+                            catalogRepository.hasXtreamSource(
+                                serverUrl = serverUrl,
+                                username = username,
+                                password = password,
+                            )
+                        }
+                    if (!alreadyApplied) {
+                        catalogRepository.importXtream(
+                            XtreamImportRequest(
+                                // The name the seller chose, or the standing one when they chose
+                                // none — never blank, which would leave an unnameable row.
+                                displayName = assigned.listLabel ?: PROVISIONED_SOURCE_NAME,
+                                serverUrl = serverUrl,
+                                username = username,
+                                password = password,
+                            ),
                         )
                     }
-                if (!alreadyApplied) {
-                    catalogRepository.importXtream(
-                        XtreamImportRequest(
-                            displayName = PROVISIONED_SOURCE_NAME,
-                            serverUrl = assigned.serverUrl,
-                            username = assigned.username,
-                            password = assigned.password,
-                        ),
-                    )
                 }
                 // Never overwrites a key the customer already pasted in themselves: the seller's
                 // key is a convenience for someone who has not configured one, not a takeover of a

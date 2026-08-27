@@ -770,6 +770,54 @@ class MainViewModelNavigationTest {
         assertEquals("omdb-key-from-seller", keyStore.readCritics())
     }
 
+    /**
+     * A delivery that carries only a key.
+     *
+     * A seller whose customer already has a working list should be able to hand over a TMDb key
+     * without retyping the address and password. Reported on the panel as "nao deixa eu enviar so
+     * api tmdb preciso enviar tudo".
+     */
+    @Test
+    fun `a delivery with only a key applies the key and imports nothing`() = runTest {
+        val assigned =
+            AssignedPlaylist(
+                serverUrl = null,
+                username = null,
+                password = null,
+                metadataKey = "tmdb-key-from-seller",
+            )
+        val licence = RecordingLicenseService(assignedPlaylist = assigned)
+        val repository = FakeCatalogRepository()
+        val keyStore = RecordingMetadataKeyStore()
+        val viewModel = createViewModel(repository, licenseService = licence, metadataKeyStore = keyStore)
+        viewModel.refreshLicense()
+        advanceUntilIdle()
+
+        assertEquals("tmdb-key-from-seller", keyStore.readShared())
+        // No connection arrived, so there is nothing to import — and importing a blank source
+        // would leave an unusable row the customer would have to delete.
+        assertEquals(0, repository.importXtreamCallCount)
+        // Still confirmed, or the panel keeps showing a delivery that was in fact applied.
+        assertEquals(listOf(null), licence.confirmedFailureCodes)
+    }
+
+    /** The name the seller chose is what the customer sees, rather than the standing label. */
+    @Test
+    fun `the list is named by the seller when they chose a name`() = runTest {
+        val assigned =
+            AssignedPlaylist(
+                "http://provedor.example:8080", "cliente1", "senha1",
+                listLabel = "Plano Familia",
+            )
+        val licence = RecordingLicenseService(assignedPlaylist = assigned)
+        val repository = FakeCatalogRepository()
+        val viewModel = createViewModel(repository, licenseService = licence)
+        viewModel.refreshLicense()
+        advanceUntilIdle()
+
+        assertEquals("Plano Familia", repository.lastXtreamRequest?.displayName)
+    }
+
     @Test
     fun `a seller-supplied key never overwrites one the customer already set themselves`() = runTest {
         val assigned =
