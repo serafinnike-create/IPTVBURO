@@ -1298,6 +1298,7 @@ private fun XtreamCatalogGrid(
                         // use produces a broken-looking grid instead of a clear limit.
                         multiviewFull = appState.multiviewChannelIds.size >= appState.multiviewCapacity,
                         multiviewCapacity = appState.multiviewCapacity,
+                        fetchedArtwork = { uncovered -> appState.fetchedArtworkFor(uncovered) },
                     )
                 }
             }
@@ -1372,9 +1373,19 @@ private fun XtreamCatalogCard(
     multiviewFull: Boolean = false,
     /** How many tiles the subscription allows, so the message can name the real number. */
     multiviewCapacity: Int = MULTIVIEW_MAX_TILES,
+    /**
+     * A cover for a title the provider left uncovered, or null.
+     *
+     * Passed as a function rather than a fetched value so the card can ask only when it actually
+     * has nothing to draw — a grid of forty thousand rows must not start a lookup per row.
+     */
+    fetchedArtwork: (XtreamCatalogItem) -> String? = { null },
 ) {
     val live = item.contentType == XtreamContentType.LIVE
     val title = item.name.editorialTitle()
+    // The provider's own cover wins. Only a card with nothing to draw asks for one, which is what
+    // keeps this to the adult rows a provider stamped with one shared placeholder.
+    val artwork = item.artworkUrl ?: fetchedArtwork(item)
 
     // The list mode is a different shape, not a smaller card: artwork beside the name rather than
     // above it, so the title gets the width that makes a list worth choosing.
@@ -1392,7 +1403,7 @@ private fun XtreamCatalogCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 BuroRemoteArtwork(
-                    artworkUrl = item.artworkUrl,
+                    artworkUrl = artwork,
                     contentDescription = null,
                     modifier =
                         Modifier
@@ -1458,7 +1469,7 @@ private fun XtreamCatalogCard(
                         ),
             ) {
                 BuroRemoteArtwork(
-                    artworkUrl = item.artworkUrl,
+                    artworkUrl = artwork,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = if (live) ContentScale.Fit else ContentScale.Crop,

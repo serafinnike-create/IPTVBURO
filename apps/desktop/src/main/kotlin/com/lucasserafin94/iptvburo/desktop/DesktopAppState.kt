@@ -141,6 +141,7 @@ import com.lucasserafin94.iptvburo.metadata.CriticScores
 import com.lucasserafin94.iptvburo.metadata.CriticScoresClient
 import com.lucasserafin94.iptvburo.metadata.TMDB_NAMESPACE
 import com.lucasserafin94.iptvburo.metadata.TMDB_SERIES_NAMESPACE
+import com.lucasserafin94.iptvburo.desktop.data.AdultArtworkShelf
 import com.lucasserafin94.iptvburo.metadata.AdultArtworkClient
 import com.lucasserafin94.iptvburo.metadata.TmdbAudienceScore
 import com.lucasserafin94.iptvburo.metadata.TmdbClient
@@ -300,12 +301,41 @@ class DesktopAppState(
     )
         private set
 
+    /**
+     * Covers fetched for the grid, one lookup per title however often a card is drawn.
+     *
+     * Separate from [adultArtworkUrl], which the details screen uses for the one title on it. A
+     * grid rebuilds its cards on every scroll, so without a cache the same title would be asked
+     * about again each time it came back into view.
+     *
+     * Present only while a key is, and rebuilt with the client so a pasted key takes effect at
+     * once — and so a key that is removed cannot go on serving covers it fetched.
+     */
+    var adultArtworkShelf by mutableStateOf(newAdultArtworkShelf(adultArtworkClient))
+        private set
+
+    private fun newAdultArtworkShelf(client: AdultArtworkClient?): AdultArtworkShelf? =
+        client?.let {
+            AdultArtworkShelf(
+                client = it,
+                scope = streamingScope,
+                // Each answer nudges the revision so the cards holding a placeholder redraw. One
+                // signal per answer, not per card.
+                onFound = { adultArtworkRevision += 1 },
+            )
+        }
+
+    /** Bumped as covers arrive, so a grid drawn before the answer redraws once it has one. */
+    var adultArtworkRevision by mutableStateOf(0)
+        private set
+
     /** Stores the key and rebuilds the client, so pasting one takes effect without a restart. */
     fun updateAdultMetadataApiKey(value: String) {
         val clean = value.trim()
         userStore.setAdultMetadataApiKey(clean)
         adultMetadataApiKey = clean
         adultArtworkClient = clean.takeIf(String::isNotBlank)?.let(::AdultArtworkClient)
+        adultArtworkShelf = newAdultArtworkShelf(adultArtworkClient)
     }
 
     /**
@@ -1045,6 +1075,35 @@ class DesktopAppState(
      */
     fun artworkFor(item: XtreamCatalogItem): String? =
         item.artworkUrl?.takeIf { url -> url.trim() !in placeholderArtworkUrls }
+
+    /**
+     * A fetched cover for a title the provider left uncovered, or null.
+     *
+     * Only for adult titles, and only when a key is configured. Two reasons to gate it rather than
+     * asking for everything uncovered: the source only knows adult titles, so an ordinary film
+     * spends a request to learn nothing; and the request budget belongs to the viewer's own key.
+     *
+     * Reading [adultArtworkRevision] here is what makes a card redraw when its answer arrives —
+     * the value is unused, but touching it subscribes this composable to the change.
+     */
+    fun fetchedArtworkFor(item: XtreamCatalogItem): String? {
+        val shelf = adultArtworkShelf ?: return null
+        // The category, not just the title. A provider files these under "ADULTOS" and names the
+        // titles themselves anything at all, so matching only the name would miss most of them.
+        val adultCategoryIds =
+            xtreamCategories
+                .filter { category -> FamilyContentPolicy.isExplicitAdultLabel(category.name) }
+                .map(XtreamCategory::providerId)
+                .toSet()
+        if (!FamilyContentPolicy.isExplicitAdultLabel(item.name) &&
+            item.categoryIds.none { id -> id in adultCategoryIds }
+        ) {
+            return null
+        }
+        @Suppress("UNUSED_EXPRESSION")
+        adultArtworkRevision
+        return shelf.posterFor(item.name.editorialTitle())
+    }
 
     /** Playlists already configured, offered so a new profile can reuse one. */
     fun savedSources(): List<XtreamSource> = sourceLibrary.sources()
