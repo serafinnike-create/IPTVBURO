@@ -3154,10 +3154,40 @@ async function run() {
         window.document.getElementById('player-audio-label').textContent.indexOf('Deutsch') >= 0 &&
         window.document.getElementById('player-menu').hidden);
     press(window, 40);
+    /*
+      O menu de legenda ganhou o ajuste de sincronia no fim, entao contar o
+      total deixou de responder a pergunta. O que o teste quer saber e que
+      "Desligar" existe **alem** das faixas: a faixa unica desta fonte, mais a
+      linha de desligar.
+    */
+    var subtitleEntries = Array.prototype.slice.call(
+        window.document.querySelectorAll('#player-menu [data-player-option]')
+    ).map(function (button) { return button.textContent; });
     check('menu de legendas oferece desligar além das faixas disponíveis',
-        window.document.querySelectorAll('#player-menu [data-player-option]').length === 2 &&
-        window.document.getElementById('player-menu').textContent.indexOf(window.BuroI18n.t('subtitlesOff')) >= 0);
-    press(window, 37);
+        subtitleEntries.length >= 2 &&
+        subtitleEntries[0].indexOf(window.BuroI18n.t('subtitlesOff')) >= 0 &&
+        subtitleEntries.filter(function (label) {
+            return label.indexOf(window.BuroI18n.t('subtitleEarlier')) < 0 &&
+                label.indexOf(window.BuroI18n.t('subtitleLater')) < 0 &&
+                label.indexOf(window.BuroI18n.t('subtitlesOff')) < 0;
+        }).length === 1);
+    /*
+      Chegar a "Desligadas" pelo nome, e nao contando setas.
+
+      Uma seta a esquerda a partir do topo depende de quantas opcoes a lista
+      tem: com duas ela envolvia para o fim e caia na faixa, com quatro cai no
+      ajuste de sincronia. O que o teste quer e desligar a legenda, entao ele
+      anda ate encontrar a opcao — o caminho fica valido qualquer que seja o
+      tamanho do menu.
+    */
+    (function () {
+        var guard = 0;
+        while (guard < 8 && window.document.querySelector('#player-menu .player-menu-option.focused').textContent
+                .indexOf(window.BuroI18n.t('subtitlesOff')) < 0) {
+            press(window, 39);
+            guard += 1;
+        }
+    }());
     press(window, 13);
     check('desligar legendas fecha o menu sem encerrar a reprodução',
         window.document.getElementById('player-menu').hidden && window.BuroPlayer.isPlaying() &&

@@ -1344,7 +1344,9 @@ async function main() {
     check('menu de áudio mostra duas faixas e foco dentro do quadro', audioMenu.rectangles.every(rectVisible));
     check('menu de áudio produz um quadro PNG válido', await screenshotIsRendered('player-audio-menu'));
     await evaluate("BuroApp._onKeyDown({keyCode:10009,preventDefault:function(){}}); BuroApp._onKeyDown({keyCode:40,preventDefault:function(){}}); true");
-    await waitFor("!document.querySelector('#player-menu').hidden && document.querySelectorAll('#player-menu [data-player-option]').length === 3");
+    /* O menu de legenda leva o ajuste de sincronia depois das faixas, entao a
+       espera conta "Desligadas mais as faixas" e nao o total. */
+    await waitFor("!document.querySelector('#player-menu').hidden && document.querySelectorAll('#player-menu [data-player-option]').length >= 3");
     var subtitleMenu = await geometry(['.player-menu', '#player-menu-title', '.player-menu-option.focused']);
     check('menu de legendas inclui Desligadas e duas faixas sem recorte', subtitleMenu.rectangles.every(rectVisible));
     check('menu de legendas produz um quadro PNG válido', await screenshotIsRendered('player-subtitle-menu'));

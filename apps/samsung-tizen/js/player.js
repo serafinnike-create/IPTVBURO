@@ -23,11 +23,44 @@ var BuroPlayer = (function () {
         return typeof webapis !== 'undefined' && Boolean(webapis.avplay);
     }
 
+    var subtitleOffsetMs = 0;
+
     function styledSubtitlesAvailable() {
         return available() && typeof webapis.avplay.setSilentSubtitle === 'function';
     }
 
     function clearSubtitleCue() { listeners.onSubtitle('', 0); }
+
+    /*
+      O atraso da legenda, em milissegundos.
+
+      Numa lista IPTV a legenda dessincroniza do audio com frequencia: o
+      provedor remuxa o arquivo e o offset embutido deixa de valer. Sem ajuste a
+      unica saida e desligar a legenda.
+
+      setSubtitlePosition existe em parte dos firmwares e resolve na fonte,
+      antes de o texto chegar. Onde nao existe, subtitleOffsetMs guarda o
+      valor e quem desenha a legenda o aplica — a que chega adiantada espera, e
+      a atrasada aparece de imediato porque o tempo dela ja passou.
+
+      Nao ha equivalente para o audio: o AVPlay nao expoe atraso de faixa, e
+      fingir um controle que nao funciona seria pior do que nao ter nenhum.
+    */
+    function subtitleOffsetAvailable() {
+        return available() && typeof webapis.avplay.setSubtitlePosition === 'function';
+    }
+
+    function setSubtitleOffset(milliseconds) {
+        var value = Math.max(-10000, Math.min(10000, Number(milliseconds) || 0));
+        subtitleOffsetMs = value;
+        if (subtitleOffsetAvailable()) {
+            try { webapis.avplay.setSubtitlePosition(value); }
+            catch (ignoredOffset) { /* Fica o atraso aplicado no desenho. */ }
+        }
+        return value;
+    }
+
+    function subtitleOffset() { return subtitleOffsetMs; }
 
     function status(code, value) { listeners.onStatus(code, value); }
 
@@ -340,6 +373,8 @@ var BuroPlayer = (function () {
         selectTrack: selectTrack,
         disableSubtitles: disableSubtitles,
         toggleSubtitles: toggleSubtitles,
+        setSubtitleOffset: setSubtitleOffset,
+        subtitleOffset: subtitleOffset,
         playbackRates: playbackRates,
         playbackRate: function () { return playbackRate; },
         setPlaybackRate: setPlaybackRate,
