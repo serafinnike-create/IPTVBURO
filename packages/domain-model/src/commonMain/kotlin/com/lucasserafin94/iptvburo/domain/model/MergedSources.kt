@@ -55,9 +55,20 @@ object MergedSources {
         val failed: List<Contribution<T>>,
         /** How many titles each source contributed after duplicates were removed. */
         val contributed: Map<String, Int>,
+        /**
+         * Every source that carries each title, best first.
+         *
+         * Keyed by the same identity the merge matched on. This is what lets a stream that fails
+         * fall back to another subscription's copy instead of showing an error — which is half the
+         * value of owning a second list, and the viewer should never have to know it happened.
+         */
+        val alternatives: Map<String, List<String>> = emptyMap(),
     ) {
         val hasFailures: Boolean
             get() = failed.isNotEmpty()
+
+        /** The sources holding [identity], in the order they should be tried. */
+        fun sourcesFor(identity: String): List<String> = alternatives[identity].orEmpty()
     }
 
     /**
@@ -82,14 +93,26 @@ object MergedSources {
         val seen = mutableSetOf<String>()
         val items = mutableListOf<T>()
         val contributed = mutableMapOf<String, Int>()
+        // Insertion-ordered, so the first source to offer a title is the first tried when its
+        // stream fails — which is the largest one, by the ordering above.
+        val alternatives = mutableMapOf<String, MutableList<String>>()
 
         ordered.forEach { source ->
             var added = 0
             source.items.forEach { item ->
                 val identity = key(item)
                 // A blank key cannot be compared to anything, so the item is kept rather than
-                // dropped: losing a title is worse than showing it twice.
-                if (identity.isBlank() || seen.add(identity)) {
+                // dropped: losing a title is worse than showing it twice. It gets no alternatives
+                // either, since nothing can be matched to it.
+                if (identity.isBlank()) {
+                    items += item
+                    added += 1
+                    return@forEach
+                }
+                // Recorded whether or not the title is shown from here: a copy that lost the
+                // ordering is exactly what a failed stream should fall back to.
+                alternatives.getOrPut(identity) { mutableListOf() }.add(source.sourceId)
+                if (seen.add(identity)) {
                     items += item
                     added += 1
                 }
@@ -97,7 +120,12 @@ object MergedSources {
             contributed[source.sourceId] = added
         }
 
-        return Merged(items = items, failed = failed, contributed = contributed)
+        return Merged(
+            items = items,
+            failed = failed,
+            contributed = contributed,
+            alternatives = alternatives,
+        )
     }
 
     /**

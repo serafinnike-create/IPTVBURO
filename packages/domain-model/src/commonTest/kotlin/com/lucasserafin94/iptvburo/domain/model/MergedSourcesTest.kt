@@ -113,6 +113,50 @@ class MergedSourcesTest {
         assertEquals(3, merged.items.size)
     }
 
+    /**
+     * A stream that fails must be able to fall back to the other list's copy.
+     *
+     * That is half the value of owning a second subscription, and the viewer should never have to
+     * know it happened — so every source carrying a title is remembered, best first.
+     */
+    @Test
+    fun `a title in two lists remembers both, biggest first`() {
+        val merged =
+            merge(
+                source("pequena", "Avatar"),
+                source("grande", "Duna", "Matrix", "Avatar"),
+            )
+
+        assertEquals(
+            listOf("grande", "pequena"),
+            merged.sourcesFor("Avatar".shelfDeduplicationKey()),
+            "a ordem de recuo tem de comecar pela maior",
+        )
+    }
+
+    @Test
+    fun `a title only one list has has only that one to fall back on`() {
+        val merged = merge(source("grande", "Duna", "Matrix"), source("pequena", "Avatar"))
+
+        assertEquals(listOf("pequena"), merged.sourcesFor("Avatar".shelfDeduplicationKey()))
+        assertEquals(listOf("grande"), merged.sourcesFor("Duna".shelfDeduplicationKey()))
+    }
+
+    /** Provider decoration must not split one film into two fallback chains. */
+    @Test
+    fun `decoration does not break the fallback chain`() {
+        val merged =
+            merge(
+                source("grande", "Duna 4K [DUB]", "Matrix"),
+                source("pequena", "Duna"),
+            )
+
+        assertEquals(
+            listOf("grande", "pequena"),
+            merged.sourcesFor("Duna".shelfDeduplicationKey()),
+        )
+    }
+
     @Test
     fun `merging is skipped when there is nothing to merge`() {
         assertFalse(MergedSources.isWorthMerging(listOf(source("a", "Duna"))))
