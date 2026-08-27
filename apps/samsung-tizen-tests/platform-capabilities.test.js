@@ -165,6 +165,29 @@ check('offline verdadeiro vem acompanhado da condição de USB',
     manifest.offline.supported === false ||
     manifest.notes.some(function (note) { return /USB/i.test(note) && /removivel|removível|montado/i.test(note); }));
 
+/*
+  As duas notas abaixo ja envelheceram uma vez cada.
+
+  O cabecalho deste arquivo conta o caso do `seek`, declarado falso enquanto o
+  player ja saltava. Aconteceu de novo em dois lugares, e por isso eles ganham
+  teste: uma nota que descreve a ausencia de uma funcao *implementada* e pior do
+  que nenhuma nota, porque quem a le decide nao procurar o codigo.
+*/
+check('a nota de capas descreve o cache em USB que existe',
+    manifest.notes.some(function (note) {
+        return /capas|artwork/i.test(note) && /USB/i.test(note);
+    }) && appSource('app.js').indexOf('BuroArtworkCache') >= 0);
+
+/*
+  Cast de fluxo continua impossivel e a nota deve continuar dizendo isso. O que
+  ela nao pode mais dizer e que a TV nao oferece nada: 'Enviar a tela' existe e
+  manda a identidade do titulo, como no Windows.
+*/
+check('a nota de Cast separa o fluxo, impossivel, do envio de titulo, que existe',
+    manifest.notes.some(function (note) {
+        return /BURO Cast/i.test(note) && /Enviar a tela|Enviar à tela/i.test(note);
+    }) && appSource('app.js').indexOf('send-to-screen') >= 0);
+
 process.stdout.write('\n');
 if (failures.length) {
     process.stdout.write(failures.length + ' falharam, ' + passed + ' aprovados\n');
