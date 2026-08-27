@@ -9049,6 +9049,20 @@ var BuroApp = (function () {
     function applyAssignedSource() {
         BuroLicense.fetchAssignedSource(function (assigned) {
             if (!assigned) { return; }
+            /*
+              Uma entrega pode nao trazer conexao nenhuma: so uma chave, so um
+              nome, para um cliente cuja lista ja funciona. Exigir servidor,
+              usuario e senha de novo so para entregar uma chave foi o que quem
+              vende relatou. Sem conexao nao ha o que autenticar nem gravar:
+              aplica as chaves e confirma, senao o painel fica mostrando pendente
+              uma entrega que ja foi aplicada.
+            */
+            if (!assigned.server || !assigned.username || !assigned.password) {
+                applyAssignedKeys(assigned);
+                render();
+                BuroLicense.confirmAssignedSource(null);
+                return;
+            }
             connectAssignedXtream(assigned);
         }, function () { /* Sem rede, sem provisionamento: tenta na proxima. */ });
     }
@@ -9087,7 +9101,11 @@ var BuroApp = (function () {
     /* O nome da fonte vem do endereco, sem a credencial: e o que a pessoa vera
        na lista de fontes, e nao pode virar um lugar onde a senha aparece. */
     function assignedSourceName(assigned) {
-        var host = String(assigned.server || '').replace(/^https?:\/\//i, '').split(/[/:?]/)[0];
+        var host;
+        /* O nome que quem vendeu escolheu vale mais do que o endereco: o
+           endereco e como o servidor se chama, nao como o cliente comprou. */
+        if (assigned.listLabel) { return String(assigned.listLabel).substring(0, 40); }
+        host = String(assigned.server || '').replace(/^https?:\/\//i, '').split(/[/:?]/)[0];
         return (host || 'IPTV').substring(0, 40);
     }
 

@@ -208,6 +208,26 @@ var BuroLicense = (function () {
       Silencio (204) e o caso comum: toda abertura de todo aparelho que nunca
       foi provisionado. Por isso `done(null)` em vez de erro.
     */
+    /*
+      O que vale a pena aplicar de uma entrega, ou null.
+
+      Uma entrega pode nao trazer conexao nenhuma: so uma chave, so um nome, para
+      um cliente cuja lista ja funciona. Mas servidor, usuario e senha vao juntos
+      ou nenhum — meia credencial nao e entrega parcial, e uma lista que nunca
+      abre, e o erro apareceria na TV do cliente e nao no painel de quem vendeu.
+
+      E precisa sobrar alguma coisa: aplicar um pacote vazio faria a TV confirmar
+      e o servidor apagar uma entrega que nunca foi aplicada.
+    */
+    function usableAssignedSource(source) {
+        var credentials;
+        if (!source) { return null; }
+        credentials = !!(source.server && source.username && source.password);
+        if (!credentials && (source.server || source.username || source.password)) { return null; }
+        if (!credentials && !source.metadataKey && !source.criticsKey && !source.listLabel) { return null; }
+        return source;
+    }
+
     function fetchAssignedSource(done, failed) {
         withProof('provisioning', function (body) {
             BuroNetwork.json({
@@ -216,7 +236,7 @@ var BuroLicense = (function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             }, function (payload) {
-                done(payload && payload.source ? payload.source : null);
+                done(usableAssignedSource(payload && payload.source));
             }, function (error) {
                 /* 204 chega aqui como corpo vazio em alguns runtimes: nada para
                    aplicar nao e falha. */
@@ -402,6 +422,8 @@ var BuroLicense = (function () {
         deviceId: deviceId,
         STATES: STATES,
         clearForTesting: clearForTesting,
-        useServerKeyForTesting: useServerKeyForTesting
+        useServerKeyForTesting: useServerKeyForTesting,
+        /* Exposto para teste: a regra decide se a lista de alguem e substituida. */
+        usableAssignedSourceForTesting: usableAssignedSource
     };
 }());

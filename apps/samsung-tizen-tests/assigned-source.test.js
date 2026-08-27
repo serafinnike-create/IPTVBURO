@@ -127,6 +127,7 @@ async function reachShell(window) {
 
 async function run() {
     var window;
+    var usable;
 
     process.stdout.write('A lista do painel chega sozinha na abertura\n');
     window = loadApp();
@@ -272,6 +273,71 @@ async function run() {
     window.close();
 
     process.stdout.write('\n');
+    /*
+      Uma entrega que so traz uma chave.
+
+      Quem vende precisava preencher endereco, usuario e senha para entregar
+      qualquer coisa - mesmo so uma chave do TMDb a um cliente cuja lista ja
+      funciona. Relatado no painel como "nao deixa eu enviar so api tmdb preciso
+      enviar tudo".
+    */
+    process.stdout.write('\nUma entrega que nao traz conexao\n');
+    window = loadApp({ assigned: { metadataKey: 'chave-do-vendedor' } });
+    await reachShell(window);
+    window.BuroApp._applyAssignedSource();
+    await waitFor(function () { return window.__confirmations.length === 1; }, 8000);
+
+    check('a chave do vendedor e aplicada',
+        window.BuroTmdb.keyForProfile(window.BuroApp.state.activeProfile.id) === 'chave-do-vendedor');
+    /* Sem conexao nao ha o que gravar: uma fonte em branco seria uma linha
+       inutil que o cliente teria de apagar. */
+    check('e nenhuma fonte vazia e criada',
+        window.BuroApp.state.sources.length === 0);
+    /* Confirmada mesmo assim, senao o painel mostra pendente para sempre uma
+       entrega que ja foi aplicada. */
+    check('a entrega e confirmada como aplicada',
+        window.__confirmations.length === 1 && window.__confirmations[0] === null);
+    window.close();
+
+    process.stdout.write('\nO nome que quem vendeu escolheu\n');
+    window = loadApp({
+        assigned: {
+            server: ASSIGNED.server, username: ASSIGNED.username,
+            password: ASSIGNED.password, listLabel: 'Plano Familia'
+        }
+    });
+    await reachShell(window);
+    window.BuroApp._applyAssignedSource();
+    await waitFor(function () { return window.BuroApp.state.sources.length === 1; }, 8000);
+
+    /* O endereco e como o servidor se chama; o nome e como o cliente comprou. */
+    check('a fonte recebe o nome escolhido no painel, nao o endereco',
+        window.BuroApp.state.sources[0].name === 'Plano Familia');
+    window.close();
+
+    /*
+      A regra que decide se a lista de alguem e substituida, exercitada direto:
+      o resto deste arquivo substitui fetchAssignedSource por um duble, entao
+      nada acima passa por ela.
+    */
+    process.stdout.write('\nO que a TV aceita de uma entrega\n');
+    window = loadApp();
+    usable = window.BuroLicense.usableAssignedSourceForTesting;
+
+    check('so uma chave basta', usable({ metadataKey: 'k' }) !== null);
+    check('so um nome basta', usable({ listLabel: 'Plano Familia' }) !== null);
+    check('uma conexao inteira passa', usable(ASSIGNED) !== null);
+    /* Meia credencial nao e entrega parcial: e uma lista que nunca abre, e o
+       erro apareceria na TV do cliente e nao no painel de quem vendeu. Cada caso
+       leva uma chave junto, senao seria a regra do pacote vazio a recusar - e
+       este teste passaria com a regra da credencial apagada. */
+    check('endereco sem senha e recusado',
+        usable({ server: ASSIGNED.server, username: 'u', metadataKey: 'k' }) === null);
+    check('senha sem endereco e recusada',
+        usable({ username: 'u', password: 'p', metadataKey: 'k' }) === null);
+    check('um pacote vazio e recusado', usable({}) === null && usable(null) === null);
+    window.close();
+
     if (failures.length) {
         process.stdout.write('Falhas: ' + failures.length + '\n');
         failures.forEach(function (label) { process.stdout.write('  - ' + label + '\n'); });
