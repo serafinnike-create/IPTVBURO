@@ -3582,6 +3582,8 @@ var BuroApp = (function () {
         var poster = layout === 'poster' && (item.contentType === 'MOVIE' || item.contentType === 'SERIES');
         var favorite = isFavorite(item.id);
         var playback = playbackProgress(item._libraryProgressItemId || item.id);
+        var watched;
+        var marks;
         var metadata = mediaMetadata(item);
         var art = artworkHtml(item, 'media-art');
         var action = item.contentType === 'MOVIE' ? 'movie-details' :
@@ -3593,10 +3595,25 @@ var BuroApp = (function () {
         if (poster && !art) {
             art = '<span class="media-art media-art-placeholder" aria-hidden="true"></span>';
         }
+        /*
+          O selo diz o que so ele sabe, e some quando nao tem o que dizer.
+
+          Ele carregava o `contentType` escrito — MOVIE, SERIES — sobre a capa de
+          todo cartao. Numa aba chamada Filmes isso repete o cabecalho em cada
+          item e cobre a arte que a pessoa esta olhando para reconhecer.
+
+          O que fica sao as duas marcas que a capa nao mostra sozinha: ★ do
+          favorito e ✓ do assistido. Sem nenhuma delas o span inteiro sai, senao
+          restaria uma caixa vazia com borda dourada sobre a imagem.
+
+          O separador " · " so aparece entre as duas, e nao mais depois da
+          ultima: ele existia para separar da palavra que saiu.
+        */
+        watched = Boolean(playback && playback.completed);
+        marks = (favorite ? '★' : '') + (favorite && watched ? ' · ' : '') + (watched ? '✓' : '');
         return '<button class="media-card focusable ' + (poster ? 'poster' : '') + ' ' + layout +
             (artworkFor(item) ? ' has-art' : '') + '" data-action="' + action + '" data-id="' + attr(item.id) + '">' +
-            art + '<span class="badge">' + (favorite ? '★ · ' : '') +
-            (playback && playback.completed ? '✓ · ' : '') + escapeHtml(item.contentType) + '</span><h3>' +
+            art + (marks ? '<span class="badge">' + marks + '</span>' : '') + '<h3>' +
             escapeHtml(item.name) + '</h3><p>' + escapeHtml(metadata) + '</p>' +
             (playback ? '<span class="media-progress"><i style="width:' + playback.percent.toFixed(2) + '%"></i></span>' : '') + '</button>';
     }

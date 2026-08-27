@@ -152,10 +152,23 @@ async function run() {
         window.document.querySelectorAll('[data-action="library-filter"]').length === 4);
 
     window.BuroApp._activate(window.document.querySelector('[data-action="library-filter"][data-kind="SERIES"]'));
+    /*
+      O tipo lido no `data-action`, e nao no selo.
+
+      O selo carregava o `contentType` escrito sobre a capa e foi removido — em
+      Filmes ele repetia o cabecalho em cada cartao e cobria a arte. Ele agora so
+      aparece quando ha ★ ou ✓ para mostrar, entao contar nele o tipo passou a
+      medir a decoracao em vez do filtro.
+
+      `data-action` e o que a tela usa de verdade para saber o que abrir, e por
+      isso continua respondendo a pergunta do teste depois da mudanca visual: um
+      cartao de serie abre `series-details`.
+    */
     check('mudar o filtro reinicia na primeira página e pagina somente o tipo escolhido',
         window.document.querySelector('.library-pagination').textContent.indexOf('Página 1 de 2') >= 0 &&
-        Array.prototype.every.call(window.document.querySelectorAll('.media-card .badge'), function (badge) {
-            return badge.textContent.indexOf('SERIES') >= 0;
+        window.document.querySelectorAll('.media-card').length > 0 &&
+        Array.prototype.every.call(window.document.querySelectorAll('.media-card'), function (card) {
+            return card.getAttribute('data-action') === 'series-details';
         }));
     window.BuroApp._activate(window.document.querySelector('[data-action="library-filter"][data-kind="ALL"]'));
     for (index = 0; index < 4; index += 1) {
@@ -189,15 +202,21 @@ async function run() {
     });
     for (index = 0; index < 75; index += 1) {
         progressItems.push(item('movie:progress-' + index, source.id, 'cat-library-movie', 'MOVIE',
-            (index >= 70 ? 'Concluído ' : 'Progresso ') + ('00' + index).slice(-2)));
+            index === 69 ? 'Chefão [4K] (2024)' :
+                (index >= 70 ? 'Concluído ' : 'Progresso ') + ('00' + index).slice(-2)));
         progressRows.push({
             id: 'progress-row-' + index, profileId: profile.id, itemId: 'movie:progress-' + index,
             positionMs: index >= 70 ? 120000 : 30000, durationMs: 120000,
             completed: index >= 70, updatedAt: index + 1000
         });
     }
+    progressRows.push({
+        id: 'progress-other-profile', profileId: otherProfile.id, itemId: favoriteItems[0].id,
+        positionMs: 15000, durationMs: 120000, completed: false, updatedAt: 20000
+    });
     state.items = favoriteItems.concat(progressItems);
     state.progress = progressRows;
+    await call(window, window.BuroStorage.putBatch, ['progress', progressRows]);
     state.section = 'CONTINUE_WATCHING';
     state.screenData = null;
     window.BuroApp.render();
@@ -215,6 +234,21 @@ async function run() {
     check('a série usa o progresso real do episódio mais recente sem alterar a identidade persistida',
         progressBar && progressBar.getAttribute('style').indexOf('50.00%') >= 0 &&
         state.items.filter(function (row) { return row.id === parent.id; })[0]._libraryProgressItemId === undefined);
+    check('cada item de Continuar oferece remoção separada da abertura do título',
+        window.document.querySelectorAll('[data-action="continue-remove"]').length === 20);
+    check('cada item reproduzível oferece Continuar e Assistir do início sem abrir diálogo',
+        window.document.querySelectorAll('[data-action="continue-play"]').length === 20 &&
+        window.document.querySelectorAll('[data-action="continue-restart"]').length === 20);
+    window.BuroApp._activate(window.document.querySelector('[data-action="continue-remove"]'));
+    await waitFor(function () {
+        return state.progress.some(function (row) { return row.id === 'progress-episode' && row.completed; });
+    }, 2000);
+    check('remover de Continuar conclui a linha e a mantém disponível no Histórico',
+        window.document.querySelectorAll('.media-card').length === 20 &&
+        window.document.body.textContent.indexOf('Série em andamento') === -1 &&
+        state.progress.some(function (row) {
+            return row.id === 'progress-episode' && row.completed && row.positionMs === row.durationMs;
+        }));
 
     state.section = 'HISTORY';
     state.screenData = null;
@@ -232,7 +266,110 @@ async function run() {
         window.document.querySelectorAll('.media-card').length === 1 &&
         window.document.querySelector('.media-card h3').textContent === 'Série em andamento' &&
         !window.document.querySelector('.library-pagination'));
+
+    window.BuroApp._activate(window.document.querySelector('[data-action="library-filter"][data-kind="ALL"]'));
+    var historyInput = window.document.querySelector('#history-query');
+    historyInput.value = 'chefao 4k 2024';
+    historyInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await waitFor(function () {
+        return window.document.querySelectorAll('.media-card').length === 1 &&
+            window.document.querySelector('.media-card h3').textContent === 'Chefão [4K] (2024)';
+    }, 2000);
+    check('busca do Histórico ignora acentos, ano e decoração de qualidade',
+        window.document.querySelectorAll('[data-action="history-remove"]').length === 1);
+
+    window.BuroApp._activate(window.document.querySelector('[data-action="history-remove"]'));
+    await waitFor(function () {
+        return !state.progress.some(function (row) { return row.id === 'progress-row-69'; });
+    }, 2000);
+    var removedPersisted = await call(window, window.BuroStorage.get, ['progress', 'progress-row-69']);
+    check('remover no Histórico apaga só a linha de progresso escolhida',
+        removedPersisted === undefined && state.items.some(function (row) { return row.id === 'movie:progress-69'; }));
+
+    historyInput = window.document.querySelector('#history-query');
+    historyInput.value = '';
+    historyInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await waitFor(function () { return window.document.querySelector('[data-action="history-clear"]'); }, 2000);
+    var ownProgressBeforeClear = state.progress.filter(function (row) { return row.profileId === profile.id; }).length;
+    window.BuroApp._activate(window.document.querySelector('[data-action="history-clear"]'));
+    check('limpar o Histórico abre confirmação explícita antes de apagar',
+        state.screen === 'HISTORY_CLEAR_CONFIRM' && window.document.querySelector('[data-action="history-clear-confirm"]'));
+    window.BuroApp._activate(window.document.querySelector('[data-action="back"]'));
+    check('cancelar a confirmação preserva todo o progresso',
+        state.screen === 'SHELL' && state.progress.filter(function (row) { return row.profileId === profile.id; }).length === ownProgressBeforeClear);
+    window.BuroApp._activate(window.document.querySelector('[data-action="history-clear"]'));
+    window.BuroApp._activate(window.document.querySelector('[data-action="history-clear-confirm"]'));
+    await waitFor(function () {
+        return state.screen === 'SHELL' && !state.progress.some(function (row) { return row.profileId === profile.id; });
+    }, 2000);
+    var otherProfilePersisted = await call(window, window.BuroStorage.get, ['progress', 'progress-other-profile']);
+    check('confirmar limpa somente o perfil ativo e preserva outro perfil',
+        otherProfilePersisted && otherProfilePersisted.profileId === otherProfile.id &&
+        state.progress.length === 1 && state.progress[0].profileId === otherProfile.id);
+    check('limpar Histórico não apaga catálogo nem favoritos',
+        state.items.length === favoriteItems.length + progressItems.length && state.favorites.length > 0);
     window.close();
+
+    process.stdout.write('Ações diretas da continuidade\n');
+    var directWindow = loadApp();
+    await waitFor(function () { return directWindow.BuroApp.state.ready; }, 4000);
+    var directState = directWindow.BuroApp.state;
+    var directSource = { id: 'source-direct-progress', name: 'Fonte sintética', type: 'XTREAM' };
+    var directProfile = { id: 'profile-direct-progress', name: 'Sala', avatarKey: 'gold', isKids: false, sourceId: directSource.id };
+    var directParent = item('series:direct-parent', directSource.id, 'category-direct-series', 'SERIES', 'Série projetada');
+    var directEpisode = item('episode:direct-501', directSource.id, directParent.id, 'EPISODE', 'Episódio real');
+    var directRow = {
+        id: 'progress-direct-episode', profileId: directProfile.id, itemId: directEpisode.id,
+        positionMs: 65000, durationMs: 180000, completed: false, updatedAt: 1000
+    };
+    var otherDirectRow = {
+        id: 'progress-direct-other-profile', profileId: 'profile-not-active', itemId: directEpisode.id,
+        positionMs: 90000, durationMs: 180000, completed: false, updatedAt: 2000
+    };
+    directEpisode.locator = {
+        kind: 'xtream', contentType: 'EPISODE', providerItemId: '501', extension: 'mp4', season: 2, episode: 4
+    };
+    directState.sources = [directSource];
+    directState.profiles = [directProfile];
+    directState.activeSource = directSource;
+    directState.activeProfile = directProfile;
+    directState.categories = [{
+        id: 'category-direct-series', sourceId: directSource.id, contentType: 'SERIES', name: 'Séries'
+    }];
+    directState.items = [directParent, directEpisode];
+    directState.progress = [directRow, otherDirectRow];
+    directState.screen = 'SHELL';
+    directState.section = 'CONTINUE_WATCHING';
+    directState.screenData = null;
+    await call(directWindow, directWindow.BuroStorage.secureSave, [directSource.id, {
+        serverUrl: 'https://provider.invalid', username: 'synthetic-user', password: 'synthetic-password'
+    }]);
+    var directPlayCalls = [];
+    directWindow.BuroPlayer.play = function (url, positionMs) {
+        directPlayCalls.push({ url: url, positionMs: positionMs });
+    };
+    directWindow.BuroApp.render();
+    check('o card continua sendo a série pai, mas as ações carregam a linha do episódio',
+        directWindow.document.querySelector('.media-card').getAttribute('data-id') === directParent.id &&
+        directWindow.document.querySelector('[data-action="continue-play"]').getAttribute('data-id') === directRow.id);
+    directWindow.BuroApp._activate(directWindow.document.querySelector('[data-action="continue-play"]'));
+    check('Continuar resolve o episódio real na posição salva sem diálogo intermediário',
+        directPlayCalls.length === 1 && directPlayCalls[0].positionMs === 65000 &&
+        directPlayCalls[0].url.indexOf('/series/') >= 0 && directState.screen === 'SHELL');
+    directWindow.BuroApp._activate(directWindow.document.querySelector('[data-action="continue-restart"]'));
+    check('Assistir do início usa o mesmo episódio com posição zero',
+        directPlayCalls.length === 2 && directPlayCalls[1].positionMs === 0 &&
+        directPlayCalls[1].url.indexOf('/series/') >= 0);
+    directWindow.BuroApp._activate({ getAttribute: function (name) {
+        if (name === 'data-action') { return 'continue-play'; }
+        if (name === 'data-id') { return otherDirectRow.id; }
+        return null;
+    } });
+    check('uma ação forjada para outro perfil não inicia reprodução', directPlayCalls.length === 2);
+    check('URL e credencial resolvidas não entram no DOM nem nas preferências',
+        directWindow.document.body.textContent.indexOf('synthetic-user') === -1 &&
+        (directWindow.localStorage.getItem('iptvburo.preferences.v1') || '').indexOf('synthetic-user') === -1);
+    directWindow.close();
 
     process.stdout.write('Hidratação do pai da série no boot\n');
     var factory = new fakeIndexedDb.IDBFactory();
