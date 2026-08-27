@@ -1027,6 +1027,25 @@ class DesktopAppState(
         if (stalker) switching.useStalker() else switching.useXtream()
     }
 
+    /**
+     * Covers this provider reuses across thousands of titles, so a card can ignore them.
+     *
+     * Read through [xtreamCatalogRevision] so the value refreshes when a catalogue is loaded; the
+     * repository computes it once per catalogue, not once per card.
+     */
+    val placeholderArtworkUrls: Set<String>
+        get() = xtreamRepository.placeholderArtworkUrls()
+
+    /**
+     * The cover to draw for [item], or null when the provider effectively gave none.
+     *
+     * A provider that files ten thousand adult titles under one "XXX" card leaves every row
+     * technically covered, so nothing ever reached the fallback and the grid drew that one picture
+     * hundreds of times. Treating it as absent lets the readable title card do its job.
+     */
+    fun artworkFor(item: XtreamCatalogItem): String? =
+        item.artworkUrl?.takeIf { url -> url.trim() !in placeholderArtworkUrls }
+
     /** Playlists already configured, offered so a new profile can reuse one. */
     fun savedSources(): List<XtreamSource> = sourceLibrary.sources()
 

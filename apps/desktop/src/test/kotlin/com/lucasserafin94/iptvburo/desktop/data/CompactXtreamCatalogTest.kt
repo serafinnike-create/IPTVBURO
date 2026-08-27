@@ -5,9 +5,13 @@ import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CompactXtreamCatalogTest {
+    /** Stands in for the one generic card a provider files thousands of adult titles under. */
+    private val STAMP = "http://covers.invalid/generic-adult.png"
+
     @Test
     fun `retains rendered fields artwork and category membership compactly`() {
         val catalog = CompactXtreamCatalog(XtreamContentType.MOVIE)
@@ -74,6 +78,39 @@ class CompactXtreamCatalogTest {
             catalog.matches(0, null, "", null, minimumRating = null, allowedIdentities = null),
             "with no minimum it must still be listed",
         )
+    }
+
+    @Test
+    fun `a marked placeholder cover is reported as no cover at all`() {
+        val catalog = CompactXtreamCatalog(XtreamContentType.MOVIE)
+        repeat(3) { index -> catalog.add(item(index = index, categoryIds = listOf("adult"))) }
+        catalog.add(item(index = 99, categoryIds = listOf("adult")).copy(artworkUrl = STAMP))
+        catalog.markPlaceholderArtwork(setOf(STAMP))
+
+        // The stamped row falls through to whatever the reader does for a coverless title, while
+        // its neighbours keep their own covers.
+        assertNull(catalog.itemAt(3).artworkUrl)
+        assertEquals("https://images.invalid/0.jpg", catalog.itemAt(0).artworkUrl)
+    }
+
+    @Test
+    fun `the raw artwork column still reports what the provider actually sent`() {
+        val catalog = CompactXtreamCatalog(XtreamContentType.MOVIE)
+        catalog.add(item(index = 0, categoryIds = listOf("adult")).copy(artworkUrl = STAMP))
+        catalog.markPlaceholderArtwork(setOf(STAMP))
+
+        // Counting reads this column. If marking hid the address here too, a second count would
+        // see the placeholder vanish and unmark it, which flips back and forth for ever.
+        assertEquals(listOf(STAMP), catalog.artworkUrls().toList())
+    }
+
+    @Test
+    fun `surrounding whitespace does not smuggle a placeholder past the check`() {
+        val catalog = CompactXtreamCatalog(XtreamContentType.MOVIE)
+        catalog.add(item(index = 0, categoryIds = listOf("adult")).copy(artworkUrl = "  $STAMP "))
+        catalog.markPlaceholderArtwork(setOf(STAMP))
+
+        assertNull(catalog.itemAt(0).artworkUrl)
     }
 
     private fun item(

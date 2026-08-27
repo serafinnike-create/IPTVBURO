@@ -7,6 +7,7 @@ import com.lucasserafin94.iptvburo.desktop.security.XtreamLoginInput
 import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.FamilyContentPolicy
 import com.lucasserafin94.iptvburo.domain.model.LibraryCandidate
+import com.lucasserafin94.iptvburo.domain.model.PlaceholderArtwork
 import com.lucasserafin94.iptvburo.domain.model.MatchKind
 import com.lucasserafin94.iptvburo.domain.model.normalisedForMatching
 import com.lucasserafin94.iptvburo.domain.model.shelfDeduplicationKey
@@ -61,6 +62,17 @@ class SessionXtreamRepository(
      * items read back from disk in 132 ms.
      */
     private val diskCache = CatalogDiskCache()
+
+    /**
+     * Covers this provider reuses across thousands of titles, computed once per catalogue.
+     *
+     * Per catalogue rather than per card: the grid draws hundreds of cards and counting forty
+     * thousand rows for each would be the whole catalogue walked per frame. Recomputed when a
+     * catalogue is replaced, and cleared with everything else on sign-out.
+     */
+    private val placeholders = mutableSetOf<String>()
+
+    private var placeholdersComputedFor = -1
 
     /**
      * What the initial load is doing right now.
@@ -139,6 +151,7 @@ class SessionXtreamRepository(
                 account = authenticatedAccount
                 categories.putAll(loadedCategories)
                 catalogs[XtreamContentType.LIVE] = liveCatalog
+                refreshPlaceholdersLocked()
                 summaryLocked()
             }.also {
                 // Only when it came from the provider: rewriting a copy that was just read from
@@ -219,6 +232,7 @@ class SessionXtreamRepository(
                         // Categories travel with the catalogue: they are fetched in the same round
                         // and a catalogue without them shows every title under no category at all.
                         if (cached.categories.isNotEmpty()) categories[contentType] = cached.categories
+                        refreshPlaceholdersLocked()
                         summaryLocked()
                     }
                 }
@@ -228,6 +242,7 @@ class SessionXtreamRepository(
             return synchronized(lock) {
                 checkGeneration(currentGeneration)
                 catalogs[contentType] = loaded
+                refreshPlaceholdersLocked()
                 summaryLocked()
             }.also {
                 // Written after publishing, so a slow disk never delays the screen. The categories
@@ -781,6 +796,48 @@ class SessionXtreamRepository(
         }
     }
 
+    override fun placeholderArtworkUrls(): Set<String> =
+        synchronized(lock) {
+            // Recomputed only when the loaded catalogues have changed, which the count identifies
+            // well enough: a catalogue is replaced whole, never edited row by row.
+            refreshPlaceholdersLocked()
+            placeholders.toSet()
+        }
+
+    /**
+     * Recomputes the placeholder set when the loaded catalogues have changed, and tells each
+     * catalogue what it found so [CompactXtreamCatalog.itemAt] stops handing the address out.
+     *
+     * The row count identifies a change well enough: a catalogue is replaced whole on load, never
+     * edited row by row. Call with [lock] held.
+     */
+    /**
+     * Drops the detected placeholders along with the catalogues they were counted from.
+     *
+     * The memo has to go too. It records a row count, and an empty catalogue counts zero — so
+     * leaving it set would make the next load of an equally sized catalogue look unchanged and
+     * skip the recount entirely. Call with [lock] held.
+     */
+    private fun forgetPlaceholdersLocked() {
+        placeholders.clear()
+        placeholdersComputedFor = -1
+    }
+
+    private fun refreshPlaceholdersLocked() {
+        val loaded = catalogs.values.sumOf { catalog -> catalog.size }
+        if (loaded == placeholdersComputedFor) return
+        placeholders.clear()
+        // Counted across all content types together: one provider stamp is reused for films and
+        // series alike, and a type on its own may not reach the threshold.
+        placeholders +=
+            PlaceholderArtwork.detect(
+                catalogs.values.asSequence().flatMap { catalog -> catalog.artworkUrls() },
+            )
+        placeholdersComputedFor = loaded
+        catalogs.values.forEach { catalog -> catalog.markPlaceholderArtwork(placeholders) }
+
+    }
+
     override fun summary(): XtreamSessionSummary? =
         synchronized(lock) {
             if (credentialVault == null || account == null || sourceId == null) {
@@ -811,6 +868,7 @@ class SessionXtreamRepository(
             // so clearing them here emptied the category rail down to "Todas" with no way to
             // repopulate it until the user signed in again.
             catalogs.clear()
+            forgetPlaceholdersLocked()
         }
         diskCache.clear()
     }
@@ -838,6 +896,7 @@ class SessionXtreamRepository(
                 sourceId = null
                 categories.clear()
                 catalogs.clear()
+                forgetPlaceholdersLocked()
                 previous
             }
         oldVault?.clear()

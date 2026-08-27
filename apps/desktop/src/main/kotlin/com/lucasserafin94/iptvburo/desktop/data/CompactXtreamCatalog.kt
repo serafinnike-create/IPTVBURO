@@ -173,6 +173,20 @@ internal class CompactXtreamCatalog(
         return encodedCategoryIds[index].decodeCategoryIds()
     }
 
+    /**
+     * Covers this provider hands out for thousands of titles at once, so [itemAt] can drop them.
+     *
+     * Held here rather than filtered by each screen because every reader goes through [itemAt];
+     * the previous attempt corrected the screens one at a time and missed the catalogue grid, which
+     * was the one in the screenshot. The arena itself is untouched, so [artworkUrls] still reports
+     * what the provider actually sent and the count stays honest.
+     */
+    private var placeholderArtwork: Set<String> = emptySet()
+
+    fun markPlaceholderArtwork(urls: Set<String>) {
+        placeholderArtwork = urls
+    }
+
     fun itemAt(index: Int): XtreamCatalogItem {
         require(index in 0 until size)
         return XtreamCatalogItem(
@@ -181,7 +195,7 @@ internal class CompactXtreamCatalog(
             contentType = contentType,
             categoryIds = encodedCategoryIds[index].decodeCategoryIds(),
             containerExtension = containerExtensions[index],
-            artworkUrl = artworkAt(index),
+            artworkUrl = usableArtworkAt(index),
             year = years[index].takeIf { hasYear[index] },
             rating = ratings[index].takeIf { hasRating[index] },
             addedAtEpochSeconds = null,
@@ -253,6 +267,24 @@ internal class CompactXtreamCatalog(
         artworkLengths[index] = encoded.size
         artworkByteCount += encoded.size
     }
+
+    /**
+     * Every artwork address in this catalogue, in order.
+     *
+     * Reads the artwork column directly rather than walking [itemAt]: rebuilding a domain object
+     * per row costs about 31 ms over forty thousand of them, and none of the other fields are
+     * wanted here. Lazy, so a caller that stops early pays only for what it read.
+     */
+    fun artworkUrls(): Sequence<String?> = (0 until size).asSequence().map(::artworkAt)
+
+    /**
+     * The cover for a row, or null when the provider's cover is one of its placeholders.
+     *
+     * Null rather than the placeholder address so the reader falls through to what it already does
+     * for a title with no cover — the readable title card, the TMDb lookup, the adult source.
+     */
+    private fun usableArtworkAt(index: Int): String? =
+        artworkAt(index)?.takeIf { url -> url.trim() !in placeholderArtwork }
 
     private fun artworkAt(index: Int): String? {
         val length = artworkLengths[index]

@@ -124,6 +124,18 @@ interface CatalogueRepository {
      */
     fun buildConfirmedPlaybackUri(target: XtreamPlaybackTarget): URI
 
+    /**
+     * Cover addresses this subscription hands out for thousands of titles at once.
+     *
+     * A provider that files a whole category under one generic card leaves every row technically
+     * covered, so nothing downstream reaches its fallback and the grid draws the same picture
+     * hundreds of times. Recognised by how many titles share an address — see
+     * [com.lucasserafin94.iptvburo.domain.model.PlaceholderArtwork].
+     *
+     * Empty for a subscription that gives each title its own cover, which is most of them.
+     */
+    fun placeholderArtworkUrls(): Set<String> = emptySet()
+
     fun summary(): XtreamSessionSummary?
 
     fun clearCatalogCache()

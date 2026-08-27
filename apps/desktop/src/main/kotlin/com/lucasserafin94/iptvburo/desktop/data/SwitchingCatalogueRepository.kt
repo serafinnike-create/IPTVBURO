@@ -155,6 +155,8 @@ class SwitchingCatalogueRepository(
     override fun buildConfirmedPlaybackUri(target: XtreamPlaybackTarget): URI =
         active.buildConfirmedPlaybackUri(target)
 
+    override fun placeholderArtworkUrls(): Set<String> = active.placeholderArtworkUrls()
+
     override fun summary(): XtreamSessionSummary? = active.summary()
 
     override fun clearCatalogCache() = active.clearCatalogCache()
