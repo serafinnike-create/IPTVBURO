@@ -2158,6 +2158,16 @@ async function run() {
         return { abort: function () {} };
     };
     window.BuroApp._activate(window.document.querySelector('[data-action="person-credit"][data-id="77"]'));
+    /*
+      O destino deixou de ser imediato: abrir um credito passou a procurar o
+      titulo no catalogo antes de decidir, porque um credito que a lista ja tem
+      deve abrir a ficha e nao "onde assistir" (ver person-credit-open.test.js).
+
+      A verificacao continua valendo — a Serie externa nao esta no catalogo,
+      entao Assinaturas e o destino certo para ela — mas agora vem depois da
+      leitura, e nao no mesmo quadro do clique.
+    */
+    await waitFor(function () { return window.BuroApp.state.screen !== 'PERSON'; }, 4000);
     check('crédito externo da filmografia abre o mesmo detalhe de Assinaturas',
         window.BuroApp.state.screen === 'SHELL' && window.BuroApp.state.section === 'SUBSCRIPTIONS' &&
         window.BuroApp.state.screenData.selected.tmdbId === 77 &&

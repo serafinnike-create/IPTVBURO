@@ -7804,6 +7804,22 @@ var BuroApp = (function () {
         })) { showToast(t('trailerUnavailable'), true); }
     }
 
+    /*
+      Abrir um credito da filmografia: o catalogo primeiro, Assinaturas depois.
+
+      Antes ia direto para Assinaturas. Numa TV sem chave TMDb isso deixava a
+      pessoa numa tela vazia; com chave, mandava para "onde assistir" um titulo
+      que muitas vezes esta na propria lista dela — e a ficha, com o botao de
+      assistir, e o que ela queria.
+
+      O aplicativo do Windows resolve isso com openCredit, que devolve um
+      destino: PLAYLIST_ITEM quando o titulo esta no catalogo, SUBSCRIPTIONS
+      quando nao esta. Esta funcao faz a mesma pergunta.
+
+      A busca e por nome e ano, a mesma comparacao de matchSubscriptionLocal.
+      Ela roda sobre o banco e nao sobre state.items, que e so a amostra do
+      boot: procurar ali acharia quase nada num catalogo de dezenas de milhares.
+    */
     function openPersonCredit(element) {
         var personData = state.screenData;
         var title = {
@@ -7811,10 +7827,41 @@ var BuroApp = (function () {
             title: element.getAttribute('data-title'), year: Number(element.getAttribute('data-year')) || null,
             posterUrl: null
         };
-        state.screen = 'SHELL'; state.section = 'SUBSCRIPTIONS';
-        state.screenData = { kind: 'subscriptions', filter: title.isSeries ? 'SERIES' : 'MOVIES',
-            region: activeTmdbRegion(), shelves: [], loading: false };
-        selectSubscriptionTitle(title, { screen: 'PERSON', data: personData });
+        var wantedType = title.isSeries ? 'SERIES' : 'MOVIE';
+        var wantedName = titleComparable(title.title);
+
+        function fallBackToSubscriptions() {
+            state.screen = 'SHELL'; state.section = 'SUBSCRIPTIONS';
+            state.screenData = { kind: 'subscriptions', filter: title.isSeries ? 'SERIES' : 'MOVIES',
+                region: activeTmdbRegion(), shelves: [], loading: false };
+            selectSubscriptionTitle(title, { screen: 'PERSON', data: personData });
+        }
+
+        /* O aviso de procura fica na propria pagina da pessoa: trocar de tela
+           antes de saber o destino faria a volta piscar se a busca falhasse. */
+        state.screenData = state.screenData || {};
+        state.screenData.creditOpeningId = title.tmdbId;
+        render();
+
+        BuroStorage.fold('items', function (match, item) {
+            if (match || !item || item.contentType !== wantedType) { return match; }
+            if (titleComparable(item.name) !== wantedName) { return null; }
+            if (title.year && item.year && Number(title.year) !== Number(item.year)) { return null; }
+            return item;
+        }, null, function (match) {
+            /* A pessoa pode ter saido enquanto a leitura corria. */
+            if (state.screen !== 'PERSON' || !state.screenData ||
+                    state.screenData.creditOpeningId !== title.tmdbId) { return; }
+            state.screenData.creditOpeningId = null;
+            if (match) { openPersonLocal(match.id); return; }
+            fallBackToSubscriptions();
+        }, function () {
+            if (state.screen !== 'PERSON' || !state.screenData ||
+                    state.screenData.creditOpeningId !== title.tmdbId) { return; }
+            state.screenData.creditOpeningId = null;
+            /* A leitura falhou, mas o destino de reserva continua valido. */
+            fallBackToSubscriptions();
+        });
     }
 
     function captureSimilarTitleReturn(key) {
