@@ -49,7 +49,7 @@ class CatalogueContractTest {
                 .map { it.groupValues[1] }
                 .toSet()
         assertEquals(emptySet(), declared - implemented, "declared but not implemented")
-        assertEquals(20, declared.size, "the contract covers what the app actually uses")
+        assertEquals(22, declared.size, "the contract covers what the app actually uses")
     }
 
     @Test

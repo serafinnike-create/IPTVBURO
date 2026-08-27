@@ -439,6 +439,128 @@ class XtreamClient(
             .build()
     }
 
+    /**
+     * Reads from the provider for up to [budgetMillis], reporting bytes moved and time taken.
+     *
+     * Measures the connection the viewer's television actually depends on, which is the question
+     * behind "it keeps freezing": a general speed test says the Internet is fine while the provider
+     * is the slow part, and the viewer is left blaming the app.
+     *
+     * Uses the catalogue endpoint rather than a stream. A stream would consume one of the account's
+     * simultaneous connections — on a two-connection plan, running diagnostics would stop the
+     * television in the other room.
+     *
+     * Stops at the budget and reports what it read rather than waiting for a fixed size, so a slow
+     * line finishes the test instead of hanging it. Returns null when nothing could be read.
+     */
+    fun measureTransfer(
+        credentials: XtreamCredentials,
+        budgetMillis: Long,
+    ): Pair<Long, Long>? {
+        val endpoint = XtreamEndpointParser.parse(credentials.serverUrl)
+        val url =
+            endpoint.baseUrl
+                .newBuilder()
+                .addPathSegment("player_api.php")
+                .addQueryParameter("username", credentials.username)
+                .addQueryParameter("password", credentials.password)
+                .addQueryParameter("action", "get_vod_streams")
+                .build()
+        val request =
+            Request.Builder()
+                .url(url)
+                .header("User-Agent", userAgent)
+                .header("Accept", "application/json")
+                .get()
+                .build()
+
+        // The shared client bounds a whole call in minutes, which is right for a catalogue fetch
+        // and wrong here: a provider slow to answer would leave the screen waiting long after the
+        // budget, showing a spinner that looks like the app hung.
+        val probe =
+            httpClient
+                .newBuilder()
+                .callTimeout(budgetMillis * 2, TimeUnit.MILLISECONDS)
+                .readTimeout(budgetMillis, TimeUnit.MILLISECONDS)
+                .build()
+
+        return runCatching {
+            val started = System.nanoTime()
+            probe.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                var read = 0L
+                val buffer = ByteArray(BUFFER_BYTES)
+                val stream = response.body.byteStream()
+                // Read and discard. Nothing is parsed and nothing is kept: this is a stopwatch on
+                // the connection, and holding a catalogue here would cost memory for no reading.
+                while (true) {
+                    val elapsed = (System.nanoTime() - started) / 1_000_000
+                    if (elapsed >= budgetMillis) break
+                    val count = stream.read(buffer)
+                    if (count <= 0) break
+                    read += count
+                }
+                val took = (System.nanoTime() - started) / 1_000_000
+                if (read <= 0L) null else read to took
+            }
+        }.getOrNull()
+    }
+
+    /**
+     * Round-trip times to the provider, in milliseconds, one per successful attempt.
+     *
+     * The returned list is shorter than [attempts] when requests failed, and that gap is the
+     * measurement: a connection losing one request in ten is exactly what a viewer needs told, and
+     * throwing would replace that with "the test failed".
+     *
+     * A HEAD request, so the reading is the round trip rather than the size of an answer.
+     */
+    fun measureLatency(
+        credentials: XtreamCredentials,
+        attempts: Int,
+    ): List<Int> {
+        val endpoint = XtreamEndpointParser.parse(credentials.serverUrl)
+        val url =
+            endpoint.baseUrl
+                .newBuilder()
+                .addPathSegment("player_api.php")
+                .addQueryParameter("username", credentials.username)
+                .addQueryParameter("password", credentials.password)
+                .build()
+        val probe = httpClient.newBuilder().callTimeout(3, TimeUnit.SECONDS).build()
+
+        // HEAD first, GET as the fallback. Plenty of panels answer 405 or 501 to a HEAD they have
+        // never been asked for, and treating that as loss would report a perfectly healthy
+        // connection as dropping every request.
+        var useHead = true
+        return (1..attempts).mapNotNull {
+            fun attempt(head: Boolean): Int? =
+                runCatching {
+                    val builder =
+                        Request.Builder()
+                            .url(url)
+                            .header("User-Agent", userAgent)
+                    val request = if (head) builder.head().build() else builder.get().build()
+                    val started = System.nanoTime()
+                    probe.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) return@runCatching null
+                        // Drained so the connection can be reused; an unread body would make the
+                        // next round trip pay for a new one and inflate the reading.
+                        response.body.bytes()
+                        ((System.nanoTime() - started) / 1_000_000).toInt()
+                    }
+                }.getOrNull()
+
+            attempt(useHead) ?: if (useHead) {
+                // Remembered, so the remaining attempts do not each pay for a refused HEAD.
+                useHead = false
+                attempt(false)
+            } else {
+                null
+            }
+        }
+    }
+
     private fun request(
         credentials: XtreamCredentials,
         action: String? = null,
@@ -864,6 +986,14 @@ class XtreamClient(
         XtreamClientException(XtreamFailureReason.INVALID_RESPONSE, message)
 
     private companion object {
+        /**
+         * Read size for the throughput probe.
+         *
+         * Big enough that the loop is not the bottleneck on a fast line, small enough that the
+         * budget check between reads still stops the test roughly on time.
+         */
+        const val BUFFER_BYTES = 64 * 1024
+
         /**
          * The longest single catch-up request: twelve hours.
          *

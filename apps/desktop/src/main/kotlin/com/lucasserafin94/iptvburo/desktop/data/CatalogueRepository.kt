@@ -40,6 +40,48 @@ import java.net.URI
  * the dog. A test pins the two together, so a change to either is caught rather than producing an
  * interface whose default quietly disagrees with its implementation.
  */
+/**
+ * How long a diagnostic transfer may run.
+ *
+ * Long enough to outlast the local buffer and measure the network, short enough that somebody
+ * waiting on the screen does not think it has hung. The test stops at the budget and reports what
+ * it read, rather than waiting for a fixed size that a slow line would never finish.
+ */
+const val DIAGNOSTIC_BUDGET_MILLIS = 6_000L
+
+/** Enough round trips to see jitter and loss without making the screen wait. */
+const val DIAGNOSTIC_PING_ATTEMPTS = 8
+
+/**
+ * Bytes moved and the time they took, with no trace of where they came from.
+ *
+ * The address carried the account's credentials, so it stays inside the repository and only this
+ * reaches the screen.
+ */
+data class TransferSample(
+    val bytes: Long,
+    val milliseconds: Long,
+)
+
+/**
+ * Round trips to the provider: how long they took, and how many never answered.
+ *
+ * Failures are counted rather than thrown. A connection dropping one request in ten is exactly what
+ * the viewer needs told, and an exception would lose that in favour of "the test failed".
+ */
+data class LatencySample(
+    val samplesMillis: List<Int>,
+    val attempted: Int,
+) {
+    /** The middle sample, which one slow outlier cannot drag the way an average can. */
+    val medianMillis: Int?
+        get() = samplesMillis.sorted().takeIf { it.isNotEmpty() }?.let { it[it.size / 2] }
+
+    /** How many round trips never came back, as a percentage of those tried. */
+    val lossPercent: Double
+        get() = if (attempted <= 0) 0.0 else (attempted - samplesMillis.size) * 100.0 / attempted
+}
+
 const val CATALOGUE_PAGE_SIZE = 80
 
 /** As above, for search. */
@@ -123,6 +165,28 @@ interface CatalogueRepository {
      * snapshot. Any implementation of this interface has to keep that promise.
      */
     fun buildConfirmedPlaybackUri(target: XtreamPlaybackTarget): URI
+
+    /**
+     * Measures the connection to the provider, without exposing where it went.
+     *
+     * The diagnostics screen must not receive a URL: it would be a credentialed address travelling
+     * into UI state, where a recomposition snapshot or a crash dump could keep it. So the request
+     * is made in here, and only the reading comes back.
+     *
+     * Returns the bytes read and the milliseconds they took, or null when there is no session to
+     * measure. The caller decides what that means — see
+     * [com.lucasserafin94.iptvburo.domain.model.ConnectionDiagnostics].
+     */
+    fun measureProviderTransfer(budgetMillis: Long = DIAGNOSTIC_BUDGET_MILLIS): TransferSample? = null
+
+    /**
+     * Round-trip time to the provider, in milliseconds, across [attempts] tries.
+     *
+     * Separate from the transfer because latency and throughput fail independently: a fast line
+     * with terrible latency still stalls on every channel change, and a viewer told only their
+     * speed would conclude the app is at fault.
+     */
+    fun measureProviderLatency(attempts: Int = DIAGNOSTIC_PING_ATTEMPTS): LatencySample? = null
 
     /**
      * Cover addresses this subscription hands out for thousands of titles at once.

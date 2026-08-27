@@ -796,6 +796,26 @@ class SessionXtreamRepository(
         }
     }
 
+    override fun measureProviderTransfer(budgetMillis: Long): TransferSample? {
+        // No session, nothing to measure. Null rather than an exception: the diagnostics screen
+        // runs before anyone has signed in too, and the other readings are still worth having.
+        if (synchronized(lock) { credentialVault } == null) return null
+        return runCatching {
+            withCredentials { credentials -> client.measureTransfer(credentials, budgetMillis) }
+        }.getOrNull()?.let { (bytes, millis) -> TransferSample(bytes = bytes, milliseconds = millis) }
+    }
+
+    override fun measureProviderLatency(attempts: Int): LatencySample? {
+        if (synchronized(lock) { credentialVault } == null) return null
+        val samples =
+            runCatching {
+                withCredentials { credentials -> client.measureLatency(credentials, attempts) }
+            }.getOrDefault(emptyList())
+        // Reported even when every attempt failed: "none of eight requests came back" is the most
+        // useful thing this screen can say, and an empty result would hide it.
+        return LatencySample(samplesMillis = samples, attempted = attempts)
+    }
+
     override fun placeholderArtworkUrls(): Set<String> =
         synchronized(lock) {
             // Recomputed only when the loaded catalogues have changed, which the count identifies

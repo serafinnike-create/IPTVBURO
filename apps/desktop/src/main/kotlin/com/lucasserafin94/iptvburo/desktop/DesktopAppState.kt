@@ -142,6 +142,7 @@ import com.lucasserafin94.iptvburo.metadata.CriticScoresClient
 import com.lucasserafin94.iptvburo.metadata.TMDB_NAMESPACE
 import com.lucasserafin94.iptvburo.metadata.TMDB_SERIES_NAMESPACE
 import com.lucasserafin94.iptvburo.desktop.data.AdultArtworkShelf
+import com.lucasserafin94.iptvburo.desktop.diagnostics.DiagnosticsRunner
 import com.lucasserafin94.iptvburo.metadata.AdultArtworkClient
 import com.lucasserafin94.iptvburo.metadata.TmdbAudienceScore
 import com.lucasserafin94.iptvburo.metadata.TmdbClient
@@ -1121,6 +1122,18 @@ class DesktopAppState(
         adultArtworkRevision
         return shelf.posterFor(item.name.editorialTitle())
     }
+
+    /**
+     * A connection test against the provider this session is signed in to.
+     *
+     * Built here rather than in the screen so the repository stays private: it holds the account's
+     * credentials, and a screen that could reach it could also put a credentialed URL into UI
+     * state, where a recomposition snapshot or a crash dump would keep it.
+     *
+     * A new one per call, because it keeps nothing between runs and a stored one would pin the
+     * repository it was built against after a sign-out.
+     */
+    fun newDiagnosticsRunner(): DiagnosticsRunner = DiagnosticsRunner(repository = xtreamRepository)
 
     /** Playlists already configured, offered so a new profile can reuse one. */
     fun savedSources(): List<XtreamSource> = sourceLibrary.sources()

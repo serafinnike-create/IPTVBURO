@@ -207,6 +207,9 @@ fun DesktopApp(
     var showRemoteSource by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
 
+    /** The connection test, opened from the header beside the refresh button. */
+    var diagnosticsOpen by remember { mutableStateOf(false) }
+
     /** Whether the TMDb key walkthrough is showing, over the settings window. */
     var tmdbGuideOpen by remember { mutableStateOf(false) }
     var omdbGuideOpen by remember { mutableStateOf(false) }
@@ -478,6 +481,7 @@ fun DesktopApp(
                             onEndSession = appState::disconnectXtream,
                             catalogRefreshing = appState.xtreamStatus is XtreamStatus.LoadingCatalog,
                             onRefreshCatalog = { scope.launch { appState.refreshCatalog() } },
+                            onOpenDiagnostics = { diagnosticsOpen = true },
                             metadataApiKey = appState.metadataApiKey,
                             onMetadataApiKeyChange = appState::updateMetadataApiKey,
                             streamingRegion = appState.streamingRegion,
@@ -1166,6 +1170,16 @@ fun DesktopApp(
                 )
             }
 
+            if (diagnosticsOpen) {
+                DiagnosticsDialog(
+                    text = strings,
+                    // Built per opening rather than held: it keeps nothing between runs, and a
+                    // stored one would pin the repository it was built against after a sign-out.
+                    runner = appState.newDiagnosticsRunner(),
+                    onClose = { diagnosticsOpen = false },
+                )
+            }
+
             if (settingsOpen) {
                 SettingsDialog(
                     appState = appState,
@@ -1781,6 +1795,8 @@ private fun TopBar(
     onEndSession: () -> Unit,
     catalogRefreshing: Boolean,
     onRefreshCatalog: () -> Unit,
+    /** Opens the connection test, beside the button that refreshes the lists. */
+    onOpenDiagnostics: () -> Unit,
     metadataApiKey: String,
     onMetadataApiKeyChange: (String) -> Unit,
     streamingRegion: String,
@@ -1865,6 +1881,34 @@ private fun TopBar(
                                     maxLines = 1,
                                 )
                             }
+                        }
+                    }
+                    // Beside the refresh button, because the two answer the same complaint from
+                    // opposite ends: "my list is wrong" and "my picture keeps freezing". Somebody
+                    // who cannot tell which of the two they have will try both, and both are here.
+                    Spacer(Modifier.width(BuroSpacing.Sm))
+                    BuroInteractiveRow(
+                        onClick = onOpenDiagnostics,
+                        selected = false,
+                        shape = BuroRadius.Pill,
+                        contentDescription = text.shareStrings.screens.diagnosticsAction,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = BuroSpacing.Sm, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "◉",
+                                color = BuroColors.Primary,
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = text.shareStrings.screens.diagnosticsAction,
+                                color = BuroColors.TextMuted,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                            )
                         }
                     }
                 }
