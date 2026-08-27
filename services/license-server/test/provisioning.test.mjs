@@ -15,7 +15,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
-import worker from '../src/index.js';
+import worker, { provisioningAuditDetail } from '../src/index.js';
 import {
   saveProvisioning,
   provisioningStatus,
@@ -574,4 +574,52 @@ test('a credencial continua a viajar inteira quando é enviada', async () => {
   const claimed = await claimProvisioning(DEVICE, env);
   assert.deepEqual(claimed, CREDENTIAL);
   env.DB.close();
+});
+
+/*
+  A trilha de auditoria num envio sem conexão.
+
+  A rota lia `saved.server.slice(...)` direto. Num envio só de chave esse valor é
+  null, então o pedido inteiro estourava e quem vende via "Não foi possível enviar.
+  Confira o endereço do servidor" — apontando para um campo deixado vazio de
+  propósito. Os testes anteriores chamavam saveProvisioning direto e nunca
+  passavam pela rota, que é onde o defeito estava.
+*/
+
+test('a trilha descreve um envio que não trouxe conexão', () => {
+  const detail = provisioningAuditDetail({
+    ok: true, server: null, username: null, listLabel: null,
+    metadataKey: true, criticsKey: false,
+  });
+
+  assert.equal(detail, 'chave:tmdb');
+});
+
+test('a trilha continua descrevendo a conexão quando ela é enviada', () => {
+  const detail = provisioningAuditDetail({
+    ok: true, server: CREDENTIAL.server, username: CREDENTIAL.username,
+    listLabel: 'Plano Familia', metadataKey: false, criticsKey: false,
+  });
+
+  assert.ok(detail.includes(CREDENTIAL.server));
+  assert.ok(detail.includes(CREDENTIAL.username));
+  assert.ok(detail.includes('Plano Familia'));
+});
+
+test('a senha nunca entra na trilha', () => {
+  const detail = provisioningAuditDetail({
+    ok: true, server: CREDENTIAL.server, username: CREDENTIAL.username,
+    password: CREDENTIAL.password, metadataKey: true, criticsKey: true,
+  });
+
+  assert.ok(!detail.includes(CREDENTIAL.password));
+});
+
+test('a rota registra a trilha pelo auxiliar, nunca lendo o campo direto', () => {
+  /* Ler saved.server direto é exatamente o defeito: volta a estourar num envio
+     que não traz conexão, e o painel culpa o endereço vazio. */
+  const source = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
+
+  assert.ok(source.includes('provisioningAuditDetail(saved)'), 'a rota usa o auxiliar');
+  assert.ok(!source.includes('saved.server.slice'), 'e nunca lê o campo direto');
 });

@@ -119,6 +119,27 @@ const MAX_STRIPE_WEBHOOK_BODY_BYTES = 512 * 1024;
 /** Hourly refund reconciliation is bounded so one cron invocation cannot exhaust Worker limits. */
 const GOOGLE_PLAY_RECONCILIATION_LIMIT = 50;
 
+/**
+ * O que a trilha de auditoria registra sobre um envio.
+ *
+ * Um envio pode não trazer conexão nenhuma — só uma chave, só um nome — e ler
+ * `saved.server` direto rebentava o pedido inteiro nesse caso: quem vende via
+ * "Não foi possível enviar. Confira o endereço do servidor" para um formulário
+ * onde o endereço estava vazio de propósito.
+ *
+ * A senha nunca entra aqui, nem truncada. O que interessa a uma trilha é quem
+ * aplicou, em qual aparelho e o que foi entregue.
+ */
+export function provisioningAuditDetail(saved) {
+  const parts = [];
+  if (saved.server) parts.push(`server:${String(saved.server).slice(0, 100)}`);
+  if (saved.username) parts.push(`user:${String(saved.username).slice(0, 60)}`);
+  if (saved.listLabel) parts.push(`nome:${String(saved.listLabel).slice(0, 60)}`);
+  if (saved.metadataKey) parts.push('chave:tmdb');
+  if (saved.criticsKey) parts.push('chave:omdb');
+  return parts.join(' ') || 'sem alteracao';
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -316,7 +337,7 @@ async function handleAdmin(request, env, url) {
          trilha e quem aplicou, em qual aparelho e para qual servidor. */
       await recordAdminAudit(
         administrator.actor, 'DEVICE_PROVISIONED', deviceId,
-        `server:${saved.server.slice(0, 100)} user:${saved.username.slice(0, 60)}`,
+        provisioningAuditDetail(saved),
         request.cf?.country, env,
       );
       return json({ ok: true });
