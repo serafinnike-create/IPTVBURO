@@ -1722,6 +1722,29 @@ var BuroApp = (function () {
             escapeHtml(t('cancel')) + '</button></div></section></main>';
     }
 
+    /*
+      A confirmacao de limpar a lista de Continuar assistindo.
+
+      Igual a do Historico na forma, e diferente no que faz: aqui nada e
+      apagado. Cada linha e marcada como concluida, que e exatamente o que
+      `forgetContinueProgress` faz um cartao por vez.
+
+      A distincao importa. Apagar as linhas tiraria os titulos do Historico
+      tambem — a mesma tabela responde pelas duas telas — e quem pediu para
+      limpar a fila de retomada nao pediu para esquecer o que assistiu.
+    */
+    function renderContinueClearConfirm() {
+        var busy = Boolean(state.screenData && state.screenData.busy);
+        var profileName = state.activeProfile ? state.activeProfile.name : '';
+        root.innerHTML = '<main class="resume-screen"><section class="resume-panel history-clear-panel">' +
+            '<span class="hero-kicker">IPTV BURO</span><h1>' + escapeHtml(t('continueClearConfirmTitle')) +
+            '</h1><h2>' + escapeHtml(profileName) + '</h2><p>' + escapeHtml(t('continueClearConfirmBody')) +
+            '</p><div class="action-row"><button class="button danger focusable" data-action="continue-clear-confirm"' +
+            (busy ? ' disabled' : '') + '>' + escapeHtml(busy ? t('loading') : t('continueClearAll')) +
+            '</button><button class="button ghost focusable" data-action="back"' + (busy ? ' disabled' : '') + '>' +
+            escapeHtml(t('cancel')) + '</button></div></section></main>';
+    }
+
     function navHtml() {
         return navigationEntries().map(function (entry) {
             return '<li class="nav-item focusable ' + (state.section === entry.section ? 'selected' : '') +
@@ -5556,6 +5579,22 @@ var BuroApp = (function () {
                 attr(historyQuery) + '" placeholder="' + attr(t('search')) + '">' +
                 (items.length ? '<button class="button ghost focusable" data-action="history-clear">' +
                     escapeHtml(t('historyClearAll')) + '</button>' : '') + '</div>';
+        } else if (items.length) {
+            /*
+              Limpar a lista inteira, e nao um cartao por vez.
+
+              Cada cartao ja tem "Remover da lista", mas uma lista de vinte
+              titulos exige vinte idas ao mesmo botao. O Historico ao lado ja
+              oferece o "apagar tudo"; nao havia motivo para Continuar assistindo
+              nao oferecer.
+
+              Passa pela mesma tela de confirmacao, e nao apaga direto: e uma
+              acao que nao tem volta, e um ENTER errado no controle remoto e
+              facil demais.
+            */
+            toolbar = '<div class="history-toolbar continue-toolbar">' +
+                '<button class="button ghost focusable" data-action="continue-clear">' +
+                escapeHtml(t('continueClearAll')) + '</button></div>';
         }
         if (!items.length) {
             libraryPages[section] = 0;
@@ -5859,6 +5898,52 @@ var BuroApp = (function () {
             libraryPages.HISTORY = 0;
             goBack();
             showToast(t('historyCleared'), false);
+        }, function () {
+            progressMutationPending = false;
+            state.screenData.busy = false;
+            render();
+            showToast(t('historyChangeFailed'), true);
+        });
+    }
+
+    /*
+      Marca como concluida toda linha que a lista de retomada mostraria.
+
+      As gravacoes vao para o banco numa so passada e o estado local e refeito a
+      partir do mesmo criterio, para as duas metades nao poderem divergir se uma
+      escrita falhar no meio.
+    */
+    function confirmClearContinue() {
+        var profileId = state.activeProfile && state.activeProfile.id;
+        var now = Date.now();
+        var pending;
+        if (!profileId || progressMutationPending || state.screen !== 'CONTINUE_CLEAR_CONFIRM') { return; }
+        pending = state.progress.filter(function (entry) {
+            return entry.profileId === profileId && !entry.completed;
+        }).map(function (entry) {
+            var completed = {};
+            Object.keys(entry).forEach(function (key) { completed[key] = entry[key]; });
+            completed.completed = true;
+            completed.positionMs = Number(completed.durationMs) > 0 ? Number(completed.durationMs) :
+                Math.max(0, Number(completed.positionMs) || 0);
+            completed.updatedAt = now;
+            return completed;
+        });
+        if (!pending.length) { goBack(); return; }
+        progressMutationPending = true;
+        state.screenData = state.screenData || {};
+        state.screenData.busy = true;
+        render();
+        BuroStorage.putBatch('progress', pending, function () {
+            var byId = {};
+            pending.forEach(function (entry) { byId[entry.id] = entry; });
+            state.progress = state.progress.map(function (entry) {
+                return byId[entry.id] || entry;
+            });
+            progressMutationPending = false;
+            libraryPages.CONTINUE = 0;
+            goBack();
+            showToast(t('continueCleared'), false);
         }, function () {
             progressMutationPending = false;
             state.screenData.busy = false;
@@ -7995,6 +8080,7 @@ var BuroApp = (function () {
         else if (state.screen === 'RESUME_PROMPT') { renderResumePrompt(); }
         else if (state.screen === 'BULK_DOWNLOAD_CONFIRM') { renderBulkDownloadConfirm(); }
         else if (state.screen === 'HISTORY_CLEAR_CONFIRM') { renderHistoryClearConfirm(); }
+        else if (state.screen === 'CONTINUE_CLEAR_CONFIRM') { renderContinueClearConfirm(); }
         else if (state.screen === 'SOURCE_CHOICE') { renderSourceChoice(); }
         else if (state.screen === 'SOURCE_USB_M3U') { renderUsbM3uPicker(); }
         else if (state.screen === 'SOURCE_FORM') { renderSourceForm(state.screenData.type); }
@@ -8686,7 +8772,10 @@ var BuroApp = (function () {
         var ribbonTarget;
         var reminderReturnId;
         if (state.screen === 'LICENCE') { clearLicenceKeyTimer(true); }
-        if (state.screen === 'HISTORY_CLEAR_CONFIRM' && progressMutationPending) { return; }
+        /* Nao sair da confirmacao enquanto a gravacao corre: voltar no meio
+           deixaria metade das linhas marcadas e a tela ja renderizada de novo. */
+        if ((state.screen === 'HISTORY_CLEAR_CONFIRM' || state.screen === 'CONTINUE_CLEAR_CONFIRM') &&
+                progressMutationPending) { return; }
         if (state.screen === 'PERSON' && tmdbPersonRequest && tmdbPersonRequest.abort) {
             tmdbPersonRequest.abort(); tmdbPersonRequest = null;
         }
@@ -11476,6 +11565,8 @@ var BuroApp = (function () {
         } else if (action === 'continue-play') { playProgressRow(id, false);
         } else if (action === 'continue-restart') { playProgressRow(id, true);
         } else if (action === 'history-remove') { forgetHistoryProgress(id);
+        } else if (action === 'continue-clear') { pushScreen('CONTINUE_CLEAR_CONFIRM', {});
+        } else if (action === 'continue-clear-confirm') { confirmClearContinue();
         } else if (action === 'history-clear') { pushScreen('HISTORY_CLEAR_CONFIRM', {});
         } else if (action === 'history-clear-confirm') { confirmClearHistory();
         } else if (action === 'download-filter') {
