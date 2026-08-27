@@ -802,6 +802,11 @@ class SessionXtreamRepository(
         if (synchronized(lock) { credentialVault } == null) return null
         return runCatching {
             withCredentials { credentials -> client.measureTransfer(credentials, budgetMillis) }
+        }.onFailure { failure ->
+            // Logged, because a silent null here is what made the first build unexplainable: the
+            // screen said "could not measure" and there was nothing anywhere saying why. The class
+            // and message only — never the URL, which carries the account's credentials.
+            println("[diagnostico] transferencia falhou: ${failure::class.simpleName}: ${failure.message}")
         }.getOrNull()?.let { (bytes, millis) -> TransferSample(bytes = bytes, milliseconds = millis) }
     }
 
@@ -810,6 +815,8 @@ class SessionXtreamRepository(
         val samples =
             runCatching {
                 withCredentials { credentials -> client.measureLatency(credentials, attempts) }
+            }.onFailure { failure ->
+                println("[diagnostico] latencia falhou: ${failure::class.simpleName}: ${failure.message}")
             }.getOrDefault(emptyList())
         // Reported even when every attempt failed: "none of eight requests came back" is the most
         // useful thing this screen can say, and an empty result would hide it.

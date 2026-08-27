@@ -24,6 +24,8 @@ class CatalogueContractTest {
         read("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/data/CatalogueRepository.kt")
     private val session =
         read("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/data/SessionXtreamRepository.kt")
+    private val switching =
+        read("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/data/SwitchingCatalogueRepository.kt")
 
     @Test
     fun `the existing repository implements the contract`() {
@@ -50,6 +52,35 @@ class CatalogueContractTest {
                 .toSet()
         assertEquals(emptySet(), declared - implemented, "declared but not implemented")
         assertEquals(22, declared.size, "the contract covers what the app actually uses")
+    }
+
+    /**
+     * The switcher must forward every method, not inherit a default.
+     *
+     * A method with a default body on the interface and no override here compiles perfectly and
+     * then answers "nothing" for ever. That shipped: the diagnostics screen reported "could not
+     * measure the speed" on a working connection, because the two probes were added to the
+     * interface and the session repository and never to the switcher in between. There was no
+     * error anywhere — the default simply returned null.
+     */
+    @Test
+    fun `the switcher forwards every method rather than inheriting a default`() {
+        val declared =
+            Regex("""^    fun (\w+)\(""", RegexOption.MULTILINE)
+                .findAll(contract)
+                .map { it.groupValues[1] }
+                .toSet()
+        val forwarded =
+            Regex("""^    override fun (\w+)\(""", RegexOption.MULTILINE)
+                .findAll(switching)
+                .map { it.groupValues[1] }
+                .toSet()
+
+        assertEquals(
+            emptySet(),
+            declared - forwarded,
+            "estes metodos caem no valor por defeito em vez de chegarem a fonte activa",
+        )
     }
 
     @Test

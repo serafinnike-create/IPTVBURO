@@ -203,6 +203,8 @@
     <string name="catalogue_layout_list">List</string>
     <string name="catalogue_filter_genre">Genre</string>
     <string name="catalogue_filter_year">Year</string>
+    <string name="catalogue_filter_rating">Rating</string>
+    <string name="catalogue_filter_new_releases">%1$d releases</string>
     <string name="catalogue_filter_all">All</string>
     <string name="catalogue_filter_clear">Clear filters</string>
     <string name="catalogue_sort_provider">Provider order</string>
@@ -240,6 +242,7 @@
     <string name="tmdb_guide_open_site">Open themoviedb.org</string>
     <string name="player_error_stream_gone">This channel is no longer available from your provider. The playlist still lists it, but the stream has been removed.</string>
     <string name="details_cast">Cast</string>
+    <string name="details_similar_titles">You might also like</string>
     <string name="series_episode_watched">Watched</string>
     <string name="legal_body_two">By continuing, you confirm that you hold lawful authorisation to access everything you add, and that you alone are responsible for the sources you use. The app does not bypass DRM, authentication, paywalls or any technical protection. If your source requires that, it will not work here.</string>
     <string name="legal_body_three">IPTV BURO is not affiliated with any provider, broadcaster or streaming service, and is not responsible for content delivered by third parties. Use the app in accordance with the law where you live.</string>
@@ -311,6 +314,7 @@
     <string name="cache_settings_usage">Using %1$s</string>
     <string name="cache_settings_clear">Clear cache</string>
     <string name="cache_fill_progress">%1$d of %2$d images</string>
+    <string name="cache_fill_rate">%1$s/s</string>
     <string name="cache_fill_pause">Pause</string>
     <string name="cache_fill_start">Download now</string>
     <string name="cache_fill_resume">Resume</string>
@@ -349,4 +353,34 @@
     <string name="tmdb_settings_advanced">Advanced: a key for this profile only</string>
     <string name="metadata_key_saved">Saved</string>
     <string name="metadata_key_absent">Not set</string>
+
+    <!-- O teste de ligacao, ao lado de atualizar as listas na tela principal. -->
+    <string name="diagnostics_action">Diagnostics</string>
+    <string name="diagnostics_title">Connection diagnostics</string>
+    <string name="diagnostics_running">Testing…</string>
+    <string name="diagnostics_run">Test again</string>
+    <string name="diagnostics_close">Close</string>
+    <string name="diagnostics_download">Download</string>
+    <string name="diagnostics_ping">Latency</string>
+    <string name="diagnostics_loss">Packet loss</string>
+    <string name="diagnostics_catalogue">Playlist</string>
+    <string name="diagnostics_connection">Connection</string>
+    <string name="diagnostics_memory">Memory</string>
+    <string name="diagnostics_address">IP address</string>
+    <string name="diagnostics_gateway">Gateway</string>
+    <string name="diagnostics_netmask">Subnet mask</string>
+    <string name="diagnostics_verdict_good">Everything looks fine</string>
+    <string name="diagnostics_verdict_warning">Worth a look</string>
+    <string name="diagnostics_verdict_problem">Problem found</string>
+    <string name="diagnostics_quality_unstable">Poor connection: this will cause freezing and stalls</string>
+    <string name="diagnostics_quality_sd">Modest connection: enough for standard quality</string>
+    <string name="diagnostics_quality_hd">Good connection for 1080p films</string>
+    <string name="diagnostics_quality_uhd">Perfect connection for 4K and live TV</string>
+    <string name="diagnostics_quality_unknown">The speed could not be measured</string>
+    <string name="diagnostics_wireless">Wi-Fi: a cable avoids the stalls wireless tends to cause</string>
+    <string name="diagnostics_wired">Wired</string>
+    <string name="diagnostics_no_link">No network connection</string>
+    <string name="diagnostics_catalogue_empty">The playlist did not load: check your subscription with your seller</string>
+    <string name="diagnostics_signed_out">No playlist configured</string>
+    <string name="diagnostics_low_memory">Low memory: close other apps or restart</string>
 </resources>

@@ -115,6 +115,7 @@
     <string name="share_opening_title">Abriendo el título compartido…</string>
     <string name="share_title_not_in_library">Este título no está en tu lista.</string>
     <string name="details_cast">Reparto</string>
+    <string name="details_similar_titles">También te puede gustar</string>
     <string name="settings_title">Ajustes</string>
     <string name="settings_version">Versión %1$s</string>
     <string name="settings_legal">IPTV BURO no vende ni proporciona contenido.</string>
@@ -224,6 +225,8 @@
     <string name="catalogue_layout_list">Lista</string>
     <string name="catalogue_filter_genre">Género</string>
     <string name="catalogue_filter_year">Año</string>
+    <string name="catalogue_filter_rating">Puntuación</string>
+    <string name="catalogue_filter_new_releases">Estrenos %1$d</string>
     <string name="catalogue_filter_all">Todos</string>
     <string name="catalogue_filter_clear">Borrar los filtros</string>
     <string name="catalogue_sort_provider">Orden del proveedor</string>
@@ -311,6 +314,7 @@
     <string name="cache_settings_usage">Usando %1$s</string>
     <string name="cache_settings_clear">Vaciar caché</string>
     <string name="cache_fill_progress">%1$d de %2$d imágenes</string>
+    <string name="cache_fill_rate">%1$s/s</string>
     <string name="cache_fill_pause">Pausar</string>
     <string name="cache_fill_start">Descargar ahora</string>
     <string name="cache_fill_resume">Continuar</string>
@@ -349,4 +353,34 @@
     <string name="tmdb_settings_advanced">Avanzado: una clave solo para este perfil</string>
     <string name="metadata_key_saved">Guardada</string>
     <string name="metadata_key_absent">Sin configurar</string>
+
+    <!-- O teste de ligacao, ao lado de atualizar as listas na tela principal. -->
+    <string name="diagnostics_action">Diagnóstico</string>
+    <string name="diagnostics_title">Diagnóstico de conexión</string>
+    <string name="diagnostics_running">Probando…</string>
+    <string name="diagnostics_run">Probar de nuevo</string>
+    <string name="diagnostics_close">Cerrar</string>
+    <string name="diagnostics_download">Descarga</string>
+    <string name="diagnostics_ping">Latencia</string>
+    <string name="diagnostics_loss">Pérdida de paquetes</string>
+    <string name="diagnostics_catalogue">Lista</string>
+    <string name="diagnostics_connection">Conexión</string>
+    <string name="diagnostics_memory">Memoria</string>
+    <string name="diagnostics_address">Dirección IP</string>
+    <string name="diagnostics_gateway">Puerta de enlace</string>
+    <string name="diagnostics_netmask">Máscara de red</string>
+    <string name="diagnostics_verdict_good">Todo bien</string>
+    <string name="diagnostics_verdict_warning">Atención</string>
+    <string name="diagnostics_verdict_problem">Problema encontrado</string>
+    <string name="diagnostics_quality_unstable">Conexión mala: puede causar cortes y congelamientos</string>
+    <string name="diagnostics_quality_sd">Conexión justa: suficiente para calidad estándar</string>
+    <string name="diagnostics_quality_hd">Conexión buena para películas en 1080p</string>
+    <string name="diagnostics_quality_uhd">Conexión perfecta para 4K y TV en vivo</string>
+    <string name="diagnostics_quality_unknown">No se pudo medir la velocidad</string>
+    <string name="diagnostics_wireless">Wi-Fi: el cable evita cortes que la señal inalámbrica causa</string>
+    <string name="diagnostics_wired">Cable de red</string>
+    <string name="diagnostics_no_link">Sin conexión de red</string>
+    <string name="diagnostics_catalogue_empty">La lista no cargó: revise la suscripción con quien se la vendió</string>
+    <string name="diagnostics_signed_out">Sin lista configurada</string>
+    <string name="diagnostics_low_memory">Poca memoria: cierre otras apps o reinicie</string>
 </resources>

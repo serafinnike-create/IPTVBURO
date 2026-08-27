@@ -487,7 +487,10 @@ class XtreamClient(
         return runCatching {
             val started = System.nanoTime()
             probe.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
+                if (!response.isSuccessful) {
+                    println("[diagnostico] provedor recusou a medicao: ${response.code}")
+                    return null
+                }
                 var read = 0L
                 val buffer = ByteArray(BUFFER_BYTES)
                 val stream = response.body.byteStream()
@@ -501,7 +504,14 @@ class XtreamClient(
                     read += count
                 }
                 val took = (System.nanoTime() - started) / 1_000_000
-                if (read <= 0L) null else read to took
+                if (read <= 0L) {
+                    // Distinguishes "answered with nothing" from "threw", which look identical
+                    // from outside and need completely different fixes.
+                    println("[diagnostico] provedor respondeu ${response.code} sem corpo em ${took}ms")
+                    null
+                } else {
+                    read to took
+                }
             }
         }.getOrNull()
     }

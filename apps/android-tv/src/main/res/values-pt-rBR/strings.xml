@@ -208,6 +208,8 @@
     <string name="catalogue_layout_list">Lista</string>
     <string name="catalogue_filter_genre">Gênero</string>
     <string name="catalogue_filter_year">Ano</string>
+    <string name="catalogue_filter_rating">Nota</string>
+    <string name="catalogue_filter_new_releases">Lançamentos %1$d</string>
     <string name="catalogue_filter_all">Todos</string>
     <string name="catalogue_filter_clear">Limpar filtros</string>
     <string name="catalogue_sort_provider">Ordem do provedor</string>
@@ -245,6 +247,7 @@
     <string name="tmdb_guide_open_site">Abrir themoviedb.org</string>
     <string name="player_error_stream_gone">Este canal não está mais disponível no seu provedor. A lista ainda mostra ele, mas a transmissão foi removida.</string>
     <string name="details_cast">Elenco</string>
+    <string name="details_similar_titles">Você também pode gostar</string>
     <string name="series_episode_watched">Assistido</string>
     <string name="legal_body_two">Ao continuar, você declara que possui autorização legal para acessar todo conteúdo que adicionar, e que é o único responsável pelas fontes que usar. O aplicativo não contorna DRM, autenticação, paywall ou qualquer proteção técnica. Se a sua fonte exigir isso, ela não vai funcionar aqui.</string>
     <string name="legal_body_three">O IPTV BURO não tem vínculo com nenhum provedor, emissora ou serviço de streaming, e não se responsabiliza pelo conteúdo entregue por terceiros. Use o aplicativo conforme a lei do seu país.</string>
@@ -316,6 +319,7 @@
     <string name="cache_settings_usage">Usando %1$s</string>
     <string name="cache_settings_clear">Limpar cache</string>
     <string name="cache_fill_progress">%1$d de %2$d imagens</string>
+    <string name="cache_fill_rate">%1$s/s</string>
     <string name="cache_fill_pause">Pausar</string>
     <string name="cache_fill_start">Baixar agora</string>
     <string name="cache_fill_resume">Continuar</string>
@@ -354,4 +358,34 @@
     <string name="tmdb_settings_advanced">Avançado: uma chave só para este perfil</string>
     <string name="metadata_key_saved">Salva</string>
     <string name="metadata_key_absent">Não configurada</string>
+
+    <!-- O teste de ligacao, ao lado de atualizar as listas na tela principal. -->
+    <string name="diagnostics_action">Diagnóstico</string>
+    <string name="diagnostics_title">Diagnóstico da conexão</string>
+    <string name="diagnostics_running">Testando…</string>
+    <string name="diagnostics_run">Testar de novo</string>
+    <string name="diagnostics_close">Fechar</string>
+    <string name="diagnostics_download">Download</string>
+    <string name="diagnostics_ping">Latência</string>
+    <string name="diagnostics_loss">Perda de pacotes</string>
+    <string name="diagnostics_catalogue">Lista</string>
+    <string name="diagnostics_connection">Conexão</string>
+    <string name="diagnostics_memory">Memória</string>
+    <string name="diagnostics_address">Endereço IP</string>
+    <string name="diagnostics_gateway">Gateway</string>
+    <string name="diagnostics_netmask">Máscara de rede</string>
+    <string name="diagnostics_verdict_good">Está tudo bem</string>
+    <string name="diagnostics_verdict_warning">Atenção</string>
+    <string name="diagnostics_verdict_problem">Problema encontrado</string>
+    <string name="diagnostics_quality_unstable">Conexão ruim: isso vai causar travamentos e cortes</string>
+    <string name="diagnostics_quality_sd">Conexão razoável: dá para qualidade normal</string>
+    <string name="diagnostics_quality_hd">Conexão boa para filmes em 1080p</string>
+    <string name="diagnostics_quality_uhd">Conexão perfeita para 4K e TV ao vivo</string>
+    <string name="diagnostics_quality_unknown">Não foi possível medir a velocidade</string>
+    <string name="diagnostics_wireless">Wi-Fi: o cabo evita os cortes que o sem-fio costuma causar</string>
+    <string name="diagnostics_wired">Cabo de rede</string>
+    <string name="diagnostics_no_link">Sem conexão de rede</string>
+    <string name="diagnostics_catalogue_empty">A lista não carregou: confirme a assinatura com quem vendeu</string>
+    <string name="diagnostics_signed_out">Sem lista configurada</string>
+    <string name="diagnostics_low_memory">Pouca memória: feche outros aplicativos ou reinicie</string>
 </resources>

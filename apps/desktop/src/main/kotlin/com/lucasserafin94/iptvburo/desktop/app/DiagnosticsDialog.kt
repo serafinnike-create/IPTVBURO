@@ -40,6 +40,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.domain.model.ConnectionDiagnostics.Finding
 import com.lucasserafin94.iptvburo.domain.model.ConnectionDiagnostics.Severity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
@@ -68,7 +69,13 @@ fun DiagnosticsDialog(
         // a second test look like a button that did nothing: the same numbers were still there, so
         // there was no sign anything had happened.
         report = null
+        val started = System.currentTimeMillis()
         report = withContext(Dispatchers.IO) { runCatching { runner.run() }.getOrNull() }
+        // A test that fails instantly — an unreachable provider — would otherwise finish before
+        // the screen drew a single frame of it, which is why pressing the button looked like
+        // nothing happening. The wait is for the person, not the measurement.
+        val elapsed = System.currentTimeMillis() - started
+        if (elapsed < MINIMUM_VISIBLE_MILLIS) delay(MINIMUM_VISIBLE_MILLIS - elapsed)
         running = false
     }
 
@@ -95,7 +102,7 @@ fun DiagnosticsDialog(
             val current = report
             when {
                 running -> {
-                    Spacer(Modifier.height(BuroSpacing.Md))
+                    Spacer(Modifier.height(BuroSpacing.Sm))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(
                             color = BuroColors.Primary,
@@ -105,9 +112,33 @@ fun DiagnosticsDialog(
                         Spacer(Modifier.width(BuroSpacing.Sm))
                         Text(
                             text = text.shareStrings.screens.diagnosticsRunning,
-                            color = BuroColors.TextMuted,
-                            style = MaterialTheme.typography.bodyMedium,
+                            color = BuroColors.Primary,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
                         )
+                    }
+
+                    // Every row it is about to fill, each with its own spinner. Without this the
+                    // panel emptied to a single line and then refilled, which on a fast failure
+                    // looked like a button that did nothing at all — reported exactly that way.
+                    Spacer(Modifier.height(BuroSpacing.Md))
+                    PENDING_ROWS.forEach { id ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(
+                                color = BuroColors.TextSubtle,
+                                strokeWidth = 1.5.dp,
+                                modifier = Modifier.size(11.dp),
+                            )
+                            Spacer(Modifier.width(BuroSpacing.Sm))
+                            Text(
+                                text = findingLabel(text, id),
+                                color = BuroColors.TextSubtle,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                     }
                 }
 
@@ -160,12 +191,31 @@ fun DiagnosticsDialog(
                     shape = BuroRadius.Pill,
                     contentDescription = text.shareStrings.screens.diagnosticsRun,
                 ) {
-                    Text(
-                        text = text.shareStrings.screens.diagnosticsRun,
-                        color = if (running) BuroColors.TextSubtle else BuroColors.Primary,
-                        style = MaterialTheme.typography.labelLarge,
+                    Row(
                         modifier = Modifier.padding(horizontal = BuroSpacing.Md, vertical = 8.dp),
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // The button says so itself while a test runs. A label that merely dimmed
+                        // was indistinguishable from a button that had failed to respond.
+                        if (running) {
+                            CircularProgressIndicator(
+                                color = BuroColors.Primary,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(13.dp),
+                            )
+                            Spacer(Modifier.width(BuroSpacing.Sm))
+                        }
+                        Text(
+                            text =
+                                if (running) {
+                                    text.shareStrings.screens.diagnosticsRunning
+                                } else {
+                                    text.shareStrings.screens.diagnosticsRun
+                                },
+                            color = if (running) BuroColors.TextSubtle else BuroColors.Primary,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
                 }
                 BuroInteractiveRow(
                     onClick = onClose,
@@ -292,6 +342,21 @@ private fun findingLabel(
         "memory" -> text.shareStrings.screens.diagnosticsMemory
         else -> id
     }
+
+/**
+ * The readings, in the order they will appear, so the panel can show them before it has them.
+ *
+ * Matches what DiagnosticsRunner produces. A row that appears while testing and then vanishes would
+ * be worse than none, so this list and that order are meant to stay together.
+ */
+private val PENDING_ROWS = listOf("download", "ping", "loss", "catalogue", "link", "memory")
+
+/**
+ * How long the test stays visible even when it finishes sooner.
+ *
+ * Long enough to read as work happening, short enough that nobody waits on it needlessly.
+ */
+private const val MINIMUM_VISIBLE_MILLIS = 900L
 
 /** The sentence under a reading, or null when the reading speaks for itself. */
 private fun adviceLabel(

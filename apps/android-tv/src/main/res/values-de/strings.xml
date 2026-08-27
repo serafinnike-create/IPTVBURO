@@ -203,6 +203,8 @@
     <string name="catalogue_layout_list">Liste</string>
     <string name="catalogue_filter_genre">Genre</string>
     <string name="catalogue_filter_year">Jahr</string>
+    <string name="catalogue_filter_rating">Bewertung</string>
+    <string name="catalogue_filter_new_releases">Neuerscheinungen %1$d</string>
     <string name="catalogue_filter_all">Alle</string>
     <string name="catalogue_filter_clear">Filter löschen</string>
     <string name="catalogue_sort_provider">Anbieter-Reihenfolge</string>
@@ -240,6 +242,7 @@
     <string name="tmdb_guide_open_site">themoviedb.org öffnen</string>
     <string name="player_error_stream_gone">Dieser Kanal ist bei Ihrem Anbieter nicht mehr verfügbar. Die Liste führt ihn noch auf, aber der Stream wurde entfernt.</string>
     <string name="details_cast">Besetzung</string>
+    <string name="details_similar_titles">Das könnte dir auch gefallen</string>
     <string name="series_episode_watched">Gesehen</string>
     <string name="legal_body_two">Mit dem Fortfahren bestätigen Sie, dass Sie über eine rechtmäßige Zugriffsberechtigung für alle hinzugefügten Inhalte verfügen und allein für die genutzten Quellen verantwortlich sind. Die App umgeht kein DRM, keine Authentifizierung, keine Bezahlschranke und keinen technischen Schutz. Erfordert Ihre Quelle das, funktioniert sie hier nicht.</string>
     <string name="legal_body_three">IPTV BURO steht in keiner Verbindung zu Anbietern, Sendern oder Streamingdiensten und haftet nicht für Inhalte Dritter. Nutzen Sie die App im Rahmen der bei Ihnen geltenden Gesetze.</string>
@@ -311,6 +314,7 @@
     <string name="cache_settings_usage">Belegt %1$s</string>
     <string name="cache_settings_clear">Cache leeren</string>
     <string name="cache_fill_progress">%1$d von %2$d Bildern</string>
+    <string name="cache_fill_rate">%1$s/s</string>
     <string name="cache_fill_pause">Pause</string>
     <string name="cache_fill_start">Jetzt laden</string>
     <string name="cache_fill_resume">Fortsetzen</string>
@@ -349,4 +353,34 @@
     <string name="tmdb_settings_advanced">Erweitert: ein Schlüssel nur für dieses Profil</string>
     <string name="metadata_key_saved">Gespeichert</string>
     <string name="metadata_key_absent">Nicht gesetzt</string>
+
+    <!-- O teste de ligacao, ao lado de atualizar as listas na tela principal. -->
+    <string name="diagnostics_action">Diagnose</string>
+    <string name="diagnostics_title">Verbindungsdiagnose</string>
+    <string name="diagnostics_running">Test läuft…</string>
+    <string name="diagnostics_run">Erneut testen</string>
+    <string name="diagnostics_close">Schließen</string>
+    <string name="diagnostics_download">Download</string>
+    <string name="diagnostics_ping">Latenz</string>
+    <string name="diagnostics_loss">Paketverlust</string>
+    <string name="diagnostics_catalogue">Liste</string>
+    <string name="diagnostics_connection">Verbindung</string>
+    <string name="diagnostics_memory">Speicher</string>
+    <string name="diagnostics_address">IP-Adresse</string>
+    <string name="diagnostics_gateway">Gateway</string>
+    <string name="diagnostics_netmask">Subnetzmaske</string>
+    <string name="diagnostics_verdict_good">Alles in Ordnung</string>
+    <string name="diagnostics_verdict_warning">Beachten</string>
+    <string name="diagnostics_verdict_problem">Problem gefunden</string>
+    <string name="diagnostics_quality_unstable">Schlechte Verbindung: verursacht Ruckeln und Aussetzer</string>
+    <string name="diagnostics_quality_sd">Mäßige Verbindung: reicht für Standardqualität</string>
+    <string name="diagnostics_quality_hd">Gute Verbindung für Filme in 1080p</string>
+    <string name="diagnostics_quality_uhd">Perfekte Verbindung für 4K und Live-TV</string>
+    <string name="diagnostics_quality_unknown">Die Geschwindigkeit konnte nicht gemessen werden</string>
+    <string name="diagnostics_wireless">WLAN: ein Kabel vermeidet die Aussetzer, die Funk verursacht</string>
+    <string name="diagnostics_wired">Kabel</string>
+    <string name="diagnostics_no_link">Keine Netzwerkverbindung</string>
+    <string name="diagnostics_catalogue_empty">Die Liste wurde nicht geladen: Abo beim Verkäufer prüfen</string>
+    <string name="diagnostics_signed_out">Keine Liste eingerichtet</string>
+    <string name="diagnostics_low_memory">Wenig Speicher: andere Apps schließen oder neu starten</string>
 </resources>
