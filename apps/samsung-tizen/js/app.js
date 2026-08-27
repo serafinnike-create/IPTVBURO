@@ -70,6 +70,10 @@ var BuroApp = (function () {
     var bootSweepTimer = null;
     var bootSweepDone = null;
     var homeCache = null;
+    /* Capa genérica detectada no catálogo Xtream ativo. Só o conjunto final
+       sobrevive à varredura; o mapa grande de contagens é descartado. */
+    var placeholderArtworkSourceId = null;
+    var placeholderArtworkUrls = Object.create(null);
     /* Cada pedido de página da prateleira ganha um número: uma resposta que
        chega depois de o filtro mudar não pode substituir a atual. */
     var catalogueShelfRequestId = 0;
@@ -202,7 +206,7 @@ var BuroApp = (function () {
         { tag: 'it', name: 'Italiano' },
         { tag: 'es', name: 'Español' }
     ];
-    var APP_VERSION_FALLBACK = '3.6.0';
+    var APP_VERSION_FALLBACK = '3.6.2';
     var TMDB_SIGNUP_URL = 'https://www.themoviedb.org/signup';
     var OMDB_API_KEY_URL = 'https://www.omdbapi.com/apikey.aspx';
     var CATALOGUE_LAYOUTS = ['poster', 'compact', 'list'];
@@ -292,6 +296,19 @@ var BuroApp = (function () {
         return url;
     }
 
+    function placeholderArtworkKey(value) { return '$' + value; }
+
+    function isPlaceholderArtwork(item, value) {
+        var url = safeArtworkUrl(value);
+        return Boolean(item && url && item.sourceId === placeholderArtworkSourceId &&
+            placeholderArtworkUrls[placeholderArtworkKey(url)]);
+    }
+
+    function usableArtworkUrl(item, value) {
+        var url = safeArtworkUrl(value);
+        return url && !isPlaceholderArtwork(item, url) ? url : null;
+    }
+
     function safeProviderLogoUrl(value) {
         var url = BuroDomain.trim(value);
         return /^https:\/\/image\.tmdb\.org\/t\/p\/w92\/[A-Za-z0-9._\/-]{1,240}$/.test(url) &&
@@ -362,8 +379,13 @@ var BuroApp = (function () {
         }
     }
 
-    function rememberArtworkMap(values) {
-        Object.keys(values || {}).forEach(function (itemId) { rememberArtwork(itemId, values[itemId]); });
+    function rememberArtworkMap(values, sourceId) {
+        Object.keys(values || {}).forEach(function (itemId) {
+            var url = values[itemId];
+            if (sourceId === placeholderArtworkSourceId &&
+                    placeholderArtworkUrls[placeholderArtworkKey(safeArtworkUrl(url) || '')]) { return; }
+            rememberArtwork(itemId, url);
+        });
     }
 
     function rememberM3uArtwork(entries) {
@@ -381,9 +403,23 @@ var BuroApp = (function () {
       prateleira do comeco do catalogo ter capa depois de a varredura terminar.
     */
     function artworkFor(item) {
+        var persisted;
+        var remembered;
         var remote;
         var local;
         if (!item) { return null; }
+        persisted = safeArtworkUrl(item.logoUrl);
+        remembered = safeArtworkUrl(artworkMemory[item.id]);
+        /* Um arquivo local baixado antes da detecção pode ser a mesma imagem
+           genérica. Um enriquecimento posterior e diferente continua válido,
+           mas não reutiliza aquele arquivo ambíguo. */
+        if (isPlaceholderArtwork(item, persisted)) {
+            remote = usableArtworkUrl(item, remembered);
+            if (remote && typeof BuroArtworkCache !== 'undefined') {
+                BuroArtworkCache.remember(item.id, remote);
+            }
+            return remote;
+        }
         /*
           A copia no pendrive vem primeiro, quando existe.
 
@@ -393,7 +429,7 @@ var BuroApp = (function () {
         */
         local = typeof BuroArtworkCache !== 'undefined' ? BuroArtworkCache.localUrl(item.id) : null;
         if (local) { return local; }
-        remote = safeArtworkUrl(artworkMemory[item.id]) || safeArtworkUrl(item.logoUrl);
+        remote = remembered || persisted;
         /* Repete o pedido ao desenhar para cobrir arte que já estava no item
            antes de a opção ser ligada. O adapter deduplica o trabalho. */
         if (remote && typeof BuroArtworkCache !== 'undefined') {
@@ -409,8 +445,8 @@ var BuroApp = (function () {
 
     function heroArtworkHtml(item, enrichment) {
         var stored = artworkFor(item);
-        var backdrop = safeArtworkUrl(enrichment && enrichment.backdropUrl);
-        var poster = safeArtworkUrl(enrichment && enrichment.artworkUrl) || stored;
+        var backdrop = usableArtworkUrl(item, enrichment && enrichment.backdropUrl);
+        var poster = usableArtworkUrl(item, enrichment && enrichment.artworkUrl) || stored;
         var primary = backdrop || poster;
         var fallback = backdrop && poster && backdrop !== poster ? poster : null;
         if (!primary) { return ''; }
@@ -435,7 +471,7 @@ var BuroApp = (function () {
 
     function detailArtworkHtml(item) {
         var poster = artworkFor(item);
-        var backdrop = item && safeArtworkUrl(detailBackdropMemory[item.id]);
+        var backdrop = item && usableArtworkUrl(item, detailBackdropMemory[item.id]);
         if (!backdrop && !poster) { return ''; }
         return '<span class="detail-art"><img src="' + attr(backdrop || poster) + '"' +
             (backdrop && poster && backdrop !== poster ? ' data-artwork-fallback="' + attr(poster) + '"' : '') +
@@ -1194,6 +1230,7 @@ var BuroApp = (function () {
     function prepareHomeForReveal(done) {
         bootProgress('home', 'bootHome', '', 0.08);
         BuroStorage.fold('items', collectHome, homeAccumulator(), function (result) {
+            applyHomePlaceholderArtwork(result);
             mergeItems(homeResultItems(result));
             rememberHome(result, 0);
             bootProgress('home', 'bootHome', '', 0.24);
@@ -1729,12 +1766,15 @@ var BuroApp = (function () {
             escapeHtml(label) + '</button>' : '') + '</div>';
     }
 
-    function homeRail(title, items, key, service) {
+    function homeRail(title, items, key, service, badge) {
         var identity = service ? BuroProviders.identityForLabel(service) : null;
         if (!items.length) { return ''; }
         return '<section class="home-rail" data-home-rail="' + attr(key || '') + '"><div class="section-heading home-rail-heading">' +
             (identity ? '<h2>' + providerBadge(identity) + escapeHtml(title) + '</h2>' :
-                '<h2>' + escapeHtml(title) + '</h2>') + '<p>' +
+                '<h2>' + escapeHtml(title) + '</h2>') +
+            /* O selo da fileira sazonal: diz por que ela existe hoje, para
+               "Especial de Natal" nao se ler como uma categoria comum. */
+            (badge ? '<span class="rail-badge">' + escapeHtml(badge) + '</span>' : '') + '<p>' +
             items.length + '</p></div>' +
             /* Lembretes trazem entradas próprias, não linhas do catálogo: parte
                delas não tem item para `mediaCards` desenhar. */
@@ -1984,27 +2024,6 @@ var BuroApp = (function () {
             .replace(/[^a-z0-9]+/g, ' ').replace(/^\s+|\s+$/g, '');
     }
 
-    function seasonalHomeTerms(date) {
-        var month = date.getMonth() + 1;
-        var day = date.getDate();
-        if (month === 12 && day <= 26) {
-            return ['natal', 'natalino', 'christmas', 'xmas', 'papai noel', 'santa claus', 'weihnacht', 'noel', 'renas', 'reindeer', 'grinch', 'presepe'];
-        }
-        if ((month === 12 && day >= 27) || (month === 1 && day <= 6)) {
-            return ['ano novo', 'new year', 'reveillon', 'silvester', 'capodanno', 'contagem regressiva', 'countdown', 'meia noite', 'midnight'];
-        }
-        if ((month === 10 && day >= 18) || (month === 11 && day <= 1)) {
-            return ['halloween', 'terror', 'horror', 'assombrada', 'assombrado', 'haunted', 'zumbi', 'zombie', 'vampiro', 'vampire', 'bruxa', 'witch', 'poltergeist', 'exorcis'];
-        }
-        if ((month === 2 && day >= 7 && day <= 15) || (month === 6 && day >= 5 && day <= 13)) {
-            return ['romance', 'romantic', 'romantico', 'amor', 'love', 'paixao', 'namorad', 'valentine', 'casament', 'wedding', 'coracao'];
-        }
-        if (month === 7) {
-            return ['familia', 'family', 'animacao', 'animation', 'infantil', 'kids', 'aventura', 'adventure', 'ferias', 'desenho', 'cartoon'];
-        }
-        return [];
-    }
-
     function catalogueVisibilitySnapshot() {
         var sourceId = state.activeSource && state.activeSource.id;
         var visibility = {};
@@ -2033,14 +2052,73 @@ var BuroApp = (function () {
         return true;
     }
 
+    /*
+      Natal, Halloween, Namorados, Ano Novo, ferias — quando o calendario esta
+      dentro da janela de cada um.
+
+      As colecoes, os termos e as datas vem de `js/seasonal.js`, porte do
+      `SeasonalCollections` do dominio compartilhado: o mesmo que o Windows e o
+      Android usam, para as tres plataformas mostrarem a mesma prateleira no
+      mesmo dia.
+
+      Uma coleção por vez, como no Windows: a Home tem espaco para uma fileira
+      sazonal, e duas competiriam entre si em vez de destacar o dia.
+    */
+    function seasonalRail(result, consumedIds, consumedTitles, rails) {
+        var collection = result.seasonalCollection;
+        var matched = result.seasonal || [];
+        var selected = [];
+        var shelfTitles = {};
+        if (!collection) { return; }
+        if (!matched.length) { return; }
+        /* O Windows desenha a fotografia sazonal completa mesmo quando seu
+           primeiro título também ocupa o Hero. Aqui essa repetição é útil: com
+           um único especial no catálogo, esconder o card faria a fileira — e
+           sua explicação sazonal — desaparecer por completo. A partir daqui os
+           ids ficam consumidos para não voltarem nas fileiras comuns. */
+        matched.some(function (item) {
+            var titleKey = homeTitleKey(item) || item.id;
+            if (!shelfTitles[titleKey]) {
+                shelfTitles[titleKey] = true;
+                selected.push(item);
+                consumedIds[item.id] = true;
+                if (titleKey) { consumedTitles[titleKey] = true; }
+            }
+            return selected.length >= HOME_RAIL_LIMIT;
+        });
+        rails.push({
+            key: 'seasonal-' + collection.id,
+            title: BuroSeasonal.titleFor(collection, state.preferences.language),
+            /* O selo diz por que a fileira existe: sem ele "Especial de Natal"
+               se le como uma categoria comum que ninguem pediu. */
+            badge: t('seasonalBadge'),
+            items: selected
+        });
+    }
+
     function homeAccumulator() {
         var snapshot = catalogueVisibilitySnapshot();
+        var seasonalCollection = BuroSeasonal.primaryCollectionFor(new Date());
+        var detectPlaceholderArtwork = Boolean(state.activeSource && state.activeSource.type === 'XTREAM');
         return {
             count: 0,
             sourceId: snapshot.sourceId,
             categoryVisibility: snapshot.categoryVisibility,
             currentYear: new Date().getFullYear(),
             currentReleases: [], previousReleases: [], recent: [], topRated: [], movies: [], series: [],
+            /* A varredura já percorre o catálogo inteiro. Guardar aqui os
+               primeiros encontros sazonais evita repetir até uma dúzia de
+               buscas completas como o repositório paginado do desktop precisa
+               fazer, e encontra títulos muito além das 24 escolhas editoriais. */
+            seasonalCollection: seasonalCollection,
+            seasonalTerms: seasonalCollection ? seasonalCollection.terms.map(function (term) {
+                return BuroDomain.foldAccents(term);
+            }) : [],
+            seasonal: [],
+            seasonalTitleKeys: {},
+            /* Uma única passagem serve à Home e à detecção. Este mapa é
+               transitório e removido antes de o resultado entrar no cache. */
+            artworkScan: detectPlaceholderArtwork ? BuroPlaceholderArtwork.create() : null,
             categoryService: snapshot.categoryService,
             /* Uma prateleira por serviço que a lista nomeia — o que o Windows
                mostra como "tudo na Netflix". Montado durante a mesma varredura
@@ -2052,11 +2130,27 @@ var BuroApp = (function () {
     function collectHome(result, item) {
         var type = item && item.contentType;
         var service;
+        var seasonalName;
+        var seasonalTitleKey;
         var orderCompare = function (left, right) {
             return Number(left.sortOrder) - Number(right.sortOrder) || String(left.id).localeCompare(String(right.id));
         };
-        if (!item || ['MOVIE', 'SERIES'].indexOf(type) < 0 || !snapshotItemVisible(result, item)) { return result; }
+        if (!item || ['MOVIE', 'SERIES'].indexOf(type) < 0) { return result; }
+        if (result.artworkScan && (!result.sourceId || item.sourceId === result.sourceId)) {
+            BuroPlaceholderArtwork.add(result.artworkScan, item.logoUrl);
+        }
+        if (!snapshotItemVisible(result, item)) { return result; }
         result.count += 1;
+        if (result.seasonalTerms && result.seasonalTerms.length && result.seasonal.length < 18) {
+            seasonalName = BuroDomain.foldAccents(item.name || '');
+            seasonalTitleKey = homeTitleKey(item) || item.id;
+            if (!result.seasonalTitleKeys[seasonalTitleKey] && result.seasonalTerms.some(function (term) {
+                return seasonalName.indexOf(term) >= 0;
+            })) {
+                result.seasonalTitleKeys[seasonalTitleKey] = true;
+                result.seasonal.push(item);
+            }
+        }
         if (Number(item.year) === result.currentYear) {
             rankedInsert(result.currentReleases, item, function (left, right) {
                 return Number(right.rating) - Number(left.rating) || Number(right.addedAt) - Number(left.addedAt) || orderCompare(left, right);
@@ -2086,10 +2180,22 @@ var BuroApp = (function () {
         return result;
     }
 
+    function applyHomePlaceholderArtwork(result) {
+        var sourceId = result && result.sourceId;
+        var detected = result && result.artworkScan ?
+            BuroPlaceholderArtwork.finish(result.artworkScan) : [];
+        placeholderArtworkSourceId = sourceId || null;
+        placeholderArtworkUrls = Object.create(null);
+        detected.forEach(function (url) {
+            placeholderArtworkUrls[placeholderArtworkKey(url)] = true;
+        });
+        if (result) { delete result.artworkScan; }
+    }
+
     function homeResultItems(result) {
         var rows = [];
         var known = {};
-        ['currentReleases', 'previousReleases', 'recent', 'topRated', 'movies', 'series'].forEach(function (key) {
+        ['seasonal', 'currentReleases', 'previousReleases', 'recent', 'topRated', 'movies', 'series'].forEach(function (key) {
             (result[key] || []).forEach(function (item) {
                 if (!known[item.id]) { known[item.id] = true; rows.push(item); }
             });
@@ -2129,8 +2235,7 @@ var BuroApp = (function () {
         var continuedIds = {};
         var consumedIds = {};
         var consumedTitles = {};
-        var seasonalTerms = seasonalHomeTerms(new Date());
-        var seasonal;
+        var seasonal = result.seasonal || [];
         var heroCandidates;
         var lead;
         var rotation;
@@ -2161,10 +2266,6 @@ var BuroApp = (function () {
                 continued.push(item);
             }
         });
-        seasonal = seasonalTerms.length ? catalog.filter(function (item) {
-            var name = BuroDomain.foldAccents(item.name || '');
-            return seasonalTerms.some(function (term) { return name.indexOf(BuroDomain.foldAccents(term)) >= 0; });
-        }) : [];
         heroCandidates = seasonal.concat(result.currentReleases || []).concat(result.topRated || [], result.movies || [], result.series || [])
             .filter(function (item, index, rows) {
                 return !continuedIds[item.id] && rows.map(function (row) { return row.id; }).indexOf(item.id) === index;
@@ -2198,6 +2299,15 @@ var BuroApp = (function () {
           valem a pena mostrar. Mesma decisão do Android.
         */
         rails.push({ key: 'reminders', title: t('homeReminders'), items: reminderCards().slice(0, 12) });
+        /*
+          A prateleira do calendario, acima das escolhas do dia.
+
+          E a razao de a Home parecer diferente hoje: enterra-la sob as fileiras
+          de sempre anularia o proposito — mesma decisao do `XtreamDailyHome` do
+          Windows, e o Android ja a tinha. Fica vazia na maior parte do ano, e
+          `takeHomeItems` a descarta sozinha quando nao ha titulo que case.
+        */
+        seasonalRail(result, consumedIds, consumedTitles, rails);
         rails.push({ key: 'releases-current', title: t('homeReleases').replace('{year}', currentYear),
             items: takeHomeItems(result.currentReleases, consumedIds, consumedTitles) });
         rails.push({ key: 'releases-previous', title: t('homeReleases').replace('{year}', currentYear - 1),
@@ -2284,7 +2394,7 @@ var BuroApp = (function () {
             escapeHtml(hero.name) + '</h2><p class="hero-metadata">' +
             escapeHtml(metadata.join(' · ')) + '</p><p class="hero-synopsis">' + escapeHtml(synopsis) +
             '</p>' + heroActions + '</div>';
-        model.rails.forEach(function (rail) { content += homeRail(rail.title, rail.items, rail.key, rail.service); });
+        model.rails.forEach(function (rail) { content += homeRail(rail.title, rail.items, rail.key, rail.service, rail.badge); });
         homeStreamingShelves.forEach(function (shelf) { content += homeStreamingRail(shelf); });
         return content;
     }
@@ -2298,6 +2408,7 @@ var BuroApp = (function () {
             var nextRotation;
             if (requestId !== homeRequestId || state.screen !== 'SHELL' || state.section !== 'HOME' ||
                     !state.screenData || state.screenData.requestId !== requestId) { return; }
+            applyHomePlaceholderArtwork(result);
             currentData = state.screenData;
             currentHero = currentData.heroRotation &&
                 currentData.heroRotation[Number(currentData.heroIndex) || 0];
