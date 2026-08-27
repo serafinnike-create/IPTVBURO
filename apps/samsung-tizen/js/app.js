@@ -3286,6 +3286,14 @@ var BuroApp = (function () {
       existe, está quebrada ou não se aplica à lista dele. Dizer o motivo serve
       mais do que o silêncio.
     */
+    /* Ha alguma pergunta ativa alem de "mostre a aba"? A mesma lista que o ramo
+       do vazio usa para decidir entre "nenhum titulo com estes filtros" e "o
+       catalogo ainda nao chegou aqui". */
+    function catalogueScopeIsFiltered(scope) {
+        return Boolean(scope.query || scope.genre || scope.service ||
+            scope.year != null || scope.minimumRating != null);
+    }
+
     function catalogueScopeBar(contentType, categories) {
         var scope = catalogueScope(contentType);
         var parts = BuroProviders.split(categories);
@@ -4174,9 +4182,27 @@ var BuroApp = (function () {
                 '<button class="scope-chip compact focusable" data-action="catalogue-pick-density"><strong>' +
                 escapeHtml(catalogueDensityLabel(layout)) + ' ▾</strong></button>') +
             shelfArtworkNote(rows) +
-            '<p>' + (scope.total == null ? '' : escapeHtml(t('shelfLoadedOf')
+            /* O total antigo some junto com as linhas antigas: enquanto a
+               leitura nova corre, "0 de 9056" conta uma historia que ja nao vale
+               — 9056 era a resposta da pergunta anterior. */
+            '<p>' + (scope.total == null || (scope.rows === undefined && catalogueScopeIsFiltered(scope)) ? '' : escapeHtml(t('shelfLoadedOf')
                 .replace('{loaded}', rows.length).replace('{total}', total))) + '</p></div>';
-        if (!rows.length && scope.loading) {
+        /*
+          Um filtro escolhido e ainda nao lido nao e um filtro sem resultado.
+
+          chooseCatalogueOption limpa as linhas do escopo e devolve loading a
+          falso antes de agendar a carga nova, entao o quadro seguinte chega
+          aqui com linhas vazias e loading falso — que era indistinguivel de
+          "leu e nao achou nada". A tela escrevia "Nenhum titulo com estes
+          filtros" durante os segundos da leitura, e o contador ainda mostrava
+          o total da pergunta anterior: "0 de 9056".
+
+          Linhas por ler separa nunca-lido de lido-e-vazio, mas so conta quando
+          ha filtro. Na primeira abertura da aba as linhas tambem estao por ler,
+          e ali quem deve responder e o ramo de baixo — ele mantem a lista de
+          categorias alcancavel enquanto a varredura corre.
+        */
+        if (!rows.length && (scope.loading || (scope.rows === undefined && catalogueScopeIsFiltered(scope)))) {
             return heading + '<div class="search-loading"><span class="boot-indicator"></span><p>' +
                 escapeHtml(t('loadingCatalogue')) + '</p></div>';
         }
