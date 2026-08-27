@@ -206,7 +206,7 @@ var BuroApp = (function () {
         { tag: 'it', name: 'Italiano' },
         { tag: 'es', name: 'Español' }
     ];
-    var APP_VERSION_FALLBACK = '3.6.2';
+    var APP_VERSION_FALLBACK = '3.6.3';
     var TMDB_SIGNUP_URL = 'https://www.themoviedb.org/signup';
     var OMDB_API_KEY_URL = 'https://www.omdbapi.com/apikey.aspx';
     var CATALOGUE_LAYOUTS = ['poster', 'compact', 'list'];
