@@ -41,7 +41,10 @@ class ProvisioningWiringTest {
     fun `what the customer already had is never removed`() {
         // The whole safety property of the feature.
         val body = collectorBody()
-        assertTrue(body.contains("sourceLibrary.create("), "it adds a source")
+        // Matched loosely: the call now spreads over lines, because a delivery may carry no
+        // connection at all and the source is created only when one arrives.
+        assertTrue(body.contains("sourceLibrary"), "it adds a source")
+        assertTrue(body.contains(".create("), "it adds a source")
         listOf("sourceLibrary.remove", "sourceLibrary.clear", "catalogs = emptyList()", ".forget(").forEach { destructive ->
             assertFalse(
                 body.contains(destructive),
@@ -112,7 +115,7 @@ class ProvisioningWiringTest {
             "the chosen name wins when there is one",
         )
         assertTrue(
-            body.contains("?: String(source.server).hostLabel()"),
+            body.contains("?: String(server).hostLabel()"),
             "and the host is still the fallback, so a list with no name is not left blank",
         )
     }

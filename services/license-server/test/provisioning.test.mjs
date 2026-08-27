@@ -493,3 +493,85 @@ test('um nome absurdo ou sujo é ignorado, e a lista vai assim mesmo', async () 
   }
   env.DB.close();
 });
+
+/*
+  Envio parcial.
+
+  Quem vende precisava preencher endereço, usuário e senha para entregar qualquer
+  coisa — mesmo só uma chave do TMDb a um cliente cuja lista já está funcionando.
+  Relatado assim: "nao deixa eu enviar so api tmdb preciso enviar tudo".
+*/
+
+test('só a chave do TMDb basta para um envio', async () => {
+  const env = createEnv();
+  const saved = await saveProvisioning(DEVICE, { metadataKey: 'chave-tmdb-sintetica' }, 'dono@exemplo', env);
+
+  assert.equal(saved.ok, true);
+  const status = await provisioningStatus(DEVICE, env);
+  assert.equal(status.metadataKey, true);
+  assert.equal(status.server, null, 'sem credencial, não inventa endereço');
+  env.DB.close();
+});
+
+test('só o nome da lista basta para um envio', async () => {
+  const env = createEnv();
+  const saved = await saveProvisioning(DEVICE, { listLabel: 'Plano Familia' }, 'dono@exemplo', env);
+
+  assert.equal(saved.ok, true);
+  assert.equal((await provisioningStatus(DEVICE, env)).listLabel, 'Plano Familia');
+  env.DB.close();
+});
+
+test('uma chave enviada depois não apaga a lista que o aparelho já recebeu', async () => {
+  const env = createEnv();
+  await saveProvisioning(DEVICE, { ...CREDENTIAL, listLabel: 'Plano Familia' }, 'dono@exemplo', env);
+  await saveProvisioning(DEVICE, { metadataKey: 'chave-tmdb-sintetica' }, 'dono@exemplo', env);
+
+  /*
+    O painel mostra qual lista está no aparelho. Sobrescrever os rótulos com nada
+    deixaria o suporte sem saber o que o cliente tem, logo depois de mandar uma
+    chave para melhorar exatamente essa lista.
+  */
+  const status = await provisioningStatus(DEVICE, env);
+  assert.equal(status.server, CREDENTIAL.server);
+  assert.equal(status.username, CREDENTIAL.username);
+  assert.equal(status.listLabel, 'Plano Familia');
+  assert.equal(status.metadataKey, true);
+  env.DB.close();
+});
+
+test('meia credencial é recusada', async () => {
+  const env = createEnv();
+
+  /* Endereço sem senha nunca conecta: aceitar isso entregaria ao cliente uma lista
+     que não abre, e o erro só apareceria na televisão dele. */
+  const missingPassword = await saveProvisioning(
+    DEVICE, { server: CREDENTIAL.server, username: CREDENTIAL.username }, 'dono@exemplo', env,
+  );
+  assert.equal(missingPassword.error, 'bad_credentials');
+
+  const missingServer = await saveProvisioning(
+    DEVICE, { username: CREDENTIAL.username, password: CREDENTIAL.password }, 'dono@exemplo', env,
+  );
+  assert.equal(missingServer.error, 'bad_credentials');
+  env.DB.close();
+});
+
+test('um formulário inteiramente vazio não marca o aparelho como pendente', async () => {
+  const env = createEnv();
+  const saved = await saveProvisioning(DEVICE, {}, 'dono@exemplo', env);
+
+  assert.equal(saved.error, 'nothing_to_send');
+  assert.equal(await provisioningStatus(DEVICE, env), null);
+  env.DB.close();
+});
+
+test('a credencial continua a viajar inteira quando é enviada', async () => {
+  const env = createEnv();
+  await saveProvisioning(DEVICE, CREDENTIAL, 'dono@exemplo', env);
+
+  /* O envio parcial não pode ter deixado a senha de fora do payload no caso comum. */
+  const claimed = await claimProvisioning(DEVICE, env);
+  assert.deepEqual(claimed, CREDENTIAL);
+  env.DB.close();
+});

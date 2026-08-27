@@ -616,11 +616,14 @@ export function adminPage() {
         + (info.lastError ? ' · último erro: ' + esc(info.lastError) : '')
         + '</p>'
       : '<p class="sub" style="margin:4px 0 10px">Nenhuma lista atribuída por aqui ainda.</p>';
-    return status + '<div class="row" style="margin:0 0 10px">'
+    return status
+      + '<p class="sub" style="margin:0 0 8px">Envie só o que quiser mudar. Endereço, usuário e senha vão juntos; nome e chaves vão sozinhos. Campo em branco não mexe no que o aparelho já tem.</p>'
+      + '<div class="row" style="margin:0 0 10px">'
       + '<label class="field" style="flex:2 1 260px"><span>Endereço do servidor</span><input id="prov-server-' + key + '" placeholder="http://provedor.exemplo:8080"></label>'
       + '<label class="field" style="flex:1 1 160px"><span>Usuário</span><input id="prov-user-' + key + '"></label>'
       + '<label class="field" style="flex:1 1 160px"><span>Senha</span><input id="prov-pass-' + key + '" type="password" autocomplete="new-password"></label>'
       + '</div><div class="row" style="margin:0 0 10px">'
+      + '<label class="field" style="flex:1 1 240px"><span>Nome da lista (opcional)</span><input id="prov-label-' + key + '" placeholder="como o cliente vai ver a lista" maxlength="60"></label>'
       + '<label class="field" style="flex:1 1 240px"><span>Chave TMDb (opcional)</span><input id="prov-tmdb-' + key + '" placeholder="capas, elenco e sinopse"></label>'
       + '<label class="field" style="flex:1 1 240px"><span>Chave OMDb (opcional)</span><input id="prov-omdb-' + key + '" placeholder="notas da critica"></label>'
       + '</div><div class="row" style="margin:0 0 16px">'
@@ -640,8 +643,12 @@ export function adminPage() {
     const server = document.getElementById('prov-server-' + key).value.trim();
     const username = document.getElementById('prov-user-' + key).value.trim();
     const password = document.getElementById('prov-pass-' + key).value;
-    if (!server || !username || !password) {
-      return alert('Preencha endereço, usuário e senha antes de enviar.');
+    /* Credencial é tudo ou nada, e o resto vai sozinho. Quem só quer entregar uma
+       chave do TMDb a um cliente que já tem lista não deve precisar redigitar
+       servidor, usuário e senha — e meia credencial nunca conecta. */
+    const credentials = server && username && password;
+    if ((server || username || password) && !credentials) {
+      return alert('Endereço, usuário e senha vão juntos: preencha os três ou deixe os três em branco.');
     }
     /* As chaves são opcionais e vão no mesmo envio: quem não consegue cadastrar um
        Xtream também não vai criar conta no TMDb, e assim o aplicativo chega mostrando
@@ -651,6 +658,9 @@ export function adminPage() {
     /* Deixado em branco, o aplicativo deriva o nome do endereço — que é como o
        servidor se chama, não como quem vendeu quer que a lista apareça. */
     const listLabel = document.getElementById('prov-label-' + key).value.trim();
+    if (!credentials && !metadataKey && !criticsKey && !listLabel) {
+      return alert('Preencha ao menos um campo antes de enviar.');
+    }
     const result = await api('/admin/provisioning', {
       device: device, server: server, username: username, password: password,
       listLabel: listLabel, metadataKey: metadataKey, criticsKey: criticsKey,

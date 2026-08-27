@@ -18,9 +18,16 @@ import okhttp3.RequestBody.Companion.toRequestBody
  * viewer has accepted it.
  */
 class ProvisionedSource(
-    val server: CharArray,
-    val username: CharArray,
-    val password: CharArray,
+    /**
+     * The connection, or null when the seller sent none.
+     *
+     * Null is a real case: a seller whose customer already has a working list may send only a
+     * TMDb key, or only a new name for it. Reported as "nao deixa eu enviar so api tmdb preciso
+     * enviar tudo". The three travel together or not at all — half a credential never connects.
+     */
+    val server: CharArray?,
+    val username: CharArray?,
+    val password: CharArray?,
     /**
      * A TMDb key the seller set up as well, or null when they sent none.
      *
@@ -51,9 +58,9 @@ class ProvisionedSource(
      * the same reason, so nothing here converts.
      */
     fun clear() {
-        server.fill('\u0000')
-        username.fill('\u0000')
-        password.fill('\u0000')
+        server?.fill('\u0000')
+        username?.fill('\u0000')
+        password?.fill('\u0000')
         metadataKey?.fill('\u0000')
         criticsKey?.fill('\u0000')
     }
@@ -99,33 +106,54 @@ class ProvisioningClient(
     fun claim(): ProvisionedSource? {
         val answer = post(claimUrl) ?: return null
         val source = answer.getAsJsonObject("source") ?: return null
-        val server = source.string("server") ?: return null
-        val username = source.string("username") ?: return null
-        val password = source.string("password") ?: return null
+        val server = source.string("server")
+        val username = source.string("username")
+        val password = source.string("password")
 
-        // Checked here as well as on the server. This value becomes a request the app makes with
-        // the viewer's credentials attached, and the server that vouched for it is not the one
-        // this app answers to.
-        if (!server.startsWith("http://", ignoreCase = true) &&
-            !server.startsWith("https://", ignoreCase = true)
-        ) {
+        // All three or none. A delivery may legitimately carry only a key or only a name, for a
+        // customer whose list already works; but an address with no password is not a partial
+        // delivery, it is a list that will never open.
+        val credentials =
+            when {
+                server != null && username != null && password != null -> true
+                server == null && username == null && password == null -> false
+                else -> return null
+            }
+
+        if (credentials) {
+            // Checked here as well as on the server. This value becomes a request the app makes
+            // with the viewer's credentials attached, and the server that vouched for it is not
+            // the one this app answers to.
+            if (!server!!.startsWith("http://", ignoreCase = true) &&
+                !server.startsWith("https://", ignoreCase = true)
+            ) {
+                return null
+            }
+            // Credentials embedded in the address would be a second copy of the password
+            // travelling somewhere it would be logged.
+            if (CREDENTIALS_IN_URL.containsMatchIn(server)) return null
+        }
+
+        val metadataKey = source.string("metadataKey")?.takeIf(::looksLikeApiKey)
+        val criticsKey = source.string("criticsKey")?.takeIf(::looksLikeApiKey)
+        val listLabel = source.string("listLabel")?.take(MAX_LIST_LABEL)
+
+        // Something has to have arrived. An answer carrying an empty source is not a delivery, and
+        // building one from it would have the app confirm and erase a delivery it never applied.
+        if (!credentials && metadataKey == null && criticsKey == null && listLabel == null) {
             return null
         }
-        // Credentials embedded in the address would be a second copy of the password travelling
-        // somewhere it would be logged.
-        if (CREDENTIALS_IN_URL.containsMatchIn(server)) return null
 
         return ProvisionedSource(
-            server = server.toCharArray(),
-            username = username.toCharArray(),
-            password = password.toCharArray(),
-            // Checked here too. These go into a URL the app builds, so anything outside the
-            // alphabet these keys use is a mis-paste rather than a key.
-            metadataKey = source.string("metadataKey")?.takeIf(::looksLikeApiKey)?.toCharArray(),
-            criticsKey = source.string("criticsKey")?.takeIf(::looksLikeApiKey)?.toCharArray(),
-            // Trimmed and capped because it is drawn in a row of its own: a long one would push
-            // the rest of the row off the screen.
-            listLabel = source.string("listLabel")?.take(MAX_LIST_LABEL),
+            server = server?.toCharArray(),
+            username = username?.toCharArray(),
+            password = password?.toCharArray(),
+            // Checked above. These go into a URL the app builds, so anything outside the
+            // alphabet these keys use is a mis-paste rather than a key. Trimmed and capped because
+            // the name is drawn in a row of its own.
+            metadataKey = metadataKey?.toCharArray(),
+            criticsKey = criticsKey?.toCharArray(),
+            listLabel = listLabel,
         )
     }
 

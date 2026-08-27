@@ -41,12 +41,16 @@ class LiveProvisioningProbe {
             println("              (ou o servidor recusou, ou nada foi aplicado no painel)")
         } else {
             // The host only. The full address can carry a token, and the credentials never print.
+            // A entrega pode nao trazer conexao nenhuma: so uma chave, para um cliente cuja
+            // lista ja funciona.
             val host =
-                runCatching { java.net.URI(String(source.server)).host }.getOrNull() ?: "<ilegivel>"
-            println("resultado   : CONEXAO RECEBIDA")
+                source.server
+                    ?.let { address -> runCatching { java.net.URI(String(address)).host }.getOrNull() }
+                    ?: "<sem conexao>"
+            println("resultado   : ENTREGA RECEBIDA")
             println("host        : $host")
-            println("usuario     : ${source.username.size} caracteres")
-            println("senha       : ${source.password.size} caracteres")
+            println("usuario     : ${source.username?.let { "${it.size} caracteres" } ?: "nao enviado"}")
+            println("senha       : ${source.password?.let { "${it.size} caracteres" } ?: "nao enviada"}")
             println("chave TMDb  : ${source.metadataKey?.let { "${it.size} caracteres" } ?: "nao enviada"}")
             println("chave OMDb  : ${source.criticsKey?.let { "${it.size} caracteres" } ?: "nao enviada"}")
             println("")

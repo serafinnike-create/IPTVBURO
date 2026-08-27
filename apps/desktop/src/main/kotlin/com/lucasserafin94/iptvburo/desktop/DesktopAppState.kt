@@ -5867,21 +5867,35 @@ class DesktopAppState(
             } ?: return
 
         try {
-            // The name the seller chose, or the host when they chose none.
+            // A delivery need not carry a connection at all. A seller whose customer already has a
+            // working list may send only a TMDb key, or only a new name for it, and demanding the
+            // address and password again just to hand over a key is what was reported.
+            val server = source.server
+            val username = source.username
+            val password = source.password
             val entry =
-                sourceLibrary.create(
-                    source.listLabel?.takeIf(String::isNotBlank)
-                        ?: String(source.server).hostLabel(),
-                )
-            withContext(Dispatchers.IO) {
-                sourceLibrary.store(entry.id).save(source.server, source.username, source.password)
-            }
+                if (server != null && username != null && password != null) {
+                    // The name the seller chose, or the host when they chose none.
+                    sourceLibrary
+                        .create(
+                            source.listLabel?.takeIf(String::isNotBlank)
+                                ?: String(server).hostLabel(),
+                        ).also { created ->
+                            withContext(Dispatchers.IO) {
+                                sourceLibrary.store(created.id).save(server, username, password)
+                            }
+                        }
+                } else {
+                    null
+                }
             // The metadata keys, when the seller set those up too. Applied only when sent: an
             // absent key means "leave alone", so replacing a provider address that went down
             // cannot wipe a key the viewer configured themselves.
             source.metadataKey?.let { key -> userStore.setMetadataApiKey(String(key)) }
             source.criticsKey?.let { key -> userStore.setCriticScoresApiKey(String(key)) }
-            provisionedSourceLabel = entry.label
+            // Only when a list actually arrived. The onboarding screen says "a sua lista ja esta
+            // aqui", which would be a lie for a delivery that carried only a key.
+            entry?.let { created -> provisionedSourceLabel = created.label }
             // Only once it is actually saved. Confirming at the moment of delivery would leave a
             // customer whose app closed in between with no list and no way to ask again.
             withContext(Dispatchers.IO) { provisioningClient.confirmApplied() }

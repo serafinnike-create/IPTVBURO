@@ -83,9 +83,11 @@ class ProvisioningClientTest {
         withServer(sourceResponse()) { client, _ ->
             val source = client.claim()
             assertNotNull(source)
-            assertEquals("http://provedor.invalid:8080", String(source.server))
-            assertEquals("cliente", String(source.username))
-            assertEquals("senha-do-cliente", String(source.password))
+            // Asserted present, not merely equal: these are nullable now, because a delivery may
+            // carry only a key — but one that announces a connection must carry all three.
+            assertEquals("http://provedor.invalid:8080", String(assertNotNull(source.server)))
+            assertEquals("cliente", String(assertNotNull(source.username)))
+            assertEquals("senha-do-cliente", String(assertNotNull(source.password)))
         }
     }
 
@@ -112,6 +114,57 @@ class ProvisioningClientTest {
     fun `a refusal is not mistaken for a connection`() {
         withServer(MockResponse().setResponseCode(401).setBody("""{"error":"invalid_proof"}""")) { client, _ ->
             assertNull(client.claim())
+        }
+    }
+
+    /**
+     * A delivery that carries only a key.
+     *
+     * A seller whose customer already has a working list should be able to hand over a TMDb key
+     * without retyping the address and password. Reported as "nao deixa eu enviar so api tmdb
+     * preciso enviar tudo".
+     */
+    @Test
+    fun `a delivery with only a key is applied`() {
+        withServer(
+            MockResponse().setResponseCode(200)
+                .setBody("""{"source":{"metadataKey":"chave-tmdb-sintetica"}}"""),
+        ) { client, _ ->
+            val claimed = requireNotNull(client.claim()) { "a chave sozinha devia bastar" }
+
+            assertEquals("chave-tmdb-sintetica", claimed.metadataKey?.let(::String))
+            assertNull(claimed.server, "sem credencial, nao inventa endereco")
+            claimed.clear()
+        }
+    }
+
+    @Test
+    fun `a delivery with only a list name is applied`() {
+        withServer(
+            MockResponse().setResponseCode(200)
+                .setBody("""{"source":{"listLabel":"Plano Familia"}}"""),
+        ) { client, _ ->
+            val claimed = requireNotNull(client.claim()) { "o nome sozinho devia bastar" }
+
+            assertEquals("Plano Familia", claimed.listLabel)
+            assertNull(claimed.password)
+            claimed.clear()
+        }
+    }
+
+    /**
+     * Clearing must survive a delivery that carried no credentials.
+     *
+     * The wipe runs in a `finally` on every path. If it assumed all three were present it would
+     * throw there, and a throw in `finally` replaces whatever the block was really doing.
+     */
+    @Test
+    fun `clearing a delivery that carried no credentials does not throw`() {
+        withServer(
+            MockResponse().setResponseCode(200)
+                .setBody("""{"source":{"metadataKey":"chave-tmdb-sintetica"}}"""),
+        ) { client, _ ->
+            requireNotNull(client.claim()).clear()
         }
     }
 

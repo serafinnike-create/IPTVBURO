@@ -192,3 +192,26 @@ test('a lista enviada pode ser removida mesmo depois de aplicada', () => {
     'condicionar ao pendente prenderia uma lista já aplicada',
   );
 });
+
+/*
+  Todo campo que o painel lê tem de existir na página.
+
+  "Nome da lista" foi acrescentado ao envio sem nunca ser desenhado: o leitor
+  chamava getElementById num id que a marcação não produzia, e o envio inteiro
+  morria em `.value` de null. Quem vende via um formulário sem o campo e um botão
+  que não fazia nada.
+*/
+test('cada campo lido pelo painel existe no formulário', () => {
+  const page = adminPage();
+
+  const read = [...page.matchAll(/getElementById\('(prov-[a-z]+)-' \+ key\)/g)]
+    .map((match) => match[1]);
+  assert.ok(read.length >= 4, 'o envio de lista deixou de ler campos');
+
+  for (const id of new Set(read)) {
+    assert.ok(
+      page.includes(`id="${id}-' + key + '"`),
+      `o painel lê ${id} mas nunca desenha esse campo`,
+    );
+  }
+});
