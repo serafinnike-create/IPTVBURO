@@ -2049,3 +2049,36 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
 .player-next-panel[hidden] { display: none; }
 .player-next-title { margin: 0 0 8px; color: var(--gold); font-size: 26px; font-weight: 800; }
 .player-next-countdown { margin: 0; color: var(--secondary); font-size: 19px; }
+
+/*
+  O teste de ligacao.
+
+  Uma linha por leitura, com o sinal a esquerda e o valor a direita, para quem
+  esta a tres metros da televisao conseguir varrer a coluna e ver qual e a que
+  esta vermelha sem ler tudo.
+*/
+.diagnostics-list { margin: 8px 0 26px; }
+.diagnostics-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 0; font-size: 24px; color: var(--text);
+}
+.diagnostics-row.pending { color: var(--muted); }
+.diagnostics-mark { width: 24px; font-size: 22px; }
+.diagnostics-mark.good { color: var(--success); }
+.diagnostics-mark.warning { color: var(--gold); }
+.diagnostics-mark.problem { color: var(--error); }
+.diagnostics-name { width: 320px; }
+.diagnostics-value { color: var(--secondary); }
+/* Alinhada com o nome, nao com o sinal: le-se como uma nota da linha de cima. */
+.diagnostics-advice {
+    margin: -4px 0 8px 40px; color: var(--muted);
+    font-size: 20px; line-height: 1.4;
+}
+.diagnostics-fact {
+    display: flex; gap: 16px; padding: 4px 0 4px 40px;
+    font-size: 20px; color: var(--muted);
+}
+.diagnostics-verdict { font-size: 30px; font-weight: 600; margin: 4px 0 6px; }
+.diagnostics-verdict.good { color: var(--success); }
+.diagnostics-verdict.warning { color: var(--gold); }
+.diagnostics-verdict.problem { color: var(--error); }

@@ -2857,7 +2857,16 @@ async function run() {
         ((window.BuroApp.state.screenData.heroRotation || [])[Number(window.BuroApp.state.screenData.heroIndex) || 0] || {}).id ===
             heroDetailRequests[0].item.id && !heroDetailRequests[0].aborted);
     var heroButton = window.document.querySelector('.real-home-hero .button');
-    for (var heroFocusAttempt = 0; heroFocusAttempt < 20 && !heroButton.classList.contains('focused'); heroFocusAttempt += 1) {
+    /*
+      O orçamento vem da própria tela, não de um número fixo.
+
+      Estava em 20 e quebrou quando a barra superior ganhou mais um botão: a
+      quantidade de paradas até o Hero cresceu junto, e o teste passou a falhar
+      sem que nada de errado tivesse acontecido. O laço para assim que o foco
+      chega, então sobrar orçamento não custa nada.
+    */
+    var heroFocusBudget = window.document.querySelectorAll('.focusable').length + 10;
+    for (var heroFocusAttempt = 0; heroFocusAttempt < heroFocusBudget && !heroButton.classList.contains('focused'); heroFocusAttempt += 1) {
         press(window, 40);
     }
     var enrichedHeroId = heroDetailRequests[0].item.id;

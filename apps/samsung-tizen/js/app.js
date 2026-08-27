@@ -216,6 +216,17 @@ var BuroApp = (function () {
         { tag: 'es', name: 'Español' }
     ];
     var APP_VERSION_FALLBACK = '3.6.3';
+
+    /*
+      Quanto tempo o teste fica visivel mesmo quando acaba antes.
+
+      O suficiente para se ler como trabalho a acontecer, curto o bastante para
+      ninguem esperar sem motivo.
+    */
+    var DIAGNOSTICS_MINIMUM_MS = 900;
+
+    /* As leituras, na ordem em que aparecem, para o ecra as mostrar antes de as ter. */
+    var DIAGNOSTICS_ROWS = ['download', 'ping', 'loss', 'catalogue', 'link'];
     var TMDB_SIGNUP_URL = 'https://www.themoviedb.org/signup';
     var OMDB_API_KEY_URL = 'https://www.omdbapi.com/apikey.aspx';
     var CATALOGUE_LAYOUTS = ['poster', 'compact', 'list'];
@@ -1869,7 +1880,7 @@ var BuroApp = (function () {
             /* O indicador fica fora do <h1>: o título tem de continuar sendo
                exatamente o nome da seção, que é o que a tela anuncia. */
             '</h1>' + catalogueSyncChip() + topbarSubtitleHtml() + (topbarExtra || '') +
-            '<div class="topbar-status">' + refreshChipHtml() + downloadChipHtml() + licenceChipHtml() + clockHtml() + profileChipHtml() +
+            '<div class="topbar-status">' + refreshChipHtml() + diagnosticsChipHtml() + downloadChipHtml() + licenceChipHtml() + clockHtml() + profileChipHtml() +
             notificationBellHtml() + '</div></header><section class="content ' + (scrollable ? 'scrollable' : '') + '">' +
             sharedTitleNoticeHtml() + content + '</section><div class="bottom-hint">' + t('useArrows') + '</div></main></div>';
     }
@@ -5437,6 +5448,19 @@ var BuroApp = (function () {
             escapeHtml(t('refreshCatalogue')) + '</button>';
     }
 
+    /*
+      O teste de ligacao, ao lado de atualizar.
+
+      Os dois respondem a mesma queixa por lados opostos: "a minha lista esta
+      errada" e "a imagem fica travando". Quem nao sabe qual dos dois tem vai
+      tentar ambos, e ambos estao aqui.
+    */
+    function diagnosticsChipHtml() {
+        return '<button class="topbar-chip focusable" data-action="diagnostics"' +
+            ' aria-label="' + attr(t('diagnosticsAction')) + '">◉ ' +
+            escapeHtml(t('diagnosticsAction')) + '</button>';
+    }
+
     /* Quanto falta, curto o bastante para caber na barra. */
     function catalogueSyncShortLabel(status) {
         if (!status || !status.total) { return t('refreshingCatalogue'); }
@@ -6920,6 +6944,247 @@ var BuroApp = (function () {
      * Numa televisao nao ha como copiar. O codigo e lido da tela e enviado por
      * mensagem, entao e desenhado grande, no mesmo estilo do pareamento.
      */
+    /*
+      O teste de ligacao.
+
+      Quem esta a ver um filme que trava nao sabe se a culpa e do Wi-Fi, do
+      provedor ou do aplicativo. Sem resposta conclui que o aplicativo esta com
+      defeito, entao cada leitura aqui vira uma frase que a pessoa pode usar.
+    */
+    function openDiagnostics() {
+        pushScreen('DIAGNOSTICS', { running: true, findings: null });
+        runDiagnostics();
+    }
+
+    function closeDiagnostics() {
+        goBack();
+    }
+
+    /*
+      Corre as medicoes e desenha o resultado.
+
+      A duracao minima nao e para a medicao: e para a pessoa. Um teste que falha
+      num instante — provedor fora do ar — acabaria antes de o ecra desenhar um
+      unico quadro, e carregar no botao pareceria nao fazer nada.
+    */
+    function runDiagnostics() {
+        var source = state.activeSource;
+        var started = new Date().getTime();
+        var secret = null;
+
+        state.screenData = { running: true, findings: null };
+        render();
+
+        function finish(findings, readings) {
+            var elapsed = new Date().getTime() - started;
+            var wait = Math.max(0, DIAGNOSTICS_MINIMUM_MS - elapsed);
+            window.setTimeout(function () {
+                if (state.screen !== 'DIAGNOSTICS') { return; }
+                state.screenData = { running: false, findings: findings, readings: readings };
+                render();
+            }, wait);
+        }
+
+        /* Sem fonte nao ha o que medir, mas as leituras locais continuam uteis. */
+        if (!source || source.type !== 'XTREAM') {
+            finish(localFindings(0, 'signed-out'), {});
+            return;
+        }
+
+        /* Sincrono e pode lancar: um cofre indisponivel nao pode derrubar o ecra. */
+        try {
+            secret = BuroStorage.secureGet(source.id);
+        } catch (unavailable) {
+            secret = null;
+        }
+        if (!secret) { finish(localFindings(0, 'signed-out'), {}); return; }
+        measureDiagnostics(secret);
+
+        function measureDiagnostics(credentials) {
+            var probeUrl = BuroDiagnostics.probeUrl(credentials);
+            BuroDiagnostics.measureTransfer(probeUrl, function (transfer) {
+                var mbps = transfer
+                    ? BuroDiagnostics.megabitsPerSecond(transfer.bytes, transfer.milliseconds)
+                    : null;
+                BuroDiagnostics.measureLatency(probeUrl, BuroDiagnostics.PING_ATTEMPTS,
+                    function (latency) {
+                        var ping = BuroDiagnostics.median(latency.samples);
+                        var loss = BuroDiagnostics.lossPercent(latency);
+                        var findings = [
+                            {
+                                id: 'download',
+                                severity: BuroDiagnostics.downloadVerdict(mbps),
+                                detail: mbps === null ? '\u2014' : (Math.round(mbps * 10) / 10) + ' Mbit/s',
+                                advice: BuroDiagnostics.qualityCeiling(mbps)
+                            },
+                            {
+                                id: 'ping',
+                                severity: BuroDiagnostics.pingVerdict(ping),
+                                detail: ping === null ? '\u2014' : ping + ' ms'
+                            },
+                            {
+                                id: 'loss',
+                                severity: BuroDiagnostics.lossVerdict(loss),
+                                detail: loss === null ? '\u2014'
+                                    : (Math.round(loss * 10) / 10) + '% de ' + latency.attempted
+                            }
+                        ];
+                        finish(findings.concat(localFindings(catalogueCount(), null)), {
+                            quality: BuroDiagnostics.qualityCeiling(mbps)
+                        });
+                    });
+            });
+        }
+    }
+
+    /* Quantos itens a lista trouxe: uma ligacao perfeita com catalogo vazio ainda e um problema. */
+    function catalogueCount() {
+        return (state.channels && state.channels.length) || 0;
+    }
+
+    /*
+      As leituras que nao precisam de rede.
+
+      Feitas a parte porque funcionam sem internet nenhuma — que e exatamente
+      quando alguem abre este ecra.
+    */
+    function localFindings(itemCount, catalogueOverride) {
+        var link = BuroDiagnostics.linkKind();
+        var findings = [];
+
+        findings.push({
+            id: 'catalogue',
+            severity: catalogueOverride === 'signed-out' ? 'WARNING'
+                : (itemCount <= 0 ? 'PROBLEM' : 'GOOD'),
+            detail: catalogueOverride === 'signed-out' ? '\u2014' : String(itemCount),
+            advice: catalogueOverride === 'signed-out' ? 'signed-out'
+                : (itemCount <= 0 ? 'empty' : null)
+        });
+        findings.push({
+            id: 'link',
+            /* Wi-Fi nao e defeito, mas e a explicacao mais comum para uma ligacao
+               que mede bem e mesmo assim corta. */
+            severity: link === 'none' ? 'PROBLEM' : (link === 'wireless' ? 'WARNING' : 'GOOD'),
+            /*
+              Um travessao quando a plataforma nao sabe dizer o tipo de ligacao.
+
+              A Tizen so expoe isso em algumas versoes, e reaproveitar aqui a
+              frase da velocidade — "nao foi possivel medir a velocidade" — dizia
+              a coisa errada sobre a linha errada. Um travessao e honesto.
+            */
+            detail: link === 'wireless' ? t('diagnosticsWireless')
+                : (link === 'wired' ? t('diagnosticsWired')
+                : (link === 'none' ? t('diagnosticsNoLink') : '—')),
+            advice: link
+        });
+        return findings;
+    }
+
+    function diagnosticsMark(severity) {
+        if (severity === 'GOOD') { return '\u25CF'; }
+        if (severity === 'WARNING') { return '\u25B2'; }
+        return '\u25A0';
+    }
+
+    function diagnosticsLabel(id) {
+        if (id === 'download') { return t('diagnosticsDownload'); }
+        if (id === 'ping') { return t('diagnosticsPing'); }
+        if (id === 'loss') { return t('diagnosticsLoss'); }
+        if (id === 'catalogue') { return t('diagnosticsCatalogue'); }
+        if (id === 'link') { return t('diagnosticsConnection'); }
+        return id;
+    }
+
+    function diagnosticsQualityLabel(ceiling) {
+        if (ceiling === 'unstable') { return t('diagnosticsQualityUnstable'); }
+        if (ceiling === 'sd') { return t('diagnosticsQualitySd'); }
+        if (ceiling === 'hd') { return t('diagnosticsQualityHd'); }
+        if (ceiling === 'uhd') { return t('diagnosticsQualityUhd'); }
+        return t('diagnosticsQualityUnknown');
+    }
+
+    /* A frase por baixo da leitura, so quando ha uma que valha a pena ler. */
+    function diagnosticsAdvice(finding) {
+        if (finding.id === 'download' && finding.severity !== 'GOOD') {
+            return diagnosticsQualityLabel(finding.advice);
+        }
+        if (finding.id === 'link' && finding.advice === 'wireless') { return t('diagnosticsWireless'); }
+        if (finding.id === 'link' && finding.advice === 'none') { return t('diagnosticsNoLink'); }
+        if (finding.id === 'catalogue' && finding.advice === 'empty') { return t('diagnosticsCatalogueEmpty'); }
+        if (finding.id === 'catalogue' && finding.advice === 'signed-out') { return t('diagnosticsSignedOut'); }
+        return null;
+    }
+
+    function renderDiagnostics() {
+        var data = state.screenData || {};
+        var net = BuroDiagnostics.network();
+        var body = '<div class="pair-panel">';
+        var verdict;
+        var rows = '';
+
+        if (data.running) {
+            /*
+              Cada linha que o teste vai preencher, ja com o seu indicador. Sem
+              isto o painel ficava vazio e enchia de golpe, o que numa falha
+              rapida parecia um botao que nao fez nada.
+            */
+            body += '<p class="form-note"><span class="boot-indicator"></span> ' +
+                escapeHtml(t('diagnosticsRunning')) + '</p>';
+            DIAGNOSTICS_ROWS.forEach(function (id) {
+                rows += '<div class="diagnostics-row pending"><span class="boot-indicator"></span>' +
+                    '<span class="diagnostics-name">' + escapeHtml(diagnosticsLabel(id)) + '</span></div>';
+            });
+        } else if (!data.findings) {
+            body += '<p class="form-note">' + escapeHtml(t('diagnosticsQualityUnknown')) + '</p>';
+        } else {
+            verdict = BuroDiagnostics.overall(data.findings);
+            body += '<p class="diagnostics-verdict ' + verdict.toLowerCase() + '">' +
+                escapeHtml(t(verdict === 'GOOD' ? 'diagnosticsVerdictGood'
+                    : (verdict === 'WARNING' ? 'diagnosticsVerdictWarning' : 'diagnosticsVerdictProblem'))) +
+                '</p>';
+            body += '<p class="form-note">' +
+                escapeHtml(diagnosticsQualityLabel((data.readings || {}).quality)) + '</p>';
+            data.findings.forEach(function (finding) {
+                var advice = diagnosticsAdvice(finding);
+                rows += '<div class="diagnostics-row">' +
+                    '<span class="diagnostics-mark ' + finding.severity.toLowerCase() + '">' +
+                    diagnosticsMark(finding.severity) + '</span>' +
+                    '<span class="diagnostics-name">' + escapeHtml(diagnosticsLabel(finding.id)) + '</span>' +
+                    '<span class="diagnostics-value">' + escapeHtml(finding.detail) + '</span>' +
+                    '</div>';
+                if (advice) {
+                    rows += '<div class="diagnostics-advice">' + escapeHtml(advice) + '</div>';
+                }
+            });
+            /* Os enderecos, que sao o que um pedido de suporte pergunta. */
+            if (net.address) {
+                rows += diagnosticsFactHtml(t('diagnosticsAddress'), net.address);
+            }
+            if (net.netmask) {
+                rows += diagnosticsFactHtml(t('diagnosticsNetmask'), net.netmask);
+            }
+            if (net.gateway) {
+                rows += diagnosticsFactHtml(t('diagnosticsGateway'), net.gateway);
+            }
+        }
+
+        body += '<div class="diagnostics-list">' + rows + '</div>';
+        body += '<div class="form-actions">' +
+            '<button class="button focusable" data-action="diagnostics-run"' +
+            (data.running ? ' disabled' : '') + '>' +
+            escapeHtml(data.running ? t('diagnosticsRunning') : t('diagnosticsRun')) + '</button>' +
+            '<button class="button ghost focusable" data-action="diagnostics-close">' +
+            escapeHtml(t('diagnosticsClose')) + '</button></div>';
+        body += '</div>';
+        shell(body, t('diagnosticsTitle'), true);
+    }
+
+    function diagnosticsFactHtml(label, value) {
+        return '<div class="diagnostics-fact"><span class="diagnostics-name">' +
+            escapeHtml(label) + '</span><span class="diagnostics-value">' +
+            escapeHtml(value) + '</span></div>';
+    }
+
     function renderDeviceCode() {
         var code = BuroLicense.deviceId();
         var body = code
@@ -8269,6 +8534,7 @@ var BuroApp = (function () {
         else if (state.screen === 'CRITICS_SETTINGS') { renderCriticsSettings(); }
         else if (state.screen === 'PAIRING') { renderPairing(); }
         else if (state.screen === 'DEVICE_CODE') { renderDeviceCode(); }
+        else if (state.screen === 'DIAGNOSTICS') { renderDiagnostics(); }
         else if (state.screen === 'SEND_TO_SCREEN') { renderSendToScreen(); }
         else if (state.screen === 'CRITICS_GUIDE') { renderCriticsGuide(); }
         else if (state.screen === 'STORAGE_SETTINGS') { renderStorageSettings(); }
@@ -11792,6 +12058,9 @@ var BuroApp = (function () {
         else if (action === 'source-manage') { pushScreen('SOURCE_MANAGE', { sourceId: id, confirmDelete: false }); }
         else if (action === 'source-refresh') { refreshSource(); }
         else if (action === 'catalogue-refresh') { refreshCatalogueFromTopBar(); }
+        else if (action === 'diagnostics') { openDiagnostics(); }
+        else if (action === 'diagnostics-run') { runDiagnostics(); }
+        else if (action === 'diagnostics-close') { closeDiagnostics(); }
         else if (action === 'catalogue-sync-cancel') {
             if (BuroCatalogueSync.cancel()) { showToast(t('catalogueSyncCancelledToast'), false); }
         }
