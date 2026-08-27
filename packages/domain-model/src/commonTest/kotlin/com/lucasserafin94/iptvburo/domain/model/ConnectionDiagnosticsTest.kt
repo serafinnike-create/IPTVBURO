@@ -45,9 +45,30 @@ class ConnectionDiagnosticsTest {
     fun `latency is judged apart from speed`() {
         // A fast line with terrible latency still freezes on every channel change, so speed alone
         // must not be able to produce a clean verdict.
-        assertEquals(Severity.GOOD, ConnectionDiagnostics.pingVerdict(60))
-        assertEquals(Severity.WARNING, ConnectionDiagnostics.pingVerdict(61))
+        assertEquals(Severity.GOOD, ConnectionDiagnostics.pingVerdict(50))
+        assertEquals(Severity.WARNING, ConnectionDiagnostics.pingVerdict(51))
         assertEquals(Severity.PROBLEM, ConnectionDiagnostics.pingVerdict(151))
+    }
+
+    /**
+     * Latency needs a sentence of its own.
+     *
+     * A viewer shown "173 ms" in red learns that something is wrong and nothing about what. Latency
+     * is the reading most likely to be the real cause of a picture that freezes on a connection
+     * whose speed looks fine, so it is the one that most needs explaining.
+     */
+    @Test
+    fun `latency carries advice, not just a colour`() {
+        assertEquals("good", ConnectionDiagnostics.latencyAdvice(20))
+        assertEquals("good", ConnectionDiagnostics.latencyAdvice(50), "50 ainda e boa")
+        assertEquals("fair", ConnectionDiagnostics.latencyAdvice(51), "acima de 50 ja avisa")
+        assertEquals("fair", ConnectionDiagnostics.latencyAdvice(150))
+        assertEquals("unstable", ConnectionDiagnostics.latencyAdvice(173), "a leitura reportada")
+    }
+
+    @Test
+    fun `latency that could not be measured says so`() {
+        assertEquals("unknown", ConnectionDiagnostics.latencyAdvice(null))
     }
 
     @Test

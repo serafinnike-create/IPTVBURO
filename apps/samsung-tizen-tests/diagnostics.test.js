@@ -41,14 +41,30 @@ check('30 é o mínimo oferecido para 4K',
 process.stdout.write('\nLatência e perda, julgadas à parte da velocidade\n');
 
 /* Uma linha rápida com latência terrível trava em cada troca de canal. */
-check('60 ms é bom, 61 já é aviso',
-    diagnostics.pingVerdict(60) === 'GOOD' && diagnostics.pingVerdict(61) === 'WARNING');
+check('50 ms é bom, 51 já é aviso',
+    diagnostics.pingVerdict(50) === 'GOOD' && diagnostics.pingVerdict(51) === 'WARNING');
 check('acima de 150 ms é problema',
     diagnostics.pingVerdict(151) === 'PROBLEM');
 check('qualquer perda merece ser dita',
     diagnostics.lossVerdict(0) === 'GOOD' &&
     diagnostics.lossVerdict(0.5) === 'WARNING' &&
     diagnostics.lossVerdict(2) === 'PROBLEM');
+
+/*
+  A latencia precisa de frase propria.
+
+  Quem ve "173 ms" a vermelho fica a saber que algo esta mal e nada sobre o que —
+  e a latencia e a leitura que mais provavelmente explica uma imagem que trava
+  numa ligacao cuja velocidade parece boa.
+*/
+check('abaixo de 50 ms a latencia e dita boa',
+    diagnostics.latencyAdvice(20) === 'good' && diagnostics.latencyAdvice(50) === 'good');
+check('acima de 50 ms avisa que pode travar',
+    diagnostics.latencyAdvice(51) === 'fair' && diagnostics.latencyAdvice(150) === 'fair');
+check('a leitura relatada de 173 ms e chamada instavel',
+    diagnostics.latencyAdvice(173) === 'unstable');
+check('sem leitura, a latencia e desconhecida',
+    diagnostics.latencyAdvice(null) === 'unknown');
 
 process.stdout.write('\nO veredito é a pior leitura, nunca a média\n');
 
@@ -126,7 +142,7 @@ check('o limite de 1080p e o mesmo do Windows',
 check('o limite de 4K e o mesmo do Windows',
     sharedNumber('UHD_DOWNLOAD_MBPS') === 30);
 check('os limites de latencia sao os mesmos',
-    sharedNumber('GOOD_PING_MS') === 60 && sharedNumber('POOR_PING_MS') === 150);
+    sharedNumber('GOOD_PING_MS') === 50 && sharedNumber('POOR_PING_MS') === 150);
 check('o limite de perda de pacotes e o mesmo',
     sharedNumber('POOR_PACKET_LOSS_PERCENT') === 2.0);
 

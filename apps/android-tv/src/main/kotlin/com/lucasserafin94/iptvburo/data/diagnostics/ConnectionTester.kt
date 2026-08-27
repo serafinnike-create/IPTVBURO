@@ -139,6 +139,10 @@ class ConnectionTester
                         id = "ping",
                         severity = ConnectionDiagnostics.pingVerdict(ping),
                         detail = ping?.let { "$it ms" } ?: EM_DASH,
+                        // Latency is the reading most likely to explain a picture that freezes on a
+                        // connection whose speed looks fine, so it says what it means rather than
+                        // only turning red.
+                        advice = ConnectionDiagnostics.latencyAdvice(ping),
                     )
 
                 // Counted rather than thrown: a connection losing one request in ten is exactly

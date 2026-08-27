@@ -45,6 +45,11 @@ var BuroApp = (function () {
     var playerNextCountdown;
     var nextEpisodeTimer = null;
     var nextEpisodeTarget = null;
+    var playerSleepLabel;
+    var sleepTimerTicker = null;
+    var sleepTimerEndsAt = null;
+    var sleepTimerMinutes = null;
+    var sleepTimerAtEpisodeEnd = false;
     var playerControlsTimer = null;
     var playerEnterTimer = null;
     var playerEnterPressActive = false;
@@ -1008,6 +1013,109 @@ var BuroApp = (function () {
         if (hide !== false && playerNextPanel) { playerNextPanel.hidden = true; }
     }
 
+    /*
+      O temporizador de sono.
+
+      Quem adormece assistindo deixa a TV tocando a noite inteira: a lista
+      continua consumindo banda, o painel continua aceso, e no dia seguinte o
+      progresso do titulo esta no fim de um episodio que ninguem viu.
+
+      As opcoes sao minutos e "ao fim deste episodio". A ultima existe porque e o
+      que as pessoas de facto querem quando ja estao com sono: nao trinta
+      minutos, mas ate onde este acabar.
+
+      Ao chegar a zero para e volta a ficha, gravando o progresso — o mesmo
+      caminho do RETURN. Fechar o aplicativo inteiro seria pior no caso comum de
+      quem esta acordado e so nao mexeu no controle; deixar pausado com a tela
+      acesa resolveria metade do problema.
+    */
+    var SLEEP_MINUTES = [15, 30, 45, 60, 90, 120];
+
+    /* Sessenta segundos de resolucao bastam, e um intervalo por segundo numa TV
+       de baixo custo e trabalho a toa durante duas horas. */
+    var SLEEP_TICK_MILLIS = 60000;
+
+    function sleepTimerOptions() {
+        var options = [{ index: null, label: t('sleepTimerOff'), selected: sleepTimerEndsAt === null && !sleepTimerAtEpisodeEnd, sleep: true }];
+        SLEEP_MINUTES.forEach(function (minutes) {
+            options.push({
+                index: minutes,
+                label: t('sleepTimerMinutes').replace('{minutes}', String(minutes)),
+                selected: sleepTimerMinutes === minutes && !sleepTimerAtEpisodeEnd,
+                sleep: true
+            });
+        });
+        /* Só faz sentido onde existe um fim: um canal ao vivo nunca acaba. */
+        if (currentPlayback && currentPlayback.contentType !== 'LIVE') {
+            options.push({
+                index: 'EPISODE',
+                label: t('sleepTimerEpisodeEnd'),
+                selected: sleepTimerAtEpisodeEnd,
+                sleep: true
+            });
+        }
+        return options;
+    }
+
+    function clearSleepTimer() {
+        if (sleepTimerTicker) { window.clearInterval(sleepTimerTicker); sleepTimerTicker = null; }
+        sleepTimerEndsAt = null;
+        sleepTimerMinutes = null;
+        sleepTimerAtEpisodeEnd = false;
+        updateSleepTimerLabel();
+    }
+
+    /*
+      O rotulo na barra do player mostra quanto falta, e nao so que o
+      temporizador esta ligado: sem o numero a pessoa nao sabe se ainda da tempo
+      de ver o resto, e acaba desligando por duvida.
+    */
+    function updateSleepTimerLabel() {
+        var remaining;
+        if (!playerSleepLabel) { return; }
+        if (sleepTimerAtEpisodeEnd) {
+            playerSleepLabel.hidden = false;
+            playerSleepLabel.textContent = '⏻ ' + t('sleepTimerEpisodeEnd');
+            return;
+        }
+        if (sleepTimerEndsAt === null) { playerSleepLabel.hidden = true; return; }
+        remaining = Math.max(0, Math.ceil((sleepTimerEndsAt - Date.now()) / 60000));
+        playerSleepLabel.hidden = false;
+        playerSleepLabel.textContent = '⏻ ' + t('sleepTimerRemaining').replace('{minutes}', String(remaining));
+    }
+
+    /*
+      Chega a zero: grava e sai.
+
+      `stopPlayback` ja faz as duas coisas e e o caminho que o RETURN percorre,
+      entao dormir e sair pelo controle terminam no mesmo estado — a ficha, com
+      o botao dizendo de onde continuar.
+    */
+    function fireSleepTimer() {
+        clearSleepTimer();
+        showToast(t('sleepTimerFired'), false);
+        stopPlayback();
+    }
+
+    function setSleepTimer(value) {
+        clearSleepTimer();
+        if (value === null) { showToast(t('sleepTimerOff'), false); return; }
+        if (value === 'EPISODE') {
+            sleepTimerAtEpisodeEnd = true;
+            updateSleepTimerLabel();
+            showToast(t('sleepTimerEpisodeEnd'), false);
+            return;
+        }
+        sleepTimerMinutes = Number(value);
+        sleepTimerEndsAt = Date.now() + sleepTimerMinutes * 60000;
+        sleepTimerTicker = window.setInterval(function () {
+            if (sleepTimerEndsAt !== null && Date.now() >= sleepTimerEndsAt) { fireSleepTimer(); return; }
+            updateSleepTimerLabel();
+        }, SLEEP_TICK_MILLIS);
+        updateSleepTimerLabel();
+        showToast(t('sleepTimerRemaining').replace('{minutes}', String(sleepTimerMinutes)), false);
+    }
+
     function closePlayerMenu() {
         playerMenuState = null;
         if (playerMenu) { playerMenu.hidden = true; }
@@ -1019,9 +1127,10 @@ var BuroApp = (function () {
         if (!playerMenuState || !playerMenu) { return; }
         guide = playerMenuState.type === 'GUIDE';
         playerMenu.classList.toggle('guide', guide);
-        playerMenuTitle.textContent = playerMenuState.type === 'AUDIO' ? t('audioTracks') :
+        playerMenuTitle.textContent = playerMenuState.type === 'SLEEP' ? t('sleepTimer') :
+            (playerMenuState.type === 'AUDIO' ? t('audioTracks') :
             (playerMenuState.type === 'TEXT' ? t('subtitleTracks') :
-                (playerMenuState.type === 'GUIDE' ? t('programmeGuide') : t('playbackSpeed')));
+                (playerMenuState.type === 'GUIDE' ? t('programmeGuide') : t('playbackSpeed'))));
         playerMenuOptions.setAttribute('role', guide ? 'list' : 'listbox');
         playerMenuOptions.setAttribute('aria-label', playerMenuTitle.textContent);
         if (guide && playerMenuState.empty) {
@@ -1071,9 +1180,9 @@ var BuroApp = (function () {
         var nowSeconds = Math.floor(Date.now() / 1000);
         var guideChannel = type === 'GUIDE' && currentPlayback ?
             findItemAndSource(currentPlayback.itemId).item : null;
-        var options = type === 'SPEED' ? BuroPlayer.playbackRates().map(function (rate) {
+        var options = type === 'SLEEP' ? sleepTimerOptions() : (type === 'SPEED' ? BuroPlayer.playbackRates().map(function (rate) {
             return { index: rate, label: rate + '×', selected: rate === BuroPlayer.playbackRate(), speed: true };
-        }) : (type === 'GUIDE' ? playerSchedule().slice(0, 100).map(function (program, index) {
+        }).concat([{ index: 'SLEEP_MENU', label: t('sleepTimer') + ' ›', selected: false, openSleep: true }]) : (type === 'GUIDE' ? playerSchedule().slice(0, 100).map(function (program, index) {
             var catchUp = guideChannel ? BuroXtream.catchUpLocator(guideChannel.locator, program, nowSeconds) : null;
             return {
                 index: index,
@@ -1085,9 +1194,11 @@ var BuroApp = (function () {
                 catchUp: Boolean(catchUp), programme: program,
                 guide: true
             };
-        }) : BuroPlayer.trackOptions(type));
+        }) : BuroPlayer.trackOptions(type)));
         var selected = 0;
         if (type === 'SPEED' && (!currentPlayback || currentPlayback.contentType === 'LIVE')) { return; }
+        /* O sono vale tambem no ao vivo — e ali que a TV fica a noite toda. */
+        if (type === 'SLEEP' && !currentPlayback) { return; }
         if (type === 'TEXT') {
             options.unshift({ index: null, label: t('subtitlesOff'), selected: false, off: true });
         }
@@ -1128,6 +1239,20 @@ var BuroApp = (function () {
                 return;
             }
             closePlayerMenu(); return;
+        }
+        /* A entrada que abre o submenu do sono, e nao uma escolha em si. As
+           quatro teclas coloridas ja estao ocupadas, entao o temporizador mora
+           dentro do menu amarelo — que deixa de ser so velocidade e passa a ser
+           o menu de reproducao. */
+        if (option.openSleep) {
+            closePlayerMenu();
+            openPlayerMenu('SLEEP');
+            return;
+        }
+        if (option.sleep) {
+            setSleepTimer(option.index);
+            closePlayerMenu();
+            return;
         }
         selected = option.speed ? BuroPlayer.setPlaybackRate(option.index) :
             (option.off ? BuroPlayer.disableSubtitles() : BuroPlayer.selectTrack(playerMenuState.type, option.index));
@@ -7020,7 +7145,11 @@ var BuroApp = (function () {
                             {
                                 id: 'ping',
                                 severity: BuroDiagnostics.pingVerdict(ping),
-                                detail: ping === null ? '\u2014' : ping + ' ms'
+                                detail: ping === null ? '\u2014' : ping + ' ms',
+                                /* Diz o que significa, e nao so fica vermelho: a latencia e a
+                                   leitura que mais explica uma imagem que trava numa ligacao
+                                   cuja velocidade parece boa. */
+                                advice: BuroDiagnostics.latencyAdvice(ping)
                             },
                             {
                                 id: 'loss',
@@ -7103,8 +7232,19 @@ var BuroApp = (function () {
         return t('diagnosticsQualityUnknown');
     }
 
+    function diagnosticsLatencyLabel(advice) {
+        if (advice === 'good') { return t('diagnosticsLatencyGood'); }
+        if (advice === 'fair') { return t('diagnosticsLatencyFair'); }
+        if (advice === 'unstable') { return t('diagnosticsLatencyUnstable'); }
+        return t('diagnosticsLatencyUnknown');
+    }
+
     /* A frase por baixo da leitura, so quando ha uma que valha a pena ler. */
     function diagnosticsAdvice(finding) {
+        /* Sempre, e nao so quando esta ma: "os canais trocam sem espera" vale a pena ler,
+           e uma leitura boa sem nada por baixo parece que o aplicativo nao teve nada a
+           dizer. */
+        if (finding.id === 'ping') { return diagnosticsLatencyLabel(finding.advice); }
         if (finding.id === 'download' && finding.severity !== 'GOOD') {
             return diagnosticsQualityLabel(finding.advice);
         }
@@ -7138,12 +7278,16 @@ var BuroApp = (function () {
             body += '<p class="form-note">' + escapeHtml(t('diagnosticsQualityUnknown')) + '</p>';
         } else {
             verdict = BuroDiagnostics.overall(data.findings);
-            body += '<p class="diagnostics-verdict ' + verdict.toLowerCase() + '">' +
+            /* O veredito num painel da sua cor, e nao mais uma linha de texto: e a
+               unica coisa que quem nao ler mais nada tem de levar consigo. */
+            body += '<div class="diagnostics-banner ' + verdict.toLowerCase() + '">' +
+                '<span class="diagnostics-banner-mark">' + diagnosticsMark(verdict) + '</span>' +
+                '<span class="diagnostics-banner-text"><strong>' +
                 escapeHtml(t(verdict === 'GOOD' ? 'diagnosticsVerdictGood'
                     : (verdict === 'WARNING' ? 'diagnosticsVerdictWarning' : 'diagnosticsVerdictProblem'))) +
-                '</p>';
-            body += '<p class="form-note">' +
-                escapeHtml(diagnosticsQualityLabel((data.readings || {}).quality)) + '</p>';
+                '</strong><span>' +
+                escapeHtml(diagnosticsQualityLabel((data.readings || {}).quality)) +
+                '</span></span></div>';
             data.findings.forEach(function (finding) {
                 var advice = diagnosticsAdvice(finding);
                 rows += '<div class="diagnostics-row">' +
@@ -7168,7 +7312,8 @@ var BuroApp = (function () {
             }
         }
 
-        body += '<div class="diagnostics-list">' + rows + '</div>';
+        body += '<div class="diagnostics-list' + (data.running ? ' pending' : '') + '">' +
+            rows + '</div>';
         body += '<div class="form-actions">' +
             '<button class="button focusable" data-action="diagnostics-run"' +
             (data.running ? ' disabled' : '') + '>' +
@@ -11690,6 +11835,9 @@ var BuroApp = (function () {
            fechado abriria o proximo episodio por cima da tela que a pessoa
            acabou de escolher. */
         cancelNextEpisode(true);
+        /* O temporizador morre com a sessao: armado numa reproducao, nao deve
+           derrubar a proxima que a pessoa escolher. */
+        clearSleepTimer();
         resetPlayerControlsLock();
         progressChanged = persistProgress(false);
         currentPlayback = null;
@@ -12403,6 +12551,7 @@ var BuroApp = (function () {
         playerNextPanel = document.getElementById('player-next-panel');
         playerNextTitle = document.getElementById('player-next-title');
         playerNextCountdown = document.getElementById('player-next-countdown');
+        playerSleepLabel = document.getElementById('player-sleep-label');
         playerWaiting = document.getElementById('player-waiting');
         playerWaitingLabel = document.getElementById('player-waiting-label');
         playerErrorPanel = document.getElementById('player-error-panel');
@@ -12456,6 +12605,20 @@ var BuroApp = (function () {
                   episodio que acabou ja esta marcado como visto, e o proximo
                   comeca com a lista correta atras dele.
                 */
+                /*
+                  O temporizador "ao fim deste episodio" ganha do encadeamento.
+
+                  Quem o escolheu disse que este e o ultimo, entao oferecer o
+                  proximo — e comeca-lo sozinho em dez segundos — seria o oposto
+                  do pedido.
+                */
+                if (sleepTimerAtEpisodeEnd) {
+                    clearSleepTimer();
+                    document.body.classList.remove('playing'); root.removeAttribute('aria-hidden'); overlay.hidden = true;
+                    if (progressChanged) { refreshPlaybackReturnVisual(visual); }
+                    showToast(t('sleepTimerFired'), false);
+                    return;
+                }
                 next = finishedId ? nextEpisodeAfter(finishedId) : null;
                 if (next) {
                     if (progressChanged) { refreshPlaybackReturnVisual(visual); }

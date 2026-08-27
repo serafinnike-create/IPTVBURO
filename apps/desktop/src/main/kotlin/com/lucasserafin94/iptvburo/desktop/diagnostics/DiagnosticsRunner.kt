@@ -83,6 +83,9 @@ class DiagnosticsRunner(
             id = "ping",
             severity = ConnectionDiagnostics.pingVerdict(millis),
             detail = millis?.let { "$it ms" } ?: "—",
+            // Latency is the reading most likely to explain a picture that freezes on a connection
+            // whose speed looks fine, so it says what it means rather than only turning red.
+            advice = ConnectionDiagnostics.latencyAdvice(millis),
         )
 
     private fun lossFinding(

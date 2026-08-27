@@ -1,6 +1,7 @@
 package com.lucasserafin94.iptvburo.desktop.app
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -152,31 +153,69 @@ fun DiagnosticsDialog(
                 }
 
                 else -> {
-                    Spacer(Modifier.height(BuroSpacing.Sm))
-                    // The verdict first. Somebody who reads nothing else must still learn whether
-                    // their connection is the problem.
-                    Text(
-                        text = verdictLabel(text, current.overall),
-                        color = severityColor(current.overall),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = qualityLabel(text, current.qualityCeiling),
-                        color = BuroColors.TextMuted,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-
                     Spacer(Modifier.height(BuroSpacing.Md))
-                    current.findings.forEach { finding ->
-                        DiagnosticRow(text = text, finding = finding)
+                    // The verdict as a banner in its own colour, not another line of text.
+                    //
+                    // It is the one thing somebody reading nothing else must still take away, and
+                    // as a plain sentence above a list it read as a caption rather than a finding.
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(severityColor(current.overall).copy(alpha = 0.12f))
+                                .padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = severityMark(current.overall),
+                            color = severityColor(current.overall),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Spacer(Modifier.width(BuroSpacing.Sm))
+                        Column {
+                            Text(
+                                text = verdictLabel(text, current.overall),
+                                color = severityColor(current.overall),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = qualityLabel(text, current.qualityCeiling),
+                                color = BuroColors.TextMuted,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                     }
 
+                    // The readings on their own surface, so the eye can tell a measurement from the
+                    // verdict above it and the machine's addresses below.
                     Spacer(Modifier.height(BuroSpacing.Md))
-                    // The addresses, which are what a support call actually asks for.
-                    network.address?.let { address -> FactRow(text.shareStrings.screens.diagnosticsAddress, address) }
-                    network.netmask?.let { mask -> FactRow(text.shareStrings.screens.diagnosticsNetmask, mask) }
-                    network.gateway?.let { gateway -> FactRow(text.shareStrings.screens.diagnosticsGateway, gateway) }
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BuroColors.SurfaceRaised)
+                                .padding(vertical = BuroSpacing.Xs),
+                    ) {
+                        current.findings.forEach { finding ->
+                            DiagnosticRow(text = text, finding = finding)
+                        }
+                    }
+
+                    // The addresses, which are what a support call actually asks for. Quieter and
+                    // apart: nobody reads these unless somebody on the telephone asks for them.
+                    val facts =
+                        listOfNotNull(
+                            network.address?.let { text.shareStrings.screens.diagnosticsAddress to it },
+                            network.netmask?.let { text.shareStrings.screens.diagnosticsNetmask to it },
+                            network.gateway?.let { text.shareStrings.screens.diagnosticsGateway to it },
+                        )
+                    if (facts.isNotEmpty()) {
+                        Spacer(Modifier.height(BuroSpacing.Md))
+                        facts.forEach { (label, value) -> FactRow(label, value) }
+                    }
                 }
             }
 
@@ -240,7 +279,12 @@ private fun DiagnosticRow(
     text: DesktopStrings,
     finding: Finding,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = BuroSpacing.Md, vertical = 7.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = severityMark(finding.severity),
@@ -252,12 +296,17 @@ private fun DiagnosticRow(
                 text = findingLabel(text, finding.id),
                 color = BuroColors.Text,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.width(150.dp),
+                // Weighted rather than a fixed width: the labels are longest in German, where a
+                // fixed column either clipped them or left a gap in every other language.
+                modifier = Modifier.weight(1f),
             )
+            // The value at the end, so the numbers line up as a column somebody can scan for the
+            // one that is wrong instead of reading every row.
             Text(
                 text = finding.detail,
-                color = BuroColors.TextMuted,
+                color = BuroColors.Text,
                 style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
             )
         }
         // The sentence, only when there is one worth reading: a healthy line needs no explaining,
@@ -267,7 +316,9 @@ private fun DiagnosticRow(
                 text = advice,
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(start = 26.dp),
+                // Indented past the mark, so it reads as a note on the line above rather than as
+                // another reading of its own.
+                modifier = Modifier.padding(start = 24.dp, top = 2.dp),
             )
         }
     }
@@ -278,12 +329,17 @@ private fun FactRow(
     label: String,
     value: String,
 ) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = BuroSpacing.Md, vertical = 3.dp),
+    ) {
         Text(
             text = label,
             color = BuroColors.TextSubtle,
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.width(150.dp),
+            modifier = Modifier.weight(1f),
         )
         Text(
             text = value,
@@ -329,6 +385,17 @@ private fun qualityLabel(
         else -> text.shareStrings.screens.diagnosticsQualityUnknown
     }
 
+private fun latencyLabel(
+    text: DesktopStrings,
+    advice: String,
+): String =
+    when (advice) {
+        "good" -> text.shareStrings.screens.diagnosticsLatencyGood
+        "fair" -> text.shareStrings.screens.diagnosticsLatencyFair
+        "unstable" -> text.shareStrings.screens.diagnosticsLatencyUnstable
+        else -> text.shareStrings.screens.diagnosticsLatencyUnknown
+    }
+
 private fun findingLabel(
     text: DesktopStrings,
     id: String,
@@ -366,6 +433,9 @@ private fun adviceLabel(
     when {
         finding.id == "download" && finding.severity != Severity.GOOD ->
             qualityLabel(text, finding.advice.orEmpty())
+        // Always, not only when it is bad: "os canais trocam sem espera" is worth reading, and a
+        // good reading with nothing under it looks like the app had nothing to say.
+        finding.id == "ping" -> latencyLabel(text, finding.advice.orEmpty())
         finding.id == "link" && finding.advice == "wireless" -> text.shareStrings.screens.diagnosticsWireless
         finding.id == "link" && finding.advice == "none" -> text.shareStrings.screens.diagnosticsNoLink
         finding.id == "catalogue" && finding.advice == "empty" -> text.shareStrings.screens.diagnosticsCatalogueEmpty

@@ -2082,3 +2082,34 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
 .diagnostics-verdict.good { color: var(--success); }
 .diagnostics-verdict.warning { color: var(--gold); }
 .diagnostics-verdict.problem { color: var(--error); }
+
+/*
+  O veredito como faixa, na sua propria cor.
+
+  E a unica coisa que quem nao ler mais nada tem de levar consigo, e como frase
+  solta por cima de uma lista lia-se como legenda em vez de resultado.
+*/
+.diagnostics-banner {
+    display: flex; align-items: center; gap: 18px;
+    padding: 18px 24px; border-radius: 14px; margin: 10px 0 22px;
+}
+.diagnostics-banner.good { background: rgba(78, 213, 155, 0.12); }
+.diagnostics-banner.warning { background: rgba(214, 169, 86, 0.12); }
+.diagnostics-banner.problem { background: rgba(255, 107, 107, 0.12); }
+.diagnostics-banner-mark { font-size: 30px; }
+.diagnostics-banner.good .diagnostics-banner-mark { color: var(--success); }
+.diagnostics-banner.warning .diagnostics-banner-mark { color: var(--gold); }
+.diagnostics-banner.problem .diagnostics-banner-mark { color: var(--error); }
+.diagnostics-banner-text { display: flex; flex-direction: column; gap: 4px; }
+.diagnostics-banner-text strong { font-size: 30px; }
+.diagnostics-banner.good .diagnostics-banner-text strong { color: var(--success); }
+.diagnostics-banner.warning .diagnostics-banner-text strong { color: var(--gold); }
+.diagnostics-banner.problem .diagnostics-banner-text strong { color: var(--error); }
+.diagnostics-banner-text span { color: var(--secondary); font-size: 22px; }
+
+/* As leituras na sua propria superficie, separadas do veredito e dos enderecos. */
+.diagnostics-list { background: var(--elevated); border-radius: 14px; padding: 10px 22px; }
+/* O valor no fim, para os numeros formarem uma coluna que se varre de relance. */
+.diagnostics-row .diagnostics-name { flex: 1; width: auto; }
+.diagnostics-row .diagnostics-value { color: var(--text); font-weight: 600; }
+.diagnostics-fact { padding-left: 0; }

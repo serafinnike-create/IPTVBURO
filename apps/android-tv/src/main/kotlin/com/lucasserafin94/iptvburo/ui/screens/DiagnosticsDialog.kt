@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -39,6 +40,7 @@ import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
 import com.lucasserafin94.iptvburo.ui.theme.BuroDanger
 import com.lucasserafin94.iptvburo.ui.theme.BuroGold
 import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
+import com.lucasserafin94.iptvburo.ui.theme.BuroSurfaceRaised
 import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
 import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 import kotlinx.coroutines.delay
@@ -141,29 +143,66 @@ fun DiagnosticsDialog(
             }
 
             else -> {
-                Spacer(Modifier.height(8.dp))
-                // The verdict first. Somebody who reads nothing else must still learn whether their
-                // connection is the problem.
-                Text(
-                    text = stringResource(verdictFor(current.overall)),
-                    color = colourFor(current.overall),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = stringResource(qualityFor(current.qualityCeiling)),
-                    color = BuroTextSecondary,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Spacer(Modifier.height(14.dp))
+                // The verdict as a banner in its own colour, not another line of text: it is the
+                // one thing somebody reading nothing else must still take away, and as a plain
+                // sentence above a list it read as a caption rather than a finding.
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colourFor(current.overall).copy(alpha = 0.12f))
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = markFor(current.overall),
+                        color = colourFor(current.overall),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = stringResource(verdictFor(current.overall)),
+                            color = colourFor(current.overall),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = stringResource(qualityFor(current.qualityCeiling)),
+                            color = BuroTextSecondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
 
+                // The readings on their own surface, so the eye can tell a measurement from the
+                // verdict above it and the machine's addresses below.
                 Spacer(Modifier.height(16.dp))
-                current.findings.forEach { finding -> DiagnosticRow(finding) }
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(BuroSurfaceRaised)
+                            .padding(vertical = 6.dp),
+                ) {
+                    current.findings.forEach { finding -> DiagnosticRow(finding) }
+                }
 
-                Spacer(Modifier.height(16.dp))
-                // The addresses, which are what a support call actually asks for.
-                current.address?.let { FactRow(R.string.diagnostics_address, it) }
-                current.netmask?.let { FactRow(R.string.diagnostics_netmask, it) }
-                current.gateway?.let { FactRow(R.string.diagnostics_gateway, it) }
+                // The addresses, quieter and apart: nobody reads these unless somebody on the
+                // telephone asks for them.
+                val facts =
+                    listOfNotNull(
+                        current.address?.let { R.string.diagnostics_address to it },
+                        current.netmask?.let { R.string.diagnostics_netmask to it },
+                        current.gateway?.let { R.string.diagnostics_gateway to it },
+                    )
+                if (facts.isNotEmpty()) {
+                    Spacer(Modifier.height(16.dp))
+                    facts.forEach { (label, value) -> FactRow(label, value) }
+                }
             }
         }
 
@@ -211,7 +250,7 @@ fun DiagnosticsDialog(
 
 @Composable
 private fun DiagnosticRow(finding: Finding) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = markFor(finding.severity),
@@ -223,12 +262,17 @@ private fun DiagnosticRow(finding: Finding) {
                 text = stringResource(labelFor(finding.id)),
                 color = BuroTextPrimary,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.width(170.dp),
+                // Weighted rather than a fixed width: the labels are longest in German, where a
+                // fixed column either clipped them or left a gap in every other language.
+                modifier = Modifier.weight(1f),
             )
+            // The value at the end, so the numbers line up as a column somebody can scan for the
+            // one that is wrong instead of reading every row.
             Text(
                 text = finding.detail,
-                color = BuroTextSecondary,
+                color = BuroTextPrimary,
                 style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
             )
         }
         // The sentence, only when there is one worth reading: a healthy line needs no explaining,
@@ -249,12 +293,12 @@ private fun FactRow(
     label: Int,
     value: String,
 ) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp)) {
         Text(
             text = stringResource(label),
             color = BuroTextSecondary,
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.width(170.dp),
+            modifier = Modifier.weight(1f),
         )
         Text(
             text = value,
@@ -298,6 +342,14 @@ private fun qualityFor(ceiling: String): Int =
         else -> R.string.diagnostics_quality_unknown
     }
 
+private fun latencyFor(advice: String): Int =
+    when (advice) {
+        "good" -> R.string.diagnostics_latency_good
+        "fair" -> R.string.diagnostics_latency_fair
+        "unstable" -> R.string.diagnostics_latency_unstable
+        else -> R.string.diagnostics_latency_unknown
+    }
+
 private fun labelFor(id: String): Int =
     when (id) {
         "download" -> R.string.diagnostics_download
@@ -313,6 +365,9 @@ private fun adviceFor(finding: Finding): Int? =
     when {
         finding.id == "download" && finding.severity != Severity.GOOD ->
             qualityFor(finding.advice.orEmpty())
+        // Always, not only when it is bad: "os canais trocam sem espera" is worth reading, and a
+        // good reading with nothing under it looks like the app had nothing to say.
+        finding.id == "ping" -> latencyFor(finding.advice.orEmpty())
         finding.id == "link" && finding.advice == "wireless" -> R.string.diagnostics_wireless
         finding.id == "link" && finding.advice == "wired" -> R.string.diagnostics_wired
         finding.id == "link" && finding.advice == "none" -> R.string.diagnostics_no_link

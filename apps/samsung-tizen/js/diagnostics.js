@@ -27,7 +27,7 @@ var BuroDiagnostics = (function () {
       recuperacao de um segmento perdido — que e o que a pessoa sente como
       "fica travando" numa ligacao cuja velocidade parece boa.
     */
-    var GOOD_PING_MS = 60;
+    var GOOD_PING_MS = 50;
     var POOR_PING_MS = 150;
 
     /* Qualquer perda constante e um problema: um stream nao pede duas vezes. */
@@ -66,6 +66,20 @@ var BuroDiagnostics = (function () {
         if (percent >= POOR_LOSS_PERCENT) { return 'PROBLEM'; }
         if (percent > 0) { return 'WARNING'; }
         return 'GOOD';
+    }
+
+    /*
+      O que uma leitura de latencia significa para quem esta a ver.
+
+      Precisou de frase propria: quem ve "173 ms" a vermelho fica a saber que algo
+      esta mal e nada sobre o que. A latencia e a leitura que mais provavelmente
+      explica uma imagem que trava numa ligacao cuja velocidade parece boa.
+    */
+    function latencyAdvice(ms) {
+        if (ms === null || ms === undefined) { return 'unknown'; }
+        if (ms > POOR_PING_MS) { return 'unstable'; }
+        if (ms > GOOD_PING_MS) { return 'fair'; }
+        return 'good';
     }
 
     /*
@@ -222,6 +236,7 @@ var BuroDiagnostics = (function () {
         megabitsPerSecond: megabitsPerSecond,
         downloadVerdict: downloadVerdict,
         pingVerdict: pingVerdict,
+        latencyAdvice: latencyAdvice,
         lossVerdict: lossVerdict,
         qualityCeiling: qualityCeiling,
         overall: overall,

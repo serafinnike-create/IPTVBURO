@@ -388,4 +388,10 @@
     <string name="diagnostics_catalogue_empty">A lista não carregou: confirme a assinatura com quem vendeu</string>
     <string name="diagnostics_signed_out">Sem lista configurada</string>
     <string name="diagnostics_low_memory">Pouca memória: feche outros aplicativos ou reinicie</string>
+
+    <!-- A latencia precisa de frase propria: e a leitura que mais explica uma imagem que trava. -->
+    <string name="diagnostics_latency_good">Latência baixa: os canais trocam sem espera</string>
+    <string name="diagnostics_latency_fair">Latência alta: pode travar e demorar ao trocar de canal</string>
+    <string name="diagnostics_latency_unstable">Latência muito alta: vai causar travamentos e cortes</string>
+    <string name="diagnostics_latency_unknown">Não foi possível medir a latência</string>
 </resources>

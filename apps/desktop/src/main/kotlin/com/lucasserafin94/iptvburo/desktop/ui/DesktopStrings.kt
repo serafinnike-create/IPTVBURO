@@ -644,6 +644,10 @@ data class DesktopStrings(
                         ScreenStrings(
                             diagnosticsAction = "Diagnóstico",
                             diagnosticsTitle = "Diagnóstico de conexión",
+                            diagnosticsLatencyGood = "Latencia baja: los canales cambian sin espera",
+                            diagnosticsLatencyFair = "Latencia alta: puede cortar y tardar al cambiar de canal",
+                            diagnosticsLatencyUnstable = "Latencia muy alta: va a causar cortes y congelamientos",
+                            diagnosticsLatencyUnknown = "No se pudo medir la latencia",
                             diagnosticsRunning = "Probando…",
                             diagnosticsRun = "Probar de nuevo",
                             diagnosticsClose = "Cerrar",
@@ -1401,6 +1405,10 @@ data class DesktopStrings(
                         ScreenStrings(
                             diagnosticsAction = "Diagnóstico",
                             diagnosticsTitle = "Diagnóstico da ligação",
+                            diagnosticsLatencyGood = "Latência baixa: os canais trocam sem espera",
+                            diagnosticsLatencyFair = "Latência alta: pode travar e demorar ao trocar de canal",
+                            diagnosticsLatencyUnstable = "Latência muito alta: vai causar travamentos e cortes",
+                            diagnosticsLatencyUnknown = "Não foi possível medir a latência",
                             diagnosticsRunning = "A testar…",
                             diagnosticsRun = "Testar de novo",
                             diagnosticsClose = "Fechar",
@@ -2158,6 +2166,10 @@ data class DesktopStrings(
                         ScreenStrings(
                             diagnosticsAction = "Diagnostics",
                             diagnosticsTitle = "Connection diagnostics",
+                            diagnosticsLatencyGood = "Low latency: channels change without waiting",
+                            diagnosticsLatencyFair = "High latency: this can stall and slow channel changes",
+                            diagnosticsLatencyUnstable = "Very high latency: this will cause freezing and stalls",
+                            diagnosticsLatencyUnknown = "The latency could not be measured",
                             diagnosticsRunning = "Testing…",
                             diagnosticsRun = "Test again",
                             diagnosticsClose = "Close",
@@ -2914,6 +2926,10 @@ data class DesktopStrings(
                         ScreenStrings(
                             diagnosticsAction = "Diagnose",
                             diagnosticsTitle = "Verbindungsdiagnose",
+                            diagnosticsLatencyGood = "Niedrige Latenz: Kanäle wechseln ohne Wartezeit",
+                            diagnosticsLatencyFair = "Hohe Latenz: kann stocken und Kanalwechsel verzögern",
+                            diagnosticsLatencyUnstable = "Sehr hohe Latenz: verursacht Ruckeln und Aussetzer",
+                            diagnosticsLatencyUnknown = "Die Latenz konnte nicht gemessen werden",
                             diagnosticsRunning = "Test läuft…",
                             diagnosticsRun = "Erneut testen",
                             diagnosticsClose = "Schließen",
@@ -3675,6 +3691,10 @@ data class DesktopStrings(
                         ScreenStrings(
                             diagnosticsAction = "Diagnostica",
                             diagnosticsTitle = "Diagnostica della connessione",
+                            diagnosticsLatencyGood = "Latenza bassa: i canali cambiano senza attesa",
+                            diagnosticsLatencyFair = "Latenza alta: può bloccarsi e rallentare il cambio canale",
+                            diagnosticsLatencyUnstable = "Latenza molto alta: causerà blocchi e interruzioni",
+                            diagnosticsLatencyUnknown = "Non è stato possibile misurare la latenza",
                             diagnosticsRunning = "Test in corso…",
                             diagnosticsRun = "Riprova",
                             diagnosticsClose = "Chiudi",
@@ -4818,6 +4838,17 @@ data class ScreenStrings(
     val diagnosticsQualityHd: String,
     val diagnosticsQualityUhd: String,
     val diagnosticsQualityUnknown: String,
+    /**
+     * What a latency reading means for watching.
+     *
+     * A viewer shown "173 ms" in red learns that something is wrong and nothing about
+     * what. Latency is the reading most likely to explain a picture that freezes on a
+     * connection whose speed looks fine, so it is the one that most needs a sentence.
+     */
+    val diagnosticsLatencyGood: String,
+    val diagnosticsLatencyFair: String,
+    val diagnosticsLatencyUnstable: String,
+    val diagnosticsLatencyUnknown: String,
     val diagnosticsWireless: String,
     val diagnosticsWired: String,
     val diagnosticsNoLink: String,

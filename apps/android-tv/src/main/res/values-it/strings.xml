@@ -391,4 +391,10 @@
     <string name="diagnostics_catalogue_empty">La lista non si è caricata: verifica l’abbonamento con il venditore</string>
     <string name="diagnostics_signed_out">Nessuna lista configurata</string>
     <string name="diagnostics_low_memory">Poca memoria: chiudi altre app o riavvia</string>
+
+    <!-- A latencia precisa de frase propria: e a leitura que mais explica uma imagem que trava. -->
+    <string name="diagnostics_latency_good">Latenza bassa: i canali cambiano senza attesa</string>
+    <string name="diagnostics_latency_fair">Latenza alta: può bloccarsi e rallentare il cambio canale</string>
+    <string name="diagnostics_latency_unstable">Latenza molto alta: causerà blocchi e interruzioni</string>
+    <string name="diagnostics_latency_unknown">Non è stato possibile misurare la latenza</string>
 </resources>

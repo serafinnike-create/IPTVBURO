@@ -383,4 +383,10 @@
     <string name="diagnostics_catalogue_empty">The playlist did not load: check your subscription with your seller</string>
     <string name="diagnostics_signed_out">No playlist configured</string>
     <string name="diagnostics_low_memory">Low memory: close other apps or restart</string>
+
+    <!-- A latencia precisa de frase propria: e a leitura que mais explica uma imagem que trava. -->
+    <string name="diagnostics_latency_good">Low latency: channels change without waiting</string>
+    <string name="diagnostics_latency_fair">High latency: this can stall and slow channel changes</string>
+    <string name="diagnostics_latency_unstable">Very high latency: this will cause freezing and stalls</string>
+    <string name="diagnostics_latency_unknown">The latency could not be measured</string>
 </resources>

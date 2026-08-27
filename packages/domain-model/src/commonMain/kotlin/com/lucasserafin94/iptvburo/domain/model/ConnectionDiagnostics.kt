@@ -33,7 +33,7 @@ object ConnectionDiagnostics {
      * recovery from a dropped segment — which is what a viewer experiences as "it keeps freezing"
      * even on a connection whose speed looks fine.
      */
-    const val GOOD_PING_MS = 60
+    const val GOOD_PING_MS = 50
     const val POOR_PING_MS = 150
 
     /** Any sustained loss is a problem; a stream cannot ask for a lost segment twice and keep up. */
@@ -89,6 +89,22 @@ object ConnectionDiagnostics {
             percent >= POOR_PACKET_LOSS_PERCENT -> Severity.PROBLEM
             percent > 0.0 -> Severity.WARNING
             else -> Severity.GOOD
+        }
+
+    /**
+     * What a latency reading means for watching, as a token a screen turns into a sentence.
+     *
+     * Latency needed a sentence of its own. A viewer shown "173 ms" in red learns that something is
+     * wrong and nothing about what — and latency is the reading most likely to be the real cause of
+     * a picture that freezes on a connection whose speed looks fine, because it delays every seek,
+     * every channel change and every recovery from a dropped segment.
+     */
+    fun latencyAdvice(milliseconds: Int?): String =
+        when {
+            milliseconds == null -> "unknown"
+            milliseconds > POOR_PING_MS -> "unstable"
+            milliseconds > GOOD_PING_MS -> "fair"
+            else -> "good"
         }
 
     /**
