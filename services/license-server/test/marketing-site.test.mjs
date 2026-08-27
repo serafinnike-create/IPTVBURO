@@ -20,7 +20,12 @@ test('the public site presents the product before asking for payment', () => {
   }
 
   assert.ok(html.includes('data-demo-tab="multiview"'), 'the interactive product tour is missing');
-  assert.ok(html.includes('assets/buro-reel.mp4'), 'the product reel is missing');
+  // A real screenshot of the app, not a video. The reel this used to demand was dropped in
+  // cdd10db along with every other piece of AI fantasy art on the page — the "video" was a still
+  // image behind a pause button that did nothing. The requirement it was standing in for is that
+  // the page shows the actual product above the fold, which is what is asserted now.
+  assert.ok(html.includes('assets/app-hero.webp'), 'the page must show the real app above the fold');
+  assert.ok(!/buro-reel\.mp4/.test(html), 'the removed reel came back without its asset');
   assert.ok(html.includes('7 dias grátis'), 'the trial must be stated before checkout');
   assert.ok(html.includes('730 dias'), 'the real license term must be explicit');
 });
