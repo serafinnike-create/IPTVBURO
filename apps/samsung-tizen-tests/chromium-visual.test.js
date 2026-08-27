@@ -825,6 +825,27 @@ async function main() {
     check('Home real não desloca o painel principal nem cria overflow global', realHomeData.mainScroll === 0 && realHome.scrollWidth <= 1920 && realHome.scrollHeight <= 1080);
     check('Home real produz um quadro PNG não vazio', await screenshotIsRendered('real-home'));
 
+    /* A data da máquina não deve decidir se este layout pode ser exercitado.
+       Injeta na fotografia já varrida a mesma coleção pública que dezembro
+       produziria; seasonal-app.test.js cobre separadamente a busca integral. */
+    await evaluate("(function(){var d=BuroApp.state.screenData;var c=BuroSeasonal.primaryCollectionFor(new Date(2026,11,10,12,0,0));var item=(d.result.movies||[])[0];d.result.seasonalCollection=c;d.result.seasonalTerms=c.terms.map(BuroDomain.foldAccents);d.result.seasonal=[item];BuroApp.render();return true;}())");
+    await waitFor("document.querySelector('[data-home-rail=seasonal-christmas] .rail-badge') && document.querySelector('[data-home-rail=seasonal-christmas] .media-card')");
+    await evaluate("document.querySelector('[data-home-rail=seasonal-christmas]').scrollIntoView({block:'center'}); true");
+    var seasonalHome = await geometry(['.buro-ribbon', '.topbar',
+        '[data-home-rail=seasonal-christmas] .home-rail-heading',
+        '[data-home-rail=seasonal-christmas] .rail-badge',
+        '[data-home-rail=seasonal-christmas] .media-card']);
+    process.stdout.write('Home sazonal\n');
+    check('fileira sazonal mostra título, selo e card dentro da TV',
+        seasonalHome.rectangles.every(rectVisible) &&
+        await evaluate("/Especial de Natal/.test(document.querySelector('[data-home-rail=seasonal-christmas]').textContent)"));
+    check('selo sazonal tem contraste e caixa próprios, sem virar texto solto',
+        await evaluate("(function(){var e=document.querySelector('.rail-badge');var s=getComputedStyle(e);return e.textContent===BuroI18n.t('seasonalBadge')&&parseFloat(s.paddingLeft)>=8&&s.borderTopStyle!=='none'&&s.color!==getComputedStyle(document.body).color;}())"));
+    check('Home sazonal conserva chrome e zero overflow global',
+        seasonalHome.scrollWidth <= 1920 && seasonalHome.scrollHeight <= 1080);
+    check('Home sazonal produz um quadro PNG não vazio', await screenshotIsRendered('seasonal-home'));
+    await evaluate("(function(){var d=BuroApp.state.screenData;d.result.seasonalCollection=null;d.result.seasonalTerms=[];d.result.seasonal=[];BuroApp.render();return true;}())");
+
     /* A aba abre direto na prateleira, como no aplicativo do Windows: as
        categorias viraram filtro na barra em vez de um degrau antes dos
        pôsteres. O que continua sendo medido é o mesmo — a barra de escopo e
@@ -962,6 +983,23 @@ async function main() {
     check('detalhe de filme abre o título correto com ação principal', movieDetailData.title === 'Aurora de Vidro' && movieDetailData.play === 1);
     check('sinopse da ficha usa a leitura de 24 px do Windows, não o tamanho padrão do navegador', await evaluate("(function(){var copy=document.querySelector('.detail-hero-copy > p');if(!copy){return false;}var style=getComputedStyle(copy);return parseFloat(style.fontSize)===24&&Math.abs(parseFloat(style.lineHeight)-34.8)<0.2&&parseFloat(style.maxWidth)===1040;}())"));
     check('detalhe de filme preserva chrome e conteúdo inicial visíveis', movieDetail.rectangles.every(rectVisible) && movieDetailData.mainScroll === 0);
+    /*
+      A sinopse cabe na coluna, e a coluna cabe no hero.
+
+      `max-width: 1040px` foi escrito quando a ficha era uma coluna so. Depois o
+      poster entrou a esquerda — 300px mais 42 de margem — e passou a dividir a
+      mesma linha, entao 1040 deixou de ser uma medida segura por si: quem
+      garante o encaixe agora e o `flex: 1` com `min-width: 0` da coluna.
+
+      Medir a direita real de cada caixa e o que distingue as duas coisas. Um
+      `max-width` correto no CSS nao prova que o texto nao passa da borda do
+      hero, que e o que a pessoa ve.
+    */
+    var synopsisFit = await evaluate("(function(){var copy=document.querySelector('.detail-hero-copy');var p=document.querySelector('.detail-hero-copy > p');var hero=document.querySelector('.detail-hero');if(!copy||!p||!hero){return null;}var cr=copy.getBoundingClientRect();var pr=p.getBoundingClientRect();var hr=hero.getBoundingClientRect();return {copyRight:cr.right,textRight:pr.right,heroRight:hr.right,heroPadRight:parseFloat(getComputedStyle(hero).paddingRight),scrollOver:p.scrollWidth-p.clientWidth};}())");
+    check('a sinopse nao passa da coluna nem da borda do hero',
+        synopsisFit && synopsisFit.textRight <= synopsisFit.copyRight + 1 &&
+        synopsisFit.textRight <= synopsisFit.heroRight - synopsisFit.heroPadRight + 1 &&
+        synopsisFit.scrollOver <= 0);
     check('detalhe de filme produz um quadro PNG não vazio', await screenshotIsRendered('movie-detail'));
 
     await evaluate("(function(){var d=BuroApp.state.screenData.details;d.similarTitles=[];for(var i=0;i<10;i+=1){d.similarTitles.push({tmdbId:700+i,isSeries:false,title:'Saga recomendada '+(i+1),year:2015+i,posterUrl:'https://image.tmdb.org/t/p/w342/similar-'+i+'.jpg'});}d.similarTitlesLoaded=true;BuroApp.render();var c=document.querySelector('.content.scrollable');var r=document.querySelector('.detail-related');c.scrollTop=Math.max(0,r.offsetTop-110);return true;}())");
