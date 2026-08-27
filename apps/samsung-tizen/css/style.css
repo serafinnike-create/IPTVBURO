@@ -1266,6 +1266,11 @@ body.reduced-motion .download-fill { transition: none; }
 .media-card.poster .media-progress { margin-top: 6px; }
 .media-card h3, .category-card h3, .source-card h3 { font-size: 25px; line-height: 1.18; }
 .media-card p, .category-card p, .source-card p { color: var(--muted); font-size: 19px; }
+/* A estrela se ilumina a partir de 4 de 5 — ou 8 de 10, que e a mesma fracao.
+   Abaixo disso ela herda a cor da linha: uma nota media que brilha igual a uma
+   otima faz a cor deixar de informar. */
+.media-card p .rating-high { color: var(--gold); font-weight: 700; }
+.media-card p .rating-plain { color: inherit; }
 .media-card .badge { align-self: flex-start; padding: 7px 11px; color: var(--gold); border: 1px solid rgba(214,169,86,.48); border-radius: 10px; font-size: 15px; font-weight: 800; }
 /* A arte de um lembrete vem do próprio registro e não da memória de artwork da
    sessão, então é desenhada como background. Quando não há imagem — o caso

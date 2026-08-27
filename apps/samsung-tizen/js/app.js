@@ -3614,7 +3614,7 @@ var BuroApp = (function () {
         return '<button class="media-card focusable ' + (poster ? 'poster' : '') + ' ' + layout +
             (artworkFor(item) ? ' has-art' : '') + '" data-action="' + action + '" data-id="' + attr(item.id) + '">' +
             art + (marks ? '<span class="badge">' + marks + '</span>' : '') + '<h3>' +
-            escapeHtml(item.name) + '</h3><p>' + escapeHtml(metadata) + '</p>' +
+            escapeHtml(item.name) + '</h3><p>' + metadata + '</p>' +
             (playback ? '<span class="media-progress"><i style="width:' + playback.percent.toFixed(2) + '%"></i></span>' : '') + '</button>';
     }
 
@@ -3638,13 +3638,46 @@ var BuroApp = (function () {
 
     function mediaMetadata(item) {
         var parts = [];
+        /* Cada parte entra ja escapada: a funcao passou a devolver HTML por causa
+           da estrela colorida, entao escapar so na saida deixaria de valer. Os
+           valores aqui sao todos numericos e passam por `Number`, mas escapar
+           mesmo assim mantem a regra visivel em vez de depender disso. */
         if (item.contentType === 'EPISODE' && item.locator) {
             if (Number(item.locator.season) > 0) { parts.push('T' + Number(item.locator.season)); }
             if (Number(item.locator.episode) > 0) { parts.push('E' + Number(item.locator.episode)); }
         }
         if (Number(item.year) > 0) { parts.push(String(Number(item.year))); }
-        if (Number(item.rating) > 0) { parts.push('★ ' + Number(item.rating).toFixed(1)); }
-        return parts.length ? parts.join(' · ') : 'IPTV BURO';
+        /*
+          A estrela so fica dourada quando a nota a justifica.
+
+          Antes toda nota saia em dourado, entao um 2.9 tinha o mesmo destaque
+          visual de um 4.8 e a cor deixava de informar. O corte fica em 4 de 5, a
+          faixa que o usuario pediu: abaixo dela a nota e escrita na cor do resto
+          da linha, acima ela se ilumina.
+
+          A escala do provedor varia — alguns mandam 0-10 — entao a comparacao e
+          feita na fracao, e nao no numero cru: `>= 0.8` do maximo vale para as
+          duas escalas sem precisar adivinhar qual chegou.
+        */
+        if (Number(item.rating) > 0) {
+            parts.push('<span class="' + (ratingIsHigh(item.rating) ? 'rating-high' : 'rating-plain') +
+                '">★ ' + escapeHtml(Number(item.rating).toFixed(1)) + '</span>');
+        }
+        return parts.length ? parts.join(' · ') : escapeHtml('IPTV BURO');
+    }
+
+    /*
+      A nota esta no alto da propria escala?
+
+      O provedor manda 0-5 numa lista e 0-10 noutra, as vezes na mesma conta. Um
+      corte fixo em 4 marcaria como alta uma nota 4 de 10, que e baixa. Comparar
+      a fracao resolve sem adivinhar: 4 de 5 e 8 de 10 dao a mesma fracao.
+    */
+    function ratingIsHigh(value) {
+        var numeric = Number(value);
+        var scale = numeric > 5 ? 10 : 5;
+        if (!isFinite(numeric) || numeric <= 0) { return false; }
+        return numeric / scale >= 0.8;
     }
 
     function playbackProgress(itemId) {
@@ -4863,9 +4896,22 @@ var BuroApp = (function () {
             '</span><h2>' + escapeHtml(details.title || item.name) + '</h2>' +
             (facts.length ? '<div class="detail-facts">' + facts.map(function (fact) {
                 return detailFact(fact, /^★/.test(fact) ? 'rating' : '');
-            }).join('') + '</div>' : '') + ratingsSection(details) + criticsStrip(details) +
+            }).join('') + '</div>' : '') +
             '<p>' + escapeHtml(details.plot || t('noSynopsis')) + '</p>' + detailProgress(item) +
-            detailActionsHtml(item, isSeries, episodeRows, trailerId) + '</div></div>' +
+            /*
+              As notas depois das acoes, e nao antes.
+
+              Ficavam entre a linha de fatos e a sinopse, empurrando Assistir e a
+              barra de glifos para baixo — quem abre a ficha para assistir tinha
+              de passar por TMDb, OMDb e criticos antes de chegar ao botao.
+
+              A ordem e a do Windows: sinopse, e o bloco de notas depois. La as
+              acoes vivem noutro bloco acima; aqui elas estao na mesma coluna,
+              entao "depois das acoes" e o equivalente — decidir vem primeiro,
+              conferir a nota vem depois.
+            */
+            detailActionsHtml(item, isSeries, episodeRows, trailerId) +
+            ratingsSection(details) + criticsStrip(details) + '</div></div>' +
             (supporting ? '<div class="detail-support">' + supporting + '</div>' : '') + '</div>';
     }
 
