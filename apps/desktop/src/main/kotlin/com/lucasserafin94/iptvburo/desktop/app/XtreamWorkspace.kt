@@ -39,7 +39,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -1265,10 +1265,17 @@ private fun XtreamCatalogGrid(
                 horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Md),
                 verticalArrangement = Arrangement.spacedBy(BuroSpacing.Lg),
             ) {
-                gridItems(
+                // Keyed by position as well as id.
+                //
+                // A lazy layout throws — and takes the whole app with it — when two items share a
+                // key, and `providerId` is the provider's own number: a list that files one stream
+                // under two categories sends it twice, and nothing upstream deduplicates by id.
+                // The position keeps items stable across recomposition within a page, which is what
+                // a key is for here, and cannot collide however the provider numbers its rows.
+                itemsIndexed(
                     items = page.items,
-                    key = XtreamCatalogItem::providerId,
-                ) { item ->
+                    key = { index, item -> "$index:${item.providerId}" },
+                ) { _, item ->
                     XtreamCatalogCard(
                         item = item,
                         text = text,

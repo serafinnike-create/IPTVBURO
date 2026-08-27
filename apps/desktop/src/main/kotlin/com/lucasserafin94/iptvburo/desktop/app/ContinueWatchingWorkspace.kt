@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
@@ -154,7 +154,9 @@ fun ContinueWatchingWorkspace(
                         .edgeScrollableVertically(listState),
                 verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
             ) {
-                items(visible, key = { entry -> entry.item.providerId }) { entry ->
+                // Position in the key: a lazy layout throws when two items share one, and a
+                // provider that files a stream under two categories sends the same id twice.
+                itemsIndexed(visible, key = { index, entry -> "$index:${entry.item.providerId}" }) { _, entry ->
                     ContinueRow(
                         entry = entry,
                         onResume = { onResume(entry) },

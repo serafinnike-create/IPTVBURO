@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
@@ -722,7 +723,12 @@ fun SettingsDialog(
                                         modifier = Modifier.padding(top = BuroSpacing.Sm),
                                     )
                                 }
-                                items(list, key = { category -> "cat-$type-${category.providerId}" }) { category ->
+                                // Position in the key: a lazy layout throws when two items share
+                                // one, and a category id is the provider's own number.
+                                itemsIndexed(
+                                    list,
+                                    key = { index, category -> "cat-$type-$index-${category.providerId}" },
+                                ) { _, category ->
                                     CategoryRow(
                                         name = category.name,
                                         hidden = category.providerId in hiddenByType[type].orEmpty(),

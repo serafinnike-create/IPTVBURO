@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
@@ -633,7 +634,9 @@ private fun DailyRow(
             // for the hover scale the top and bottom of a lifted card get sliced off.
             contentPadding = PaddingValues(horizontal = metrics.gutter, vertical = BuroSpacing.Sm),
         ) {
-            items(items, key = { "${it.contentType}:${it.providerId}" }) { item ->
+            // Position in the key: a provider filing a stream under two categories sends the
+            // same id twice, and a lazy layout throws when two items share a key.
+            itemsIndexed(items, key = { index, it -> "$index:${it.contentType}:${it.providerId}" }) { _, item ->
                 DailyCard(item, metrics, text, onClick)
             }
         }
@@ -724,7 +727,10 @@ private fun SeasonalRow(
             horizontalArrangement = Arrangement.spacedBy(metrics.cardSpacing),
             contentPadding = PaddingValues(horizontal = metrics.gutter, vertical = BuroSpacing.Sm),
         ) {
-            items(items, key = { "seasonal:${it.contentType}:${it.providerId}" }) { item ->
+            itemsIndexed(
+                items,
+                key = { index, it -> "seasonal:$index:${it.contentType}:${it.providerId}" },
+            ) { _, item ->
                 DailyCard(item, metrics, text, onClick)
             }
         }

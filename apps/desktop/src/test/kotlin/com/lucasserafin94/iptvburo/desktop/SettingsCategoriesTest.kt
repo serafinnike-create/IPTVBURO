@@ -56,9 +56,16 @@ class SettingsCategoriesTest {
      */
     @Test
     fun `row keys distinguish sections`() {
+        // The section and the id, in whatever order the key is built. Matched loosely because the
+        // key also carries the row's position now: two categories can share a provider id, and a
+        // lazy list throws — taking the window with it — when two items share a key.
         assertTrue(
-            dialogSource.contains("\"cat-\$type-\${category.providerId}\""),
+            dialogSource.contains("\"cat-\$type-"),
             "a row key must include its section",
+        )
+        assertTrue(
+            dialogSource.contains("category.providerId}\""),
+            "a row key must still identify the category",
         )
     }
 

@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -106,7 +106,9 @@ fun SearchWorkspace(
             ) {
                 // Type as well as id: provider numbering restarts per content type, so a film and a
                 // channel can share one and the grid would drop a row as a duplicate key.
-                items(results, key = { item -> "${item.contentType}:${item.providerId}" }) { item ->
+                // Position in the key: a lazy layout throws when two items share one, and a
+                // provider that files a stream under two categories sends the same id twice.
+                itemsIndexed(results, key = { index, item -> "$index:${item.contentType}:${item.providerId}" }) { _, item ->
                     SearchResultCover(item = item, onOpen = { onOpenItem(item) })
                 }
             }
