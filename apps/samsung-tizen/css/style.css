@@ -921,6 +921,42 @@ body.reduced-motion .discover-card.current { animation: none; }
 /* A linha de ano e nota fica acima da de genero/servico e usa chips menores:
    sao respostas curtas ("2026", "Nota 8+") e nao precisam do rotulo em cima. */
 .catalogue-year-bar { margin-bottom: 14px; }
+/*
+  Um único trilho compacto substitui a antiga fileira permanente de serviços e
+  a segunda linha de filtros. Em 1920×1080 todos os controles cabem lado a lado;
+  o wrap permanece como fallback para traduções mais longas.
+*/
+.catalogue-filter-strip { align-items: flex-start; margin-bottom: 14px; }
+.catalogue-filter-strip > .scope-chip,
+.catalogue-filter-strip > .picker-slot { margin-right: 10px; }
+.catalogue-filter-strip .scope-chip.compact {
+    min-height: 64px; margin: 0 0 8px; padding: 8px 17px;
+}
+.catalogue-filter-strip .filter-labelled { min-width: 190px; max-width: 235px; }
+.catalogue-filter-strip .filter-labelled small { font-size: 13px; }
+.catalogue-filter-strip .filter-labelled strong { margin-top: 2px; font-size: 19px; }
+.provider-directory-slot { flex: 0 0 auto; }
+.catalogue-filter-strip .provider-directory-selector {
+    width: 310px; max-width: 310px; flex-direction: row; align-items: center;
+    justify-content: flex-start; padding-right: 20px;
+}
+.provider-selector-copy { min-width: 0; display: flex; flex-direction: column; }
+.provider-selector-copy small,
+.provider-selector-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.provider-selector-copy small { color: var(--muted); font-size: 13px; text-transform: uppercase; }
+.provider-selector-copy strong { margin-top: 2px; color: var(--text); font-size: 16px; }
+.provider-directory-selector.focused .provider-selector-copy small,
+.provider-directory-selector.focused .provider-selector-copy strong { color: var(--canvas); }
+.provider-directory-options { width: 390px; }
+.provider-directory-option { padding: 7px 15px; }
+.provider-directory-option > img {
+    flex: 0 0 42px; width: 42px; height: 42px; margin-right: 14px; padding: 4px;
+    border-radius: 9px; background: rgba(246,247,250,.94); object-fit: contain;
+}
+.provider-directory-option .provider-badge { flex: 0 0 auto; margin: 0 14px 0 0; }
+.provider-directory-option strong {
+    overflow: hidden; font-size: 19px; text-overflow: ellipsis; white-space: nowrap;
+}
 /* As opcoes de um seletor, abertas embaixo dele. Uma lista por vez: duas
    ocupariam a tela inteira numa TV. */
 /*
@@ -1009,6 +1045,12 @@ body.reduced-motion .discover-card.current { animation: none; }
 .similar-title-row {
     width: 100%; padding: 2px 2px 12px; display: flex; overflow-x: auto; overflow-y: hidden;
 }
+.similar-title-row::-webkit-scrollbar,
+.detail-cast .cast-row::-webkit-scrollbar { height: 6px; }
+.similar-title-row::-webkit-scrollbar-track,
+.detail-cast .cast-row::-webkit-scrollbar-track { background: rgba(255,255,255,.08); border-radius: 999px; }
+.similar-title-row::-webkit-scrollbar-thumb,
+.detail-cast .cast-row::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 999px; }
 .similar-title-card {
     position: relative; flex: 0 0 160px; width: 160px; min-height: 304px; margin-right: 14px;
     padding: 0 0 10px; overflow: hidden; border: 2px solid transparent; border-radius: 14px;
@@ -1039,7 +1081,25 @@ body.reduced-motion .similar-title-opening { animation: none; left: 29%; }
 .detail-metadata-hint .button { flex: none; }
 .detail-credit-card p { margin-top: 9px; color: var(--secondary); font-size: 17px; }
 .detail-credit-card strong { color: var(--gold); }
-.detail-cast > div { display: flex; flex-wrap: wrap; }
+.detail-cast .cast-row {
+    width: 100%; padding: 3px 3px 14px; display: flex; flex-wrap: nowrap;
+    overflow-x: auto; overflow-y: hidden;
+}
+.detail-cast .cast-chip {
+    flex: 0 0 224px; width: 224px; min-height: 108px; margin: 0 14px 0 0;
+    padding: 9px 14px 9px 9px; border-radius: 16px;
+}
+.detail-cast .cast-chip img,
+.detail-cast .cast-chip i {
+    flex: none; width: 82px; height: 88px; margin-right: 13px; border-radius: 12px;
+}
+.detail-cast .cast-chip i {
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 30px; line-height: 88px;
+}
+.detail-cast .cast-chip span { min-width: 0; }
+.detail-cast .cast-chip strong { max-width: 105px; font-size: 17px; line-height: 1.25; white-space: normal; }
+.detail-cast .cast-chip small { max-width: 105px; margin-top: 6px; font-size: 14px; line-height: 1.25; white-space: normal; }
 .cast-chip { min-height: 46px; margin: 0 9px 9px 0; padding: 7px 12px 7px 7px; display: flex; align-items: center; border: 2px solid transparent; border-radius: 999px; background: var(--elevated); color: var(--secondary); font-size: 15px; text-align: left; }
 .cast-chip i { display: inline-block; width: 28px; height: 28px; margin-right: 8px; border-radius: 50%; background: rgba(214,169,86,.22); color: var(--gold); font-style: normal; font-weight: 800; line-height: 28px; text-align: center; }
 .cast-chip img { width: 32px; height: 32px; margin-right: 9px; border-radius: 50%; object-fit: cover; }
@@ -1926,23 +1986,31 @@ body.reduced-motion .focusable.focused { transform: none; }
     position: absolute;
     top: -34px; right: -34px; bottom: -34px; left: -34px;
     z-index: -3;
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    grid-template-rows: repeat(3, 1fr);
-    opacity: .7;
-    filter: saturate(.8) brightness(.58);
-    transform: scale(1.035);
-    animation: boot-wall-drift 20000ms ease-in-out infinite alternate;
+    display: block;
+    opacity: .68;
+    filter: saturate(.82) brightness(.6);
+    transform: scale(1.055);
 }
 .boot-backdrop.local {
     display: block;
-    background: url('../assets/buro_category_atlas_v1.webp') center center / cover no-repeat;
+    background: #08090a;
 }
-.boot-backdrop.local span { display: none; }
+
+.boot-cover-row {
+    position: absolute;
+    right: -18px; left: -18px;
+    height: 50%;
+    display: flex;
+    will-change: transform;
+}
+.boot-cover-row-a { top: 0; animation: boot-cover-drift-a 26000ms ease-in-out infinite alternate; }
+.boot-cover-row-b { bottom: 0; animation: boot-cover-drift-b 30000ms ease-in-out infinite alternate; }
 
 /* A borda transparente substitui o `gap`: o fundo escuro aparece entre os
    pôsteres do mesmo jeito, sem depender de suporte a grid moderno. */
 .boot-backdrop span {
+    flex: 0 0 16.666666%;
+    height: 100%;
     background-position: center;
     background-size: cover;
     border: 7px solid transparent;
@@ -1954,9 +2022,21 @@ body.reduced-motion .focusable.focused { transform: none; }
 .boot-backdrop span:nth-child(4n+4) { background-image: url('../assets/buro_category_atlas_v1.webp'); }
 .boot-backdrop span img { width: 100%; height: 100%; object-fit: cover; opacity: .78; }
 
-@keyframes boot-wall-drift {
-    from { transform: scale(1.06) translate3d(-8px, -5px, 0); }
-    to { transform: scale(1.10) translate3d(10px, 7px, 0); }
+/*
+  As doze capas usam somente quatro arquivos locais pequenos, portanto a TV
+  decodifica cada imagem uma vez e as repete. O movimento altera apenas
+  `transform` em somente duas fileiras, que ficam na camada de composição e não
+  recalculam o layout.
+  As duas fileiras viajam em sentidos opostos para o fundo parecer vivo sem
+  competir com o texto central.
+*/
+@keyframes boot-cover-drift-a {
+    from { transform: translate3d(-14px, -5px, 0); }
+    to { transform: translate3d(14px, 6px, 0); }
+}
+@keyframes boot-cover-drift-b {
+    from { transform: translate3d(14px, 6px, 0); }
+    to { transform: translate3d(-14px, -5px, 0); }
 }
 
 .boot-vignette {
@@ -2045,19 +2125,34 @@ body.reduced-motion .focusable.focused { transform: none; }
 
 .boot-progress {
     position: relative;
-    width: 280px;
-    height: 4px;
+    width: 360px;
+    height: 30px;
     margin-top: 24px;
     overflow: hidden;
-    border-radius: 2px;
-    background: rgba(246,247,250,.16);
+    border: 1px solid rgba(246,247,250,.22);
+    border-radius: 15px;
+    background: rgba(4,5,7,.68);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.28), 0 8px 26px rgba(0,0,0,.22);
 }
-.boot-progress span {
+.boot-progress-fill {
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
     display: block;
-    height: 100%;
-    border-radius: 2px;
-    background: var(--gold);
+    border-radius: 15px;
+    background: linear-gradient(90deg, #ad7c2e, var(--gold), #f1d58a);
     transition: width 450ms ease-out;
+}
+.boot-progress-value {
+    position: absolute;
+    top: 0; right: 0; bottom: 0; left: 0;
+    z-index: 2;
+    color: var(--ivory);
+    font-size: 16px;
+    font-weight: 900;
+    line-height: 30px;
+    letter-spacing: .8px;
+    text-align: center;
+    text-shadow: 0 1px 4px rgba(0,0,0,.96);
 }
 .boot-progress::after {
     content: '';
@@ -2076,9 +2171,9 @@ body.reduced-motion .focusable.focused { transform: none; }
 
 body.reduced-motion .boot-indicator { animation: none; }
 body.reduced-motion .boot-mark { animation: none; }
-body.reduced-motion .boot-backdrop { animation: none; }
+body.reduced-motion .boot-cover-row { animation: none; }
 body.reduced-motion .boot-progress::after { animation: none; display: none; }
-body.reduced-motion .boot-progress span { transition: none; }
+body.reduced-motion .boot-progress-fill { transition: none; }
 body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.reduced-transparency .player-status, body.reduced-transparency .player-topbar { background: #111319; }
 
 /* Na TV, o QR é a capability real equivalente à share sheet de toque. */
@@ -2251,12 +2346,21 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
   cartao ao lado dos outros leria-se como mais uma fonte.
 */
 .merge-toggle {
-    display: flex; align-items: center; gap: 20px; width: 100%;
+    display: flex; align-items: center; width: 100%;
     padding: 20px 26px; margin: 0 0 22px; border-radius: 14px;
     background: var(--surface); border: 3px solid transparent;
     color: var(--text); text-align: left;
 }
-.merge-mark { font-size: 30px; color: var(--gold); }
-.merge-text { display: flex; flex-direction: column; gap: 4px; }
+.merge-mark { margin-right: 20px; font-size: 30px; color: var(--gold); }
+.merge-text { display: flex; flex-direction: column; }
 .merge-text strong { font-size: 26px; }
-.merge-text span { color: var(--secondary); font-size: 20px; }
+.merge-text span { margin-top: 4px; color: var(--secondary); font-size: 20px; }
+
+/* A razao de o botao de baixar nao estar ali.
+
+   Discreta: e uma explicacao, nao um erro. Um aviso vermelho faria parecer que
+   alguma coisa falhou, quando na verdade so falta ligar um cabo. */
+.detail-download-hint {
+    max-width: 520px; margin: 4px 0 0;
+    color: var(--muted); font-size: 18px; line-height: 1.4;
+}

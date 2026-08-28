@@ -2015,10 +2015,14 @@ var BuroApp = (function () {
         var progressLabel = t(boot.messageKey);
         var preview = boot.previewArtwork || [];
         var hasPosterWall = preview.length >= 9;
-        var backdrop = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(function (index) {
+        var backdropCovers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(function (index) {
             return '<span>' + (hasPosterWall && preview[index] ?
                 '<img src="' + attr(preview[index]) + '" alt="">' : '') + '</span>';
-        }).join('');
+        });
+        var backdrop = '<div class="boot-cover-row boot-cover-row-a">' +
+            backdropCovers.slice(0, 6).join('') + '</div>' +
+            '<div class="boot-cover-row boot-cover-row-b">' +
+            backdropCovers.slice(6).join('') + '</div>';
         var dots = BOOT_STEPS.map(function (step, index) {
             var status = index < boot.index ? 'complete' : (index === boot.index ? 'active' : '');
             return '<span class="boot-dot ' + status + '" aria-hidden="true"></span>';
@@ -3806,6 +3810,8 @@ var BuroApp = (function () {
             '|' + contentType + '|' + state.preferences.language;
         var configured = Boolean(BuroTmdb.keyForProfile(profileId));
         var rows;
+        var scope;
+        var open;
         if (!directoryState) { return ''; }
         if (!configured || directoryState.identity !== expectedIdentity) {
             window.setTimeout(function () { ensureCatalogueProviderDirectory(contentType); }, 0);
@@ -3816,17 +3822,23 @@ var BuroApp = (function () {
         }
         rows = directoryState.rows;
         if (!rows.length) { return ''; }
-        return '<section class="catalogue-provider-shortcuts"><div class="section-heading"><h2>' +
-            escapeHtml(t('subscriptionsBrowse')) + '</h2><p>' + rows.length + '</p></div>' +
-            '<div class="catalogue-provider-row">' + rows.map(function (provider) {
+        scope = catalogueScope(contentType);
+        open = scope.openPicker === 'provider-directory';
+        return '<span class="picker-slot provider-directory-slot' + (open ? ' open' : '') + '">' +
+            '<button class="scope-chip compact provider-directory-selector focusable" ' +
+            'data-action="catalogue-pick-provider-directory" aria-haspopup="listbox" aria-expanded="' +
+            (open ? 'true' : 'false') + '"><span class="provider-selector-copy"><small>' + escapeHtml(t('serviceSelector')) + ' · ' + rows.length +
+            '</small><strong>' + escapeHtml(t('subscriptionsBrowse')) + ' ▾</strong></span></button>' +
+            (open ? '<div class="catalogue-options provider-directory-options" role="listbox">' + rows.map(function (provider) {
                 var logo = safeProviderLogoUrl(provider.logoUrl);
                 var identity = BuroProviders.identityForLabel(provider.name);
                 var mark = logo ? '<img src="' + attr(logo) + '" alt="">' :
                     providerBadge(identity || { mark: provider.name.charAt(0), label: provider.name, colour: '#343741' });
-                return '<button class="catalogue-provider-shortcut focusable" data-action="catalogue-provider-shortcut"' +
-                    ' data-provider="' + attr(String(provider.id)) + '">' + mark + '<strong>' +
+                return '<button class="option-chip provider-directory-option focusable" role="option" ' +
+                    'data-action="catalogue-provider-shortcut" data-provider="' + attr(String(provider.id)) + '">' + mark + '<strong>' +
                     escapeHtml(provider.name) + '</strong></button>';
-            }).join('') + '</div></section>';
+            }).join('') + (rows.length > OPTIONS_VISIBLE ? '<p class="options-count">' +
+                escapeHtml(t('optionsTotal').replace('{count}', rows.length)) + '</p>' : '') + '</div>' : '') + '</span>';
     }
 
     function ensureServiceIndex(contentType) {
@@ -3910,7 +3922,7 @@ var BuroApp = (function () {
             });
         }
         var serviceLabel = scope.service || t('filterAll');
-        var serviceIdentity = scope.service ? BuroProviders.identityForLabel(scope.service) : null;
+        var providerDirectory = catalogueProviderShortcutsHtml(contentType);
         /*
           Cada chip carrega a sua propria lista, ancorada nele.
 
@@ -3919,7 +3931,7 @@ var BuroApp = (function () {
           esquerda. Numa TV isso se le como o seletor errado ter aberto.
         */
         var chips = pickerSlot('genre', contentType,
-            '<button class="scope-chip focusable ' + (scope.genre ? 'selected' : '') +
+            '<button class="scope-chip compact filter-labelled focusable ' + (scope.genre ? 'selected' : '') +
             '" data-action="catalogue-pick-genre"><small>' + t('genreSelector') + '</small><strong>' +
             escapeHtml(genreLabel) + '</strong></button>');
         /*
@@ -3934,11 +3946,11 @@ var BuroApp = (function () {
         */
         if (parts.hasProviders || !currentServiceIndex().isEmpty()) {
             chips += pickerSlot('service', contentType,
-                '<button class="scope-chip focusable ' + (scope.service ? 'selected' : '') +
-                '" data-action="catalogue-pick-service">' + providerBadge(serviceIdentity) +
+                '<button class="scope-chip compact filter-labelled focusable ' + (scope.service ? 'selected' : '') +
+                '" data-action="catalogue-pick-service">' +
                 '<small>' + t('serviceSelector') + '</small><strong>' + escapeHtml(serviceLabel) + '</strong></button>');
         } else {
-            chips += '<span class="scope-chip disabled"><small>' + t('serviceSelector') +
+            chips += '<span class="scope-chip compact filter-labelled disabled"><small>' + t('serviceSelector') +
                 '</small><strong>' + escapeHtml(t(serviceIndexLoading ? 'servicesLoading' : 'servicesUnavailable')) +
                 '</strong></span>';
             /*
@@ -3960,8 +3972,9 @@ var BuroApp = (function () {
           Ao vivo não tem nenhum dos dois: um canal não tem ano de lançamento
           nem nota, e chips que não filtram nada só ocupam a tela.
         */
-        return (contentType === 'LIVE' ? '' : catalogueYearBar(contentType)) +
-            '<div class="catalogue-scope-bar">' + chips + '</div>';
+        return '<div class="catalogue-scope-bar catalogue-filter-strip' +
+            (contentType === 'LIVE' ? '' : ' catalogue-year-bar') + '">' +
+            (contentType === 'LIVE' ? '' : catalogueYearBar(contentType)) + providerDirectory + chips + '</div>';
     }
 
     /*
@@ -4020,8 +4033,7 @@ var BuroApp = (function () {
         var yearLabel = scope.year == null ? t('chooseYear') : String(scope.year);
         var ratingLabel = scope.minimumRating == null ? t('anyRating') :
             t('ratingAtLeast').replace('{rating}', scope.minimumRating);
-        return '<div class="catalogue-scope-bar catalogue-year-bar">' +
-            '<button class="scope-chip compact focusable ' + (scope.year == null ? 'selected' : '') +
+        return '<button class="scope-chip compact focusable ' + (scope.year == null ? 'selected' : '') +
             '" data-action="catalogue-year-all"><strong>' + t('allYears') + '</strong></button>' +
             '<button class="scope-chip compact focusable ' + (scope.year === currentYear ? 'selected' : '') +
             '" data-action="catalogue-year-current"><strong>' +
@@ -4033,7 +4045,7 @@ var BuroApp = (function () {
             pickerSlot('rating', contentType,
                 '<button class="scope-chip compact focusable ' + (scope.minimumRating != null ? 'selected' : '') +
                 '" data-action="catalogue-pick-rating"><strong>' + escapeHtml(ratingLabel) + ' ▾</strong></button>') +
-            '</div>';
+            '';
     }
 
     /*
@@ -4543,8 +4555,7 @@ var BuroApp = (function () {
               As categorias continuam alcançáveis: escolher um gênero na barra é
               o mesmo que abrir aquela categoria.
             */
-            shell(catalogueToolbar(contentType) + catalogueProviderShortcutsHtml(contentType) +
-                catalogueScopeBar(contentType, categories) +
+            shell(catalogueToolbar(contentType) + catalogueScopeBar(contentType, categories) +
                 catalogueShelf(contentType, categories), t(titleKey), true);
         }());
     }
@@ -5520,7 +5531,7 @@ var BuroApp = (function () {
                 '<p><strong>' + t('director') + '</strong> ' + escapeHtml(details.director) + '</p></section>';
         }
         if (castMembers.length || cast.length) {
-            supporting += '<section class="detail-cast"><h3>' + t('castTitle') + '</h3><div>' +
+            supporting += '<section class="detail-cast"><h3>' + t('castTitle') + '</h3><div class="cast-row">' +
                 (castMembers.length ? castMembers : cast.map(function (name) { return { name: name }; })).map(function (member) {
                     var photo = safeArtworkUrl(member.photoUrl);
                     return '<button class="cast-chip focusable" data-action="person" data-name="' + attr(member.name) + '">' +
@@ -9257,6 +9268,8 @@ var BuroApp = (function () {
             if (container.classList && (container.classList.contains('nav-list') ||
                     container.classList.contains('card-row') ||
                     container.classList.contains('subscription-row') ||
+                    container.classList.contains('similar-title-row') ||
+                    container.classList.contains('cast-row') ||
                     container.classList.contains('demo-card-row'))) { return container; }
             container = container.parentNode;
         }
@@ -11715,15 +11728,47 @@ var BuroApp = (function () {
       adapter realmente consegue resolver no último instante. A TV ao vivo
       nunca é elegível — ver ADR-008.
     */
+    /*
+      O botao de baixar, ou a razao de ele nao estar ali.
+
+      Ele exige um pendrive ou HD montado, e isso nao e capricho: o
+      armazenamento interno do aplicativo Tizen nao comporta video, entao a
+      unica gravacao possivel e num volume removivel. Ver ADR-008.
+
+      O que estava errado era o **silencio**. Sem USB o botao simplesmente
+      sumia, e quem procurava por ele concluia que o aplicativo nao baixa —
+      ou pior, que esta quebrado, porque o aplicativo do Windows e o do
+      celular baixam. Uma linha dizendo o que falta transforma uma ausencia
+      inexplicavel numa instrucao.
+
+      A dica so aparece onde o download faria sentido: num titulo elegivel,
+      de uma fonte que o adapter resolve. Num canal ao vivo — que a ADR-008
+      recusa — continuar calado e o certo, porque ali nem um pendrive
+      ajudaria.
+    */
     function downloadButton(item, isSeries) {
         var source = sourceForDownload(item);
         var sourceSupported = source && (source.type === 'XTREAM' || source.type === 'REMOTE_M3U' || source.type === 'LOCAL_M3U');
         var directM3uFile = source && (source.type === 'REMOTE_M3U' || source.type === 'LOCAL_M3U') &&
             item && item.locator && Boolean(item.locator.extension);
-        if (isSeries || !BuroDownloads.enabled() || !sourceSupported ||
-                ((source.type === 'REMOTE_M3U' || source.type === 'LOCAL_M3U') && !directM3uFile)) { return ''; }
-        if (!BuroDownloads.downloadable(item.contentType)) { return ''; }
+        var eligible = !isSeries && sourceSupported &&
+            !((source.type === 'REMOTE_M3U' || source.type === 'LOCAL_M3U') && !directM3uFile) &&
+            BuroDownloads.downloadable(item.contentType);
+        if (!eligible) { return ''; }
+        if (!BuroDownloads.enabled()) { return downloadUnavailableHint(); }
         return downloadControls(item, false);
+    }
+
+    /*
+      Diz o que falta, e distingue os dois motivos.
+
+      Sem pendrive a pessoa resolve ligando um; sem a API de download a TV
+      simplesmente nao sabe baixar, e ligar um pendrive nao mudaria nada.
+      Uma mensagem so mandaria metade das pessoas procurar um cabo a toa.
+    */
+    function downloadUnavailableHint() {
+        var reason = BuroDownloads.available() ? 'downloadNeedsUsb' : 'downloadUnsupported';
+        return '<p class="detail-download-hint">' + escapeHtml(t(reason)) + '</p>';
     }
 
     /*
@@ -12902,6 +12947,7 @@ var BuroApp = (function () {
         else if (action === 'notification-remove') { removeNotification(element.getAttribute('data-id')); }
         else if (action === 'catalogue-pick-genre') { toggleCataloguePicker('genre'); }
         else if (action === 'catalogue-pick-service') { toggleCataloguePicker('service'); }
+        else if (action === 'catalogue-pick-provider-directory') { toggleCataloguePicker('provider-directory'); }
         else if (action === 'catalogue-pick-year') { toggleCataloguePicker('year'); }
         else if (action === 'catalogue-pick-rating') { toggleCataloguePicker('rating'); }
         else if (action === 'catalogue-pick-density') { toggleCataloguePicker('density'); }
