@@ -27,8 +27,11 @@ class ProtocolSwitchingTest {
 
     @Test
     fun `the app is built with both protocols available`() {
+        // Matched without the empty parentheses: the switcher now takes the Xtream delegate, so
+        // that it can be the merging repository when the viewer asked for one catalogue. What this
+        // guards is unchanged — building one protocol directly is what made the other unreachable.
         assertTrue(
-            main.contains("SwitchingCatalogueRepository()"),
+            main.contains("SwitchingCatalogueRepository("),
             "building one protocol directly is what made the other unreachable",
         )
     }

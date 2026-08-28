@@ -73,6 +73,7 @@ import com.lucasserafin94.iptvburo.desktop.user.StoredReminder
 import com.lucasserafin94.iptvburo.domain.model.AppNotification
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import com.lucasserafin94.iptvburo.domain.model.BestOfferPolicy
+import com.lucasserafin94.iptvburo.domain.model.MergedSources
 import com.lucasserafin94.iptvburo.domain.model.CacheBudget
 import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
 import com.lucasserafin94.iptvburo.domain.model.CacheFillState
@@ -5703,6 +5704,48 @@ class DesktopAppState(
         startupMessage = message
     }
 
+    /**
+     * The names of the lists that did not answer, for the screen to report.
+     *
+     * Empty in the ordinary case, and empty when merging is off — a viewer with one list has
+     * nothing to be told about.
+     */
+    var mergeFailures by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /**
+     * Adds every other saved subscription to the merge.
+     *
+     * Only when the viewer asked for it, and only for the lists beyond the one already open: the
+     * first was restored the ordinary way, and re-adding it would show every one of its titles
+     * twice.
+     *
+     * A list that fails is recorded and skipped. One dead subscription blanking a working library
+     * would be far worse than the problem merging solves.
+     */
+    private suspend fun addRemainingSourcesToMerge() {
+        val merged = (xtreamRepository as? SwitchingCatalogueRepository)?.merging ?: return
+        val alreadyOpen = xtreamRepository.summary()?.sourceId
+        val others =
+            sourceLibrary
+                .sources()
+                .filter { source -> source.id != alreadyOpen }
+                .take(MergedSources.MAXIMUM_SOURCES - 1)
+        if (others.isEmpty()) return
+
+        withContext(Dispatchers.IO) {
+            others.forEach { source ->
+                // Credentials are read one at a time and handed straight over: the merge holds the
+                // vault, and nothing here keeps a second copy.
+                val input = runCatching { sourceLibrary.store(source.id).load() }.getOrNull()
+                if (input != null) {
+                    merged.addSource(sourceId = source.id, label = source.label, input = input)
+                }
+            }
+        }
+        mergeFailures = merged.failedSources
+    }
+
     suspend fun restoreRememberedXtream() {
         try {
             // Before the early return below: a returning user whose session is already open still
@@ -5739,6 +5782,12 @@ class DesktopAppState(
                         },
                 )
             }
+            // The other subscriptions, when the viewer asked for one catalogue.
+            //
+            // After the first one is open, so the app is usable at the earliest moment: a second
+            // list that is slow to answer delays only its own titles rather than the whole start.
+            addRemainingSourcesToMerge()
+
             // The home is built from the catalogue, so loading it here means the first screen is
             // complete when the splash clears rather than filling in afterwards.
             if (xtreamStatus !is XtreamStatus.Error) {

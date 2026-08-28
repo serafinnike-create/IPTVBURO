@@ -39,6 +39,15 @@ class SwitchingCatalogueRepository(
     private var active: CatalogueRepository = xtream
 
     /**
+     * The merging repository, when this app was started with one.
+     *
+     * Exposed so the startup can add the viewer's other subscriptions to it. Null in the ordinary
+     * single-list case, which is the answer the caller wants: nothing to add.
+     */
+    val merging: MergedCatalogueRepository?
+        get() = xtream as? MergedCatalogueRepository
+
+    /**
      * Points the next connection at a portal rather than an Xtream server.
      *
      * Called by the source form before it connects. Anything already loaded is cleared first: a

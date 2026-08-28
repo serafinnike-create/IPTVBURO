@@ -18,6 +18,8 @@ import java.awt.GraphicsEnvironment
 import com.lucasserafin94.iptvburo.desktop.app.DesktopApp
 import com.lucasserafin94.iptvburo.desktop.data.InMemoryCatalogRepository
 import com.lucasserafin94.iptvburo.desktop.data.PlatformContextHolder
+import com.lucasserafin94.iptvburo.desktop.data.MergedCatalogueRepository
+import com.lucasserafin94.iptvburo.desktop.data.SessionXtreamRepository
 import com.lucasserafin94.iptvburo.desktop.data.SwitchingCatalogueRepository
 import com.lucasserafin94.iptvburo.desktop.platform.ProtocolRegistration
 import com.lucasserafin94.iptvburo.desktop.platform.SingleInstance
@@ -142,12 +144,25 @@ fun main(args: Array<String>) {
         }.start()
 
     val localRepository = InMemoryCatalogRepository()
+    val rememberedXtreamStore = RememberedXtreamStore()
+    val userStore = DesktopUserStore()
     // Both protocols, with the open subscription deciding which answers. One repository lives
     // for the life of the app, so choosing at startup would leave somebody with an Xtream account
     // and a Stalker portal able to use only whichever was picked first.
-    val xtreamRepository = SwitchingCatalogueRepository()
-    val rememberedXtreamStore = RememberedXtreamStore()
-    val userStore = DesktopUserStore()
+    //
+    // The Xtream side is the merging repository when the viewer asked for their lists to be shown
+    // as one catalogue. Read once here rather than watched: each of these holds live sessions, and
+    // swapping them under somebody who is browsing would empty the screen they are looking at. The
+    // switch says it takes effect on the next launch.
+    val xtreamRepository =
+        SwitchingCatalogueRepository(
+            xtream =
+                if (userStore.mergeAllSources()) {
+                    MergedCatalogueRepository()
+                } else {
+                    SessionXtreamRepository()
+                },
+        )
 
     // The artwork cache, sized by the viewer.
     //

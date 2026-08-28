@@ -91,6 +91,41 @@ class SourceFormsTest {
         assertTrue(state.contains("userStore.mergeAllSources()"), "a escolha nao e lida de volta")
     }
 
+    /**
+     * A switch that is stored and never acted on is a switch that does nothing.
+     *
+     * This is the step that was missing when the toggle first shipped: the choice was saved, the
+     * merging repository existed and was tested, and the app went on building the single-session
+     * one regardless.
+     */
+    @Test
+    fun `the stored choice decides which repository the app builds`() {
+        val main = read("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/Main.kt")
+
+        assertTrue(main.contains("userStore.mergeAllSources()"), "o arranque nao le a escolha")
+        assertTrue(main.contains("MergedCatalogueRepository()"), "o arranque nunca junta nada")
+    }
+
+    /** And the other lists have to actually be added, or merging has one member. */
+    @Test
+    fun `the remaining lists are added to the merge at startup`() {
+        // The call, not the declaration: a method that exists and nobody invokes is exactly the
+        // gap this test was written for, and matching the name alone would pass over it.
+        assertTrue(
+            state.contains("            addRemainingSourcesToMerge()"),
+            "as outras listas nunca entram na juncao",
+        )
+        assertTrue(
+            state.contains("merged.addSource("),
+            "nada e acrescentado ao repositorio que junta",
+        )
+        // The one already open must not be added twice, or every one of its titles appears twice.
+        assertTrue(
+            state.contains("source.id != alreadyOpen"),
+            "a lista ja aberta seria acrescentada outra vez",
+        )
+    }
+
     /** Choosing a saved list must still skip the connection fields. */
     @Test
     fun `a saved list needs no server, user or password`() {
