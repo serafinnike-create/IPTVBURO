@@ -343,6 +343,33 @@ class MergedCatalogueRepositoryTest {
     }
 
     /**
+     * Connecting a second subscription must not close the first.
+     *
+     * It did: the list was cleared before the new one was added, so the viewer watched one library
+     * vanish as another arrived. Reported exactly that way — "a primeira fonte fechou e abriu a
+     * segunda". The whole point of this repository is that subscriptions accumulate.
+     */
+    @Test
+    fun `connecting a second subscription keeps the first`() {
+        val queue = mutableListOf(FakeSource(listOf("Duna", "Matrix")), FakeSource(listOf("Avatar")))
+        val repository = MergedCatalogueRepository(newDelegate = { queue.removeAt(0) })
+
+        repeat(2) {
+            repository.authenticateAndLoadInitial(
+                input =
+                    XtreamLoginInput(
+                        server = "http://p.invalid".toCharArray(),
+                        username = "u".toCharArray(),
+                        password = "p".toCharArray(),
+                    ),
+            ) { _, _ -> }
+        }
+
+        assertTrue(repository.isMerging, "a segunda ligacao fechou a primeira")
+        assertEquals(3, page(repository).items.size, "uma das listas desapareceu")
+    }
+
+    /**
      * A stream that fails must be able to fall back to another list's copy.
      *
      * Half the value of owning a second subscription is that a dead stream is not the end of the

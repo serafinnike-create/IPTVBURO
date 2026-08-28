@@ -353,12 +353,26 @@ class MergedCatalogueRepository(
         input: XtreamLoginInput,
         onProgress: (fraction: Float, detail: SessionXtreamRepository.XtreamLoadStage) -> Unit,
     ): XtreamSessionSummary {
-        // The first subscription, added the ordinary way. Later ones come through addSource.
         val repository = newDelegate()
         val summary = repository.authenticateAndLoadInitial(input, onProgress)
         synchronized(lock) {
-            members.clear()
-            members += Member(sourceId = "primary", label = "", repository = repository)
+            // Added, never replacing what is already loaded.
+            //
+            // This cleared the list first, so connecting a second subscription closed the first —
+            // the viewer watched one library vanish as another arrived, which is the opposite of
+            // merging and exactly what was reported. The whole point of this repository is that
+            // subscriptions accumulate.
+            //
+            // Above the cap it is refused rather than swapped: silently dropping one of ten lists
+            // to make room would be the same disappearance in a quieter form.
+            if (members.size < MergedSources.MAXIMUM_SOURCES) {
+                members +=
+                    Member(
+                        sourceId = summary.sourceId,
+                        label = summary.sourceId,
+                        repository = repository,
+                    )
+            }
         }
         return summary
     }

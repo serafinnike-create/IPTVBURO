@@ -437,6 +437,8 @@ fun DesktopApp(
                         onReminders = appState::openReminders,
                         onDiscover = appState::openDiscovery,
                         onConnectXtream = { showXtreamLogin = true },
+                        mergeSources = appState.mergeAllSources,
+                        onToggleMergeSources = appState::updateMergeAllSources,
                         onImportM3u = {
                             chooseLocalPlaylist(ownerWindow)?.let { path ->
                                 scope.launch { appState.importLocalPlaylist(path) }
@@ -1302,6 +1304,14 @@ private fun SourceSidebar(
     onDiscover: () -> Unit,
     /** Connects an Xtream account. */
     onConnectXtream: () -> Unit,
+    /**
+     * Whether every configured list is browsed as one catalogue.
+     *
+     * Offered here because this is where somebody adds a second subscription — the profile form
+     * is not, and a switch only there might as well not exist.
+     */
+    mergeSources: Boolean = false,
+    onToggleMergeSources: (Boolean) -> Unit = {},
     /** Imports an M3U playlist from a file. */
     onImportM3u: () -> Unit,
     onAddRemoteSource: () -> Unit,
@@ -1547,6 +1557,36 @@ private fun SourceSidebar(
                         source = source,
                         selected = source.id == selectedSourceId,
                         onClick = { onSourceSelected(source.id) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            // Here, beside the lists themselves.
+            //
+            // It was offered only on the profile form, which is not where somebody adds a second
+            // subscription — they use these buttons. Reported exactly that way: no switch was
+            // visible, so the two lists were expected to add up on their own.
+            BuroInteractiveRow(
+                onClick = { onToggleMergeSources(!mergeSources) },
+                selected = false,
+                shape = BuroRadius.Small,
+                contentDescription = text.shareStrings.screens.mergeSourcesTitle,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (mergeSources) "◉" else "○",
+                        color = BuroColors.Primary,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = text.shareStrings.screens.mergeSourcesTitle,
+                        color = BuroColors.TextMuted,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 2,
                     )
                 }
             }
