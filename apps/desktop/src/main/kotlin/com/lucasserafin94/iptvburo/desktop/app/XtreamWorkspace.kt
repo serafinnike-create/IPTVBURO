@@ -479,12 +479,19 @@ private fun XtreamToolbar(
     onClearMultiview: () -> Unit = {},
 ) {
     val text = strings
+    // Tightened, not trimmed.
+    //
+    // Three rows of controls stood between the top of the window and the first poster, and the
+    // catalogue is what somebody came to look at. Nothing was removed — every filter is still
+    // here — but the padding above and below and the gaps between the rows were the largest on
+    // the scale and are now the next size down, which returns most of a poster's height to the
+    // grid without the toolbar reading as cramped.
     Column(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = BuroSpacing.GutterCompact, vertical = BuroSpacing.Md),
-        verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+                .padding(horizontal = BuroSpacing.GutterCompact, vertical = BuroSpacing.Xs),
+        verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // Segmented control rather than three filled buttons: only one type can be active, and
@@ -1571,12 +1578,18 @@ private fun XtreamCatalogCard(
                 }
             }
             Spacer(Modifier.height(BuroSpacing.Xs))
+            // Set in from the card's edge.
+            //
+            // Flush against it, the first glyph of a line was clipped — the "2" of a year lost its
+            // left stroke, reported with a screenshot of a row of them. A text layout has no
+            // bearing of its own, so the inset has to come from here.
             Text(
                 text = title,
                 color = if (selected) BuroColors.Primary else BuroColors.Text,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = CARD_CAPTION_INSET),
             )
             Text(
                 text = itemMetadata(item).ifBlank { if (live) text.onAir else "" },
@@ -1584,10 +1597,19 @@ private fun XtreamCatalogCard(
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = CARD_CAPTION_INSET),
             )
         }
     }
 }
+
+/**
+ * How far a card's caption sits inside the card.
+ *
+ * Two points is enough to clear the clipping and small enough that the captions still line up with
+ * the artwork above them, which is what makes a grid read as a grid.
+ */
+private val CARD_CAPTION_INSET = 2.dp
 
 private fun XtreamContentType.label(text: DesktopStrings): String =
     when (this) {
