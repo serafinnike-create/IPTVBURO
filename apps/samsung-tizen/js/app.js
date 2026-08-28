@@ -788,6 +788,17 @@ var BuroApp = (function () {
         playerSubtitleTimer = window.setTimeout(clearPlayerSubtitle, duration);
     }
 
+    /*
+      Se o fluxo e uma emissao ao vivo.
+
+      Desconhecido conta como ao vivo, que e o lado seguro: um filme tratado como
+      canal fica apenas com o buffer menor que ja tinha, enquanto um canal tratado
+      como filme comecaria dois minutos mais tarde.
+    */
+    function isLiveContent(contentType) {
+        return contentType !== 'MOVIE' && contentType !== 'SERIES' && contentType !== 'EPISODE';
+    }
+
     function preparePlayerOverlay() {
         resetPlayerControlsLock();
         clearPlayerError();
@@ -8103,7 +8114,24 @@ var BuroApp = (function () {
                 return '<section data-provider="' + attr(String(shelf.providerId || shelf.providerName || '')) +
                     '"><div class="section-heading"><h2>' + subscriptionProviderLogo(shelf.providerLogoUrl) +
                     escapeHtml(shelf.providerName === 'coming-soon' ?
-                    t('subscriptionsUpcomingShelf') : shelf.providerName) + '</h2><p>' + shelf.titles.length + '</p></div><div class="subscription-row">' +
+                    t('subscriptionsUpcomingShelf') : shelf.providerName) + '</h2>' +
+                    /*
+                      O "Ver mais" tambem no cabecalho, e nao so no fim da
+                      fileira.
+
+                      Ele existia so depois dos vinte posteres. Sete cabem na
+                      tela, entao alcanca-lo exigia atravessar treze cartoes
+                      que a pessoa nao queria ver — e nada dizia que ele
+                      estava la. No cabecalho ele fica ao lado do numero que
+                      promete os vinte, que e onde a pergunta "cade o resto"
+                      aparece.
+
+                      O do fim continua: quem varreu a fileira inteira chega
+                      nele naturalmente, e tira-lo obrigaria a voltar.
+                    */
+                    (shelf.providerId ? '<button class="subscription-head-more focusable" data-action="subscription-expand" data-provider="' +
+                        attr(shelf.providerId) + '">' + t('subscriptionsSeeMore') + ' ›</button>' : '') +
+                    '<p>' + shelf.titles.length + '</p></div><div class="subscription-row">' +
                     shelf.titles.map(function (title) {
                         var poster = safeArtworkUrl(title.posterUrl);
                         return '<button class="subscription-poster focusable" data-action="subscription-title" data-key="' +
@@ -8332,7 +8360,7 @@ var BuroApp = (function () {
         var element = null;
         var row = null;
         if (root && root.querySelectorAll) {
-            Array.prototype.some.call(root.querySelectorAll('[data-action="subscription-expand"]'), function (candidate) {
+            Array.prototype.some.call(root.querySelectorAll('.subscription-row [data-action="subscription-expand"]'), function (candidate) {
                 if (candidate.getAttribute('data-provider') !== String(providerId || '')) { return false; }
                 element = candidate;
                 return true;
@@ -8346,13 +8374,22 @@ var BuroApp = (function () {
         };
     }
 
+    /*
+      A busca e restrita a fileira de proposito.
+
+      "Ver mais" existe em dois lugares — no cabecalho e no fim da fileira —
+      com o mesmo data-action e o mesmo data-provider. Sem a restricao, esta
+      busca encontra o do cabecalho, que nao vive dentro de .subscription-row:
+      closest devolve nulo, a posicao horizontal nao e restaurada e o foco
+      volta para o botao errado.
+    */
     function restoreSubscriptionExpandedVisual(visual) {
         var content = root && root.querySelector ? root.querySelector('.content.scrollable') : null;
         var element = null;
         var row;
         var index;
         if (!visual || !root || !root.querySelectorAll) { return; }
-        Array.prototype.some.call(root.querySelectorAll('[data-action="subscription-expand"]'), function (candidate) {
+        Array.prototype.some.call(root.querySelectorAll('.subscription-row [data-action="subscription-expand"]'), function (candidate) {
             if (candidate.getAttribute('data-provider') !== visual.providerId) { return false; }
             element = candidate;
             return true;
@@ -11563,7 +11600,8 @@ var BuroApp = (function () {
         root.setAttribute('aria-hidden', 'true');
         preparePlayerOverlay();
         updatePlayerTimeline(startPositionMs, playback.durationMs);
-        try { BuroPlayer.play(BuroXtream.resolveCatchUp(secret, locator), startPositionMs); }
+        /* Catch-up e um ficheiro gravado, nao uma emissao: le a frente como um filme. */
+        try { BuroPlayer.play(BuroXtream.resolveCatchUp(secret, locator), startPositionMs, false); }
         catch (error) { playbackFailed({ code: 'PLAYBACK_SOURCE_UNAVAILABLE' }); }
         secret = null;
         locator = null;
@@ -11624,7 +11662,13 @@ var BuroApp = (function () {
         try { secret = BuroStorage.secureGet(source.id); }
         catch (error) { playbackFailed({ code: 'PLAYBACK_UNKNOWN' }); return; }
         if (source.type === 'XTREAM') {
-            try { BuroPlayer.play(BuroXtream.resolvePlayback(secret, playbackItem.locator), startPositionMs); }
+            try {
+                BuroPlayer.play(
+                    BuroXtream.resolvePlayback(secret, playbackItem.locator),
+                    startPositionMs,
+                    isLiveContent(item.contentType)
+                );
+            }
             catch (error) { playbackFailed({ code: 'PLAYBACK_UNKNOWN' }); }
         } else if (source.type === 'STALKER') {
             resolveStalkerPlayback(source, secret, playbackItem, startPositionMs);
@@ -11643,7 +11687,7 @@ var BuroApp = (function () {
             if (currentPlayback !== playback) { return; }
             BuroStalker.resolvePlayback(secret, session, source.id, item.locator, function (url) {
                 if (currentPlayback !== playback) { url = null; return; }
-                BuroPlayer.play(url, startPositionMs);
+                BuroPlayer.play(url, startPositionMs, isLiveContent(item.contentType));
                 url = null;
             }, function (error) {
                 if (currentPlayback !== playback) { return; }
@@ -11696,7 +11740,7 @@ var BuroApp = (function () {
         updatePlayerTimeline(playback.positionMs, 0);
         BuroDownloads.resolveCompletedFile(entry.id, function (uri) {
             if (currentPlayback !== playback) { uri = null; return; }
-            BuroPlayer.play(uri, playback.positionMs);
+            BuroPlayer.play(uri, playback.positionMs, isLiveContent(playback.contentType));
             uri = null;
         }, function () {
             if (currentPlayback === playback) { playbackFailed({ code: 'PLAYBACK_SOURCE_UNAVAILABLE' }); }

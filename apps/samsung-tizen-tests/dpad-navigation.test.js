@@ -1232,7 +1232,15 @@ async function run() {
         subscriptionCalls.length === subscriptionCallsAfterFirstVisit &&
         window.BuroApp.state.screenData.shelves.length === 1 &&
         !window.BuroApp.state.screenData.loading);
-    var expandService = window.document.querySelector('[data-action="subscription-expand"]');
+    /*
+      O botao do fim da fileira, e nao o do cabecalho.
+
+      "Ver mais" passou a existir nos dois lugares: no cabecalho, alcancavel de
+      imediato, e no fim da fileira para quem a percorreu inteira. Os dois levam
+      a mesma tela. Este bloco testa o do fim — ele mede a rolagem horizontal da
+      fileira, que so faz sentido para um botao que vive dentro dela.
+    */
+    var expandService = window.document.querySelector('.subscription-row [data-action="subscription-expand"]');
     check('cada serviço real termina com Ver mais e Em breve não inventa catálogo',
         expandService && expandService.getAttribute('data-provider') === '8' &&
         !window.document.querySelector('[data-provider="coming-soon"]'));
@@ -1280,10 +1288,12 @@ async function run() {
         check('RETURN fecha a grade ampla e devolve as prateleiras do mesmo filtro',
             !window.BuroApp.state.screenData.expanded &&
             window.document.querySelectorAll('.subscription-shelves [data-action="subscription-title"]').length === 2 &&
-            window.document.querySelector('[data-action="subscription-expand"]').classList.contains('focused') &&
+            /* O foco volta ao botao usado, que e o do fim da fileira — o do
+               cabecalho tem o mesmo data-action e vem antes na pagina. */
+            window.document.querySelector('.subscription-row [data-action="subscription-expand"]').classList.contains('focused') &&
             window.document.querySelector('.content.scrollable').scrollTop === 73 &&
             window.document.querySelector('.subscription-row').scrollLeft === 31);
-        window.BuroApp._activate(window.document.querySelector('[data-action="subscription-expand"]'));
+        window.BuroApp._activate(window.document.querySelector('.subscription-row [data-action="subscription-expand"]'));
         expandedCatalogueCall.failure({ code: 'NETWORK_ERROR' });
         check('falha conserva os títulos iniciais e uma explicação visível na grade',
             window.BuroApp.state.screenData.expanded.error &&

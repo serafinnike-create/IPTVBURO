@@ -1075,7 +1075,29 @@ body.reduced-motion .similar-title-opening { animation: none; left: 29%; }
 .subscription-shelves > section { margin-bottom: 30px; }
 .subscription-shelves .section-heading h2, .subscription-expanded .section-heading h2 { display: flex; align-items: center; }
 .subscription-provider-logo { width: 36px; height: 36px; margin-right: 12px; padding: 3px; border-radius: 8px; background: var(--elevated); object-fit: contain; }
-.subscription-row { width: 100%; padding: 5px 4px 22px; display: flex; overflow-x: hidden; }
+/*
+  A fileira de um servico mostra sete de vinte, e agora diz isso.
+
+  Era `overflow-x: hidden`: o D-pad deslizava a fileira, mas nada na tela
+  contava que havia mais — so o numero no cabecalho, que assim contradizia o
+  que se via. A barra fica sempre desenhada porque numa TV nao ha ponteiro
+  para revela-la, e uma que so aparece durante o movimento chega tarde.
+*/
+.subscription-row {
+    width: 100%; padding: 5px 4px 22px; display: flex; overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: thin; scrollbar-color: var(--gold) rgba(246,247,250,.14);
+}
+.subscription-row::-webkit-scrollbar { height: 8px; }
+.subscription-row::-webkit-scrollbar-track { border-radius: 4px; background: rgba(246,247,250,.14); }
+.subscription-row::-webkit-scrollbar-thumb { border-radius: 4px; background: var(--gold); }
+/* O atalho do cabecalho, ao lado do nome do servico. Discreto: ele repete o
+   que o botao do fim da fileira ja faz, e nao deve competir com os posteres. */
+.subscription-head-more {
+    margin-left: 18px; padding: 6px 14px;
+    border: 1px solid rgba(214,169,86,.42); border-radius: 999px;
+    background: transparent; color: var(--gold); font-size: 17px; font-weight: 700;
+}
+.subscription-head-more.focused { background: var(--gold); color: #111319; }
 .home-streaming-rail .home-rail-heading h2 { display: flex; align-items: center; }
 .home-streaming-row { padding-bottom: 30px; }
 .subscription-poster { position: relative; flex: 0 0 160px; width: 160px; min-height: 300px; margin-right: 14px; padding: 0 0 10px; overflow: hidden; border: 2px solid transparent; border-radius: 14px; background: var(--surface); color: var(--text); text-align: left; }
