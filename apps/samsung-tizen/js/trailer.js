@@ -35,10 +35,54 @@ var BuroTrailer = (function () {
         return BuroDomain.sanitizeYouTubeReference(reference);
     }
 
-    function embedUrl(id) {
-        return 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) +
-            '?autoplay=1&mute=1&controls=0&playsinline=1&rel=0&loop=0&enablejsapi=1';
+    /*
+      A origem que o IFrame API exige, quando ela existe.
+
+      O erro 153 do YouTube e recusa por origem: com `enablejsapi=1` o player
+      confere quem o incorporou, e um widget Tizen carregado de `file://` tem
+      origem `null`. O parametro nunca era enviado, entao a maioria dos
+      trailers falhava com "Video player configuration error".
+
+      Onde a pagina tem uma origem de verdade — o emulador servido por http,
+      um firmware que usa esquema proprio — ela e enviada e a API funciona.
+      Onde nao tem, o proximo comentario explica o que acontece.
+    */
+    function pageOrigin() {
+        var origin;
+        if (typeof window === 'undefined' || !window.location) { return null; }
+        origin = window.location.origin || '';
+        /* `file://` e `about:` produzem "null" como texto, ou vazio. Nenhum
+           dos dois serve ao YouTube. */
+        if (!origin || origin === 'null' || origin.indexOf('http') !== 0) { return null; }
+        return origin;
     }
+
+    /*
+      Com origem, o embed usa a API e o overlay controla a reproducao. Sem
+      origem, o embed vai sem `enablejsapi` — e ai o YouTube nao tem o que
+      recusar, e o trailer toca.
+
+      O que se perde nesse caminho e o controle por tecla: play, pause, seek
+      e mudo passam a nao responder, porque nao ha canal para pedi-los. O que
+      se ganha e o trailer existir. Um controle que funciona sobre um video
+      que nao carrega nao vale nada, e era isso que havia antes.
+
+      `autoplay=1&mute=1` cobre o caso sem API: o trailer comeca sozinho e em
+      silencio, que e o comportamento que o overlay produzia com a API.
+    */
+    function embedUrl(id) {
+        var origin = pageOrigin();
+        var base = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) +
+            '?autoplay=1&mute=1&controls=' + (origin ? '0' : '1') +
+            '&playsinline=1&rel=0&loop=0';
+        /* Sem a API os controles do proprio YouTube ficam ligados: sao a
+           unica forma de pausar o que a tecla ja nao pausa. */
+        return origin ? base + '&enablejsapi=1&origin=' + encodeURIComponent(origin) : base;
+    }
+
+    /* O overlay pergunta isto para saber se as teclas de transporte tem a
+       quem falar. */
+    function apiAvailable() { return pageOrigin() !== null; }
 
     function formatTime(value) {
         var total = Math.max(0, Math.floor(Number(value) || 0));
@@ -147,6 +191,10 @@ var BuroTrailer = (function () {
     }
 
     function available() {
+        /* Em widget Tizen a origem costuma ser `file://`/null. Nesse caso o
+           embed sem API continua válido e mostra os controles do próprio
+           YouTube; bloquear aqui tornava inalcançável justamente o fallback
+           construído por `embedUrl`. */
         return initialized && Boolean(frame && frame.contentWindow && window.postMessage);
     }
 
@@ -161,7 +209,8 @@ var BuroTrailer = (function () {
         muted = true;
         opened = true;
         titleLabel.textContent = clean(title) || 'IPTV BURO';
-        hintLabel.textContent = copy.hint || '';
+        hintLabel.textContent = apiAvailable() ? (copy.hint || '') :
+            (copy.fallbackHint || copy.hint || '');
         updateStatus();
         overlay.hidden = false;
         if (appRoot) { appRoot.setAttribute('aria-hidden', 'true'); }
@@ -221,6 +270,7 @@ var BuroTrailer = (function () {
     return {
         init: init,
         available: available,
+        apiAvailable: apiAvailable,
         open: open,
         close: close,
         togglePlayback: togglePlayback,

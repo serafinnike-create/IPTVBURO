@@ -394,8 +394,8 @@ body.playing .app-root { display: none; }
 .notice-row > button { flex: none; }
 .notice-kind { color: var(--muted); font-size: 16px; letter-spacing: .06em; text-transform: uppercase; }
 .content {
-    position: absolute; top: 92px; right: 0; bottom: 0; left: 0; z-index: 1;
-    height: auto; overflow: hidden; padding: 10px 64px 70px;
+    position: absolute; top: 92px; right: 0; bottom: 48px; left: 0; z-index: 1;
+    height: auto; overflow: hidden; padding: 10px 64px 26px;
 }
 .content.scrollable { overflow-y: auto; }
 
@@ -1805,8 +1805,11 @@ body.reduced-motion .catalogue-skeleton-card em { animation: none; }
 .empty-state p { color: var(--secondary); font-size: 23px; margin-bottom: 28px; }
 
 .bottom-hint {
-    position: absolute; left: 68px; bottom: 26px; z-index: 20;
-    padding-right: 18px; background: var(--canvas); color: var(--muted); font-size: 18px;
+    position: absolute; right: 0; bottom: 0; left: 0; z-index: 20;
+    height: 48px; padding: 0 68px; display: flex; align-items: center;
+    border-top: 1px solid rgba(255,255,255,.06);
+    background: linear-gradient(90deg, var(--canvas), rgba(8,9,10,.96));
+    color: var(--muted); font-size: 17px;
 }
 .toast { position: absolute; right: 72px; bottom: 64px; max-width: 660px; padding: 20px 28px; border: 1px solid #3b3f4a; border-radius: 16px; background: rgba(17,19,25,.96); color: var(--text); font-size: 22px; z-index: 50; }
 .toast.error { border-color: rgba(255,107,107,.6); color: var(--error); }
@@ -2363,4 +2366,16 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
 .detail-download-hint {
     max-width: 520px; margin: 4px 0 0;
     color: var(--muted); font-size: 18px; line-height: 1.4;
+}
+
+/* A marca do proprio aplicativo na lista de onde assistir.
+
+   O TMDb entrega o logo das outras plataformas; o IPTV BURO nao esta nesse
+   catalogo, e ficava sem nada — a unica linha sem identidade numa lista onde a
+   marca e o que se le primeiro. O mesmo B dourado da barra lateral. */
+.subscription-offer-mark {
+    flex: 0 0 46px; width: 46px; height: 46px; margin-right: 16px;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--gold); border-radius: 50%;
+    color: var(--gold); font-size: 22px; font-weight: 900;
 }

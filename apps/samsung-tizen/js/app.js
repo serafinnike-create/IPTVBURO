@@ -85,6 +85,8 @@ var BuroApp = (function () {
     var bootSweepDone = null;
     var homeCache = null;
     var discoverCache = null;
+    var subscriptionIndex = null;
+    var subscriptionIndexAt = 0;
     /* Capa genérica detectada no catálogo Xtream ativo. Só o conjunto final
        sobrevive à varredura; o mapa grande de contagens é descartado. */
     var placeholderArtworkSourceId = null;
@@ -137,6 +139,15 @@ var BuroApp = (function () {
     var licenceKeyTimer = null;
     var licenceKeyRequestId = 0;
     var sourceRefreshRequestId = 0;
+    /* Estado transitório do atalho da barra superior para M3U/Stalker. Não entra
+       em preferências nem no IndexedDB; serve apenas para manter o mesmo botão
+       ocupado enquanto a fotografia transacional da fonte é substituída. */
+    var topbarSourceRefresh = {
+        sourceId: null,
+        refreshing: false,
+        refreshError: null,
+        refreshSuccess: false
+    };
     var SEARCH_PAGE_SIZE = 40;
     var SEARCH_DEBOUNCE_MILLIS = 300;
     var LICENCE_KEY_DEBOUNCE_MILLIS = 600;
@@ -3072,7 +3083,9 @@ var BuroApp = (function () {
     }
 
     /* Catálogo novo, Home velha: o guardado deixa de valer. */
-    function forgetHomeCache() { homeCache = null; forgetDiscoverCache(); }
+    /* Um catalogo novo invalida tudo o que foi lido dele: a Home, o baralho
+       do Descobrir e o indice de nomes das Assinaturas. */
+    function forgetHomeCache() { homeCache = null; forgetDiscoverCache(); forgetSubscriptionIndex(); }
 
     function elementWithinClass(element, className) {
         var current = element;
@@ -6049,14 +6062,24 @@ var BuroApp = (function () {
     function refreshChipHtml() {
         var source = state.activeSource;
         var status;
-        if (!source || source.type !== 'XTREAM') { return ''; }
-        status = catalogueSyncStatus(source);
-        if (status && status.state === 'RUNNING') {
-            return '<span class="topbar-chip refresh-chip busy" role="status" aria-label="' +
-                attr(t('refreshingCatalogue')) + '"><span class="boot-indicator"></span>' +
-                escapeHtml(catalogueSyncShortLabel(status)) + '</span>';
+        if (!source) { return ''; }
+        if (source.type === 'XTREAM') {
+            status = catalogueSyncStatus(source);
+            if (status && status.state === 'RUNNING') {
+                return '<span class="topbar-chip refresh-chip busy" role="status" aria-label="' +
+                    attr(t('refreshingCatalogue')) + '"><span class="boot-indicator"></span>' +
+                    escapeHtml(catalogueSyncShortLabel(status)) + '</span>';
+            }
+            return '<button class="topbar-chip refresh-chip focusable" data-action="catalogue-refresh"' +
+                ' aria-label="' + attr(t('refreshCatalogue')) + '">⟳ ' +
+                escapeHtml(t('refreshCatalogue')) + '</button>';
         }
-        return '<button class="topbar-chip refresh-chip focusable" data-action="catalogue-refresh"' +
+        if (topbarSourceRefresh.sourceId === source.id && topbarSourceRefresh.refreshing) {
+            return '<span class="topbar-chip refresh-chip busy" role="status" aria-label="' +
+                attr(t('refreshingSource')) + '"><span class="boot-indicator"></span>' +
+                escapeHtml(t('refreshingSource')) + '</span>';
+        }
+        return '<button class="topbar-chip refresh-chip focusable" data-action="active-source-refresh"' +
             ' aria-label="' + attr(t('refreshCatalogue')) + '">⟳ ' +
             escapeHtml(t('refreshCatalogue')) + '</button>';
     }
@@ -8341,9 +8364,19 @@ var BuroApp = (function () {
         var offerHtml = data.selectionLoading ? '<div class="subscription-loading"><span class="boot-indicator"></span><p>' +
             t('subscriptionsLoadingOffers') + '</p></div>' : (offers.length ? offers.map(function (offer) {
                 var action = offer.localItem ? 'subscription-local' : 'subscription-offer';
+                /*
+                  O proprio aplicativo tem marca; o TMDb nao a fornece.
+
+                  As outras linhas mostram o logo que o catalogo de provedores
+                  entrega. O IPTV BURO nao esta nesse catalogo — e nem deveria
+                  — entao ficava sem nada, a unica linha sem identidade numa
+                  lista onde a marca e o que se le primeiro.
+                */
+                var mark = offer.localItem ? '<span class="subscription-offer-mark">B</span>' :
+                    subscriptionOfferLogo(offer.providerLogoUrl);
                 return '<button class="subscription-offer focusable" data-action="' + action + '"' +
                     (offer.localItem ? ' data-id="' + attr(offer.localItem.id) + '"' : ' data-url="' + attr(offer.url || '') + '"') +
-                    '>' + subscriptionOfferLogo(offer.providerLogoUrl) + '<div><strong>' + escapeHtml(offer.providerName) + '</strong><p>' + t('offer' +
+                    '>' + mark + '<div><strong>' + escapeHtml(offer.providerName) + '</strong><p>' + t('offer' +
                     String(offer.type || '').charAt(0).toUpperCase() + String(offer.type || '').slice(1)) + '</p>' +
                     (offer.requiresAttribution ? '<small>Streaming data provided by JustWatch</small>' : '') + '</div><span>›</span></button>';
             }).join('') : (!data.selectionLoading ? '<p class="form-message">' + t('subscriptionsUnknown') + '</p>' : ''));
@@ -8611,19 +8644,69 @@ var BuroApp = (function () {
         restoreSubscriptionExpandedVisual(visual);
     }
 
+    /*
+      O indice de nomes do catalogo, montado uma vez e reaproveitado.
+
+      Cada titulo aberto em Assinaturas varria as 42.000 linhas para responder
+      uma pergunta so — "este filme esta na minha lista?". As outras
+      plataformas saem junto com a ficha, e a do proprio aplicativo chegava
+      cinco a dez segundos depois, o que fazia parecer que ela nao existia.
+
+      Guarda so o que a comparacao usa — nome dobrado, ano, id e tipo — e nao
+      os itens: o objeto inteiro de 42.000 linhas nao cabe confortavelmente na
+      memoria de uma TV, e nada mais aqui precisa dele.
+
+      A chave junta nome e tipo porque um filme e uma serie podem ter o mesmo
+      nome, e sao respostas diferentes.
+    */
+    function subscriptionIndexKey(name, isSeries) {
+        return (isSeries ? 's:' : 'm:') + titleComparable(name);
+    }
+
+    function buildSubscriptionIndex(done, failed) {
+        BuroStorage.fold('items', function (index, item) {
+            var key;
+            if (!item || (item.contentType !== 'MOVIE' && item.contentType !== 'SERIES')) { return index; }
+            key = subscriptionIndexKey(item.name, item.contentType === 'SERIES');
+            /* O primeiro vence: a lista costuma repetir o mesmo titulo em
+               varias qualidades, e qualquer um deles abre a mesma ficha. */
+            if (!index[key]) {
+                index[key] = { id: item.id, year: Number(item.year) || null };
+            }
+            return index;
+        }, {}, function (index) {
+            subscriptionIndex = index;
+            subscriptionIndexAt = Date.now();
+            done(index);
+        }, failed);
+    }
+
+    function forgetSubscriptionIndex() { subscriptionIndex = null; subscriptionIndexAt = 0; }
+
+    /*
+      Acha o titulo na biblioteca, pelo indice.
+
+      O ano so descarta quando os dois lados o tem: uma lista que nao informa
+      ano nao deve perder o casamento por isso, e era assim que a varredura
+      antiga ja se comportava.
+    */
     function matchSubscriptionLocal(title) {
-        BuroStorage.fold('items', function (match, item) {
-            if (match || !item || item.contentType !== (title.isSeries ? 'SERIES' : 'MOVIE')) { return match; }
-            if (titleComparable(item.name) !== titleComparable(title.title)) { return null; }
-            if (title.year && item.year && Number(title.year) !== Number(item.year)) { return null; }
-            return item;
-        }, null, function (match) {
+        function answer(index) {
+            var hit = index[subscriptionIndexKey(title.title, title.isSeries)];
             if (state.section !== 'SUBSCRIPTIONS' || !state.screenData || !state.screenData.selected ||
                     subscriptionTitleKey(state.screenData.selected) !== subscriptionTitleKey(title)) { return; }
+            if (hit && title.year && hit.year && Number(title.year) !== hit.year) { hit = null; }
             state.screenData.selection = state.screenData.selection || { offers: [], unknown: true };
-            state.screenData.selection.localItem = match;
+            /* O indice guarda o id; a ficha e aberta a partir dele, lendo o
+               item do banco na hora. */
+            state.screenData.selection.localItem = hit ? { id: hit.id } : null;
             render();
-        }, function () {});
+        }
+        if (subscriptionIndex && Date.now() - subscriptionIndexAt < HOME_CACHE_TRUST_MILLIS) {
+            answer(subscriptionIndex);
+            return;
+        }
+        buildSubscriptionIndex(answer, function () {});
     }
 
     function subscriptionVisualForTitle(title, originElement) {
@@ -8794,12 +8877,40 @@ var BuroApp = (function () {
         restoreSubscriptionTitleVisual(visual);
     }
 
+    /*
+      Abrir o titulo que a linha "Na sua biblioteca" promete.
+
+      `findItemAndSource` le `state.items`, que e a amostra que o boot
+      carregou — algumas centenas de linhas de um catalogo de dezenas de
+      milhares. Mas quem casou este titulo foi `matchSubscriptionLocal`, que
+      varre o **banco inteiro**: o item quase sempre existe no banco e quase
+      nunca na amostra.
+
+      O resultado era um cartao que prometia o filme e nao fazia nada ao ser
+      acionado, sem mensagem nenhuma — o `return` mudo abaixo.
+
+      Agora, quando a amostra nao tem, o item e lido do banco pelo id antes
+      de abrir. E se nem o banco tiver — a linha ficou velha, o catalogo foi
+      trocado — a tela diz isso em vez de engolir o toque.
+    */
     function openSubscriptionLocal(itemId) {
         var found = findItemAndSource(itemId);
         subscriptionReturnData = state.screenData;
-        if (!found.item) { return; }
-        if (found.item.contentType === 'SERIES') { openSeriesById(itemId, 'SUBSCRIPTIONS'); }
-        else { openMovieDetails(itemId, 'SUBSCRIPTIONS'); }
+        if (found.item) { openSubscriptionLocalItem(found.item); return; }
+        BuroStorage.get('items', itemId, function (item) {
+            if (!item) { showToast(t('subscriptionsLocalGone'), true); return; }
+            /* Entra no estado para que a ficha encontre o mesmo objeto que o
+               resto do aplicativo usa. */
+            mergeItems([item]);
+            openSubscriptionLocalItem(item);
+        }, function () {
+            showToast(t('subscriptionsLocalGone'), true);
+        });
+    }
+
+    function openSubscriptionLocalItem(item) {
+        if (item.contentType === 'SERIES') { openSeriesById(item.id, 'SUBSCRIPTIONS'); }
+        else { openMovieDetails(item.id, 'SUBSCRIPTIONS'); }
     }
 
     function safeOfferUrl(value) {
@@ -8836,7 +8947,8 @@ var BuroApp = (function () {
         if (!details || !BuroTrailer.open(details.youtubeTrailerId, details.title || data.selected.title, {
             title: t('trailer'), loading: t('trailerLoading'), playing: t('trailerPlaying'),
             playingMuted: t('trailerPlayingMuted'), paused: t('trailerPaused'), ended: t('trailerEnded'),
-            error: t('trailerUnavailable'), hint: t('trailerHint')
+            error: t('trailerUnavailable'), hint: t('trailerHint'),
+            fallbackHint: t('trailerFallbackHint')
         })) { showToast(t('trailerUnavailable'), true); }
     }
 
@@ -10595,7 +10707,7 @@ var BuroApp = (function () {
         }, sourceFailed);
     }
 
-    function finishSourceRefresh(requestId, source, categories, items, replaceAllItems, parsedEntries) {
+    function finishSourceRefresh(requestId, source, categories, items, replaceAllItems, parsedEntries, refreshDraft) {
         var updated;
         if (requestId !== sourceRefreshRequestId) { return; }
         try {
@@ -10608,11 +10720,10 @@ var BuroApp = (function () {
                 updatedAt: Date.now()
             });
         } catch (metadataError) {
-            if (state.screenData && state.screenData.sourceId === source.id) {
-                state.screenData.refreshing = false;
-                state.screenData.refreshError = friendlyError(metadataError);
-                render();
-            }
+            refreshDraft.refreshing = false;
+            refreshDraft.refreshError = friendlyError(metadataError);
+            render();
+            if (refreshDraft === topbarSourceRefresh) { showToast(refreshDraft.refreshError, true); }
             return;
         }
         BuroStorage.replaceSourceCatalogue(updated, categories, items, replaceAllItems, function (result) {
@@ -10645,11 +10756,9 @@ var BuroApp = (function () {
                 if (key.indexOf(updated.id + ':') === 0) { delete artworkRequests[key]; }
             });
             refreshActiveReferences();
-            if (state.screenData && state.screenData.sourceId === updated.id) {
-                state.screenData.refreshing = false;
-                state.screenData.refreshError = null;
-                state.screenData.refreshSuccess = replaceAllItems;
-            }
+            refreshDraft.refreshing = false;
+            refreshDraft.refreshError = null;
+            refreshDraft.refreshSuccess = replaceAllItems;
             render();
             retryPendingSharedTitle();
             if (updated.type === 'XTREAM') {
@@ -10659,11 +10768,10 @@ var BuroApp = (function () {
             } else { showToast(t('sourceRefreshed'), false); }
         }, function (error) {
             if (requestId !== sourceRefreshRequestId) { return; }
-            if (state.screenData && state.screenData.sourceId === source.id) {
-                state.screenData.refreshing = false;
-                state.screenData.refreshError = friendlyError(error);
-                render();
-            } else { showToast(friendlyError(error), true); }
+            refreshDraft.refreshing = false;
+            refreshDraft.refreshError = friendlyError(error);
+            render();
+            if (refreshDraft === topbarSourceRefresh) { showToast(refreshDraft.refreshError, true); }
         });
     }
 
@@ -10692,20 +10800,25 @@ var BuroApp = (function () {
         render();
     }
 
-    function refreshSource() {
-        var draft = sourceManageDraft();
-        var source = state.sources.filter(function (row) { return row.id === draft.sourceId; })[0];
+    function refreshSource(sourceOverride, fromTopbar) {
+        var draft = fromTopbar ? topbarSourceRefresh : sourceManageDraft();
+        var source = sourceOverride || state.sources.filter(function (row) { return row.id === draft.sourceId; })[0];
         var secret;
         var requestId;
         var resumeOnFailure = false;
         var sync;
         if (!source || draft.refreshing) { return; }
+        draft.sourceId = source.id;
         if (source.type === 'XTREAM') {
             sync = catalogueSyncStatus(source);
             if (sync && sync.state === 'RUNNING') { resumeOnFailure = BuroCatalogueSync.cancel(); }
         }
         try { secret = BuroStorage.secureGet(source.id); }
-        catch (error) { draft.refreshError = friendlyError(error); render(); return; }
+        catch (error) {
+            draft.refreshError = friendlyError(error); render();
+            if (fromTopbar) { showToast(draft.refreshError, true); }
+            return;
+        }
         requestId = ++sourceRefreshRequestId;
         draft.refreshing = true;
         draft.refreshError = null;
@@ -10716,18 +10829,19 @@ var BuroApp = (function () {
             draft.refreshing = false;
             draft.refreshError = friendlyError(error);
             render();
+            if (fromTopbar) { showToast(draft.refreshError, true); }
             if (resumeOnFailure) { startXtreamHydration(source, false); }
         }
         if (source.type === 'XTREAM') {
             BuroXtream.authenticate(secret, function () {
                 fetchXtreamCategorySets(secret, source, ['LIVE', 'MOVIE', 'SERIES'], [], function (categories) {
-                    finishSourceRefresh(requestId, source, categories, [], false, null);
+                    finishSourceRefresh(requestId, source, categories, [], false, null, draft);
                 }, failed);
             }, failed);
         } else if (source.type === 'STALKER') {
             withStalkerSession(source, secret, function (session) {
                 fetchStalkerCategorySets(secret, session, source, ['LIVE', 'MOVIE', 'SERIES'], [], function (categories) {
-                    finishSourceRefresh(requestId, source, categories, [], false, null);
+                    finishSourceRefresh(requestId, source, categories, [], false, null, draft);
                 }, failed);
             }, failed);
         } else if (source.type === 'REMOTE_M3U' || source.type === 'LOCAL_M3U') {
@@ -10741,10 +10855,15 @@ var BuroApp = (function () {
                     updatedSecret = null;
                     BuroXmltv.clear(source.id);
                     finishSourceRefresh(requestId, source, snapshot.categories, snapshot.items, true,
-                        snapshot.parsed.entries);
+                        snapshot.parsed.entries, draft);
                 }, function (error) { updatedSecret = null; failed(error); });
             }, failed);
         } else { failed(new Error('SOURCE_TYPE_UNAVAILABLE')); }
+    }
+
+    function refreshActiveSourceFromTopBar() {
+        if (!state.activeSource || state.activeSource.type === 'XTREAM') { return; }
+        refreshSource(state.activeSource, true);
     }
 
     function persistSource(source, categories, items) {
@@ -12322,7 +12441,8 @@ var BuroApp = (function () {
             paused: t('trailerPaused'),
             ended: t('trailerEnded'),
             error: t('trailerUnavailable'),
-            hint: t('trailerHint')
+            hint: t('trailerHint'),
+            fallbackHint: t('trailerFallbackHint')
         })) { showToast(t('trailerUnavailable'), true); }
     }
 
@@ -12780,6 +12900,7 @@ var BuroApp = (function () {
         else if (action === 'source-connect') { connectSource(element.getAttribute('data-type')); }
         else if (action === 'source-manage') { pushScreen('SOURCE_MANAGE', { sourceId: id, confirmDelete: false }); }
         else if (action === 'source-refresh') { refreshSource(); }
+        else if (action === 'active-source-refresh') { refreshActiveSourceFromTopBar(); }
         else if (action === 'catalogue-refresh') { refreshCatalogueFromTopBar(); }
         else if (action === 'diagnostics') { openDiagnostics(); }
         else if (action === 'toggle-merge-sources') { toggleMergeSources(); }
@@ -13322,6 +13443,7 @@ var BuroApp = (function () {
         _skipIntro: skipIntro,
         _applySubtitleOffset: applySubtitleOffset,
         _forgetHomeCache: forgetHomeCache,
+        _matchSubscriptionLocal: matchSubscriptionLocal,
         /* Envelhece o cache sem o descartar: e o estado de uma segunda visita
            horas depois, que e quando a conferencia serve. */
         _ageHomeCacheForTest: function () { if (homeCache) { homeCache.at = 0; } },
