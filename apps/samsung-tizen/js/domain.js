@@ -43,6 +43,55 @@ var BuroDomain = (function () {
             .replace(/^\s+|\s+$/g, '');
     }
 
+    /*
+      A mesma identidade de prateleira de `LibraryMatching.kt`.
+
+      Ela e mais agressiva do que a identidade de playback de proposito: aqui
+      uma chave igual apenas evita desenhar quatro posters identicos. Os itens
+      continuam intactos no IndexedDB e a preferencia permite voltar a lista
+      bruta. Numeros e subtitulos longos ficam, portanto sequencias diferentes
+      nao desaparecem.
+    */
+    function shelfDeduplicationKey(value) {
+        var working = String(value == null ? '' : value);
+        var parts;
+        var longest;
+        if (working.indexOf('|') >= 0) {
+            parts = working.split('|');
+            longest = parts[0] || '';
+            parts.forEach(function (part) {
+                if (trim(part).length > trim(longest).length) { longest = part; }
+            });
+            working = longest;
+        }
+        working = working.replace(/[\[(][A-Za-z0-9]{1,4}[\])]/g, ' ');
+        working = working.replace(/\s+[A-Za-z]{1,2}\s*$/g, ' ');
+        working = working.replace(/\b(hevc|h\.?26[45]|x26[45]|av1|dv|hdr10?\+?|atmos|multi|ac3|aac|eac3)\b/gi, ' ');
+        working = working.toLowerCase()
+            .replace(/[\[(]?\b(19|20)\d{2}\b[\])]?/g, ' ')
+            .replace(/\b(4k|uhd|hd|sd|fhd|1080p?|720p?|480p?|2160p?|dublado|dual|legendado|leg|nacional|dub|bluray|blu-ray|webrip|web-dl|webdl|hdrip|dvdrip|remux|imax|extended|remaster(?:ed|izado)?)\b/gi, ' ');
+        return foldAccents(working).replace(/[^a-z0-9]+/g, '');
+    }
+
+    function shelfItemDeduplicationKey(item) {
+        var title = shelfDeduplicationKey(item && item.name);
+        var year = Number(item && item.year);
+        var safeYear = year >= 1800 && year <= 3000 ? String(Math.floor(year)) : '';
+        if (!title) { return ''; }
+        return String(item && item.contentType || CONTENT.UNKNOWN) + ':' + title + ':' + safeYear;
+    }
+
+    function collapseShelfDuplicates(items) {
+        var seen = Object.create(null);
+        return (items || []).filter(function (item) {
+            var key = shelfItemDeduplicationKey(item);
+            if (!key) { return true; }
+            if (Object.prototype.hasOwnProperty.call(seen, key)) { return false; }
+            seen[key] = true;
+            return true;
+        });
+    }
+
     function stableHash(value) {
         var text = String(value == null ? '' : value);
         var hash = 2166136261;
@@ -330,6 +379,15 @@ var BuroDomain = (function () {
        mencionado no aviso. Mesmo valor do Android. */
     var COUNTDOWN_HORIZON_DAYS = 30;
 
+    /*
+      Os horizontes que a interface oferece.
+
+      Um dia e "so na vespera"; noventa cobre uma temporada inteira anunciada
+      com antecedencia. Sao poucos de proposito: um campo numerico livre
+      exigiria o teclado da TV para uma escolha que cabe em quatro botoes.
+    */
+    var REMINDER_HORIZON_CHOICES = [1, 7, 30, 90];
+
     /* Compara datas pelo dia local, não pelo instante: dois horários do mesmo dia
        precisam contar como zero dia de diferença, e um Date guarda o milissegundo.
        `releaseDate` chega como 'YYYY-MM-DD', que é o que o provedor devolve. */
@@ -382,7 +440,19 @@ var BuroDomain = (function () {
       Devolve sempre a mesma forma; `total` em zero é o "silêncio" do Android —
       nada a dizer, e o app não deve mostrar aviso nenhum.
     */
-    function reminderDigest(reminders, now) {
+    /*
+      `horizonDays` e opcional e cai no padrao de trinta.
+
+      Era fixo. Trinta dias serve para quem marca lancamentos, e nao serve
+      para quem marca a estreia da temporada de dezembro em agosto: o
+      lembrete fica guardado, sem virar aviso, ate faltar um mes — e ate la
+      a pessoa nao sabe se o aplicativo ainda o tem.
+
+      Quem prefere ser avisado so na vespera tambem existe, e para essa
+      pessoa trinta dias de contagem regressiva sao ruido diario.
+    */
+    function reminderDigest(reminders, now, horizonDays) {
+        var horizon = Number(horizonDays) > 0 ? Number(horizonDays) : COUNTDOWN_HORIZON_DAYS;
         /* Um relógio impossível não pode derrubar a Home: sem hoje utilizável,
            ninguém consegue dizer o que já saiu, então tudo fica apenas marcado. */
         var today = startOfLocalDay(now || new Date()) || startOfLocalDay(new Date());
@@ -408,7 +478,7 @@ var BuroDomain = (function () {
                 releasedToday.push(reminder);
                 return;
             }
-            if (days <= COUNTDOWN_HORIZON_DAYS) {
+            if (days <= horizon) {
                 upcoming.push({ reminder: reminder, days: days });
             }
         });
@@ -710,6 +780,9 @@ var BuroDomain = (function () {
         clamp: clamp,
         trim: trim,
         foldAccents: foldAccents,
+        shelfDeduplicationKey: shelfDeduplicationKey,
+        shelfItemDeduplicationKey: shelfItemDeduplicationKey,
+        collapseShelfDuplicates: collapseShelfDuplicates,
         stableHash: stableHash,
         id: id,
         safeId: safeId,
@@ -727,6 +800,7 @@ var BuroDomain = (function () {
         playbackCompleted: playbackCompleted,
         resumeDecision: resumeDecision,
         COUNTDOWN_HORIZON_DAYS: COUNTDOWN_HORIZON_DAYS,
+        REMINDER_HORIZON_CHOICES: REMINDER_HORIZON_CHOICES,
         DISCOVERY_DECK_SIZE: DISCOVERY_DECK_SIZE,
         DISCOVERY_SURPRISE_SLOTS: DISCOVERY_SURPRISE_SLOTS,
         discoveryDeck: discoveryDeck,

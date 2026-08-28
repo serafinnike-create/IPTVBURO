@@ -2361,9 +2361,15 @@ var BuroApp = (function () {
         return item.contentType === 'SERIES' && state.activeSource.type === 'XTREAM';
     }
 
-    /* Dias que faltam, ou null quando não há data utilizável. */
+    /*
+      Dias que faltam, ou null quando não há data utilizável.
+
+      Usa o mesmo horizonte do aviso: um cartao que mostrasse a contagem de um
+      titulo que o aviso ainda ignora diria duas coisas diferentes na mesma
+      tela.
+    */
     function reminderCountdown(reminder) {
-        var digest = BuroDomain.reminderDigest([reminder]);
+        var digest = BuroDomain.reminderDigest([reminder], null, reminderHorizonDays());
         if (digest.releasedToday.length) { return 0; }
         if (digest.upcoming.length) { return digest.upcoming[0].days; }
         return null;
@@ -5600,6 +5606,30 @@ var BuroApp = (function () {
       desligada não avisa ninguém. Um seletor de horário que não dispara seria
       uma promessa falsa, então a página diz em voz alta o que a TV realmente faz.
     */
+    /*
+      Com quanta antecedencia o aviso aparece.
+
+      A TV nao pode notificar com o aplicativo fechado — o manifesto declara
+      `background-support=disable` e a propria tela ja diz isso abaixo. O que
+      esta escolha governa e o aviso da abertura: quanto tempo antes da
+      estreia um titulo marcado passa a ser anunciado.
+
+      Fica acima da lista porque muda o que a lista significa: com um dia de
+      horizonte, quase tudo aparece como "guardado"; com noventa, quase tudo
+      vira contagem regressiva.
+    */
+    function reminderHorizonPicker() {
+        var current = reminderHorizonDays();
+        return '<div class="reminder-horizon"><strong>' + escapeHtml(t('reminderHorizon')) +
+            '</strong><div class="action-row">' +
+            BuroDomain.REMINDER_HORIZON_CHOICES.map(function (days) {
+                return '<button class="filter-chip focusable ' + (days === current ? 'selected' : '') +
+                    '" data-action="reminder-horizon" data-days="' + days + '">' +
+                    escapeHtml(t(days === 1 ? 'reminderHorizonDay' : 'reminderHorizonDays')
+                        .replace('{days}', String(days))) + '</button>';
+            }).join('') + '</div></div>';
+    }
+
     function renderReminders() {
         var entries = reminderCards();
         var content;
@@ -5607,6 +5637,7 @@ var BuroApp = (function () {
             content = emptyState('!', t('remindersEmpty'), t('remindersEmptyBody'), '', '');
         } else {
             content = '<p class="profile-help">' + escapeHtml(t('remindersSubtitle')) + '</p>' +
+                reminderHorizonPicker() +
                 reminderRowsHtml(entries) +
                 '<p class="reminders-notice-hint">' + escapeHtml(t('remindersNoNotice')) + '</p>';
         }
@@ -5621,8 +5652,25 @@ var BuroApp = (function () {
       horizonte — um lembrete para daqui a seis meses fica guardado sem virar
       aviso, exatamente como no Android.
     */
+    /* O horizonte escolhido pela pessoa, ou o padrao do dominio. */
+    function reminderHorizonDays() {
+        var stored = Number(state.preferences.reminderHorizonDays);
+        return BuroDomain.REMINDER_HORIZON_CHOICES.indexOf(stored) >= 0 ?
+            stored : BuroDomain.COUNTDOWN_HORIZON_DAYS;
+    }
+
+    function setReminderHorizon(days) {
+        state.preferences.reminderHorizonDays = Number(days);
+        savePreferences();
+        /* O aviso da abertura ja foi mostrado com o horizonte antigo; deixar
+           que ele volte a aparecer seria repetir o mesmo aviso na mesma
+           sessao. A escolha vale a partir da proxima. */
+        render();
+        showToast(t('reminderHorizonSaved'), false);
+    }
+
     function reminderNoticeText() {
-        var digest = BuroDomain.reminderDigest(profileReminders());
+        var digest = BuroDomain.reminderDigest(profileReminders(), null, reminderHorizonDays());
         var parts = [];
         function line(count, one, many) {
             if (!count) { return; }
@@ -5916,7 +5964,8 @@ var BuroApp = (function () {
         var body;
         var current;
         if (!state.preferences) { return; }
-        digest = BuroDomain.reminderDigest(reminders);
+        /* O sino segue o horizonte escolhido, como o aviso da abertura. */
+        digest = BuroDomain.reminderDigest(reminders, null, reminderHorizonDays());
         if (!digest.releasedToday.length && !digest.upcoming.length) { return; }
         isoDate = localEditorialDay();
         body = reminderNoticeText();
@@ -12449,6 +12498,8 @@ var BuroApp = (function () {
         } else if (action === 'continue-play') { playProgressRow(id, false);
         } else if (action === 'continue-restart') { playProgressRow(id, true);
         } else if (action === 'history-remove') { forgetHistoryProgress(id);
+        } else if (action === 'reminder-horizon') {
+            setReminderHorizon(element.getAttribute('data-days'));
         } else if (action === 'continue-clear') { pushScreen('CONTINUE_CLEAR_CONFIRM', {});
         } else if (action === 'continue-clear-confirm') { confirmClearContinue();
         } else if (action === 'history-clear') { pushScreen('HISTORY_CLEAR_CONFIRM', {});
