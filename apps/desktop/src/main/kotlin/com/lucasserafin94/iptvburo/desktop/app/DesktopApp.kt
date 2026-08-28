@@ -916,6 +916,8 @@ fun DesktopApp(
                         savedSources = appState.savedSourcesRevision.let { appState.savedSources() },
                         onRenameSaved = appState::renameSavedSource,
                         onRemoveSaved = appState::removeSavedSource,
+                        mergeSources = appState.mergeAllSources,
+                        onToggleMergeSources = appState::updateMergeAllSources,
                         deviceCode = appState.deviceCode,
                         onShowDeviceCode = { setupShowingDeviceCode = true },
                         // Hoisted above the step branch so a failed connection returns to a form

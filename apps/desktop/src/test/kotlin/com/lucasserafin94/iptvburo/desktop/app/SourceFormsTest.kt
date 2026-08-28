@@ -69,6 +69,28 @@ class SourceFormsTest {
         assertTrue(onboarding.contains("missing?.let { reason ->"), "a razao nunca e desenhada")
     }
 
+    /**
+     * The switch that turns several lists into one catalogue.
+     *
+     * Only with more than one list: with a single one there is nothing to merge, and the switch
+     * would be a question about nothing.
+     */
+    @Test
+    fun `the merge switch appears only when there is more than one list`() {
+        assertTrue(onboarding.contains("savedSources.size > 1"), "sem a condicao das duas listas")
+        assertTrue(
+            onboarding.contains("mergeSourcesTitle"),
+            "o interruptor nao usa o rotulo traduzido",
+        )
+    }
+
+    /** A switch nobody records is a switch that does nothing. */
+    @Test
+    fun `the merge choice is stored`() {
+        assertTrue(state.contains("userStore.setMergeAllSources"), "a escolha nao e guardada")
+        assertTrue(state.contains("userStore.mergeAllSources()"), "a escolha nao e lida de volta")
+    }
+
     /** Choosing a saved list must still skip the connection fields. */
     @Test
     fun `a saved list needs no server, user or password`() {

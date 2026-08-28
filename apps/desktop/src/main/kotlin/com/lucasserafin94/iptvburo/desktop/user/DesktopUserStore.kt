@@ -294,6 +294,23 @@ class DesktopUserStore(
      * Per install rather than per profile, matching the thing it controls: one machine opens one
      * socket, whoever happens to be signed in.
      */
+    /**
+     * Whether every configured subscription is browsed as one catalogue.
+     *
+     * Off by default. Somebody with a single list gains nothing and would pay for a merge pass over
+     * their whole catalogue, and somebody with two who has not asked for this should not find their
+     * library silently rearranged.
+     *
+     * Per install rather than per profile: it describes how the machine loads its lists, and a
+     * profile that saw a different library from the one next to it would be confusing rather than
+     * useful.
+     */
+    fun mergeAllSources(): Boolean = preferences.getBoolean(KEY_MERGE_SOURCES, false)
+
+    fun setMergeAllSources(enabled: Boolean) {
+        preferences.putBoolean(KEY_MERGE_SOURCES, enabled)
+    }
+
     fun castReceiverAutoStart(): Boolean = preferences.getBoolean(KEY_CAST_AUTO_START, true)
 
     fun setCastReceiverAutoStart(enabled: Boolean) {
@@ -1070,6 +1087,7 @@ class DesktopUserStore(
         const val KEY_LANGUAGE = "language"
         const val KEY_FIRST_STARTUP_DONE = "first-startup-done"
         const val KEY_CAST_AUTO_START = "cast-receiver-auto-start"
+        const val KEY_MERGE_SOURCES = "merge-all-sources"
         const val KEY_CAST_PAIRING_CODE = "cast-pairing-code"
         const val KEY_CACHE_BUDGET_GB = "cache-budget-gb"
 

@@ -34,6 +34,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -319,6 +320,9 @@ fun AccountSetupGate(
     onRenameSaved: (sourceId: String, label: String) -> Unit = { _, _ -> },
     /** Forgets a saved playlist and the password stored with it. */
     onRemoveSaved: (sourceId: String) -> Unit = {},
+    /** Whether every configured list is browsed as one catalogue. */
+    mergeSources: Boolean = false,
+    onToggleMergeSources: (Boolean) -> Unit = {},
 ) {
     // Hoisted out of this composable so a failed connection can return here with everything the
     // user typed still in place. Held in remember alone, the state died with the screen and the
@@ -471,6 +475,42 @@ fun AccountSetupGate(
                     }
                 }
                 Spacer(Modifier.height(BuroSpacing.Xs))
+            }
+
+            // Only with more than one list, because with one there is nothing to merge and the
+            // switch would be a question about nothing.
+            if (savedSources.size > 1) {
+                Spacer(Modifier.height(BuroSpacing.Sm))
+                BuroInteractiveSurface(
+                    onClick = { onToggleMergeSources(!mergeSources) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = BuroRadius.Medium,
+                    background = BuroColors.Surface,
+                    contentDescription = text.shareStrings.screens.mergeSourcesTitle,
+                ) { _ ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(BuroSpacing.Md),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = mergeSources,
+                            onCheckedChange = { chosen -> onToggleMergeSources(chosen) },
+                        )
+                        Spacer(Modifier.width(BuroSpacing.Sm))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = text.shareStrings.screens.mergeSourcesTitle,
+                                color = BuroColors.Text,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                text = text.shareStrings.screens.mergeSourcesHelp,
+                                color = BuroColors.TextMuted,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
+                }
             }
         }
 

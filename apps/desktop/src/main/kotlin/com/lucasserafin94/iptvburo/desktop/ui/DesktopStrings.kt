@@ -646,6 +646,9 @@ data class DesktopStrings(
                             setupMissingConnection = "Complete el servidor, el usuario y la contraseña, o elija una lista ya configurada",
                             diagnosticsAction = "Diagnóstico",
                             diagnosticsTitle = "Diagnóstico de conexión",
+                            mergeSourcesTitle = "Unir todas las listas",
+                            mergeSourcesHelp = "Muestra todas sus listas como un solo catálogo. Nada se repite: la lista más grande manda y las otras completan lo que falta.",
+                            mergeSourcesFailed = "%1${'$'}s no respondió. Las demás listas siguen funcionando.",
                             diagnosticsLatencyGood = "Latencia baja: los canales cambian sin espera",
                             diagnosticsLatencyFair = "Latencia alta: puede cortar y tardar al cambiar de canal",
                             diagnosticsLatencyUnstable = "Latencia muy alta: va a causar cortes y congelamientos",
@@ -1409,6 +1412,9 @@ data class DesktopStrings(
                             setupMissingConnection = "Preencha servidor, usuário e senha, ou escolha uma lista já configurada",
                             diagnosticsAction = "Diagnóstico",
                             diagnosticsTitle = "Diagnóstico da ligação",
+                            mergeSourcesTitle = "Juntar todas as listas",
+                            mergeSourcesHelp = "Mostra todas as suas listas como um só catálogo. Nada se repete: a lista maior manda e as outras completam o que falta.",
+                            mergeSourcesFailed = "%1${'$'}s não respondeu. As outras listas continuam a funcionar.",
                             diagnosticsLatencyGood = "Latência baixa: os canais trocam sem espera",
                             diagnosticsLatencyFair = "Latência alta: pode travar e demorar ao trocar de canal",
                             diagnosticsLatencyUnstable = "Latência muito alta: vai causar travamentos e cortes",
@@ -2172,6 +2178,9 @@ data class DesktopStrings(
                             setupMissingConnection = "Fill in the server, username and password, or pick a playlist you already have",
                             diagnosticsAction = "Diagnostics",
                             diagnosticsTitle = "Connection diagnostics",
+                            mergeSourcesTitle = "Merge every playlist",
+                            mergeSourcesHelp = "Shows all your playlists as one catalogue. Nothing repeats: the biggest list leads and the others fill the gaps.",
+                            mergeSourcesFailed = "%1${'$'}s did not answer. Your other playlists are still working.",
                             diagnosticsLatencyGood = "Low latency: channels change without waiting",
                             diagnosticsLatencyFair = "High latency: this can stall and slow channel changes",
                             diagnosticsLatencyUnstable = "Very high latency: this will cause freezing and stalls",
@@ -2934,6 +2943,9 @@ data class DesktopStrings(
                             setupMissingConnection = "Server, Benutzer und Passwort ausfüllen oder eine vorhandene Liste wählen",
                             diagnosticsAction = "Diagnose",
                             diagnosticsTitle = "Verbindungsdiagnose",
+                            mergeSourcesTitle = "Alle Listen zusammenführen",
+                            mergeSourcesHelp = "Zeigt alle Listen als einen Katalog. Nichts doppelt sich: die größte Liste führt, die anderen füllen die Lücken.",
+                            mergeSourcesFailed = "%1${'$'}s hat nicht geantwortet. Die anderen Listen funktionieren weiter.",
                             diagnosticsLatencyGood = "Niedrige Latenz: Kanäle wechseln ohne Wartezeit",
                             diagnosticsLatencyFair = "Hohe Latenz: kann stocken und Kanalwechsel verzögern",
                             diagnosticsLatencyUnstable = "Sehr hohe Latenz: verursacht Ruckeln und Aussetzer",
@@ -3701,6 +3713,9 @@ data class DesktopStrings(
                             setupMissingConnection = "Compila server, utente e password, oppure scegli una lista già configurata",
                             diagnosticsAction = "Diagnostica",
                             diagnosticsTitle = "Diagnostica della connessione",
+                            mergeSourcesTitle = "Unisci tutte le liste",
+                            mergeSourcesHelp = "Mostra tutte le liste come un solo catalogo. Niente si ripete: la lista più grande guida e le altre completano.",
+                            mergeSourcesFailed = "%1${'$'}s non ha risposto. Le altre liste continuano a funzionare.",
                             diagnosticsLatencyGood = "Latenza bassa: i canali cambiano senza attesa",
                             diagnosticsLatencyFair = "Latenza alta: può bloccarsi e rallentare il cambio canale",
                             diagnosticsLatencyUnstable = "Latenza molto alta: causerà blocchi e interruzioni",
@@ -4818,6 +4833,16 @@ data class DownloadStrings(
  * there — `DesktopStrings` is at its enforced constructor limit.
  */
 data class ScreenStrings(
+    /**
+     * Browsing every subscription as one catalogue.
+     *
+     * Somebody who buys a second list to fill the gaps in the first ends up switching
+     * between them to find which has the film they want — work the app should be doing.
+     */
+    val mergeSourcesTitle: String,
+    val mergeSourcesHelp: String,
+    /** Names the list that is down, so the rest are visibly still working. */
+    val mergeSourcesFailed: String,
     /**
      * Why Continuar is disabled.
      *

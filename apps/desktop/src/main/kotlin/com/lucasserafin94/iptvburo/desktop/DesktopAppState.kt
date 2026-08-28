@@ -1135,6 +1135,28 @@ class DesktopAppState(
      */
     fun newDiagnosticsRunner(): DiagnosticsRunner = DiagnosticsRunner(repository = xtreamRepository)
 
+    /**
+     * Whether every configured list is browsed as one catalogue.
+     *
+     * Off by default: somebody with one list gains nothing and would pay for a merge pass over
+     * their whole catalogue, and somebody with two who has not asked for this should not find
+     * their library silently rearranged.
+     */
+    var mergeAllSources by mutableStateOf(userStore.mergeAllSources())
+        private set
+
+    /**
+     * Stores the choice.
+     *
+     * Takes effect on the next load rather than immediately: rebuilding the catalogue underneath
+     * somebody who is browsing would empty the screen they are looking at, and the setting is
+     * changed from the profile form — which is on the way to a load anyway.
+     */
+    fun updateMergeAllSources(enabled: Boolean) {
+        userStore.setMergeAllSources(enabled)
+        mergeAllSources = enabled
+    }
+
     /** Playlists already configured, offered so a new profile can reuse one. */
     fun savedSources(): List<XtreamSource> = sourceLibrary.sources()
 
