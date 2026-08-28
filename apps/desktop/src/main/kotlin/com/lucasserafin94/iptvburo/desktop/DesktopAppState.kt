@@ -2358,22 +2358,68 @@ class DesktopAppState(
                     )
                 }
                 xtreamSummary?.let { summary ->
-                    add(
-                        DesktopSourceSummary(
-                            id = summary.sourceId,
-                            name = "Sessão Xtream",
-                            itemCount = summary.loadedItemCount,
-                            kind = DesktopSourceKind.XTREAM_SESSION,
-                        ),
-                    )
+                    // Every subscription in the merge, not just the one connected last.
+                    //
+                    // This used to add a single row for the open session, so somebody browsing two
+                    // merged lists saw one — and the switch that turns merging on hides itself
+                    // below two sources, which made it unreachable exactly when it was wanted.
+                    // Reported as a second list that closed the first, with no switch anywhere.
+                    val merged =
+                        (xtreamRepository as? SwitchingCatalogueRepository)?.merging?.heldSources.orEmpty()
+                    if (merged.size > 1) {
+                        val saved = sourceLibrary.sources().associateBy { it.id }
+                        merged.forEach { held ->
+                            add(
+                                DesktopSourceSummary(
+                                    id = held.sourceId,
+                                    // The name the viewer gave it, which is the only thing telling
+                                    // one subscription from another. The stored label is the
+                                    // fallback, and the id is never shown: it means nothing to
+                                    // anybody reading the sidebar.
+                                    name = saved[held.sourceId]?.label?.takeIf { it.isNotBlank() }
+                                        ?: held.label,
+                                    // Per-source counts are not held once the lists are merged, and
+                                    // repeating the merged total on each row would claim every list
+                                    // has all of it. Zero reads as "not counted" to the row, which
+                                    // shows nothing rather than a wrong number.
+                                    itemCount = 0,
+                                    kind = DesktopSourceKind.XTREAM_SESSION,
+                                    isWorking = held.isWorking,
+                                ),
+                            )
+                        }
+                    } else {
+                        add(
+                            DesktopSourceSummary(
+                                id = summary.sourceId,
+                                name = "Sessão Xtream",
+                                itemCount = summary.loadedItemCount,
+                                kind = DesktopSourceKind.XTREAM_SESSION,
+                            ),
+                        )
+                    }
                 }
             }
 
     val isXtreamSelected: Boolean
         get() {
             val xtreamSourceId = xtreamSummary?.sourceId ?: return false
-            return xtreamSourceId == selectedSourceId
+            if (xtreamSourceId == selectedSourceId) return true
+            // Any subscription in the merge counts, not only the one connected last.
+            //
+            // The sidebar now lists each merged list on its own row, and every one of them is the
+            // Xtream catalogue. Matching just the open session would leave a click on the second
+            // row reading as "no Xtream selected" and blank the screen.
+            return mergedSourceIds().contains(selectedSourceId)
         }
+
+    /** The subscriptions currently merged, empty when the lists are browsed separately. */
+    private fun mergedSourceIds(): List<String> =
+        (xtreamRepository as? SwitchingCatalogueRepository)
+            ?.merging
+            ?.heldSources
+            .orEmpty()
+            .map { it.sourceId }
 
     val selectedCatalog: ImportedCatalog?
         get() =
@@ -6869,6 +6915,14 @@ class DesktopAppState(
     fun selectSource(sourceId: String) {
         selectedSourceId = sourceId
         if (xtreamSummary?.sourceId == sourceId) {
+            return
+        }
+        // A merged subscription is not somewhere to switch to.
+        //
+        // Every merged row is the same one catalogue, so clicking one changes nothing about what is
+        // shown — and falling through would clear the open category and channel as if the viewer
+        // had moved to a different list.
+        if (mergedSourceIds().contains(sourceId)) {
             return
         }
         selectedCategoryId = null

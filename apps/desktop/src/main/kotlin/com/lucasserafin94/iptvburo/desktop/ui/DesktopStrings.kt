@@ -648,7 +648,9 @@ data class DesktopStrings(
                             diagnosticsTitle = "Diagnóstico de conexión",
                             mergeSourcesTitle = "Unir todas las listas",
                             mergeSourcesHelp = "Muestra todas sus listas como un solo catálogo. Nada se repite: la lista más grande manda y las otras completan lo que falta.",
+                            mergeSourcesRestart = "Se aplica al abrir la aplicación de nuevo.",
                             mergeSourcesFailed = "%1${'$'}s no respondió. Las demás listas siguen funcionando.",
+                            mergeSourcesOffline = "No responde",
                             diagnosticsLatencyGood = "Latencia baja: los canales cambian sin espera",
                             diagnosticsLatencyFair = "Latencia alta: puede cortar y tardar al cambiar de canal",
                             diagnosticsLatencyUnstable = "Latencia muy alta: va a causar cortes y congelamientos",
@@ -1414,7 +1416,9 @@ data class DesktopStrings(
                             diagnosticsTitle = "Diagnóstico da ligação",
                             mergeSourcesTitle = "Juntar todas as listas",
                             mergeSourcesHelp = "Mostra todas as suas listas como um só catálogo. Nada se repete: a lista maior manda e as outras completam o que falta.",
+                            mergeSourcesRestart = "Aplica-se quando abrir a aplicação de novo.",
                             mergeSourcesFailed = "%1${'$'}s não respondeu. As outras listas continuam a funcionar.",
+                            mergeSourcesOffline = "Não responde",
                             diagnosticsLatencyGood = "Latência baixa: os canais trocam sem espera",
                             diagnosticsLatencyFair = "Latência alta: pode travar e demorar ao trocar de canal",
                             diagnosticsLatencyUnstable = "Latência muito alta: vai causar travamentos e cortes",
@@ -2180,7 +2184,9 @@ data class DesktopStrings(
                             diagnosticsTitle = "Connection diagnostics",
                             mergeSourcesTitle = "Merge every playlist",
                             mergeSourcesHelp = "Shows all your playlists as one catalogue. Nothing repeats: the biggest list leads and the others fill the gaps.",
+                            mergeSourcesRestart = "Takes effect the next time you open the app.",
                             mergeSourcesFailed = "%1${'$'}s did not answer. Your other playlists are still working.",
+                            mergeSourcesOffline = "Not answering",
                             diagnosticsLatencyGood = "Low latency: channels change without waiting",
                             diagnosticsLatencyFair = "High latency: this can stall and slow channel changes",
                             diagnosticsLatencyUnstable = "Very high latency: this will cause freezing and stalls",
@@ -2945,7 +2951,9 @@ data class DesktopStrings(
                             diagnosticsTitle = "Verbindungsdiagnose",
                             mergeSourcesTitle = "Alle Listen zusammenführen",
                             mergeSourcesHelp = "Zeigt alle Listen als einen Katalog. Nichts doppelt sich: die größte Liste führt, die anderen füllen die Lücken.",
+                            mergeSourcesRestart = "Wird beim nächsten Start der App wirksam.",
                             mergeSourcesFailed = "%1${'$'}s hat nicht geantwortet. Die anderen Listen funktionieren weiter.",
+                            mergeSourcesOffline = "Antwortet nicht",
                             diagnosticsLatencyGood = "Niedrige Latenz: Kanäle wechseln ohne Wartezeit",
                             diagnosticsLatencyFair = "Hohe Latenz: kann stocken und Kanalwechsel verzögern",
                             diagnosticsLatencyUnstable = "Sehr hohe Latenz: verursacht Ruckeln und Aussetzer",
@@ -3715,7 +3723,9 @@ data class DesktopStrings(
                             diagnosticsTitle = "Diagnostica della connessione",
                             mergeSourcesTitle = "Unisci tutte le liste",
                             mergeSourcesHelp = "Mostra tutte le liste come un solo catalogo. Niente si ripete: la lista più grande guida e le altre completano.",
+                            mergeSourcesRestart = "Si applica alla prossima apertura dell'app.",
                             mergeSourcesFailed = "%1${'$'}s non ha risposto. Le altre liste continuano a funzionare.",
+                            mergeSourcesOffline = "Non risponde",
                             diagnosticsLatencyGood = "Latenza bassa: i canali cambiano senza attesa",
                             diagnosticsLatencyFair = "Latenza alta: può bloccarsi e rallentare il cambio canale",
                             diagnosticsLatencyUnstable = "Latenza molto alta: causerà blocchi e interruzioni",
@@ -4841,8 +4851,24 @@ data class ScreenStrings(
      */
     val mergeSourcesTitle: String,
     val mergeSourcesHelp: String,
+    /**
+     * That the change lands on the next launch.
+     *
+     * The switch cannot act on the open catalogue: the sessions it would swap are the ones
+     * being browsed, and rebuilding them underneath somebody empties the screen they are
+     * looking at. Without this line a flipped switch does nothing visible, which reads as a
+     * dead button — reported once already about this very feature.
+     */
+    val mergeSourcesRestart: String,
     /** Names the list that is down, so the rest are visibly still working. */
     val mergeSourcesFailed: String,
+    /**
+     * The same thing in two words, for the row that already carries the name.
+     *
+     * The sidebar prints the list's name on the line above, so the full sentence would repeat it
+     * and wrap a narrow column into three lines saying one thing.
+     */
+    val mergeSourcesOffline: String,
     /**
      * Why Continuar is disabled.
      *

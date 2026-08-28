@@ -452,4 +452,46 @@ class MergedCatalogueRepositoryTest {
 
         assertNotNull(repository.itemByProviderId(XtreamContentType.MOVIE, "0"))
     }
+
+    /**
+     * Every subscription is reported, so the sidebar can show one row each.
+     *
+     * The sidebar listed a single row for the most recent session, which with a merge open meant
+     * two lists looked like one — and the switch that turns merging on hides itself below two
+     * sources, so it became unreachable exactly when it was wanted. Reported as a second list that
+     * closed the first, with no switch anywhere on screen.
+     */
+    @Test
+    fun `every subscription is reported for the sidebar`() {
+        val repository =
+            merged(
+                "grande" to FakeSource(listOf("Duna", "Matrix")),
+                "pequena" to FakeSource(listOf("Avatar")),
+            )
+
+        assertEquals(
+            listOf("grande", "pequena"),
+            repository.heldSources.map { it.label },
+            "a barra lateral nao veria as duas listas",
+        )
+    }
+
+    /**
+     * Including one that is down.
+     *
+     * A failed subscription still belongs on screen: dropping it would leave the viewer unable to
+     * tell a list that stopped answering from one they never added.
+     */
+    @Test
+    fun `a subscription that is down is still reported`() {
+        val repository =
+            merged(
+                "grande" to FakeSource(listOf("Duna")),
+                "avariada" to FakeSource(listOf("Avatar"), failOnLoad = true),
+            )
+
+        val down = repository.heldSources.filter { !it.isWorking }.map { it.label }
+        assertEquals(listOf("avariada"), down, "a lista avariada desapareceu da barra lateral")
+        assertEquals(2, repository.heldSources.size, "a barra lateral perdeu uma linha")
+    }
 }

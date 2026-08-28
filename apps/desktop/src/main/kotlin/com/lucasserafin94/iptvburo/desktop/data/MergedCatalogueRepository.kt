@@ -77,6 +77,36 @@ class MergedCatalogueRepository(
         get() = synchronized(lock) { members.count { it.failure == null } > 1 }
 
     /**
+     * Every subscription held, working or not, for the sidebar to list.
+     *
+     * The sidebar used to show one row for the most recent Xtream session, which with a merge open
+     * meant two lists appeared as one — and the switch that turns merging on hides itself below two
+     * sources, so it became unreachable exactly when it mattered. Reported as a second list that
+     * vanished and no switch anywhere.
+     *
+     * A list of what is held, not a judgement about it: a failed list still belongs on screen, or
+     * the viewer cannot tell a subscription that is down from one that was never added.
+     */
+    val heldSources: List<HeldSource>
+        get() =
+            synchronized(lock) {
+                members.map { member ->
+                    HeldSource(
+                        sourceId = member.sourceId,
+                        label = member.label,
+                        isWorking = member.failure == null,
+                    )
+                }
+            }
+
+    /** One subscription in the merge, as the sidebar needs to show it. */
+    data class HeldSource(
+        val sourceId: String,
+        val label: String,
+        val isWorking: Boolean,
+    )
+
+    /**
      * Adds a subscription to the merge and loads it.
      *
      * Failures are recorded rather than thrown: the viewer needs to know which of their lists is

@@ -51,6 +51,16 @@ data class DesktopSourceSummary(
     val name: String,
     val itemCount: Int,
     val kind: DesktopSourceKind,
+    /**
+     * Whether the subscription answered.
+     *
+     * Only a merge can show a list that is down — browsing one at a time, a list that fails never
+     * opens at all. Shown rather than hidden: the viewer asked for these lists together, and a row
+     * that quietly disappeared would look like the app lost their subscription.
+     *
+     * True for everything else, which is the state every source was in before merging existed.
+     */
+    val isWorking: Boolean = true,
 )
 
 data class XtreamSessionSummary(

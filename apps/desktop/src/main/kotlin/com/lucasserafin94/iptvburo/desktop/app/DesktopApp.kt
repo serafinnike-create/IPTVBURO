@@ -1582,12 +1582,25 @@ private fun SourceSidebar(
                         style = MaterialTheme.typography.labelLarge,
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = text.shareStrings.screens.mergeSourcesTitle,
-                        color = BuroColors.TextMuted,
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 2,
-                    )
+                    // A Column, not the rest of the Row: the label and the note are two lines of
+                    // text, and a Row would squeeze the second into one letter per line — the
+                    // sidebar has done exactly that before.
+                    Column {
+                        Text(
+                            text = text.shareStrings.screens.mergeSourcesTitle,
+                            color = BuroColors.TextMuted,
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 2,
+                        )
+                        // Said here rather than nowhere. The switch cannot rebuild the open
+                        // catalogue, so without this it looks like a button that does nothing.
+                        Text(
+                            text = text.shareStrings.screens.mergeSourcesRestart,
+                            color = BuroColors.TextSubtle,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 2,
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -1811,11 +1824,34 @@ private fun SourceItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                "${source.itemCount} ${strings.items}",
-                color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            // A list that did not answer says so, ahead of any count.
+            //
+            // Only a merge can show one: browsing a list at a time, a list that fails never opens.
+            // Without this the row looks like every other, and a catalogue quietly missing a
+            // subscription's titles is indistinguishable from one that never had them.
+            if (!source.isWorking) {
+                Text(
+                    // Not the full "%s did not answer" sentence: the name is already the line
+                    // above, and repeating it in a narrow sidebar wraps to three lines saying
+                    // one thing.
+                    strings.shareStrings.screens.mergeSourcesOffline,
+                    color = BuroColors.Warning,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else if (source.itemCount > 0) {
+                // Zero means "not counted", not "empty".
+                //
+                // Merged subscriptions have no per-list count to show — the whole point is that the
+                // catalogue is one thing — and "0 itens" under every list would read as a load that
+                // failed. Nothing is the honest answer.
+                Text(
+                    "${source.itemCount} ${strings.items}",
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
     }
     }
