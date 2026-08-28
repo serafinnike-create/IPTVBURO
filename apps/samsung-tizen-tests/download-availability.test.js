@@ -163,9 +163,20 @@ async function run() {
         return window.BuroApp.state.ready && window.BuroApp.state.screen !== 'BOOT';
     }, 15000);
     await openMovie(window);
-    check('o botao de baixar nao aparece sem volume montado',
-        !window.document.querySelector('[data-action="download"]'));
-    check('mas a ficha explica que falta um pendrive',
+    /*
+      O botao continua na barra, apagado. Escrevi a primeira versao disto como um
+      paragrafo no lugar do botao, e estava errado: o texto solto desalinhava a
+      barra de glifos, e quem nunca viu o botao com pendrive ligado nao sabia que
+      baixar existia.
+    */
+    check('o botao de baixar continua na barra, sem disparar download',
+        !window.document.querySelector('[data-action="download"]') &&
+        Boolean(window.document.querySelector('[data-action="download-unavailable"]')));
+    /* A razao aparece quando a pessoa pergunta, e nao antes. */
+    check('a ficha ainda nao explica nada, porque ninguem perguntou',
+        bodyText(window).indexOf(window.BuroI18n.t('downloadNeedsUsb')) < 0);
+    window.BuroApp._activate(window.document.querySelector('[data-action="download-unavailable"]'));
+    check('e tocar nele diz que falta um pendrive',
         bodyText(window).indexOf(window.BuroI18n.t('downloadNeedsUsb')) >= 0);
     window.close();
 
@@ -180,6 +191,7 @@ async function run() {
         return window.BuroApp.state.ready && window.BuroApp.state.screen !== 'BOOT';
     }, 15000);
     await openMovie(window);
+    window.BuroApp._activate(window.document.querySelector('[data-action="download-unavailable"]'));
     check('diz que a TV nao permite, e nao que falta pendrive',
         bodyText(window).indexOf(window.BuroI18n.t('downloadUnsupported')) >= 0 &&
         bodyText(window).indexOf(window.BuroI18n.t('downloadNeedsUsb')) < 0);

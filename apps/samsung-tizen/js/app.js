@@ -223,6 +223,10 @@ var BuroApp = (function () {
       não um catálogo.
     */
     var CATALOGUE_BLOCK_SIZE = 21;
+
+    /* Quantas paginas um salto atravessa. Dez porque cinco poupa pouco e
+       cinquenta atravessa demais para quem esta procurando alguma coisa. */
+    var CATALOGUE_PAGE_JUMP = 10;
     var EPISODE_PAGE_SIZE = 40;
     var CATEGORY_SETTINGS_PAGE_SIZE = 40;
     var LIBRARY_PAGE_SIZE = 40;
@@ -375,7 +379,7 @@ var BuroApp = (function () {
 
     function safeProviderLogoUrl(value) {
         var url = BuroDomain.trim(value);
-        return /^https:\/\/image\.tmdb\.org\/t\/p\/w92\/[A-Za-z0-9._\/-]{1,240}$/.test(url) &&
+        return /^https:\/\/image\.tmdb\.org\/t\/p\/(w92|w185)\/[A-Za-z0-9._\/-]{1,240}$/.test(url) &&
             url.indexOf('..') < 0 ? url : null;
     }
 
@@ -4216,6 +4220,9 @@ var BuroApp = (function () {
            ficava presa no resultado sem filtro. */
         scope.rows = undefined;
         scope.loading = false;
+        /* Filtro novo, primeira pagina: continuar na pagina 40 de uma lista
+           que agora tem 3 mostraria o vazio como se fosse resposta. */
+        scope.page = 0;
         render();
     }
 
@@ -4688,13 +4695,37 @@ var BuroApp = (function () {
       Contagem e página vêm da mesma regra e do mesmo pedido: primeiro o total,
       que é o que permite dizer "página 1 de 230", depois a fatia visível.
     */
+    /*
+      Vai para uma pagina, sem deixar sair da lista.
+
+      O indice e preso entre zero e a ultima: um salto de dez a partir da
+      pagina 3 nao deve cair no vazio, deve cair na primeira. E um salto para
+      a frente que passaria do fim para na ultima, que e onde a pessoa queria
+      chegar quando apertou.
+    */
+    function goToCataloguePage(contentType, target) {
+        var scope = catalogueScope(contentType);
+        var pages = Math.max(1, Math.ceil((Number(scope.total) || 0) / CATALOGUE_BLOCK_SIZE));
+        var page = BuroDomain.clamp(Number(target) || 0, 0, pages - 1);
+        if (page === (Number(scope.page) || 0) && scope.rows !== undefined) { return; }
+        scope.page = page;
+        /* A pagina nova substitui a antiga em vez de se somar a ela: e o que
+           mantem uma pagina so no DOM. */
+        scope.rows = undefined;
+        scope.loading = false;
+        render();
+    }
+
     function loadCatalogueShelf(contentType, more) {
         var categories = sourceCategories(contentType);
         var scope = catalogueScope(contentType);
         var matcher = catalogueMatcher(contentType, categories);
         var requestId;
         var loaded = more && scope.rows ? scope.rows : [];
-        var offset = loaded.length;
+        /* Com paginas, o deslocamento vem do indice; "carregar mais" deixou
+           de existir, mas o parametro fica porque a retomada por cursor
+           interna ainda o usa. */
+        var offset = more ? loaded.length : (Number(scope.page) || 0) * CATALOGUE_BLOCK_SIZE;
         /*
           Um "carregar mais" sobre uma carga em andamento é ignorado: são a mesma
           pergunta, e a segunda só duplicaria o bloco.
@@ -4913,10 +4944,57 @@ var BuroApp = (function () {
                     '</div>' : '') +
                 categoryCards(scopedCategories(contentType, categories));
         }
-        return heading + mediaCards(rows, layout, true) +
-            (scope.hasMore ? '<div class="catalogue-pagination"><button class="button primary focusable"' +
-                ' data-action="catalogue-shelf-more"' + (scope.loading ? ' disabled' : '') + '>' +
-                (scope.loading ? t('loadingCatalogue') : t('loadMore')) + '</button></div>' : '');
+        return heading + mediaCards(rows, layout, true) + cataloguePager(contentType, scope);
+    }
+
+    /*
+      As paginas do catalogo, e o salto de varias.
+
+      Havia so "Carregar mais": cada toque acrescentava um bloco a mesma
+      lista, entao chegar ao fim de quarenta mil titulos significava empilhar
+      tudo no DOM e rolar por cima. Numa TV isso fica lento antes do meio.
+
+      Agora sao paginas — uma de cada vez no DOM, com anterior e proxima. E o
+      salto de dez, que o aplicativo do Windows nao tem: com quarenta mil
+      titulos e vinte e um por pagina sao quase dois mil toques de "proxima"
+      para atravessar a lista, e ninguem faz isso.
+
+      Dez, e nao cinco nem cinquenta: cinco poupa pouco, cinquenta atravessa
+      demais para quem esta procurando alguma coisa. E os saltos so aparecem
+      quando ha para onde saltar, para nao oferecerem uma viagem que acaba na
+      mesma pagina.
+    */
+    function cataloguePager(contentType, scope) {
+        var page = Number(scope.page) || 0;
+        var total = Number(scope.total) || 0;
+        var pages = Math.max(1, Math.ceil(total / CATALOGUE_BLOCK_SIZE));
+        var buttons = '';
+        if (pages <= 1) { return ''; }
+        if (page >= CATALOGUE_PAGE_JUMP) {
+            buttons += pagerButton('catalogue-page-first', '«', scope.loading);
+            buttons += pagerButton('catalogue-page-back-jump',
+                '‹‹ ' + CATALOGUE_PAGE_JUMP, scope.loading);
+        }
+        buttons += pagerButton('catalogue-page-previous', '‹ ' + t('previousPage'),
+            scope.loading || page === 0);
+        buttons += '<span class="catalogue-page-mark">' +
+            escapeHtml(t('pageOf').replace('{page}', String(page + 1)).replace('{pages}', String(pages))) +
+            '</span>';
+        buttons += pagerButton('catalogue-page-next', t('nextPage') + ' ›',
+            scope.loading || page >= pages - 1);
+        if (page + CATALOGUE_PAGE_JUMP < pages) {
+            buttons += pagerButton('catalogue-page-forward-jump',
+                CATALOGUE_PAGE_JUMP + ' ››', scope.loading);
+            buttons += pagerButton('catalogue-page-last', '»', scope.loading);
+        }
+        return '<div class="catalogue-pagination">' + buttons + '</div>';
+    }
+
+    /* Um botao desabilitado continua desenhado: some-lo faria a fileira
+       mudar de tamanho a cada pagina, e o foco pularia de lugar. */
+    function pagerButton(action, label, disabled) {
+        return '<button class="button ghost focusable catalogue-page-button" data-action="' + action +
+            '"' + (disabled ? ' disabled' : '') + '>' + escapeHtml(label) + '</button>';
     }
 
     /*
@@ -11898,7 +11976,21 @@ var BuroApp = (function () {
             !((source.type === 'REMOTE_M3U' || source.type === 'LOCAL_M3U') && !directM3uFile) &&
             BuroDownloads.downloadable(item.contentType);
         if (!eligible) { return ''; }
-        if (!BuroDownloads.enabled()) { return downloadUnavailableHint(); }
+        /*
+          Sem armazenamento, o botao continua ali — apagado, e explicando quando
+          tocado.
+
+          Escrevi isto primeiro como um paragrafo no lugar do botao, e ficou
+          errado por duas razoes: o texto solto desalinhava a barra de glifos, e
+          a funcao deixava de ser descobrivel — quem nunca viu o botao com um
+          pendrive ligado nao sabia que baixar existia.
+
+          Um glifo apagado diz "isto existe e agora nao da", que e a verdade. A
+          razao aparece ao tocar, quando a pessoa perguntou.
+        */
+        if (!BuroDownloads.enabled()) {
+            return actionGlyph('download-unavailable', item.id, '↓', t('download'), false);
+        }
         return downloadControls(item, false);
     }
 
@@ -11909,9 +12001,8 @@ var BuroApp = (function () {
       simplesmente nao sabe baixar, e ligar um pendrive nao mudaria nada.
       Uma mensagem so mandaria metade das pessoas procurar um cabo a toa.
     */
-    function downloadUnavailableHint() {
-        var reason = BuroDownloads.available() ? 'downloadNeedsUsb' : 'downloadUnsupported';
-        return '<p class="detail-download-hint">' + escapeHtml(t(reason)) + '</p>';
+    function explainDownloadUnavailable() {
+        showToast(t(BuroDownloads.available() ? 'downloadNeedsUsb' : 'downloadUnsupported'), true);
     }
 
     /*
@@ -13033,6 +13124,7 @@ var BuroApp = (function () {
         else if (action === 'reminder-open') { openReminderItem(id); }
         else if (action === 'reminder-remove') { removeReminderById(id); }
         else if (action === 'download') { downloadItem(id); }
+        else if (action === 'download-unavailable') { explainDownloadUnavailable(); }
         else if (action === 'download-retry') {
             BuroDownloads.remove(element.getAttribute('data-key'));
             downloadItem(id);
@@ -13106,7 +13198,26 @@ var BuroApp = (function () {
         else if (action === 'catalogue-year-all') { cycleCatalogueYear('all'); }
         else if (action === 'catalogue-year-current') { cycleCatalogueYear('current'); }
 
-        else if (action === 'catalogue-shelf-more') { loadCatalogueShelf(currentCatalogueType(), true); }
+        else if (action === 'catalogue-page-next') {
+            goToCataloguePage(currentCatalogueType(),
+                (Number(catalogueScope(currentCatalogueType()).page) || 0) + 1);
+        }
+        else if (action === 'catalogue-page-previous') {
+            goToCataloguePage(currentCatalogueType(),
+                (Number(catalogueScope(currentCatalogueType()).page) || 0) - 1);
+        }
+        else if (action === 'catalogue-page-forward-jump') {
+            goToCataloguePage(currentCatalogueType(),
+                (Number(catalogueScope(currentCatalogueType()).page) || 0) + CATALOGUE_PAGE_JUMP);
+        }
+        else if (action === 'catalogue-page-back-jump') {
+            goToCataloguePage(currentCatalogueType(),
+                (Number(catalogueScope(currentCatalogueType()).page) || 0) - CATALOGUE_PAGE_JUMP);
+        }
+        else if (action === 'catalogue-page-first') { goToCataloguePage(currentCatalogueType(), 0); }
+        else if (action === 'catalogue-page-last') {
+            goToCataloguePage(currentCatalogueType(), Number.MAX_SAFE_INTEGER);
+        }
 
         else if (action === 'parental-form') { pushScreen('PARENTAL_FORM'); }
         else if (action === 'parental-save') { saveParentalPin(); }

@@ -196,24 +196,46 @@ async function run() {
     check('a contagem diz quanto já veio e quanto existe',
         (window.document.querySelector('.catalogue-shelf-heading p').textContent || '')
             .indexOf(String(blockSize * 2 + 3)) > 0);
-    check('havendo mais, a prateleira oferece carregar',
-        Boolean(window.document.querySelector('[data-action="catalogue-shelf-more"]')));
+    /*
+      "Carregar mais" virou paginacao, e a semantica mudou de proposito.
 
-    window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-shelf-more"]'));
-    await waitFor(function () {
-        return window.document.querySelectorAll('.media-card').length === blockSize * 2;
-    }, 8000);
-    check('carregar mais acrescenta ao que já estava, sem recomeçar',
-        window.document.querySelectorAll('.media-card').length === blockSize * 2);
+      Antes cada toque acrescentava um bloco a mesma lista: chegar ao fim de
+      quarenta mil titulos significava empilhar tudo no DOM, e numa TV isso fica
+      lento antes do meio. Agora e uma pagina de cada vez, e a pagina nova
+      **substitui** a anterior — e por isso que a contagem de cartoes volta a ser
+      um bloco depois de avancar, em vez de dobrar.
 
-    window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-shelf-more"]'));
+      O que o teste continua protegendo: uma pagina por vez no DOM, e a ultima
+      trazendo so o que resta.
+    */
+    check('havendo mais, a prateleira oferece a proxima pagina',
+        Boolean(window.document.querySelector('[data-action="catalogue-page-next"]')));
+
+    window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-page-next"]'));
     await waitFor(function () {
-        return window.document.querySelectorAll('.media-card').length === blockSize * 2 + 3;
+        return window.document.querySelectorAll('.media-card').length === blockSize &&
+            !window.document.querySelector('[data-action="catalogue-page-previous"][disabled]');
     }, 8000);
-    check('o último bloco traz só o que resta',
-        window.document.querySelectorAll('.media-card').length === blockSize * 2 + 3);
-    check('sem mais nada para vir, o botão sai da tela',
-        !window.document.querySelector('[data-action="catalogue-shelf-more"]'));
+    check('a segunda pagina continua sendo uma pagina, e nao duas somadas',
+        window.document.querySelectorAll('.media-card').length === blockSize);
+    /* E o caminho de volta existe assim que ha para onde voltar. */
+    check('e a pagina anterior fica alcancavel',
+        Boolean(window.document.querySelector('[data-action="catalogue-page-previous"]')) &&
+        !window.document.querySelector('[data-action="catalogue-page-previous"][disabled]'));
+
+    window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-page-next"]'));
+    await waitFor(function () {
+        return window.document.querySelectorAll('.media-card').length === 3;
+    }, 8000);
+    check('a última página traz só o que resta',
+        window.document.querySelectorAll('.media-card').length === 3);
+    /*
+      O botao continua desenhado, so desabilitado: some-lo faria a fileira mudar
+      de largura a cada pagina, e o foco pularia de lugar entre um toque e o
+      seguinte.
+    */
+    check('e a proxima pagina deixa de estar disponivel',
+        Boolean(window.document.querySelector('[data-action="catalogue-page-next"][disabled]')));
 
     /*
       Escolher um filtro enquanto a prateleira ainda carrega.

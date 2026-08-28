@@ -23,6 +23,7 @@ html, body {
     background: transparent;
     color: var(--text);
     font-family: "Samsung One", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
     -webkit-user-select: none;
     user-select: none;
     cursor: none;
@@ -30,6 +31,9 @@ html, body {
 
 button, input { font: inherit; }
 button { color: inherit; }
+
+/* Evita os modos de pixel art que serrilham fotografias e capas. */
+img { image-rendering: auto; }
 
 #av-player { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; }
 
@@ -2359,14 +2363,13 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
 .merge-text strong { font-size: 26px; }
 .merge-text span { margin-top: 4px; color: var(--secondary); font-size: 20px; }
 
-/* A razao de o botao de baixar nao estar ali.
+/* O botao de baixar quando nao ha onde guardar.
 
-   Discreta: e uma explicacao, nao um erro. Um aviso vermelho faria parecer que
-   alguma coisa falhou, quando na verdade so falta ligar um cabo. */
-.detail-download-hint {
-    max-width: 520px; margin: 4px 0 0;
-    color: var(--muted); font-size: 18px; line-height: 1.4;
-}
+   Apagado, e nao ausente: um glifo esmaecido diz "isto existe e agora nao da", e
+   mantem a barra alinhada. Continua focavel, porque e tocando nele que a pessoa
+   descobre o que falta — e volta ao normal sob foco, senao pareceria inerte. */
+.action-glyph[data-action="download-unavailable"] { opacity: .45; }
+.action-glyph[data-action="download-unavailable"].focused { opacity: 1; }
 
 /* A marca do proprio aplicativo na lista de onde assistir.
 
@@ -2396,3 +2399,13 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
 .catalogue-layout-compact .media-card[data-action="live-details"] h3 {
     padding-bottom: 14px;
 }
+
+/* A fileira de paginas do catalogo.
+
+   Os botoes desabilitados continuam desenhados, so apagados: some-los faria a
+   fileira mudar de largura a cada pagina e o foco pularia de lugar entre um
+   toque e o seguinte. */
+.catalogue-pagination { display: flex; align-items: center; justify-content: center; padding: 26px 0 34px; }
+.catalogue-page-button { margin: 0 8px; }
+.catalogue-page-button[disabled] { opacity: .35; }
+.catalogue-page-mark { margin: 0 18px; color: var(--secondary); font-size: 20px; font-weight: 700; }
