@@ -2409,3 +2409,20 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
 .catalogue-page-button { margin: 0 8px; }
 .catalogue-page-button[disabled] { opacity: .35; }
 .catalogue-page-mark { margin: 0 18px; color: var(--secondary); font-size: 20px; font-weight: 700; }
+
+/* A janela da previa do canal em foco.
+
+   Canto superior direito, do tamanho de um quarto da tela: grande o bastante
+   para se reconhecer o que esta passando, pequena o bastante para a lista
+   continuar sendo o assunto. O AVPlay desenha por baixo da pagina, entao a
+   moldura e um buraco transparente com borda — nao um elemento que contem o
+   video. */
+.live-preview {
+    position: fixed; top: 96px; right: 64px; z-index: 5;
+    width: 480px; height: 270px;
+    border: 2px solid rgba(214,169,86,.55); border-radius: 14px;
+    background: transparent;
+    box-shadow: 0 18px 44px rgba(0,0,0,.5);
+    pointer-events: none;
+}
+.live-preview[hidden] { display: none; }

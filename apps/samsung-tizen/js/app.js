@@ -53,6 +53,10 @@ var BuroApp = (function () {
     var playerSubtitleDelayTimer = null;
     var playerSkipIntroButton;
     var skipIntroVisible = false;
+    var previewTimer = null;
+    var previewItemId = null;
+    var previewPendingId = null;
+    var previewFrame;
     var subtitleOffsetMs = 0;
     var playerControlsTimer = null;
     var playerEnterTimer = null;
@@ -227,6 +231,19 @@ var BuroApp = (function () {
     /* Quantas paginas um salto atravessa. Dez porque cinco poupa pouco e
        cinquenta atravessa demais para quem esta procurando alguma coisa. */
     var CATALOGUE_PAGE_JUMP = 10;
+
+    /*
+      Quanto tempo o foco precisa ficar parado antes de a previa comecar.
+
+      Sem espera, atravessar a lista com o D-pad abriria e fecharia um fluxo
+      por canal — dezenas de aberturas por minuto. Cada uma custa banda e uma
+      sessao no provedor, e ha provedores que limitam conexoes simultaneas e
+      derrubam a conta por excesso.
+
+      Um segundo e meio e o tempo de alguem parar para ler o nome do canal.
+      Quem esta so passando nunca chega a abrir nada.
+    */
+    var PREVIEW_DELAY_MILLIS = 1500;
     var EPISODE_PAGE_SIZE = 40;
     var CATEGORY_SETTINGS_PAGE_SIZE = 40;
     var LIBRARY_PAGE_SIZE = 40;
@@ -7041,7 +7058,16 @@ var BuroApp = (function () {
             colours.map(function (option) {
                 return subtitleChoice('subtitle-colour-select', option[0], option[1], colour === option[0], true);
             }).join('') + '</div><div class="subtitle-background-row">' +
-            settingCard('subtitleBackground', 'subtitleBackground') + '</div></section>';
+            settingCard('subtitleBackground', 'subtitleBackground') +
+            /*
+              A previa do canal focado, desligada por padrao.
+
+              Cada abertura e uma sessao no provedor, e ha provedores que
+              limitam conexoes simultaneas e derrubam a conta por excesso.
+              Quem sabe que a sua aguenta liga aqui; quem nao sabe nao e
+              exposto ao risco sem ter escolhido.
+            */
+            settingCard('livePreview', 'livePreview') + '</div></section>';
     }
 
     function clockChoice(value, labelKey, selected) {
@@ -9559,11 +9585,103 @@ var BuroApp = (function () {
         }
     }
 
+    /*
+      A previa do canal focado.
+
+      E o que as listas de IPTV fazem: a lista de um lado, o canal em foco
+      tocando pequeno do outro, trocando conforme o foco anda. Sem isso a
+      unica forma de saber o que esta passando e abrir o canal inteiro e
+      voltar.
+
+      **Desligada por padrao.** Cada abertura e uma sessao no provedor, e ha
+      provedores que limitam conexoes e derrubam a conta por excesso. Quem
+      sabe que a sua aguenta liga em Configuracoes; quem nao sabe nao e
+      exposto ao risco sem escolher.
+    */
+    function previewEnabled() {
+        return state.preferences.livePreview === true;
+    }
+
+    function cancelPreview() {
+        if (previewTimer) { window.clearTimeout(previewTimer); previewTimer = null; }
+        if (previewItemId) {
+            previewItemId = null;
+            BuroPlayer.stop();
+            if (previewFrame) { previewFrame.hidden = true; }
+        }
+        /* O alvo pendente sai junto: sem isto, sair da lista e voltar ao mesmo
+           canal nao reabriria a previa, porque o alvo continuaria "igual". */
+        previewPendingId = null;
+    }
+
+    /*
+      Chamada a cada movimento do foco. Cancela o que estava a caminho e
+      recomeca a contagem: e o cancelamento que impede a enxurrada de
+      aberturas quando alguem atravessa a lista.
+    */
+    function schedulePreview(element) {
+        var itemId = element && element.getAttribute ? element.getAttribute('data-id') : null;
+        var isChannel = element && element.getAttribute &&
+            element.getAttribute('data-action') === 'live-details';
+        /*
+          So quando o alvo muda de verdade.
+
+          `applyFocus` roda a cada redesenho, e nao apenas quando o foco anda —
+          uma prateleira que recebe capas redesenha varias vezes por segundo.
+          Agendar ali sem comparar criava um `setTimeout` por redesenho: medi 320
+          callbacks pendentes contra um limite de 12 em
+          `chromium-visual.test.js`, que foi quem pegou.
+
+          Comparar com o alvo pendente resolve na raiz: um redesenho sobre o
+          mesmo canal nao mexe no que ja esta contando.
+        */
+        /*
+          Um redesenho sobre o mesmo canal nao mexe no que ja esta contando —
+          mas so enquanto houver algo contando ou tocando. Sem a segunda metade,
+          um alvo marcado por uma tentativa que **nao** comecou (a preferencia
+          estava desligada, o player estava aberto) bloqueava a tentativa
+          seguinte: ligar a previa nas Configuracoes so faria efeito depois de
+          mover o foco para outro canal e voltar.
+        */
+        if (itemId && itemId === previewPendingId && (previewTimer || previewItemId)) { return; }
+        /* Cancelar primeiro, marcar depois: `cancelPreview` limpa o alvo
+           pendente, e faze-lo na outra ordem apagaria a marca recem-posta e a
+           guarda acima nunca valeria. */
+        cancelPreview();
+        previewPendingId = isChannel ? itemId : null;
+        if (!previewEnabled() || !isChannel || !itemId) { return; }
+        /* Nunca por cima de uma reproducao de verdade: quem esta assistindo
+           nao quer o audio de outro canal por baixo. */
+        if (document.body.classList.contains('playing')) { return; }
+        previewTimer = window.setTimeout(function () {
+            previewTimer = null;
+            startPreview(itemId);
+        }, PREVIEW_DELAY_MILLIS);
+    }
+
+    function startPreview(itemId) {
+        var found = findItemAndSource(itemId);
+        var secret;
+        if (!found.item || !found.source || found.source.type !== 'XTREAM') { return; }
+        if (document.body.classList.contains('playing')) { return; }
+        try { secret = BuroStorage.secureGet(found.source.id); }
+        catch (ignoredSecret) { return; }
+        previewItemId = itemId;
+        if (previewFrame) { previewFrame.hidden = false; }
+        /* A URL e produzida aqui e some quando a chamada retorna, como na
+           reproducao normal — resolucao tardia, sem nada guardado. */
+        try { BuroPlayer.play(BuroXtream.resolvePlayback(secret, found.item.locator), 0); }
+        catch (ignoredPlay) { cancelPreview(); }
+    }
+
     function applyFocus() {
         focusables.forEach(function (element, index) {
             var verticalContent;
             element.classList.toggle('focused', index === focusIndex);
             if (index === focusIndex) {
+                /* O foco mudou: a previa antiga morre e a nova comeca a
+                   contar. */
+                schedulePreview(element);
                 element.setAttribute('tabindex', '0');
                 verticalContent = verticalContentFor(element);
                 if (verticalContent) {
@@ -12118,6 +12236,9 @@ var BuroApp = (function () {
           caminhos.
         */
         cancelNextEpisode(true);
+        /* Uma reproducao de verdade encerra a previa: dois fluxos ao mesmo
+           tempo e o dobro do custo, e o audio brigaria. */
+        cancelPreview();
         restoreSubtitleOffset();
         if (!found.item) { return; }
         decision = BuroDomain.resumeDecision(progress && progress.entry, found.item.contentType !== 'LIVE');
@@ -13390,6 +13511,7 @@ var BuroApp = (function () {
         playerMenuTitle = document.getElementById('player-menu-title');
         playerMenuOptions = document.getElementById('player-menu-options');
         playerMenuHint = document.getElementById('player-menu-hint');
+        previewFrame = document.getElementById('live-preview');
         playerSkipIntroButton = document.getElementById('player-skip-intro');
         playerNextPanel = document.getElementById('player-next-panel');
         playerNextTitle = document.getElementById('player-next-title');
@@ -13579,6 +13701,7 @@ var BuroApp = (function () {
         _applySubtitleOffset: applySubtitleOffset,
         _forgetHomeCache: forgetHomeCache,
         _matchSubscriptionLocal: matchSubscriptionLocal,
+        _schedulePreview: schedulePreview,
         /* Envelhece o cache sem o descartar: e o estado de uma segunda visita
            horas depois, que e quando a conferencia serve. */
         _ageHomeCacheForTest: function () { if (homeCache) { homeCache.at = 0; } },

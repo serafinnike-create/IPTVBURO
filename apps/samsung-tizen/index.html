@@ -13,9 +13,12 @@
     <div id="app" class="app-root">
         <div class="boot-screen">
             <div class="boot-backdrop local" aria-hidden="true">
-                <span></span><span></span><span></span><span></span>
-                <span></span><span></span><span></span><span></span>
-                <span></span><span></span><span></span><span></span>
+                <div class="boot-cover-row boot-cover-row-a">
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <div class="boot-cover-row boot-cover-row-b">
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
             </div>
             <div class="boot-vignette" aria-hidden="true"></div>
             <section class="boot-panel" role="status" aria-live="polite" aria-atomic="true">
@@ -24,7 +27,10 @@
                 <p class="boot-message">Preparando seus perfis&hellip;</p>
                 <p class="boot-stage">PREPARANDO SUA BURO</p>
                 <div class="boot-progress" role="progressbar" aria-label="Preparando seus perfis"
-                     aria-valuemin="0" aria-valuemax="100" aria-valuenow="25"><span style="width: 25%"></span></div>
+                     aria-valuemin="0" aria-valuemax="100" aria-valuenow="25">
+                    <span class="boot-progress-fill" style="width: 25%"></span>
+                    <strong class="boot-progress-value" aria-hidden="true">25%</strong>
+                </div>
                 <div class="boot-dots" aria-hidden="true">
                     <span class="boot-dot active"></span><span class="boot-dot"></span>
                     <span class="boot-dot"></span><span class="boot-dot"></span>
@@ -49,6 +55,10 @@
         <!-- Pular a abertura. Nao recebe foco: as teclas sao tratadas direto,
              porque numa TV a pessoa ja tem o controle na mao e navegar ate um
              alvo custaria mais do que os trinta segundos que ele economiza. -->
+        <!-- A moldura da previa do canal focado. Fica fora do overlay do player
+             porque nao e uma reproducao: e uma janela ao lado da lista, e o
+             overlay inteiro apareceria por cima dela. -->
+        <div id="live-preview" class="live-preview" aria-hidden="true" hidden></div>
         <button id="player-skip-intro" class="player-skip-intro" hidden></button>
         <!-- Pular a abertura. Nao recebe foco: as teclas sao tratadas direto,
              porque numa TV a pessoa ja tem o controle na mao e navegar ate um
@@ -137,6 +147,7 @@
     <script src="js/m3u.js"></script>
     <script src="js/xmltv.js"></script>
     <script src="js/xtream.js"></script>
+    <script src="js/display-quality.js"></script>
     <script src="js/tmdb.js"></script>
     <script src="js/critics.js"></script>
     <script src="js/notifications.js"></script>
