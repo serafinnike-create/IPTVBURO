@@ -828,6 +828,7 @@ fun DesktopApp(
 
                 activePlayback?.let { request ->
                     DesktopPlayerOverlay(
+                        onFindAlternative = appState::alternativePlayback,
                         request = request,
                         onCheckpoint = { positionMs, durationMs ->
                             appState.checkpointPlayback(request, positionMs, durationMs)

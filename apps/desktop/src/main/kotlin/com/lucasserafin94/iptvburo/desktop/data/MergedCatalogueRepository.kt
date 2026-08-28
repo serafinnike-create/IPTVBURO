@@ -393,6 +393,25 @@ class MergedCatalogueRepository(
             eachWorking { runCatching { it.buildConfirmedPlaybackUri(target) }.getOrNull() },
         ) { "No subscription could resolve this stream." }
 
+    /**
+     * The same title from the next subscription that has it.
+     *
+     * Skips [exclude] of them, so a second failure moves on again rather than offering the same
+     * dead stream for ever. Null once every list has been tried, which is the point at which the
+     * viewer genuinely has to be told.
+     */
+    override fun buildAlternativePlaybackUri(
+        target: XtreamPlaybackTarget,
+        exclude: Int,
+    ): URI? {
+        val working = synchronized(lock) { members.filter { it.failure == null }.toList() }
+        return working
+            .drop(exclude.coerceAtLeast(0))
+            .firstNotNullOfOrNull { member ->
+                runCatching { member.repository.buildConfirmedPlaybackUri(target) }.getOrNull()
+            }
+    }
+
     override fun measureProviderTransfer(budgetMillis: Long) =
         primary?.measureProviderTransfer(budgetMillis)
 

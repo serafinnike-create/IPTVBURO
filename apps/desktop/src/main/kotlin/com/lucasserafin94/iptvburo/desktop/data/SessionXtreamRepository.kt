@@ -823,6 +823,18 @@ class SessionXtreamRepository(
         return LatencySample(samplesMillis = samples, attempted = attempts)
     }
 
+    /**
+     * Null, always.
+     *
+     * One subscription has no alternative to offer: a stream that fails here has failed, and
+     * pretending otherwise would send the player round a loop trying the same address. Only the
+     * merging repository has somewhere else to look.
+     */
+    override fun buildAlternativePlaybackUri(
+        target: XtreamPlaybackTarget,
+        exclude: Int,
+    ): URI? = null
+
     override fun placeholderArtworkUrls(): Set<String> =
         synchronized(lock) {
             // Recomputed only when the loaded catalogues have changed, which the count identifies

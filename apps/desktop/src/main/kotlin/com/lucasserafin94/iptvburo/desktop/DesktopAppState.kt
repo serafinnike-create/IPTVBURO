@@ -1158,6 +1158,29 @@ class DesktopAppState(
         mergeAllSources = enabled
     }
 
+    /**
+     * The same title from another subscription, for a stream that failed.
+     *
+     * Null when only one list carries it, or when every list has been tried — which is the point at
+     * which the viewer genuinely has to be told rather than kept waiting.
+     *
+     * Half the value of owning a second subscription is that a dead stream is not the end of the
+     * evening, and the viewer should never have to know a swap happened.
+     */
+    fun alternativePlayback(
+        request: DesktopPlaybackRequest,
+        attempt: Int,
+    ): DesktopPlaybackRequest? {
+        val target = lastPlaybackTarget ?: return null
+        val uri =
+            runCatching { xtreamRepository.buildAlternativePlaybackUri(target, exclude = attempt) }
+                .getOrNull() ?: return null
+        return request.copy(uri = uri)
+    }
+
+    /** What is playing, so a failed stream can be asked for from a different list. */
+    private var lastPlaybackTarget: XtreamPlaybackTarget? = null
+
     /** Playlists already configured, offered so a new profile can reuse one. */
     fun savedSources(): List<XtreamSource> = sourceLibrary.sources()
 
@@ -6314,6 +6337,8 @@ class DesktopAppState(
         startPositionMillis: Long = 0L,
     ): DesktopPlaybackRequest? =
         runCatching {
+            // Remembered so a stream that fails can be asked for from another subscription.
+            lastPlaybackTarget = target
             DesktopPlaybackRequest(
                 title = title.take(180),
                 uri = xtreamRepository.buildConfirmedPlaybackUri(target),

@@ -148,7 +148,9 @@ class MergedCatalogueRepositoryTest {
 
         override fun shortEpg(streamId: String) = XtreamShortEpg(emptyList(), 0)
 
-        override fun buildConfirmedPlaybackUri(target: XtreamPlaybackTarget) = error("nao usado")
+        /** A stand-in address, so the fallback has something real to hand back. */
+        override fun buildConfirmedPlaybackUri(target: XtreamPlaybackTarget): java.net.URI =
+            java.net.URI("http://p.invalid/${target.contentKey}")
 
         override fun summary(): XtreamSessionSummary =
             XtreamSessionSummary(
@@ -338,6 +340,35 @@ class MergedCatalogueRepositoryTest {
 
         assertEquals(2, page(repository).items.size)
         assertTrue(!repository.isMerging)
+    }
+
+    /**
+     * A stream that fails must be able to fall back to another list's copy.
+     *
+     * Half the value of owning a second subscription is that a dead stream is not the end of the
+     * evening, and the viewer should never have to know a swap happened.
+     */
+    @Test
+    fun `a failed stream can be asked for from the next list`() {
+        val repository =
+            merged(
+                "grande" to FakeSource(listOf("Duna", "Matrix")),
+                "pequena" to FakeSource(listOf("Duna")),
+            )
+        val target =
+            XtreamPlaybackTarget.CatalogItem(
+                providerId = "0",
+                contentType = XtreamContentType.MOVIE,
+                containerExtension = "mp4",
+                contentKey = "duna",
+            )
+
+        // Skipping none is the first list; skipping one has to reach the second.
+        assertNotNull(repository.buildAlternativePlaybackUri(target, exclude = 0))
+        assertNotNull(repository.buildAlternativePlaybackUri(target, exclude = 1))
+        // And once every list has been tried there is nothing left to offer, which is when the
+        // viewer genuinely has to be told rather than kept waiting.
+        assertEquals(null, repository.buildAlternativePlaybackUri(target, exclude = 2))
     }
 
     /** The cap the owner named. */

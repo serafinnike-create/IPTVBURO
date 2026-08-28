@@ -66,6 +66,13 @@ private val PLAYBACK_RATES = listOf(1.0, 1.25, 1.5, 2.0, 0.75)
 @Composable
 fun DesktopPlayerOverlay(
     request: DesktopPlaybackRequest,
+    /**
+     * The same title from another subscription, or null when there is no other to try.
+     *
+     * Takes how many have already been tried, so a second failure moves on rather than offering
+     * the same dead stream again.
+     */
+    onFindAlternative: (DesktopPlaybackRequest, Int) -> DesktopPlaybackRequest? = { _, _ -> null },
     onCheckpoint: (Long, Long) -> Unit,
     onEnded: (Long) -> Unit,
     isFullScreen: Boolean,
@@ -370,7 +377,21 @@ fun DesktopPlayerOverlay(
                 modifier = Modifier.fillMaxSize(),
             )
             }
-            state.errorMessage?.let { message ->
+            // A stream that fails is asked for from another subscription before the viewer is
+            // told anything. Half the value of owning a second list is that a dead stream is not
+            // the end of the evening — and they should never have to know a swap happened.
+            //
+            // Counted, so a second failure moves on to the next list rather than offering the same
+            // dead stream for ever; once every list has been tried the error below is the honest
+            // answer.
+            var alternativesTried by remember(request) { mutableStateOf(0) }
+            LaunchedEffect(state.errorMessage, request) {
+                if (state.errorMessage == null) return@LaunchedEffect
+                val next = onFindAlternative(request, alternativesTried + 1) ?: return@LaunchedEffect
+                alternativesTried += 1
+                controller.retry(next)
+            }
+            state.errorMessage?.takeIf { alternativesTried == 0 || onFindAlternative(request, alternativesTried + 1) == null }?.let { message ->
                 Column(
                     Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,

@@ -200,6 +200,20 @@ interface CatalogueRepository {
      */
     fun placeholderArtworkUrls(): Set<String> = emptySet()
 
+    /**
+     * The same title from a different subscription, or null when there is no other.
+     *
+     * A stream that fails is exactly when the other list's copy is worth having — half the value of
+     * owning a second subscription, and the viewer should never have to know it happened.
+     *
+     * @param exclude how many subscriptions to skip, so a second failure moves on again rather than
+     *   offering the same dead stream for ever.
+     */
+    fun buildAlternativePlaybackUri(
+        target: XtreamPlaybackTarget,
+        exclude: Int,
+    ): URI? = null
+
     fun summary(): XtreamSessionSummary?
 
     fun clearCatalogCache()
