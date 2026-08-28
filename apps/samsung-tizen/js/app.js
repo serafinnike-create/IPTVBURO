@@ -51,6 +51,8 @@ var BuroApp = (function () {
     var sleepTimerMinutes = null;
     var sleepTimerAtEpisodeEnd = false;
     var playerSubtitleDelayTimer = null;
+    var playerSkipIntroButton;
+    var skipIntroVisible = false;
     var subtitleOffsetMs = 0;
     var playerControlsTimer = null;
     var playerEnterTimer = null;
@@ -163,6 +165,23 @@ var BuroApp = (function () {
        Trocar de fonte ou varrer o catalogo invalida o cache por outro
        caminho, entao este numero nao governa a validade — so a repeticao. */
     var HOME_CACHE_TRUST_MILLIS = 30000;
+
+    /*
+      A janela em que pular a abertura faz sentido, e para onde pular.
+
+      Depois de tres minutos ja nao e abertura: e a historia, e um botao ali
+      convidaria a pular o inicio do episodio. Antes de trinta segundos
+      tambem nao — muita serie abre com uma cena antes do tema, e oferecer o
+      salto ja no primeiro quadro tiraria justamente essa cena.
+
+      Noventa segundos e a duracao tipica de um tema de serie. Sem marcacao
+      de capitulos — que nenhuma lista IPTV fornece — um salto fixo e o que
+      da para oferecer honestamente, e a barra de progresso mostra para onde
+      ele leva antes de a pessoa apertar.
+    */
+    var SKIP_INTRO_FROM_MS = 30000;
+    var SKIP_INTRO_UNTIL_MS = 180000;
+    var SKIP_INTRO_JUMP_MS = 90000;
 
     var NEXT_EPISODE_SECONDS = 10;
 
@@ -800,6 +819,10 @@ var BuroApp = (function () {
     }
 
     function preparePlayerOverlay() {
+        /* O convite sai com a sessao: ele so faz sentido dentro dos
+           primeiros minutos de um episodio que esta tocando. */
+        skipIntroVisible = false;
+        if (playerSkipIntroButton) { playerSkipIntroButton.hidden = true; }
         resetPlayerControlsLock();
         clearPlayerError();
         closePlayerMenu();
@@ -1195,6 +1218,46 @@ var BuroApp = (function () {
         }, SLEEP_TICK_MILLIS);
         updateSleepTimerLabel();
         showToast(t('sleepTimerRemaining').replace('{minutes}', String(sleepTimerMinutes)), false);
+    }
+
+    /*
+      O convite para pular a abertura.
+
+      So em episodio: um filme nao tem tema que se repita, e num canal ao
+      vivo nao ha para onde saltar. So dentro da janela, e so quando o
+      episodio e longo o bastante para que noventa segundos nao sejam uma
+      fatia grande dele — pular um episodio de cinco minutos comeria um terco
+      do que existe.
+    */
+    function skipIntroAvailable() {
+        var position;
+        var duration;
+        if (!currentPlayback || currentPlayback.contentType !== 'EPISODE') { return false; }
+        position = Number(currentPlayback.positionMs) || 0;
+        duration = Number(currentPlayback.durationMs) || 0;
+        if (duration > 0 && duration < SKIP_INTRO_JUMP_MS * 4) { return false; }
+        return position >= SKIP_INTRO_FROM_MS && position <= SKIP_INTRO_UNTIL_MS;
+    }
+
+    /* Desenhado so quando muda de estado: escrever no DOM a cada segundo de
+       reproducao e trabalho a toa numa TV. */
+    function updateSkipIntro() {
+        var available = skipIntroAvailable();
+        if (!playerSkipIntroButton || available === skipIntroVisible) { return; }
+        skipIntroVisible = available;
+        playerSkipIntroButton.hidden = !available;
+        if (available) { playerSkipIntroButton.textContent = t('skipIntro') + '  ››'; }
+    }
+
+    function skipIntro() {
+        if (!skipIntroAvailable()) { return false; }
+        BuroPlayer.seekBy(SKIP_INTRO_JUMP_MS);
+        /* Some assim que e usado: deixa-lo na tela convidaria a um segundo
+           salto, que ja seria dentro do episodio. */
+        skipIntroVisible = false;
+        if (playerSkipIntroButton) { playerSkipIntroButton.hidden = true; }
+        showToast(t('skipIntroDone'), false);
+        return true;
     }
 
     function closePlayerMenu() {
@@ -12047,6 +12110,10 @@ var BuroApp = (function () {
            fechado abriria o proximo episodio por cima da tela que a pessoa
            acabou de escolher. */
         cancelNextEpisode(true);
+        /* O convite de pular a abertura tambem sai: ele so vale enquanto um
+           episodio esta tocando dentro dos primeiros minutos. */
+        skipIntroVisible = false;
+        if (playerSkipIntroButton) { playerSkipIntroButton.hidden = true; }
         /* O temporizador morre com a sessao: armado numa reproducao, nao deve
            derrubar a proxima que a pessoa escolher. */
         clearSleepTimer();
@@ -12689,6 +12756,15 @@ var BuroApp = (function () {
                 return;
             }
             if (event.keyCode === K.RETURN || event.keyCode === K.STOP) { stopPlayback(); event.preventDefault(); }
+            /*
+              Com o convite na tela, ENTER pula a abertura.
+
+              As quatro teclas coloridas ja tem dono e o convite dura pouco
+              mais de dois minutos, entao gastar uma delas com algo tao
+              passageiro seria caro. O ENTER longo continua bloqueando os
+              controles: so o toque curto salta.
+            */
+            else if (event.keyCode === K.ENTER && skipIntroVisible) { skipIntro(); event.preventDefault(); }
             else if (event.keyCode === K.ENTER) { beginPlayerEnterPress(); event.preventDefault(); }
             else if (event.keyCode === K.PLAY_PAUSE || event.keyCode === K.PLAY ||
                     event.keyCode === K.PAUSE) { BuroPlayer.togglePause(); event.preventDefault(); }
@@ -12760,6 +12836,7 @@ var BuroApp = (function () {
         playerMenuTitle = document.getElementById('player-menu-title');
         playerMenuOptions = document.getElementById('player-menu-options');
         playerMenuHint = document.getElementById('player-menu-hint');
+        playerSkipIntroButton = document.getElementById('player-skip-intro');
         playerNextPanel = document.getElementById('player-next-panel');
         playerNextTitle = document.getElementById('player-next-title');
         playerNextCountdown = document.getElementById('player-next-countdown');
@@ -12796,6 +12873,7 @@ var BuroApp = (function () {
                 playerWaiting.hidden = true;
                 overlay.setAttribute('aria-busy', 'false');
                 updatePlaybackTime(position, duration);
+                updateSkipIntro();
             },
             onSubtitle: showPlayerSubtitle,
             onComplete: function () {
@@ -12942,6 +13020,8 @@ var BuroApp = (function () {
         _setCurrentPlaybackForTest: function (playback) { currentPlayback = playback; },
         _openPlayerMenu: openPlayerMenu,
         _setSleepTimer: setSleepTimer,
+        _updateSkipIntro: updateSkipIntro,
+        _skipIntro: skipIntro,
         _applySubtitleOffset: applySubtitleOffset,
         _forgetHomeCache: forgetHomeCache,
         /* Envelhece o cache sem o descartar: e o estado de uma segunda visita

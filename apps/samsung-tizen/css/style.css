@@ -2207,3 +2207,18 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
 .diagnostics-row .diagnostics-name { flex: 1; width: auto; }
 .diagnostics-row .diagnostics-value { color: var(--text); font-weight: 600; }
 .diagnostics-fact { padding-left: 0; }
+
+/* O convite para pular a abertura.
+
+   Canto inferior direito, acima da barra de controles e do painel do proximo
+   episodio — os dois nunca aparecem ao mesmo tempo, um vive no comeco e o
+   outro no fim. Discreto de proposito: e uma oferta que passa, nao uma acao
+   que a tela esta pedindo. */
+.player-skip-intro {
+    position: absolute; right: 64px; bottom: 210px; z-index: 6;
+    padding: 16px 28px;
+    border: 1px solid rgba(232,225,207,.34); border-radius: 999px;
+    background: rgba(8,10,12,.82); color: var(--text);
+    font-size: 24px; font-weight: 700;
+}
+.player-skip-intro[hidden] { display: none; }
