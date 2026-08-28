@@ -87,6 +87,54 @@ interface ChannelDao {
         offset: Int,
     ): List<ChannelEntity>
 
+    /**
+     * A page across every subscription, each title once.
+     *
+     * Somebody who buys a second list to fill the gaps in the first ends up switching between them
+     * to find which has the film they want — work the app should be doing.
+     *
+     * The biggest list wins a shared title. `MIN(rank)` picks it: the ranking subquery numbers the
+     * sources by size, so the row kept is the one from the largest catalogue. It is a heuristic,
+     * but a stable one — choosing per title would make the same film play from a different provider
+     * on different days for no reason the viewer could see.
+     *
+     * Grouped on the lowercased name rather than the provider's id, because two subscriptions
+     * number the same film differently and grouping by id would keep both.
+     */
+    @Query(
+        """
+        SELECT c.* FROM channels c
+        JOIN (
+            SELECT LOWER(TRIM(name)) AS title, MIN(source_rank) AS best
+            FROM channels
+            JOIN (
+                SELECT source_id AS ranked_source,
+                       ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, source_id) AS source_rank
+                FROM channels GROUP BY source_id
+            ) ON ranked_source = source_id
+            WHERE (:categoryId IS NULL OR category_id = :categoryId)
+              AND (:contentType IS NULL OR content_type = :contentType)
+            GROUP BY LOWER(TRIM(name))
+        ) winners ON winners.title = LOWER(TRIM(c.name))
+        JOIN (
+            SELECT source_id AS ranked_source,
+                   ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, source_id) AS source_rank
+            FROM channels GROUP BY source_id
+        ) ranks ON ranks.ranked_source = c.source_id AND ranks.source_rank = winners.best
+        WHERE (:categoryId IS NULL OR c.category_id = :categoryId)
+          AND (:contentType IS NULL OR c.content_type = :contentType)
+        GROUP BY LOWER(TRIM(c.name))
+        ORDER BY c.sort_order, c.name COLLATE NOCASE
+        LIMIT :limit OFFSET :offset
+        """,
+    )
+    suspend fun loadMergedPage(
+        categoryId: String?,
+        contentType: String?,
+        limit: Int,
+        offset: Int,
+    ): List<ChannelEntity>
+
     @Query(
         """
         SELECT * FROM channels
@@ -137,6 +185,24 @@ interface ChannelDao {
     )
     suspend fun countForSource(
         sourceId: String,
+        categoryId: String?,
+        contentType: String?,
+    ): Int
+
+    /**
+     * How many distinct titles every subscription holds between them.
+     *
+     * Counted on the same lowercased name the merged page groups by, so the total matches what the
+     * grid can actually show — a count of rows would promise pages that are not there.
+     */
+    @Query(
+        """
+        SELECT COUNT(DISTINCT LOWER(TRIM(name))) FROM channels
+        WHERE (:categoryId IS NULL OR category_id = :categoryId)
+          AND (:contentType IS NULL OR content_type = :contentType)
+        """,
+    )
+    suspend fun countMerged(
         categoryId: String?,
         contentType: String?,
     ): Int

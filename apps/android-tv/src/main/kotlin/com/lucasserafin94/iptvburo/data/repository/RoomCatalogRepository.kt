@@ -120,10 +120,22 @@ class RoomCatalogRepository @Inject constructor(
         require(offset >= 0) { "offset cannot be negative" }
         require(limit in 1..MAX_PAGE_SIZE) { "limit must be between 1 and $MAX_PAGE_SIZE" }
         val type = contentType?.name
-        val total = channelDao.countForSource(sourceId, categoryId, type)
+        // A blank source id asks for every subscription at once, each title kept only from the
+        // largest list that has it. Blank rather than a second method, so the merged and single
+        // paths stay one call with one set of paging arithmetic behind it.
+        val merged = sourceId.isBlank()
+        val total =
+            if (merged) {
+                channelDao.countMerged(categoryId, type)
+            } else {
+                channelDao.countForSource(sourceId, categoryId, type)
+            }
         val items =
-            channelDao.loadPage(sourceId, categoryId, type, limit, offset)
-                .map(ChannelEntity::toDomain)
+            if (merged) {
+                channelDao.loadMergedPage(categoryId, type, limit, offset)
+            } else {
+                channelDao.loadPage(sourceId, categoryId, type, limit, offset)
+            }.map(ChannelEntity::toDomain)
         CatalogPage(
             items = items,
             offset = offset,
