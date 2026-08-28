@@ -1668,6 +1668,15 @@ async function run() {
     window.BuroStorage.fold = function (storeName, reducer, initial, success, failure) {
         window.setTimeout(function () { failure({ code: 'DATABASE_REQUEST_FAILED' }); }, 5);
     };
+    /*
+      Envelhecer o guardado para a Home voltar a ler.
+
+      Uma Home montada ha segundos nao e reconferida — a abertura ja a montou e
+      a leitura deu certo ali. A conferencia que este teste exercita e a do
+      cache antigo, que e onde ela serve para alguma coisa: mostrar o guardado
+      e descobrir que o banco caiu no meio-tempo.
+    */
+    window.BuroApp._ageHomeCacheForTest();
     window.BuroApp.state.screenData = null;
     window.BuroApp.render();
     await waitFor(function () { return window.BuroApp.state.screenData && window.BuroApp.state.screenData.error; }, 4000);
@@ -1685,6 +1694,8 @@ async function run() {
     window.BuroStorage.fold = function (storeName, reducer, initial, success, failure) {
         pendingHomeFold = { reducer: reducer, result: initial, success: success };
     };
+    /* Mesma razao de acima: so um cache antigo e reconferido. */
+    window.BuroApp._ageHomeCacheForTest();
     window.BuroApp.state.screenData = null;
     window.BuroApp.render();
     await waitFor(function () { return Boolean(pendingHomeFold); }, 4000);

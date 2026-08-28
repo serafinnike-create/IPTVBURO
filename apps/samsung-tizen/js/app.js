@@ -157,6 +157,12 @@ var BuroApp = (function () {
     */
     /* Dez segundos entre um episodio e o proximo: o bastante para ler o titulo
        e desistir, curto o bastante para nao virar espera. */
+    /* Uma Home montada ha menos disto nao e reconferida: o intervalo cobre a
+       distancia entre a abertura monta-la e a SHELL aparecer, e nada mais.
+       Trocar de fonte ou varrer o catalogo invalida o cache por outro
+       caminho, entao este numero nao governa a validade — so a repeticao. */
+    var HOME_CACHE_TRUST_MILLIS = 30000;
+
     var NEXT_EPISODE_SECONDS = 10;
 
     var CATALOGUE_PAGE_SIZE = 42;
@@ -2833,6 +2839,21 @@ var BuroApp = (function () {
                 kind: 'home', loading: false, result: homeCache.result,
                 heroIndex: homeCache.heroIndex || 0, requestId: requestId, cached: true
             };
+            /*
+              Uma varredura recente nao e refeita.
+
+              A conferencia existe para nao esconder uma falha de leitura: a
+              Home apareceria montada com o banco inacessivel. Isso vale para
+              um cache de horas atras, nao para um que a abertura acabou de
+              montar — ali a leitura ja aconteceu, e com sucesso.
+
+              A abertura varria a mesma tabela duas vezes seguidas:
+              prepareHomeForReveal montava a Home e gravava o cache, e esta
+              funcao refazia tudo no quadro seguinte. Sao 450ms cada num PC,
+              e varios segundos numa TV, gastos para chegar ao mesmo
+              resultado que ja estava na tela.
+            */
+            if (Date.now() - (homeCache.at || 0) < HOME_CACHE_TRUST_MILLIS) { return; }
             window.setTimeout(function () { loadHome(requestId); }, 0);
             return;
         }
@@ -2843,8 +2864,10 @@ var BuroApp = (function () {
     }
 
     /* O que a Home montou hoje, para uma segunda visita não refazer a varredura. */
+    /* O carimbo de tempo e o que permite a Home logo a seguir confiar no
+       resultado em vez de refazer o mesmo trabalho. */
     function rememberHome(result, heroIndex) {
-        homeCache = { day: localEditorialDay(), result: result, heroIndex: heroIndex || 0 };
+        homeCache = { day: localEditorialDay(), result: result, heroIndex: heroIndex || 0, at: Date.now() };
     }
 
     /* Catálogo novo, Home velha: o guardado deixa de valer. */
@@ -12823,6 +12846,10 @@ var BuroApp = (function () {
         _openPlayerMenu: openPlayerMenu,
         _setSleepTimer: setSleepTimer,
         _applySubtitleOffset: applySubtitleOffset,
+        _forgetHomeCache: forgetHomeCache,
+        /* Envelhece o cache sem o descartar: e o estado de uma segunda visita
+           horas depois, que e quando a conferencia serve. */
+        _ageHomeCacheForTest: function () { if (homeCache) { homeCache.at = 0; } },
         _restoreSubtitleOffset: restoreSubtitleOffset,
         _beginNextEpisodeCountdown: beginNextEpisodeCountdown,
         _onKeyDown: onKeyDown,
