@@ -6319,6 +6319,12 @@ class DesktopAppState(
                 uri = xtreamRepository.buildConfirmedPlaybackUri(target),
                 progressIdentity = playbackIdentity(target),
                 startPositionMillis = startPositionMillis.coerceAtLeast(0L),
+                // A channel cannot be read ahead of the broadcast, so it keeps the small buffer.
+                // Everything else is a file, and reads two minutes ahead of the picture.
+                isLive =
+                    target is XtreamPlaybackTarget.CatalogItem &&
+                        target.contentType == XtreamContentType.LIVE,
+
             )
         }.getOrNull()
 
@@ -6607,7 +6613,8 @@ class DesktopAppState(
         runCatching {
             val uri = URI(channel.streamUri)
             require(uri.scheme?.lowercase(Locale.ROOT) in setOf("http", "https", "file"))
-            DesktopPlaybackRequest(channel.name.take(180), uri)
+            // A channel from an M3U playlist is live, whatever the file extension suggests.
+            DesktopPlaybackRequest(channel.name.take(180), uri, isLive = true)
         }.getOrNull()
 
     fun openPublicTrailer(youtubeTrailerId: String): ExternalOpenResult {

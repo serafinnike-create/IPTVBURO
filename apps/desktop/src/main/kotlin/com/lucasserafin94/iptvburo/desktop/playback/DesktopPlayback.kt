@@ -8,6 +8,18 @@ data class DesktopPlaybackRequest(
     val uri: URI,
     val progressIdentity: PlaybackProgressIdentity? = null,
     val startPositionMillis: Long = 0L,
+    /**
+     * Whether this is a live channel rather than a film or an episode.
+     *
+     * Decides how far ahead the player reads. A film is a file, so it can be minutes ahead of the
+     * picture and simply not notice a connection that drops and comes back; a live channel has no
+     * ahead to read, and buffering it heavily only starts it later and leaves it behind.
+     *
+     * False by default, which is the safe way round: a film wrongly treated as live merely keeps
+     * the smaller buffer it has today, while a channel wrongly treated as a film would start two
+     * minutes late.
+     */
+    val isLive: Boolean = false,
 ) {
     override fun toString(): String = "DesktopPlaybackRequest(title=$title, uri=<redacted>)"
 }

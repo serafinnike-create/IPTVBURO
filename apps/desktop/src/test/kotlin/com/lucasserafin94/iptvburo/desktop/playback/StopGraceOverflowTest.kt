@@ -1,5 +1,6 @@
 package com.lucasserafin94.iptvburo.desktop.playback
 
+import com.lucasserafin94.iptvburo.domain.model.PlaybackBuffering
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -62,5 +63,41 @@ class StopGraceOverflowTest {
         // Both real call sites, so the guard cannot be tightened past what the app needs.
         VlcDesktopPlayer(networkCachingMillis = DEFAULT_NETWORK_CACHING_MILLIS).dispose()
         VlcDesktopPlayer(networkCachingMillis = MULTIVIEW_NETWORK_CACHING_MILLIS).dispose()
+    }
+
+    /**
+     * A film buffers two minutes, and its grace has to clear that.
+     *
+     * The whole point of reading far ahead is that a connection which drops and comes back never
+     * reaches the picture. A grace shorter than the buffer would undo it: the player would be
+     * forcibly reconnected part-way through an ordinary refill, which is the flicker this
+     * mechanism exists to prevent.
+     */
+    @Test
+    fun `a film's two-minute buffer gets a grace long enough to refill it`() {
+        val grace = stopGraceFor(PlaybackBuffering.ON_DEMAND_MILLIS)
+
+        assertTrue(
+            grace > PlaybackBuffering.ON_DEMAND_MILLIS,
+            "a tolerancia ($grace ms) e menor do que o buffer que tem de encher",
+        )
+    }
+
+    /**
+     * And a live channel keeps the short grace its small buffer needs.
+     *
+     * Both graces carry the same fixed headroom, so they can never be worlds apart — what matters
+     * is that a channel is reconnected in tens of seconds while a film is given minutes. Half a
+     * minute is the line: beyond that a viewer stops waiting and presses something.
+     */
+    @Test
+    fun `a live channel is not given a film's patience`() {
+        val live = stopGraceFor(PlaybackBuffering.LIVE_MILLIS)
+
+        assertTrue(live < 30_000, "um canal ao vivo esperaria $live ms antes de reconectar")
+        assertTrue(
+            stopGraceFor(PlaybackBuffering.ON_DEMAND_MILLIS) > live * 4,
+            "um filme nao esta a receber muito mais paciencia do que um canal",
+        )
     }
 }

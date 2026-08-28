@@ -50,6 +50,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.download.DISPLAY_LOCALE
+import com.lucasserafin94.iptvburo.domain.model.PlaybackBuffering
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
@@ -101,7 +102,21 @@ fun DesktopPlayerOverlay(
     val screenText = strings.shareStrings.screens
     val controller =
         remember(request, subtitleStyle, audioOutput, screenText) {
-            VlcDesktopPlayer(subtitleStyle, audioOutput, text = screenText)
+            VlcDesktopPlayer(
+                subtitleStyle,
+                audioOutput,
+                text = screenText,
+                // Two minutes ahead for a film or an episode, so a connection that drops and comes
+                // back never reaches the picture. A live channel keeps its small reservoir: what
+                // has not been broadcast cannot be read early, and buffering it heavily only starts
+                // it later and leaves it behind.
+                //
+                // Set at construction because VLC fixes its caching when the process launches, and
+                // this player is already rebuilt per request — so the size always matches what is
+                // about to play.
+                networkCachingMillis = PlaybackBuffering.millisFor(isLive = request.isLive),
+
+            )
         }
     // Keyed on the controller, not on the request. Changing the speaker layout builds a new player
     // without changing the request, so a request-keyed snapshot survived the swap and reported the

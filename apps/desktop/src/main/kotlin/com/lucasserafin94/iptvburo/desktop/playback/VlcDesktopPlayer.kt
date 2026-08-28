@@ -3,6 +3,7 @@ package com.lucasserafin94.iptvburo.desktop.playback
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.domain.model.PlaybackBuffering
 import com.lucasserafin94.iptvburo.desktop.ui.ScreenStrings
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
@@ -104,7 +105,10 @@ class VlcDesktopPlayer(
         // The buffer was the one construction parameter with no bound, and it reaches both a VLC
         // command line and the stop-grace arithmetic. A negative value would ask VLC for nonsense;
         // an enormous one would delay every start by minutes. Bounded here so neither is possible.
-        require(networkCachingMillis in 0..MAX_NETWORK_CACHING_MILLIS) {
+        // The ceiling is the shared one, which a film's two-minute read-ahead has to fit inside:
+        // this guard was written when every stream was live and sixty seconds was plainly absurd.
+        // A film is a file and can be read minutes ahead, so the limit moved with the reason for it.
+        require(PlaybackBuffering.isWithinLimit(networkCachingMillis)) {
             "networkCachingMillis is outside the safe range"
         }
     }
@@ -1249,6 +1253,12 @@ class VlcDesktopPlayer(
          *
          * Far above anything the app asks for — multiview, the greediest caller, uses five seconds
          * — and low enough that a mistake cannot turn into a start that appears to hang.
+         */
+        /**
+         * Kept for the live path's own arithmetic, which is unchanged.
+         *
+         * The construction guard uses [PlaybackBuffering.MAXIMUM_MILLIS] instead, since a film
+         * reads far further ahead than any live stream ever should.
          */
         const val MAX_NETWORK_CACHING_MILLIS = 60_000
 
