@@ -8,6 +8,17 @@ var BuroPlayer = (function () {
     };
     var phase = 'IDLE';
     var session = 0;
+
+    /*
+      Os mesmos numeros do Windows e do Android, de proposito: uma televisao que
+      aguentasse uma queda de ligacao pior do que o computador seria o produto a
+      discutir consigo proprio.
+    */
+    var ON_DEMAND_BUFFER_MS = 120000;
+    var LIVE_BUFFER_MS = 1500;
+    /* Quanto tem de chegar antes de a imagem comecar. Pequeno de proposito: o
+       buffer deve encher por tras de uma imagem que ja esta no ar, e nao antes. */
+    var PLAY_BUFFER_MS = 2000;
     var audioTrackPosition = -1;
     var subtitleTrackPosition = -1;
     var subtitlesSilent = false;
@@ -158,7 +169,30 @@ var BuroPlayer = (function () {
         };
     }
 
-    function play(url, startPositionMs) {
+    /*
+      Quanto o leitor le a frente da imagem.
+
+      Um filme e um ficheiro: o leitor pode estar dois minutos a frente e nem dar
+      por uma ligacao que cai e volta — que e a falha mais visivel deste aplicativo.
+      Um canal ao vivo nao tem "a frente" para ler, entao o mesmo buffer nao compra
+      nada e custa um arranque mais tardio e uma imagem atrasada.
+
+      A API pode nao existir em televisoes mais antigas, e isso nao pode impedir a
+      reproducao: sem ela o leitor fica exatamente como estava.
+    */
+    function applyReadAhead(isLive) {
+        var millis = isLive ? LIVE_BUFFER_MS : ON_DEMAND_BUFFER_MS;
+        try {
+            if (webapis.avplay.setBufferingParam) {
+                webapis.avplay.setBufferingParam('PLAYER_BUFFER_FOR_PLAY', 'PLAYER_BUFFER_SIZE_IN_TIME', PLAY_BUFFER_MS);
+                webapis.avplay.setBufferingParam('PLAYER_BUFFER_FOR_RESUME', 'PLAYER_BUFFER_SIZE_IN_TIME', millis);
+            }
+        } catch (ignore) {
+            /* Uma televisao sem esta API reproduz na mesma, com o buffer que ja tinha. */
+        }
+    }
+
+    function play(url, startPositionMs, isLive) {
         var token;
         var initialPosition = Math.max(0, Number(startPositionMs) || 0);
         if (!available()) {
@@ -179,6 +213,8 @@ var BuroPlayer = (function () {
             webapis.avplay.setListener(callbacks(token));
             webapis.avplay.setDisplayRect(0, 0, 1920, 1080);
             if (displayModeAvailable()) { applyDisplayMode(displayMode); }
+            /* Antes de preparar: o buffer tem de estar definido quando o fluxo abre. */
+            applyReadAhead(isLive !== false);
             status('PREPARING');
             webapis.avplay.prepareAsync(function () {
                 var started = false;
