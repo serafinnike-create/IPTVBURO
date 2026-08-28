@@ -173,16 +173,30 @@ class MergedCatalogueRepository(
         val contributions =
             working.map { member ->
                 // Everything matching, not one page of it: the merge decides what page three is.
-                val all =
-                    runCatching {
-                        member.repository.page(
-                            contentType, categoryId, query, requestedPage = 0,
-                            pageSize = MERGE_SCAN_LIMIT, releaseYear = releaseYear,
-                            minimumRating = minimumRating, allowedIdentities = allowedIdentities,
-                            kidsMode = kidsMode, lockedCategoryIds = lockedCategoryIds,
-                            collapseDuplicates = collapseDuplicates, allowedLocalIds = allowedLocalIds,
-                        ).items
-                    }.getOrDefault(emptyList())
+                // Read in blocks the delegate will accept.
+                //
+                // Asking for the whole scan in one page threw — the session repository caps a page
+                // at two hundred rows — and the failure was swallowed, so every source contributed
+                // nothing and the home came up empty with two lists loaded. Paged instead, up to
+                // the same scan limit.
+                val all = mutableListOf<XtreamCatalogItem>()
+                var block = 0
+                while (all.size < MERGE_SCAN_LIMIT) {
+                    val page =
+                        runCatching {
+                            member.repository.page(
+                                contentType, categoryId, query, requestedPage = block,
+                                pageSize = MERGE_BLOCK_SIZE, releaseYear = releaseYear,
+                                minimumRating = minimumRating, allowedIdentities = allowedIdentities,
+                                kidsMode = kidsMode, lockedCategoryIds = lockedCategoryIds,
+                                collapseDuplicates = collapseDuplicates,
+                                allowedLocalIds = allowedLocalIds,
+                            ).items
+                        }.getOrDefault(emptyList())
+                    if (page.isEmpty()) break
+                    all += page
+                    block += 1
+                }
                 MergedSources.Contribution(
                     sourceId = member.sourceId,
                     label = member.label,
@@ -198,6 +212,12 @@ class MergedCatalogueRepository(
             items = slice,
             pageIndex = requestedPage,
             pageSize = pageSize,
+            // What was actually merged, which is bounded by the scan above.
+            //
+            // This is the honest number and it has to be: callers turn it into a page count and
+            // then ask for one of those pages. Reporting the catalogue's true size while only the
+            // first few thousand rows can be served hands back a page index with nothing behind it
+            // — which is exactly how the home came up empty with two lists loaded.
             totalMatches = merged.items.size,
         )
     }
@@ -466,5 +486,14 @@ class MergedCatalogueRepository(
          * to this many merged results.
          */
         const val MERGE_SCAN_LIMIT = 5_000
+
+        /**
+         * How much of that scan is read at a time.
+         *
+         * The session repository refuses a page above two hundred rows, and asking for the whole
+         * scan at once threw — silently, since the failure was caught — leaving every source
+         * contributing nothing. This is that ceiling.
+         */
+        const val MERGE_BLOCK_SIZE = 200
     }
 }

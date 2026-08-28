@@ -101,6 +101,10 @@ class MergedCatalogueRepositoryTest {
             collapseDuplicates: Boolean,
             allowedLocalIds: Set<String>?,
         ): XtreamCatalogPage {
+            // The real repository refuses anything above two hundred rows. Without that here, a
+            // merge asking for thousands at once looked fine in the tests and returned nothing on
+            // a real catalogue — which is how the home came up empty with two lists loaded.
+            require(pageSize in 1..200) { "Invalid page size." }
             val start = requestedPage * pageSize
             return XtreamCatalogPage(
                 items = items.drop(start).take(pageSize),
@@ -396,6 +400,33 @@ class MergedCatalogueRepositoryTest {
         // And once every list has been tried there is nothing left to offer, which is when the
         // viewer genuinely has to be told rather than kept waiting.
         assertEquals(null, repository.buildAlternativePlaybackUri(target, exclude = 2))
+    }
+
+    /**
+     * The home picks a page at random from the count this reports, so the two must agree.
+     *
+     * With two lists loaded the home came up empty — movies, series and live all zero — while the
+     * header counted a hundred thousand items. A page index taken from a count that does not match
+     * what can be served lands on nothing.
+     */
+    @Test
+    fun `every page the reported count promises actually has items`() {
+        val repository =
+            merged(
+                "grande" to FakeSource((1..300).map { "Filme $it" }),
+                "pequena" to FakeSource((301..420).map { "Filme $it" }),
+            )
+
+        val first = page(repository, index = 0, size = 80)
+        val pageCount = first.pageCount
+        assertTrue(pageCount > 1, "sem paginas para percorrer")
+        // Every one of them, not just the first: the home asks for whichever the day's seed picks.
+        (0 until pageCount).forEach { index ->
+            assertTrue(
+                page(repository, index = index, size = 80).items.isNotEmpty(),
+                "a pagina $index de $pageCount veio vazia",
+            )
+        }
     }
 
     /** The cap the owner named. */
