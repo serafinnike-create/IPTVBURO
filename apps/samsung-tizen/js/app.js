@@ -1099,6 +1099,50 @@ var BuroApp = (function () {
        de baixo custo e trabalho a toa durante duas horas. */
     var SLEEP_TICK_MILLIS = 60000;
 
+    /*
+      As leituras desta reproducao, uma por linha.
+
+      Existe para diagnosticar a lista de um cliente sem sair da TV: uma
+      imagem que trava com bitrate alto e problema de rede, e a mesma imagem
+      com bitrate baixo e o provedor entregando menos do que promete. Sem os
+      numeros as duas se parecem.
+
+      O que o AVPlay nao devolver simplesmente nao aparece — nem como
+      tracinho. Uma linha vazia parece um numero que deveria estar la, e a
+      pessoa passa a duvidar do aplicativo em vez de duvidar da lista.
+
+      Nao ha o que escolher aqui: sao leituras. Elas entram como opcoes
+      porque o menu do player e a unica superficie que existe durante a
+      reproducao.
+    */
+    function playerStatsOptions() {
+        var stats = BuroPlayer.statistics ? BuroPlayer.statistics() : {};
+        var rows = [];
+        if (currentPlayback) {
+            rows.push({ label: t('playerStatsTitle') + ': ' + String(currentPlayback.title || ''), reading: true });
+        }
+        if (stats.resolution) {
+            rows.push({ label: t('playerStatsResolution') + ': ' + stats.resolution, reading: true });
+        }
+        if (stats.codec) {
+            rows.push({ label: t('playerStatsCodec') + ': ' + stats.codec, reading: true });
+        }
+        if (stats.bitrateKbps) {
+            rows.push({ label: t('playerStatsBitrate').replace('{kbps}', String(stats.bitrateKbps)), reading: true });
+        }
+        /*
+          Sem nenhuma leitura, uma linha dizendo isso — e nao um menu vazio.
+          Muitos firmwares nao expoem `getStreamingProperty`, e a pessoa
+          precisa saber que o silencio e da TV e nao um defeito do
+          aplicativo.
+        */
+        if (rows.length <= 1) {
+            rows.push({ label: t('playerStatsUnavailable'), reading: true });
+        }
+        rows.forEach(function (row, index) { row.index = index; });
+        return rows;
+    }
+
     function sleepTimerOptions() {
         var options = [{ index: null, label: t('sleepTimerOff'), selected: sleepTimerEndsAt === null && !sleepTimerAtEpisodeEnd, sleep: true }];
         SLEEP_MINUTES.forEach(function (minutes) {
@@ -1271,10 +1315,11 @@ var BuroApp = (function () {
         if (!playerMenuState || !playerMenu) { return; }
         guide = playerMenuState.type === 'GUIDE';
         playerMenu.classList.toggle('guide', guide);
-        playerMenuTitle.textContent = playerMenuState.type === 'SLEEP' ? t('sleepTimer') :
+        playerMenuTitle.textContent = playerMenuState.type === 'STATS' ? t('playerStats') :
+            (playerMenuState.type === 'SLEEP' ? t('sleepTimer') :
             (playerMenuState.type === 'AUDIO' ? t('audioTracks') :
             (playerMenuState.type === 'TEXT' ? t('subtitleTracks') :
-                (playerMenuState.type === 'GUIDE' ? t('programmeGuide') : t('playbackSpeed'))));
+                (playerMenuState.type === 'GUIDE' ? t('programmeGuide') : t('playbackSpeed')))));
         playerMenuOptions.setAttribute('role', guide ? 'list' : 'listbox');
         playerMenuOptions.setAttribute('aria-label', playerMenuTitle.textContent);
         if (guide && playerMenuState.empty) {
@@ -1324,9 +1369,10 @@ var BuroApp = (function () {
         var nowSeconds = Math.floor(Date.now() / 1000);
         var guideChannel = type === 'GUIDE' && currentPlayback ?
             findItemAndSource(currentPlayback.itemId).item : null;
-        var options = type === 'SLEEP' ? sleepTimerOptions() : (type === 'SPEED' ? BuroPlayer.playbackRates().map(function (rate) {
+        var options = type === 'STATS' ? playerStatsOptions() : (type === 'SLEEP' ? sleepTimerOptions() : (type === 'SPEED' ? BuroPlayer.playbackRates().map(function (rate) {
             return { index: rate, label: rate + '×', selected: rate === BuroPlayer.playbackRate(), speed: true };
-        }).concat([{ index: 'SLEEP_MENU', label: t('sleepTimer') + ' ›', selected: false, openSleep: true }]) : (type === 'GUIDE' ? playerSchedule().slice(0, 100).map(function (program, index) {
+        }).concat([{ index: 'SLEEP_MENU', label: t('sleepTimer') + ' ›', selected: false, openSleep: true },
+            { index: 'STATS', label: t('playerStats') + ' ›', selected: false, openStats: true }]) : (type === 'GUIDE' ? playerSchedule().slice(0, 100).map(function (program, index) {
             var catchUp = guideChannel ? BuroXtream.catchUpLocator(guideChannel.locator, program, nowSeconds) : null;
             return {
                 index: index,
@@ -1338,11 +1384,12 @@ var BuroApp = (function () {
                 catchUp: Boolean(catchUp), programme: program,
                 guide: true
             };
-        }) : BuroPlayer.trackOptions(type)));
+        }) : BuroPlayer.trackOptions(type))));
         var selected = 0;
         if (type === 'SPEED' && (!currentPlayback || currentPlayback.contentType === 'LIVE')) { return; }
         /* O sono vale tambem no ao vivo — e ali que a TV fica a noite toda. */
         if (type === 'SLEEP' && !currentPlayback) { return; }
+        if (type === 'STATS' && !currentPlayback) { return; }
         if (type === 'TEXT') {
             options.unshift({ index: null, label: t('subtitlesOff'), selected: false, off: true });
             /*
@@ -1406,6 +1453,13 @@ var BuroApp = (function () {
            quatro teclas coloridas ja estao ocupadas, entao o temporizador mora
            dentro do menu amarelo — que deixa de ser so velocidade e passa a ser
            o menu de reproducao. */
+        if (option.openStats) {
+            closePlayerMenu();
+            openPlayerMenu('STATS');
+            return;
+        }
+        /* Uma leitura nao e uma escolha: acionar qualquer linha so fecha. */
+        if (option.reading) { closePlayerMenu(); return; }
         if (option.openSleep) {
             closePlayerMenu();
             openPlayerMenu('SLEEP');

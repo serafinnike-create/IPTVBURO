@@ -73,6 +73,177 @@ var BuroPlayer = (function () {
 
     function subtitleOffset() { return subtitleOffsetMs; }
 
+    /*
+      O que esta reproducao consegue dizer sobre si.
+
+      Cada leitura vem separada e com a propria guarda porque o AVPlay nao e
+      uniforme entre modelos: uma TV devolve resolucao e nao devolve bitrate,
+      outra lanca em vez de devolver vazio. Um bloco unico dentro de um
+      try/catch perderia tudo por causa de uma chamada que falha.
+
+      O que nao vier fica ausente do resultado, e a tela nao inventa um
+      tracinho no lugar: uma linha "Bitrate: —" e pior do que a ausencia da
+      linha, porque parece um numero que deveria estar la e nao esta.
+
+      `getStreamingProperty` responde por bitrate e buffer; `getCurrentStreamInfo`
+      pelas faixas. Nenhuma das duas e obrigatoria na plataforma.
+    */
+    function readStreamingProperty(name) {
+        var raw;
+        if (!available() || typeof webapis.avplay.getStreamingProperty !== 'function') { return null; }
+        try { raw = webapis.avplay.getStreamingProperty(name); }
+        catch (ignored) { return null; }
+        return raw === undefined || raw === null || raw === '' ? null : String(raw);
+    }
+
+    function videoTrackInfo() {
+        var tracks;
+        var found = null;
+        if (!available() || typeof webapis.avplay.getCurrentStreamInfo !== 'function') { return null; }
+        try { tracks = webapis.avplay.getCurrentStreamInfo(); }
+        catch (ignored) { return null; }
+        (tracks || []).forEach(function (track) {
+            var extra;
+            if (found || !track || String(track.type).toUpperCase() !== 'VIDEO') { return; }
+            /* `extra_info` chega como JSON em texto na maioria dos firmwares,
+               e ja como objeto em alguns. */
+            extra = track.extra_info;
+            if (typeof extra === 'string') {
+                try { extra = JSON.parse(extra); } catch (ignoredParse) { extra = null; }
+            }
+            found = extra && typeof extra === 'object' ? extra : null;
+        });
+        return found;
+    }
+
+    function statistics() {
+        var video = videoTrackInfo();
+        var bitrate = readStreamingProperty('CURRENT_BANDWIDTH');
+        var buffered = readStreamingProperty('AVAILABLE_BITRATE');
+        var stats = {};
+        var width = video && Number(video.Width || video.width);
+        var height = video && Number(video.Height || video.height);
+        if (width > 0 && height > 0) { stats.resolution = width + '\u00d7' + height; }
+        if (video && (video.Codec || video.codec)) { stats.codec = String(video.Codec || video.codec); }
+        if (bitrate && Number(bitrate) > 0) { stats.bitrateKbps = Math.round(Number(bitrate) / 1000); }
+        if (buffered) { stats.bitrates = String(buffered); }
+        return stats;
+    }
+
+    /*
+      O que esta reproducao consegue dizer sobre si.
+
+      Cada leitura vem separada e com a propria guarda porque o AVPlay nao e
+      uniforme entre modelos: uma TV devolve resolucao e nao devolve bitrate,
+      outra lanca em vez de devolver vazio. Um bloco unico dentro de um
+      try/catch perderia tudo por causa de uma chamada que falha.
+
+      O que nao vier fica ausente do resultado, e a tela nao inventa um
+      tracinho no lugar: uma linha "Bitrate: —" e pior do que a ausencia da
+      linha, porque parece um numero que deveria estar la e nao esta.
+
+      `getStreamingProperty` responde por bitrate e buffer; `getCurrentStreamInfo`
+      pelas faixas. Nenhuma das duas e obrigatoria na plataforma.
+    */
+    function readStreamingProperty(name) {
+        var raw;
+        if (!available() || typeof webapis.avplay.getStreamingProperty !== 'function') { return null; }
+        try { raw = webapis.avplay.getStreamingProperty(name); }
+        catch (ignored) { return null; }
+        return raw === undefined || raw === null || raw === '' ? null : String(raw);
+    }
+
+    function videoTrackInfo() {
+        var tracks;
+        var found = null;
+        if (!available() || typeof webapis.avplay.getCurrentStreamInfo !== 'function') { return null; }
+        try { tracks = webapis.avplay.getCurrentStreamInfo(); }
+        catch (ignored) { return null; }
+        (tracks || []).forEach(function (track) {
+            var extra;
+            if (found || !track || String(track.type).toUpperCase() !== 'VIDEO') { return; }
+            /* `extra_info` chega como JSON em texto na maioria dos firmwares,
+               e ja como objeto em alguns. */
+            extra = track.extra_info;
+            if (typeof extra === 'string') {
+                try { extra = JSON.parse(extra); } catch (ignoredParse) { extra = null; }
+            }
+            found = extra && typeof extra === 'object' ? extra : null;
+        });
+        return found;
+    }
+
+    function statistics() {
+        var video = videoTrackInfo();
+        var bitrate = readStreamingProperty('CURRENT_BANDWIDTH');
+        var buffered = readStreamingProperty('AVAILABLE_BITRATE');
+        var stats = {};
+        var width = video && Number(video.Width || video.width);
+        var height = video && Number(video.Height || video.height);
+        if (width > 0 && height > 0) { stats.resolution = width + '\u00d7' + height; }
+        if (video && (video.Codec || video.codec)) { stats.codec = String(video.Codec || video.codec); }
+        if (bitrate && Number(bitrate) > 0) { stats.bitrateKbps = Math.round(Number(bitrate) / 1000); }
+        if (buffered) { stats.bitrates = String(buffered); }
+        return stats;
+    }
+
+    /*
+      O que esta reproducao consegue dizer sobre si.
+
+      Cada leitura vem separada e com a propria guarda porque o AVPlay nao e
+      uniforme entre modelos: uma TV devolve resolucao e nao devolve bitrate,
+      outra lanca em vez de devolver vazio. Um bloco unico dentro de um
+      try/catch perderia tudo por causa de uma chamada que falha.
+
+      O que nao vier fica ausente do resultado, e a tela nao inventa um
+      tracinho no lugar: uma linha "Bitrate: —" e pior do que a ausencia da
+      linha, porque parece um numero que deveria estar la e nao esta.
+
+      `getStreamingProperty` responde por bitrate e buffer; `getCurrentStreamInfo`
+      pelas faixas. Nenhuma das duas e obrigatoria na plataforma.
+    */
+    function readStreamingProperty(name) {
+        var raw;
+        if (!available() || typeof webapis.avplay.getStreamingProperty !== 'function') { return null; }
+        try { raw = webapis.avplay.getStreamingProperty(name); }
+        catch (ignored) { return null; }
+        return raw === undefined || raw === null || raw === '' ? null : String(raw);
+    }
+
+    function videoTrackInfo() {
+        var tracks;
+        var found = null;
+        if (!available() || typeof webapis.avplay.getCurrentStreamInfo !== 'function') { return null; }
+        try { tracks = webapis.avplay.getCurrentStreamInfo(); }
+        catch (ignored) { return null; }
+        (tracks || []).forEach(function (track) {
+            var extra;
+            if (found || !track || String(track.type).toUpperCase() !== 'VIDEO') { return; }
+            /* `extra_info` chega como JSON em texto na maioria dos firmwares,
+               e ja como objeto em alguns. */
+            extra = track.extra_info;
+            if (typeof extra === 'string') {
+                try { extra = JSON.parse(extra); } catch (ignoredParse) { extra = null; }
+            }
+            found = extra && typeof extra === 'object' ? extra : null;
+        });
+        return found;
+    }
+
+    function statistics() {
+        var video = videoTrackInfo();
+        var bitrate = readStreamingProperty('CURRENT_BANDWIDTH');
+        var buffered = readStreamingProperty('AVAILABLE_BITRATE');
+        var stats = {};
+        var width = video && Number(video.Width || video.width);
+        var height = video && Number(video.Height || video.height);
+        if (width > 0 && height > 0) { stats.resolution = width + '\u00d7' + height; }
+        if (video && (video.Codec || video.codec)) { stats.codec = String(video.Codec || video.codec); }
+        if (bitrate && Number(bitrate) > 0) { stats.bitrateKbps = Math.round(Number(bitrate) / 1000); }
+        if (buffered) { stats.bitrates = String(buffered); }
+        return stats;
+    }
+
     function status(code, value) { listeners.onStatus(code, value); }
 
     function safeClose() {
@@ -409,6 +580,9 @@ var BuroPlayer = (function () {
         selectTrack: selectTrack,
         disableSubtitles: disableSubtitles,
         toggleSubtitles: toggleSubtitles,
+        statistics: statistics,
+        statistics: statistics,
+        statistics: statistics,
         setSubtitleOffset: setSubtitleOffset,
         subtitleOffset: subtitleOffset,
         playbackRates: playbackRates,
