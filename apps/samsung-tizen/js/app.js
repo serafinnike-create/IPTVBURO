@@ -2535,7 +2535,14 @@ var BuroApp = (function () {
     }
 
     function catalogueVisibilitySnapshot() {
-        var sourceId = state.activeSource && state.activeSource.id;
+        /*
+          Vazio quando o utilizador pediu para juntar as listas.
+
+          Uma fonte falsa aqui ja significava "todas as fontes" em todo o codigo a
+          jusante, entao juntar e escolher isso mais uma passagem que tira os
+          repetidos — e nao um segundo caminho a discordar deste.
+        */
+        var sourceId = mergeEverySource() ? null : (state.activeSource && state.activeSource.id);
         var visibility = {};
         /* Qual serviço cada categoria nomeia, resolvido uma vez por varredura em
            vez de uma vez por item: a Home percorre dezenas de milhares de linhas
@@ -2552,6 +2559,29 @@ var BuroApp = (function () {
             }
         });
         return { sourceId: sourceId, categoryVisibility: visibility, categoryService: categoryService };
+    }
+
+    /*
+      Se todas as assinaturas sao mostradas como um so catalogo.
+
+      Desligado por defeito: quem tem uma lista nao ganha nada, e quem tem duas e
+      nao pediu isto nao deve encontrar a biblioteca reorganizada sozinha.
+    */
+    /*
+      Guarda a escolha e volta a desenhar.
+
+      Passa a valer na proxima vez que uma fonte e aberta e nao de imediato:
+      reconstruir o catalogo por baixo de quem esta a navegar esvaziaria o ecra que
+      a pessoa esta a ver.
+    */
+    function toggleMergeSources() {
+        state.preferences.mergeEverySource = !mergeEverySource();
+        savePreferences();
+        render();
+    }
+
+    function mergeEverySource() {
+        return Boolean(state.preferences && state.preferences.mergeEverySource);
     }
 
     function snapshotItemVisible(snapshot, item) {
@@ -4545,7 +4575,17 @@ var BuroApp = (function () {
        a contagem consumir todas as chaves e devolver uma pagina vazia. */
     function catalogueDuplicateMatcher(matcher) {
         var seen = Object.create(null);
-        if (state.preferences.collapseDuplicateTitles === false) { return matcher; }
+        /*
+          Com as listas juntadas, os repetidos tem de sair mesmo que a pessoa tenha
+          desligado o agrupamento por qualidade.
+
+          Sao duas coisas diferentes com a mesma aparencia: colapsar copias do mesmo
+          provedor e uma escolha sobre qualidades, enquanto mostrar o mesmo filme uma
+          vez por assinatura e a duplicacao que juntar as listas existe para acabar.
+        */
+        if (state.preferences.collapseDuplicateTitles === false && !mergeEverySource()) {
+            return matcher;
+        }
         return function (item) {
             var key;
             if (!matcher(item)) { return false; }
@@ -5581,10 +5621,72 @@ var BuroApp = (function () {
                 '</div>';
         }
         shell('<div class="form-panel"><div class="field-row"><div class="field"><label>' + t('search') +
-            '</label><input id="search-query" class="focusable" maxlength="80" value="' + attr(query) + '"></div>' +
+            /*
+              `type="search"` nao e cosmetico aqui: e ele que faz o teclado
+              virtual da Samsung mostrar o proprio botao de microfone. Em
+              modelos onde a Web Speech API nao existe, esse teclado e o
+              unico caminho para ditar — e ele ja estava a uma letra de
+              distancia.
+            */
+            '</label><input id="search-query" class="focusable" type="search" maxlength="80" value="' + attr(query) + '"></div>' +
+            voiceSearchButton() +
             '<button class="button primary focusable" data-action="search-run">' + t('search') + '</button></div></div>' +
             body,
             t('search'), true);
+    }
+
+    /*
+      O botao de ditar, quando o aparelho sabe escutar.
+
+      Some quando a Web Speech API nao existe — e nesse caso o microfone do
+      teclado virtual continua sendo o caminho, porque o campo e
+      `type="search"`. Um botao que nao funciona seria pior do que nenhum:
+      numa TV a pessoa aperta, nao acontece nada, e ela conclui que o
+      aplicativo esta quebrado.
+    */
+    function voiceSearchButton() {
+        if (!BuroVoice.available()) { return ''; }
+        return '<button class="button ghost focusable voice-search' +
+            (BuroVoice.isListening() ? ' listening' : '') +
+            '" data-action="search-voice" aria-label="' + attr(t('searchByVoice')) + '">' +
+            '<span class="voice-mark" aria-hidden="true"></span>' +
+            escapeHtml(BuroVoice.isListening() ? t('searchListening') : t('searchByVoice')) +
+            '</button>';
+    }
+
+    /*
+      Escuta uma frase e busca com ela.
+
+      Busca sozinho depois de ouvir, e nao espera um segundo ENTER: quem
+      falou o nome do filme ja disse o que queria, e pedir confirmacao com o
+      controle na mao desfaria a economia de nao ter digitado.
+
+      O texto vai para o campo antes da busca, para a pessoa ver o que foi
+      entendido — se saiu errado, ela corrige dali em vez de recomecar.
+    */
+    function startVoiceSearch() {
+        var input;
+        if (BuroVoice.isListening()) { BuroVoice.stop(); render(); return; }
+        if (!BuroVoice.available()) { showToast(t('searchVoiceUnavailable'), true); return; }
+        BuroVoice.listen(state.preferences.language || 'pt-BR', function (text) {
+            var heard = BuroDomain.trim(text);
+            /* A tela pode ter mudado enquanto o aparelho escutava. */
+            if (state.screen !== 'SHELL' || state.section !== 'SEARCH') { return; }
+            render();
+            if (!heard) { showToast(t('searchVoiceEmpty'), false); return; }
+            input = document.getElementById('search-query');
+            if (input) { input.value = heard; }
+            runSearch();
+        }, function (error) {
+            if (state.screen !== 'SHELL' || state.section !== 'SEARCH') { return; }
+            render();
+            /* Desistir nao e falhar: quem soltou o botao ou ficou em silencio
+               nao precisa de um aviso vermelho. */
+            if (error.code === 'VOICE_CANCELLED') { return; }
+            showToast(t(error.code === 'VOICE_UNAVAILABLE' ?
+                'searchVoiceUnavailable' : 'searchVoiceFailed'), true);
+        });
+        render();
     }
 
     function runSearch() {
@@ -6587,7 +6689,15 @@ var BuroApp = (function () {
         }).join('');
         cards += '<button class="source-card focusable" data-action="source-add"><span class="source-kind">+</span><h3>' +
             t('addSource') + '</h3><span class="source-count">M3U · Xtream · Stalker</span></button>';
-        shell('<div class="card-row">' + cards + '</div>', t('sources'), true);
+        /* So com mais de uma lista: com uma nao ha nada para juntar, e o interruptor
+           seria uma pergunta sobre nada. */
+        var merge = state.sources.length > 1
+            ? '<button class="merge-toggle focusable" data-action="toggle-merge-sources">' +
+              '<span class="merge-mark">' + (mergeEverySource() ? '◉' : '○') + '</span>' +
+              '<span class="merge-text"><strong>' + escapeHtml(t('mergeSourcesTitle')) + '</strong>' +
+              '<span>' + escapeHtml(t('mergeSourcesHelp')) + '</span></span></button>'
+            : '';
+        shell(merge + '<div class="card-row">' + cards + '</div>', t('sources'), true);
     }
 
     function renderSourceManage() {
@@ -9724,6 +9834,9 @@ var BuroApp = (function () {
     }
 
     function goBack() {
+        /* Sair da busca encerra a escuta: um reconhecimento vivo noutra tela
+           devolveria texto para um campo que ja nao existe. */
+        if (typeof BuroVoice !== 'undefined' && BuroVoice.isListening()) { BuroVoice.stop(); }
         var previous;
         var focused;
         var ribbonTarget;
@@ -12552,6 +12665,7 @@ var BuroApp = (function () {
         } else if (action === 'continue-play') { playProgressRow(id, false);
         } else if (action === 'continue-restart') { playProgressRow(id, true);
         } else if (action === 'history-remove') { forgetHistoryProgress(id);
+        } else if (action === 'search-voice') { startVoiceSearch();
         } else if (action === 'reminder-horizon') {
             setReminderHorizon(element.getAttribute('data-days'));
         } else if (action === 'continue-clear') { pushScreen('CONTINUE_CLEAR_CONFIRM', {});
@@ -12591,6 +12705,7 @@ var BuroApp = (function () {
         else if (action === 'source-refresh') { refreshSource(); }
         else if (action === 'catalogue-refresh') { refreshCatalogueFromTopBar(); }
         else if (action === 'diagnostics') { openDiagnostics(); }
+        else if (action === 'toggle-merge-sources') { toggleMergeSources(); }
         else if (action === 'diagnostics-run') { runDiagnostics(); }
         else if (action === 'diagnostics-close') { closeDiagnostics(); }
         else if (action === 'catalogue-sync-cancel') {

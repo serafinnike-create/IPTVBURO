@@ -5,7 +5,7 @@
     "touch": false,
     "keyboard": true,
     "mouse": true,
-    "voice": false
+    "voice": true
   },
   "playback": {
     "engine": "Samsung AVPlay",
@@ -39,6 +39,7 @@
     "seasonQueue e verdadeiro: series e temporadas inteiras podem ser enfileiradas de uma vez, ordenadas por T/E, pulando episodios ja concluidos. backgroundJobs e falso porque o manifesto declara background-support=disable e a fila so avanca com o app aberto; smartDownloads nunca foi implementado em nenhuma plataforma.",
     "O download por USB esta implementado (js/usb.js e js/downloads.js) e e habilitado em tempo de execucao por BuroDownloads.enabled(), que exige um volume removable_ montado. Sem USB a acao nao aparece na interface.",
     "Conforme ADR-008: TV ao vivo e recusada, o nome do arquivo vem da identidade de conteudo e nunca da URL, e o conteudo protegido e gravado como recebido.",
+    "Voz: a busca aceita ditado. Onde o firmware expoe a Web Speech API o proprio aplicativo escuta e recebe o texto; onde nao expoe, o campo de busca e type=search e o teclado virtual da Samsung mostra o proprio botao de microfone, entao quem escuta e o sistema. Nenhum privilegio de microfone e declarado porque nenhuma das duas vias exige um: a API usa o canal de voz que a plataforma ja gerencia, e o teclado e do sistema. O aplicativo nao grava audio, nao guarda o que foi dito e nao envia nada para fora — o texto reconhecido vai para o campo de busca e morre ali. Nao foi validado em TV fisica: nenhum modelo real foi exercitado.",
     "O download por USB nao foi validado em TV fisica nem em emulador: nenhuma das APIs tizen.download e tizen.filesystem foi exercitada contra a plataforma real.",
     "HDR e multiview seguem desligados ate medicao em hardware real.",
     "Notas da critica (OMDb) estao implementadas em js/critics.js: a chave fica no KeyManager, o id do IMDb vem do external_ids do TMDb, e a fileira aparece nos detalhes somente quando existe numero real. Sem chave, sem rede ou com limite estourado a fileira simplesmente nao aparece e o resto da tela nao muda.",

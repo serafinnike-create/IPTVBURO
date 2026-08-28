@@ -188,6 +188,26 @@ check('a nota de Cast separa o fluxo, impossivel, do envio de titulo, que existe
         return /BURO Cast/i.test(note) && /Enviar a tela|Enviar à tela/i.test(note);
     }) && appSource('app.js').indexOf('send-to-screen') >= 0);
 
+/*
+  Voz declarada e voz implementada.
+
+  O campo era falso e passou a ser verdadeiro, entao ele precisa da mesma
+  guarda que as notas de capa e de Cast ganharam: o manifesto e estatico e
+  nada no runtime o corrige.
+*/
+check('voz declarada corresponde ao adapter de ditado',
+    manifest.navigation.voice === false ||
+    (appSource('voice.js').indexOf('SpeechRecognition') >= 0 &&
+        appSource('app.js').indexOf('search-voice') >= 0));
+
+/* A segunda via, que e a que funciona nos modelos sem a API: o campo de busca
+   precisa ser type=search para o teclado da Samsung mostrar o microfone. */
+check('a busca continua abrindo o teclado com microfone',
+    manifest.navigation.voice === false ||
+    /id="search-query"[^>]*type="search"|type="search"[^>]*id="search-query"/.test(
+        appSource('app.js').replace(/\n/g, ' ')) ||
+    appSource('app.js').indexOf('id="search-query" class="focusable" type="search"') >= 0);
+
 process.stdout.write('\n');
 if (failures.length) {
     process.stdout.write(failures.length + ' falharam, ' + passed + ' aprovados\n');

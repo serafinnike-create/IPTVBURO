@@ -2222,3 +2222,41 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
     font-size: 24px; font-weight: 700;
 }
 .player-skip-intro[hidden] { display: none; }
+
+/* O botao de ditar a busca.
+
+   O ponto e um circulo desenhado em CSS, e nao um emoji de microfone: emoji
+   nao existe em todo firmware de TV e apareceria como quadrado. Ele pulsa
+   enquanto o aparelho escuta, porque sem isso a unica diferenca entre
+   escutando e parado seria o texto — e a pessoa esta a tres metros. */
+.voice-search { display: flex; align-items: center; }
+.voice-mark {
+    width: 14px; height: 14px; margin-right: 12px;
+    border-radius: 50%; background: var(--gold); flex: 0 0 auto;
+}
+.voice-search.listening { border-color: var(--gold); color: var(--gold); }
+.voice-search.listening .voice-mark {
+    background: var(--error);
+    animation: voice-pulse 900ms ease-in-out infinite alternate;
+}
+@keyframes voice-pulse {
+    from { transform: scale(.75); opacity: .55; }
+    to { transform: scale(1.25); opacity: 1; }
+}
+
+/*
+  O interruptor que junta as listas, por cima dos cartoes das fontes.
+
+  Como linha larga e nao como cartao: e uma escolha sobre todas as fontes, e um
+  cartao ao lado dos outros leria-se como mais uma fonte.
+*/
+.merge-toggle {
+    display: flex; align-items: center; gap: 20px; width: 100%;
+    padding: 20px 26px; margin: 0 0 22px; border-radius: 14px;
+    background: var(--surface); border: 3px solid transparent;
+    color: var(--text); text-align: left;
+}
+.merge-mark { font-size: 30px; color: var(--gold); }
+.merge-text { display: flex; flex-direction: column; gap: 4px; }
+.merge-text strong { font-size: 26px; }
+.merge-text span { color: var(--secondary); font-size: 20px; }
