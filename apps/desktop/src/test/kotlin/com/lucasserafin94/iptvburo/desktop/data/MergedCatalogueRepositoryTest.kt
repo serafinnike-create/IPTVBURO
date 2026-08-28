@@ -609,6 +609,26 @@ class MergedCatalogueRepositoryTest {
         )
     }
 
+    /**
+     * The merge is bounded, so it cannot take the whole heap.
+     *
+     * A merged view holds a built item per title across every list at once, and the app runs in a
+     * 768 MB heap. Reading without a ceiling killed the process with nothing written to the log —
+     * the columnar catalogue exists precisely so a whole list is not held as objects, and merging
+     * is the one path that has to build them.
+     */
+    @Test
+    fun `a merged view is bounded`() {
+        assertTrue(
+            MergedCatalogueRepository.MERGE_ITEMS_TOTAL in 20_000..120_000,
+            "o limite total saiu do intervalo que cabe na memoria da aplicacao",
+        )
+        assertTrue(
+            MergedCatalogueRepository.MERGE_ITEMS_PER_SOURCE <= MergedCatalogueRepository.MERGE_ITEMS_TOTAL,
+            "uma so lista pode encher o orcamento inteiro",
+        )
+    }
+
     /** And forgetting one that was never held changes nothing. */
     @Test
     fun `forgetting an unknown subscription is harmless`() {

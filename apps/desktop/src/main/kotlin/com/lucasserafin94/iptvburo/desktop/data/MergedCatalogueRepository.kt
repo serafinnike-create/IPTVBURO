@@ -107,7 +107,10 @@ class MergedCatalogueRepository(
         lockedCategoryIds: Set<String>,
         collapseDuplicates: Boolean,
         allowedLocalIds: Set<String>?,
+        /** What is left of the shared budget, so several lists cannot each fill the heap. */
+        limit: Int = MERGE_ITEMS_PER_SOURCE,
     ): List<XtreamCatalogItem> {
+        val ceiling = minOf(limit, MERGE_ITEMS_PER_SOURCE)
         val all = mutableListOf<XtreamCatalogItem>()
         var block = 0
         while (true) {
@@ -128,7 +131,9 @@ class MergedCatalogueRepository(
             // A delegate that answered the same rows forever would spin here. Nothing does, but a
             // loop with no exit at all is a hang rather than a bug, and this catalogue is large
             // enough that a hang would look like the app dying rather than misbehaving.
-            if (block > MERGE_MAX_BLOCKS) break
+            // Bounded so the merged view fits the heap. A delegate that answered the same rows
+            // forever would also spin here without it.
+            if (all.size >= ceiling) break
         }
         return all
     }
@@ -339,19 +344,46 @@ class MergedCatalogueRepository(
         val cached = synchronized(lock) { mergeCache[signature] }
         val merged =
             cached ?: run {
+                // Released before the replacement is built, not after.
+                //
+                // Both would otherwise be alive at once, which doubles the heaviest thing this
+                // repository holds at the exact moment it is building another one.
+                synchronized(lock) { mergeCache.clear() }
+                // A running budget across the subscriptions, not just within each.
+                //
+                // What occupies the heap is every built item from every list at once, and the app
+                // runs in 768 MB: nine lists and an unfiltered Films tab killed the process with
+                // nothing written to the log.
+                var budget = MERGE_ITEMS_TOTAL
+                // Largest first, so the budget goes to the list that leads the merge.
+                //
+                // Spent in membership order, a small subscription read first could take the budget
+                // and leave the biggest list truncated — the opposite of the rule this feature is
+                // built on. The delegate's own count is used, which costs nothing to ask.
                 val contributions =
-                    working.map { member ->
-                        MergedSources.Contribution(
-                            sourceId = member.sourceId,
-                            label = member.label,
-                            items =
-                                readEverything(
-                                    member, contentType, categoryId, query, releaseYear,
-                                    minimumRating, allowedIdentities, kidsMode, lockedCategoryIds,
-                                    collapseDuplicates, allowedLocalIds,
-                                ),
-                        )
-                    }
+                    working
+                        .sortedByDescending { member ->
+                            runCatching { member.repository.summary()?.loadedItemCount }.getOrNull() ?: 0
+                        }
+                        .map { member ->
+                            val items =
+                                if (budget <= 0) {
+                                    emptyList()
+                                } else {
+                                    readEverything(
+                                        member, contentType, categoryId, query, releaseYear,
+                                        minimumRating, allowedIdentities, kidsMode,
+                                        lockedCategoryIds, collapseDuplicates, allowedLocalIds,
+                                        limit = budget,
+                                    )
+                                }
+                            budget -= items.size
+                            MergedSources.Contribution(
+                                sourceId = member.sourceId,
+                                label = member.label,
+                                items = items,
+                            )
+                        }
                 val result =
                     MergedSources.merge(contributions) { item -> item.name.shelfDeduplicationKey() }
                 synchronized(lock) {
@@ -649,7 +681,7 @@ class MergedCatalogueRepository(
         all.forEach { member -> runCatching { block(member.repository) } }
     }
 
-    private companion object {
+    internal companion object {
         /**
          * How many merged views are remembered at once.
          *
@@ -660,14 +692,31 @@ class MergedCatalogueRepository(
         const val MERGE_CACHE_ENTRIES = 1
 
         /**
-         * A ceiling on the block loop, not on the catalogue.
+         * How many titles one subscription may contribute to a merged view.
          *
-         * Two hundred rows a block, so this allows two hundred thousand titles from one list — far
-         * past any real subscription. It exists only so a delegate that answered the same rows
-         * forever would stop rather than hang; the previous five-thousand-row cap was a limit on
-         * the merge itself, and it made two lists show fewer films than either alone.
+         * The app runs in a 768 MB heap, and a merged view holds a built item per title across
+         * every list at once. Reading without a ceiling exhausted that: nine subscriptions and an
+         * unfiltered Films tab killed the process with nothing in the log.
+         *
+         * Sixty thousand is well past any one real subscription — the owner's largest holds about
+         * forty-two thousand — so this bounds the memory without being the old five-thousand-row
+         * cap that made two lists show fewer films than either alone.
          */
-        const val MERGE_MAX_BLOCKS = 1_000
+        const val MERGE_ITEMS_PER_SOURCE = 45_000
+
+        /**
+         * And across all of them together, which is what actually occupies the heap.
+         *
+         * Sized against the 768 MB the app runs in. A built XtreamCatalogItem carries several
+         * strings and a composed artwork URL — a few hundred bytes each — so eighty thousand is
+         * tens of megabytes, in the same order as the columnar catalogue itself.
+         *
+         * The columnar store exists precisely so a whole list is not held as objects; merging is
+         * the one path that has to build them to order titles across lists, and this is what keeps
+         * that from becoming the process's whole heap. Reaching it costs the tail of the merged
+         * order rather than a whole subscription.
+         */
+        const val MERGE_ITEMS_TOTAL = 80_000
 
         /**
          * How much of that scan is read at a time.
