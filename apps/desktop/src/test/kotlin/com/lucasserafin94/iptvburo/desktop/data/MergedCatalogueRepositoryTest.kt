@@ -1,0 +1,366 @@
+package com.lucasserafin94.iptvburo.desktop.data
+
+import com.lucasserafin94.iptvburo.desktop.model.XtreamCatalogPage
+import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
+import com.lucasserafin94.iptvburo.desktop.model.XtreamSessionSummary
+import com.lucasserafin94.iptvburo.desktop.security.XtreamLoginInput
+import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
+import com.lucasserafin94.iptvburo.domain.model.LibraryCandidate
+import com.lucasserafin94.iptvburo.xtream.XtreamAccount
+import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
+import com.lucasserafin94.iptvburo.xtream.XtreamCategory
+import com.lucasserafin94.iptvburo.xtream.XtreamContentType
+import com.lucasserafin94.iptvburo.xtream.XtreamShortEpg
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+/**
+ * Two subscriptions browsed as one catalogue.
+ *
+ * The behaviour asked for: the bigger list leads, the smaller fills the gaps, nothing appears
+ * twice, and a list that is down is named without taking the others with it.
+ *
+ * Driven with fake delegates, because what is worth exercising here is the merging and the paging
+ * over it — the session repository already has its own tests for talking to a provider.
+ */
+class MergedCatalogueRepositoryTest {
+    /** One subscription's catalogue, and nothing else. */
+    private class FakeSource(
+        titles: List<String>,
+        private val failOnLoad: Boolean = false,
+        private val categoryNames: List<String> = listOf("Filmes"),
+    ) : CatalogueRepository {
+        /**
+         * Authenticates, then dies when the catalogue is fetched.
+         *
+         * A different moment from [failOnLoad], and worth its own switch: a subscription that
+         * connects and then fails is the one that exercises loadCatalog, and without it that path
+         * could throw with nothing noticing.
+         */
+        var diesWhileLoading = false
+        private val items =
+            titles.mapIndexed { index, name ->
+                XtreamCatalogItem(
+                    providerId = index.toString(),
+                    name = name,
+                    contentType = XtreamContentType.MOVIE,
+                    categoryIds = listOf("c1"),
+                    containerExtension = "mp4",
+                    artworkUrl = null,
+                    year = 2026,
+                    rating = null,
+                    addedAtEpochSeconds = null,
+                )
+            }
+
+        override fun authenticateAndLoadInitial(
+            input: XtreamLoginInput,
+            onProgress: (Float, SessionXtreamRepository.XtreamLoadStage) -> Unit,
+        ): XtreamSessionSummary {
+            if (failOnLoad) throw IllegalStateException("provedor fora do ar")
+            return requireNotNull(summary())
+        }
+
+        override fun loadCatalog(
+            contentType: XtreamContentType,
+            forceRefresh: Boolean,
+            onProgress: CatalogLoadListener?,
+        ): XtreamSessionSummary {
+            if (failOnLoad || diesWhileLoading) throw IllegalStateException("provedor fora do ar")
+            return requireNotNull(summary())
+        }
+
+        override fun categories(contentType: XtreamContentType): List<XtreamCategory> =
+            categoryNames.mapIndexed { index, name ->
+                XtreamCategory(providerId = "cat$index", name = name, contentType = contentType)
+            }
+
+        override fun itemByProviderId(
+            contentType: XtreamContentType,
+            providerId: String,
+        ): XtreamCatalogItem? = items.firstOrNull { it.providerId == providerId }
+
+        override fun itemByContentKey(
+            contentType: XtreamContentType,
+            contentKey: String,
+        ): XtreamCatalogItem? = null
+
+        override fun page(
+            contentType: XtreamContentType,
+            categoryId: String?,
+            query: String,
+            requestedPage: Int,
+            pageSize: Int,
+            releaseYear: Int?,
+            minimumRating: Double?,
+            allowedIdentities: Set<ContentIdentity>?,
+            kidsMode: Boolean,
+            lockedCategoryIds: Set<String>,
+            collapseDuplicates: Boolean,
+            allowedLocalIds: Set<String>?,
+        ): XtreamCatalogPage {
+            val start = requestedPage * pageSize
+            return XtreamCatalogPage(
+                items = items.drop(start).take(pageSize),
+                pageIndex = requestedPage,
+                pageSize = pageSize,
+                totalMatches = items.size,
+            )
+        }
+
+        override fun seriesDetails(seriesId: String) = error("nao usado")
+
+        override fun search(
+            query: String,
+            limit: Int,
+        ): List<XtreamCatalogItem> =
+            items.filter { it.name.contains(query, ignoreCase = true) }.take(limit)
+
+        override fun findByTitles(
+            normalisedTitles: Set<String>,
+            limit: Int,
+        ) = emptyList<XtreamCatalogItem>()
+
+        override fun releasesForYear(
+            type: XtreamContentType,
+            year: Int,
+            limit: Int,
+            kidsMode: Boolean,
+            lockedCategoryIds: Set<String>,
+            rotation: Int,
+        ) = items.take(limit)
+
+        override fun isAllowedForBrowsing(
+            item: XtreamCatalogItem,
+            kidsMode: Boolean,
+            lockedCategoryIds: Set<String>,
+        ) = true
+
+        override fun libraryMatchCandidates(
+            kidsMode: Boolean,
+            lockedCategoryIds: Set<String>,
+            lockedCategoryIdsByContentType: Map<XtreamContentType, Set<String>>,
+        ) = emptyList<LibraryCandidate>()
+
+        override fun movieDetails(movieId: String) = error("nao usado")
+
+        override fun shortEpg(streamId: String) = XtreamShortEpg(emptyList(), 0)
+
+        override fun buildConfirmedPlaybackUri(target: XtreamPlaybackTarget) = error("nao usado")
+
+        override fun summary(): XtreamSessionSummary =
+            XtreamSessionSummary(
+                sourceId = "fonte",
+                account =
+                    XtreamAccount(
+                        authenticated = true,
+                        status = "Active",
+                        isTrial = false,
+                        activeConnections = 0,
+                        maximumConnections = 1,
+                        allowedOutputFormats = setOf("ts"),
+                    ),
+                loadedItemCount = items.size,
+                loadedContentTypes = setOf(XtreamContentType.MOVIE),
+            )
+
+        override fun clearCatalogCache() = Unit
+
+        override fun clearIncludingDiskCache() = Unit
+
+        override fun clear() = Unit
+    }
+
+    private fun merged(vararg sources: Pair<String, FakeSource>): MergedCatalogueRepository {
+        val queue = sources.map { it.second }.toMutableList()
+        val repository = MergedCatalogueRepository(newDelegate = { queue.removeAt(0) })
+        sources.forEach { (label, _) ->
+            repository.addSource(
+                sourceId = label,
+                label = label,
+                input =
+                    XtreamLoginInput(
+                        server = "http://p.invalid".toCharArray(),
+                        username = "u".toCharArray(),
+                        password = "p".toCharArray(),
+                    ),
+            )
+        }
+        return repository
+    }
+
+    private fun page(
+        repository: MergedCatalogueRepository,
+        index: Int = 0,
+        size: Int = 80,
+    ) = repository.page(
+        contentType = XtreamContentType.MOVIE,
+        categoryId = null,
+        query = "",
+        requestedPage = index,
+        pageSize = size,
+    )
+
+    /** The owner's example: a film only the second list has must still appear. */
+    @Test
+    fun `a title only the smaller list has still appears`() {
+        val repository =
+            merged(
+                "grande" to FakeSource(listOf("Duna", "Matrix", "Alien")),
+                "pequena" to FakeSource(listOf("Avatar")),
+            )
+
+        val names = page(repository).items.map { it.name }
+        assertTrue("Avatar" in names, "o titulo exclusivo da lista pequena sumiu: $names")
+        assertEquals(4, names.size)
+    }
+
+    /** And a film both lists have must appear once, from the bigger one. */
+    @Test
+    fun `a shared title appears once`() {
+        val repository =
+            merged(
+                "pequena" to FakeSource(listOf("Avatar")),
+                "grande" to FakeSource(listOf("Duna", "Matrix", "Avatar")),
+            )
+
+        val names = page(repository).items.map { it.name }
+        assertEquals(3, names.size, "apareceu duas vezes: $names")
+        assertEquals(1, names.count { it == "Avatar" })
+    }
+
+    /**
+     * The hard part: page three of a merged catalogue is not page three of any one subscription.
+     */
+    @Test
+    fun `paging runs over the merged result, not over one source`() {
+        val repository =
+            merged(
+                "grande" to FakeSource((1..10).map { "Filme $it" }),
+                "pequena" to FakeSource((11..14).map { "Filme $it" }),
+            )
+
+        val first = page(repository, index = 0, size = 5)
+        val second = page(repository, index = 1, size = 5)
+        val third = page(repository, index = 2, size = 5)
+
+        assertEquals(14, first.totalMatches, "o total tem de ser o do catalogo juntado")
+        assertEquals(5, first.items.size)
+        assertEquals(4, third.items.size, "a ultima pagina cruza as duas fontes")
+        // No title appears on two pages: the cut is over one merged list, not two separate ones.
+        val seen = (first.items + second.items + third.items).map { it.name }
+        assertEquals(seen.size, seen.toSet().size, "um titulo apareceu em duas paginas")
+    }
+
+    /** The whole safety property: one dead list must not blank a working library. */
+    @Test
+    fun `a source that is down is named and the rest still load`() {
+        val repository =
+            merged(
+                "grande" to FakeSource(listOf("Duna", "Matrix")),
+                "caiu" to FakeSource(emptyList(), failOnLoad = true),
+            )
+
+        assertEquals(listOf("caiu"), repository.failedSources)
+        assertEquals(2, page(repository).items.size, "a lista viva foi perdida")
+    }
+
+    /**
+     * A list that authenticates and then fails to load must not take the others with it either.
+     *
+     * Separate from the test above because they fail at different moments: that one never
+     * connects, this one connects and then dies when the catalogue is fetched. Only this one
+     * exercises loadCatalog, and without it that path could throw and nothing would notice.
+     */
+    @Test
+    fun `a source that dies while loading does not take the others with it`() {
+        val dying = FakeSource(listOf("Avatar"))
+        val repository =
+            merged(
+                "grande" to FakeSource(listOf("Duna", "Matrix")),
+                "morre" to dying,
+            )
+        // Only after it has connected, so the failure lands in loadCatalog and nowhere else.
+        dying.diesWhileLoading = true
+
+        repository.loadCatalog(XtreamContentType.MOVIE)
+
+        assertEquals(listOf("morre"), repository.failedSources)
+        assertEquals(2, page(repository).items.size, "a lista viva foi perdida")
+    }
+
+    /**
+     * A search reaching only one list is the sharpest form of the original problem: typing a name
+     * and being told it is not there when you own it.
+     */
+    @Test
+    fun `search reaches every subscription`() {
+        val repository =
+            merged(
+                "grande" to FakeSource(listOf("Duna", "Matrix")),
+                "pequena" to FakeSource(listOf("Avatar")),
+            )
+
+        assertEquals(1, repository.search("avatar", limit = 20).size)
+    }
+
+    /** The header count has to be the merged one, or two lists look like half a library. */
+    @Test
+    fun `the summary counts every subscription`() {
+        val repository =
+            merged(
+                "grande" to FakeSource(listOf("Duna", "Matrix", "Alien")),
+                "pequena" to FakeSource(listOf("Avatar")),
+            )
+
+        assertEquals(4, repository.summary()?.loadedItemCount)
+    }
+
+    /** Two lists carrying the same category must not show it twice. */
+    @Test
+    fun `a category both lists carry is listed once`() {
+        val repository =
+            merged(
+                "grande" to FakeSource(listOf("Duna"), categoryNames = listOf("Filmes", "Series")),
+                "pequena" to FakeSource(listOf("Avatar"), categoryNames = listOf("Filmes")),
+            )
+
+        val names = repository.categories(XtreamContentType.MOVIE).map { it.name }
+        assertEquals(listOf("Filmes", "Series"), names)
+    }
+
+    /** One subscription merges to itself, and must not pay for a merge pass. */
+    @Test
+    fun `a single subscription behaves exactly as before`() {
+        val repository = merged("so uma" to FakeSource(listOf("Duna", "Matrix")))
+
+        assertEquals(2, page(repository).items.size)
+        assertTrue(!repository.isMerging)
+    }
+
+    /** The cap the owner named. */
+    @Test
+    fun `no more than ten subscriptions are accepted`() {
+        val sources = (1..12).map { index -> "fonte$index" to FakeSource(listOf("Filme $index")) }
+        val repository = merged(*sources.toTypedArray())
+
+        assertEquals(10, page(repository).items.size, "aceitou mais do que dez fontes")
+    }
+
+    /**
+     * A title the second list contributed is not in the first, so opening it must not look only
+     * there — that would fail to open something the grid had just shown.
+     */
+    @Test
+    fun `a title is found in whichever list holds it`() {
+        val repository =
+            merged(
+                "grande" to FakeSource(listOf("Duna", "Matrix", "Alien")),
+                "pequena" to FakeSource(listOf("Avatar")),
+            )
+
+        assertNotNull(repository.itemByProviderId(XtreamContentType.MOVIE, "0"))
+    }
+}
