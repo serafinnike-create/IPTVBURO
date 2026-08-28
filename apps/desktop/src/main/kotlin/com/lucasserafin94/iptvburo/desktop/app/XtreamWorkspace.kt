@@ -388,6 +388,22 @@ fun XtreamWorkspace(
                     detailsOpen = false
                     scope.launch { appState.nextXtreamPage() }
                 },
+                onJumpBack = {
+                    detailsOpen = false
+                    scope.launch { appState.jumpXtreamPages(-appState.xtreamPageJump) }
+                },
+                onJumpForward = {
+                    detailsOpen = false
+                    scope.launch { appState.jumpXtreamPages(appState.xtreamPageJump) }
+                },
+                onFirstPage = {
+                    detailsOpen = false
+                    scope.launch { appState.firstXtreamPage() }
+                },
+                onLastPage = {
+                    detailsOpen = false
+                    scope.launch { appState.lastXtreamPage() }
+                },
             )
             // No blocking panel while the catalogue loads. It sat over the middle of the screen
             // saying something the user could not act on, and it hid the very catalogue they were
@@ -510,7 +526,10 @@ private fun XtreamToolbar(
             OutlinedTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                modifier = Modifier.weight(1f).widthIn(max = 460.dp),
+                // Capped rather than greedy: the search box used to take every pixel the segmented
+                // control left, pushing the year and rating filters onto a row of their own and
+                // costing the grid a whole line of posters for empty space.
+                modifier = Modifier.widthIn(min = 220.dp, max = 340.dp),
                 singleLine = true,
                 placeholder = { Text(text.searchCatalog) },
                 leadingIcon = { Text("⌕", color = BuroColors.TextSubtle) },
@@ -523,6 +542,20 @@ private fun XtreamToolbar(
                         unfocusedContainerColor = BuroColors.Surface,
                     ),
             )
+            // The year and rating filters ride here, in the width the search box no longer takes.
+            //
+            // They had a row to themselves above a third row of selectors: three bands of chrome
+            // over the catalogue, which is what somebody came to look at. Asked for three times.
+            if (selectedType != XtreamContentType.LIVE) {
+                Spacer(Modifier.width(BuroSpacing.Md))
+                YearAndRatingFilters(
+                    text = text,
+                    selectedYear = selectedYear,
+                    minimumRating = minimumRating,
+                    onYearSelected = onYearSelected,
+                    onMinimumRatingSelected = onMinimumRatingSelected,
+                )
+            }
             Spacer(Modifier.weight(1f))
         }
 
@@ -563,42 +596,59 @@ private fun XtreamToolbar(
                 Spacer(Modifier.width(BuroSpacing.Md))
             }
 
-            if (selectedType != XtreamContentType.LIVE) {
-                val currentYear = Year.now().value
-                Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
-                    FilterChip(
-                        label = text.allYears,
-                        selected = selectedYear == null,
-                        onClick = { onYearSelected(null) },
-                    )
-                    FilterChip(
-                        label = "${text.releasesIn} $currentYear",
-                        selected = selectedYear == currentYear,
-                        onClick = { onYearSelected(currentYear) },
-                    )
-                    // A picker rather than one chip per year: a catalogue spans decades, and a row
-                    // of chips would either cover a handful of years arbitrarily or run off screen.
-                    YearPicker(
-                        selectedYear = selectedYear?.takeIf { it != currentYear },
-                        currentYear = currentYear,
-                        label = text.chooseYear,
-                        onSelect = onYearSelected,
-                    )
-                    // Whole-star thresholds rather than a slider: the provider's ratings are coarse
-                    // and "at least four stars" is the question people actually ask.
-                    RatingPicker(
-                        selected = minimumRating,
-                        label = text.chooseRating,
-                        anyLabel = text.anyRating,
-                        onSelect = onMinimumRatingSelected,
-                    )
-                }
-                Spacer(Modifier.width(BuroSpacing.Md))
-            }
             // Multiview, live only and only once something is queued. Shown as a count rather than
             // a plain button so the toolbar says how many channels are waiting — with a cap of
             // four, "3 canais" is the whole state.
         }
+    }
+}
+
+/**
+ * Year and rating, on the same line as the type control and the search box.
+ *
+ * They used to hold a row of their own between the search box and the genre selectors — three bands
+ * of chrome above the grid. The search box no longer takes the whole width, so they fit beside it
+ * and the catalogue gets the line back.
+ */
+@Composable
+private fun YearAndRatingFilters(
+    text: DesktopStrings,
+    selectedYear: Int?,
+    minimumRating: Double?,
+    onYearSelected: (Int?) -> Unit,
+    onMinimumRatingSelected: (Double?) -> Unit,
+) {
+    val currentYear = Year.now().value
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        FilterChip(
+            label = text.allYears,
+            selected = selectedYear == null,
+            onClick = { onYearSelected(null) },
+        )
+        FilterChip(
+            label = "${text.releasesIn} $currentYear",
+            selected = selectedYear == currentYear,
+            onClick = { onYearSelected(currentYear) },
+        )
+        // A picker rather than one chip per year: a catalogue spans decades, and a row of chips
+        // would either cover a handful of years arbitrarily or run off screen.
+        YearPicker(
+            selectedYear = selectedYear?.takeIf { it != currentYear },
+            currentYear = currentYear,
+            label = text.chooseYear,
+            onSelect = onYearSelected,
+        )
+        // Whole-star thresholds rather than a slider: the provider's ratings are coarse and "at
+        // least four stars" is the question people actually ask.
+        RatingPicker(
+            selected = minimumRating,
+            label = text.chooseRating,
+            anyLabel = text.anyRating,
+            onSelect = onMinimumRatingSelected,
+        )
     }
 }
 
@@ -743,11 +793,13 @@ private fun XtreamCategorySelectors(
     val genreSelected = selectedCategoryId?.takeIf { id -> !split.isProvider(id) }
     val providerSelected = selectedCategoryId?.takeIf { id -> split.isProvider(id) }
 
+    // No padding above: the toolbar directly overhead already ends with its own, and two together
+    // put a visible gap between two rows of the same control strip.
     FlowRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = BuroSpacing.GutterCompact, vertical = BuroSpacing.Xs),
+                .padding(start = BuroSpacing.GutterCompact, end = BuroSpacing.GutterCompact, bottom = BuroSpacing.Xs),
         horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
         verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
     ) {
@@ -1113,6 +1165,10 @@ private fun XtreamCatalogGrid(
     onItemSelected: (String) -> Unit,
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
+    onJumpBack: () -> Unit,
+    onJumpForward: () -> Unit,
+    onFirstPage: () -> Unit,
+    onLastPage: () -> Unit,
 ) {
     val page = appState.xtreamPage
     val live = appState.xtreamContentType == XtreamContentType.LIVE
@@ -1330,6 +1386,7 @@ private fun XtreamCatalogGrid(
             }
         }
 
+        val jump = appState.xtreamPageJump
         if (page.pageCount > 1) {
             Row(
                 modifier =
@@ -1339,8 +1396,34 @@ private fun XtreamCatalogGrid(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
+                // Crossing the list, not just stepping through it.
+                //
+                // One page at a time is right for browsing and useless for reaching the far
+                // end: forty thousand titles at this page size is hundreds of clicks. The jump
+                // buttons appear only when there is somewhere to jump to, so they never offer a
+                // trip that ends on the same page.
+                if (page.pageIndex >= jump) {
+                    OutlinedButton(
+                        onClick = onFirstPage,
+                        shape = BuroRadius.Small,
+                        colors =
+                            ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
+                    ) {
+                        Text("«")
+                    }
+                    OutlinedButton(
+                        onClick = onJumpBack,
+                        modifier = Modifier.padding(start = BuroSpacing.Xs),
+                        shape = BuroRadius.Small,
+                        colors =
+                            ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
+                    ) {
+                        Text("‹‹  $jump")
+                    }
+                }
                 OutlinedButton(
                     onClick = onPreviousPage,
+                    modifier = Modifier.padding(start = BuroSpacing.Xs),
                     enabled = page.hasPrevious,
                     shape = BuroRadius.Small,
                     colors =
@@ -1362,6 +1445,26 @@ private fun XtreamCatalogGrid(
                         ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
                 ) {
                     Text("${text.next}  →")
+                }
+                if (page.pageIndex + jump < page.pageCount) {
+                    OutlinedButton(
+                        onClick = onJumpForward,
+                        modifier = Modifier.padding(start = BuroSpacing.Xs),
+                        shape = BuroRadius.Small,
+                        colors =
+                            ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
+                    ) {
+                        Text("$jump  ››")
+                    }
+                    OutlinedButton(
+                        onClick = onLastPage,
+                        modifier = Modifier.padding(start = BuroSpacing.Xs),
+                        shape = BuroRadius.Small,
+                        colors =
+                            ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
+                    ) {
+                        Text("»")
+                    }
                 }
             }
         }

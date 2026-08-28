@@ -3830,6 +3830,14 @@ class DesktopAppState(
     /** TMDb's discover page size. Asking for less would waste a request; more is not offered. */
     private val SERVICE_INDEX_PAGE_SIZE = 20
 
+    /**
+     * Pages crossed by one jump.
+     *
+     * Ten because five saves too little to be worth a separate control, and fifty overshoots
+     * what someone searching is willing to skim past.
+     */
+    private val XTREAM_PAGE_JUMP = 10
+
     /** Opens the Assinaturas area at its shelves, loading them if this is the first visit. */
     fun openSubscriptions() {
         favoritesOnly = false
@@ -6220,6 +6228,41 @@ class DesktopAppState(
             refreshXtreamPage(xtreamPage.pageIndex + 1)
         }
     }
+
+    /**
+     * Jumps several pages at once, clamped to the list.
+     *
+     * One page at a time is fine for browsing and useless for crossing a catalogue: forty
+     * thousand titles at this page size is hundreds of clicks on "next". Ten is the step —
+     * five saves too little, fifty overshoots what someone searching is willing to skim.
+     *
+     * Clamped rather than refused: a jump backwards from page 3 lands on the first page, and
+     * one past the end lands on the last, because that is where the person pressing meant to
+     * go.
+     */
+    suspend fun jumpXtreamPages(delta: Int) {
+        val target = (xtreamPage.pageIndex + delta).coerceIn(0, xtreamPage.pageCount - 1)
+        if (target != xtreamPage.pageIndex) {
+            refreshXtreamPage(target)
+        }
+    }
+
+    /** The first and last pages, for crossing the whole list in one press. */
+    suspend fun firstXtreamPage() {
+        if (xtreamPage.pageIndex != 0) {
+            refreshXtreamPage(0)
+        }
+    }
+
+    suspend fun lastXtreamPage() {
+        val last = xtreamPage.pageCount - 1
+        if (xtreamPage.pageIndex != last) {
+            refreshXtreamPage(last)
+        }
+    }
+
+    /** How many pages a jump crosses. Shared with the toolbar so the label cannot drift. */
+    val xtreamPageJump: Int get() = XTREAM_PAGE_JUMP
 
     fun selectXtreamItem(providerId: String) {
         dailySelectedItem = null
