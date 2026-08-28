@@ -1618,7 +1618,13 @@ private fun SourceSidebar(
             }
         }
         Spacer(Modifier.height(8.dp))
-        if (sources.size > 1 && !sourcesFolded) {
+        // One list is still a list.
+        //
+        // The rows were shown only from two upwards, on the reasoning that there is nothing to
+        // switch between — but the rows are also the only place to rename or forget a list, so
+        // somebody with a single subscription could do neither. Reported as "tem uma fonte, porem
+        // nao consigo editar ela".
+        if (sources.isNotEmpty() && !sourcesFolded) {
             // A plain Column, not a LazyColumn.
             //
             // The sidebar now scrolls as a whole, and a LazyColumn inside a `verticalScroll` is a

@@ -31,11 +31,27 @@ class MergeSwitchTest {
     @Test
     fun `the switch sits with the sources in the sidebar`() {
         val sourcesBlock =
-            app.substringAfter("if (sources.size > 1) {").substringBefore("NavigationItem(")
+            app.substringAfter("if (sources.isNotEmpty() && !sourcesFolded) {")
+                .substringBefore("NavigationItem(")
 
         assertTrue(
             sourcesBlock.contains("onToggleMergeSources"),
             "o interruptor nao esta junto das listas na barra lateral",
+        )
+    }
+
+    /**
+     * A single list is still listed.
+     *
+     * The rows appeared only from two upwards, but they are also the only place to rename or forget
+     * a list — so somebody with one subscription could do neither. Reported as "tem uma fonte,
+     * porem nao consigo editar ela".
+     */
+    @Test
+    fun `one list is still shown so it can be edited`() {
+        assertTrue(
+            app.contains("if (sources.isNotEmpty() && !sourcesFolded) {"),
+            "com uma lista so, as linhas desaparecem e nao ha onde editar",
         )
     }
 
@@ -47,8 +63,11 @@ class MergeSwitchTest {
      */
     @Test
     fun `the switch is offered only when there is something to merge`() {
+        val switchBlock =
+            app.substringAfter("// Outside the fold, on purpose.").substringBefore("NavigationItem(")
+
         assertTrue(
-            app.contains("if (sources.size > 1) {"),
+            switchBlock.contains("if (sources.size > 1) {"),
             "o interruptor apareceria com uma lista so",
         )
     }
