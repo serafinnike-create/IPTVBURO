@@ -1589,9 +1589,18 @@ async function run() {
     window.BuroApp.state.section = 'HOME';
     window.BuroApp.state.screenData = null;
     window.BuroApp.render();
+    /*
+      A faixa "Montando sua Home" saiu do Inicio.
+
+      Ela ficava por cima da Home ja desenhada, anunciando um trabalho que a tela
+      de abertura ja tinha feito e anunciado com percentagem e contagem. O que o
+      teste guarda continua sendo o mesmo: o cache aparece de imediato, sem
+      esperar a consulta ao catalogo inteiro — e agora sem faixa nenhuma por cima
+      dele.
+    */
     check('a Home mostra o cache imediatamente enquanto consulta o catálogo inteiro',
         window.document.querySelector('.real-home-hero h2').textContent === 'Filme destaque' &&
-        Boolean(window.document.querySelector('.home-status.loading')));
+        !window.document.querySelector('.home-status.loading'));
     await waitFor(function () {
         return window.BuroApp.state.screenData && window.BuroApp.state.screenData.kind === 'home' &&
             !window.BuroApp.state.screenData.loading;

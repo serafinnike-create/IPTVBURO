@@ -1657,7 +1657,9 @@ var BuroApp = (function () {
     }
 
     function revealApp(targetScreen) {
-        if (targetScreen === 'SHELL' && (state.preferences.section || 'HOME') === 'HOME') {
+        /* A Home e montada atras da tela de abertura sempre que o destino e o
+           shell, porque o destino agora e sempre o Inicio. */
+        if (targetScreen === 'SHELL') {
             prepareHomeForReveal(function () { completeReveal(targetScreen); });
             return;
         }
@@ -1670,7 +1672,20 @@ var BuroApp = (function () {
         bootProgress('ready', 'bootReady');
         window.setTimeout(function () {
             state.screen = targetScreen;
-            if (targetScreen === 'SHELL') { state.section = state.preferences.section || 'HOME'; }
+            /*
+              Abrir sempre no Inicio.
+
+              A secao ficava guardada e era restaurada: quem saiu do
+              aplicativo em Configuracoes voltava nelas dias depois, sem
+              nenhuma pista de por que. Numa TV isso e pior do que num
+              telefone — a pessoa liga o aparelho para assistir, e a primeira
+              tela deve ser a que oferece o que assistir.
+
+              A preferencia continua sendo gravada: ela ainda diz onde a
+              pessoa estava dentro da mesma sessao, e e o que a volta usa.
+              O que muda e a abertura.
+            */
+            if (targetScreen === 'SHELL') { state.section = 'HOME'; }
             render();
             if (targetScreen === 'SHELL') {
                 /* A varredura já rodou na abertura; isto retoma o que tiver
@@ -2041,7 +2056,8 @@ var BuroApp = (function () {
             (bootIsSweeping() ? '<p class="boot-note">' + escapeHtml(t('bootFirstRunNote')) + '</p>' : '') +
             '<div class="boot-progress" role="progressbar" aria-label="' + attr(progressLabel) +
             '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + progressValue + '">' +
-            '<span style="width: ' + progressValue + '%"></span></div>' +
+            '<span class="boot-progress-fill" style="width: ' + progressValue + '%"></span>' +
+            '<strong class="boot-progress-value" aria-hidden="true">' + progressValue + '%</strong></div>' +
             '<div class="boot-dots" aria-hidden="true">' + dots + '</div>' +
             '</section>' +
             '</main>';
@@ -3347,8 +3363,24 @@ var BuroApp = (function () {
             } else if (data.error && !(data.result && data.result.count)) {
                 content = emptyState('!', t('couldNotLoad'), t('homeLoadError'), 'home-retry', t('retry'));
             } else {
-                content = (data.loading ? '<div class="home-status loading"><span class="boot-indicator"></span>' +
-                    t('homeLoading') + '</div>' : '') +
+                /*
+                  A faixa de "montando" sai quando ha Home para ver.
+
+                  Este ramo so e alcancado quando `data.result.count` existe —
+                  ou seja, quando ja ha destaques e prateleiras desenhados. A
+                  faixa ficava por cima deles anunciando um trabalho que a
+                  tela de abertura ja tinha feito e anunciado, com percentagem
+                  e contagem de titulos.
+
+                  Dizer duas vezes a mesma coisa e pior do que dizer uma: a
+                  segunda faz a pessoa procurar o que mudou.
+
+                  A conferencia por baixo continua acontecendo; ela so deixa
+                  de ocupar a primeira linha do Inicio. O erro, abaixo, fica —
+                  aquele **e** noticia, porque diz que o que esta na tela pode
+                  estar velho.
+                */
+                content =
                     (data.error ? '<div class="details-inline-warning home-cache-warning"><span>!</span><p>' +
                         t('homeCachedWarning') + '</p><button class="button ghost focusable" data-action="home-retry">' +
                         t('retry') + '</button></div>' : '') + renderRealHome(data);
