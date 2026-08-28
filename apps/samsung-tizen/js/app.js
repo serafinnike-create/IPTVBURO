@@ -3732,7 +3732,21 @@ var BuroApp = (function () {
         if (!catalogueScopes[contentType]) {
             catalogueScopes[contentType] = {
                 query: '', genre: null, service: null, year: null, minimumRating: null,
-                layout: 'poster', rows: undefined, total: null, hasMore: false, loading: false
+                /*
+                  Ao Vivo comeca compacto; filme e serie, em poster.
+
+                  Um canal nao tem capa 2:3. O que o provedor manda e um logo
+                  quadrado ou horizontal, e desenha-lo numa caixa alta de
+                  poster deixava a marca boiando no meio de um retangulo
+                  vazio — e o canal sem logo virava um cartao alto so com
+                  texto. O cartao compacto tem a proporcao que o material
+                  tem.
+
+                  Continua sendo so o padrao: quem preferir outro formato
+                  troca no seletor de densidade, e a escolha vale para a aba.
+                */
+                layout: contentType === 'LIVE' ? 'compact' : 'poster',
+                rows: undefined, total: null, hasMore: false, loading: false
             };
         }
         return catalogueScopes[contentType];
@@ -4294,6 +4308,15 @@ var BuroApp = (function () {
         }).join('') + '</div>';
     }
 
+    /*
+      A segunda linha do cartao.
+
+      Num canal ao vivo ela saia com o nome da fonte — "IPTV BURO" repetido em
+      cada cartao, que nao distingue nada quando ha uma fonte so e vira ruido
+      mesmo quando ha varias. Um canal nao tem ano nem nota; se nao houver
+      programa no ar para mostrar, e melhor a linha ficar vazia do que
+      carregar uma palavra que nao informa.
+    */
     function mediaMetadata(item) {
         var parts = [];
         /* Cada parte entra ja escapada: a funcao passou a devolver HTML por causa
@@ -4321,7 +4344,8 @@ var BuroApp = (function () {
             parts.push('<span class="' + (ratingIsHigh(item.rating) ? 'rating-high' : 'rating-plain') +
                 '">★ ' + escapeHtml(Number(item.rating).toFixed(1)) + '</span>');
         }
-        return parts.length ? parts.join(' · ') : escapeHtml('IPTV BURO');
+        if (parts.length) { return parts.join(' · '); }
+        return item && item.contentType === 'LIVE' ? '' : escapeHtml('IPTV BURO');
     }
 
     /*

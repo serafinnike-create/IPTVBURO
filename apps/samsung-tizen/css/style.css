@@ -2379,3 +2379,20 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
     border: 2px solid var(--gold); border-radius: 50%;
     color: var(--gold); font-size: 22px; font-weight: 900;
 }
+
+/* O logo de um canal, na forma que ele tem.
+
+   `contain` e nao `cover`: um logo cortado nas bordas deixa de ser o logo, e
+   e por ele que a pessoa reconhece o canal de relance. O fundo claro existe
+   porque boa parte das marcas de TV e desenhada escura sobre transparencia e
+   sumiria contra o painel. */
+.catalogue-layout-compact .media-card[data-action="live-details"] .media-art img {
+    object-fit: contain;
+    padding: 10px;
+    background: rgba(246,247,250,.94);
+}
+/* Sem a segunda linha, o nome ganha o espaco dela — cabe inteiro em vez de
+   ser cortado no meio. */
+.catalogue-layout-compact .media-card[data-action="live-details"] h3 {
+    padding-bottom: 14px;
+}
