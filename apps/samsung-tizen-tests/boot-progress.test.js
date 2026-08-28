@@ -126,6 +126,29 @@ check('o último passo chega a cem',
 check('a barra nunca passa de cem',
     percent({ index: 99, total: steps.length }) === 100);
 
+process.stdout.write('A porcentagem aparece dentro da própria barra\n');
+window.BuroApp.state.screen = 'BOOT';
+window.BuroApp.state.boot = {
+    step: 'sweep', index: sweepAt, total: steps.length,
+    messageKey: 'bootCatalogueSweep', fraction: 0.5, previewArtwork: []
+};
+window.BuroApp.render();
+(function () {
+    var bar = window.document.querySelector('.boot-progress');
+    var value = window.document.querySelector('.boot-progress-value');
+    var fill = window.document.querySelector('.boot-progress-fill');
+    check('a barra mostra uma porcentagem numérica visível',
+        Boolean(value && /^\d+%$/.test(value.textContent)));
+    check('o texto usa exatamente o valor acessível da barra',
+        Boolean(bar && value && value.textContent === bar.getAttribute('aria-valuenow') + '%'));
+    check('o preenchimento usa a mesma porcentagem',
+        Boolean(fill && fill.style.width === value.textContent));
+    check('o fundo local é composto por doze capas leves',
+        window.document.querySelectorAll('.boot-backdrop.local .boot-cover-row > span').length === 12);
+    check('somente duas fileiras são animadas',
+        window.document.querySelectorAll('.boot-backdrop.local > .boot-cover-row').length === 2);
+}());
+
 process.stdout.write('A Home é montada na abertura, não depois dela\n');
 /*
   O ponto: `home` precisa ser um passo da abertura. Sem isso quem esperou a

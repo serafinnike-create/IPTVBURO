@@ -164,7 +164,16 @@ async function run() {
     check('Fechar remove somente o aviso e conserva o pedido para uma tentativa futura',
         !window.document.querySelector('.shared-link-notice') && window.BuroApp._pendingSharedTitle());
 
-    window.BuroApp._receiveRequestedAppControl(appUri);
+    window.BuroApp.render();
+    window.dispatchEvent(new window.Event('focus'));
+    await new Promise(function (resolve) { setTimeout(resolve, 50); });
+    check('Fechar permanece fechado após render e foco com o mesmo pedido antigo',
+        !window.document.querySelector('.shared-link-notice') && window.BuroApp._pendingSharedTitle());
+
+    /* Uma entrega realmente nova continua substituindo o pedido dormente. O
+       parâmetro público extra é ignorado pelo parser, mas torna a URI distinta
+       daquela que getRequestedAppControl conserva como último pedido. */
+    window.BuroApp._receiveRequestedAppControl(appUri + '&request=second');
     await waitFor(function () { return window.document.querySelector('.shared-link-notice'); }, 4000);
     window.BuroApp.state.preferences.hiddenCategoryIds = [];
     window.BuroApp._activate(window.document.querySelector('[data-action="shared-retry"]'));

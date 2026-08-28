@@ -132,8 +132,15 @@ async function run() {
         headings[0] === 'seasonal-christmas' && headings.length > 1);
     check('o card sazonal continua sendo uma ação normal alcançável pelo D-pad',
         seasonalCard && seasonalCard.classList.contains('focusable') && seasonalCard.getAttribute('data-action') === 'movie-details');
-    check('a Home continua limitada e não materializa os 32 títulos no DOM',
-        window.document.querySelectorAll('.media-card').length < items.length);
+    /*
+      A contagem sai para o ecrã porque este teste já falhou duas vezes na suíte
+      inteira e passou sempre sozinho, mesmo com os nove ficheiros anteriores
+      corridos à frente. Sem o número, uma falha dessas não diz se a Home
+      materializou tudo ou se nem chegou a desenhar.
+    */
+    var cardCount = window.document.querySelectorAll('.media-card').length;
+    check('a Home continua limitada e não materializa os 32 títulos no DOM (' + cardCount + '/' + items.length + ')',
+        cardCount > 0 && cardCount < items.length);
 
     window.close();
     process.stdout.write('\n');

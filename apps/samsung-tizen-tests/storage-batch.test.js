@@ -179,6 +179,28 @@ async function run() {
     });
     check('a gravação devolve o controle entre blocos', yielded);
 
+    process.stdout.write('Remoção indexada por perfil\n');
+    await promised(function (ok, no) {
+        window.BuroStorage.putBatch('progress', [
+            { id: 'progress-a-1', profileId: 'profile-a', itemId: 'movie:a', positionMs: 10 },
+            { id: 'progress-a-2', profileId: 'profile-a', itemId: 'movie:b', positionMs: 20 },
+            { id: 'progress-b-1', profileId: 'profile-b', itemId: 'movie:c', positionMs: 30 }
+        ], ok, no);
+    });
+    window.__resetTransactions();
+    var removedForProfile = await promised(function (ok, no) {
+        window.BuroStorage.removeByIndex('progress', 'byProfile', 'profile-a', ok, no);
+    });
+    var removalTransactions = window.__transactions();
+    var rowsAfterProfileRemoval = await promised(function (ok, no) {
+        window.BuroStorage.all('progress', ok, no);
+    });
+    check('remove todas as linhas da chave solicitada', removedForProfile === 2);
+    check('preserva integralmente as linhas de outro perfil',
+        rowsAfterProfileRemoval.length === 1 && rowsAfterProfileRemoval[0].profileId === 'profile-b');
+    check('a limpeza inteira usa uma unica transação de escrita', removalTransactions === 1,
+        removalTransactions + ' transações de escrita');
+
     process.stdout.write('Substituição transacional usada pela importação\n');
     var snapshotSource = {
         id: 'source-snapshot', name: 'Fonte sintética grande', type: 'REMOTE_M3U',

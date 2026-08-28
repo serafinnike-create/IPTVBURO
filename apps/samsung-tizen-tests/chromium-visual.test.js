@@ -733,13 +733,17 @@ async function main() {
     check('Portuguese (Brasil) recebe o foco inicial visivel', language.focused && language.focused.language === 'pt-BR' && rectInside(language.focused.rectangle));
     check('a composicao de idioma produz um quadro PNG nao vazio', await screenshotIsRendered('language'));
 
-    var boot = await evaluate("(function () { document.querySelector('[data-action=select-language][data-language=\"pt-BR\"]').click(); var panel = document.querySelector('.boot-panel'); var r = panel && panel.getBoundingClientRect(); return { screen: BuroApp.state.screen, dots: document.querySelectorAll('.boot-dot').length, progress: Number(document.querySelector('.boot-progress') && document.querySelector('.boot-progress').getAttribute('aria-valuenow')), rectangle: r && { left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height }, scrollWidth:document.documentElement.scrollWidth, scrollHeight:document.documentElement.scrollHeight }; }())");
+    var boot = await evaluate("(function () { document.querySelector('[data-action=select-language][data-language=\"pt-BR\"]').click(); var panel = document.querySelector('.boot-panel'); var r = panel && panel.getBoundingClientRect(); var bar = document.querySelector('.boot-progress'); var value = document.querySelector('.boot-progress-value'); var fill = document.querySelector('.boot-progress-fill'); var covers = document.querySelectorAll('.boot-backdrop span'); var rows = document.querySelectorAll('.boot-cover-row'); return { screen: BuroApp.state.screen, dots: document.querySelectorAll('.boot-dot').length, progress: Number(bar && bar.getAttribute('aria-valuenow')), percentage: value && value.textContent, fillWidth: fill && fill.style.width, covers: covers.length, rows: rows.length, firstMotion: rows[0] && getComputedStyle(rows[0]).animationName, lastMotion: rows[rows.length - 1] && getComputedStyle(rows[rows.length - 1]).animationName, rectangle: r && { left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height }, scrollWidth:document.documentElement.scrollWidth, scrollHeight:document.documentElement.scrollHeight }; }())");
     process.stdout.write('Carregamento cinematico\n');
     /* O numero de passos vem do app e nao daqui: `BOOT_STEPS` cresceu duas vezes
        (a varredura do catalogo, depois a montagem da Home) e um numero fixo
        neste teste quebrava a suite a cada vez sem apontar defeito nenhum. O que
        importa e haver passos, e a barra ja ter saido do zero. */
     check('selecao do idioma abre imediatamente a tela de carregamento', boot.screen === 'BOOT' && boot.dots >= 4 && boot.progress > 0 && boot.progress <= 100);
+    check('a porcentagem visível coincide com o progresso real', boot.percentage === boot.progress + '%' && boot.fillWidth === boot.percentage);
+    check('doze capas compõem o fundo em somente duas camadas móveis', boot.covers === 12 && boot.rows === 2);
+    check('as duas fileiras de capas se movem em sentidos independentes',
+        boot.firstMotion === 'boot-cover-drift-a' && boot.lastMotion === 'boot-cover-drift-b');
     check('painel de carregamento fica inteiro e sem overflow global', rectInside(boot.rectangle) && boot.scrollWidth <= 1920 && boot.scrollHeight <= 1080);
     check('a tela de carregamento produz um quadro PNG nao vazio', await screenshotIsRendered('boot'));
 

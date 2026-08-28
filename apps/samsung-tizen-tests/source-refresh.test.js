@@ -94,8 +94,8 @@ async function run() {
         id: 'source-refresh-ui', name: 'Lista atualizável', type: 'REMOTE_M3U',
         channelCount: 1, createdAt: Date.now(), updatedAt: null
     };
-    var oldText = '#EXTM3U\n#EXTINF:-1 tvg-id="stable" group-title="Antiga",Canal estável\nhttps://public.test/stable.m3u8';
-    var newText = '#EXTM3U\n#EXTINF:-1 tvg-id="stable" group-title="Nova",Canal estável\nhttps://public.test/stable-v2.m3u8\n' +
+    var oldText = '#EXTM3U url-tvg="https://old-guide.synthetic/epg.xml?token=old"\n#EXTINF:-1 tvg-id="stable" group-title="Antiga",Canal estável\nhttps://public.test/stable.m3u8';
+    var newText = '#EXTM3U url-tvg="https://new-guide.synthetic/epg.xml?token=new"\n#EXTINF:-1 tvg-id="stable" group-title="Nova",Canal estável\nhttps://public.test/stable-v2.m3u8\n' +
         '#EXTINF:-1 tvg-id="new" group-title="Nova",Canal novo\nhttps://public.test/new.m3u8';
     var oldParsed = window.BuroM3u.parse(oldText, source.id);
     var oldItem = window.BuroM3u.metadata(oldParsed)[0];
@@ -112,7 +112,9 @@ async function run() {
     await call(window, window.BuroStorage.put, ['items', oldItem]);
     await call(window, window.BuroStorage.put, ['favorites', favorite]);
     await call(window, window.BuroStorage.put, ['progress', progress]);
-    await call(window, window.BuroStorage.secureSave, [source.id, { url: 'https://public.test/list.m3u' }]);
+    await call(window, window.BuroStorage.secureSave, [source.id, {
+        url: 'https://public.test/list.m3u', epgUrls: oldParsed.header.epgUrls
+    }]);
     window.BuroApp.state.sources = [source];
     window.BuroApp.state.categories = [oldCategory];
     window.BuroApp.state.items = [oldItem];
@@ -145,6 +147,7 @@ async function run() {
     var storedCategories = await call(window, window.BuroStorage.all, ['categories']);
     var storedFavorites = await call(window, window.BuroStorage.all, ['favorites']);
     var storedProgress = await call(window, window.BuroStorage.all, ['progress']);
+    var refreshedSecret = window.BuroStorage.secureGet(source.id);
     check('nova fotografia substitui categoria antiga e contém os dois itens',
         storedItems.filter(function (row) { return row.sourceId === source.id; }).length === 2 &&
         storedCategories.some(function (row) { return row.sourceId === source.id && row.name === 'Nova'; }) &&
@@ -157,7 +160,12 @@ async function run() {
         storedItems.filter(function (row) { return row.id !== oldItem.id && row.sourceId === source.id; })[0].addedAt > 1000);
     check('URL de stream e segredo continuam fora do IndexedDB',
         JSON.stringify(storedItems).indexOf('public.test') === -1 &&
-        JSON.stringify(storedItems).indexOf('list.m3u') === -1);
+        JSON.stringify(storedItems).indexOf('list.m3u') === -1 &&
+        JSON.stringify(storedItems).indexOf('guide.synthetic') === -1);
+    check('atualização troca o XMLTV apenas no KeyManager e preserva a URL da lista',
+        refreshedSecret.url === 'https://public.test/list.m3u' && refreshedSecret.epgUrls.length === 1 &&
+        refreshedSecret.epgUrls[0].indexOf('new-guide.synthetic') >= 0 &&
+        refreshedSecret.epgUrls[0].indexOf('old-guide.synthetic') === -1);
 
     process.stdout.write('Falha remota sem perda de catálogo\n');
     var snapshotBeforeFailure = JSON.stringify(storedItems);
@@ -213,16 +221,21 @@ async function run() {
     check('player mostra carregamento central enquanto prepara o stream',
         !window.document.getElementById('player-waiting').hidden &&
         window.document.body.classList.contains('playing'));
-    await waitFor(function () { return !window.document.getElementById('player-error-panel').hidden; }, 4000);
-    check('falha permanece visível com causa e duas decisões',
+    await waitFor(function () { return retryPrepareCount === 2; }, 4000);
+    check('primeira falha de conexão repete o mesmo item automaticamente',
+        window.document.getElementById('player-error-panel').hidden &&
+        window.document.body.classList.contains('playing'));
+
+    press(window, 10009);
+    forcedPrepareError = { name: 'NetworkError' };
+    window.BuroApp._activate(playFixture);
+    await waitFor(function () { return !window.document.getElementById('player-error-panel').hidden; }, 5000);
+    check('duas falhas de conexão encerram o automático e mostram duas decisões',
+        retryPrepareCount === 4 &&
         window.document.getElementById('player-error-message').textContent === window.BuroI18n.t('playbackConnectionError') &&
         window.document.querySelectorAll('[data-player-error-action]').length === 2);
     check('Retry recebe o foco inicial do controle remoto',
         window.document.getElementById('player-error-retry').classList.contains('focused'));
-    press(window, 13);
-    check('ENTER repete o mesmo item e retorna à reprodução',
-        retryPrepareCount === 2 && window.document.getElementById('player-error-panel').hidden &&
-        window.document.body.classList.contains('playing'));
     press(window, 10009);
     forcedPrepareError = { name: 'InvalidAccessError' };
     window.BuroApp._activate(playFixture);
@@ -294,5 +307,5 @@ async function run() {
 
 run().catch(function (error) {
     process.stderr.write('Falha na suíte de atualização: ' + error.stack + '\n');
-    process.exitCode = 1;
+    process.exit(1);
 });

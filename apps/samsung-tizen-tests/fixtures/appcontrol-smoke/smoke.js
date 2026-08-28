@@ -7,12 +7,21 @@
     var TARGET_APP_ID = 'IPTVBUROxx.IPTVBURO';
 
     function report(result) {
-        var beacon = new Image();
-        beacon.src = REPORT_BASE + encodeURIComponent(result) + '&ts=' + Date.now();
+        var status = document.getElementById('status');
+        if (status) { status.textContent = result; }
+        try {
+            var request = new XMLHttpRequest();
+            request.open('GET', REPORT_BASE + encodeURIComponent(result) + '&ts=' + Date.now(), false);
+            request.send(null);
+        } catch (ignoredReport) {
+            var beacon = new Image();
+            beacon.src = REPORT_BASE + encodeURIComponent(result) + '&ts=' + Date.now();
+        }
     }
 
     window.addEventListener('load', function () {
         var control;
+        report('APPCONTROL_STAGE_STARTED');
         function launchResolvedTarget() {
             tizen.application.launchAppControl(control, TARGET_APP_ID, function () {
                 report('APPCONTROL_LAUNCH_PASS');
@@ -36,6 +45,7 @@
                     report('APPCONTROL_FILTER_NOT_FOUND');
                     return;
                 }
+                report('APPCONTROL_STAGE_FILTER_FOUND');
                 launchResolvedTarget();
             }, function (error) {
                 report('APPCONTROL_FIND_FAIL_' + String(error && error.name || 'UNKNOWN'));
