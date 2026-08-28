@@ -22,6 +22,59 @@ class XtreamSourceLibraryTest {
         }
     }
 
+    /**
+     * The same account is found again rather than added twice.
+     *
+     * Connecting created a row every time, so every restart and every merge toggle left another
+     * copy of the same subscription behind — reported as "monte de fonte aletoria com nome host".
+     */
+    @Test
+    fun `an account already in the library is found`() {
+        withLibrary { library ->
+            val entry = library.create("Casa")
+            library.store(entry.id).save(
+                "http://buro.ac".toCharArray(),
+                "lucas".toCharArray(),
+                "segredo".toCharArray(),
+            )
+
+            val found =
+                library.findMatching("http://buro.ac".toCharArray(), "lucas".toCharArray())
+
+            assertEquals(entry.id, found?.id, "a lista existente nao foi encontrada")
+        }
+    }
+
+    /** A different account on the same server is a different list. */
+    @Test
+    fun `a different username is a different list`() {
+        withLibrary { library ->
+            val entry = library.create("Casa")
+            library.store(entry.id).save(
+                "http://buro.ac".toCharArray(),
+                "lucas".toCharArray(),
+                "segredo".toCharArray(),
+            )
+
+            val found =
+                library.findMatching("http://buro.ac".toCharArray(), "outro".toCharArray())
+
+            assertEquals(null, found, "duas contas diferentes foram tratadas como a mesma")
+        }
+    }
+
+    /** And an empty library matches nothing rather than failing. */
+    @Test
+    fun `an empty library matches nothing`() {
+        withLibrary { library ->
+            assertEquals(
+                null,
+                library.findMatching("http://buro.ac".toCharArray(), "lucas".toCharArray()),
+                "encontrou uma lista onde nao existe nenhuma",
+            )
+        }
+    }
+
     @Test
     fun `sources are listed in creation order with their labels`() {
         withLibrary { library ->

@@ -26,9 +26,18 @@ import java.net.URI
  * place a password could be left behind.
  */
 class SwitchingCatalogueRepository(
-    private val xtream: CatalogueRepository = SessionXtreamRepository(),
+    xtream: CatalogueRepository = SessionXtreamRepository(),
     private val stalker: CatalogueRepository = StalkerCatalogueRepository(),
 ) : CatalogueRepository {
+    /**
+     * The Xtream side, which is a merging repository when lists are browsed as one.
+     *
+     * Replaceable so the merge switch takes effect on the spot. It used to be fixed for the life of
+     * the app, so flipping the switch changed a stored preference and nothing else — reported as a
+     * click that opened no loading screen and reorganised nothing.
+     */
+    @Volatile
+    private var xtream: CatalogueRepository = xtream
     /**
      * The protocol the open subscription speaks.
      *
@@ -46,6 +55,27 @@ class SwitchingCatalogueRepository(
      */
     val merging: MergedCatalogueRepository?
         get() = xtream as? MergedCatalogueRepository
+
+    /**
+     * Switches between browsing lists separately and browsing them as one.
+     *
+     * Everything loaded is cleared: the sessions on either side belong to the mode being left, and
+     * the caller reconnects from stored credentials — which is the reorganising the viewer is
+     * shown while it happens.
+     *
+     * @return whether the mode actually changed.
+     */
+    fun useMerging(merge: Boolean): Boolean {
+        val alreadyRight = (xtream is MergedCatalogueRepository) == merge
+        if (alreadyRight) return false
+        val previous = xtream
+        val replacement: CatalogueRepository =
+            if (merge) MergedCatalogueRepository() else SessionXtreamRepository()
+        xtream = replacement
+        if (active === previous) active = replacement
+        runCatching { previous.clear() }
+        return true
+    }
 
     /**
      * Points the next connection at a portal rather than an Xtream server.

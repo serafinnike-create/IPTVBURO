@@ -187,6 +187,15 @@ class XtreamClientException(
 
 enum class XtreamFailureReason {
     INVALID_SERVER,
+
+    /**
+     * The address is nearly right: a scheme that was meant and mistyped.
+     *
+     * Its own reason so the form can name the part that is wrong. "The address is not valid" on
+     * `http:7/host` reads as a wrong address to somebody who typed the host correctly, and they
+     * conclude the app is at fault rather than looking at the `://`.
+     */
+    INVALID_SERVER_SCHEME,
     NETWORK,
     HTTP,
     RESPONSE_TOO_LARGE,

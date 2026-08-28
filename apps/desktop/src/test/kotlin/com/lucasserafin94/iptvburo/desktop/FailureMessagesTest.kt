@@ -95,6 +95,7 @@ class FailureMessagesTest {
         val expected =
             mapOf(
                 XtreamFailureReason.INVALID_SERVER to "endereço do servidor",
+                XtreamFailureReason.INVALID_SERVER_SCHEME to "http:// ou https://",
                 XtreamFailureReason.AUTHENTICATION to "recusou o usuário",
                 XtreamFailureReason.NETWORK to "alcançar o servidor",
                 XtreamFailureReason.HTTP to "erro HTTP",
@@ -102,11 +103,34 @@ class FailureMessagesTest {
                 XtreamFailureReason.INVALID_RESPONSE to "catálogo Xtream compatível",
             )
 
+        // Every reason, not only the ones somebody remembered to list. A map alone silently skips
+        // a newly added failure, which is how a reason ends up with no wording of its own.
+        assertEquals(
+            XtreamFailureReason.entries.toSet(),
+            expected.keys,
+            "uma falha ficou sem redacao propria",
+        )
+
         expected.forEach { (reason, fragment) ->
             val text = message(XtreamClientException(reason, "internal detail"))
             assertTrue(fragment in text, "$reason should say '$fragment' but said: $text")
             assertFalse("internal detail" in text, "$reason leaked its internal message")
         }
+    }
+
+    /**
+     * A mistyped scheme does not read like a wrong address.
+     *
+     * `http:7/host` used to be accepted, turned into a request to a host called `http`, and failed
+     * later saying the address was invalid — on an address the viewer had typed correctly but for
+     * one character. The two must not say the same thing.
+     */
+    @Test
+    fun `a mistyped scheme says something different from a wrong address`() {
+        val wrong = message(XtreamClientException(XtreamFailureReason.INVALID_SERVER, "x"))
+        val mistyped = message(XtreamClientException(XtreamFailureReason.INVALID_SERVER_SCHEME, "x"))
+
+        assertFalse(wrong == mistyped, "as duas falhas dizem exactamente o mesmo: $wrong")
     }
 
     /** The one failure the user cannot act on alone points at the log. */

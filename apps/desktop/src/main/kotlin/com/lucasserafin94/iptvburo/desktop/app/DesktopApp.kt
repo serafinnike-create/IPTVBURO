@@ -7,6 +7,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -438,7 +441,14 @@ fun DesktopApp(
                         onDiscover = appState::openDiscovery,
                         onConnectXtream = { showXtreamLogin = true },
                         mergeSources = appState.mergeAllSources,
-                        onToggleMergeSources = appState::updateMergeAllSources,
+                        // Applied on the spot rather than stored for the next launch: the switch
+                        // used to change a preference and nothing visible, which reads as a dead
+                        // button.
+                        onToggleMergeSources = { enabled ->
+                            scope.launch { appState.applyMergeAllSources(enabled) }
+                        },
+                        onRenameSource = appState::renameSavedSource,
+                        onRemoveSource = appState::removeSavedSource,
                         onImportM3u = {
                             chooseLocalPlaylist(ownerWindow)?.let { path ->
                                 scope.launch { appState.importLocalPlaylist(path) }
@@ -1312,6 +1322,15 @@ private fun SourceSidebar(
      */
     mergeSources: Boolean = false,
     onToggleMergeSources: (Boolean) -> Unit = {},
+    /**
+     * Renames and forgets a saved subscription, from beside the list itself.
+     *
+     * Both were reachable only from the profile form. Somebody looking at a list that stopped
+     * answering is here, not there, and a row that says "not answering" with no way to remove it
+     * reads as a fault in the app rather than a dead subscription.
+     */
+    onRenameSource: (sourceId: String, label: String) -> Unit = { _, _ -> },
+    onRemoveSource: (sourceId: String) -> Unit = {},
     /** Imports an M3U playlist from a file. */
     onImportM3u: () -> Unit,
     onAddRemoteSource: () -> Unit,
@@ -1328,11 +1347,48 @@ private fun SourceSidebar(
 ) {
     val text = strings
 
+    // The list waiting on a yes before it is forgotten.
+    //
+    // Confirmed rather than removed on the click: forgetting a subscription throws away its stored
+    // password too, and the button sits inches from the one that opens the list.
+    var removingSource by remember { mutableStateOf<DesktopSourceSummary?>(null) }
+
+    /**
+     * Whether the list of subscriptions is folded away.
+     *
+     * Open by default, which is what the sidebar has always done. Somebody with ten lists can fold
+     * them; somebody with two is not made to unfold anything to see them.
+     */
+    var sourcesFolded by remember { mutableStateOf(false) }
+
     // Collapsed: a narrow strip carrying the name vertically and the control to bring it back. The
     // content beside it gets the width, which on a shelf of posters is another card and a half.
     if (collapsed) {
         CollapsedSidebar(onExpand = onToggleCollapsed)
         return
+    }
+
+    val doomed = removingSource
+    if (doomed != null) {
+        AlertDialog(
+            onDismissRequest = { removingSource = null },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onRemoveSource(doomed.id)
+                        removingSource = null
+                    },
+                ) {
+                    Text(text.shareStrings.screens.setupRemoveList, color = BuroColors.Primary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { removingSource = null }) { Text(text.cancel) }
+            },
+            text = {
+                Text(text.shareStrings.screens.setupRemoveListConfirm.format(doomed.name))
+            },
+        )
     }
 
     Column(
@@ -1529,20 +1585,40 @@ private fun SourceSidebar(
         // with a single playlist had nowhere in the app to connect another, because the buttons
         // that do it live on the empty-library screen they will never see again.
         Spacer(Modifier.height(28.dp))
+        // The heading folds the list away.
+        //
+        // Ten subscriptions is the documented maximum and every one of them takes a row, which
+        // pushes everything below off the sidebar. Folded, the section is two lines; the count
+        // stays visible either way, so nothing is hidden without saying how much.
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(BuroRadius.Small)
+                    .clickable(enabled = sources.size > 1) { sourcesFolded = !sourcesFolded }
+                    .padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             SectionLabel(text.sources)
-            Text(
-                text = sources.size.toString(),
-                color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.labelLarge,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = sources.size.toString(),
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                if (sources.size > 1) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (sourcesFolded) "▸" else "▾",
+                        color = BuroColors.TextSubtle,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(8.dp))
-        if (sources.size > 1) {
+        if (sources.size > 1 && !sourcesFolded) {
             // A plain Column, not a LazyColumn.
             //
             // The sidebar now scrolls as a whole, and a LazyColumn inside a `verticalScroll` is a
@@ -1557,10 +1633,37 @@ private fun SourceSidebar(
                         source = source,
                         selected = source.id == selectedSourceId,
                         onClick = { onSourceSelected(source.id) },
+                        // Renaming and forgetting a list, here rather than only on the profile
+                        // form. This is where somebody looking at a list that stopped answering
+                        // actually is, and a row marked "not answering" that cannot be removed
+                        // reads as a fault in the app.
+                        //
+                        // Only for saved subscriptions: an imported M3U has no stored credentials
+                        // to forget, and its row is the catalogue itself.
+                        onRename =
+                            if (source.kind == DesktopSourceKind.XTREAM_SESSION) {
+                                { label -> onRenameSource(source.id, label) }
+                            } else {
+                                null
+                            },
+                        onRemove =
+                            if (source.kind == DesktopSourceKind.XTREAM_SESSION) {
+                                { removingSource = source }
+                            } else {
+                                null
+                            },
+                        strings = text,
                     )
                 }
             }
             Spacer(Modifier.height(6.dp))
+        }
+        // Outside the fold, on purpose.
+        //
+        // Folding the rows must not take the switch with it: a merge control that disappears when
+        // the lists are tidied away is the "no switch anywhere" that was reported in the first
+        // place.
+        if (sources.size > 1) {
             // Here, beside the lists themselves.
             //
             // It was offered only on the profile form, which is not where somebody adds a second
@@ -1786,12 +1889,88 @@ private fun NavigationItem(
     }
 }
 
+/**
+ * One small action on a source row.
+ *
+ * A plain clickable box rather than a TextButton: a button carries a 48dp minimum touch target on
+ * each side, and two of those in a 248dp sidebar left the list's name as one letter and an ellipsis.
+ */
+@Composable
+private fun SourceRowAction(
+    glyph: String,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier =
+            Modifier
+                .size(22.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            glyph,
+            color = BuroColors.TextSubtle,
+            style = MaterialTheme.typography.labelMedium,
+        )
+    }
+}
+
 @Composable
 private fun SourceItem(
     source: DesktopSourceSummary,
     selected: Boolean,
     onClick: () -> Unit,
+    /** Null for a list with no stored name to change, which keeps the row as it was. */
+    onRename: ((String) -> Unit)? = null,
+    onRemove: (() -> Unit)? = null,
+    strings: DesktopStrings,
 ) {
+    var renaming by remember(source.id) { mutableStateOf(false) }
+    var draft by remember(source.id) { mutableStateOf(source.name) }
+    val interactions = remember(source.id) { MutableInteractionSource() }
+    val hovered by interactions.collectIsHoveredAsState()
+
+    // Edited in place rather than in a dialog: a dialog would cover the other names at exactly the
+    // moment the point is telling them apart.
+    if (renaming && onRename != null) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                onClick = {
+                    // A blank name is refused by the store rather than saved, so the row would
+                    // silently keep its old one. Closing anyway would look like it was accepted.
+                    if (draft.isNotBlank()) {
+                        onRename(draft)
+                        renaming = false
+                    }
+                },
+                contentPadding = PaddingValues(horizontal = 6.dp),
+            ) {
+                Text("✓", color = BuroColors.Primary)
+            }
+            TextButton(
+                onClick = {
+                    draft = source.name
+                    renaming = false
+                },
+                contentPadding = PaddingValues(horizontal = 6.dp),
+            ) {
+                Text("✕", color = BuroColors.TextMuted)
+            }
+        }
+        return
+    }
+
     BuroInteractiveRow(
         onClick = onClick,
         selected = selected,
@@ -1799,7 +1978,11 @@ private fun SourceItem(
         contentDescription = source.name,
     ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 10.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .hoverable(interactions)
+                .padding(horizontal = 11.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -1851,6 +2034,25 @@ private fun SourceItem(
                     color = BuroColors.TextSubtle,
                     style = MaterialTheme.typography.bodyMedium,
                 )
+            }
+        }
+        // Rename and forget, on the row the pointer is over or the one that is open.
+        //
+        // Shown on every row at once, two buttons at their minimum touch size left almost nothing
+        // of a 248dp sidebar for the name itself: "VISTA" and "BURO" came out as "VI…" and "B…".
+        // The name is what the row is for.
+        //
+        // Hover rather than selection alone, because a list that stopped answering has to be
+        // removable without being opened first — opening it is the thing that does not work.
+        if ((onRename != null || onRemove != null) && (hovered || selected)) {
+            if (onRename != null) {
+                SourceRowAction(glyph = "✎") {
+                    draft = source.name
+                    renaming = true
+                }
+            }
+            if (onRemove != null) {
+                SourceRowAction(glyph = "🗑", onClick = onRemove)
             }
         }
     }

@@ -619,6 +619,7 @@ data class DesktopStrings(
                                 "No hubo memoria suficiente para montar esta pantalla. " +
                                     "Es una limitación de la aplicación, no de tu lista.",
                             invalidServer = "La dirección del servidor no es válida.",
+                            invalidServerScheme = "Revise el inicio de la dirección: debe ser http:// o https://.",
                             authenticationRejected = "El servidor rechazó el usuario o la contraseña.",
                             networkUnreachable = "No se pudo alcanzar el servidor.",
                             httpError = "El servidor respondió con un error HTTP.",
@@ -632,6 +633,7 @@ data class DesktopStrings(
                     startup =
                         StartupStrings(
                             openingSession = "Abriendo tu sesión…",
+                            joiningList = "Uniendo %1${'$'}s…",
                             loadingLiveCategories = "Cargando categorías de canales…",
                             loadingMovieCategories = "Cargando categorías de películas…",
                             loadingSeriesCategories = "Cargando categorías de series…",
@@ -648,7 +650,7 @@ data class DesktopStrings(
                             diagnosticsTitle = "Diagnóstico de conexión",
                             mergeSourcesTitle = "Unir todas las listas",
                             mergeSourcesHelp = "Muestra todas sus listas como un solo catálogo. Nada se repite: la lista más grande manda y las otras completan lo que falta.",
-                            mergeSourcesRestart = "Se aplica al abrir la aplicación de nuevo.",
+                            mergeSourcesRestart = "Las listas se reorganizan al momento.",
                             mergeSourcesFailed = "%1${'$'}s no respondió. Las demás listas siguen funcionando.",
                             mergeSourcesOffline = "No responde",
                             diagnosticsLatencyGood = "Latencia baja: los canales cambian sin espera",
@@ -1388,6 +1390,7 @@ data class DesktopStrings(
                                 "Não houve memória suficiente para montar esta tela. " +
                                     "Isso é uma limitação do aplicativo, não da sua lista.",
                             invalidServer = "O endereço do servidor não é válido.",
+                            invalidServerScheme = "Confira o começo do endereço: precisa ser http:// ou https://.",
                             authenticationRejected = "O servidor recusou o usuário ou a senha.",
                             networkUnreachable = "Não foi possível alcançar o servidor.",
                             httpError = "O servidor respondeu com um erro HTTP.",
@@ -1400,6 +1403,7 @@ data class DesktopStrings(
                     startup =
                         StartupStrings(
                             openingSession = "Abrindo a sua sessão…",
+                            joiningList = "Juntando %1${'$'}s…",
                             loadingLiveCategories = "Carregando categorias de canais…",
                             loadingMovieCategories = "Carregando categorias de filmes…",
                             loadingSeriesCategories = "Carregando categorias de séries…",
@@ -1416,7 +1420,7 @@ data class DesktopStrings(
                             diagnosticsTitle = "Diagnóstico da ligação",
                             mergeSourcesTitle = "Juntar todas as listas",
                             mergeSourcesHelp = "Mostra todas as suas listas como um só catálogo. Nada se repete: a lista maior manda e as outras completam o que falta.",
-                            mergeSourcesRestart = "Aplica-se quando abrir a aplicação de novo.",
+                            mergeSourcesRestart = "As listas sao reorganizadas na hora.",
                             mergeSourcesFailed = "%1${'$'}s não respondeu. As outras listas continuam a funcionar.",
                             mergeSourcesOffline = "Não responde",
                             diagnosticsLatencyGood = "Latência baixa: os canais trocam sem espera",
@@ -2156,6 +2160,7 @@ data class DesktopStrings(
                                 "There was not enough memory to build this screen. " +
                                     "That is a limit of the application, not of your list.",
                             invalidServer = "The server address is not valid.",
+                            invalidServerScheme = "Check the start of the address: it must be http:// or https://.",
                             authenticationRejected = "The server refused the username or password.",
                             networkUnreachable = "The server could not be reached.",
                             httpError = "The server answered with an HTTP error.",
@@ -2168,6 +2173,7 @@ data class DesktopStrings(
                     startup =
                         StartupStrings(
                             openingSession = "Opening your session…",
+                            joiningList = "Merging %1${'$'}s…",
                             loadingLiveCategories = "Loading channel categories…",
                             loadingMovieCategories = "Loading film categories…",
                             loadingSeriesCategories = "Loading series categories…",
@@ -2184,7 +2190,7 @@ data class DesktopStrings(
                             diagnosticsTitle = "Connection diagnostics",
                             mergeSourcesTitle = "Merge every playlist",
                             mergeSourcesHelp = "Shows all your playlists as one catalogue. Nothing repeats: the biggest list leads and the others fill the gaps.",
-                            mergeSourcesRestart = "Takes effect the next time you open the app.",
+                            mergeSourcesRestart = "The lists are reorganised right away.",
                             mergeSourcesFailed = "%1${'$'}s did not answer. Your other playlists are still working.",
                             mergeSourcesOffline = "Not answering",
                             diagnosticsLatencyGood = "Low latency: channels change without waiting",
@@ -2923,6 +2929,7 @@ data class DesktopStrings(
                                 "Es war nicht genug Speicher vorhanden, um diesen Bildschirm aufzubauen. " +
                                     "Das ist eine Grenze der Anwendung, nicht Ihrer Liste.",
                             invalidServer = "Die Serveradresse ist ungültig.",
+                            invalidServerScheme = "Prüfen Sie den Anfang der Adresse: er muss http:// oder https:// sein.",
                             authenticationRejected = "Der Server hat Benutzername oder Passwort abgelehnt.",
                             networkUnreachable = "Der Server war nicht erreichbar.",
                             httpError = "Der Server antwortete mit einem HTTP-Fehler.",
@@ -2935,6 +2942,7 @@ data class DesktopStrings(
                     startup =
                         StartupStrings(
                             openingSession = "Ihre Sitzung wird geöffnet…",
+                            joiningList = "%1${'$'}s wird zusammengeführt…",
                             loadingLiveCategories = "Senderkategorien werden geladen…",
                             loadingMovieCategories = "Filmkategorien werden geladen…",
                             loadingSeriesCategories = "Serienkategorien werden geladen…",
@@ -2951,7 +2959,7 @@ data class DesktopStrings(
                             diagnosticsTitle = "Verbindungsdiagnose",
                             mergeSourcesTitle = "Alle Listen zusammenführen",
                             mergeSourcesHelp = "Zeigt alle Listen als einen Katalog. Nichts doppelt sich: die größte Liste führt, die anderen füllen die Lücken.",
-                            mergeSourcesRestart = "Wird beim nächsten Start der App wirksam.",
+                            mergeSourcesRestart = "Die Listen werden sofort neu geordnet.",
                             mergeSourcesFailed = "%1${'$'}s hat nicht geantwortet. Die anderen Listen funktionieren weiter.",
                             mergeSourcesOffline = "Antwortet nicht",
                             diagnosticsLatencyGood = "Niedrige Latenz: Kanäle wechseln ohne Wartezeit",
@@ -3695,6 +3703,7 @@ data class DesktopStrings(
                                 "Non c'era memoria sufficiente per costruire questa schermata. " +
                                     "È un limite dell'applicazione, non della tua lista.",
                             invalidServer = "L'indirizzo del server non è valido.",
+                            invalidServerScheme = "Controlli l'inizio dell'indirizzo: deve essere http:// o https://.",
                             authenticationRejected = "Il server ha rifiutato l'utente o la password.",
                             networkUnreachable = "Non è stato possibile raggiungere il server.",
                             httpError = "Il server ha risposto con un errore HTTP.",
@@ -3707,6 +3716,7 @@ data class DesktopStrings(
                     startup =
                         StartupStrings(
                             openingSession = "Apertura della sessione…",
+                            joiningList = "Unione di %1${'$'}s…",
                             loadingLiveCategories = "Caricamento categorie dei canali…",
                             loadingMovieCategories = "Caricamento categorie dei film…",
                             loadingSeriesCategories = "Caricamento categorie delle serie…",
@@ -3723,7 +3733,7 @@ data class DesktopStrings(
                             diagnosticsTitle = "Diagnostica della connessione",
                             mergeSourcesTitle = "Unisci tutte le liste",
                             mergeSourcesHelp = "Mostra tutte le liste come un solo catalogo. Niente si ripete: la lista più grande guida e le altre completano.",
-                            mergeSourcesRestart = "Si applica alla prossima apertura dell'app.",
+                            mergeSourcesRestart = "Le liste vengono riorganizzate subito.",
                             mergeSourcesFailed = "%1${'$'}s non ha risposto. Le altre liste continuano a funzionare.",
                             mergeSourcesOffline = "Non risponde",
                             diagnosticsLatencyGood = "Latenza bassa: i canali cambiano senza attesa",
@@ -4852,12 +4862,11 @@ data class ScreenStrings(
     val mergeSourcesTitle: String,
     val mergeSourcesHelp: String,
     /**
-     * That the change lands on the next launch.
+     * That the lists are rebuilt straight away.
      *
-     * The switch cannot act on the open catalogue: the sessions it would swap are the ones
-     * being browsed, and rebuilding them underneath somebody empties the screen they are
-     * looking at. Without this line a flipped switch does nothing visible, which reads as a
-     * dead button — reported once already about this very feature.
+     * The switch rebuilds the catalogue on the spot, behind the loading screen. It used to
+     * store a preference and change nothing until the next launch, which reads as a dead
+     * button — reported twice about this very feature.
      */
     val mergeSourcesRestart: String,
     /** Names the list that is down, so the rest are visibly still working. */
@@ -4998,6 +5007,14 @@ data class ScreenStrings(
 
 data class StartupStrings(
     val openingSession: String,
+    /**
+     * A second subscription being read during the splash.
+     *
+     * It carries the list's name because the wait belongs to that list: a bar that sits still for a
+     * minute with no explanation reads as a hang, which is how it was reported — "quando apliquei o
+     * app nao foi para tela de carregamento".
+     */
+    val joiningList: String,
     val loadingLiveCategories: String,
     val loadingMovieCategories: String,
     val loadingSeriesCategories: String,
@@ -5013,6 +5030,14 @@ data class FailureStrings(
     /** Not enough memory to build the screen. An app limitation, not the user's list. */
     val outOfMemory: String,
     val invalidServer: String,
+    /**
+     * The address whose scheme is nearly right.
+     *
+     * "The address is not valid" on `http:7/buro.ac` reads as a wrong address, and somebody who
+     * typed the host correctly is certain the app is at fault — reported exactly that way. Naming
+     * the part that is wrong turns it into a typo they can see.
+     */
+    val invalidServerScheme: String,
     val authenticationRejected: String,
     val networkUnreachable: String,
     val httpError: String,

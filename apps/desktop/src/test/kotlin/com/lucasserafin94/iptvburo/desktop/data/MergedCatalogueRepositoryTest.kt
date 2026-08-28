@@ -31,6 +31,14 @@ class MergedCatalogueRepositoryTest {
         titles: List<String>,
         private val failOnLoad: Boolean = false,
         private val categoryNames: List<String> = listOf("Filmes"),
+        /**
+         * Which catalogues this subscription has in memory.
+         *
+         * Configurable because two lists rarely have loaded the same ones: the merge has to say a
+         * type is ready only when every list holds it, and a fake that always claims the same set
+         * cannot show the difference.
+         */
+        private val loaded: Set<XtreamContentType> = setOf(XtreamContentType.MOVIE),
     ) : CatalogueRepository {
         /**
          * Authenticates, then dies when the catalogue is fetched.
@@ -169,7 +177,7 @@ class MergedCatalogueRepositoryTest {
                         allowedOutputFormats = setOf("ts"),
                     ),
                 loadedItemCount = items.size,
-                loadedContentTypes = setOf(XtreamContentType.MOVIE),
+                loadedContentTypes = loaded,
             )
 
         override fun clearCatalogCache() = Unit
@@ -493,5 +501,120 @@ class MergedCatalogueRepositoryTest {
         val down = repository.heldSources.filter { !it.isWorking }.map { it.label }
         assertEquals(listOf("avariada"), down, "a lista avariada desapareceu da barra lateral")
         assertEquals(2, repository.heldSources.size, "a barra lateral perdeu uma linha")
+    }
+
+    /**
+     * A forgotten subscription leaves the merge at once.
+     *
+     * Clearing the stored password while the loaded catalogue stayed in the merge left the row on
+     * screen until the app restarted, which is the same "it cannot be deleted" that was reported.
+     */
+    @Test
+    fun `a forgotten subscription leaves the merge`() {
+        val repository =
+            merged(
+                "grande" to FakeSource(listOf("Duna", "Matrix")),
+                "pequena" to FakeSource(listOf("Avatar")),
+            )
+
+        assertTrue(repository.removeSource("pequena"), "nao encontrou a lista a esquecer")
+
+        assertEquals(
+            listOf("grande"),
+            repository.heldSources.map { it.label },
+            "a lista esquecida continua na barra lateral",
+        )
+        assertTrue(
+            page(repository).items.none { it.name == "Avatar" },
+            "o catalogo ainda mostra titulos da lista esquecida",
+        )
+    }
+
+    /**
+     * Two large lists together hold more than either alone.
+     *
+     * The merge used to read only the first five thousand matching rows of each subscription, so
+     * two lists of tens of thousands showed fewer films than one — reported exactly that way:
+     * "serie tinha menos que uma lista filmes tbm".
+     */
+    @Test
+    fun `two large lists hold more than either alone`() {
+        val big = (1..8_000).map { "Filme grande numero$it" }
+        val small = (1..6_000).map { "Filme pequeno numero$it" }
+        val repository =
+            merged(
+                "grande" to FakeSource(big),
+                "pequena" to FakeSource(small),
+            )
+
+        val total = page(repository).totalMatches
+
+        assertTrue(
+            total >= big.size + small.size,
+            "juntas mostram $total titulos, menos do que as ${big.size + small.size} que existem",
+        )
+    }
+
+    /**
+     * And the last page of a large merge is reachable.
+     *
+     * A total the paging cannot actually serve hands back a page index with nothing behind it,
+     * which is how a catalogue ends up showing an empty final screen.
+     */
+    @Test
+    fun `the last page of a large merge is not empty`() {
+        val repository =
+            merged(
+                "grande" to FakeSource((1..8_000).map { "Filme grande numero$it" }),
+                "pequena" to FakeSource((1..6_000).map { "Filme pequeno numero$it" }),
+            )
+
+        val first = page(repository)
+        val last = page(repository, index = first.pageCount - 1)
+
+        assertTrue(last.items.isNotEmpty(), "a ultima pagina do catalogo juntado veio vazia")
+    }
+
+    /**
+     * A type is loaded only when every subscription holds it.
+     *
+     * The union said a type was ready as soon as one list had it, so the caller skipped the fetch
+     * and the other lists never loaded it — and with none of them holding films, the Films tab
+     * paged over whatever they did hold and filled with live channels. Reported as "clikei em
+     * filmes e abriu aovico".
+     */
+    @Test
+    fun `a content type is loaded only when every list holds it`() {
+        val repository =
+            merged(
+                "grande" to FakeSource(
+                    listOf("Duna"),
+                    loaded = setOf(XtreamContentType.MOVIE, XtreamContentType.LIVE),
+                ),
+                "pequena" to FakeSource(
+                    listOf("Avatar"),
+                    loaded = setOf(XtreamContentType.LIVE),
+                ),
+            )
+
+        val loaded = repository.summary()?.loadedContentTypes.orEmpty()
+
+        assertTrue(
+            XtreamContentType.LIVE in loaded,
+            "ao vivo esta nas duas listas e devia contar como carregado",
+        )
+        assertTrue(
+            XtreamContentType.MOVIE !in loaded,
+            "filmes so esta numa lista, mas o conjunto diz que esta carregado: $loaded",
+        )
+    }
+
+    /** And forgetting one that was never held changes nothing. */
+    @Test
+    fun `forgetting an unknown subscription is harmless`() {
+        val repository = merged("grande" to FakeSource(listOf("Duna")))
+
+        assertTrue(!repository.removeSource("inexistente"), "afirmou ter esquecido o que nao tinha")
+        assertEquals(1, repository.heldSources.size, "perdeu uma lista que devia ter ficado")
     }
 }

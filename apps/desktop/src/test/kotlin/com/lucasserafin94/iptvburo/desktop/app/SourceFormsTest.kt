@@ -111,9 +111,17 @@ class SourceFormsTest {
     fun `the remaining lists are added to the merge at startup`() {
         // The call, not the declaration: a method that exists and nobody invokes is exactly the
         // gap this test was written for, and matching the name alone would pass over it.
+        // Matched without its arguments: it now reports progress as each list is read, and pinning
+        // the empty parentheses failed on that change rather than on anything being wrong.
         assertTrue(
-            state.contains("            addRemainingSourcesToMerge()"),
+            state.contains("            addRemainingSourcesToMerge"),
             "as outras listas nunca entram na juncao",
+        )
+        // Reading a second list of tens of thousands of titles under a bar that never moves reads
+        // as a hang, which is how it was reported.
+        assertTrue(
+            state.contains("stageText.joiningList.format(label)"),
+            "a juncao das outras listas nao aparece no ecra de carregamento",
         )
         assertTrue(
             state.contains("merged.addSource("),

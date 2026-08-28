@@ -60,6 +60,7 @@ internal object FailureMessages {
     ): String =
         when (error.reason) {
             XtreamFailureReason.INVALID_SERVER -> text.invalidServer
+            XtreamFailureReason.INVALID_SERVER_SCHEME -> text.invalidServerScheme
             XtreamFailureReason.AUTHENTICATION -> text.authenticationRejected
             XtreamFailureReason.NETWORK -> text.networkUnreachable
             XtreamFailureReason.HTTP -> text.httpError

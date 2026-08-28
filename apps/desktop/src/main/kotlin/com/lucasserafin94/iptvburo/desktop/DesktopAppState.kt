@@ -1159,6 +1159,64 @@ class DesktopAppState(
     }
 
     /**
+     * Applies the merge choice now, rebuilding the catalogue while the splash is shown.
+     *
+     * The switch used to store a preference and nothing else, so turning it on or off changed
+     * nothing until the app was restarted — reported as a click that opened no loading screen and
+     * reorganised nothing.
+     *
+     * Rebuilding means reconnecting every subscription from stored credentials, which is the same
+     * work the cold start does; the splash is raised for it so the wait is visibly work.
+     */
+    suspend fun applyMergeAllSources(enabled: Boolean) {
+        val switching = xtreamRepository as? SwitchingCatalogueRepository ?: return
+        updateMergeAllSources(enabled)
+        if (!switching.useMerging(enabled)) return
+
+        val stageText = DesktopStrings.of(language).shareStrings.startup
+        isStarting = true
+        startupStep(1, stageText.openingSession)
+        // Everything below is derived from a catalogue that no longer exists.
+        xtreamSummary = null
+        xtreamStatus = XtreamStatus.Disconnected
+        xtreamPage = XtreamCatalogPage.empty()
+        selectedXtreamCategoryId = null
+        mergeFailures = emptyList()
+        try {
+            val input = withContext(Dispatchers.IO) { rememberedXtreamStore.load() }
+            if (input == null) {
+                // Nothing remembered to reconnect with. The mode is stored and takes effect the
+                // next time a list is opened, which is the old behaviour rather than a failure.
+                return
+            }
+            connectXtream(input) { fraction, _ ->
+                startupProgressWithin(
+                    from = 0.1f,
+                    to = 0.6f,
+                    fraction = fraction,
+                    message = stageText.openingSession,
+                )
+            }
+            if (enabled) {
+                addRemainingSourcesToMerge { fraction, label ->
+                    startupProgressWithin(
+                        from = 0.6f,
+                        to = 0.8f,
+                        fraction = fraction,
+                        message = stageText.joiningList.format(label),
+                    )
+                }
+            }
+            if (xtreamStatus !is XtreamStatus.Error) {
+                startupStep(4, stageText.organising)
+                refreshXtreamPage(pageIndex = 0)
+            }
+        } finally {
+            isStarting = false
+        }
+    }
+
+    /**
      * The same title from another subscription, for a stream that failed.
      *
      * Null when only one list carries it, or when every list has been tried — which is the point at
@@ -1209,6 +1267,12 @@ class DesktopAppState(
      */
     fun removeSavedSource(sourceId: String) {
         sourceLibrary.remove(sourceId)
+        // Out of the open merge too, not only out of storage.
+        //
+        // Otherwise the credentials are gone but the loaded catalogue stays in the merge and the
+        // row stays in the sidebar until the app restarts — which is the "it cannot be deleted"
+        // this is meant to answer.
+        (xtreamRepository as? SwitchingCatalogueRepository)?.merging?.removeSource(sourceId)
         val orphaned = profiles.filter { it.sourceId == sourceId }
         if (orphaned.isNotEmpty()) {
             profiles = profiles.map { profile ->
@@ -2367,17 +2431,26 @@ class DesktopAppState(
                     val merged =
                         (xtreamRepository as? SwitchingCatalogueRepository)?.merging?.heldSources.orEmpty()
                     if (merged.size > 1) {
-                        val saved = sourceLibrary.sources().associateBy { it.id }
+                        // The revision is read so this recomposes when a list is renamed or
+                        // forgotten: the library is queried directly and holds no observable state
+                        // of its own, so without it the sidebar keeps the old name on screen.
+                        val saved =
+                            savedSourcesRevision.let { sourceLibrary.sources() }.associateBy { it.id }
                         merged.forEach { held ->
                             add(
                                 DesktopSourceSummary(
                                     id = held.sourceId,
                                     // The name the viewer gave it, which is the only thing telling
-                                    // one subscription from another. The stored label is the
-                                    // fallback, and the id is never shown: it means nothing to
-                                    // anybody reading the sidebar.
-                                    name = saved[held.sourceId]?.label?.takeIf { it.isNotBlank() }
-                                        ?: held.label,
+                                    // one subscription from another.
+                                    //
+                                    // A raw id is never shown. A session that joined the merge
+                                    // before its library entry existed is held under its generated
+                                    // id, and printing that put `xtream-05acb0cb…` in the sidebar
+                                    // where a name belongs — reported exactly that way.
+                                    name =
+                                        saved[held.sourceId]?.label?.takeIf { it.isNotBlank() }
+                                            ?: held.label.takeIf { it != held.sourceId }
+                                            ?: "Sessão Xtream",
                                     // Per-source counts are not held once the lists are merged, and
                                     // repeating the merged total on each row would claim every list
                                     // has all of it. Zero reads as "not counted" to the row, which
@@ -2389,14 +2462,38 @@ class DesktopAppState(
                             )
                         }
                     } else {
-                        add(
-                            DesktopSourceSummary(
-                                id = summary.sourceId,
-                                name = "Sessão Xtream",
-                                itemCount = summary.loadedItemCount,
-                                kind = DesktopSourceKind.XTREAM_SESSION,
-                            ),
-                        )
+                        // Browsing one list at a time: every saved subscription is still listed.
+                        //
+                        // Only the open session used to appear, so turning merging off left a
+                        // single row and the others looked deleted — reported as "desmarco opcao
+                        // apaga as fontes". They were never gone; the sidebar stopped showing them,
+                        // which also took away the only place to rename or forget one.
+                        val saved = savedSourcesRevision.let { sourceLibrary.sources() }
+                        if (saved.isEmpty()) {
+                            add(
+                                DesktopSourceSummary(
+                                    id = summary.sourceId,
+                                    name = "Sessão Xtream",
+                                    itemCount = summary.loadedItemCount,
+                                    kind = DesktopSourceKind.XTREAM_SESSION,
+                                ),
+                            )
+                        } else {
+                            saved.forEach { entry ->
+                                val isOpen = entry.id == selectedSourceId || saved.size == 1
+                                add(
+                                    DesktopSourceSummary(
+                                        id = entry.id,
+                                        name = entry.label.ifBlank { "Sessão Xtream" },
+                                        // Only the open list has a count to report; the others are
+                                        // saved credentials, not loaded catalogues, and a number
+                                        // borrowed from the open one would be a claim about them.
+                                        itemCount = if (isOpen) summary.loadedItemCount else 0,
+                                        kind = DesktopSourceKind.XTREAM_SESSION,
+                                    ),
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -2410,7 +2507,13 @@ class DesktopAppState(
             // The sidebar now lists each merged list on its own row, and every one of them is the
             // Xtream catalogue. Matching just the open session would leave a click on the second
             // row reading as "no Xtream selected" and blank the screen.
-            return mergedSourceIds().contains(selectedSourceId)
+            if (mergedSourceIds().contains(selectedSourceId)) return true
+            // A saved subscription that is listed but not loaded.
+            //
+            // The sidebar lists every saved list when merging is off, so a click can land on one
+            // that is not the open session. Treating that as "no Xtream selected" would blank the
+            // catalogue that is perfectly well loaded behind it.
+            return savedSourcesRevision.let { sourceLibrary.sources() }.any { it.id == selectedSourceId }
         }
 
     /** The subscriptions currently merged, empty when the lists are browsed separately. */
@@ -5542,10 +5645,33 @@ class DesktopAppState(
                 // subscription connected from the form was usable but nameless — it never showed
                 // up in that list at all.
                 runCatching {
+                    // Reused when this account is already in the library.
+                    //
+                    // A row was added on every connect, so every restart and every merge toggle
+                    // left another copy of the same subscription behind — reported as "monte de
+                    // fonte aletoria com nome host". A reconnection is not a new list.
+                    //
+                    // A name typed on the form still wins: somebody renaming their list expects
+                    // that to stick rather than be ignored because the account already existed.
+                    val existing = sourceLibrary.findMatching(rememberedServer, rememberedUsername)
                     val entry =
-                        sourceLibrary.create(
-                            listLabel.ifBlank { String(rememberedServer).hostLabel() },
-                        )
+                        when {
+                            existing == null ->
+                                sourceLibrary.create(
+                                    listLabel.ifBlank { String(rememberedServer).hostLabel() },
+                                )
+                            listLabel.isNotBlank() -> {
+                                sourceLibrary.rename(existing.id, listLabel)
+                                existing.copy(label = listLabel)
+                            }
+                            else -> existing
+                        }
+                    // The merge holds this session under the id the repository generated for it,
+                    // because it joined before this entry existed. Left alone, the sidebar shows
+                    // that raw `xtream-05acb0cb…` where a name belongs.
+                    (xtreamRepository as? SwitchingCatalogueRepository)
+                        ?.merging
+                        ?.relabelSource(summary.sourceId, entry.label)
                     withContext(Dispatchers.IO) {
                         sourceLibrary
                             .store(entry.id)
@@ -5792,7 +5918,16 @@ class DesktopAppState(
      * A list that fails is recorded and skipped. One dead subscription blanking a working library
      * would be far worse than the problem merging solves.
      */
-    private suspend fun addRemainingSourcesToMerge() {
+    private suspend fun addRemainingSourcesToMerge(
+        /**
+         * Reports which list is being read, for the splash.
+         *
+         * Defaulted so the paths that are not a cold start need no callback. Without it the bar sat
+         * still while a second list of tens of thousands of titles was read, which reads as a hang
+         * rather than as work — reported exactly that way.
+         */
+        onProgress: (fraction: Float, label: String) -> Unit = { _, _ -> },
+    ) {
         val merged = (xtreamRepository as? SwitchingCatalogueRepository)?.merging ?: return
         val alreadyOpen = xtreamRepository.summary()?.sourceId
         val others =
@@ -5803,13 +5938,15 @@ class DesktopAppState(
         if (others.isEmpty()) return
 
         withContext(Dispatchers.IO) {
-            others.forEach { source ->
+            others.forEachIndexed { index, source ->
+                onProgress(index.toFloat() / others.size, source.label)
                 // Credentials are read one at a time and handed straight over: the merge holds the
                 // vault, and nothing here keeps a second copy.
                 val input = runCatching { sourceLibrary.store(source.id).load() }.getOrNull()
                 if (input != null) {
                     merged.addSource(sourceId = source.id, label = source.label, input = input)
                 }
+                onProgress((index + 1).toFloat() / others.size, source.label)
             }
         }
         mergeFailures = merged.failedSources
@@ -5855,7 +5992,14 @@ class DesktopAppState(
             //
             // After the first one is open, so the app is usable at the earliest moment: a second
             // list that is slow to answer delays only its own titles rather than the whole start.
-            addRemainingSourcesToMerge()
+            addRemainingSourcesToMerge { fraction, label ->
+                startupProgressWithin(
+                    from = 0.7f,
+                    to = 0.8f,
+                    fraction = fraction,
+                    message = stageText.joiningList.format(label),
+                )
+            }
 
             // The home is built from the catalogue, so loading it here means the first screen is
             // complete when the splash clears rather than filling in afterwards.
@@ -5949,7 +6093,16 @@ class DesktopAppState(
         // so. A progress indicator that appears when there is no progress teaches the viewer that
         // it means nothing.
         val alreadyLoaded = contentType in xtreamSummary?.loadedContentTypes.orEmpty()
-        if (!alreadyLoaded) xtreamStatus = XtreamStatus.LoadingCatalog(contentType)
+        if (!alreadyLoaded) {
+            xtreamStatus = XtreamStatus.LoadingCatalog(contentType)
+            // The page on screen belongs to the type being left.
+            //
+            // Kept, it is served under the new tab until the fetch finishes: clicking Filmes showed
+            // a grid of live channels, every card labelled "Ao vivo", for as long as the films took
+            // to arrive. An empty grid under a loading banner is the honest state.
+            xtreamPage = XtreamCatalogPage.empty()
+            xtreamContentType = contentType
+        }
 
         runCatching {
             val summary =
@@ -6923,6 +7076,12 @@ class DesktopAppState(
         // shown — and falling through would clear the open category and channel as if the viewer
         // had moved to a different list.
         if (mergedSourceIds().contains(sourceId)) {
+            return
+        }
+        // Nor is a saved subscription that is not the open one: clicking it cannot switch lists
+        // yet, and clearing the category and channel would empty the catalogue on screen for a
+        // click that changed nothing.
+        if (savedSourcesRevision.let { sourceLibrary.sources() }.any { it.id == sourceId }) {
             return
         }
         selectedCategoryId = null

@@ -3,6 +3,7 @@ package com.lucasserafin94.iptvburo.desktop
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -31,10 +32,22 @@ class LoadingIndicatorHonestyTest {
             "alreadyLoaded" in switchBody,
             "the switch no longer distinguishes a cached catalogue from one that must be fetched",
         )
+        // The banner has to sit inside the !alreadyLoaded branch, whatever shape that branch has.
+        // Pinning the one-line form failed when the branch grew a second statement, which was a
+        // change in spelling rather than in behaviour.
+        val guarded =
+            switchBody
+                .substringAfter("if (!alreadyLoaded)")
+                .substringBefore("runCatching")
         assertTrue(
-            Regex("""if \(!alreadyLoaded\) xtreamStatus = XtreamStatus\.LoadingCatalog""")
-                .containsMatchIn(switchBody),
+            "xtreamStatus = XtreamStatus.LoadingCatalog" in guarded,
             "LoadingCatalog is set unconditionally again, which flashes the banner on every switch",
+        )
+        assertFalse(
+            Regex("""
+ *xtreamStatus = XtreamStatus\.LoadingCatalog""")
+                .containsMatchIn(switchBody.substringBefore("if (!alreadyLoaded)")),
+            "LoadingCatalog is raised before the cached case is ruled out",
         )
     }
 

@@ -54,17 +54,21 @@ class MergeSwitchTest {
     }
 
     /**
-     * It has to say that the change lands on the next launch.
+     * It has to say what happens when it is flipped.
      *
-     * The sessions the switch would swap are the ones being browsed, so it cannot act on the open
-     * catalogue. Flipping it therefore changes nothing on screen — which, unexplained, is
-     * indistinguishable from a dead button.
+     * The switch now rebuilds the catalogue on the spot, behind the loading screen. It used to
+     * store a preference and change nothing until the next launch, which reads as a dead button —
+     * reported twice.
      */
     @Test
-    fun `the switch says when it takes effect`() {
+    fun `the switch says what it does`() {
         assertTrue(
             app.contains("mergeSourcesRestart"),
-            "o interruptor nao diz que so vale no proximo arranque",
+            "o interruptor nao diz o que acontece ao ser mudado",
+        )
+        assertTrue(
+            app.contains("appState.applyMergeAllSources(enabled)"),
+            "o interruptor guarda a escolha mas nao reorganiza nada",
         )
     }
 
@@ -100,6 +104,59 @@ class MergeSwitchTest {
         assertTrue(
             app.contains("mergeSourcesOffline"),
             "a barra lateral nao marca a lista que nao respondeu",
+        )
+    }
+
+    /**
+     * A list can be renamed and forgotten from the sidebar.
+     *
+     * Both were reachable only from the profile form. Somebody looking at a list that stopped
+     * answering is in the sidebar, not there — reported as rows that could be neither edited nor
+     * deleted.
+     */
+    @Test
+    fun `a list can be renamed and forgotten from the sidebar`() {
+        assertTrue(
+            app.contains("onRenameSource = appState::renameSavedSource"),
+            "a barra lateral nao permite mudar o nome de uma lista",
+        )
+        assertTrue(
+            app.contains("onRemoveSource = appState::removeSavedSource"),
+            "a barra lateral nao permite esquecer uma lista",
+        )
+    }
+
+    /**
+     * Forgetting asks first.
+     *
+     * It throws away the stored password too, and the control sits inches from the one that opens
+     * the list.
+     */
+    @Test
+    fun `forgetting a list asks before it happens`() {
+        assertTrue(
+            app.contains("setupRemoveListConfirm"),
+            "esquecer uma lista nao pede confirmacao",
+        )
+    }
+
+    /**
+     * Switching tab does not leave the previous type's grid on screen.
+     *
+     * Clicking Filmes showed a grid of live channels, every card labelled "Ao vivo", for as long as
+     * the films took to arrive — reported as "clikei em filmes e abriu aovico". An empty grid under
+     * the loading banner is the honest state.
+     */
+    @Test
+    fun `changing content type clears the page it is leaving`() {
+        val state =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/DesktopAppState.kt").readText()
+        val block =
+            state.substringAfter("if (!alreadyLoaded) {").substringBefore("runCatching {")
+
+        assertTrue(
+            block.contains("xtreamPage = XtreamCatalogPage.empty()"),
+            "a grelha do tipo anterior fica no ecra enquanto o novo carrega",
         )
     }
 

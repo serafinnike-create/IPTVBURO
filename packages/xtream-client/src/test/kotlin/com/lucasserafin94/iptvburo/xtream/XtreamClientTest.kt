@@ -7,6 +7,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -391,6 +392,77 @@ class XtreamClientTest {
         val epg = client.shortEpg(credentials(), "42")
 
         assertTrue(epg.programs.isEmpty())
+    }
+
+    @Test
+    fun `xmltv guide is fetched, parsed and indexed by channel id`() {
+        server.enqueue(
+            MockResponse()
+                .setBody(
+                    """<?xml version="1.0" encoding="UTF-8"?><tv>
+                    <programme channel="42" start="20260824203000 +0000" stop="20260824213000 +0000">
+                    <title>Jornal</title><desc>As noticias da noite.</desc></programme>
+                    <programme channel="42" start="20260825203000 +0000" stop="20260825213000 +0000">
+                    <title>Jornal (dia seguinte)</title></programme>
+                    <programme channel="7" start="20260824203000 +0000" stop="20260824213000 +0000">
+                    <title>Outro canal</title></programme>
+                    </tv>""",
+                )
+                .setHeader("Content-Type", "application/xml"),
+        )
+
+        val guide = client.xmltvGuide(credentials())
+
+        assertEquals(2, guide.keys.size)
+        val channel42 = guide["42"].orEmpty()
+        assertEquals(2, channel42.size)
+        assertEquals("Jornal", channel42[0].title)
+        assertEquals("As noticias da noite.", channel42[0].description)
+        assertEquals("Jornal (dia seguinte)", channel42[1].title)
+        assertEquals(1, guide["7"]?.size)
+        val recorded = server.takeRequest()
+        assertEquals("/xmltv.php", recorded.path?.substringBefore('?'))
+        assertEquals("sample-user", recorded.requestUrl?.queryParameter("username"))
+        assertEquals("sample-pass", recorded.requestUrl?.queryParameter("password"))
+        assertNull(
+            "xmltv.php has no action parameter — it is a different endpoint from player_api.php",
+            recorded.requestUrl?.queryParameter("action"),
+        )
+    }
+
+    @Test
+    fun `xmltv guide matching is case and whitespace insensitive`() {
+        server.enqueue(
+            MockResponse()
+                .setBody(
+                    """<?xml version="1.0" encoding="UTF-8"?><tv>
+                    <programme channel=" ABC-1 " start="20260824203000 +0000" stop="20260824213000 +0000">
+                    <title>Jornal</title></programme>
+                    </tv>""",
+                )
+                .setHeader("Content-Type", "application/xml"),
+        )
+
+        val guide = client.xmltvGuide(credentials())
+
+        assertEquals(1, guide["abc-1"]?.size)
+    }
+
+    @Test
+    fun `xmltv guide is empty rather than thrown when the provider does not publish one`() {
+        server.enqueue(MockResponse().setResponseCode(404))
+
+        val guide = client.xmltvGuide(credentials())
+
+        assertTrue(guide.isEmpty())
+    }
+
+    @Test
+    fun `xmltv guide with blank credentials never reaches the network`() {
+        val guide = client.xmltvGuide(XtreamCredentials(serverUrl = server.url("/").toString(), username = "", password = ""))
+
+        assertTrue(guide.isEmpty())
+        assertEquals(0, server.requestCount)
     }
 
     @Test

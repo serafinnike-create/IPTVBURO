@@ -51,13 +51,87 @@ class MergedCatalogueRepository(
     /** One subscription, its delegate, and whether it is currently usable. */
     private class Member(
         val sourceId: String,
-        val label: String,
+        /**
+         * Mutable because a subscription connected through the login form joins before the library
+         * entry that names it exists, and is renamed once that name is known.
+         */
+        var label: String,
         val repository: CatalogueRepository,
         var failure: String? = null,
     )
 
     private val lock = Any()
     private val members = mutableListOf<Member>()
+
+    /**
+     * Everything a merged view depends on.
+     *
+     * The merged result is only reusable for the exact filter that produced it, and the set of
+     * working subscriptions belongs in here too: a list that drops out mid-session changes what the
+     * merge should contain, and serving the old answer would show titles that can no longer play.
+     */
+    private data class MergeSignature(
+        val contentType: XtreamContentType,
+        val categoryId: String?,
+        val query: String,
+        val releaseYear: Int?,
+        val minimumRating: Double?,
+        val allowedIdentities: Set<ContentIdentity>?,
+        val kidsMode: Boolean,
+        val lockedCategoryIds: Set<String>,
+        val collapseDuplicates: Boolean,
+        val allowedLocalIds: Set<String>?,
+        val sourceIds: List<String>,
+    )
+
+    /** The merged view for the filter currently being browsed. Guarded by [lock]. */
+    private val mergeCache = LinkedHashMap<MergeSignature, MergedSources.Merged<XtreamCatalogItem>>()
+
+    /**
+     * Every matching row from one subscription, however many there are.
+     *
+     * Read in blocks because the session repository refuses a page above two hundred rows — asking
+     * for more threw, and the failure was swallowed, so every source contributed nothing and the
+     * home came up empty. There is no cap on the total: a cap here is what made two lists show
+     * fewer films than one.
+     */
+    private fun readEverything(
+        member: Member,
+        contentType: XtreamContentType,
+        categoryId: String?,
+        query: String,
+        releaseYear: Int?,
+        minimumRating: Double?,
+        allowedIdentities: Set<ContentIdentity>?,
+        kidsMode: Boolean,
+        lockedCategoryIds: Set<String>,
+        collapseDuplicates: Boolean,
+        allowedLocalIds: Set<String>?,
+    ): List<XtreamCatalogItem> {
+        val all = mutableListOf<XtreamCatalogItem>()
+        var block = 0
+        while (true) {
+            val page =
+                runCatching {
+                    member.repository.page(
+                        contentType, categoryId, query, requestedPage = block,
+                        pageSize = MERGE_BLOCK_SIZE, releaseYear = releaseYear,
+                        minimumRating = minimumRating, allowedIdentities = allowedIdentities,
+                        kidsMode = kidsMode, lockedCategoryIds = lockedCategoryIds,
+                        collapseDuplicates = collapseDuplicates,
+                        allowedLocalIds = allowedLocalIds,
+                    ).items
+                }.getOrDefault(emptyList())
+            if (page.isEmpty()) break
+            all += page
+            block += 1
+            // A delegate that answered the same rows forever would spin here. Nothing does, but a
+            // loop with no exit at all is a hang rather than a bug, and this catalogue is large
+            // enough that a hang would look like the app dying rather than misbehaving.
+            if (block > MERGE_MAX_BLOCKS) break
+        }
+        return all
+    }
 
     /**
      * The subscription every non-catalogue call goes to.
@@ -105,6 +179,49 @@ class MergedCatalogueRepository(
         val label: String,
         val isWorking: Boolean,
     )
+
+    /**
+     * Gives a held subscription the name the viewer knows it by.
+     *
+     * A subscription connected through the login form joins the merge before the library entry
+     * that names it exists, so it is held under its own generated id — and the sidebar showed that
+     * raw `xtream-05acb0cb…` where a name belongs.
+     *
+     * @return whether a subscription was actually held under [sourceId].
+     */
+    fun relabelSource(
+        sourceId: String,
+        label: String,
+    ): Boolean {
+        if (label.isBlank()) return false
+        return synchronized(lock) {
+            val member = members.firstOrNull { it.sourceId == sourceId } ?: return@synchronized false
+            member.label = label
+            true
+        }
+    }
+
+    /**
+     * Drops a subscription from the merge and closes its session.
+     *
+     * Forgetting a list clears its stored password, but without this the loaded catalogue stayed in
+     * the merge and its row stayed in the sidebar until the app was restarted — which is the same
+     * "it cannot be deleted" the viewer reported in the first place.
+     *
+     * @return whether a subscription was actually held under [sourceId].
+     */
+    fun removeSource(sourceId: String): Boolean {
+        val dropped =
+            synchronized(lock) {
+                val member = members.firstOrNull { it.sourceId == sourceId } ?: return@synchronized null
+                members.remove(member)
+                member
+            } ?: return false
+        // Outside the lock: clearing a delegate takes its own lock and closes its client, and
+        // holding both is how two threads end up waiting on each other.
+        runCatching { dropped.repository.clear() }
+        return true
+    }
 
     /**
      * Adds a subscription to the merge and loads it.
@@ -160,6 +277,10 @@ class MergedCatalogueRepository(
                     }
                 }
         }
+        // A reload replaces what the merge was built from, and the signature cannot see that: the
+        // filter and the subscriptions are unchanged, only their contents. Dropped here so a
+        // refresh actually shows the new catalogue.
+        synchronized(lock) { mergeCache.clear() }
         return summary() ?: error("No subscription is loaded.")
     }
 
@@ -200,42 +321,49 @@ class MergedCatalogueRepository(
             )
         }
 
-        val contributions =
-            working.map { member ->
-                // Everything matching, not one page of it: the merge decides what page three is.
-                // Read in blocks the delegate will accept.
-                //
-                // Asking for the whole scan in one page threw — the session repository caps a page
-                // at two hundred rows — and the failure was swallowed, so every source contributed
-                // nothing and the home came up empty with two lists loaded. Paged instead, up to
-                // the same scan limit.
-                val all = mutableListOf<XtreamCatalogItem>()
-                var block = 0
-                while (all.size < MERGE_SCAN_LIMIT) {
-                    val page =
-                        runCatching {
-                            member.repository.page(
-                                contentType, categoryId, query, requestedPage = block,
-                                pageSize = MERGE_BLOCK_SIZE, releaseYear = releaseYear,
-                                minimumRating = minimumRating, allowedIdentities = allowedIdentities,
-                                kidsMode = kidsMode, lockedCategoryIds = lockedCategoryIds,
-                                collapseDuplicates = collapseDuplicates,
-                                allowedLocalIds = allowedLocalIds,
-                            ).items
-                        }.getOrDefault(emptyList())
-                    if (page.isEmpty()) break
-                    all += page
-                    block += 1
-                }
-                MergedSources.Contribution(
-                    sourceId = member.sourceId,
-                    label = member.label,
-                    items = all,
-                )
-            }
-
+        // Built once per filter and kept, rather than rebuilt on every page turn.
+        //
+        // Merging has to see each list whole before it can say what page three contains, and that
+        // read is the expensive part. Doing it per page meant turning a page re-read every
+        // subscription end to end; bounding it instead — the old five-thousand-row cap — meant two
+        // lists together showed fewer films than either alone, which is what was reported.
+        //
+        // So: read everything once, remember it against the filter that produced it, and serve
+        // every page of that filter from the result.
+        val signature =
+            MergeSignature(
+                contentType, categoryId, query.trim(), releaseYear, minimumRating,
+                allowedIdentities, kidsMode, lockedCategoryIds, collapseDuplicates,
+                allowedLocalIds, working.map { it.sourceId },
+            )
+        val cached = synchronized(lock) { mergeCache[signature] }
         val merged =
-            MergedSources.merge(contributions) { item -> item.name.shelfDeduplicationKey() }
+            cached ?: run {
+                val contributions =
+                    working.map { member ->
+                        MergedSources.Contribution(
+                            sourceId = member.sourceId,
+                            label = member.label,
+                            items =
+                                readEverything(
+                                    member, contentType, categoryId, query, releaseYear,
+                                    minimumRating, allowedIdentities, kidsMode, lockedCategoryIds,
+                                    collapseDuplicates, allowedLocalIds,
+                                ),
+                        )
+                    }
+                val result =
+                    MergedSources.merge(contributions) { item -> item.name.shelfDeduplicationKey() }
+                synchronized(lock) {
+                    // One filter at a time. Somebody browsing moves between a handful of views and
+                    // comes back to them, but every remembered merge is a list of every matching
+                    // title across every subscription — keeping several is how a catalogue ends up
+                    // held in memory more than once.
+                    if (mergeCache.size >= MERGE_CACHE_ENTRIES) mergeCache.clear()
+                    mergeCache[signature] = result
+                }
+                result
+            }
         val start = (requestedPage * pageSize).coerceAtLeast(0)
         val slice = merged.items.drop(start).take(pageSize)
         return XtreamCatalogPage(
@@ -387,7 +515,16 @@ class MergedCatalogueRepository(
         if (summaries.size == 1) return first
         return first.copy(
             loadedItemCount = summaries.sumOf { it.loadedItemCount },
-            loadedContentTypes = summaries.flatMap { it.loadedContentTypes }.toSet(),
+            // Loaded by every subscription, not by any of them.
+            //
+            // The union said a type was ready as soon as one list had it, so the caller skipped the
+            // fetch and the other lists never loaded it at all — and with none of them holding
+            // films, the Films tab paged over whatever they did hold and filled with live channels.
+            // Reported as "clikei em filmes e abriu aovico".
+            loadedContentTypes =
+                summaries
+                    .map { it.loadedContentTypes }
+                    .reduce { shared, next -> shared intersect next },
         )
     }
 
@@ -481,13 +618,21 @@ class MergedCatalogueRepository(
 
     override fun measureProviderLatency(attempts: Int) = primary?.measureProviderLatency(attempts)
 
-    override fun clearCatalogCache() = eachMember { it.clearCatalogCache() }
+    override fun clearCatalogCache() {
+        eachMember { it.clearCatalogCache() }
+        // Refreshing the lists is exactly the moment the remembered merge stops being true.
+        synchronized(lock) { mergeCache.clear() }
+    }
 
     override fun clearIncludingDiskCache() = eachMember { it.clearIncludingDiskCache() }
 
     override fun clear() {
         eachMember { it.clear() }
-        synchronized(lock) { members.clear() }
+        synchronized(lock) {
+            members.clear()
+            // The remembered merge is a list of titles from subscriptions that no longer exist.
+            mergeCache.clear()
+        }
     }
 
     /** The first non-null answer from a working subscription. */
@@ -506,16 +651,23 @@ class MergedCatalogueRepository(
 
     private companion object {
         /**
-         * How many matching rows one subscription may contribute to a merged page.
+         * How many merged views are remembered at once.
          *
-         * The merge needs everything that matches, not one page of it, because it decides what
-         * page three contains. This bounds that: a filter matching a whole forty-thousand-title
-         * catalogue would otherwise build forty thousand objects to show eighty of them.
-         *
-         * Generous enough that no real category reaches it, and the paging above stays correct up
-         * to this many merged results.
+         * One. Somebody browsing moves between a handful of views and comes back to them, but each
+         * remembered merge holds every matching title across every subscription — keeping several
+         * is how a catalogue ends up in memory more than once.
          */
-        const val MERGE_SCAN_LIMIT = 5_000
+        const val MERGE_CACHE_ENTRIES = 1
+
+        /**
+         * A ceiling on the block loop, not on the catalogue.
+         *
+         * Two hundred rows a block, so this allows two hundred thousand titles from one list — far
+         * past any real subscription. It exists only so a delegate that answered the same rows
+         * forever would stop rather than hang; the previous five-thousand-row cap was a limit on
+         * the merge itself, and it made two lists show fewer films than either alone.
+         */
+        const val MERGE_MAX_BLOCKS = 1_000
 
         /**
          * How much of that scan is read at a time.

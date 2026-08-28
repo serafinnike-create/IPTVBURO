@@ -969,6 +969,7 @@ class SessionXtreamRepository(
                 XtreamFailureReason.RESPONSE_TOO_LARGE,
                 -> emptyList()
                 XtreamFailureReason.INVALID_SERVER,
+                XtreamFailureReason.INVALID_SERVER_SCHEME,
                 XtreamFailureReason.NETWORK,
                 XtreamFailureReason.AUTHENTICATION,
                 -> throw error
