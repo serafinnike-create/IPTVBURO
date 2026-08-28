@@ -82,6 +82,7 @@ var BuroApp = (function () {
     var bootSweepTimer = null;
     var bootSweepDone = null;
     var homeCache = null;
+    var discoverCache = null;
     /* Capa genérica detectada no catálogo Xtream ativo. Só o conjunto final
        sobrevive à varredura; o mapa grande de contagens é descartado. */
     var placeholderArtworkSourceId = null;
@@ -2871,7 +2872,7 @@ var BuroApp = (function () {
     }
 
     /* Catálogo novo, Home velha: o guardado deixa de valer. */
-    function forgetHomeCache() { homeCache = null; }
+    function forgetHomeCache() { homeCache = null; forgetDiscoverCache(); }
 
     function elementWithinClass(element, className) {
         var current = element;
@@ -3268,20 +3269,56 @@ var BuroApp = (function () {
         }, discoverSessionTaste, 0).map(function (candidate) { return byId[candidate.id]; }).filter(Boolean);
     }
 
+    /*
+      A leitura do Descobrir, guardada.
+
+      Cada visita a aba varria o catalogo inteiro — 42.000 titulos, 453ms num
+      PC e varios segundos numa TV. Sair para a Home e voltar refazia tudo,
+      para chegar a mesma baralhada.
+
+      O que se guarda e a **leitura**, nao o baralho: `buildDiscoverDeck`
+      continua rodando a cada visita, entao o gosto aprendido nas cartas
+      anteriores e as ja vistas seguem mudando o que sai. O que deixa de se
+      repetir e a ida ao banco.
+    */
+    /* O baralho e montado aqui, e nao junto da leitura: assim a visita que
+       reaproveita a leitura guardada continua tirando cartas novas. */
+    function applyDiscoverResult(requestId, result) {
+        var deck;
+        if (requestId !== discoverRequestId || state.screen !== 'SHELL' || state.section !== 'DISCOVER') { return; }
+        mergeItems(result.items);
+        deck = buildDiscoverDeck(result);
+        state.screenData = {
+            kind: 'discover', loading: false, deck: deck, dealtCount: deck.length,
+            catalogueCount: (result.items || []).length
+        };
+        focusIndex = 0;
+        render();
+    }
+
+    function rememberDiscoverRead(result) {
+        discoverCache = { result: result, at: Date.now() };
+    }
+
+    function forgetDiscoverCache() { discoverCache = null; }
+
     function loadDiscover() {
         var requestId = ++discoverRequestId;
         ensureDiscoverSession();
+        /*
+          Uma leitura recente serve de novo.
+
+          O mesmo intervalo da Home, e pela mesma razao: cobre a distancia de
+          uma navegacao entre abas, nao a de uma sessao. A varredura de fundo
+          e a troca de fonte descartam o guardado por outro caminho.
+        */
+        if (discoverCache && Date.now() - discoverCache.at < HOME_CACHE_TRUST_MILLIS) {
+            applyDiscoverResult(requestId, discoverCache.result);
+            return;
+        }
         BuroStorage.fold('items', collectDiscover, discoverAccumulator(), function (result) {
-            var deck;
-            if (requestId !== discoverRequestId || state.screen !== 'SHELL' || state.section !== 'DISCOVER') { return; }
-            mergeItems(result.items);
-            deck = buildDiscoverDeck(result);
-            state.screenData = {
-                kind: 'discover', loading: false, deck: deck, dealtCount: deck.length,
-                catalogueCount: (result.items || []).length
-            };
-            focusIndex = 0;
-            render();
+            rememberDiscoverRead(result);
+            applyDiscoverResult(requestId, result);
         }, function (error) {
             if (requestId !== discoverRequestId || state.screen !== 'SHELL' || state.section !== 'DISCOVER') { return; }
             state.screenData = { kind: 'discover', loading: false, error: friendlyError(error) };
