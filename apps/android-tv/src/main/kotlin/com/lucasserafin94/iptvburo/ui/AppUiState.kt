@@ -642,6 +642,12 @@ data class AppUiState(
      */
     val providerLogos: Map<String, String> = emptyMap(),
     /**
+     * The services worth a shortcut on the movies/series shelf — the same directory as
+     * [providerLogos], with each entry's TMDb id kept so tapping one can open its full catalogue
+     * on Assinaturas. Empty until the directory loads, and the shortcut row simply does not draw.
+     */
+    val discoveredProviders: List<com.lucasserafin94.iptvburo.data.discovery.DiscoveredProvider> = emptyList(),
+    /**
      * The critics' scores for the open title, from OMDb.
      *
      * Null until the lookup returns, when there is no OMDb key, or when the services hold nothing
@@ -657,6 +663,16 @@ data class AppUiState(
      * film page it is usually TMDb that knows. Null when neither does, and no badge is drawn.
      */
     val openTitleProviderName: String? = null,
+    /**
+     * Other titles TMDb considers close to the one open, franchise entries and lookalikes alike —
+     * the strip a viewer sees under the cast on a film or series page.
+     *
+     * Reuses [PersonCreditUi] rather than a type of its own: both are "a title with a TMDb id,
+     * openable on the where-to-watch page", and [openPersonCredit] already does exactly that.
+     * Empty until the lookup returns, when there is no metadata key, or when TMDb has nothing to
+     * suggest — all three draw no strip at all rather than an empty one with a heading.
+     */
+    val openTitleSimilarTitles: List<PersonCreditUi> = emptyList(),
     /** What the bell is holding for the active profile. */
     val notifications: NotificationCentre = NotificationCentre(),
     /**
@@ -678,6 +694,13 @@ data class AppUiState(
     val content: AppContent = AppContent.Home,
     val lastFocusedHomeItemId: String? = null,
     val sources: List<SourceUi> = emptyList(),
+    /**
+     * Whether every configured list is browsed as one catalogue.
+     *
+     * Off by default: somebody with one list gains nothing, and somebody with two who has
+     * not asked for this should not find their library silently rearranged.
+     */
+    val mergeEverySource: Boolean = false,
     val homeItems: List<ChannelUi> = emptyList(),
     val continueWatching: List<ContinueWatchingUi> = emptyList(),
     val watchHistory: List<WatchHistoryUi> = emptyList(),
@@ -978,6 +1001,13 @@ data class SubscriptionOfferUi(
     val localContentId: String? = null,
     val providerId: String,
     val providerName: String,
+    /**
+     * The service's own mark, when TMDb has one.
+     *
+     * Null for the user's own library — that row draws the app's own [BuroMark] instead of a
+     * service logo, matching the Windows row it sits beside conceptually.
+     */
+    val logoUrl: String? = null,
     val reason: OfferReason,
     val isUserLibrary: Boolean,
     val requiresAttribution: Boolean,

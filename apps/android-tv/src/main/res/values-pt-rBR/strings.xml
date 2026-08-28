@@ -394,4 +394,8 @@
     <string name="diagnostics_latency_fair">Latência alta: pode travar e demorar ao trocar de canal</string>
     <string name="diagnostics_latency_unstable">Latência muito alta: vai causar travamentos e cortes</string>
     <string name="diagnostics_latency_unknown">Não foi possível medir a latência</string>
+
+    <!-- Varias assinaturas mostradas como um so catalogo. -->
+    <string name="merge_sources_title">Juntar todas as listas</string>
+    <string name="merge_sources_help">Mostra todas as suas listas como um só catálogo. Nada se repete: a lista maior manda e as outras completam o que falta.</string>
 </resources>

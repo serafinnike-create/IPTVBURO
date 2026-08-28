@@ -389,4 +389,8 @@
     <string name="diagnostics_latency_fair">Hohe Latenz: kann stocken und Kanalwechsel verzögern</string>
     <string name="diagnostics_latency_unstable">Sehr hohe Latenz: verursacht Ruckeln und Aussetzer</string>
     <string name="diagnostics_latency_unknown">Die Latenz konnte nicht gemessen werden</string>
+
+    <!-- Varias assinaturas mostradas como um so catalogo. -->
+    <string name="merge_sources_title">Alle Listen zusammenführen</string>
+    <string name="merge_sources_help">Zeigt alle Listen als einen Katalog. Nichts doppelt sich: die größte Liste führt, die anderen füllen die Lücken.</string>
 </resources>

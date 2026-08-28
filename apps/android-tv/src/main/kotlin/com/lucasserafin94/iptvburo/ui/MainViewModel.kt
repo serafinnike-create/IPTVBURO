@@ -14,6 +14,7 @@ import com.lucasserafin94.iptvburo.data.download.DownloadResult
 import com.lucasserafin94.iptvburo.data.discovery.ProviderLogoCatalogue
 import com.lucasserafin94.iptvburo.data.discovery.StreamingDiscoveryRepository
 import com.lucasserafin94.iptvburo.data.preferences.CatalogueGuard
+import com.lucasserafin94.iptvburo.data.preferences.SourceMergeSettings
 import com.lucasserafin94.iptvburo.data.preferences.NotificationCentreStore
 import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
@@ -141,6 +142,7 @@ class MainViewModel @Inject constructor(
     private val providerLogoCatalogue: ProviderLogoCatalogue,
     private val playbackProgressRepository: PlaybackProgressRepository,
     private val catalogueGuardPreferences: CatalogueGuard,
+    private val sourceMergeSettings: SourceMergeSettings,
     private val subtitlePreferences: SubtitleSettings,
     private val logger: AppLogger,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -249,6 +251,15 @@ class MainViewModel @Inject constructor(
         // goes. By the time the first source list arrives the answer is usually already in hand.
         earlyBootProfileAllowed.start()
         observeDownloadRate()
+        // Kept current so a page turn can read it without collecting. Changing it takes effect the
+        // next time a source is opened rather than immediately: rebuilding a catalogue under
+        // somebody who is browsing would empty the screen they are looking at.
+        viewModelScope.launch {
+            sourceMergeSettings.mergeEverySource.collect { enabled ->
+                mergeEverySource = enabled
+                mutableState.update { it.copy(mergeEverySource = enabled) }
+            }
+        }
         observeOnboarding()
         observeProfiles()
         observeSources()
@@ -1502,12 +1513,38 @@ class MainViewModel @Inject constructor(
     fun openSource(source: SourceUi) {
         val content =
             AppContent.Categories(
-                sourceId = source.id,
+                // Blank asks the repository for every subscription at once, each title kept only
+                // from the largest list that has it.
+                //
+                // Set here rather than at each query: this is the one place a source is chosen, and
+                // everything downstream — categories, pages, the cursor — carries the id from this
+                // object. Threading a flag through all of them instead would leave one of them able
+                // to disagree with the rest.
+                sourceId = if (mergeEverySource) "" else source.id,
                 sourceName = source.name,
                 contentType = null,
             )
         navigate(content)
         observeCategories(content)
+    }
+
+    /**
+     * Whether every configured subscription is browsed as one catalogue.
+     *
+     * Held rather than collected per query: it is read on every page turn, and a Flow sampled that
+     * often would cost more than the setting is worth. Updated by the collector below.
+     */
+    @Volatile
+    private var mergeEverySource = false
+
+    /**
+     * Stores the choice.
+     *
+     * It takes effect the next time a source is opened rather than immediately: rebuilding a
+     * catalogue underneath somebody who is browsing would empty the screen they are looking at.
+     */
+    fun setMergeEverySource(enabled: Boolean) {
+        viewModelScope.launch { sourceMergeSettings.setMergeEverySource(enabled) }
     }
 
     fun openCategory(category: CategoryUi) {

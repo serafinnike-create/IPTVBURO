@@ -9,6 +9,8 @@ import com.lucasserafin94.iptvburo.data.discovery.ShelfCache
 import com.lucasserafin94.iptvburo.data.preferences.CatalogueGuard
 import com.lucasserafin94.iptvburo.data.preferences.CatalogueGuardPreferences
 import com.lucasserafin94.iptvburo.data.preferences.DataStoreOnboardingPreferences
+import com.lucasserafin94.iptvburo.data.preferences.SourceMergePreferences
+import com.lucasserafin94.iptvburo.data.preferences.SourceMergeSettings
 import com.lucasserafin94.iptvburo.data.preferences.SubtitlePreferences
 import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
@@ -114,6 +116,13 @@ abstract class DataBindingsModule {
     @Binds
     @Singleton
     abstract fun bindProviderProbe(implementation: XtreamProviderProbe): ProviderProbe
+
+    /** Whether every configured subscription is browsed as one catalogue. */
+    @Binds
+    @Singleton
+    abstract fun bindSourceMergeSettings(
+        implementation: SourceMergePreferences,
+    ): SourceMergeSettings
 
     @Binds
     @Singleton

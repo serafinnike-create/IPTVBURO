@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.content.res.Resources
 import com.lucasserafin94.iptvburo.core.logging.AppLogger
 import com.lucasserafin94.iptvburo.data.diagnostics.ConnectionTester
+import com.lucasserafin94.iptvburo.data.preferences.SourceMergeSettings
 import com.lucasserafin94.iptvburo.data.diagnostics.ProviderProbe
 import com.lucasserafin94.iptvburo.data.discovery.NoShelfCache
 import com.lucasserafin94.iptvburo.data.security.SourceConnectionStore
@@ -963,6 +964,8 @@ class MainViewModelNavigationTest {
             // Empty fakes: nothing hidden and no PIN, which is what these navigation assertions
             // assume. The DataStore-backed implementations cannot start on a plain JVM context.
             catalogueGuardPreferences = FakeCatalogueGuard,
+            // Off, which is the default and what these navigation assertions assume.
+            sourceMergeSettings = NoSourceMerge,
             subtitlePreferences = FakeSubtitleSettings,
             logger = logger,
             // A real tester over fakes: these assertions never open the diagnostics screen, and a
@@ -1009,6 +1012,13 @@ private object NoStoredCredentials : SourceConnectionStore {
     override fun readStalker(sourceId: String): StalkerCredentials? = null
 
     override fun remove(sourceId: String) = Unit
+}
+
+/** Merging off, which is the default a fresh install has. */
+private data object NoSourceMerge : SourceMergeSettings {
+    override val mergeEverySource = flowOf(false)
+
+    override suspend fun setMergeEverySource(enabled: Boolean) = Unit
 }
 
 /** Nothing hidden, nothing locked, no PIN: the state a fresh install is in. */

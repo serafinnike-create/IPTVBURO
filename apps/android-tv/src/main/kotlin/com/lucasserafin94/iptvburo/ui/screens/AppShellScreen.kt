@@ -88,6 +88,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.NetworkCheck
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayCircle
@@ -204,6 +206,8 @@ fun AppShellScreen(
     onImportStalkerSource: (String, String, String, String, String) -> Unit,
     onCancelStalkerImport: () -> Unit,
     onOpenSource: (SourceUi) -> Unit,
+    /** Whether every configured list is browsed as one catalogue. */
+    onToggleMergeSources: (Boolean) -> Unit = {},
     onOpenCategory: (CategoryUi) -> Unit,
     onOpenChannel: (ChannelUi) -> Unit,
     /** Runs a catalogue search. Called once the field settles, not per keystroke. */
@@ -605,6 +609,8 @@ fun AppShellScreen(
 
                         AppContent.Sources -> SourcesContent(
                             sources = state.sources,
+                            mergeSources = state.mergeEverySource,
+                            onToggleMergeSources = onToggleMergeSources,
                             isImporting = state.isImporting,
                             lastImportedChannelCount = state.lastImportedChannelCount,
                             hasImportError = state.hasImportError,
@@ -1709,6 +1715,9 @@ private fun MetricCard(
 @Composable
 private fun SourcesContent(
     sources: List<SourceUi>,
+    /** Whether every configured list is browsed as one catalogue. */
+    mergeSources: Boolean,
+    onToggleMergeSources: (Boolean) -> Unit,
     isImporting: Boolean,
     lastImportedChannelCount: Int?,
     hasImportError: Boolean,
@@ -1796,6 +1805,41 @@ private fun SourcesContent(
             if (sources.isEmpty()) {
                 EmptySources()
             } else {
+                // Only with more than one list: with a single one there is nothing to merge, and
+                // the switch would be a question about nothing.
+                if (sources.size > 1) {
+                    Column(modifier = Modifier.padding(bottom = 14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.merge_sources_title),
+                                color = BuroTextPrimary,
+                                fontSize = 14.sp,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Switch(
+                                checked = mergeSources,
+                                onCheckedChange = onToggleMergeSources,
+                                // Material's default switch is purple, which is not a colour this
+                                // app uses anywhere.
+                                colors =
+                                    SwitchDefaults.colors(
+                                        checkedThumbColor = BuroGold,
+                                        checkedTrackColor = BuroGold.copy(alpha = 0.35f),
+                                        uncheckedThumbColor = BuroTextSecondary,
+                                        uncheckedTrackColor = BuroSurfaceRaised,
+                                    ),
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.merge_sources_help),
+                            color = BuroTextSecondary,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
                 LazyColumn(
                     contentPadding = PaddingValues(bottom = 28.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),

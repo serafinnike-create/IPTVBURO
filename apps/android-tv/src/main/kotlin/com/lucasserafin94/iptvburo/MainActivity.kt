@@ -543,6 +543,7 @@ private fun IptvBuroRoot(
                 onRetryCatalog = viewModel::retryCatalog,
                 onRefreshCatalog = viewModel::refreshCatalog,
                 onRunDiagnostics = viewModel::runDiagnostics,
+                onToggleMergeSources = viewModel::setMergeEverySource,
                 onOpenHomeItem = viewModel::openStory,
                 onRememberHomeFocus = viewModel::rememberLastFocusedHomeItem,
                 onBack = { viewModel.goBack() },

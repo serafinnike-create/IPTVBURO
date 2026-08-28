@@ -397,4 +397,8 @@
     <string name="diagnostics_latency_fair">Latenza alta: può bloccarsi e rallentare il cambio canale</string>
     <string name="diagnostics_latency_unstable">Latenza molto alta: causerà blocchi e interruzioni</string>
     <string name="diagnostics_latency_unknown">Non è stato possibile misurare la latenza</string>
+
+    <!-- Varias assinaturas mostradas como um so catalogo. -->
+    <string name="merge_sources_title">Unisci tutte le liste</string>
+    <string name="merge_sources_help">Mostra tutte le liste come un solo catalogo. Niente si ripete: la lista più grande guida e le altre completano.</string>
 </resources>

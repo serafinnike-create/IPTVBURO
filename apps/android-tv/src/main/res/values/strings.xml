@@ -389,4 +389,8 @@
     <string name="diagnostics_latency_fair">High latency: this can stall and slow channel changes</string>
     <string name="diagnostics_latency_unstable">Very high latency: this will cause freezing and stalls</string>
     <string name="diagnostics_latency_unknown">The latency could not be measured</string>
+
+    <!-- Varias assinaturas mostradas como um so catalogo. -->
+    <string name="merge_sources_title">Merge every playlist</string>
+    <string name="merge_sources_help">Shows all your playlists as one catalogue. Nothing repeats: the biggest list leads and the others fill the gaps.</string>
 </resources>
