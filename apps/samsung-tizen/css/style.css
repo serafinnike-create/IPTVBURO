@@ -144,6 +144,12 @@ body.playing .app-root { display: none; }
     background: linear-gradient(145deg, var(--gold), #6d5029); color: #111319;
     font-size: 52px; font-weight: 800; margin-bottom: 24px;
 }
+/* O simbolo ocupa o circulo, e nao os 26px com que o conjunto de icones sai:
+   eles foram dimensionados para a barra lateral, onde ficam ao lado de um
+   rotulo. Aqui o desenho e a unica coisa dentro de um circulo de 134px, e um
+   icone pequeno no meio dele leria como um erro de desenho. */
+.avatar svg { width: 52%; height: 52%; stroke-width: 1.6; }
+.ribbon-avatar svg, .topbar-profile svg { width: 56%; height: 56%; }
 .avatar img, .ribbon-avatar img {
     width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover;
 }

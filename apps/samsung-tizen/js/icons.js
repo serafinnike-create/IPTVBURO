@@ -50,7 +50,25 @@ var BuroIcons = (function () {
         /* Cartão com uma marca: as assinaturas. */
         subscriptions: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M7 15h4"/>',
         /* Nota musical. */
-        music: '<path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="16" r="2"/>'
+        music: '<path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="16" r="2"/>',
+        /*
+          Um simbolo por avatar, e nao a inicial do nome.
+
+          A inicial nao distingue perfil nenhum quando a casa escolhe nomes
+          parecidos, e os cinco avatares padrao apareciam como a mesma letra
+          em cinco cores. O Android resolve com um icone por chave — fogo,
+          arvore, onda, lua — e ali a cor passa a ser reforco em vez de ser
+          a unica diferenca.
+
+          Mesmo vocabulario geometrico do resto do conjunto, em traco, para
+          herdarem a cor do contexto como os outros.
+        */
+        avatarEmber: '<path d="M12 3.5c1.4 2.8 4.2 4.3 4.2 7.7a4.2 4.2 0 0 1-8.4 0c0-1.5.6-2.6 1.5-3.5.2 1.2.8 1.9 1.7 2.1-.4-2.8.2-5 1-6.3z"/>',
+        avatarForest: '<path d="M12 3.5 7 11h3l-4 6h12l-4-6h3L12 3.5z"/><path d="M12 17v3.5"/>',
+        avatarOcean: '<path d="M3 9.5c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M3 15c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>',
+        avatarMoon: '<path d="M20 13.6A8.6 8.6 0 0 1 10.4 4 8.6 8.6 0 1 0 20 13.6z"/>',
+        avatarKids: '<circle cx="12" cy="7.5" r="3.2"/><path d="M5.5 20c0-3.5 2.9-5.8 6.5-5.8s6.5 2.3 6.5 5.8"/>',
+        avatarGold: '<path d="M12 3.5 14.2 9l5.8.4-4.4 3.8 1.4 5.7L12 15.8 7 18.9l1.4-5.7L4 9.4 9.8 9 12 3.5z"/>'
     };
 
     /*

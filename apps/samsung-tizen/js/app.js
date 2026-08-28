@@ -1761,7 +1761,23 @@ var BuroApp = (function () {
 
     function profileAvatarContent(profile) {
         var photo = safeProfilePhoto(profile && profile.photoDataUrl);
-        return photo ? '<img src="' + attr(photo) + '" alt="">' : escapeHtml(profile.name.charAt(0).toUpperCase());
+        /*
+          A foto primeiro; sem ela, o simbolo do avatar escolhido.
+
+          A inicial do nome ficava aqui e nao distinguia nada: uma casa com
+          Bruno e Beatriz via dois circulos com B, e os cinco avatares padrao
+          eram a mesma letra em cinco cores. O simbolo separa um perfil do
+          outro de relance, que e para o que o avatar existe.
+
+          A inicial fica como ultimo recurso, para uma chave fora do
+          conjunto: melhor uma letra do que um circulo vazio.
+        */
+        var symbol = profile.isKids ? 'avatarKids' : 'avatar' +
+            (AVATAR_KEYS.indexOf(profile.avatarKey) >= 0 ? profile.avatarKey : 'gold')
+                .replace(/^[a-z]/, function (first) { return first.toUpperCase(); });
+        if (photo) { return '<img src="' + attr(photo) + '" alt="">'; }
+        if (BuroIcons.has(symbol)) { return BuroIcons.svg(symbol); }
+        return escapeHtml(profile.name.charAt(0).toUpperCase());
     }
 
     function focusLabel(profile) {
