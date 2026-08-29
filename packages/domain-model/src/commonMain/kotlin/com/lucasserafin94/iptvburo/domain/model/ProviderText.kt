@@ -16,15 +16,18 @@ package com.lucasserafin94.iptvburo.domain.model
  */
 object ProviderText {
     /**
-     * A question mark between two letters, which is where an accent used to be.
+     * A question mark standing where an accent used to be.
      *
-     * Real punctuation does not sit inside a word: "quê?" and "O que é isto?" end a sentence and
-     * are followed by a space or nothing. `est?` and `s?rie` cannot be anything but damage.
+     * Two shapes, because the damage takes two. Inside a word — `s?rie`, `tra?do`, `exterm?nio` —
+     * and at the end of one that a lower-case word follows: `est? sendo`, `est? no`. A sentence
+     * genuinely ending in a question is followed by a capital or nothing, so "Quem matou o pai
+     * dele? Ninguém sabe." scores nothing.
      *
-     * Deliberately narrow. A synopsis that genuinely asks a question — "Quem matou o pai dele?" —
-     * has to survive, and a rule that counted every question mark would throw it away.
+     * Matching only inside a word was not enough: "Um escritor que acredita que est? sendo tra?do"
+     * scored one and went through, which is how a damaged synopsis reached the banner after the
+     * first attempt at this.
      */
-    private val ACCENT_LOST = Regex("""[\p{L}]\?(?=[\p{L}])""")
+    private val ACCENT_LOST = Regex("""\p{L}\?(?=\p{L})|\p{L}\?(?= \p{Ll})""")
 
     /**
      * How many such marks before the text is judged unusable.

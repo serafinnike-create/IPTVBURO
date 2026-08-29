@@ -66,6 +66,22 @@ class ProviderTextTest {
         assertFalse(ProviderText.isDamaged("O filme conta a hist?ria de um homem comum."))
     }
 
+    /**
+     * The short synopsis that slipped through the first attempt.
+     *
+     * "est? sendo tra?do" has only one question mark inside a word, so a rule that looked only
+     * there scored one and let it reach the banner — which is exactly where it was seen.
+     */
+    @Test
+    fun `a short damaged synopsis is caught`() {
+        assertTrue(
+            ProviderText.isDamaged(
+                "Um escritor fracassado que acredita que est? sendo tra?do pela sua esposa " +
+                    "recebe a visita inesperada de uma misteriosa mulher verde.",
+            ),
+        )
+    }
+
     /** Nothing to judge is not damage. */
     @Test
     fun `blank and null are not damaged`() {

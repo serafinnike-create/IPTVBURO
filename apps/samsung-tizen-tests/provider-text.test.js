@@ -39,6 +39,11 @@ check('uma sinopse com acentos perdidos e escondida',
     usableSynopsis('o exterm?nio com o n?mero de homic?dios aumentando') === null);
 check('e a segunda que foi vista tambem',
     usableSynopsis('carteiras ca?adas por viola??es de tr?nsito') === null);
+/* A curta que escapou a primeira tentativa: "est? sendo tra?do" so tem uma
+   interrogacao dentro de palavra, por isso uma regra que olhasse so para ai
+   contava uma e deixava passar -- que foi onde a sinopse estragada apareceu. */
+check('uma sinopse curta estragada tambem e apanhada',
+    usableSynopsis('Um escritor fracassado que acredita que est? sendo tra?do pela sua esposa.') === null);
 
 process.stdout.write('\nO que esta bom continua a aparecer\n');
 

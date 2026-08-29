@@ -387,7 +387,7 @@ var BuroApp = (function () {
     */
     function usableSynopsis(text) {
         if (!text) { return null; }
-        var marks = String(text).match(/[^\W\d_]\?(?=[^\W\d_])/g);
+        var marks = String(text).match(/[^\W\d_]\?(?=[^\W\d_])|[^\W\d_]\?(?= [a-zà-ÿ])/g);
         return marks && marks.length >= 2 ? null : text;
     }
 
