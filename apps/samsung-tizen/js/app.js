@@ -26,6 +26,8 @@ var BuroApp = (function () {
     var playerLockHint;
     var playerReturnLabel;
     var playerRemoteActions;
+    var playerActionBar;
+    var playerActionFocus = -1;
     var playerMenu;
     var playerMenuTitle;
     var playerMenuOptions;
@@ -749,8 +751,96 @@ var BuroApp = (function () {
         overlay.classList.remove('controls-hidden');
         if (playerControlsTimer) { window.clearTimeout(playerControlsTimer); }
         playerControlsTimer = window.setTimeout(function () {
-            if (document.body.classList.contains('playing') && !playerErrorActive) { overlay.classList.add('controls-hidden'); }
+            if (document.body.classList.contains('playing') && !playerErrorActive &&
+                    !playerMenuState && playerActionFocus < 0) { overlay.classList.add('controls-hidden'); }
         }, 5500);
+    }
+
+    function playerActionButtons() {
+        if (!playerActionBar) { return []; }
+        return Array.prototype.slice.call(playerActionBar.querySelectorAll('[data-player-action]')).filter(function (button) {
+            return !button.hidden;
+        });
+    }
+
+    function setPlayerActionFocus(index) {
+        var buttons = playerActionButtons();
+        var button;
+        if (playerActionBar) {
+            Array.prototype.slice.call(playerActionBar.querySelectorAll('[data-player-action]')).forEach(function (entry) {
+                entry.classList.remove('focused');
+                entry.setAttribute('tabindex', '-1');
+            });
+        }
+        if (index < 0 || !buttons.length) { playerActionFocus = -1; return; }
+        playerActionFocus = Math.max(0, Math.min(buttons.length - 1, index));
+        button = buttons[playerActionFocus];
+        button.classList.add('focused');
+        button.setAttribute('tabindex', '0');
+        try { button.focus(); } catch (ignoredPlayerActionFocus) {}
+        if (button.offsetLeft < playerActionBar.scrollLeft) {
+            playerActionBar.scrollLeft = Math.max(0, button.offsetLeft - 12);
+        } else if (button.offsetLeft + button.offsetWidth > playerActionBar.scrollLeft + playerActionBar.clientWidth) {
+            playerActionBar.scrollLeft = button.offsetLeft + button.offsetWidth - playerActionBar.clientWidth + 12;
+        }
+    }
+
+    function enterPlayerActions() {
+        var buttons = playerActionButtons();
+        var toggleIndex = 0;
+        buttons.some(function (button, index) {
+            if (button.getAttribute('data-player-action') === 'play-pause') { toggleIndex = index; return true; }
+            return false;
+        });
+        setPlayerActionFocus(toggleIndex);
+        showPlayerControls();
+    }
+
+    function movePlayerActionFocus(offset) {
+        var buttons = playerActionButtons();
+        if (!buttons.length) { return; }
+        setPlayerActionFocus((playerActionFocus + offset + buttons.length) % buttons.length);
+        showPlayerControls();
+    }
+
+    function refreshPlayerActionBar() {
+        var rewind = document.getElementById('player-action-rewind');
+        var toggle = document.getElementById('player-action-toggle');
+        var forward = document.getElementById('player-action-forward');
+        var sleep = document.getElementById('player-action-sleep');
+        var stats = document.getElementById('player-action-stats');
+        if (!playerActionBar) { return; }
+        playerActionBar.setAttribute('aria-label', t('playerActionsLabel'));
+        rewind.textContent = t('playerRewind');
+        forward.textContent = t('playerForward');
+        toggle.textContent = t(BuroPlayer.isPaused && BuroPlayer.isPaused() ? 'playerPlay' : 'playerPause');
+        toggle.setAttribute('aria-label', toggle.textContent);
+        sleep.textContent = t('sleepTimer');
+        stats.textContent = t('playerStats');
+        playerRemoteActions.textContent = t('playerActionsHint');
+        if (playerSpeedLabel && !playerSpeedLabel.hidden) {
+            playerSpeedLabel.textContent = t('playbackSpeed') + ': ' + BuroPlayer.playbackRate() + '×';
+        }
+        if (playerAspectLabel && !playerAspectLabel.hidden) {
+            playerAspectLabel.textContent = t('playerAspectRatio') + ': ' + displayModeLabel(BuroPlayer.displayMode());
+        }
+        if (playerActionFocus >= playerActionButtons().length) { setPlayerActionFocus(-1); }
+    }
+
+    function activatePlayerAction(action) {
+        if (action === 'seek-back') { BuroPlayer.seekBy(-10000); }
+        else if (action === 'play-pause') { BuroPlayer.togglePause(); }
+        else if (action === 'seek-forward') { BuroPlayer.seekBy(30000); }
+        else if (action === 'audio') { openPlayerMenu('AUDIO'); }
+        else if (action === 'subtitles') { openPlayerMenu('TEXT'); }
+        else if (action === 'favorite') { togglePlayerFavorite(); }
+        else if (action === 'guide') { openPlayerMenu('GUIDE'); }
+        else if (action === 'speed') { openPlayerMenu('SPEED'); }
+        else if (action === 'aspect') { cyclePlayerDisplayMode(); }
+        else if (action === 'sleep') { openPlayerMenu('SLEEP'); }
+        else if (action === 'stats') { openPlayerMenu('STATS'); }
+        refreshPlayerActionBar();
+        showPlayerControls();
     }
 
     function cancelPlayerEnterPress() {
@@ -761,6 +851,7 @@ var BuroApp = (function () {
 
     function resetPlayerControlsLock() {
         cancelPlayerEnterPress();
+        setPlayerActionFocus(-1);
         playerControlsLocked = false;
         if (overlay) { overlay.classList.remove('controls-locked'); }
         if (playerLockPanel) { playerLockPanel.hidden = true; }
@@ -879,18 +970,18 @@ var BuroApp = (function () {
         closePlayerMenu();
         clearPlayerSubtitle();
         updatePlayerTimeline(0, 0);
-        playerAudioLabel.textContent = '▲ ' + t('audioTrack');
-        playerSubtitleLabel.textContent = '▼ ' + t('subtitleTrack');
+        playerAudioLabel.textContent = t('audioTrack');
+        playerSubtitleLabel.textContent = t('subtitleTrack');
         refreshPlayerContextLabels();
         playerSpeedLabel.hidden = !currentPlayback || currentPlayback.contentType === 'LIVE' || !BuroPlayer.playbackRateAvailable();
-        playerSpeedLabel.textContent = 'YELLOW ' + t('playbackSpeed') + ': 1×';
+        playerSpeedLabel.textContent = t('playbackSpeed') + ': 1×';
         playerAspectLabel.hidden = !BuroPlayer.displayModeAvailable();
-        playerAspectLabel.textContent = 'BLUE ' + t('playerAspectRatio') + ': ' + t('playerScaleOriginal');
+        playerAspectLabel.textContent = t('playerAspectRatio') + ': ' + t('playerScaleOriginal');
         playerLockLabel.textContent = t('playerLockHint');
         playerLockTitle.textContent = t('playerControlsLocked');
         playerLockHint.textContent = t('playerUnlockHint');
         playerReturnLabel.textContent = 'RETURN ' + t('back');
-        playerRemoteActions.textContent = '◀ 10s · ENTER ' + t('playPause') + ' · 30s ▶';
+        refreshPlayerActionBar();
         playerWaiting.hidden = false;
         playerWaitingLabel.textContent = t('loading');
         overlay.setAttribute('aria-busy', 'true');
@@ -927,12 +1018,12 @@ var BuroApp = (function () {
         var isLive = Boolean(currentPlayback && currentPlayback.contentType === 'LIVE');
         if (playerFavoriteLabel) {
             playerFavoriteLabel.hidden = !canFavorite;
-            playerFavoriteLabel.textContent = 'RED ' + t(canFavorite && isFavorite(currentPlayback.itemId) ?
+            playerFavoriteLabel.textContent = t(canFavorite && isFavorite(currentPlayback.itemId) ?
                 'removeFavorite' : 'addFavorite');
         }
         if (playerGuideLabel) {
             playerGuideLabel.hidden = !isLive;
-            playerGuideLabel.textContent = 'GREEN ' + t('programmeGuide');
+            playerGuideLabel.textContent = t('programmeGuide');
         }
     }
 
@@ -985,8 +1076,9 @@ var BuroApp = (function () {
 
     function cyclePlayerDisplayMode() {
         if (BuroPlayer.cycleDisplayMode()) {
-            playerAspectLabel.textContent = 'BLUE ' + t('playerAspectRatio') + ': ' +
+            playerAspectLabel.textContent = t('playerAspectRatio') + ': ' +
                 displayModeLabel(BuroPlayer.displayMode());
+            refreshPlayerActionBar();
         }
     }
 
@@ -1359,6 +1451,7 @@ var BuroApp = (function () {
         playerMenuState = null;
         if (playerMenu) { playerMenu.hidden = true; }
         if (overlay) { overlay.classList.remove('menu-open'); }
+        if (playerActionFocus >= 0) { setPlayerActionFocus(playerActionFocus); }
     }
 
     function renderPlayerMenu() {
@@ -1534,10 +1627,11 @@ var BuroApp = (function () {
         selected = option.speed ? BuroPlayer.setPlaybackRate(option.index) :
             (option.off ? BuroPlayer.disableSubtitles() : BuroPlayer.selectTrack(playerMenuState.type, option.index));
         if (selected) {
-            if (playerMenuState.type === 'AUDIO') { playerAudioLabel.textContent = '▲ ' + t('audioTrack') + ': ' + option.label; }
-            else if (playerMenuState.type === 'TEXT') { playerSubtitleLabel.textContent = '▼ ' + t('subtitleTrack') + ': ' + option.label; }
-            else { playerSpeedLabel.textContent = 'YELLOW ' + t('playbackSpeed') + ': ' + option.label; }
+            if (playerMenuState.type === 'AUDIO') { playerAudioLabel.textContent = t('audioTrack') + ': ' + option.label; }
+            else if (playerMenuState.type === 'TEXT') { playerSubtitleLabel.textContent = t('subtitleTrack') + ': ' + option.label; }
+            else { playerSpeedLabel.textContent = t('playbackSpeed') + ': ' + option.label; }
             closePlayerMenu();
+            refreshPlayerActionBar();
         }
     }
 
@@ -4552,6 +4646,8 @@ var BuroApp = (function () {
     function renderSeriesEpisodes(data) {
         var groups = {};
         var seasons;
+        var downloadEligible = seriesBulkDownloadEligible(data.parent);
+        var downloadEnabled = downloadEligible && BuroDownloads.enabled();
         data.seasonPages = data.seasonPages || {};
         (data.items || []).forEach(function (episode) {
             var season = Number(episode.locator && episode.locator.season) || 0;
@@ -4561,7 +4657,7 @@ var BuroApp = (function () {
         seasons = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
         return seasons.map(function (season) {
             var expanded = Number(data.expandedSeason) === season;
-            var downloadCandidates = seriesBulkDownloadAvailable(data.parent) ?
+            var downloadCandidates = downloadEligible ?
                 BuroDownloads.bulkCandidates(groups[season], season) : [];
             var pageCount = Math.max(1, Math.ceil(groups[season].length / EPISODE_PAGE_SIZE));
             var page = BuroDomain.clamp(Number(data.seasonPages[season]) || 0, 0, pageCount - 1);
@@ -4569,16 +4665,29 @@ var BuroApp = (function () {
             var visible = groups[season].slice(start, start + EPISODE_PAGE_SIZE);
             var seasonAttribute = ' data-season="' + season + '"';
             data.seasonPages[season] = page;
-            return '<button class="season-header focusable ' + (expanded ? 'expanded' : '') + '" data-action="series-season" data-season="' + season +
+            return '<section class="season-group"><div class="season-toolbar"><button class="season-header focusable ' + (expanded ? 'expanded' : '') + '" data-action="series-season" data-season="' + season +
                 '" aria-expanded="' + (expanded ? 'true' : 'false') + '">' +
                 '<strong>' + t('season') + ' ' + season + '</strong><span>' + groups[season].length + ' ' + t('episodes') + ' ' + (expanded ? '▲' : '▼') +
-                '</span></button>' + (downloadCandidates.length ? '<button class="button ghost focusable season-download" data-action="series-download-season" data-season="' +
-                    season + '">↓ ' + t('downloadSeason').replace('{season}', season) + '</button>' : '') +
-                (expanded ? episodeCards(visible, seriesBulkDownloadAvailable(data.parent)) + paginationControls(
+                '</span></button>' + (downloadCandidates.length ? '<button class="button ghost focusable season-download' +
+                    (downloadEnabled ? '' : ' unavailable') + '" data-action="' +
+                    (downloadEnabled ? 'series-download-season' : 'download-unavailable') + '" data-season="' + season +
+                    '">↓ ' +
+                    t('downloadSeason').replace('{season}', season) + '</button>' : '') + '</div>' +
+                (expanded ? episodeCards(visible, downloadEligible, downloadEnabled) + paginationControls(
                     'series-page', page, pageCount, start, start + visible.length, groups[season].length,
                     seasonAttribute, 'season-pagination'
-                ) : '');
+                ) : '') + '</section>';
         }).join('');
+    }
+
+    function renderSeriesEpisodesSection(data) {
+        return (data.detailsError ? '<div class="details-inline-warning"><span>!</span><p>' +
+            t('seriesCachedWarning') + '</p><button class="button ghost focusable" data-action="series-details-retry" data-id="' +
+            attr(data.parent.id) + '">' + t('retry') + '</button></div>' : '') +
+            '<section class="detail-seasons"><div class="section-heading"><h2>' + t('episodes') + '</h2><p>' +
+            (data.items || []).length + '</p></div><div class="season-list">' +
+            ((data.items || []).length ? renderSeriesEpisodes(data) :
+                emptyState('B', t('noEpisodes'), t('noEpisodesBody'), '', '')) + '</div></section>';
     }
 
     function isFavorite(itemId) {
@@ -4608,13 +4717,8 @@ var BuroApp = (function () {
             return;
         }
         if (state.screenData && state.screenData.kind === 'series') {
-            shell(renderTitleDetails(state.screenData.parent, state.screenData.details, true, state.screenData.items || []) +
-                (state.screenData.detailsError ? '<div class="details-inline-warning"><span>!</span><p>' +
-                    t('seriesCachedWarning') + '</p><button class="button ghost focusable" data-action="series-details-retry" data-id="' +
-                    attr(state.screenData.parent.id) + '">' + t('retry') + '</button></div>' : '') +
-                '<div class="section-heading"><h2>' + t('episodes') + '</h2><p>' + (state.screenData.items || []).length +
-                '</p></div><div class="season-list">' + ((state.screenData.items || []).length ? renderSeriesEpisodes(state.screenData) :
-                    emptyState('B', t('noEpisodes'), t('noEpisodesBody'), '', '')) + '</div>', state.screenData.parent.name, true);
+            shell(renderTitleDetails(state.screenData.parent, state.screenData.details, true,
+                state.screenData.items || [], state.screenData), state.screenData.parent.name, true);
             return;
         }
         if (state.screenData && state.screenData.kind === 'category' && state.screenData.contentType === contentType) {
@@ -5633,7 +5737,7 @@ var BuroApp = (function () {
             escapeHtml(t('backToCatalogue')) + '</button></div>';
     }
 
-    function renderTitleDetails(item, details, isSeries, episodes) {
+    function renderTitleDetails(item, details, isSeries, episodes, seriesData) {
         var facts = [];
         var cast;
         var castMembers;
@@ -5641,6 +5745,7 @@ var BuroApp = (function () {
         var trailerId;
         var seasonIds = {};
         var related;
+        var seriesSection = '';
         var episodeRows = episodes || [];
         details = details || { title: item.name };
         trailerId = BuroDomain.sanitizeYouTubeReference(details.youtubeTrailerId);
@@ -5674,6 +5779,9 @@ var BuroApp = (function () {
         }
         cast = detailCastNames(details.cast);
         castMembers = Array.isArray(details.castMembers) ? details.castMembers : [];
+        if (isSeries && seriesData) {
+            seriesSection = renderSeriesEpisodesSection(seriesData);
+        }
         /* So o diretor: o pais subiu para a linha de fatos, onde e lido junto com
            o resto em vez de exigir rolar ate aqui. Repeti-lo nos dois lugares
            seria dizer a mesma coisa duas vezes na mesma tela. */
@@ -5735,6 +5843,7 @@ var BuroApp = (function () {
             */
             detailActionsHtml(item, isSeries, episodeRows, trailerId) +
             ratingsSection(details) + criticsStrip(details) + '</div></div>' +
+            seriesSection +
             (supporting ? '<div class="detail-support">' + supporting + '</div>' : '') + '</div>';
     }
 
@@ -6122,7 +6231,11 @@ var BuroApp = (function () {
         if (catalogueSize) {
             parts.push(t('topbarItems').replace('{count}', catalogueSize));
         }
-        parts.push('IPTV BURO v' + applicationVersion());
+        /* Com uma fonte ativa, contagem e status já identificam o contexto.
+           Repetir produto + versão aqui comprimia títulos, sincronização e
+           ações no topo. A versão continua inteira em Configurações e fica
+           nesta barra somente no estado vazio. */
+        if (!parts.length) { parts.push('IPTV BURO v' + applicationVersion()); }
         return '<p class="topbar-subtitle">' + escapeHtml(parts.join(' · ')) + '</p>';
     }
 
@@ -9689,7 +9802,9 @@ var BuroApp = (function () {
         if (previewFrame) { previewFrame.hidden = false; }
         /* A URL e produzida aqui e some quando a chamada retorna, como na
            reproducao normal — resolucao tardia, sem nada guardado. */
-        try { BuroPlayer.play(BuroXtream.resolvePlayback(secret, found.item.locator), 0); }
+        /* `true`: a previa e sempre de um canal ao vivo, e um buffer de dois
+           minutos ali atrasaria a imagem sem comprar nada. */
+        try { BuroPlayer.play(BuroXtream.resolvePlayback(secret, found.item.locator), 0, true); }
         catch (ignoredPlay) { cancelPreview(); }
     }
 
@@ -12060,18 +12175,24 @@ var BuroApp = (function () {
             attr(item.id) + '" data-key="' + attr(entry.id) + '">↻ ' + t('retry') + '</button>';
     }
 
-    function episodeCards(items, downloadsAvailable) {
+    function episodeCards(items, downloadsEligible, downloadsAvailable) {
         var visible = (items || []).filter(itemVisible);
         if (!visible.length) { return emptyState('B', t('error'), t('unavailable'), '', ''); }
         return '<div class="card-row catalogue-layout-compact episode-download-row">' + visible.map(function (item) {
             return '<div class="episode-download-item">' + mediaCard(item, 'compact') +
-                (downloadsAvailable ? downloadControls(item, true) : '') + '</div>';
+                (downloadsAvailable ? downloadControls(item, true) : (downloadsEligible ?
+                    '<button class="button ghost focusable episode-download-action unavailable" data-action="download-unavailable"' +
+                    ' data-id="' + attr(item.id) + '">↓ ' + t('download') + '</button>' : '')) + '</div>';
         }).join('') + '</div>';
     }
 
-    function seriesBulkDownloadAvailable(item) {
+    function seriesBulkDownloadEligible(item) {
         var source = sourceForDownload(item);
-        return Boolean(BuroDownloads.enabled() && source && source.type === 'XTREAM');
+        return Boolean(source && source.type === 'XTREAM');
+    }
+
+    function seriesBulkDownloadAvailable(item) {
+        return Boolean(BuroDownloads.enabled() && seriesBulkDownloadEligible(item));
     }
 
     function seriesDownloadAllButton(item, episodes, isSeries) {
@@ -12738,7 +12859,7 @@ var BuroApp = (function () {
 
     function resolveM3uPlayback(source, secret, item, startPositionMs) {
         resolveM3uItemUrl(source, item, function (url) {
-            BuroPlayer.play(url, startPositionMs);
+            BuroPlayer.play(url, startPositionMs, isLiveContent(item.contentType));
             url = null;
         }, function (error) {
             playbackFailed({ code: error && error.code === 'NETWORK_ERROR' ?
@@ -12961,7 +13082,7 @@ var BuroApp = (function () {
         var playback = currentPlayback;
         if (!playback || playback.offline || !findItemAndSource(playback.itemId).item) { return false; }
         toggleFavorite(playback.itemId, function () {
-            if (currentPlayback === playback) { refreshPlayerContextLabels(); showPlayerControls(); }
+            if (currentPlayback === playback) { refreshPlayerContextLabels(); refreshPlayerActionBar(); showPlayerControls(); }
         });
         return true;
     }
@@ -13449,6 +13570,29 @@ var BuroApp = (function () {
                 event.preventDefault();
                 return;
             }
+            if (playerActionFocus >= 0) {
+                if (event.keyCode === K.RETURN || event.keyCode === K.STOP) { stopPlayback(); }
+                else if (event.keyCode === K.LEFT) { movePlayerActionFocus(-1); }
+                else if (event.keyCode === K.RIGHT) { movePlayerActionFocus(1); }
+                else if (event.keyCode === K.UP || event.keyCode === K.DOWN) { setPlayerActionFocus(-1); }
+                else if (event.keyCode === K.ENTER) {
+                    active = playerActionButtons()[playerActionFocus];
+                    if (active) { activatePlayerAction(active.getAttribute('data-player-action')); }
+                }
+                else if (event.keyCode === K.PLAY_PAUSE || event.keyCode === K.PLAY ||
+                        event.keyCode === K.PAUSE) { BuroPlayer.togglePause(); refreshPlayerActionBar(); }
+                else if (event.keyCode === K.REWIND) { BuroPlayer.seekBy(-10000); }
+                else if (event.keyCode === K.FAST_FORWARD) { BuroPlayer.seekBy(30000); }
+                else if (event.keyCode === K.RED) { togglePlayerFavorite(); }
+                else if (event.keyCode === K.GREEN) {
+                    openPlayerMenu(currentPlayback && currentPlayback.contentType === 'LIVE' ? 'GUIDE' : 'TEXT');
+                }
+                else if (event.keyCode === K.YELLOW) { openPlayerMenu('SPEED'); }
+                else if (event.keyCode === K.BLUE) { cyclePlayerDisplayMode(); }
+                else { return; }
+                event.preventDefault();
+                return;
+            }
             if (event.keyCode === K.RETURN || event.keyCode === K.STOP) { stopPlayback(); event.preventDefault(); }
             /*
               Com o convite na tela, ENTER pula a abertura.
@@ -13465,7 +13609,7 @@ var BuroApp = (function () {
             else if (event.keyCode === K.LEFT || event.keyCode === K.REWIND) { BuroPlayer.seekBy(-10000); event.preventDefault(); }
             else if (event.keyCode === K.RIGHT || event.keyCode === K.FAST_FORWARD) { BuroPlayer.seekBy(30000); event.preventDefault(); }
             else if (event.keyCode === K.UP) { openPlayerMenu('AUDIO'); event.preventDefault(); }
-            else if (event.keyCode === K.DOWN) { openPlayerMenu('TEXT'); event.preventDefault(); }
+            else if (event.keyCode === K.DOWN) { enterPlayerActions(); event.preventDefault(); }
             else if (event.keyCode === K.RED) { if (togglePlayerFavorite()) { event.preventDefault(); } }
             else if (event.keyCode === K.GREEN) {
                 if (currentPlayback && currentPlayback.contentType === 'LIVE') { openPlayerMenu('GUIDE'); }
@@ -13526,6 +13670,7 @@ var BuroApp = (function () {
         playerLockHint = document.getElementById('player-lock-hint');
         playerReturnLabel = document.getElementById('player-return-label');
         playerRemoteActions = document.querySelector('.player-remote-actions');
+        playerActionBar = document.getElementById('player-action-bar');
         playerMenu = document.getElementById('player-menu');
         playerMenuTitle = document.getElementById('player-menu-title');
         playerMenuOptions = document.getElementById('player-menu-options');
@@ -13545,6 +13690,14 @@ var BuroApp = (function () {
         playerErrorBack = document.getElementById('player-error-back');
         playerErrorRetry.onclick = retryPlayback;
         playerErrorBack.onclick = stopPlayback;
+        Array.prototype.slice.call(playerActionBar.querySelectorAll('[data-player-action]')).forEach(function (button) {
+            button.setAttribute('tabindex', '-1');
+            button.addEventListener('click', function () {
+                var visible = playerActionButtons();
+                setPlayerActionFocus(visible.indexOf(button));
+                activatePlayerAction(button.getAttribute('data-player-action'));
+            });
+        });
         BuroTrailer.init();
         BuroKeys.registerMediaKeys();
         startClock();
@@ -13561,6 +13714,7 @@ var BuroApp = (function () {
                     playerWaiting.hidden = true;
                     overlay.setAttribute('aria-busy', 'false');
                 }
+                refreshPlayerActionBar();
                 showPlayerControls();
             },
             onError: function (error) { playerStatus.classList.add('error'); playbackFailed(error); },
@@ -13713,6 +13867,9 @@ var BuroApp = (function () {
         /* Expostas para o teste do temporizador: o menu so abre sobre uma
            sessao de reproducao, que o AVPlay nao entrega fora de uma TV. */
         _setCurrentPlaybackForTest: function (playback) { currentPlayback = playback; },
+        _preparePlayerOverlay: preparePlayerOverlay,
+        _activatePlayerAction: activatePlayerAction,
+        _playerActionFocus: function () { return playerActionFocus; },
         _openPlayerMenu: openPlayerMenu,
         _setSleepTimer: setSleepTimer,
         _updateSkipIntro: updateSkipIntro,

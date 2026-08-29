@@ -10,15 +10,17 @@ var BuroPlayer = (function () {
     var session = 0;
 
     /*
-      Os mesmos numeros do Windows e do Android, de proposito: uma televisao que
-      aguentasse uma queda de ligacao pior do que o computador seria o produto a
-      discutir consigo proprio.
+      O AVPlay nao oferece dois controles separados para "comece agora" e
+      "mantenha minutos a frente". setBufferingParam define quanto precisa
+      chegar ANTES de iniciar ou retomar, em segundos, e a documentacao exige
+      no minimo quatro. Pedir 120 ali faria a tela esperar dois minutos.
+
+      Usamos o minimo oficial nos dois cenarios: a imagem entra cedo e o AVPlay
+      continua abastecendo o proprio buffer enquanto reproduz.
     */
-    var ON_DEMAND_BUFFER_MS = 120000;
-    var LIVE_BUFFER_MS = 1500;
-    /* Quanto tem de chegar antes de a imagem comecar. Pequeno de proposito: o
-       buffer deve encher por tras de uma imagem que ja esta no ar, e nao antes. */
-    var PLAY_BUFFER_MS = 2000;
+    var FAST_START_BUFFER_SECONDS = 4;
+    var PREPARE_TIMEOUT_MS = 20000;
+    var prepareTimer = null;
     var audioTrackPosition = -1;
     var subtitleTrackPosition = -1;
     var subtitlesSilent = false;
@@ -130,124 +132,29 @@ var BuroPlayer = (function () {
         return stats;
     }
 
-    /*
-      O que esta reproducao consegue dizer sobre si.
-
-      Cada leitura vem separada e com a propria guarda porque o AVPlay nao e
-      uniforme entre modelos: uma TV devolve resolucao e nao devolve bitrate,
-      outra lanca em vez de devolver vazio. Um bloco unico dentro de um
-      try/catch perderia tudo por causa de uma chamada que falha.
-
-      O que nao vier fica ausente do resultado, e a tela nao inventa um
-      tracinho no lugar: uma linha "Bitrate: —" e pior do que a ausencia da
-      linha, porque parece um numero que deveria estar la e nao esta.
-
-      `getStreamingProperty` responde por bitrate e buffer; `getCurrentStreamInfo`
-      pelas faixas. Nenhuma das duas e obrigatoria na plataforma.
-    */
-    function readStreamingProperty(name) {
-        var raw;
-        if (!available() || typeof webapis.avplay.getStreamingProperty !== 'function') { return null; }
-        try { raw = webapis.avplay.getStreamingProperty(name); }
-        catch (ignored) { return null; }
-        return raw === undefined || raw === null || raw === '' ? null : String(raw);
-    }
-
-    function videoTrackInfo() {
-        var tracks;
-        var found = null;
-        if (!available() || typeof webapis.avplay.getCurrentStreamInfo !== 'function') { return null; }
-        try { tracks = webapis.avplay.getCurrentStreamInfo(); }
-        catch (ignored) { return null; }
-        (tracks || []).forEach(function (track) {
-            var extra;
-            if (found || !track || String(track.type).toUpperCase() !== 'VIDEO') { return; }
-            /* `extra_info` chega como JSON em texto na maioria dos firmwares,
-               e ja como objeto em alguns. */
-            extra = track.extra_info;
-            if (typeof extra === 'string') {
-                try { extra = JSON.parse(extra); } catch (ignoredParse) { extra = null; }
-            }
-            found = extra && typeof extra === 'object' ? extra : null;
-        });
-        return found;
-    }
-
-    function statistics() {
-        var video = videoTrackInfo();
-        var bitrate = readStreamingProperty('CURRENT_BANDWIDTH');
-        var buffered = readStreamingProperty('AVAILABLE_BITRATE');
-        var stats = {};
-        var width = video && Number(video.Width || video.width);
-        var height = video && Number(video.Height || video.height);
-        if (width > 0 && height > 0) { stats.resolution = width + '\u00d7' + height; }
-        if (video && (video.Codec || video.codec)) { stats.codec = String(video.Codec || video.codec); }
-        if (bitrate && Number(bitrate) > 0) { stats.bitrateKbps = Math.round(Number(bitrate) / 1000); }
-        if (buffered) { stats.bitrates = String(buffered); }
-        return stats;
-    }
-
-    /*
-      O que esta reproducao consegue dizer sobre si.
-
-      Cada leitura vem separada e com a propria guarda porque o AVPlay nao e
-      uniforme entre modelos: uma TV devolve resolucao e nao devolve bitrate,
-      outra lanca em vez de devolver vazio. Um bloco unico dentro de um
-      try/catch perderia tudo por causa de uma chamada que falha.
-
-      O que nao vier fica ausente do resultado, e a tela nao inventa um
-      tracinho no lugar: uma linha "Bitrate: —" e pior do que a ausencia da
-      linha, porque parece um numero que deveria estar la e nao esta.
-
-      `getStreamingProperty` responde por bitrate e buffer; `getCurrentStreamInfo`
-      pelas faixas. Nenhuma das duas e obrigatoria na plataforma.
-    */
-    function readStreamingProperty(name) {
-        var raw;
-        if (!available() || typeof webapis.avplay.getStreamingProperty !== 'function') { return null; }
-        try { raw = webapis.avplay.getStreamingProperty(name); }
-        catch (ignored) { return null; }
-        return raw === undefined || raw === null || raw === '' ? null : String(raw);
-    }
-
-    function videoTrackInfo() {
-        var tracks;
-        var found = null;
-        if (!available() || typeof webapis.avplay.getCurrentStreamInfo !== 'function') { return null; }
-        try { tracks = webapis.avplay.getCurrentStreamInfo(); }
-        catch (ignored) { return null; }
-        (tracks || []).forEach(function (track) {
-            var extra;
-            if (found || !track || String(track.type).toUpperCase() !== 'VIDEO') { return; }
-            /* `extra_info` chega como JSON em texto na maioria dos firmwares,
-               e ja como objeto em alguns. */
-            extra = track.extra_info;
-            if (typeof extra === 'string') {
-                try { extra = JSON.parse(extra); } catch (ignoredParse) { extra = null; }
-            }
-            found = extra && typeof extra === 'object' ? extra : null;
-        });
-        return found;
-    }
-
-    function statistics() {
-        var video = videoTrackInfo();
-        var bitrate = readStreamingProperty('CURRENT_BANDWIDTH');
-        var buffered = readStreamingProperty('AVAILABLE_BITRATE');
-        var stats = {};
-        var width = video && Number(video.Width || video.width);
-        var height = video && Number(video.Height || video.height);
-        if (width > 0 && height > 0) { stats.resolution = width + '\u00d7' + height; }
-        if (video && (video.Codec || video.codec)) { stats.codec = String(video.Codec || video.codec); }
-        if (bitrate && Number(bitrate) > 0) { stats.bitrateKbps = Math.round(Number(bitrate) / 1000); }
-        if (buffered) { stats.bitrates = String(buffered); }
-        return stats;
-    }
-
     function status(code, value) { listeners.onStatus(code, value); }
+
+    function clearPrepareTimer() {
+        if (prepareTimer !== null && typeof clearTimeout === 'function') {
+            clearTimeout(prepareTimer);
+        }
+        prepareTimer = null;
+    }
+
+    function startPrepareTimer(token) {
+        clearPrepareTimer();
+        if (typeof setTimeout !== 'function') { return; }
+        prepareTimer = setTimeout(function () {
+            prepareTimer = null;
+            if (token === session && phase === 'OPEN') {
+                fail({ code: 'PLAYBACK_CONNECTION' });
+            }
+        }, PREPARE_TIMEOUT_MS);
+    }
 
     function safeClose() {
         var current;
+        clearPrepareTimer();
         clearSubtitleCue();
         if (!available()) { phase = 'IDLE'; return; }
         try {
@@ -341,22 +248,40 @@ var BuroPlayer = (function () {
     }
 
     /*
-      Quanto o leitor le a frente da imagem.
+      Quanto o player le a frente da imagem, e por que a resposta muda.
 
-      Um filme e um ficheiro: o leitor pode estar dois minutos a frente e nem dar
-      por uma ligacao que cai e volta — que e a falha mais visivel deste aplicativo.
-      Um canal ao vivo nao tem "a frente" para ler, entao o mesmo buffer nao compra
-      nada e custa um arranque mais tardio e uma imagem atrasada.
+      Um filme que para porque a conexao tropecou dez segundos e a falha mais
+      visivel deste aplicativo, e e evitavel: um filme e um arquivo, entao o
+      player pode estar minutos a frente e nao notar um corte tao curto.
 
-      A API pode nao existir em televisoes mais antigas, e isso nao pode impedir a
-      reproducao: sem ela o leitor fica exatamente como estava.
+      Um canal ao vivo nao tem "a frente": o que ainda nao foi transmitido nao
+      pode ser lido cedo. Um buffer grande ali nao compra nada e custa duas
+      coisas — o canal comeca mais tarde, e a imagem fica atrasada, o que
+      transforma um jogo no grito do vizinho chegando antes do gol.
+
+      Os numeros sao os do dominio compartilhado, que o Windows ja segue:
+      PlaybackBuffering.ON_DEMAND_MILLIS e LIVE_MILLIS. A TV era a unica das
+      tres a aplicar o mesmo buffer aos dois.
+
+      O parametro que NAO muda e o de partida. PLAYER_BUFFER_FOR_PLAY e quanto
+      precisa chegar antes de a imagem aparecer, e o minimo oficial e quatro:
+      pedir 120 ali faria a tela esperar dois minutos em vez de encher por
+      baixo. O que cresce e o de retomada, que e onde o AVPlay acumula e o que
+      decide se uma queda de rede vira uma pausa na tela.
     */
-    function applyReadAhead(isLive) {
-        var millis = isLive ? LIVE_BUFFER_MS : ON_DEMAND_BUFFER_MS;
+    var ON_DEMAND_RESUME_SECONDS = 120;
+    var LIVE_RESUME_SECONDS = 2;
+
+    function applyFastStartBuffering(isLive) {
         try {
             if (webapis.avplay.setBufferingParam) {
-                webapis.avplay.setBufferingParam('PLAYER_BUFFER_FOR_PLAY', 'PLAYER_BUFFER_SIZE_IN_TIME', PLAY_BUFFER_MS);
-                webapis.avplay.setBufferingParam('PLAYER_BUFFER_FOR_RESUME', 'PLAYER_BUFFER_SIZE_IN_TIME', millis);
+                webapis.avplay.setBufferingParam(
+                    'PLAYER_BUFFER_FOR_PLAY', 'PLAYER_BUFFER_SIZE_IN_SECOND', FAST_START_BUFFER_SECONDS
+                );
+                webapis.avplay.setBufferingParam(
+                    'PLAYER_BUFFER_FOR_RESUME', 'PLAYER_BUFFER_SIZE_IN_SECOND',
+                    isLive ? LIVE_RESUME_SECONDS : ON_DEMAND_RESUME_SECONDS
+                );
             }
         } catch (ignore) {
             /* Uma televisao sem esta API reproduz na mesma, com o buffer que ja tinha. */
@@ -384,9 +309,11 @@ var BuroPlayer = (function () {
             webapis.avplay.setListener(callbacks(token));
             webapis.avplay.setDisplayRect(0, 0, 1920, 1080);
             if (displayModeAvailable()) { applyDisplayMode(displayMode); }
-            /* Antes de preparar: o buffer tem de estar definido quando o fluxo abre. */
-            applyReadAhead(isLive !== false);
+            /* Antes de preparar: o limite so pode ser definido no estado IDLE.
+               `isLive` decide o tamanho — um canal nao tem o que ler adiante. */
+            applyFastStartBuffering(isLive);
             status('PREPARING');
+            startPrepareTimer(token);
             webapis.avplay.prepareAsync(function () {
                 var started = false;
                 function startPrepared() {
@@ -404,6 +331,7 @@ var BuroPlayer = (function () {
                         status('PLAYING');
                     } catch (error) { fail(classifyFailure(error)); }
                 }
+                clearPrepareTimer();
                 if (token !== session) { return; }
                 if (initialPosition > 0 && typeof webapis.avplay.seekTo === 'function') {
                     status('RESUMING');
@@ -411,6 +339,7 @@ var BuroPlayer = (function () {
                     catch (ignoredInitialSeek) { startPrepared(); }
                 } else { startPrepared(); }
             }, function (error) {
+                clearPrepareTimer();
                 if (token === session) { fail(classifyFailure(error)); }
             });
         } catch (error) { fail(classifyFailure(error)); }
@@ -581,8 +510,6 @@ var BuroPlayer = (function () {
         disableSubtitles: disableSubtitles,
         toggleSubtitles: toggleSubtitles,
         statistics: statistics,
-        statistics: statistics,
-        statistics: statistics,
         setSubtitleOffset: setSubtitleOffset,
         subtitleOffset: subtitleOffset,
         playbackRates: playbackRates,
@@ -595,6 +522,7 @@ var BuroPlayer = (function () {
         displayModes: function () { return DISPLAY_MODES.map(function (entry) { return entry.id; }); },
         cycleDisplayMode: cycleDisplayMode,
         isPlaying: function () { return phase === 'PLAYING' || phase === 'PAUSED' || phase === 'OPEN'; },
+        isPaused: function () { return phase === 'PAUSED'; },
         setListeners: setListeners,
         available: available
     };

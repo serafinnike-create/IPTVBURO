@@ -17,6 +17,7 @@ function check(name, condition) {
 }
 
 function harness(prepareError, withDisplayMethod, withSilentSubtitle) {
+    const bufferingParams = [];
     const displayMethods = [];
     const statuses = [];
     const errors = [];
@@ -29,6 +30,9 @@ function harness(prepareError, withDisplayMethod, withSilentSubtitle) {
         open: function () { state = 'IDLE'; },
         setListener: function (callbacks) { playbackCallbacks = callbacks; },
         setDisplayRect: function () {},
+        setBufferingParam: function (option, unit, amount) {
+            bufferingParams.push({ option: option, unit: unit, amount: amount });
+        },
         prepareAsync: function (success, failure) {
             if (prepareError) { failure(prepareError); return; }
             state = 'READY';
@@ -58,6 +62,7 @@ function harness(prepareError, withDisplayMethod, withSilentSubtitle) {
         errors: errors,
         subtitleCues: subtitleCues,
         silentSubtitleValues: silentSubtitleValues,
+        bufferingParams: bufferingParams,
         callbacks: function () { return playbackCallbacks; }
     };
 }
@@ -65,6 +70,26 @@ function harness(prepareError, withDisplayMethod, withSilentSubtitle) {
 process.stdout.write('Contrato AVPlay\n');
 const display = harness(null, true);
 display.player.play('https://media.public.test/video.m3u8');
+/*
+  A partida usa o minimo oficial; a retomada, nao mais.
+
+  Quatro segundos e o que precisa chegar ANTES de a imagem aparecer, e pedir mais
+  ali faria a tela esperar em vez de encher por baixo. A retomada e outra coisa:
+  e o reservatorio que decide se uma queda de rede vira uma pausa, e um filme
+  guarda dois minutos onde um canal ao vivo guarda segundos.
+
+  Esta chamada nao informa `isLive`, entao cai no caminho de arquivo — que e o
+  caso do endereco `.m3u8` de video que ela usa.
+*/
+check('a partida usa o mínimo oficial de quatro segundos',
+    display.bufferingParams.length === 2 &&
+    display.bufferingParams[0].option === 'PLAYER_BUFFER_FOR_PLAY' &&
+    display.bufferingParams[0].unit === 'PLAYER_BUFFER_SIZE_IN_SECOND' &&
+    display.bufferingParams[0].amount === 4);
+check('e a retomada de um arquivo guarda dois minutos',
+    display.bufferingParams[1].option === 'PLAYER_BUFFER_FOR_RESUME' &&
+    display.bufferingParams[1].unit === 'PLAYER_BUFFER_SIZE_IN_SECOND' &&
+    display.bufferingParams[1].amount === 120);
 check('modo inicial preserva proporcao',
     display.displayMethods.join(',') === 'PLAYER_DISPLAY_MODE_LETTER_BOX');
 check('somente os tres modos documentados ficam publicos',
