@@ -355,12 +355,28 @@ fun String.shelfDeduplicationKey(): String {
     }
     // Short bracketed tags only. Two or three characters is a marker; more may be a subtitle.
     working = working.replace(SHORT_BRACKETED_TAG, " ")
-    // A trailing one- or two-letter word, which is how several providers mark a language.
-    working = working.replace(TRAILING_SHORT_WORD, " ")
     // Codec and container words. Absent from the shared normaliser because they are not evidence
     // about which film a title is — but on a shelf, "Filme HEVC" and "Filme HD" are one film, and
     // dropping this list while unifying the keys would have reintroduced that duplicate.
     working = working.replace(SHELF_ONLY_DECORATION, " ")
+    // A bare quality mark at the end, which is the other way providers write the same thing.
+    //
+    // `A&E [HD]` collapsed because the tag is bracketed, but `A&E 480` did not — so with two lists
+    // merged the grid showed four A&E cards where one belongs. Reported with a screenshot of
+    // exactly that.
+    //
+    // Only at the end, and repeatedly, because "Globo FHD H265" carries two. Anywhere in the
+    // string would take the 4K out of a category called "4K Filmes Premiados"; a channel with a
+    // number in its actual name — "Canal 4", "Rede 21" — is untouched because those are not
+    // quality marks.
+    var previous: String? = null
+    while (previous != working) {
+        previous = working
+        working = working.trimEnd().replace(TRAILING_QUALITY, "")
+    }
+    // A trailing one- or two-letter word, which is how several providers mark a language. After the
+    // quality marks, so "Canal HD L" loses both rather than stopping at the language.
+    working = working.replace(TRAILING_SHORT_WORD, " ")
 
     return working.normalisedForMatching()
 }
@@ -376,6 +392,20 @@ private val SHORT_BRACKETED_TAG = Regex("""[\[(][A-Za-z0-9]{1,4}[\])]""")
 
 /** A one- or two-letter word at the end, after the real title. */
 private val TRAILING_SHORT_WORD = Regex("""\s+[A-Za-z]{1,2}\s*$""")
+
+/**
+ * A resolution or quality word at the end of a channel name.
+ *
+ * `A&E`, `A&E 480`, `A&E [HD]` and `A&E [SD]` are one channel offered four ways. The bracketed ones
+ * were already collapsed; the bare `480` was not, so merging two lists put four A&E cards on the
+ * grid where one belongs.
+ *
+ * Anchored at the end because that is where a provider writes it, and because anywhere in the
+ * string would strip the 4K from a category named "4K Filmes Premiados". A number that is part of
+ * the name — "Canal 4", "Rede 21", "Blade Runner 2049" — is not a quality mark and survives.
+ */
+private val TRAILING_QUALITY =
+    Regex("""[\s\-|]+(sd|hd|fhd|uhd|4k|8k|480p?|576p?|720p?|1080p?|2160p?)$""", RegexOption.IGNORE_CASE)
 
 /**
  * Codec, range and audio words, stripped for shelves only.

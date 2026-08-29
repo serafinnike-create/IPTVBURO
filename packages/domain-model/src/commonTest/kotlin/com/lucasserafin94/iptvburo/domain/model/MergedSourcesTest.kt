@@ -187,4 +187,53 @@ class MergedSourcesTest {
 
         assertEquals(10, MergedSources.withinLimit(few).size)
     }
+
+    /**
+     * One channel offered in several qualities is one card.
+     *
+     * A provider carries "A&E", "A&E 480", "A&E [HD]" and "A&E [SD]" — the same channel four ways.
+     * The bracketed marks were already collapsed; the bare "480" was not, so merging two lists put
+     * four A&E cards on the grid. Reported with a screenshot of exactly that.
+     */
+    @Test
+    fun `quality variants of one channel share a key`() {
+        val keys =
+            listOf("A&E", "A&E 480", "A&E [HD]", "A&E [SD]", "A&E [FHD][H265]", "A&E FHD")
+                .map { name -> name.shelfDeduplicationKey() }
+                .toSet()
+
+        assertEquals(1, keys.size, "as variantes de qualidade nao dao a mesma chave: $keys")
+    }
+
+    /**
+     * But a number that belongs to the name is not a quality mark.
+     *
+     * "Canal 4" and "Rede 21" are different channels from "Canal" and "Rede". A year is a separate
+     * matter: `normalisedForMatching` has always dropped it on purpose, so "Duna (2021)" and "Duna"
+     * are one film — that is not what this rule touches.
+     */
+    @Test
+    fun `a number in the real name survives`() {
+        listOf("Canal 4", "Rede 21")
+            .forEach { name ->
+                assertTrue(
+                    name.shelfDeduplicationKey().any(Char::isDigit),
+                    "$name perdeu o numero que faz parte do nome",
+                )
+            }
+        // And they stay distinct from the same name without the number.
+        assertTrue(
+            "Canal 4".shelfDeduplicationKey() != "Canal".shelfDeduplicationKey(),
+            "Canal 4 colapsou com Canal",
+        )
+    }
+
+    /** And two different channels still differ. */
+    @Test
+    fun `different channels keep different keys`() {
+        assertTrue(
+            "A&E HD".shelfDeduplicationKey() != "AXN HD".shelfDeduplicationKey(),
+            "dois canais diferentes colapsaram num so",
+        )
+    }
 }
