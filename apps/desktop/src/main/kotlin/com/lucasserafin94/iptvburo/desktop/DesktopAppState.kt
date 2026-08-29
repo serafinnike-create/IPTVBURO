@@ -3,6 +3,7 @@ package com.lucasserafin94.iptvburo.desktop
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.lucasserafin94.iptvburo.desktop.build.BUNDLED_TMDB_KEY
@@ -75,6 +76,8 @@ import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import com.lucasserafin94.iptvburo.domain.model.BestOfferPolicy
 import com.lucasserafin94.iptvburo.domain.model.MergedSources
 import com.lucasserafin94.iptvburo.domain.model.ProviderText
+import com.lucasserafin94.iptvburo.domain.model.EpgEntry
+import com.lucasserafin94.iptvburo.domain.model.LiveGuide
 import com.lucasserafin94.iptvburo.domain.model.CacheBudget
 import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
 import com.lucasserafin94.iptvburo.domain.model.CacheFillState
@@ -7682,6 +7685,106 @@ class DesktopAppState(
             text = DesktopStrings.of(language).shareStrings.failures,
         )
 
+    // -----------------------------------------------------------------------------------------
+    // The live guide
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * The channel the guide is sitting on.
+     *
+     * Its own selection, separate from the catalogue's: the guide is a screen somebody moves down
+     * with the arrow keys, and sharing the catalogue's selection would mean leaving the guide
+     * changed what the grid behind it was showing.
+     */
+    var guideFocusedChannelId by mutableStateOf<String?>(null)
+        private set
+
+    /** One channel's schedule and when it was fetched, so staleness can be judged. */
+    private data class GuideSchedule(
+        val entries: List<EpgEntry>,
+        val fetchedAtEpochSeconds: Long,
+    )
+
+    /** Schedules already fetched, by channel, with when they were fetched. */
+    private val guideSchedules = mutableStateMapOf<String, GuideSchedule>()
+
+    /** Channels whose schedule is being fetched now, so the same one is not asked for twice. */
+    private val guideInFlight = mutableSetOf<String>()
+
+    /** The channels the guide lists: whatever the live catalogue currently holds. */
+    val guideChannels: List<XtreamCatalogItem>
+        get() = if (xtreamContentType == XtreamContentType.LIVE) xtreamPage.items else emptyList()
+
+    /** The schedule for [channelId], or null while it is still being fetched. */
+    fun guideScheduleFor(channelId: String): List<EpgEntry>? = guideSchedules[channelId]?.entries
+
+    /** Whether [channelId] is being fetched right now, so the row can say so. */
+    fun guideIsLoading(channelId: String): Boolean = channelId in guideInFlight
+
+    /**
+     * Moves the guide to [channelId] and fetches what it needs.
+     *
+     * The focused channel first, then the few either side — moving down a list one row at a time is
+     * how a guide is read, so the next rows are worth having in hand. See [LiveGuide].
+     */
+    suspend fun focusGuideChannel(channelId: String) {
+        guideFocusedChannelId = channelId
+        val channels = guideChannels
+        val index = channels.indexOfFirst { it.providerId == channelId }
+        if (index < 0) return
+
+        // The focused row before its neighbours: it is the one on screen, and a viewer moving
+        // quickly should never wait on a row they have already left.
+        fetchGuideSchedule(channelId)
+        LiveGuide.prefetchWindow(index, channels.size).forEach { neighbour ->
+            channels.getOrNull(neighbour)?.let { item -> fetchGuideSchedule(item.providerId) }
+        }
+    }
+
+    private suspend fun fetchGuideSchedule(channelId: String) {
+        val nowSeconds = System.currentTimeMillis() / 1_000L
+        val held = guideSchedules[channelId]
+        if (held != null && LiveGuide.isFresh(held.fetchedAtEpochSeconds, nowSeconds)) return
+        if (!guideInFlight.add(channelId)) return
+
+        try {
+            val epg =
+                runCatching { withContext(Dispatchers.IO) { xtreamRepository.shortEpg(channelId) } }
+                    .getOrNull()
+            // A channel with no schedule is recorded as empty rather than left unfetched, or every
+            // pass over it would ask the provider again for an answer it has already given.
+            val entries =
+                epg?.programs.orEmpty().map { program ->
+                    EpgEntry(
+                        title = program.title,
+                        description = program.description,
+                        startEpochSeconds = program.startEpochSeconds,
+                        endEpochSeconds = program.endEpochSeconds,
+                    )
+                }
+            // Bounded, because each entry is a few hours of programmes for one channel and an
+            // evening of browsing would otherwise hold the whole catalogue's schedule.
+            if (guideSchedules.size >= LiveGuide.MAX_CACHED_SCHEDULES) {
+                guideSchedules.keys
+                    .take(guideSchedules.size - LiveGuide.MAX_CACHED_SCHEDULES + 1)
+                    .forEach(guideSchedules::remove)
+            }
+            guideSchedules[channelId] = GuideSchedule(entries, nowSeconds)
+        } finally {
+            guideInFlight.remove(channelId)
+        }
+    }
+
+    /** Opens the guide, focusing whichever channel is already selected. */
+    suspend fun openGuide() {
+        destination = DesktopDestination.GUIDE
+        if (xtreamContentType != XtreamContentType.LIVE) {
+            selectXtreamContentType(XtreamContentType.LIVE)
+        }
+        val first = guideFocusedChannelId ?: guideChannels.firstOrNull()?.providerId
+        if (first != null) focusGuideChannel(first)
+    }
+
     private companion object {
         const val MAX_SEARCH_LENGTH = 120
 
@@ -7851,6 +7954,15 @@ enum class DesktopDestination {
     DISCOVER,
     /** Titles the viewer marked to come back to, including ones not in the catalogue yet. */
     REMINDERS,
+
+    /**
+     * Channels on one side, what is on them on the other, the focused one playing.
+     *
+     * The catalogue answers "what channels are there"; this answers "what is on". That second
+     * question is what somebody reaches for when they sit down, and a grid of logos is not a
+     * substitute for it.
+     */
+    GUIDE,
 }
 
 /**

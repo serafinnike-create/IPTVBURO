@@ -118,6 +118,8 @@ import com.lucasserafin94.iptvburo.desktop.download.formatRate
 import com.lucasserafin94.iptvburo.desktop.license.LicenseStatus
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceKind
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceSummary
+import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
+import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.model.PlaybackReadiness
 import com.lucasserafin94.iptvburo.desktop.model.playbackReadiness
 import com.lucasserafin94.iptvburo.desktop.platform.DesktopPlatformCapabilities
@@ -436,6 +438,7 @@ fun DesktopApp(
                         onLive = {
                             scope.launch { appState.openCatalog(XtreamContentType.LIVE) }
                         },
+                        onGuide = { scope.launch { appState.openGuide() } },
                         onFavorites = { scope.launch { appState.setFavoritesOnly(true) } },
                         onReminders = appState::openReminders,
                         onDiscover = appState::openDiscovery,
@@ -685,6 +688,39 @@ fun DesktopApp(
                                 },
                                 onForget = appState::forgetHistoryEntry,
                                 onClearAll = appState::clearHistory,
+                            )
+                        } else if (visibleDestination == DesktopDestination.GUIDE) {
+                            LiveGuideScreen(
+                                channels = appState.guideChannels,
+                                focusedChannelId = appState.guideFocusedChannelId,
+                                scheduleFor = appState::guideScheduleFor,
+                                isLoading = appState::guideIsLoading,
+                                onFocusChannel = { channelId ->
+                                    scope.launch { appState.focusGuideChannel(channelId) }
+                                },
+                                onWatch = { channel ->
+                                    // Plays where it stands rather than opening a details page.
+                                    //
+                                    // From a guide the viewer has already read what is on and
+                                    // pressed Watch; sending them to a page about the channel to
+                                    // press play again is a step that answers nothing.
+                                    //
+                                    // Built the same way every other play builds it, so the
+                                    // progress identity and the buffer decision are the shared
+                                    // ones rather than a second opinion.
+                                    activePlayback =
+                                        appState.prepareXtreamPlayback(
+                                            XtreamPlaybackTarget.CatalogItem(
+                                                providerId = channel.providerId,
+                                                contentType = channel.contentType,
+                                                containerExtension = channel.containerExtension,
+                                                contentKey = channel.contentIdentity().key,
+                                            ),
+                                            channel.name,
+                                        )
+                                },
+                                strings = text,
+                                nowEpochSeconds = rememberGuideClock(),
                             )
                         } else if (visibleDestination == DesktopDestination.DISCOVER) {
                             DiscoveryScreen(
@@ -1309,6 +1345,8 @@ private fun SourceSidebar(
     onMovies: () -> Unit,
     onSeries: () -> Unit,
     onLive: () -> Unit,
+    /** Opens the guide: channels one side, what is on them the other. */
+    onGuide: () -> Unit = {},
     onFavorites: () -> Unit,
     onReminders: () -> Unit,
     onDiscover: () -> Unit,
@@ -1518,6 +1556,12 @@ private fun SourceSidebar(
                 destination == DesktopDestination.CATALOG &&
                     catalogType == XtreamContentType.SERIES,
             onClick = onSeries,
+        )
+        NavigationItem(
+            label = text.shareStrings.screens.guideTitle,
+            icon = Icons.Default.LiveTv,
+            selected = destination == DesktopDestination.GUIDE,
+            onClick = onGuide,
         )
         NavigationItem(
             label = text.live,
