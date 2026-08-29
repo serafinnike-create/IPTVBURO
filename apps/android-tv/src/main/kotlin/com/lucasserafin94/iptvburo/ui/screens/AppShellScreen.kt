@@ -210,6 +210,8 @@ fun AppShellScreen(
     onToggleMergeSources: (Boolean) -> Unit = {},
     onOpenCategory: (CategoryUi) -> Unit,
     onOpenChannel: (ChannelUi) -> Unit,
+    /** Moves the guide to a channel, which fetches its schedule and those around it. */
+    onFocusGuideChannel: (ChannelUi) -> Unit = {},
     /** Runs a catalogue search. Called once the field settles, not per keystroke. */
     onSearch: (String) -> Unit,
     onPlayMovie: () -> Unit,
@@ -653,6 +655,21 @@ fun AppShellScreen(
                                 )
                             }
 
+                        is AppContent.Guide -> LiveGuideScreen(
+                            channels = state.channels,
+                            focusedChannelId = state.guideFocusedChannelId,
+                            scheduleFor = { id -> state.guideSchedules[id] },
+                            isLoading = { id -> id in state.guideLoadingChannelIds },
+                            onFocusChannel = onFocusGuideChannel,
+                            // The same route the catalogue takes, so the resume decision and the
+                            // progress identity are the ones every other screen uses.
+                            onWatch = onOpenChannel,
+                            title = stringResource(R.string.buro_nav_guide),
+                            nowLabel = stringResource(R.string.guide_now),
+                            emptyLabel = stringResource(R.string.guide_no_schedule),
+                            watchLabel = stringResource(R.string.guide_watch),
+                        )
+
                         is AppContent.Categories -> CategoriesContent(
                             title = content.sourceName,
                             categories = state.categories,
@@ -1024,6 +1041,7 @@ fun AppShellScreen(
 private fun AppSection.isRibbonDestination(offlineSupported: Boolean): Boolean =
     when (this) {
         AppSection.HOME,
+        AppSection.GUIDE,
         AppSection.LIVE,
         AppSection.MOVIES,
         AppSection.SERIES,
@@ -1460,6 +1478,7 @@ private fun SectionPlaceholderContent(
 private fun AppSection.ribbonLabelResource(): Int =
     when (this) {
         AppSection.HOME -> R.string.buro_nav_home
+        AppSection.GUIDE -> R.string.buro_nav_guide
         AppSection.LIVE -> R.string.buro_nav_live
         AppSection.MOVIES -> R.string.buro_nav_movies
         AppSection.SERIES -> R.string.buro_nav_series

@@ -249,6 +249,9 @@
     <string name="settings_active_profile">Aktives Profil</string>
     <string name="settings_choose_profile">Profil wählen</string>
     <string name="live_schedule_title">Programm</string>
+    <string name="guide_now">Jetzt</string>
+    <string name="guide_no_schedule">Dieser Sender hat kein Programm gesendet.</string>
+    <string name="guide_watch">Diesen Sender ansehen</string>
     <string name="live_schedule_empty">Ihr Anbieter hat für diesen Sender kein Programm geliefert. Viele Playlists enthalten keines — weder mit der App noch mit Ihrer Verbindung stimmt etwas nicht.</string>
     <string name="cast_action">An Bildschirm</string>
     <string name="cast_receive_action">Von einem Computer empfangen</string>

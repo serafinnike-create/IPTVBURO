@@ -249,6 +249,9 @@
     <string name="settings_active_profile">Active profile</string>
     <string name="settings_choose_profile">Choose a profile</string>
     <string name="live_schedule_title">Schedule</string>
+    <string name="guide_now">Now</string>
+    <string name="guide_no_schedule">This channel sent no schedule.</string>
+    <string name="guide_watch">Watch this channel</string>
     <string name="live_schedule_empty">Your provider sent no guide for this channel. Many playlists carry none — nothing is wrong with the app or your connection.</string>
     <string name="cast_action">Send to screen</string>
     <string name="cast_receive_action">Receive from a computer</string>

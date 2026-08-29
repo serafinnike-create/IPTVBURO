@@ -402,6 +402,13 @@ enum class XtreamImportStageUi {
 
 enum class AppSection {
     HOME,
+    /**
+     * Channels on one side, what is on them on the other.
+     *
+     * The catalogue answers "what channels are there"; this answers "what is on". That second
+     * question is what somebody reaches for when they sit down.
+     */
+    GUIDE,
     LIVE,
     MOVIES,
     SERIES,
@@ -421,6 +428,14 @@ enum class AppSection {
 sealed interface AppContent {
     data object Home : AppContent
     data object Sources : AppContent
+
+    /**
+     * Channels on one side, what is on them on the other.
+     *
+     * Its own content rather than a mode of Channels: the guide lists every live channel at once
+     * and carries a schedule beside it, where Channels lists one category and carries none.
+     */
+    data object Guide : AppContent
 
     data class SectionPlaceholder(
         val section: AppSection,
@@ -746,6 +761,17 @@ data class AppUiState(
     val liveNext: LiveProgramUi? = null,
     /** The whole schedule for the open live channel, for the guide. Empty when there is none. */
     val liveSchedule: List<LiveProgramUi> = emptyList(),
+    /**
+     * The channel the guide is sitting on, and the schedules it has fetched.
+     *
+     * Its own selection, separate from what is playing: the guide is a screen somebody moves down
+     * with the D-pad, and sharing the player's channel would mean browsing changed what was on.
+     */
+    val guideFocusedChannelId: String? = null,
+    /** Schedules already fetched, by channel id. Absent means not fetched yet, not empty. */
+    val guideSchedules: Map<String, List<LiveProgramUi>> = emptyMap(),
+    /** Channels being fetched right now, so a row can say so rather than looking empty. */
+    val guideLoadingChannelIds: Set<String> = emptySet(),
     val isLiveEpgLoading: Boolean = false,
     val movieDetails: MovieDetailsUi? = null,
     /**

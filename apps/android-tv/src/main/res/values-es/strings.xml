@@ -249,6 +249,9 @@
     <string name="settings_active_profile">Perfil activo</string>
     <string name="settings_choose_profile">Elegir un perfil</string>
     <string name="live_schedule_title">Programación</string>
+    <string name="guide_now">Ahora</string>
+    <string name="guide_no_schedule">Este canal no envió programación.</string>
+    <string name="guide_watch">Ver este canal</string>
     <string name="live_schedule_empty">Tu proveedor no envió guía para este canal. Muchas listas no traen ninguna: no hay nada mal en la aplicación ni en tu conexión.</string>
     <string name="cast_action">Enviar a pantalla</string>
     <string name="cast_receive_action">Recibir desde un ordenador</string>

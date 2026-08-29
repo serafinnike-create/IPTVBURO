@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="buro_nav_home">Home</string>
+    <string name="buro_nav_guide">Guida</string>
     <string name="buro_nav_live">In diretta</string>
     <string name="buro_nav_movies">Film</string>
     <string name="buro_nav_series">Serie</string>

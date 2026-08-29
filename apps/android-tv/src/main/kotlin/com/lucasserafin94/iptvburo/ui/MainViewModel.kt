@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lucasserafin94.iptvburo.domain.model.Reminder
+import com.lucasserafin94.iptvburo.domain.model.LiveGuide
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.core.logging.AppLogger
 import com.lucasserafin94.iptvburo.data.download.AndroidDownloadManager
@@ -708,6 +709,10 @@ class MainViewModel @Inject constructor(
                 // rather than only when Assinaturas is opened. Cached after the first call, so
                 // returning home does not re-fetch them.
                 loadSubscriptionShelves()
+            }
+            AppSection.GUIDE -> {
+                updateDestination(section, AppContent.Guide)
+                loadGuideChannels()
             }
             AppSection.SOURCES -> updateDestination(section, AppContent.Sources)
             AppSection.SETTINGS -> {
@@ -2421,6 +2426,110 @@ class MainViewModel @Inject constructor(
                 }
             }
     }
+
+    // ---------------------------------------------------------------------------------------
+    // The live guide
+    // ---------------------------------------------------------------------------------------
+
+    /** Channels already being fetched, so a D-pad sweep does not ask for the same one twice. */
+    private val guideInFlight = mutableSetOf<String>()
+
+    /** When each schedule was fetched, so a fresh one is not asked for again. */
+    private val guideFetchedAt = mutableMapOf<String, Long>()
+
+    /**
+     * The live channels the guide lists.
+     *
+     * The same page the catalogue uses, so merging and the parental policy apply here exactly as
+     * they do everywhere else rather than through a second path that could disagree.
+     */
+    private fun loadGuideChannels() {
+        viewModelScope.launch {
+            val source = mutableState.value.sources.firstOrNull() ?: return@launch
+            runCatching {
+                catalogRepository.loadChannelsPageAfter(
+                    sourceId = if (mergeEverySource) "" else source.id,
+                    categoryId = null,
+                    contentType = CatalogContentType.LIVE,
+                    cursor = null,
+                    limit = GUIDE_CHANNEL_LIMIT,
+                )
+            }.onSuccess { page ->
+                val channels =
+                    page.items
+                        .map { channel -> channel.toCatalogUi(channel.categoryId?.let(channelCategoryNames::get).orEmpty()) }
+                        .filterKidsContentIfNeeded(mutableState.value.activeProfile)
+                mutableState.update { state -> state.copy(channels = channels) }
+                channels.firstOrNull()?.let { first -> focusGuideChannel(first) }
+            }
+        }
+    }
+
+    /**
+     * Moves the guide to [channel] and fetches what it needs.
+     *
+     * The focused row first, then the few either side: moving down a list one row at a time is how
+     * a guide is read, so the next rows are worth having in hand. See [LiveGuide].
+     */
+    fun focusGuideChannel(channel: ChannelUi) {
+        mutableState.update { state -> state.copy(guideFocusedChannelId = channel.id) }
+        val channels = mutableState.value.channels
+        val index = channels.indexOfFirst { it.id == channel.id }
+        if (index < 0) return
+        fetchGuideSchedule(channel)
+        LiveGuide.prefetchWindow(index, channels.size).forEach { neighbour ->
+            channels.getOrNull(neighbour)?.let(::fetchGuideSchedule)
+        }
+    }
+
+    private fun fetchGuideSchedule(channel: ChannelUi) {
+        val streamId = channel.providerItemId ?: return
+        val nowSeconds = System.currentTimeMillis() / 1_000L
+        val fetchedAt = guideFetchedAt[channel.id]
+        if (fetchedAt != null && LiveGuide.isFresh(fetchedAt, nowSeconds)) return
+        if (!guideInFlight.add(channel.id)) return
+
+        viewModelScope.launch {
+            mutableState.update { state ->
+                state.copy(guideLoadingChannelIds = state.guideLoadingChannelIds + channel.id)
+            }
+            try {
+                val epg =
+                    runCatching { catalogRepository.loadShortEpg(channel.sourceId, streamId) }
+                        .getOrNull()
+                // A channel with no schedule is recorded as empty rather than left unfetched, or
+                // every pass over it would ask the provider again for the same answer.
+                val entries = epg?.schedule.orEmpty().map { it.toUi() }
+                guideFetchedAt[channel.id] = nowSeconds
+                mutableState.update { state ->
+                    // Bounded, because each entry is a few hours of programmes for one channel and
+                    // an evening of browsing would otherwise hold the whole catalogue's schedule.
+                    val trimmed =
+                        if (state.guideSchedules.size >= LiveGuide.MAX_CACHED_SCHEDULES) {
+                            state.guideSchedules.entries
+                                .drop(state.guideSchedules.size - LiveGuide.MAX_CACHED_SCHEDULES + 1)
+                                .associate { it.key to it.value }
+                        } else {
+                            state.guideSchedules
+                        }
+                    state.copy(
+                        guideSchedules = trimmed + (channel.id to entries),
+                        guideLoadingChannelIds = state.guideLoadingChannelIds - channel.id,
+                    )
+                }
+            } finally {
+                guideInFlight.remove(channel.id)
+            }
+        }
+    }
+
+    /**
+     * How many channels the guide lists.
+     *
+     * A guide is read by moving through it, not by loading a whole four-hundred-channel catalogue
+     * into one screen. Generous enough that the ordinary list arrives whole.
+     */
+    private val GUIDE_CHANNEL_LIMIT = 400
 
     private fun loadLiveEpg(channel: ChannelUi, providerStreamId: String) {
         viewModelScope.launch {
