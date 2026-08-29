@@ -119,6 +119,7 @@ import com.lucasserafin94.iptvburo.desktop.license.LicenseStatus
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceKind
 import com.lucasserafin94.iptvburo.desktop.model.DesktopSourceSummary
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
+import com.lucasserafin94.iptvburo.desktop.playback.MultiviewTile
 import com.lucasserafin94.iptvburo.desktop.data.contentIdentity
 import com.lucasserafin94.iptvburo.desktop.model.PlaybackReadiness
 import com.lucasserafin94.iptvburo.desktop.model.playbackReadiness
@@ -718,6 +719,28 @@ fun DesktopApp(
                                             ),
                                             channel.name,
                                         )
+                                },
+                                previewRequestFor = { channel ->
+                                    // Built through the shared route, so the preview asks for a
+                                    // stream exactly as every other screen does — and the guide
+                                    // itself never holds a credentialed address.
+                                    appState
+                                        .prepareXtreamPlayback(
+                                            XtreamPlaybackTarget.CatalogItem(
+                                                providerId = channel.providerId,
+                                                contentType = channel.contentType,
+                                                containerExtension = channel.containerExtension,
+                                                contentKey = channel.contentIdentity().key,
+                                            ),
+                                            channel.name,
+                                        )
+                                        ?.let { request ->
+                                            MultiviewTile(
+                                                providerId = channel.providerId,
+                                                request = request,
+                                                title = channel.name,
+                                            )
+                                        }
                                 },
                                 strings = text,
                                 nowEpochSeconds = rememberGuideClock(),

@@ -152,16 +152,17 @@ class LiveGuideWiringTest {
     }
 
     /**
-     * Pointing at a channel selects it, without a click.
+     * The pointer merely crossing a row does not select it.
      *
-     * A guide is a screen somebody sweeps rather than clicks through, and asking for a click to see
-     * what is on each channel is the work the guide exists to remove.
+     * Following the pointer was tried and is worse in the hand: the mouse passes over rows on its
+     * way to somewhere else, each pass changed the channel and started a stream, and the viewer
+     * ends up fighting the screen to reach the one they wanted. Reported after using it.
      */
     @Test
-    fun `hovering a channel focuses it`() {
+    fun `hovering a channel does not select it`() {
         assertTrue(
-            screen.contains("LaunchedEffect(hovered) { if (hovered && !selected) onClick() }"),
-            "passar por cima de um canal nao o selecciona",
+            !screen.contains("collectIsHoveredAsState"),
+            "o canal volta a ser seleccionado so por passar o rato por cima",
         )
     }
 
@@ -218,6 +219,53 @@ class LiveGuideWiringTest {
         assertTrue(
             screen.contains("channel.name.editorialTitle()"),
             "os nomes dos canais mostram as marcas de qualidade do fornecedor",
+        )
+    }
+
+    /**
+     * The focused channel plays in the panel.
+     *
+     * Selecting a channel and then having to press play to hear it is the step a guide exists to
+     * remove — a satellite box starts the channel as you land on it.
+     */
+    @Test
+    fun `the focused channel plays in the panel`() {
+        assertTrue(screen.contains("GuidePreview("), "o canal em foco nao toca no painel")
+        assertTrue(
+            app.contains("previewRequestFor = { channel ->"),
+            "nada fornece o fluxo para a previa",
+        )
+    }
+
+    /**
+     * But only once the focus stops moving.
+     *
+     * The focus follows the pointer and the arrow keys, so a sweep down the list would open and
+     * abandon a connection per row. Many subscriptions allow only one at a time, and a viewer
+     * scanning their own guide would lock themselves out of their own account.
+     */
+    @Test
+    fun `the preview waits for the focus to settle`() {
+        assertTrue(
+            screen.contains("delay(PREVIEW_SETTLE_MILLIS)"),
+            "a previa abre um fluxo em cada linha por onde o foco passa",
+        )
+    }
+
+    /**
+     * And the preview goes through the shared playback route.
+     *
+     * Its own would need its own credential handling, and the guide would then be a second place a
+     * signed address could be held.
+     */
+    @Test
+    fun `the preview uses the shared playback route`() {
+        val supplier =
+            app.substringAfter("previewRequestFor = { channel ->").substringBefore("strings = text,")
+
+        assertTrue(
+            supplier.contains("prepareXtreamPlayback("),
+            "a previa constroi o endereco a sua maneira",
         )
     }
 

@@ -4,9 +4,6 @@ import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +26,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +45,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
@@ -55,6 +54,8 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
+import com.lucasserafin94.iptvburo.desktop.playback.MultiviewSurface
+import com.lucasserafin94.iptvburo.desktop.playback.MultiviewTile
 import com.lucasserafin94.iptvburo.domain.model.EpgEntry
 import com.lucasserafin94.iptvburo.domain.model.LiveGuide
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
@@ -80,6 +81,13 @@ fun LiveGuideScreen(
     isLoading: (String) -> Boolean,
     onFocusChannel: (String) -> Unit,
     onWatch: (XtreamCatalogItem) -> Unit,
+    /**
+     * The stream to preview, or null when the channel cannot be played.
+     *
+     * Built by the caller rather than here, so the preview asks for a stream the same way every
+     * other screen does — and so this composable never touches a credentialed address.
+     */
+    previewRequestFor: (XtreamCatalogItem) -> MultiviewTile?,
     strings: DesktopStrings,
     /**
      * Seconds since the epoch, so "now" can be tested rather than read from the clock.
@@ -233,13 +241,30 @@ fun LiveGuideScreen(
                 Box(
                     modifier =
                         Modifier
-                            .width(300.dp)
+                            .width(460.dp)
                             .aspectRatio(16f / 9f)
                             .clip(RoundedCornerShape(10.dp))
                             .background(BuroColors.SurfaceRaised),
                     contentAlignment = Alignment.Center,
                 ) {
-                    BuroRemoteArtwork(
+                    // The channel plays here once the focus settles.
+                    //
+                    // Settles, not lands: the focus follows the pointer and the arrow keys, so a
+                    // sweep down the list would otherwise open and abandon a stream per row. Many
+                    // subscriptions allow only one connection at a time, and a viewer scanning
+                    // their own guide would lock themselves out of their own account.
+                    val tile = previewRequestFor(focused)
+                    var previewing by remember(focused.providerId) { mutableStateOf(false) }
+                    LaunchedEffect(focused.providerId) {
+                        previewing = false
+                        delay(PREVIEW_SETTLE_MILLIS)
+                        previewing = true
+                    }
+
+                    if (previewing && tile != null) {
+                        GuidePreview(tile = tile, strings = strings)
+                    } else {
+                        BuroRemoteArtwork(
                         artworkUrl = focused.artworkUrl,
                         contentDescription = focused.name,
                         modifier = Modifier.fillMaxSize().padding(BuroSpacing.Sm),
@@ -252,6 +277,7 @@ fun LiveGuideScreen(
                             color = BuroColors.TextSubtle,
                             style = MaterialTheme.typography.headlineSmall,
                         )
+                        }
                     }
                 }
                 Spacer(Modifier.width(BuroSpacing.Md))
@@ -273,7 +299,9 @@ fun LiveGuideScreen(
                         contentDescription = labels.guideWatch,
                     ) {
                         Text(
-                            text = "▶  ${labels.guideWatch}",
+                            // The arrows say "make this bigger": the channel is already playing in
+                            // the panel beside it, so this is expanding rather than starting.
+                            text = "⛶  ${labels.guideWatch}",
                             color = BuroColors.Primary,
                             style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -334,6 +362,42 @@ fun LiveGuideScreen(
     }
 }
 
+/**
+ * How long the focus must hold still before a stream is opened.
+ *
+ * The focus follows the pointer and the arrow keys, so a sweep down the list would open and abandon
+ * a connection per row. Many subscriptions allow only one at a time, and a viewer scanning their own
+ * guide would lock themselves out of their own account. Long enough to survive a sweep, short enough
+ * that stopping on a channel feels like it starts at once.
+ */
+private const val PREVIEW_SETTLE_MILLIS = 900L
+
+/**
+ * One channel playing inside the guide.
+ *
+ * Reuses the multiview surface rather than a second embedding of VLC: an embedded heavyweight canvas
+ * has to be handled exactly one way on Windows, and that way is already written and proven there —
+ * see MultiviewSurface for what goes wrong otherwise.
+ */
+@Composable
+private fun GuidePreview(
+    tile: MultiviewTile,
+    strings: DesktopStrings,
+) {
+    val surface = remember { MultiviewSurface() }
+    DisposableEffect(surface) { onDispose { surface.dispose() } }
+    // Read in composable scope: the effect below is not one. Same reason recorded in MultiviewOverlay.
+    val previewText = strings.shareStrings.screens
+    LaunchedEffect(tile.providerId) {
+        surface.sync(tiles = listOf(tile), onTileClicked = {}, text = previewText)
+    }
+    SwingPanel(
+        background = MultiviewSurface.SEAM_COLOUR,
+        factory = { surface.component() },
+        modifier = Modifier.fillMaxSize(),
+    )
+}
+
 /** One channel in the list, with what is on it now under the name. */
 @Composable
 private fun ChannelRow(
@@ -343,19 +407,15 @@ private fun ChannelRow(
     loading: Boolean,
     onClick: () -> Unit,
 ) {
-    val interactions = remember(channel.providerId) { MutableInteractionSource() }
-    val hovered by interactions.collectIsHoveredAsState()
-    // Pointing at a channel selects it, without a click.
+    // Selected by a click or by the arrows, never by the pointer merely crossing the row.
     //
-    // A guide is a screen somebody sweeps rather than clicks through, and asking for a click to see
-    // what is on each channel is the work the guide exists to remove. The schedule is already being
-    // fetched for the rows around the focus, so this costs nothing extra most of the time.
-    LaunchedEffect(hovered) { if (hovered && !selected) onClick() }
-
+    // Following the pointer was tried and is worse in the hand: the mouse passes over rows on its
+    // way to somewhere else, and each pass changed the channel and started a stream. The viewer
+    // ends up fighting the screen to reach the one they wanted. Reported after using it.
     BuroInteractiveRow(
         onClick = onClick,
         selected = selected,
-        modifier = Modifier.fillMaxWidth().hoverable(interactions),
+        modifier = Modifier.fillMaxWidth(),
         shape = BuroRadius.Small,
         contentDescription = channel.name,
     ) {
