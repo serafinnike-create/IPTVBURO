@@ -836,6 +836,8 @@ data class DesktopStrings(
                             duplicatesLabel = "Copias repetidas",
                             duplicatesHint = "Las listas suelen traer la misma película varias veces, una por calidad o doblaje.",
                             duplicatesToggle = "Mostrar una sola tarjeta por película",
+                            livePreviewLabel = "Vista previa del canal enfocado",
+                            livePreviewHint = "Cada vista previa abre una sesión con tu proveedor. Si el tuyo limita conexiones, déjala apagada.",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -1606,6 +1608,8 @@ data class DesktopStrings(
                             duplicatesLabel = "Cópias repetidas",
                             duplicatesHint = "As listas costumam trazer o mesmo filme várias vezes, uma por qualidade ou dublagem.",
                             duplicatesToggle = "Mostrar só um card por filme",
+                            livePreviewLabel = "Prévia do canal em foco",
+                            livePreviewHint = "Cada prévia abre uma sessão no seu provedor. Se o seu limita conexões, deixe desligada.",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -2376,6 +2380,8 @@ data class DesktopStrings(
                             duplicatesLabel = "Repeated copies",
                             duplicatesHint = "Lists usually carry the same film several times over, one per quality or dubbing.",
                             duplicatesToggle = "Show one card per film",
+                            livePreviewLabel = "Preview the focused channel",
+                            livePreviewHint = "Every preview opens a session with your provider. If yours caps connections, leave it off.",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -3145,6 +3151,8 @@ data class DesktopStrings(
                             duplicatesLabel = "Mehrfache Kopien",
                             duplicatesHint = "Listen enthalten denselben Film oft mehrfach, je nach Qualität oder Synchronisation.",
                             duplicatesToggle = "Nur eine Karte pro Film zeigen",
+                            livePreviewLabel = "Vorschau des markierten Senders",
+                            livePreviewHint = "Jede Vorschau öffnet eine Sitzung beim Anbieter. Wenn deiner Verbindungen begrenzt, lass sie aus.",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -3919,6 +3927,8 @@ data class DesktopStrings(
                             duplicatesLabel = "Copie ripetute",
                             duplicatesHint = "Le liste portano spesso lo stesso film più volte, una per qualità o doppiaggio.",
                             duplicatesToggle = "Mostra una sola scheda per film",
+                            livePreviewLabel = "Anteprima del canale selezionato",
+                            livePreviewHint = "Ogni anteprima apre una sessione con il provider. Se il tuo limita le connessioni, lasciala spenta.",
                         ),
                     receiver =
                         CastReceiverStrings(
@@ -4768,6 +4778,9 @@ data class ServiceCatalogueStrings(
     val duplicatesLabel: String,
     val duplicatesHint: String,
     val duplicatesToggle: String,
+    /** Whether the focused channel plays in a small window beside the list. */
+    val livePreviewLabel: String,
+    val livePreviewHint: String,
 )
 
 data class SavedForLaterStrings(

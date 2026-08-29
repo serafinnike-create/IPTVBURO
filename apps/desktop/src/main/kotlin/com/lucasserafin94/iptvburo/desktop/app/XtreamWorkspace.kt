@@ -65,6 +65,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.awt.SwingPanel
+import com.lucasserafin94.iptvburo.desktop.playback.MultiviewSurface
+import com.lucasserafin94.iptvburo.desktop.playback.MultiviewTile
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -1221,6 +1225,12 @@ private fun XtreamCatalogGrid(
         lastScrolledList = current
     }
 
+    // A Box em volta existe para a previa ter onde ficar por cima.
+    //
+    // Um SwingPanel e composto na propria camada, acima da cena Compose: e por isso que a
+    // previa se sobrepoe a grade em vez de dividir espaco com ela. Um so, e nunca dois — o
+    // MultiviewOverlay documenta o que acontece com varios.
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier =
@@ -1467,6 +1477,45 @@ private fun XtreamCatalogGrid(
                         Text("»")
                     }
                 }
+            }
+        }
+    }
+
+        // O canal selecionado tocando pequeno, como nas listas de IPTV.
+        //
+        // Desligada por padrao: cada previa e uma sessao no provedor, e ha provedores que
+        // limitam conexoes e cortam a conta por excesso. Quem sabe que a sua aguenta liga em
+        // Configuracoes.
+        val previewTiles = if (appState.livePreviewEnabled) appState.livePreviewTiles() else emptyList()
+        if (previewTiles.isNotEmpty()) {
+            val previewSurface = remember { MultiviewSurface() }
+            DisposableEffect(previewSurface) {
+                onDispose { previewSurface.dispose() }
+            }
+            // Lido aqui, em escopo composable: o efeito abaixo nao e um. Mesma razao
+            // registrada no MultiviewOverlay.
+            val previewText = strings.shareStrings.screens
+            LaunchedEffect(previewTiles.map(MultiviewTile::providerId)) {
+                previewSurface.sync(
+                    tiles = previewTiles,
+                    // Clicar na previa abre o canal inteiro: e o gesto que a janela sugere.
+                    onTileClicked = { providerId -> appState.selectXtreamItem(providerId) },
+                    text = previewText,
+                )
+            }
+            Box(
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(BuroSpacing.Lg)
+                        .size(width = 320.dp, height = 180.dp)
+                        .border(1.dp, BuroColors.Primary, BuroRadius.Small),
+            ) {
+                SwingPanel(
+                    background = MultiviewSurface.SEAM_COLOUR,
+                    factory = { previewSurface.component() },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
     }

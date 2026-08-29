@@ -638,6 +638,18 @@ fun SettingsDialog(
                                     scope.launch { appState.changeCollapsesDuplicateTitles(value) }
                                 },
                             )
+                            // Off by default, and the hint says why: every preview is a session
+                            // on the provider, and some cap connections and cut the account off.
+                            SettingsSwitch(
+                                label = text.shareStrings.serviceCatalogue.livePreviewLabel,
+                                checked = appState.livePreviewEnabled,
+                                onCheckedChange = appState::toggleLivePreview,
+                            )
+                            Text(
+                                text = text.shareStrings.serviceCatalogue.livePreviewHint,
+                                color = BuroColors.TextMuted,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                         }
                     }
 

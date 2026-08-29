@@ -4137,10 +4137,14 @@ class DesktopAppState(
     var livePreviewEnabled by mutableStateOf(false)
         private set
 
-    fun setLivePreviewEnabled(enabled: Boolean) {
+    /**
+     * Named `toggle…` rather than `setLivePreviewEnabled`: the latter collides on the JVM with the
+     * property's own generated setter, and the compiler rejects the pair.
+     */
+    fun toggleLivePreview(enabled: Boolean) {
         livePreviewEnabled = enabled
         if (!enabled) {
-            livePreviewChannelId = null
+            stopPreview()
         }
     }
 
@@ -4164,15 +4168,18 @@ class DesktopAppState(
             livePreviewChannelId = null
             return
         }
-        // Nothing over a real playback: two streams cost twice as much and the audio would
-        // fight. The overlay owns the screen when it is open.
-        if (multiviewOpen || playbackRequest != null) {
+        // Nothing under multiview: it owns the screen and every tile is already a session.
+        //
+        // A full-screen playback is handled by the caller rather than checked here — this state
+        // does not track an open player, and inventing a flag for it would be a second source of
+        // truth about the same thing.
+        if (multiviewOpen) {
             livePreviewChannelId = null
             return
         }
         livePreviewJob =
-            scope.launch {
-                delay(LIVE_PREVIEW_DELAY_MILLIS)
+            streamingScope.launch {
+                kotlinx.coroutines.delay(LIVE_PREVIEW_DELAY_MILLIS)
                 livePreviewChannelId = providerId
             }
     }
