@@ -74,9 +74,17 @@ var BuroXtream = (function () {
         var extension = row.container_extension || (contentType === 'LIVE' ? 'ts' : 'mp4');
         var rating = row.rating_5based != null ? row.rating_5based : row.rating;
         var providerAddedAt = Number(row.added != null ? row.added : row.added_at);
+        var locator = {
+            kind: 'xtream', contentType: contentType,
+            providerItemId: String(providerId), extension: extension
+        };
+        var archiveDays = contentType === 'LIVE' ? catchUpDays(row) : null;
         if (isFinite(providerAddedAt) && providerAddedAt > 0 && providerAddedAt < 100000000000) {
             providerAddedAt *= 1000;
         }
+        /* Não aumente cada item de filmes/séries com um campo nulo: em
+           catálogos grandes isso vira megabytes sem nenhuma informação. */
+        if (archiveDays) { locator.catchUpDays = archiveDays; }
         return BuroDomain.createItem({
             sourceId: sourceId,
             providerItemId: String(providerId),
@@ -106,8 +114,16 @@ var BuroXtream = (function () {
             rating: rating || null,
             sortOrder: index,
             addedAt: providerAddedAt,
-            locator: { kind: 'xtream', contentType: contentType, providerItemId: String(providerId), extension: extension }
+            /* Os dois campos de arquivo precisam concordar. Alguns painéis
+               conservam uma duração antiga depois de desligar o recurso. */
+            locator: locator
         });
+    }
+
+    function catchUpDays(row) {
+        var enabled = Number(row && row.tv_archive);
+        var days = Math.floor(Number(row && row.tv_archive_duration));
+        return isFinite(enabled) && enabled > 0 && isFinite(days) && days > 0 ? days : null;
     }
 
     function loadItems(secret, sourceId, contentType, category, success, failure) {
@@ -288,6 +304,49 @@ var BuroXtream = (function () {
         }, failure);
     }
 
+    /* O horário textual vem do próprio provedor e conserva o fuso dele. */
+    function timeshiftStart(value) {
+        var match = BuroDomain.trim(value).match(
+            /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/
+        );
+        return match ? match[1] + '-' + match[2] + '-' + match[3] + ':' + match[4] + '-' + match[5] : null;
+    }
+
+    /*
+      Produz apenas metadados opacos. A URL autenticada continua inexistente
+      até o instante em que o usuário confirma a reprodução.
+    */
+    function catchUpLocator(channelLocator, programme, nowSeconds) {
+        var days = Math.floor(Number(channelLocator && channelLocator.catchUpDays));
+        var start = Number(programme && programme.startEpochSeconds);
+        var end = Number(programme && programme.endEpochSeconds);
+        var current = Number(nowSeconds);
+        var startLocal = timeshiftStart(programme && programme.start);
+        var durationMinutes;
+        if (!channelLocator || channelLocator.kind !== 'xtream' || channelLocator.contentType !== 'LIVE' ||
+                !BuroDomain.trim(channelLocator.providerItemId) || !isFinite(days) || days <= 0 ||
+                !isFinite(start) || !isFinite(end) || end <= start || !isFinite(current) ||
+                end > current || current - end > days * 86400 || !startLocal) { return null; }
+        durationMinutes = Math.ceil((end - start) / 60);
+        if (durationMinutes < 1 || durationMinutes > 720) { return null; }
+        return {
+            kind: 'xtream-catchup', providerItemId: String(channelLocator.providerItemId),
+            startLocal: startLocal, durationMinutes: durationMinutes,
+            startEpochSeconds: start, endEpochSeconds: end
+        };
+    }
+
+    function resolveCatchUp(secret, locator) {
+        if (!locator || locator.kind !== 'xtream-catchup' ||
+                !BuroDomain.trim(locator.providerItemId) ||
+                !/^\d{4}-\d{2}-\d{2}:\d{2}-\d{2}$/.test(String(locator.startLocal || '')) ||
+                !isFinite(Number(locator.durationMinutes)) || Number(locator.durationMinutes) < 1 ||
+                Number(locator.durationMinutes) > 720) { throw new Error('LOCATOR_INVALID'); }
+        return secret.server + '/timeshift/' + encodeURIComponent(secret.username) + '/' +
+            encodeURIComponent(secret.password) + '/' + Math.floor(Number(locator.durationMinutes)) + '/' +
+            locator.startLocal + '/' + encodeURIComponent(locator.providerItemId) + '.ts';
+    }
+
     function resolvePlayback(secret, locator) {
         var folder;
         if (!locator || locator.kind !== 'xtream') { throw new Error('LOCATOR_INVALID'); }
@@ -311,6 +370,9 @@ var BuroXtream = (function () {
         loadMovieDetails: loadMovieDetails,
         loadHeroDetails: loadHeroDetails,
         loadLiveEpg: loadLiveEpg,
+        catchUpDays: catchUpDays,
+        catchUpLocator: catchUpLocator,
+        resolveCatchUp: resolveCatchUp,
         resolvePlayback: resolvePlayback
     };
 }());

@@ -13,6 +13,7 @@ import java.net.StandardProtocolFamily
 import java.net.StandardSocketOptions
 import java.nio.channels.DatagramChannel
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.random.Random
@@ -63,6 +64,15 @@ class CastReceiver(
      * worth having: a value read out of the message would be chosen by the attacker.
      */
     private val failuresByAddress = ConcurrentHashMap<String, AtomicInteger>()
+
+    /**
+     * Caps threads spawned by [startAcceptLoop] at once.
+     *
+     * Without this, a client that connects and holds the socket open without sending anything
+     * blocks its handler thread for the full [READ_TIMEOUT_MILLIS] — and a tight connect loop from
+     * anyone on the same network spins up a fresh thread per connection with nothing to stop it.
+     */
+    private val connectionSlots = Semaphore(MAX_CONCURRENT_CONNECTIONS)
 
     /** The code the user reads off this screen and types into the sender. Null when stopped. */
     @Volatile
@@ -160,55 +170,66 @@ class CastReceiver(
         Thread {
             while (!socket.isClosed) {
                 val client = runCatching { socket.accept() }.getOrNull() ?: break
+                // Bounded so a connect flood cannot spin up unlimited handler threads. A slot
+                // refusal closes the socket right away rather than queuing — the sender that opened
+                // it is on the same network and can simply retry once a slot frees up.
+                if (!connectionSlots.tryAcquire()) {
+                    runCatching { client.close() }
+                    continue
+                }
                 // Each connection on its own thread, so the brake below holds one sender without
                 // holding the queue. Sleeping on the accept loop instead would fill the backlog and
                 // then have the OS refuse everyone — including the owner typing the right code.
                 Thread {
-                    runCatching {
-                        client.use { connection ->
-                            // Refused outright once this address has spent its attempts.
-                            //
-                            // The delay below is not enough on its own, and this receiver shipped
-                            // without the cap because it was ported from the desktop's own
-                            // pre-fix version. The flaw is that the wait runs on the connection's
-                            // thread: fifty sockets opened at once get fifty waits side by side, so
-                            // each attempt is slowed and the total is not. Four digits is ten
-                            // thousand possibilities, and discovery hands out this device's port to
-                            // anyone who asks — so on a shared network finding the target is free.
-                            //
-                            // Closing beats sleeping: a wait still lets the next attempt run in
-                            // parallel, which is the whole defect. The count is per address, so one
-                            // guesser cannot lock the household out of its own screen.
-                            val peer = connection.inetAddress?.hostAddress.orEmpty()
-                            val spent = failuresByAddress[peer]?.get() ?: 0
-                            if (spent >= MAX_FAILURES_PER_ADDRESS) return@use
+                    try {
+                        runCatching {
+                            client.use { connection ->
+                                // Refused outright once this address has spent its attempts.
+                                //
+                                // The delay below is not enough on its own, and this receiver shipped
+                                // without the cap because it was ported from the desktop's own
+                                // pre-fix version. The flaw is that the wait runs on the connection's
+                                // thread: fifty sockets opened at once get fifty waits side by side, so
+                                // each attempt is slowed and the total is not. Four digits is ten
+                                // thousand possibilities, and discovery hands out this device's port to
+                                // anyone who asks — so on a shared network finding the target is free.
+                                //
+                                // Closing beats sleeping: a wait still lets the next attempt run in
+                                // parallel, which is the whole defect. The count is per address, so one
+                                // guesser cannot lock the household out of its own screen.
+                                val peer = connection.inetAddress?.hostAddress.orEmpty()
+                                val spent = failuresByAddress[peer]?.get() ?: 0
+                                if (spent >= MAX_FAILURES_PER_ADDRESS) return@use
 
-                            connection.soTimeout = READ_TIMEOUT_MILLIS
-                            val line =
-                                readBoundedLine(
-                                    connection.getInputStream().bufferedReader(Charsets.UTF_8),
-                                )
-                            // Decoded, not trusted: the pairing code is checked inside decode, and
-                            // anything failing a check is dropped. Throwing here would hand anyone
-                            // on the network a way to stop the listener.
-                            val message = CastMessage.decode(line, code)
-                            if (message == null) {
-                                // Counted per address as well as globally: the growing wait is what
-                                // makes a serial attack tedious, and the per-address cap is what
-                                // bounds a parallel one.
-                                failuresByAddress
-                                    .computeIfAbsent(peer) { AtomicInteger(0) }
-                                    .incrementAndGet()
-                                val penalty = guessPenaltyMillis(consecutiveFailures.incrementAndGet())
-                                if (penalty > 0) runCatching { Thread.sleep(penalty) }
-                            } else {
-                                consecutiveFailures.set(0)
-                                // The right code clears this address, so somebody who mistyped a few
-                                // times and then got it right is not locked out of their own screen.
-                                failuresByAddress.remove(peer)
-                                runCatching { onMessage?.invoke(message) }
+                                connection.soTimeout = READ_TIMEOUT_MILLIS
+                                val line =
+                                    readBoundedLine(
+                                        connection.getInputStream().bufferedReader(Charsets.UTF_8),
+                                    )
+                                // Decoded, not trusted: the pairing code is checked inside decode, and
+                                // anything failing a check is dropped. Throwing here would hand anyone
+                                // on the network a way to stop the listener.
+                                val message = CastMessage.decode(line, code)
+                                if (message == null) {
+                                    // Counted per address as well as globally: the growing wait is what
+                                    // makes a serial attack tedious, and the per-address cap is what
+                                    // bounds a parallel one.
+                                    failuresByAddress
+                                        .computeIfAbsent(peer) { AtomicInteger(0) }
+                                        .incrementAndGet()
+                                    val penalty = guessPenaltyMillis(consecutiveFailures.incrementAndGet())
+                                    if (penalty > 0) runCatching { Thread.sleep(penalty) }
+                                } else {
+                                    consecutiveFailures.set(0)
+                                    // The right code clears this address, so somebody who mistyped a few
+                                    // times and then got it right is not locked out of their own screen.
+                                    failuresByAddress.remove(peer)
+                                    runCatching { onMessage?.invoke(message) }
+                                }
                             }
                         }
+                    } finally {
+                        connectionSlots.release()
                     }
                 }.apply {
                     name = "iptvburo-cast-client"
@@ -329,6 +350,15 @@ class CastReceiver(
         private const val MULTICAST_LOCK_TAG = "iptvburo-cast-receiver"
         private const val TCP_BACKLOG = 2
         private const val READ_TIMEOUT_MILLIS = 3_000
+
+        /**
+         * Handler threads allowed at once.
+         *
+         * Bounds the worst case at [READ_TIMEOUT_MILLIS] times this many stalled connections, not
+         * an unbounded pile of threads from a connect flood. Generous for the real use — one or two
+         * senders on a household network — while still being a real ceiling.
+         */
+        private const val MAX_CONCURRENT_CONNECTIONS = 16
         private const val DISCOVERY_BUFFER_BYTES = 256
         private const val MAX_DISPLAY_NAME_LENGTH = 48
 

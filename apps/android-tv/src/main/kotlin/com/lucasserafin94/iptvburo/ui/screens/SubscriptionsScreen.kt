@@ -60,6 +60,7 @@ import com.lucasserafin94.iptvburo.ui.SubscriptionsUi
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButtonStyle
+import com.lucasserafin94.iptvburo.ui.designsystem.BuroMark
 import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
 import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
 import com.lucasserafin94.iptvburo.ui.theme.BuroSurfaceRaised
@@ -605,17 +606,45 @@ private fun OfferRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                // The provider's name as text. Windows now draws the service's mark beside the
-                // name; this screen has not been changed to match, so it stays text-only and
-                // there is deliberately no artwork here.
-                Text(
-                    text = offer.providerName,
-                    color = if (offer.isUserLibrary) BuroAccent else BuroTextPrimary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // This app's own mark on its own row, matching Windows, so the entry the
+                    // viewer cares about most is findable at a glance the same way a real
+                    // service's mark is.
+                    if (offer.isUserLibrary) {
+                        BuroMark(size = 22.dp)
+                    } else {
+                        // Always beside the name rather than instead of it: a logo TMDb has none
+                        // for degrades to exactly the previous text-only behaviour, never to a
+                        // nameless gap.
+                        offer.logoUrl?.let { logo ->
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(22.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(BuroSurfaceRaised),
+                            ) {
+                                AsyncImage(
+                                    model = logo,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = offer.providerName,
+                        color = if (offer.isUserLibrary) BuroAccent else BuroTextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = stringResource(offer.reason.labelResource()),

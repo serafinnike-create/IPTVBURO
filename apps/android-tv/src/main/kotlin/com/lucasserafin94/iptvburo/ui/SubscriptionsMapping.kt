@@ -129,6 +129,9 @@ internal fun StreamingOffer.toUi(): SubscriptionOfferUi =
     SubscriptionOfferUi(
         providerId = provider.id,
         providerName = provider.displayName,
+        // Null for the user's own library, same as Windows: that row draws the app's own mark
+        // instead, so a logo here would never be read anyway.
+        logoUrl = if (type == OfferType.USER_LIBRARY) null else provider.logoUrl,
         reason = reasonFor(type),
         isUserLibrary = type == OfferType.USER_LIBRARY,
         requiresAttribution = type != OfferType.USER_LIBRARY,

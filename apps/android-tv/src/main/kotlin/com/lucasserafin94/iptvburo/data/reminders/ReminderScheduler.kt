@@ -61,7 +61,13 @@ class ReminderScheduler
         override suspend fun sync() {
             val schedule = preferences.current()
             if (schedule.notify) {
-                ReminderWorker.schedule(context, schedule.time)
+                // Converted at the boundary: the preference stays java.time.LocalTime, which is
+                // what the Android time picker hands back, while the shared ReminderPolicy this
+                // feeds into speaks kotlinx.datetime.
+                ReminderWorker.schedule(
+                    context,
+                    kotlinx.datetime.LocalTime(schedule.time.hour, schedule.time.minute),
+                )
             } else {
                 ReminderWorker.cancel(context)
             }

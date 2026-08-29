@@ -47,10 +47,13 @@ import com.lucasserafin94.iptvburo.ui.designsystem.BuroButton
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroButtonStyle
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroEmptyState
 import com.lucasserafin94.iptvburo.ui.designsystem.BuroTheme
-import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
+import kotlin.time.Clock
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.daysUntil
+import kotlinx.datetime.todayIn
 
 /**
  * Everything the profile marked, and when the phone says something about it.
@@ -77,15 +80,18 @@ fun RemindersScreen(
     onBack: () -> Unit,
 ) {
     val colors = BuroTheme.colors
-    val today = LocalDate.now()
+    val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
     // Sorted here rather than in the view model: this is a presentation order, and the same list
     // feeds the home shelf, which wants the same ordering for the same reason.
     val ordered =
         remember(reminders, today) {
             reminders.sortedWith(
                 compareBy(
-                    { reminder -> reminder.releaseDate?.let { if (it.isAfter(today)) 1 else 0 } ?: 2 },
-                    { reminder -> reminder.releaseDate ?: LocalDate.MAX },
+                    { reminder -> reminder.releaseDate?.let { if (it > today) 1 else 0 } ?: 2 },
+                    // A date this far out is never real, so an undated reminder sorts after every
+                    // countdown while still comparing cleanly against one — the same role
+                    // java.time's LocalDate.MAX played before this screen moved to kotlinx.datetime.
+                    { reminder -> reminder.releaseDate ?: LocalDate(9999, 12, 31) },
                     { reminder -> reminder.title.lowercase() },
                 ),
             )
@@ -341,11 +347,11 @@ private fun ReminderRow(
 @Composable
 private fun Reminder.statusLabel(today: LocalDate): String {
     val release = releaseDate ?: return stringResource(R.string.reminders_status_waiting)
-    if (!release.isAfter(today)) return stringResource(R.string.reminders_status_released)
-    val days = ChronoUnit.DAYS.between(today, release)
+    if (release <= today) return stringResource(R.string.reminders_status_released)
+    val days = today.daysUntil(release)
     return pluralStringResource(
         R.plurals.reminders_status_countdown,
-        days.toInt(),
-        days.toInt(),
+        days,
+        days,
     )
 }

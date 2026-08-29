@@ -182,6 +182,14 @@ class AndroidDownloadManager @Inject constructor(
                             }
                         }
                     }
+                    // Re-checked after the loop: cancellation landing right as the last chunk hits
+                    // EOF would otherwise exit the loop via `break` without the flag ever being
+                    // seen, and the file below gets finalized despite the caller believing it was
+                    // cancelled.
+                    if (flag.get()) {
+                        partial.delete()
+                        return@withContext DownloadResult.Cancelled
+                    }
                     // A 200 carrying no body would otherwise be filed as a complete offline copy
                     // that plays back as nothing.
                     if (read == 0L) {

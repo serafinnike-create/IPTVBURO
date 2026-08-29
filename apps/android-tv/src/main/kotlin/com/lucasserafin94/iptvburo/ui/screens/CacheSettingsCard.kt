@@ -189,11 +189,22 @@ private fun CacheFillSection(
     if (progress.isRunning || paused) {
         CacheFillBar(progress = progress, dimmed = paused)
         Spacer(Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.cache_fill_progress, progress.done, progress.total),
-            color = BuroTextSecondary,
-            fontSize = 12.sp,
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(R.string.cache_fill_progress, progress.done, progress.total),
+                color = BuroTextSecondary,
+                fontSize = 12.sp,
+            )
+            // Absent rather than "0 MB/s" before an interval has been measured or once the fill
+            // has paused: both mean "nothing to report", not "stopped moving".
+            progress.bytesPerSecond?.takeIf { progress.isRunning }?.let { rate ->
+                Text(
+                    text = stringResource(R.string.cache_fill_rate, formatBytes(rate)),
+                    color = BuroTextSecondary,
+                    fontSize = 12.sp,
+                )
+            }
+        }
     }
 
     if (progress.isRunning) {

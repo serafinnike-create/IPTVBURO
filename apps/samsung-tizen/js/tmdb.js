@@ -72,14 +72,18 @@ var BuroTmdb = (function () {
        ponto dela é o host e o formato do caminho, não o tamanho. */
     function shelfCachePoster(value) {
         var poster = clean(value);
-        return /^https:\/\/image\.tmdb\.org\/t\/p\/(w342|w780)\/[A-Za-z0-9._\/-]{1,240}$/.test(poster) &&
-            poster.indexOf('..') < 0 ? poster : null;
+        if (!/^https:\/\/image\.tmdb\.org\/t\/p\/(w342|w780)\/[A-Za-z0-9._\/-]{1,240}$/.test(poster) ||
+                poster.indexOf('..') >= 0) { return null; }
+        return poster.replace(/\/t\/p\/(w342|w780)\//,
+            '/t/p/' + displayImageSize('w342') + '/');
     }
 
     function shelfCacheProviderLogo(value) {
         var logo = clean(value);
-        return /^https:\/\/image\.tmdb\.org\/t\/p\/w92\/[A-Za-z0-9._\/-]{1,240}$/.test(logo) &&
-            logo.indexOf('..') < 0 ? logo : null;
+        if (!/^https:\/\/image\.tmdb\.org\/t\/p\/(w92|w185)\/[A-Za-z0-9._\/-]{1,240}$/.test(logo) ||
+                logo.indexOf('..') >= 0) { return null; }
+        return logo.replace(/\/t\/p\/(w92|w185)\//,
+            '/t/p/' + displayImageSize('w92') + '/');
     }
 
     function shelfCacheTitle(value) {
@@ -262,32 +266,15 @@ var BuroTmdb = (function () {
         return headers;
     }
 
-    /*
-      O degrau acima de cada tamanho, para televisão 4K.
-
-      A viewport é fixa em 1920x1080 e a TV amplia o resultado, então numa 4K
-      cada pixel do layout vira dois na tela: o pôster de 300px da ficha é
-      desenhado com 600, e uma imagem de 342px de largura esticada até lá fica
-      visivelmente borrada. Pedir o degrau seguinte custa banda só onde ela
-      existe — uma TV 4K é um aparelho recente e com rede melhor.
-
-      Só sobem os tamanhos que o TMDb realmente oferece (`poster_sizes` e
-      `backdrop_sizes` da configuração); os pequenos, como o `w92` do logotipo de
-      serviço e o `w185` da foto redonda do elenco, já são desenhados pequenos e
-      ficam como estão.
-    */
-    var LARGER_ON_4K = { w342: 'w780', w1280: 'original' };
-
-    /* Duas vezes o pixel, ou mais: a TV é 4K. Numa 1080p isto é 1 e nada muda.
-       Envolto em try porque o valor vem do runtime da TV, não do nosso código. */
-    function isHighDensity() {
-        try { return Number(window.devicePixelRatio) >= 2; }
-        catch (ignoredDensity) { return false; }
+    function displayImageSize(size) {
+        return (typeof BuroDisplayQuality !== 'undefined' && BuroDisplayQuality.tmdbSize) ?
+            BuroDisplayQuality.tmdbSize(size) : size;
     }
 
+    /* BuroDisplayQuality escolhe o tamanho conforme o painel fisico. */
     function image(path, size) {
         var value = clean(path);
-        var wanted = (isHighDensity() && LARGER_ON_4K[size]) || size;
+        var wanted = displayImageSize(size);
         if (!/^\/[A-Za-z0-9._/-]{1,240}$/.test(value) || value.indexOf('..') >= 0) { return null; }
         return IMAGE_BASE + '/' + wanted + value;
     }

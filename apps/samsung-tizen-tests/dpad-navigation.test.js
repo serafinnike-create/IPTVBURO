@@ -1178,6 +1178,8 @@ async function run() {
         window.document.querySelectorAll('.nav-list [data-action="section"]').length === 15 &&
         Boolean(window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]')));
     window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="MOVIES"]'));
+    await waitFor(function () { return window.document.querySelector('[data-action="catalogue-pick-provider-directory"]'); }, 4000);
+    window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-pick-provider-directory"]'));
     await waitFor(function () { return window.document.querySelector('[data-action="catalogue-provider-shortcut"]'); }, 4000);
     var movieProviderShortcut = window.document.querySelector('[data-action="catalogue-provider-shortcut"]');
     check('Filmes mostra a fileira visual do diretório TMDb com marca e nome do serviço',
@@ -1201,6 +1203,8 @@ async function run() {
         !window.BuroApp.state.screenData.expanded && window.BuroApp.state.screenData.filter === 'MOVIES' &&
         Boolean(window.document.querySelector('[data-action="subscription-title"]')));
     window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="SERIES"]'));
+    await waitFor(function () { return window.document.querySelector('[data-action="catalogue-pick-provider-directory"]'); }, 4000);
+    window.BuroApp._activate(window.document.querySelector('[data-action="catalogue-pick-provider-directory"]'));
     await waitFor(function () { return window.document.querySelector('[data-action="catalogue-provider-shortcut"]'); }, 4000);
     var seriesProviderShortcut = window.document.querySelector('[data-action="catalogue-provider-shortcut"]');
     check('Séries usa diretório próprio e não reaproveita por engano os serviços de Filmes',
@@ -2030,6 +2034,10 @@ async function run() {
         window.document.querySelector('.cast-chip small').textContent === 'Lia' &&
         window.document.body.textContent.indexOf('Fixture pública') >= 0 &&
         window.document.body.textContent.indexOf('Sinopse TMDb') === -1);
+    check('elenco da ficha usa uma fileira horizontal e retratos grandes para TV',
+        window.document.querySelector('.detail-cast .cast-row') &&
+        window.document.querySelector('.detail-cast .cast-row > .cast-chip img') &&
+        window.document.querySelector('.detail-cast .cast-row > .cast-chip').classList.contains('focusable'));
     check('nota pública TMDb permanece separada da nota editorial da fonte',
         window.document.querySelector('.detail-fact.rating').textContent.indexOf('8.7') >= 0 &&
         window.document.querySelector('.detail-ratings .rating-value').textContent === '76%');

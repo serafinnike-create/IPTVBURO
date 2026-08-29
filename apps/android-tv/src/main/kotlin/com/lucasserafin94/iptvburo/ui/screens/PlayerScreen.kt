@@ -233,8 +233,25 @@ fun PlayerScreen(
     }
     val audioTracks = remember(tracks) { tracks.selectableTracks(androidx.media3.common.C.TRACK_TYPE_AUDIO) }
     val subtitleTracks = remember(tracks) { tracks.selectableTracks(androidx.media3.common.C.TRACK_TYPE_TEXT) }
-    LaunchedEffect(player, scrubbingTo == null) {
+
+    /**
+     * The last position seen while the film was genuinely playing.
+     *
+     * ExoPlayer reports `currentPosition == duration` once it has been stopped or has run to the
+     * end, and every checkpoint outside the polling loop reads the position at a moment when that
+     * may already be true. Saving it recorded a film as fully watched the instant the user left it,
+     * so nothing ever appeared under Continue watching. This is the value those checkpoints use.
+     */
+    var lastPlayingPositionMs by remember(player) { mutableLongStateOf(0L) }
+
+    // A single 500ms ticker feeds the UI position readout, the "last known playing position"
+    // sample, and the periodic checkpoint save — three independent reasons to poll the same
+    // player clock, previously three separate loops each doing their own main-thread reads.
+    LaunchedEffect(player, scrubbingTo == null, progressIdentity, resumeChoiceResolved) {
         if (scrubbingTo != null) return@LaunchedEffect
+        var wasSamplingPlayback = false
+        var ticksSinceLastPlayingSample = 0
+        var ticksSinceLastCheckpoint = 0
         while (true) {
             val duration = player.duration.takeIf { it > 0L } ?: 0L
             playbackState =
@@ -242,6 +259,26 @@ fun PlayerScreen(
                     positionMillis = player.currentPosition.coerceAtLeast(0L),
                     durationMillis = duration,
                 )
+            if (progressIdentity != null && resumeChoiceResolved && player.isPlaying && duration > 0L) {
+                ticksSinceLastPlayingSample += 1
+                // Sampled right away the instant playback starts, not only after the first full
+                // interval: waiting would let an early exit (e.g. backgrounding within that first
+                // second) checkpoint against the stale value left over from before playback began.
+                if (!wasSamplingPlayback || ticksSinceLastPlayingSample >= PLAYING_SAMPLE_TICKS) {
+                    ticksSinceLastPlayingSample = 0
+                    lastPlayingPositionMs = player.currentPosition
+                }
+                wasSamplingPlayback = true
+                ticksSinceLastCheckpoint += 1
+                if (ticksSinceLastCheckpoint >= CHECKPOINT_TICKS) {
+                    ticksSinceLastCheckpoint = 0
+                    playbackProgressCoordinator.checkpointAsync(progressIdentity, player.currentPosition, duration)
+                }
+            } else {
+                wasSamplingPlayback = false
+                ticksSinceLastPlayingSample = 0
+                ticksSinceLastCheckpoint = 0
+            }
             delay(500)
         }
     }
@@ -313,38 +350,6 @@ fun PlayerScreen(
         if (decision !is ResumeDecision.ResumeFrom) {
             resumeChoiceResolved = true
             player.play()
-        }
-    }
-
-    /**
-     * The last position seen while the film was genuinely playing.
-     *
-     * ExoPlayer reports `currentPosition == duration` once it has been stopped or has run to the
-     * end, and every checkpoint outside the polling loop reads the position at a moment when that
-     * may already be true. Saving it recorded a film as fully watched the instant the user left it,
-     * so nothing ever appeared under Continue watching. This is the value those checkpoints use.
-     */
-    var lastPlayingPositionMs by remember(player) { mutableLongStateOf(0L) }
-
-    LaunchedEffect(player, progressIdentity, resumeChoiceResolved) {
-        if (progressIdentity == null || !resumeChoiceResolved) return@LaunchedEffect
-        while (true) {
-            delay(1_000)
-            // Sampled every second but only while playing: that is the only moment the position
-            // is trustworthy, and it costs nothing to read.
-            if (player.isPlaying && player.duration > 0L) {
-                lastPlayingPositionMs = player.currentPosition
-            }
-        }
-    }
-
-    LaunchedEffect(player, progressIdentity, resumeChoiceResolved) {
-        if (progressIdentity == null || !resumeChoiceResolved) return@LaunchedEffect
-        while (true) {
-            delay(12_000)
-            if (player.isPlaying && player.duration > 0L) {
-                playbackProgressCoordinator.checkpointAsync(progressIdentity, player.currentPosition, player.duration)
-            }
         }
     }
 
@@ -883,6 +888,12 @@ private fun PlayerView.applySubtitleStyle(presentation: SubtitlePresentation) {
 
 /** Dark enough to read over a bright scene, translucent enough not to block it. */
 private const val BACKGROUND_SCRIM = 0xB3000000.toInt()
+
+/** 500ms ticks between "last known playing position" samples: a 1-second cadence. */
+private const val PLAYING_SAMPLE_TICKS = 2
+
+/** 500ms ticks between checkpoint saves: a 12-second cadence, unchanged from the old loop. */
+private const val CHECKPOINT_TICKS = 24
 
 private tailrec fun Context.findActivity(): Activity? =
     when (this) {

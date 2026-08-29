@@ -42,6 +42,26 @@ var BuroM3u = (function () {
         return /^(mp4|mkv|avi|mov|webm|ts|m2ts)$/.test(extension) ? extension : null;
     }
 
+    function headerMetadata(line) {
+        var attributes = parseAttributes(String(line || '').replace(/^#EXTM3U\s*/i, ''));
+        var epgUrls = [];
+        var seen = {};
+        var candidates = [];
+        var shift = Number(attributes['tvg-shift']);
+
+        [attributes['url-tvg'], attributes['x-tvg-url']].forEach(function (value) {
+            if (value) { candidates = candidates.concat(String(value).split(/[,;]/)); }
+        });
+        candidates.forEach(function (value) {
+            var clean = BuroDomain.trim(value);
+            if (clean && !seen[clean]) { seen[clean] = true; epgUrls.push(clean); }
+        });
+        return {
+            epgUrls: epgUrls,
+            tvgShiftHours: isFinite(shift) ? shift : 0
+        };
+    }
+
     function parse(text, sourceId) {
         var lines = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/);
         var entries = [];
@@ -55,10 +75,12 @@ var BuroM3u = (function () {
         var group;
         var itemType;
         var item;
+        var header;
 
         if (!/^#EXTM3U/i.test(BuroDomain.trim(lines[0] || ''))) {
             throw new Error('M3U_HEADER_REQUIRED');
         }
+        header = headerMetadata(BuroDomain.trim(lines[0] || ''));
 
         for (index = 1; index < lines.length && entries.length < MAX_ITEMS; index += 1) {
             line = BuroDomain.trim(lines[index]);
@@ -84,7 +106,9 @@ var BuroM3u = (function () {
                 logoUrl: null,
                 locator: {
                     kind: 'm3u-index', entryIndex: entries.length,
-                    extension: directFileExtension(line)
+                    extension: directFileExtension(line),
+                    /* Identificador opaco e seguro; a URL do guia fica no KeyManager. */
+                    tvgId: BuroDomain.trim(attrs['tvg-id']) || null
                 }
             });
             entries.push({
@@ -98,7 +122,7 @@ var BuroM3u = (function () {
         }
 
         if (entries.length === MAX_ITEMS) { warnings.push('ITEM_LIMIT_REACHED'); }
-        return { entries: entries, warnings: warnings };
+        return { entries: entries, warnings: warnings, header: header };
     }
 
     function metadata(result) {

@@ -14,6 +14,17 @@ import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 
 /**
+ * A streaming service as the movies/series shortcut row shows it: enough to draw a logo and,
+ * unlike the label-only map [ProviderLogoCatalogue.logosByLabel] already exposed, enough to open
+ * that service's shelf on Assinaturas.
+ */
+data class DiscoveredProvider(
+    val label: String,
+    val logoUrl: String,
+    val tmdbProviderId: Int,
+)
+
+/**
  * The streaming services' own logos, keyed by the identity this app recognises them as.
  *
  * ## Why a catalogue rather than a lookup per title
@@ -38,6 +49,17 @@ class ProviderLogoCatalogue @Inject constructor(
     private val logos = MutableStateFlow<Map<String, String>>(emptyMap())
 
     val logosByLabel: StateFlow<Map<String, String>> = logos
+
+    /**
+     * The same directory as [logosByLabel], with the TMDb provider id kept alongside each entry.
+     *
+     * A separate flow rather than widening the map's value: every existing badge reads
+     * [logosByLabel] and only the movies/series shortcut row needs the id, so this keeps that
+     * change from touching a call site that has no use for it.
+     */
+    private val providers = MutableStateFlow<List<DiscoveredProvider>>(emptyList())
+
+    val discoveredProviders: StateFlow<List<DiscoveredProvider>> = providers
 
     /** Guards against several screens triggering the same fetch on first launch. */
     private val loading = Mutex()
@@ -82,6 +104,7 @@ class ProviderLogoCatalogue @Inject constructor(
                 )
 
             val collected = mutableMapOf<String, String>()
+            val collectedProviders = LinkedHashMap<String, DiscoveredProvider>()
             listOf(false, true).forEach { forSeries ->
                 runCatching { client.watchProviderDirectory(region, forSeries) }
                     .getOrDefault(emptyList())
@@ -93,11 +116,20 @@ class ProviderLogoCatalogue @Inject constructor(
                         // First wins: the directory is ordered by TMDb's display priority, so the
                         // earlier entry is the one they consider canonical for the region.
                         collected.putIfAbsent(label, logo)
+                        collectedProviders.putIfAbsent(
+                            label,
+                            DiscoveredProvider(
+                                label = label,
+                                logoUrl = logo,
+                                tmdbProviderId = provider.providerId,
+                            ),
+                        )
                     }
             }
 
             if (collected.isNotEmpty()) {
                 logos.value = collected
+                providers.value = collectedProviders.values.toList()
                 loadedWithKey = key
             }
         }

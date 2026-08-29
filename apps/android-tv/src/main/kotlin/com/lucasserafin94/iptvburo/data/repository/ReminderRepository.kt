@@ -6,9 +6,10 @@ import com.lucasserafin94.iptvburo.data.cache.isStorableArtwork
 import com.lucasserafin94.iptvburo.di.IoDispatcher
 import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.Reminder
-import java.time.Instant
-import java.time.LocalDate
 import javax.inject.Inject
+import kotlin.time.Clock
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -47,7 +48,7 @@ class ReminderRepository @Inject constructor(
         title: String,
         artworkUrl: String? = null,
         releaseDate: LocalDate? = null,
-        now: Instant = Instant.now(),
+        now: Instant = Clock.System.now(),
     ): Boolean =
         withContext(ioDispatcher) {
             if (reminderDao.isMarked(profileId, identity.key)) {
@@ -62,7 +63,7 @@ class ReminderRepository @Inject constructor(
                         // Dropped when it carries a credential. See [isStorableArtwork].
                         artworkUrl = artworkUrl?.takeIf(::isStorableArtwork),
                         releaseDate = releaseDate?.toString(),
-                        createdAtEpochMillis = now.toEpochMilli(),
+                        createdAtEpochMillis = now.toEpochMilliseconds(),
                     ),
                 )
                 true
@@ -96,5 +97,5 @@ private fun ReminderEntity.toDomain(): Reminder =
         // A date that cannot be parsed is treated as absent rather than as a crash: the row still
         // names a title worth reminding about, and the worst case is that it stops counting down.
         releaseDate = releaseDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
-        createdAt = Instant.ofEpochMilli(createdAtEpochMillis),
+        createdAt = Instant.fromEpochMilliseconds(createdAtEpochMillis),
     )

@@ -1,5 +1,6 @@
 package com.lucasserafin94.iptvburo.data.mapper
 
+import com.lucasserafin94.iptvburo.data.security.ChannelFieldCipher
 import com.lucasserafin94.iptvburo.playlist.ParsedChannel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -7,7 +8,14 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PlaylistEntityMapperTest {
-    private val mapper = PlaylistEntityMapper()
+    /** Identity cipher: this suite exercises mapping logic, not [ChannelFieldCipher] itself. */
+    private val identityCipher =
+        object : ChannelFieldCipher {
+            override fun encrypt(value: String?): String? = value
+
+            override fun decrypt(value: String?): String? = value
+        }
+    private val mapper = PlaylistEntityMapper(identityCipher)
 
     @Test
     fun `groups category names case insensitively in first-seen order`() {
@@ -111,6 +119,39 @@ class PlaylistEntityMapperTest {
         assertFalse(mapped.toString().contains(secretMarker))
     }
 
+    @Test
+    fun `encrypts stream URL and headers through the field cipher`() {
+        val cipher = PrefixingFakeCipher()
+        val mapper = PlaylistEntityMapper(cipher)
+        val mapped =
+            mapper.map(
+                sourceId = "source-1",
+                channels = listOf(
+                    ParsedChannel(
+                        name = "Encrypted",
+                        streamUri = "https://media.example/live.m3u8?token=secret",
+                        requestHeaders = mapOf("User-Agent" to "IPTV BURO"),
+                    ),
+                ),
+            )
+
+        val channel = mapped.channels.single()
+        assertEquals(
+            "enc:https://media.example/live.m3u8?token=secret",
+            channel.streamUrl,
+        )
+        assertEquals("enc:IPTV BURO", channel.userAgent)
+        assertNull(channel.referer)
+        assertNull(channel.origin)
+        // The cipher's own round trip recovers the original values, which is what a real
+        // Keystore-backed cipher is expected to guarantee at playback time.
+        assertEquals(
+            "https://media.example/live.m3u8?token=secret",
+            cipher.decrypt(channel.streamUrl),
+        )
+        assertEquals("IPTV BURO", cipher.decrypt(channel.userAgent))
+    }
+
     private fun channel(
         name: String,
         streamUri: String = "https://media.example/$name.m3u8",
@@ -121,4 +162,11 @@ class PlaylistEntityMapperTest {
             streamUri = streamUri,
             groupTitle = group,
         )
+
+    /** Marks encryption with a visible prefix, so a test can assert it actually ran. */
+    private class PrefixingFakeCipher : ChannelFieldCipher {
+        override fun encrypt(value: String?): String? = value?.let { "enc:$it" }
+
+        override fun decrypt(value: String?): String? = value?.removePrefix("enc:")
+    }
 }

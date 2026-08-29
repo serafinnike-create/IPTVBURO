@@ -7,13 +7,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -21,11 +26,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.ui.PersonCreditUi
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
 import com.lucasserafin94.iptvburo.ui.theme.BuroAccent
 import com.lucasserafin94.iptvburo.ui.theme.BuroCanvas
 import com.lucasserafin94.iptvburo.ui.theme.BuroSurface
 import com.lucasserafin94.iptvburo.ui.theme.BuroTextPrimary
+import com.lucasserafin94.iptvburo.ui.theme.BuroTextSecondary
 
 @Composable
 internal fun CastPersonChip(
@@ -80,6 +88,94 @@ internal fun CastPersonChip(
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
             )
+        }
+    }
+}
+
+/**
+ * The "you might also like" strip: a heading plus a row of clickable posters, shown when TMDb
+ * found anything at all. Callers place it and decide whether to show it — this only draws.
+ */
+@Composable
+internal fun SimilarTitlesShelf(
+    titles: List<PersonCreditUi>,
+    onOpenTitle: (PersonCreditUi) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = stringResource(R.string.details_similar_titles),
+            color = BuroTextPrimary,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(9.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(
+                items = titles,
+                key = { title -> "similar:${title.externalId}:${title.isSeries}" },
+            ) { title ->
+                SimilarTitleCard(title = title, onClick = { onOpenTitle(title) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun SimilarTitleCard(
+    title: PersonCreditUi,
+    onClick: () -> Unit,
+) {
+    FocusSurface(
+        onClick = onClick,
+        modifier = Modifier.width(120.dp).height(224.dp),
+        backgroundColor = BuroSurface,
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (!title.posterUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = title.posterUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier =
+                        Modifier
+                            .width(120.dp)
+                            .height(178.dp)
+                            .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)),
+                )
+            } else {
+                Box(
+                    modifier =
+                        Modifier
+                            .width(120.dp)
+                            .height(178.dp)
+                            .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+                            .background(BuroAccent.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(title.title.take(1), color = BuroAccent, fontWeight = FontWeight.Black, fontSize = 24.sp)
+                }
+            }
+            Column(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = title.title,
+                    color = BuroTextPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                title.year?.let { year ->
+                    Text(
+                        text = year.toString(),
+                        color = BuroTextSecondary,
+                        fontSize = 11.sp,
+                    )
+                }
+            }
         }
     }
 }

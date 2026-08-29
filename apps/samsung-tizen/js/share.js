@@ -129,22 +129,40 @@ var BuroShare = (function () {
       manifesto registrou. A checagem acontece antes de qualquer consulta ao
       catalogo e nenhum campo recebido vira URL de reproducao.
     */
-    function parseIncoming(raw) {
-        var text = clean(raw);
+    function validatedIncoming(text) {
         var value;
-        if (!text || text.length > MAX_INCOMING_LINK || /[\u0000-\u001f\u007f\s]/.test(text)) { return null; }
-        if (!/^iptvburo:\/\/title\/?\?/i.test(text) || text.indexOf('#') >= 0) { return null; }
         value = parse(text);
         if (!value || value.identity.length > MAX_INCOMING_FIELD || value.title.length > MAX_INCOMING_FIELD) {
             return null;
         }
-        if (/[\u0000-\u001f\u007f]/.test(value.identity) ||
+        if (/[\u0000-\u001f\u007f]/.test(value.identity) || /[\u0000-\u001f\u007f]/.test(value.title) ||
                 !/^(movie|series|episode|live|unknown):[^:]+(?::\d{4})?$/i.test(value.identity)) { return null; }
         return value;
     }
 
+    function safeIncomingText(raw) {
+        var text = clean(raw);
+        return !text || text.length > MAX_INCOMING_LINK || /[\u0000-\u001f\u007f\s]/.test(text) ||
+            text.indexOf('#') >= 0 ? null : text;
+    }
+
+    function parseIncoming(raw) {
+        var text = safeIncomingText(raw);
+        if (!text || !/^iptvburo:\/\/title\/?\?/i.test(text)) { return null; }
+        return validatedIncoming(text);
+    }
+
+    /* O relay aceita somente os dois enderecos emitidos pelo IPTV BURO. */
+    function parsePairingPayload(raw) {
+        var text = safeIncomingText(raw);
+        if (!text || (!/^iptvburo:\/\/title\/?\?/i.test(text) &&
+                !/^https:\/\/iptvburo\.pages\.dev\/t\/?\?/i.test(text))) { return null; }
+        return validatedIncoming(text);
+    }
+
     return {
-        build: build, parse: parse, parseIncoming: parseIncoming, identity: identity, publicArtwork: publicArtwork,
+        build: build, parse: parse, parseIncoming: parseIncoming, parsePairingPayload: parsePairingPayload,
+        identity: identity, publicArtwork: publicArtwork,
         maxDescription: MAX_DESCRIPTION, baseUrl: BASE_URL
     };
 }());

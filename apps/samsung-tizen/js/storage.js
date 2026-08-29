@@ -41,7 +41,15 @@ var BuroStorage = (function () {
             subtitleSize: 'medium',
             subtitleColour: 'white',
             subtitleBackground: true,
+            uses24HourClock: true,
+            /* Igual ao Windows: listas reais repetem o mesmo filme por
+               qualidade/dublagem. A visualizacao limpa e o padrao, sem apagar
+               nenhuma linha do catalogo. */
+            collapseDuplicateTitles: true,
             tmdbRegion: 'BR',
+            /* Regiao por perfil, como no Windows. `tmdbRegion` permanece como
+               compatibilidade de leitura para instalacoes anteriores. */
+            tmdbRegionsByProfile: {},
             /* Os avisos do sino. Ficam nas preferências e não no IndexedDB
                porque são derivados: se sumirem, a próxima abertura reconstrói o
                digest do dia a partir dos lembretes. */
@@ -57,6 +65,7 @@ var BuroStorage = (function () {
         var defaults = defaultPreferences();
         var raw;
         var parsed;
+        var regions = {};
         try {
             raw = localStorage.getItem(PREFERENCES_KEY);
             parsed = raw ? JSON.parse(raw) : {};
@@ -66,12 +75,33 @@ var BuroStorage = (function () {
         Object.keys(defaults).forEach(function (key) {
             if (parsed[key] !== undefined) { defaults[key] = parsed[key]; }
         });
+        if (parsed.tmdbRegionsByProfile && typeof parsed.tmdbRegionsByProfile === 'object' &&
+                !Array.isArray(parsed.tmdbRegionsByProfile)) {
+            Object.keys(parsed.tmdbRegionsByProfile).forEach(function (profileId) {
+                var region;
+                if (profileId === '__proto__' || profileId === 'constructor' || profileId === 'prototype') { return; }
+                region = String(parsed.tmdbRegionsByProfile[profileId] || '').toUpperCase();
+                if (['BR', 'PT', 'US', 'DE', 'IT'].indexOf(region) >= 0) { regions[profileId] = region; }
+            });
+        } else if (parsed.activeProfileId) {
+            /* A preferencia global antiga pertencia, na pratica, ao perfil que
+               estava ativo. Migra-la evita trocar silenciosamente o pais. */
+            regions[String(parsed.activeProfileId)] =
+                ['BR', 'PT', 'US', 'DE', 'IT'].indexOf(String(parsed.tmdbRegion || '').toUpperCase()) >= 0 ?
+                    String(parsed.tmdbRegion).toUpperCase() : 'BR';
+        }
+        defaults.tmdbRegionsByProfile = regions;
+        defaults.tmdbRegion = ['BR', 'PT', 'US', 'DE', 'IT'].indexOf(String(defaults.tmdbRegion || '').toUpperCase()) >= 0 ?
+            String(defaults.tmdbRegion).toUpperCase() : 'BR';
         return defaults;
     }
 
     function savePreferences(preferences) {
         var safe = defaultPreferences();
         Object.keys(safe).forEach(function (key) { safe[key] = preferences[key]; });
+        safe.tmdbRegionsByProfile = preferences.tmdbRegionsByProfile &&
+            typeof preferences.tmdbRegionsByProfile === 'object' && !Array.isArray(preferences.tmdbRegionsByProfile) ?
+                preferences.tmdbRegionsByProfile : {};
         localStorage.setItem(PREFERENCES_KEY, JSON.stringify(safe));
     }
 
@@ -272,6 +302,44 @@ var BuroStorage = (function () {
 
     function remove(storeName, key, success, failure) {
         requestStore(storeName, 'readwrite', function (store) { return store.delete(key); }, success, failure);
+    }
+
+    /*
+      Remove todas as linhas que pertencem a uma chave de indice em uma unica
+      transacao. Historico e isolado por perfil; percorrer `byProfile` impede
+      que "limpar" alcance outro perfil e evita abrir uma transacao por linha,
+      custo que fica perceptivel no Web Runtime de TVs antigas.
+    */
+    function removeByIndex(storeName, indexName, key, success, failure) {
+        var settled = false;
+        var removed = 0;
+        open(function (database) {
+            var transaction;
+            var request;
+            function fail(error) {
+                if (!settled) {
+                    settled = true;
+                    failure(error || new Error('DATABASE_REQUEST_FAILED'));
+                }
+            }
+            try {
+                transaction = database.transaction([storeName], 'readwrite');
+                request = transaction.objectStore(storeName).index(indexName).openCursor(key);
+                request.onsuccess = function (event) {
+                    var cursor = event.target.result;
+                    if (settled || !cursor) { return; }
+                    cursor.delete();
+                    removed += 1;
+                    cursor.continue();
+                };
+                request.onerror = function () { fail(request.error); };
+                transaction.oncomplete = function () {
+                    if (!settled) { settled = true; success(removed); }
+                };
+                transaction.onerror = function () { fail(transaction.error); };
+                transaction.onabort = function () { fail(transaction.error); };
+            } catch (error) { fail(error); }
+        }, failure);
     }
 
     function get(storeName, key, success, failure) {
@@ -964,6 +1032,7 @@ var BuroStorage = (function () {
         put: put,
         putBatch: putBatch,
         remove: remove,
+        removeByIndex: removeByIndex,
         get: get,
         all: all,
         take: take,

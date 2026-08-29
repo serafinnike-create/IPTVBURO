@@ -14,11 +14,11 @@ import com.lucasserafin94.iptvburo.domain.model.ReminderDigest
 import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import java.time.Duration
-import java.time.Instant
-import java.time.LocalTime
-import java.time.ZoneId
 import java.util.concurrent.TimeUnit
+import kotlin.time.Clock
+import kotlin.time.Instant
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
 
 /**
  * Wakes once a day and posts the reminder digest.
@@ -52,8 +52,8 @@ class ReminderWorker @AssistedInject constructor(
                 val digest =
                     ReminderPolicy.digestFor(
                         reminders = profileReminders,
-                        now = Instant.now(),
-                        zone = ZoneId.systemDefault(),
+                        now = Clock.System.now(),
+                        zone = TimeZone.currentSystemDefault(),
                     )
                 if (digest is ReminderDigest.Daily) notifier.notify(digest)
             }
@@ -106,17 +106,17 @@ class ReminderWorker @AssistedInject constructor(
         fun schedule(
             context: Context,
             preferred: LocalTime,
-            now: Instant = Instant.now(),
-            zone: ZoneId = ZoneId.systemDefault(),
+            now: Instant = Clock.System.now(),
+            zone: TimeZone = TimeZone.currentSystemDefault(),
         ) {
             val firstRun = ReminderPolicy.nextNotificationAt(preferred, now, zone)
-            val delay = Duration.between(now, firstRun).coerceAtLeast(Duration.ZERO)
+            val delay = (firstRun - now).coerceAtLeast(kotlin.time.Duration.ZERO)
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
                 ExistingPeriodicWorkPolicy.UPDATE,
                 PeriodicWorkRequestBuilder<ReminderWorker>(1, TimeUnit.DAYS)
-                    .setInitialDelay(delay.toMillis(), TimeUnit.MILLISECONDS)
+                    .setInitialDelay(delay.inWholeMilliseconds, TimeUnit.MILLISECONDS)
                     .build(),
             )
         }

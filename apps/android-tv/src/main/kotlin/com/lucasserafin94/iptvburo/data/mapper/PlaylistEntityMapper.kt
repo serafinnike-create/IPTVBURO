@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.data.mapper
 
 import com.lucasserafin94.iptvburo.data.local.entity.CategoryEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ChannelEntity
+import com.lucasserafin94.iptvburo.data.security.ChannelFieldCipher
 import com.lucasserafin94.iptvburo.playlist.ParsedChannel
 import java.net.URI
 import java.nio.charset.StandardCharsets
@@ -9,7 +10,9 @@ import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 
-class PlaylistEntityMapper @Inject constructor() {
+class PlaylistEntityMapper @Inject constructor(
+    private val channelFieldCipher: ChannelFieldCipher,
+) {
     fun newSession(sourceId: String): PlaylistMappingSession =
         PlaylistMappingSession(sourceId)
 
@@ -108,10 +111,10 @@ class PlaylistEntityMapper @Inject constructor() {
                     tvgName?.trim().orEmpty().ifEmpty { "Untitled channel" }
                 },
                 logoUrl = logoUri?.trim()?.takeIf(String::isNotEmpty),
-                streamUrl = normalizedStreamUri,
-                userAgent = headerLookup["user-agent"]?.takeIf(String::isNotBlank),
-                referer = headerLookup["referer"]?.takeIf(String::isNotBlank),
-                origin = headerLookup["origin"]?.takeIf(String::isNotBlank),
+                streamUrl = channelFieldCipher.encrypt(normalizedStreamUri).orEmpty(),
+                userAgent = channelFieldCipher.encrypt(headerLookup["user-agent"]?.takeIf(String::isNotBlank)),
+                referer = channelFieldCipher.encrypt(headerLookup["referer"]?.takeIf(String::isNotBlank)),
+                origin = channelFieldCipher.encrypt(headerLookup["origin"]?.takeIf(String::isNotBlank)),
                 sortOrder = sortOrder,
             )
         }

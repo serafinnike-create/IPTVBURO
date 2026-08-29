@@ -72,6 +72,18 @@ internal fun CatalogueFilterBar(
             item(key = "layout") {
                 LayoutPicker(selected = layout, onSelect = onLayoutChange)
             }
+            item(key = "current-year") {
+                val currentYear = remember { java.time.LocalDate.now().year }
+                Chip(
+                    label = stringResource(R.string.catalogue_filter_new_releases, currentYear),
+                    selected = filter.year == currentYear,
+                    onClick = {
+                        onFilterChange(
+                            filter.copy(year = if (filter.year == currentYear) null else currentYear),
+                        )
+                    },
+                )
+            }
             item(key = "sort") {
                 SortPicker(
                     selected = filter.sort,
@@ -101,6 +113,22 @@ internal fun CatalogueFilterBar(
                         onSelect = { year -> onFilterChange(filter.copy(year = year.toIntOrNull())) },
                     )
                 }
+            }
+            item(key = "rating") {
+                // Fixed floors rather than every rating present in the catalogue: rating is
+                // continuous, so "every distinct value" would be a picker with dozens of nearly
+                // identical entries instead of the handful of thresholds a viewer actually means.
+                ValuePicker(
+                    label = filter.minRating?.let { "${it.toInt()}+" }
+                        ?: stringResource(R.string.catalogue_filter_rating),
+                    active = filter.minRating != null,
+                    options = RATING_FLOORS.map { "${it.toInt()}+" },
+                    onClear = { onFilterChange(filter.copy(minRating = null)) },
+                    onSelect = { option ->
+                        val floor = option.removeSuffix("+").toDoubleOrNull()
+                        onFilterChange(filter.copy(minRating = floor))
+                    },
+                )
             }
             if (filter.isActive) {
                 item(key = "reset") {
@@ -256,6 +284,9 @@ private fun CatalogueLayout.labelResource(): Int =
         CatalogueLayout.COMPACT -> R.string.catalogue_layout_compact
         CatalogueLayout.LIST -> R.string.catalogue_layout_list
     }
+
+/** Thresholds offered by the rating filter, highest first — the ratings a viewer actually asks for. */
+private val RATING_FLOORS = listOf(9.0, 8.0, 7.0, 6.0, 5.0)
 
 private fun CatalogueSort.labelResource(): Int =
     when (this) {

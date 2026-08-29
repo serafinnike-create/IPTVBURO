@@ -119,6 +119,9 @@ internal fun MovieDetailsScreen(
     /** Photos already resolved, by lower-cased name. Absent means not looked up yet. */
     castPhotos: Map<String, String?> = emptyMap(),
     onRequestCastPhotos: (List<String>) -> Unit = {},
+    /** Franchise entries and lookalikes from TMDb, shown under the cast. Empty draws nothing. */
+    similarTitles: List<com.lucasserafin94.iptvburo.ui.PersonCreditUi> = emptyList(),
+    onOpenSimilarTitle: (com.lucasserafin94.iptvburo.ui.PersonCreditUi) -> Unit = {},
     offlineSupported: Boolean = AndroidPlatformCapabilities.offlineSupported,
     modifier: Modifier = Modifier,
 ) {
@@ -487,6 +490,15 @@ internal fun MovieDetailsScreen(
                                     }
                                 }
                             }
+                        }
+                    }
+                    similarTitles.takeIf(List<*>::isNotEmpty)?.let { titles ->
+                        item("similar-titles") {
+                            SimilarTitlesShelf(
+                                titles = titles,
+                                onOpenTitle = onOpenSimilarTitle,
+                                modifier = Modifier.width(contentWidth),
+                            )
                         }
                     }
                     item("credits") {

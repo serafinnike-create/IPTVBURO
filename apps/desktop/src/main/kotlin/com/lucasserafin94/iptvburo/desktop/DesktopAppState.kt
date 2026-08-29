@@ -74,6 +74,7 @@ import com.lucasserafin94.iptvburo.domain.model.AppNotification
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import com.lucasserafin94.iptvburo.domain.model.BestOfferPolicy
 import com.lucasserafin94.iptvburo.domain.model.MergedSources
+import com.lucasserafin94.iptvburo.domain.model.ProviderText
 import com.lucasserafin94.iptvburo.domain.model.CacheBudget
 import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
 import com.lucasserafin94.iptvburo.domain.model.CacheFillState
@@ -2264,6 +2265,8 @@ class DesktopAppState(
             ?.details
             ?.takeIf { details -> details.title == item.name }
             ?.plot
+            // Hidden when the provider's encoding destroyed the accents, the same as the banner.
+            ?.let(ProviderText::usableOrNull)
 
     /**
      * The genres to print under the title.
@@ -3238,6 +3241,12 @@ class DesktopAppState(
                 runCatching { withContext(Dispatchers.IO) { fetch() } }
                     .getOrNull()
                     ?.takeIf(String::isNotBlank)
+                    // Some providers convert their catalogue out of a single-byte encoding badly,
+                    // so the synopsis arrives with every accent replaced by a question mark: "est?
+                    // no centro de uma s?rie", "por viola??es de tr?nsito". Nothing can decode that
+                    // back — the bytes are gone before we see them — so the banner keeps its fixed
+                    // line rather than showing a paragraph the viewer has to decipher.
+                    ?.let(ProviderText::usableOrNull)
                     ?: return@launch
             // A profile/provider/policy switch invalidates the Home while this network request is
             // running. Its old synopsis must not be published into the new catalogue afterwards.
@@ -3838,6 +3847,14 @@ class DesktopAppState(
      */
     private val XTREAM_PAGE_JUMP = 10
 
+    /**
+     * How long the selection must hold still before a preview opens.
+     *
+     * Without it, arrowing through a list would open and close a stream per channel — dozens a
+     * minute, each one a session on the provider.
+     */
+    private val LIVE_PREVIEW_DELAY_MILLIS = 1500L
+
     /** Opens the Assinaturas area at its shelves, loading them if this is the first visit. */
     fun openSubscriptions() {
         favoritesOnly = false
@@ -4109,6 +4126,88 @@ class DesktopAppState(
      * Built on demand rather than stored: a channel that has left the catalogue since it was chosen
      * simply drops out, instead of leaving a tile that plays nothing.
      */
+    /**
+     * Whether the focused channel plays in a small window beside the list.
+     *
+     * Off by default, and that is the point. Every preview is a session on the provider, and
+     * some providers cap simultaneous connections and cut the account off for exceeding them.
+     * Someone who knows their own list can take the risk; someone who does not should not be
+     * exposed to it without choosing.
+     */
+    var livePreviewEnabled by mutableStateOf(false)
+        private set
+
+    fun setLivePreviewEnabled(enabled: Boolean) {
+        livePreviewEnabled = enabled
+        if (!enabled) {
+            livePreviewChannelId = null
+        }
+    }
+
+    /** The channel the preview is showing, or null when nothing is previewing. */
+    var livePreviewChannelId by mutableStateOf<String?>(null)
+        private set
+
+    private var livePreviewJob: Job? = null
+
+    /**
+     * Asks for a preview of [providerId] after the selection settles.
+
+     * The delay is what keeps this from opening a stream per channel while someone arrows
+     * through the list: each call cancels the one before it, so only the channel somebody stops
+     * on is ever opened. A second and a half is roughly how long it takes to read a channel
+     * name and decide.
+     */
+    fun previewChannel(providerId: String?) {
+        livePreviewJob?.cancel()
+        if (!livePreviewEnabled || providerId == null) {
+            livePreviewChannelId = null
+            return
+        }
+        // Nothing over a real playback: two streams cost twice as much and the audio would
+        // fight. The overlay owns the screen when it is open.
+        if (multiviewOpen || playbackRequest != null) {
+            livePreviewChannelId = null
+            return
+        }
+        livePreviewJob =
+            scope.launch {
+                delay(LIVE_PREVIEW_DELAY_MILLIS)
+                livePreviewChannelId = providerId
+            }
+    }
+
+    fun stopPreview() {
+        livePreviewJob?.cancel()
+        livePreviewChannelId = null
+    }
+
+    /**
+     * The preview as a one-tile list, reusing the multiview surface.
+     *
+     * One tile rather than a second player: the surface already mounts VLC into an embedded AWT
+     * panel and takes it down again, and a preview is that with a list of one. Building a
+     * parallel path would mean a second set of the same mistakes.
+     */
+    fun livePreviewTiles(): List<MultiviewTile> {
+        val providerId = livePreviewChannelId ?: return emptyList()
+        val item =
+            xtreamRepository.itemByProviderId(XtreamContentType.LIVE, providerId)
+                ?: return emptyList()
+        val request =
+            prepareXtreamPlayback(
+                XtreamPlaybackTarget.CatalogItem(
+                    providerId = item.providerId,
+                    contentType = item.contentType,
+                    containerExtension = item.containerExtension,
+                    contentKey = item.contentIdentity().key,
+                ),
+                item.name,
+                0L,
+            ) ?: return emptyList()
+        return listOf(MultiviewTile(providerId = item.providerId, request = request, title = item.name))
+    }
+
     fun multiviewTiles(): List<MultiviewTile> =
         multiviewChannelIds.mapNotNull { providerId ->
             val item =
@@ -6271,6 +6370,10 @@ class DesktopAppState(
             seriesDetailsStatus = SeriesDetailsStatus.Idle
             movieDetailsStatus = MovieDetailsStatus.Idle
             liveEpgStatus = LiveEpgStatus.Idle
+            // Only live channels preview: there is no "what is on now" for a film.
+            val channel =
+                xtreamRepository.itemByProviderId(XtreamContentType.LIVE, providerId)
+            previewChannel(if (channel != null) providerId else null)
         }
     }
 

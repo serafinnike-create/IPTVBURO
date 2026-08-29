@@ -14,6 +14,7 @@ import com.lucasserafin94.iptvburo.data.security.ChannelFieldCipher
 import com.lucasserafin94.iptvburo.data.security.SourceConnectionStore
 import com.lucasserafin94.iptvburo.di.IoDispatcher
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
+import com.lucasserafin94.iptvburo.domain.model.ProviderText
 import com.lucasserafin94.iptvburo.domain.model.Category
 import com.lucasserafin94.iptvburo.domain.model.Channel
 import com.lucasserafin94.iptvburo.domain.model.Episode
@@ -641,7 +642,11 @@ class RoomCatalogRepository @Inject constructor(
             sourceId = sourceId,
             providerSeriesId = providerSeriesId,
             title = details.title,
-            plot = details.plot,
+            // Hidden when the provider's encoding destroyed the accents: some lists convert
+            // their catalogue out of a single-byte encoding badly and every accent arrives as a
+            // question mark, which no decoding can undo. Applied here so every screen that shows
+            // a synopsis gets the same answer.
+            plot = ProviderText.usableOrNull(details.plot),
             artworkUri = details.artworkUrl,
             backdropUris = details.backdropUrls,
             cast = details.cast,
@@ -682,7 +687,11 @@ class RoomCatalogRepository @Inject constructor(
             sourceId = sourceId,
             providerMovieId = providerMovieId,
             title = details.title,
-            plot = details.plot,
+            // Hidden when the provider's encoding destroyed the accents: some lists convert
+            // their catalogue out of a single-byte encoding badly and every accent arrives as a
+            // question mark, which no decoding can undo. Applied here so every screen that shows
+            // a synopsis gets the same answer.
+            plot = ProviderText.usableOrNull(details.plot),
             cast = details.cast,
             director = details.director,
             genre = details.genre,

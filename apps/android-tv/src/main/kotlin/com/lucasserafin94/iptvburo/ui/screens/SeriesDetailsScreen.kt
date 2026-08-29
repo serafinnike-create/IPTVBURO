@@ -129,6 +129,9 @@ internal fun SeriesDetailsScreen(
     /** Actor photos already looked up, keyed by lower-cased name. */
     castPhotos: Map<String, String?> = emptyMap(),
     onRequestCastPhotos: (List<String>) -> Unit = {},
+    /** Franchise entries and lookalikes from TMDb, shown under the cast. Empty draws nothing. */
+    similarTitles: List<com.lucasserafin94.iptvburo.ui.PersonCreditUi> = emptyList(),
+    onOpenSimilarTitle: (com.lucasserafin94.iptvburo.ui.PersonCreditUi) -> Unit = {},
     offlineSupported: Boolean = AndroidPlatformCapabilities.offlineSupported,
     modifier: Modifier = Modifier,
 ) {
@@ -499,6 +502,15 @@ internal fun SeriesDetailsScreen(
                                     }
                                 }
                             }
+                        }
+                    }
+                    similarTitles.takeIf(List<*>::isNotEmpty)?.let { titles ->
+                        item(key = "series:similar-titles") {
+                            SimilarTitlesShelf(
+                                titles = titles,
+                                onOpenTitle = onOpenSimilarTitle,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         }
                     }
                     details.episodes

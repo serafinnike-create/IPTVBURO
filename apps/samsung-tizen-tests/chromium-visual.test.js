@@ -797,6 +797,10 @@ async function main() {
     await waitFor("BuroApp.state.section === 'HOME' && !BuroApp.state.screenData && document.querySelectorAll('[data-demo-rail]').length === 3");
     check('voltar do detalhe restaura a Home demonstrativa completa', await evaluate("document.querySelectorAll('.demo-media-card').length === 14"));
 
+    /* As capturas de loja representam um aparelho ativado. O gate de licença
+       real continua coberto pelos testes dedicados; aqui só evitamos publicar
+       imagens promocionais com o aviso sintético "Dispositivo não registrado". */
+    await evaluate("BuroLicense.decide=function(){return {allowed:true,trial:false,expiresAt:null};}; true");
     var seeded = await evaluate('(' + seedVisualCatalogue.toString() + ')()');
     await waitFor("BuroApp.state.screenData && BuroApp.state.screenData.kind === 'home' && !BuroApp.state.screenData.loading && document.querySelector('.real-home-hero')", 10000);
     await waitFor("document.querySelectorAll('.buro-progressive-image').length > 0 && Array.prototype.every.call(document.querySelectorAll('.buro-progressive-image'),function(image){return image.classList.contains('image-ready') || image.style.display === 'none';})", 10000);
@@ -827,6 +831,8 @@ async function main() {
     check('progresso do perfil aparece na Home real', realHomeData.progress >= 1);
     check('Home real mantém Ribbon, topbar, hero e primeiro trilho visíveis', realHome.rectangles.every(rectVisible));
     check('Home real não desloca o painel principal nem cria overflow global', realHomeData.mainScroll === 0 && realHome.scrollWidth <= 1920 && realHome.scrollHeight <= 1080);
+    check('ajuda do controle remoto ocupa faixa própria e não cobre capas',
+        await evaluate("(function(){var content=document.querySelector('.content').getBoundingClientRect();var hint=document.querySelector('.bottom-hint').getBoundingClientRect();return content.bottom<=hint.top&&hint.bottom===1080&&hint.height>=44;}())"));
     check('Home real produz um quadro PNG não vazio', await screenshotIsRendered('real-home'));
 
     /* A data da máquina não deve decidir se este layout pode ser exercitado.
@@ -856,17 +862,27 @@ async function main() {
        os cartões cabem na tela da TV, sem deslocar o chrome. */
     await evaluate('(' + installSyntheticProviderDirectory.toString() + ')()');
     await evaluate("document.querySelector('[data-action=section][data-section=MOVIES]').click(); true");
-    await waitFor("BuroApp.state.section === 'MOVIES' && document.querySelectorAll('.media-card.poster').length >= 1 && document.querySelectorAll('.catalogue-provider-shortcut').length === 3");
+    await waitFor("BuroApp.state.section === 'MOVIES' && document.querySelectorAll('.media-card.poster').length >= 1 && document.querySelector('[data-action=catalogue-pick-provider-directory]')");
     var movieCategories = await geometry(['.buro-ribbon', '.topbar', '.catalogue-toolbar',
         '.catalogue-type-tabs', '.catalogue-type-tab', '.catalogue-search', '#catalogue-query',
-        '.catalogue-provider-shortcuts', '.catalogue-provider-shortcut',
-        '.catalogue-scope-bar', '.catalogue-year-bar', '.media-card.poster']);
-    check('atalhos de servico mostram tres marcas e nomes antes dos filtros',
-        await evaluate("document.querySelectorAll('.catalogue-provider-shortcut').length===3 && document.querySelectorAll('.catalogue-provider-shortcut img').length===3 && /Netflix/.test(document.querySelector('.catalogue-provider-row').textContent)"));
+        '.provider-directory-selector', '.catalogue-scope-bar', '.catalogue-year-bar', '.media-card.poster']);
+    check('serviços ficam recolhidos num seletor compacto',
+        await evaluate("document.querySelectorAll('.catalogue-scope-bar').length===1 && document.querySelector('[data-action=catalogue-pick-provider-directory]').textContent.indexOf(BuroI18n.t('subscriptionsBrowse'))>=0 && !document.querySelector('.provider-directory-options')"));
+    await evaluate("document.querySelector('[data-action=catalogue-pick-provider-directory]').click(); true");
+    await waitFor("document.querySelectorAll('[data-action=catalogue-provider-shortcut]').length===3");
+    check('o seletor abre os três serviços com marca e nome',
+        await evaluate("document.querySelectorAll('[data-action=catalogue-provider-shortcut] img').length===3 && /Netflix/.test(document.querySelector('.provider-directory-options').textContent)"));
+    check('o seletor de serviços aberto produz um quadro PNG válido',
+        await screenshotIsRendered('movie-service-selector'));
+    await evaluate("document.querySelector('[data-action=catalogue-pick-provider-directory]').click(); true");
     process.stdout.write('Filmes e catálogo\n');
     check('abas e busca formam a mesma faixa superior do catálogo Windows',
         await evaluate("(function(){var tabs=document.querySelector('.catalogue-type-tabs').getBoundingClientRect();var box=document.querySelector('.catalogue-search').getBoundingClientRect();var years=document.querySelector('.catalogue-year-bar').getBoundingClientRect();var input=document.querySelector('#catalogue-query');return document.querySelectorAll('.catalogue-type-tab').length===3&&document.querySelectorAll('.catalogue-type-tab[aria-selected=true]').length===1&&Math.abs(tabs.top-box.top)<=2&&Math.abs(tabs.bottom-box.bottom)<=2&&input.placeholder===BuroI18n.t('catalogueSearchHint')&&box.bottom<years.top;}())"));
     check('aba Filmes exibe escopo e prateleira dentro da área da TV', movieCategories.rectangles.every(rectVisible));
+    var compactFilterMetrics = await evaluate("(function(){var strip=document.querySelector('.catalogue-filter-strip').getBoundingClientRect();var children=Array.prototype.map.call(document.querySelector('.catalogue-filter-strip').children,function(node){var r=node.getBoundingClientRect();return {action:(node.querySelector('[data-action]')||node).getAttribute('data-action'),left:Math.round(r.left),top:Math.round(r.top),right:Math.round(r.right),height:Math.round(r.height)};});return {height:Math.round(strip.height),width:Math.round(strip.width),rows:Array.from(new Set(children.map(function(row){return row.top;}))).length,children:children};}())");
+    check('filtros usam uma única faixa compacta para liberar espaço às capas',
+        compactFilterMetrics.height <= 96 && compactFilterMetrics.rows === 1 &&
+        await evaluate("document.querySelectorAll('.catalogue-scope-bar').length===1"));
 
     /*
       O cartao tem a proporcao de um poster de cinema.
@@ -1006,8 +1022,12 @@ async function main() {
         synopsisFit.scrollOver <= 0);
     check('detalhe de filme produz um quadro PNG não vazio', await screenshotIsRendered('movie-detail'));
 
-    await evaluate("(function(){var d=BuroApp.state.screenData.details;d.similarTitles=[];for(var i=0;i<10;i+=1){d.similarTitles.push({tmdbId:700+i,isSeries:false,title:'Saga recomendada '+(i+1),year:2015+i,posterUrl:'https://image.tmdb.org/t/p/w342/similar-'+i+'.jpg'});}d.similarTitlesLoaded=true;BuroApp.render();var c=document.querySelector('.content.scrollable');var r=document.querySelector('.detail-related');c.scrollTop=Math.max(0,r.offsetTop-110);return true;}())");
+    await evaluate("(function(){var d=BuroApp.state.screenData.details;d.castMembers=[];d.similarTitles=[];for(var i=0;i<10;i+=1){d.castMembers.push({name:'Pessoa '+(i+1),character:'Personagem '+(i+1),photoUrl:'https://image.tmdb.org/t/p/w185/cast-'+i+'.jpg'});d.similarTitles.push({tmdbId:700+i,isSeries:false,title:'Saga recomendada '+(i+1),year:2015+i,posterUrl:'https://image.tmdb.org/t/p/w342/similar-'+i+'.jpg'});}d.similarTitlesLoaded=true;BuroApp.render();var c=document.querySelector('.content.scrollable');var r=document.querySelector('.detail-related');c.scrollTop=Math.max(0,r.offsetTop-110);return true;}())");
     await waitFor("document.querySelectorAll('[data-action=similar-title]').length === 10");
+    var castPresentation = await evaluate("(function(){var row=document.querySelector('.detail-cast .cast-row');var portrait=document.querySelector('.detail-cast .cast-chip img, .detail-cast .cast-chip i');if(!row||!portrait){return null;}var rs=getComputedStyle(row);var ps=getComputedStyle(portrait);return {nowrap:rs.flexWrap==='nowrap',horizontal:rs.overflowX==='auto'||rs.overflowX==='scroll',width:parseFloat(ps.width),height:parseFloat(ps.height),overflow:row.scrollWidth>row.clientWidth};}())");
+    check('elenco da ficha mostra retratos grandes em uma fileira horizontal',
+        castPresentation && castPresentation.nowrap && castPresentation.horizontal && castPresentation.overflow &&
+        castPresentation.width >= 82 && castPresentation.height >= 88);
     await evaluate("(function(){var c=document.querySelector('.content.scrollable');var r=document.querySelector('.detail-related');c.scrollTop=Math.max(0,r.offsetTop-110);return c.scrollTop;}())");
     var similarDetail = await geometry(['.buro-ribbon', '.topbar', '.detail-related', '.similar-title-card']);
     var similarDetailData = await evaluate("(function(){var row=document.querySelector('.similar-title-row');return {count:document.querySelectorAll('[data-action=similar-title]').length,overflow:row.scrollWidth>row.clientWidth,mainScroll:document.querySelector('.main-pane').scrollTop};}())");
@@ -1016,6 +1036,11 @@ async function main() {
     check('trilho semelhante conserva Ribbon, topbar, título e primeiro card no viewport',
         similarDetail.rectangles.every(rectVisible) && similarDetailData.mainScroll === 0);
     check('títulos semelhantes produzem um quadro PNG não vazio', await screenshotIsRendered('movie-similar-titles'));
+
+    var similarNavigation = await evaluate("(function(){BuroApp._focusAction('similar-title');for(var i=0;i<9;i+=1){BuroApp._onKeyDown({keyCode:39,preventDefault:function(){}});}var row=document.querySelector('.similar-title-row');var focused=row.querySelector('.similar-title-card.focused');var rr=row.getBoundingClientRect();var fr=focused&&focused.getBoundingClientRect();var result={key:focused&&focused.getAttribute('data-key'),scrollLeft:row.scrollLeft,inside:!!fr&&fr.left>=rr.left-1&&fr.right<=rr.right+1};BuroApp._focusAction('back');return result;}())");
+    check('D-pad continua pelos tÃ­tulos semelhantes e revela as capas fora da primeira tela',
+        similarNavigation && similarNavigation.key === 'movie:709' &&
+        similarNavigation.scrollLeft > 0 && similarNavigation.inside);
 
     await evaluate("(function(){BuroApp.state.screenData.details.similarTitles=[];BuroApp.render();var c=document.querySelector('.content.scrollable');var r=document.querySelector('.detail-related');c.scrollTop=Math.max(0,r.offsetTop-110);return true;}())");
     await waitFor("document.querySelectorAll('[data-action=similar-title][data-key^=\"local:\"]').length === 3");
@@ -1442,7 +1467,7 @@ async function main() {
         check(visualLanguage.tag + ' conserva Ribbon e topbar fixas ao rolar Stalker',
             multilingualStalker.windowY === 0 && multilingualStalker.ribbon === 0 &&
             multilingualStalker.topbar.top === 0 && multilingualStalker.topbar.bottom === 92 &&
-            multilingualStalker.content.top === 92 && multilingualStalker.content.bottom === 1080 &&
+            multilingualStalker.content.top === 92 && multilingualStalker.content.bottom === 1032 &&
             multilingualStalker.ribbonOwnsHit && multilingualStalker.topbarOwnsHit);
         check(visualLanguage.tag + ' mantém o texto Stalker realmente localizado', multilingualStalker.localized);
         check(visualLanguage.tag + ' gera PNG válido do formulário Stalker',

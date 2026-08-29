@@ -105,6 +105,28 @@ async function run() {
         !window.BuroTrailer.isOpen() && window.localStorage.length === 0);
 
     dom.window.close();
+
+    process.stdout.write('Fallback de widget Tizen sem origem HTTP\n');
+    var fileDom = new JSDOM(html, {
+        runScripts: 'outside-only', pretendToBeVisual: true, url: 'file:///opt/usr/apps/IPTVBURO/index.html'
+    });
+    var fileWindow = fileDom.window;
+    fileWindow.eval(fs.readFileSync(path.join(APP_DIR, 'js/domain.js'), 'utf8'));
+    fileWindow.eval(fs.readFileSync(path.join(APP_DIR, 'js/trailer.js'), 'utf8'));
+    fileWindow.BuroTrailer.init();
+    check('widget file continua anunciando trailer disponível', fileWindow.BuroTrailer.available());
+    check('widget abre o embed com controles próprios e ajuda honesta',
+        fileWindow.BuroTrailer.open(safeId, 'Filme sintético', {
+            title: 'Trailer', loading: 'Carregando', hint: 'Teclas da API',
+            fallbackHint: 'Use os controles do vídeo · RETURN voltar'
+        }) &&
+        fileWindow.document.getElementById('trailer-frame').src.indexOf('controls=1') >= 0 &&
+        fileWindow.document.getElementById('trailer-frame').src.indexOf('enablejsapi=1') < 0 &&
+        fileWindow.document.getElementById('trailer-hint').textContent ===
+            'Use os controles do vídeo · RETURN voltar');
+    fileWindow.BuroTrailer.close();
+    fileDom.window.close();
+
     process.stdout.write('\n' + passed + ' verificações aprovadas.\n');
     if (failures.length) {
         process.stderr.write(failures.length + ' falha(s): ' + failures.join('; ') + '\n');

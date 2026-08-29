@@ -180,6 +180,28 @@ async function run() {
         JSON.stringify(itemsAfterFailure) === snapshotBeforeFailure &&
         window.document.querySelector('.form-message.error'));
 
+    process.stdout.write('Atualização M3U pelo cabeçalho\n');
+    window.BuroApp.state.screen = 'SHELL';
+    window.BuroApp.state.section = 'HOME';
+    window.BuroApp.state.screenData = null;
+    window.BuroNetwork.text = function (options, success) {
+        window.setTimeout(function () { success(newText); }, 5);
+    };
+    window.BuroApp.render();
+    check('fonte M3U oferece Atualizar listas no mesmo cabeçalho do Windows',
+        Boolean(window.document.querySelector('[data-action="active-source-refresh"]')));
+    window.BuroApp._activate(window.document.querySelector('[data-action="active-source-refresh"]'));
+    check('atalho vira estado ocupado sem abrir Gerenciar fonte',
+        Boolean(window.document.querySelector('.refresh-chip.busy')) &&
+        window.BuroApp.state.screen === 'SHELL' && window.BuroApp.state.section === 'HOME');
+    await waitFor(function () {
+        return Boolean(window.document.querySelector('[data-action="active-source-refresh"]'));
+    }, 4000);
+    window.BuroNetwork.text = originalNetworkText;
+    check('atalho retorna depois da fotografia transacional e conserva a tela',
+        window.BuroApp.state.screen === 'SHELL' && window.BuroApp.state.section === 'HOME' &&
+        window.BuroApp.state.activeSource.channelCount === 2);
+
     process.stdout.write('Carregamento e recuperação do player\n');
     var languages = ['pt-BR', 'en', 'de', 'it', 'es'];
     var playbackTranslationsPresent = languages.every(function (language) {

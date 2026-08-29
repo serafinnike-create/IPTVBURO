@@ -146,6 +146,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.splitCategories
 import com.lucasserafin94.iptvburo.desktop.ui.strings
 import com.lucasserafin94.iptvburo.desktop.ui.withLogoFrom
 import com.lucasserafin94.iptvburo.domain.model.CastMessage
+import com.lucasserafin94.iptvburo.domain.model.ProviderText
 import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
 import com.lucasserafin94.iptvburo.domain.model.TitleShareLink
 import com.lucasserafin94.iptvburo.metadata.CriticScores
@@ -1850,7 +1851,7 @@ internal fun XtreamInternalDetailsPage(
                             title = item.name.editorialTitle(),
                             year = item.year,
                             artworkUrl = movie?.details?.artworkUrl ?: series?.details?.artworkUrl,
-                            description = movie?.details?.plot ?: series?.details?.plot,
+                            description = ProviderText.usableOrNull(movie?.details?.plot ?: series?.details?.plot),
                         )
                 },
                 onCast = {
@@ -1866,7 +1867,7 @@ internal fun XtreamInternalDetailsPage(
                         title = item.name.editorialTitle(),
                         year = item.year,
                         artworkUrl = movie?.details?.artworkUrl ?: series?.details?.artworkUrl,
-                        description = movie?.details?.plot ?: series?.details?.plot,
+                        description = ProviderText.usableOrNull(movie?.details?.plot ?: series?.details?.plot),
                     )?.let(appState::startCastTo)
                 },
                 resumeDecisionFor = appState::resumeDecision,
@@ -2699,7 +2700,7 @@ private fun MovieDetailContent(
                 )
                 Spacer(Modifier.height(12.dp))
             }
-            details.plot?.let {
+            ProviderText.usableOrNull(details.plot)?.let {
                 Text(it, color = BuroColors.Text, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(14.dp))
             }
@@ -3299,7 +3300,7 @@ private fun SeriesDetailContent(
                 )
                 Spacer(Modifier.height(10.dp))
             }
-            details.plot?.let {
+            ProviderText.usableOrNull(details.plot)?.let {
                 Text(it, color = BuroColors.Text, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(10.dp))
             }

@@ -372,6 +372,25 @@ var BuroApp = (function () {
     }
 
     function attr(value) { return escapeHtml(value); }
+
+    /*
+      Sinopse cujos acentos o fornecedor ja destruiu.
+
+      Algumas listas convertem o catalogo de uma codificacao de um byte sem
+      cuidado, e cada letra acentuada chega como ponto de interrogacao: "est?
+      no centro de uma s?rie", "por viola??es de tr?nsito". Nao ha decodificacao
+      que desfaca isto -- os bytes desaparecem antes de nos chegarem.
+
+      So conta interrogacoes dentro de uma palavra. Uma pergunta a serio ("Quem
+      matou o pai dele?") tem de sobreviver, e duas ocorrencias antes de julgar,
+      porque uma sozinha pode ser gralha de quem escreveu.
+    */
+    function usableSynopsis(text) {
+        if (!text) { return null; }
+        var marks = String(text).match(/[^\W\d_]\?(?=[^\W\d_])/g);
+        return marks && marks.length >= 2 ? null : text;
+    }
+
     function t(key) { return BuroI18n.t(key); }
 
     function safeArtworkUrl(value) {
@@ -3150,7 +3169,7 @@ var BuroApp = (function () {
     function tmdbHeroDetails(metadata) {
         var minutes = Number(metadata && metadata.duration);
         return {
-            synopsis: metadata && metadata.plot || null,
+            synopsis: usableSynopsis(metadata && metadata.plot) || null,
             genre: metadata && metadata.genre || null,
             duration: minutes > 0 ? Math.round(minutes) + ' min' : null,
             rating: metadata && metadata.rating || null,
@@ -5335,7 +5354,7 @@ var BuroApp = (function () {
         payload = BuroShare.build({
             kind: data.kind === 'series' ? 'SERIES' : 'MOVIE',
             title: details.title || item.name, year: shareYear(item, details),
-            artworkUrl: metadata.posterUrl || artworkMemory[item.id], description: details.plot
+            artworkUrl: metadata.posterUrl || artworkMemory[item.id], description: usableSynopsis(details.plot)
         });
         if (payload) { pushScreen('SHARE', payload); }
     }
@@ -5362,7 +5381,7 @@ var BuroApp = (function () {
         payload = BuroShare.build({
             kind: data.kind === 'series' ? 'SERIES' : 'MOVIE',
             title: details.title || item.name, year: shareYear(item, details),
-            artworkUrl: metadata.posterUrl || artworkFor(item), description: details.plot
+            artworkUrl: metadata.posterUrl || artworkFor(item), description: usableSynopsis(details.plot)
         });
         if (!payload) { return; }
         startSendToScreen(payload);
@@ -5701,7 +5720,7 @@ var BuroApp = (function () {
             (facts.length ? '<div class="detail-facts">' + facts.map(function (fact) {
                 return detailFact(fact, /^★/.test(fact) ? 'rating' : '');
             }).join('') + '</div>' : '') +
-            '<p>' + escapeHtml(details.plot || t('noSynopsis')) + '</p>' + detailProgress(item) +
+            '<p>' + escapeHtml(usableSynopsis(details.plot) || t('noSynopsis')) + '</p>' + detailProgress(item) +
             /*
               As notas depois das acoes, e nao antes.
 
@@ -8527,8 +8546,8 @@ var BuroApp = (function () {
             '" data-action="subscription-reminder" aria-pressed="' + (reminderMarked ? 'true' : 'false') + '">' +
             (reminderMarked ? t('reminderRemove') : t('reminderAdd')) + '</button></div>' +
             '</div></div><div class="section-heading"><h2>' + t('subscriptionsAvailable') + '</h2></div><div class="subscription-offers">' +
-            offerHtml + '</div>' + (details.plot ? '<section class="subscription-copy"><h3>' + t('subscriptionsSynopsis') + '</h3><p>' +
-            escapeHtml(details.plot) + '</p></section>' : '') + cast + '</div>';
+            offerHtml + '</div>' + (usableSynopsis(details.plot) ? '<section class="subscription-copy"><h3>' + t('subscriptionsSynopsis') + '</h3><p>' +
+            escapeHtml(usableSynopsis(details.plot)) + '</p></section>' : '') + cast + '</div>';
     }
 
     function renderExpandedSubscription(data) {

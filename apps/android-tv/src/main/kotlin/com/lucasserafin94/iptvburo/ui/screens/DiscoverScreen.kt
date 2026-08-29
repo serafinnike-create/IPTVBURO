@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -205,26 +206,34 @@ private fun SwipeableCard(
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val offsetX = remember(channel.id) { Animatable(0f) }
+    // Live drag position, updated synchronously on every pointer delta — snapTo never animates
+    // anything, so tracking the drag itself never needed a coroutine per pixel moved.
+    var dragOffsetX by remember(channel.id) { mutableFloatStateOf(0f) }
+    // Only the release transitions (spring back, fly away) are actual animations, so this is the
+    // only place that still needs an Animatable.
+    val releaseOffsetX = remember(channel.id) { Animatable(0f) }
+    var isAnimatingRelease by remember(channel.id) { mutableStateOf(false) }
     var decided by remember(channel.id) { mutableStateOf(false) }
     val thresholdPx = with(density) { DECISION_THRESHOLD.toPx() }
     val flyAwayPx = with(density) { FLY_AWAY_DISTANCE.toPx() }
 
+    val offsetX = if (isAnimatingRelease) releaseOffsetX.value else dragOffsetX
+
     // The verdict a release at the current offset would give, or null while it is still undecided.
     val leaning =
         when {
-            offsetX.value > thresholdPx -> true
-            offsetX.value < -thresholdPx -> false
+            offsetX > thresholdPx -> true
+            offsetX < -thresholdPx -> false
             else -> null
         }
 
     Box(
         modifier = Modifier
             .graphicsLayer {
-                translationX = offsetX.value
+                translationX = offsetX
                 // A slight tilt, in proportion to the drag. This is what makes the card feel like a
                 // physical thing being tossed rather than a rectangle sliding sideways.
-                rotationZ = (offsetX.value / thresholdPx).coerceIn(-1f, 1f) * MAX_TILT_DEGREES
+                rotationZ = (offsetX / thresholdPx).coerceIn(-1f, 1f) * MAX_TILT_DEGREES
             }
             .pointerInput(channel.id) {
                 detectHorizontalDragGestures(
@@ -232,18 +241,25 @@ private fun SwipeableCard(
                         if (decided) return@detectHorizontalDragGestures
                         val verdict =
                             when {
-                                offsetX.value > thresholdPx -> true
-                                offsetX.value < -thresholdPx -> false
+                                dragOffsetX > thresholdPx -> true
+                                dragOffsetX < -thresholdPx -> false
                                 else -> null
                             }
+                        isAnimatingRelease = true
                         if (verdict == null) {
                             // Short of the threshold: springs back, so a hesitant drag is not a
                             // decision. Being able to change your mind halfway is the point.
-                            scope.launch { offsetX.animateTo(0f, tween(FLY_BACK_MILLIS)) }
+                            scope.launch {
+                                releaseOffsetX.snapTo(dragOffsetX)
+                                releaseOffsetX.animateTo(0f, tween(FLY_BACK_MILLIS))
+                                isAnimatingRelease = false
+                                dragOffsetX = 0f
+                            }
                         } else {
                             decided = true
                             scope.launch {
-                                offsetX.animateTo(
+                                releaseOffsetX.snapTo(dragOffsetX)
+                                releaseOffsetX.animateTo(
                                     if (verdict) flyAwayPx else -flyAwayPx,
                                     tween(FLY_AWAY_MILLIS),
                                 )
@@ -253,7 +269,7 @@ private fun SwipeableCard(
                     },
                 ) { _, dragAmount ->
                     if (!decided) {
-                        scope.launch { offsetX.snapTo(offsetX.value + dragAmount) }
+                        dragOffsetX += dragAmount
                     }
                 }
             },

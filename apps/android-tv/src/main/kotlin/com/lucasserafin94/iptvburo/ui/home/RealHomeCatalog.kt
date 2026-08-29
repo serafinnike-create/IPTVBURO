@@ -10,7 +10,10 @@ import com.lucasserafin94.iptvburo.ui.localEditorialDay
 import com.lucasserafin94.iptvburo.ui.ContinueWatchingUi
 import com.lucasserafin94.iptvburo.ui.ProviderShelfUi
 import com.lucasserafin94.iptvburo.ui.SubscriptionTitleUi
-import java.time.LocalDate
+import kotlin.time.Clock
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.todayIn
 import java.util.Calendar
 import java.util.Locale
 
@@ -106,7 +109,7 @@ object RealHomeCatalog {
         // What the calendar suggests today: at Christmas the banner should open on Christmas films,
         // which is the whole point of a home screen that changes with the date. The terms are the
         // shared domain's, so the phone and the desktop celebrate the same days.
-        val today = LocalDate.now()
+        val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
         val seasonalTerms =
             SeasonalCollections.collectionsFor(today).flatMap(SeasonalCollection::searchTerms)
         val seasonalPicks =

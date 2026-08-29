@@ -11,6 +11,9 @@
     <content src="index.html"/>
     <icon src="icon.png"/>
 
+    <!-- Obrigatorio no pre-teste do Samsung TV Seller Office. -->
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+
     <!-- 1920x1080 e a resolucao logica padrao das Samsung TV. -->
     <tizen:application id="IPTVBUROxx.IPTVBURO"
                        package="IPTVBUROxx"
