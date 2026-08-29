@@ -1240,6 +1240,14 @@ class DesktopAppState(
     /** What is playing, so a failed stream can be asked for from a different list. */
     private var lastPlaybackTarget: XtreamPlaybackTarget? = null
 
+    /**
+     * The saved list the open session is, so the merge does not add it again.
+     *
+     * The session's own id is derived from its credentials and shares nothing with the library's
+     * UUIDs, so it cannot answer "is this list already loaded".
+     */
+    private var openSourceLibraryId: String? = null
+
     /** Playlists already configured, offered so a new profile can reuse one. */
     fun savedSources(): List<XtreamSource> = sourceLibrary.sources()
 
@@ -5786,6 +5794,13 @@ class DesktopAppState(
                     (xtreamRepository as? SwitchingCatalogueRepository)
                         ?.merging
                         ?.relabelSource(summary.sourceId, entry.label)
+                    // Which saved list the open session actually is.
+                    //
+                    // The session is held under an id the repository generates from the server and
+                    // username; the library entry has a UUID of its own. Comparing the two said
+                    // "different" every time, so the merge added this same subscription a second
+                    // time and the sidebar showed BURO twice.
+                    openSourceLibraryId = entry.id
                     withContext(Dispatchers.IO) {
                         sourceLibrary
                             .store(entry.id)
@@ -6043,7 +6058,12 @@ class DesktopAppState(
         onProgress: (fraction: Float, label: String) -> Unit = { _, _ -> },
     ) {
         val merged = (xtreamRepository as? SwitchingCatalogueRepository)?.merging ?: return
-        val alreadyOpen = xtreamRepository.summary()?.sourceId
+        // The library entry the open session belongs to, recorded when it connected.
+        //
+        // Not the session's own id: that is generated from the credentials and never matches a
+        // library UUID, so filtering on it excluded nothing and the open subscription was merged
+        // with itself — one account, two rows in the sidebar.
+        val alreadyOpen = openSourceLibraryId
         val others =
             sourceLibrary
                 .sources()

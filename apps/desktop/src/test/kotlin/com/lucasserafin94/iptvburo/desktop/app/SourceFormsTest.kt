@@ -132,6 +132,19 @@ class SourceFormsTest {
             state.contains("source.id != alreadyOpen"),
             "a lista ja aberta seria acrescentada outra vez",
         )
+        // And "already open" has to mean the library entry, not the session's own id.
+        //
+        // The session id is generated from the credentials and shares nothing with the library's
+        // UUIDs, so comparing them excluded nothing: the open subscription was merged with itself
+        // and the sidebar showed the same list twice. Reported with a screenshot of two BURO rows.
+        assertTrue(
+            state.contains("val alreadyOpen = openSourceLibraryId"),
+            "a lista aberta e comparada por um id que nunca corresponde",
+        )
+        assertTrue(
+            state.contains("openSourceLibraryId = entry.id"),
+            "nada regista qual das listas guardadas esta aberta",
+        )
     }
 
     /** Choosing a saved list must still skip the connection fields. */

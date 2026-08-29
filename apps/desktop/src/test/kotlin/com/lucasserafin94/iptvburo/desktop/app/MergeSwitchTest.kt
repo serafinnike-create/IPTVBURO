@@ -180,6 +180,36 @@ class MergeSwitchTest {
     }
 
     /**
+     * Every dead list can be forgotten in one press.
+     *
+     * A subscription that expired leaves a row that will never work again, and after a few of those
+     * the sidebar is mostly dead entries — reported with a screenshot of seven. Removing them one
+     * at a time is a confirmation each, for what is really one decision.
+     */
+    @Test
+    fun `the dead lists can be forgotten together`() {
+        assertTrue(
+            app.contains("mergeSourcesRemoveOffline"),
+            "nao ha forma de remover as listas mortas de uma vez",
+        )
+        // Offered only when there is more than one, since removing a single dead list is what the
+        // row's own button already does.
+        assertTrue(
+            app.contains("if (offline.size > 1 && !sourcesFolded)"),
+            "o botao apareceria com uma lista morta so, onde a linha ja tem o seu",
+        )
+    }
+
+    /** And it names them, rather than asking about a number. */
+    @Test
+    fun `forgetting the dead lists names them`() {
+        assertTrue(
+            app.contains("doomedList.joinToString(\", \") { it.name }"),
+            "a confirmacao nao diz quais listas vao ser esquecidas",
+        )
+    }
+
+    /**
      * And a merged row shows no item count.
      *
      * There is no per-list count once the lists are merged — the catalogue is one thing — so a

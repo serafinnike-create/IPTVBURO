@@ -653,6 +653,7 @@ data class DesktopStrings(
                             mergeSourcesRestart = "Las listas se reorganizan al momento.",
                             mergeSourcesFailed = "%1${'$'}s no respondió. Las demás listas siguen funcionando.",
                             mergeSourcesOffline = "No responde",
+                            mergeSourcesRemoveOffline = "Quitar las listas que no responden (%1${'$'}d)",
                             diagnosticsLatencyGood = "Latencia baja: los canales cambian sin espera",
                             diagnosticsLatencyFair = "Latencia alta: puede cortar y tardar al cambiar de canal",
                             diagnosticsLatencyUnstable = "Latencia muy alta: va a causar cortes y congelamientos",
@@ -1425,6 +1426,7 @@ data class DesktopStrings(
                             mergeSourcesRestart = "As listas sao reorganizadas na hora.",
                             mergeSourcesFailed = "%1${'$'}s não respondeu. As outras listas continuam a funcionar.",
                             mergeSourcesOffline = "Não responde",
+                            mergeSourcesRemoveOffline = "Remover as listas que nao respondem (%1${'$'}d)",
                             diagnosticsLatencyGood = "Latência baixa: os canais trocam sem espera",
                             diagnosticsLatencyFair = "Latência alta: pode travar e demorar ao trocar de canal",
                             diagnosticsLatencyUnstable = "Latência muito alta: vai causar travamentos e cortes",
@@ -2197,6 +2199,7 @@ data class DesktopStrings(
                             mergeSourcesRestart = "The lists are reorganised right away.",
                             mergeSourcesFailed = "%1${'$'}s did not answer. Your other playlists are still working.",
                             mergeSourcesOffline = "Not answering",
+                            mergeSourcesRemoveOffline = "Remove the lists that are not answering (%1${'$'}d)",
                             diagnosticsLatencyGood = "Low latency: channels change without waiting",
                             diagnosticsLatencyFair = "High latency: this can stall and slow channel changes",
                             diagnosticsLatencyUnstable = "Very high latency: this will cause freezing and stalls",
@@ -2968,6 +2971,7 @@ data class DesktopStrings(
                             mergeSourcesRestart = "Die Listen werden sofort neu geordnet.",
                             mergeSourcesFailed = "%1${'$'}s hat nicht geantwortet. Die anderen Listen funktionieren weiter.",
                             mergeSourcesOffline = "Antwortet nicht",
+                            mergeSourcesRemoveOffline = "Nicht antwortende Listen entfernen (%1${'$'}d)",
                             diagnosticsLatencyGood = "Niedrige Latenz: Kanäle wechseln ohne Wartezeit",
                             diagnosticsLatencyFair = "Hohe Latenz: kann stocken und Kanalwechsel verzögern",
                             diagnosticsLatencyUnstable = "Sehr hohe Latenz: verursacht Ruckeln und Aussetzer",
@@ -3744,6 +3748,7 @@ data class DesktopStrings(
                             mergeSourcesRestart = "Le liste vengono riorganizzate subito.",
                             mergeSourcesFailed = "%1${'$'}s non ha risposto. Le altre liste continuano a funzionare.",
                             mergeSourcesOffline = "Non risponde",
+                            mergeSourcesRemoveOffline = "Rimuovi le liste che non rispondono (%1${'$'}d)",
                             diagnosticsLatencyGood = "Latenza bassa: i canali cambiano senza attesa",
                             diagnosticsLatencyFair = "Latenza alta: può bloccarsi e rallentare il cambio canale",
                             diagnosticsLatencyUnstable = "Latenza molto alta: causerà blocchi e interruzioni",
@@ -4891,6 +4896,14 @@ data class ScreenStrings(
      * and wrap a narrow column into three lines saying one thing.
      */
     val mergeSourcesOffline: String,
+    /**
+     * Forgets every list that is not answering, in one press.
+     *
+     * A subscription that has expired or moved leaves a row that will never work again, and after a
+     * few of those the sidebar is mostly dead entries. Removing them one at a time is a
+     * confirmation each; this is the same decision made once.
+     */
+    val mergeSourcesRemoveOffline: String,
     /**
      * Why Continuar is disabled.
      *

@@ -1361,11 +1361,42 @@ private fun SourceSidebar(
      */
     var sourcesFolded by remember { mutableStateOf(false) }
 
+    /** The dead lists waiting on a yes before they are all forgotten. */
+    var removingOffline by remember { mutableStateOf<List<DesktopSourceSummary>>(emptyList()) }
+
     // Collapsed: a narrow strip carrying the name vertically and the control to bring it back. The
     // content beside it gets the width, which on a shelf of posters is another card and a half.
     if (collapsed) {
         CollapsedSidebar(onExpand = onToggleCollapsed)
         return
+    }
+
+    if (removingOffline.isNotEmpty()) {
+        val doomedList = removingOffline
+        AlertDialog(
+            onDismissRequest = { removingOffline = emptyList() },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        doomedList.forEach { source -> onRemoveSource(source.id) }
+                        removingOffline = emptyList()
+                    },
+                ) {
+                    Text(text.shareStrings.screens.setupRemoveList, color = BuroColors.Primary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { removingOffline = emptyList() }) { Text(text.cancel) }
+            },
+            text = {
+                // Named rather than counted: forgetting a list throws away its stored password, and
+                // "seven lists" is not something somebody can check before agreeing to it.
+                Text(
+                    text.shareStrings.screens.setupRemoveListConfirm
+                        .format(doomedList.joinToString(", ") { it.name }),
+                )
+            },
+        )
     }
 
     val doomed = removingSource
@@ -1661,6 +1692,29 @@ private fun SourceSidebar(
                         strings = text,
                     )
                 }
+            }
+            Spacer(Modifier.height(6.dp))
+        }
+        // Forgetting every dead list at once.
+        //
+        // A subscription that expired or moved leaves a row that will never work again, and after a
+        // few of those the sidebar is mostly dead entries. Removing them one at a time is a
+        // confirmation each, for a decision that is really one decision.
+        val offline = sources.filter { !it.isWorking && it.kind == DesktopSourceKind.XTREAM_SESSION }
+        if (offline.size > 1 && !sourcesFolded) {
+            BuroInteractiveRow(
+                onClick = { removingOffline = offline },
+                selected = false,
+                shape = BuroRadius.Small,
+                contentDescription = text.shareStrings.screens.mergeSourcesRemoveOffline.format(offline.size),
+            ) {
+                Text(
+                    text = text.shareStrings.screens.mergeSourcesRemoveOffline.format(offline.size),
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 2,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                )
             }
             Spacer(Modifier.height(6.dp))
         }
