@@ -42,8 +42,12 @@ class BannerTrailerWiringTest {
             home.contains("trailerId = heroItem?.let(appState::heroTrailerFor)"),
             "o banner nao recebe o trailer",
         )
+        // The banner takes the default rather than passing the flag, so the default is what is
+        // asserted. It became a parameter when the Descobrir card started using the same player
+        // without wanting the hero's masks — those fade the left edge and the bottom, which on a
+        // card with its own edges only smears the video.
         assertTrue(
-            home.contains("blendIntoHero = true"),
+            home.contains("blendIntoHero: Boolean = true"),
             "o Chromium fica como um retangulo sobreposto, sem se fundir ao hero",
         )
     }
@@ -173,6 +177,26 @@ class BannerTrailerWiringTest {
         assertTrue(
             state.contains("if (item.contentType == XtreamContentType.LIVE) return"),
             "pede trailer para um canal ao vivo, que nunca tem um",
+        )
+    }
+
+    /**
+     * Nothing is shown until the page has actually loaded.
+     *
+     * Chromium paints its own white page before any content arrives, and the panel is a heavyweight
+     * surface sitting above Compose, where nothing can cover it. On the banner that white never
+     * showed, because the video fills a dark hero; on the Descobrir card it was a blank white
+     * rectangle where the trailer should be. Reported with a screenshot of exactly that.
+     */
+    @Test
+    fun `the player is hidden until its page has loaded`() {
+        assertTrue(
+            home.contains("onReady = { ready = true }"),
+            "nada sabe quando a pagina do trailer acabou de carregar",
+        )
+        assertTrue(
+            home.contains("if (ready) 1f else 0f"),
+            "o Chromium aparece antes de ter video, e o que se ve e um rectangulo branco",
         )
     }
 }

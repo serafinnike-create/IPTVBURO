@@ -154,6 +154,23 @@ private const val HERO_ROTATION_MILLIS = 10_000L
  */
 private const val HERO_TRAILER_WIDTH_FRACTION = 0.58f
 
+/**
+ * The gap between the end of the copy and the edge of the trailer.
+ *
+ * Text that stops exactly where a video begins reads as text running into it, and the video's own
+ * left mask is a gradient rather than a hard edge — the last word would sit in the fade.
+ */
+private val HERO_TRAILER_CLEARANCE = 24.dp
+
+/**
+ * The narrowest the copy column may be squeezed while a trailer plays.
+ *
+ * At some window width the remainder stops being a column and becomes one word per line — the
+ * failure this app has produced before. Below this the text is allowed to reach under the video
+ * instead: a synopsis partly behind a trailer is still readable, a one-word column is not.
+ */
+private val HERO_COPY_MIN_WIDTH = 300.dp
+
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun XtreamDailyHome(
@@ -538,14 +555,33 @@ internal fun HeroTrailer(
      */
     soundOn: Boolean,
     onFailed: () -> Unit,
+    /**
+     * Whether this is the Home banner, which needs the masks that merge it into the hero.
+     *
+     * False for a trailer sitting in a card of its own: those masks are a gradient down the left
+     * edge and along the bottom, and applied to a card they read as the video being smudged rather
+     * than as anything blending. The Descobrir card is a rectangle with its own edges.
+     */
+    blendIntoHero: Boolean = true,
 ) {
     // Keyed on the sound too: the flag is baked into the embed URL, so changing it means a new
     // player rather than a message to the old one.
-    val browser = remember(youtubeId, soundOn) { TrailerBrowser() }
+    val browser = remember(youtubeId, soundOn, blendIntoHero) { TrailerBrowser() }
+
+    /**
+     * Whether the page has finished loading and has something to show.
+     *
+     * Chromium paints its own white page before any content arrives, and the panel sits above
+     * Compose where nothing can cover it. On the banner that white never showed — the video fills a
+     * dark hero — but on the Descobrir card it was a blank white rectangle where the trailer should
+     * be. Reported with a screenshot. Hidden until there is a page, the card simply shows nothing
+     * for that moment, which is what it did before there was a trailer at all.
+     */
+    var ready by remember(youtubeId, soundOn, blendIntoHero) { mutableStateOf(false) }
     DisposableEffect(browser) { onDispose { browser.dispose() } }
 
     val panel =
-        remember(youtubeId, soundOn) {
+        remember(youtubeId, soundOn, blendIntoHero) {
             runCatching {
                 browser.createComponent(
                     youtubeId = youtubeId,
@@ -553,7 +589,10 @@ internal fun HeroTrailer(
                     muted = !soundOn,
                     // The browser surface always sits above Compose. Its own page therefore owns
                     // the side and bottom masks that make video, artwork and copy one hero.
-                    blendIntoHero = true,
+                    blendIntoHero = blendIntoHero,
+                    // Called on a CEF thread; Compose state is safe to set from anywhere here
+                    // because it is only ever flipped one way.
+                    onReady = { ready = true },
                 )
             }.getOrNull()
         }
@@ -566,7 +605,7 @@ internal fun HeroTrailer(
         return
     }
 
-    SwingPanel(factory = { panel }, modifier = modifier)
+    SwingPanel(factory = { panel }, modifier = modifier.alpha(if (ready) 1f else 0f))
 }
 
 @Composable
@@ -600,7 +639,13 @@ private fun DailyHero(
     /** True while the viewer is scrolling, which stops the sound and the picture. */
     scrolling: Boolean = false,
 ) {
-    Box(modifier = Modifier.fillMaxWidth().height(metrics.heroHeight).background(BuroColors.Surface)) {
+    // Constraints, not just a Box: the copy column is sized from what the trailer leaves, and that
+    // needs the banner's real width. A fixed cap cannot track a video measured as a fraction —
+    // at a narrow window the two overlapped and the synopsis was cut off mid-sentence.
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth().height(metrics.heroHeight).background(BuroColors.Surface),
+    ) {
+        val bannerWidth = maxWidth
         // The trailer plays behind the title, and the artwork is what shows whenever it cannot.
         //
         // Started only after the banner has held this title for a moment: it rotates on its own,
@@ -666,7 +711,16 @@ private fun DailyHero(
                     .widthIn(
                         max =
                             when {
-                                trailerPlaying -> if (metrics.wide) 460.dp else 380.dp
+                                // What the trailer leaves, minus the gutters either side and a
+                                // margin so the text stops before the picture rather than at it.
+                                // Measured rather than guessed: a fixed cap does not track a video
+                                // sized as a fraction of the window, and at a narrow width the
+                                // synopsis ran under the video and was cut off mid-sentence.
+                                trailerPlaying ->
+                                    (
+                                        bannerWidth * (1f - HERO_TRAILER_WIDTH_FRACTION) -
+                                            metrics.gutter * 2 - HERO_TRAILER_CLEARANCE
+                                    ).coerceAtLeast(HERO_COPY_MIN_WIDTH)
                                 metrics.wide -> 620.dp
                                 else -> 520.dp
                             },

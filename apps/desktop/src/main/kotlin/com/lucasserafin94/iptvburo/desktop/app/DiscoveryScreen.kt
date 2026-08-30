@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -260,9 +261,24 @@ private fun DiscoveryCard(
     // The card was a poster alone, which asks somebody to judge a film by its artwork; the trailer
     // beside it is what turns a guess into a decision. When there is no trailer the row holds only
     // the card and the screen looks exactly as it did.
+    // Constraints, so the trailer fits the room there is rather than the room it would like.
+    //
+    // The card and a 460dp video together are wider than a modest window, and the overflow went off
+    // the right edge — seen with the video half outside the screen. Below that width the video
+    // takes what is left instead.
+    BoxWithConstraints {
+        val roomForTrailer = maxWidth - CARD_WIDTH - BuroSpacing.Lg * 2
+        val trailerWidth = minOf(TRAILER_WIDTH, roomForTrailer)
+        val trailerFits = trailerWidth >= TRAILER_MIN_WIDTH
+
+    // Anchored to the top, not centred.
+    //
+    // Centring made the poster jump: each card's text is a different height, and the whole row was
+    // recentred around it, so the artwork moved between cards even though it never changed size.
+    // Pinned to the top it stays exactly where the eye left it.
     Row(
         horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Lg),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         Column(
             modifier = Modifier.width(CARD_WIDTH),
@@ -350,16 +366,8 @@ private fun DiscoveryCard(
                 )
             }
 
-            synopsis?.takeIf(String::isNotBlank)?.let { plot ->
-                Spacer(Modifier.height(BuroSpacing.Xs))
-                Text(
-                    text = plot,
-                    color = BuroColors.TextSubtle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            // The synopsis is not here: it sits under the video, where there is room to read it.
+            // Beside a 300dp poster it was a narrow strip of text competing with the artwork.
 
             Spacer(Modifier.height(BuroSpacing.Md))
             Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Lg)) {
@@ -378,13 +386,12 @@ private fun DiscoveryCard(
                     tint = BuroColors.Primary,
                     onClick = { onDecide(DiscoveryVerdict.KEPT) },
                 )
-                // Neither a verdict nor a swipe: a way to read more before giving one.
+                // Neither a verdict nor a swipe: it opens the film's own page.
                 //
-                // The card shows a poster, a year and a genre, and the synopsis only after TMDb answers
-                // — so on most cards there was nothing to judge but the artwork. Deciding blind is what
-                // this button exists to avoid.
+                // Was "Detalhes", which read as a panel of extra facts. It goes to the title itself,
+                // and coming back returns to this card — so the deck is not lost by looking.
                 DecisionButton(
-                    label = "ℹ",
+                    label = "▶",
                     caption = text.details,
                     tint = BuroColors.TextMuted,
                     onClick = onOpenDetails,
@@ -392,23 +399,47 @@ private fun DiscoveryCard(
             }
         }
 
-        if (trailerId != null) {
+        if (trailerId != null && trailerFits) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     modifier =
                         Modifier
-                            .width(TRAILER_WIDTH)
+                            .width(trailerWidth)
                             .aspectRatio(16f / 9f)
                             .clip(BuroRadius.Large)
-                            .background(BuroColors.SurfaceRaised),
+                            // Canvas, not SurfaceRaised. The browser panel is a heavyweight surface
+                            // that Compose cannot clip or cover, so whatever shows through before
+                            // the video arrives should be the dark the video itself is, not a pale
+                            // card that reads as a broken image.
+                            .background(BuroColors.Canvas),
                 ) {
                     HeroTrailer(
                         youtubeId = trailerId,
                         modifier = Modifier.fillMaxSize(),
                         soundOn = soundOn,
                         onFailed = onTrailerFailed,
+                        // Not the banner. Those masks fade the left edge and the bottom into the
+                        // hero behind them; on a card with its own edges they only smear the video.
+                        blendIntoHero = false,
                     )
                 }
+                // The synopsis, under the video and as wide as it.
+                //
+                // It used to sit beside the poster, in a 300dp strip competing with the artwork.
+                // Here it has the video's full width, which is where there is room to actually read
+                // it — and the point of the card is deciding, which needs reading.
+                synopsis?.takeIf(String::isNotBlank)?.let { plot ->
+                    Spacer(Modifier.height(BuroSpacing.Sm))
+                    Text(
+                        text = plot,
+                        modifier = Modifier.width(trailerWidth),
+                        color = BuroColors.TextSubtle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 5,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
                 Spacer(Modifier.height(BuroSpacing.Sm))
                 // Beside the video rather than over it: the player is a browser surface that always
                 // paints above Compose, so a control laid on top of it is simply not there.
@@ -438,6 +469,7 @@ private fun DiscoveryCard(
                 }
             }
         }
+    }
     }
 }
 
@@ -485,6 +517,14 @@ private val CARD_WIDTH = 300.dp
  * the trailer says what it is, which is the difference between guessing and deciding.
  */
 private val TRAILER_WIDTH = 460.dp
+
+/**
+ * Below this the trailer is not shown at all.
+ *
+ * A video squeezed into a sliver beside the card is not a trailer, it is a distraction with a
+ * soundtrack. At that width the card goes back to being a card, which is what it was before.
+ */
+private val TRAILER_MIN_WIDTH = 280.dp
 
 
 private const val POSTER_RATIO = 2f / 3f
