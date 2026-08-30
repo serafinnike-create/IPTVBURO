@@ -12,14 +12,36 @@ class HeroSelectionTest {
         hasArtwork: Boolean = true,
     ) = HeroCandidate(id = id, title = "Title $id", year = year, rating = rating, hasArtwork = hasArtwork)
 
+    /**
+     * As many titles as were asked for, and no title twice.
+     *
+     * The count itself is not the point and has changed — five was a handful somebody recognised by
+     * the second day, so the banner now cycles twenty. What must hold is that the rotation fills up
+     * and that nothing repeats inside it.
+     */
     @Test
-    fun `the rotation holds five distinct titles`() {
-        val pool = (1..20).map { index -> candidate("c$index", rating = 7.0) }
+    fun `the rotation holds the titles it was asked for, all distinct`() {
+        val pool = (1..40).map { index -> candidate("c$index", rating = 7.0) }
+
+        val rotation = HeroSelection.rotationFor(pool, dayOfEpoch = 20_000, count = 12)
+
+        assertEquals(12, rotation.size)
+        assertEquals(12, rotation.map(HeroCandidate::id).toSet().size, "the same title appeared twice")
+    }
+
+    /** And the default fills from a pool that can supply it. */
+    @Test
+    fun `the default rotation is filled`() {
+        val pool = (1..40).map { index -> candidate("c$index", rating = 7.0) }
 
         val rotation = HeroSelection.rotationFor(pool, dayOfEpoch = 20_000)
 
-        assertEquals(5, rotation.size)
-        assertEquals(5, rotation.map(HeroCandidate::id).toSet().size, "the same title appeared twice")
+        assertEquals(
+            rotation.size,
+            rotation.map(HeroCandidate::id).toSet().size,
+            "the same title appeared twice",
+        )
+        assertTrue(rotation.size > 5, "a rotacao devia mostrar mais do que um punhado")
     }
 
     @Test
@@ -119,6 +141,7 @@ class HeroSelectionTest {
         // Dates before the epoch are not expected, but floorMod must not produce a negative index.
         val pool = (1..10).map { index -> candidate("c$index", rating = 7.0) }
 
-        assertEquals(5, HeroSelection.rotationFor(pool, dayOfEpoch = -3).size)
+        // Bounded by the pool, which is the point: a rotation cannot invent titles.
+        assertEquals(10, HeroSelection.rotationFor(pool, dayOfEpoch = -3).size)
     }
 }

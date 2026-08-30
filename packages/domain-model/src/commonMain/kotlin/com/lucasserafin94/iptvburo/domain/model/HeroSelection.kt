@@ -150,7 +150,14 @@ object HeroSelection {
         return rating + recency * RECENCY_WEIGHT + affinity.affinityFor(candidate) * AFFINITY_WEIGHT
     }
 
-    private const val DEFAULT_ROTATION = 5
+    /**
+     * How many titles the banner cycles through in a day.
+     *
+     * Twenty rather than five. Five is a handful somebody recognises by the second day, and the
+     * banner stops being a reason to look at the home screen. The pool it draws from is forty, so
+     * twenty is still the better half of it rather than the whole catalogue.
+     */
+    private const val DEFAULT_ROTATION = 20
 
     /**
      * How many titles the rotation is drawn from.
