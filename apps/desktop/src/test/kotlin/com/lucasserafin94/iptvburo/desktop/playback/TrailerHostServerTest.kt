@@ -129,8 +129,13 @@ class TrailerHostServerTest {
             "o som e pedido antes do video tocar, e o motor recusa o arranque: $timerBody",
         )
 
-        // The one place it may happen: the message saying playback has actually started.
-        val onPlaying = page.substringAfter("playerState===1").substringBefore("}")
+        // The one place it may happen: the branch taken when the player reports it is playing.
+        val playingBranch = "if(s===1){"
+        assertTrue(
+            playingBranch in page,
+            "o ramo do estado 'a tocar' mudou: este teste ja nao le nada",
+        )
+        val onPlaying = page.substringAfter(playingBranch).substringBefore("}")
         assertTrue(
             "raise()" in onPlaying,
             "o som nao e levantado no momento em que o video comeca a tocar",
@@ -217,6 +222,12 @@ class TrailerHostServerTest {
         assertTrue("linear-gradient(90deg" in page, "the video does not dissolve into the copy")
         assertTrue("linear-gradient(0deg" in page, "the video does not dissolve into the shelf")
         assertTrue("pointer-events:none" in page, "the masks intercept the embedded player")
+        assertTrue("animation:hero-reveal 850ms" in page, "the trailer drops in without a reveal")
+        assertTrue("scale(1.035)" in page, "the reveal has no cinematic pull-back")
+        assertTrue(
+            "translate(-50%,-50%) scale(1)" in page,
+            "the reveal does not finish in the correctly centred position",
+        )
     }
 
     /**

@@ -202,8 +202,17 @@ class TrailerHostServer private constructor(
                       listen();
                       window.addEventListener('message',function(e){
                         var d;try{d=JSON.parse(e.data)}catch(_){return}
+                        if(!d||!d.info)return;
                         // 1 is "playing": the engine has granted the autoplay, so sound is safe.
-                        if(d&&d.info&&d.info.playerState===1){raise();done=true}
+                        //
+                        // Read from either shape the player answers in. Listening only for the
+                        // state-change event missed a player that was already playing before this
+                        // script attached — and the sound switch then appeared to do nothing at
+                        // all, which is exactly how it was reported. The infoDelivery replies carry
+                        // the current state too, so an already-running video is caught as well.
+                        var s = d.info.playerState;
+                        if(s===undefined && d.info.currentTime!==undefined) s = 1;
+                        if(s===1){raise();done=true}
                       });
                       // The timer only ever asks the player to report itself. It must NOT call
                       // raise(): an unMute that arrives before the video is playing is read as a
@@ -215,7 +224,9 @@ class TrailerHostServer private constructor(
                       var tries=0;
                       var timer=setInterval(function(){
                         listen();
-                        if(done||++tries>20)clearInterval(timer);
+                        // Sixty tries, not twenty: ten seconds was not enough for a trailer that
+                        // buffers, and when the timer gave up the sound was never raised at all.
+                        if(done||++tries>60)clearInterval(timer);
                       },500);
                     })();
                     </script>
@@ -247,17 +258,44 @@ class TrailerHostServer private constructor(
                 body.cinematic-hero::before,body.cinematic-hero::after{
                      content:"";position:fixed;z-index:2;pointer-events:none}
                 body.cinematic-hero::before{
-                     inset:0 auto 0 0;width:28%;
+                     /* Wide enough to actually dissolve.
+                        At 28% the fade covered a narrow strip of a player that is itself only just
+                        over half the banner, so what showed was a hard vertical edge where the
+                        video began — reported as the trailer not sitting properly in the banner.
+                        Half the player's width, held opaque at the start, reads as one picture. */
+                     inset:0 auto 0 0;width:50%;
                      background:linear-gradient(90deg,
-                         rgba(8,9,10,1) 0%,rgba(8,9,10,.92) 22%,
-                         rgba(8,9,10,.58) 58%,rgba(8,9,10,0) 100%)}
+                         rgba(8,9,10,1) 0%,rgba(8,9,10,1) 14%,
+                         rgba(8,9,10,.86) 34%,rgba(8,9,10,.46) 66%,
+                         rgba(8,9,10,0) 100%)}
                 body.cinematic-hero::after{
                      inset:auto 0 0 0;height:38%;
                      background:linear-gradient(0deg,
                          rgba(8,9,10,.96) 0%,rgba(8,9,10,.64) 34%,
                          rgba(8,9,10,0) 100%)}
-                body.cinematic-hero #fit{animation:hero-reveal 460ms ease-out both}
-                @keyframes hero-reveal{from{opacity:0}to{opacity:1}}
+                /* The banner's player is blown up past the frame on purpose.
+
+                   `controls=0` is a request, not a guarantee: YouTube still draws its own title
+                   bar along the top and its transport buttons across the middle-bottom, and both
+                   showed on the banner over a video nobody had asked to control — reported as the
+                   trailer not sitting right. They are drawn relative to the player, so scaling the
+                   player beyond the visible frame carries them outside it, and what is left in
+                   view is picture. The explicit trailer lightbox is untouched: there the controls
+                   are the point. */
+                body.cinematic-hero #fit{width:126vw;height:70.9vw;
+                     min-height:126vh;min-width:224vh}
+                /* The moving picture arrives as part of the banner, not as a player dropped on it.
+
+                   This animation must live here rather than in Compose: JCEF is an AWT heavyweight
+                   surface, so Compose alpha and transforms do not affect its pixels. A restrained
+                   fade with a tiny pull-back gives the artwork-to-video hand-off some depth while
+                   keeping the title and actions still and readable. */
+                body.cinematic-hero #fit{
+                     animation:hero-reveal 850ms cubic-bezier(.2,.72,.24,1) both;
+                     transform-origin:center center}
+                @keyframes hero-reveal{
+                     from{opacity:0;transform:translate(-50%,-50%) scale(1.035)}
+                     to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
                 @media (prefers-reduced-motion:reduce){body.cinematic-hero #fit{animation:none}}
                 </style></head>
                 <body$bodyClass><div id="fit"><iframe src="$embed"
