@@ -629,6 +629,38 @@ class MergedCatalogueRepositoryTest {
         )
     }
 
+    /**
+     * Every list failing is reported, not thrown.
+     *
+     * Thrown, it broke the whole home — the screen that has nothing to do with any one
+     * subscription — and the viewer got an error card instead of the connect screen. Seen on a real
+     * install whose stored credentials had gone: eight lists registered, none openable, and "BURO
+     * home FAILED: IllegalStateException" in the log.
+     */
+    @Test
+    fun `every list failing does not throw`() {
+        val repository =
+            merged(
+                "uma" to FakeSource(listOf("Duna"), failOnLoad = true),
+                "outra" to FakeSource(listOf("Avatar"), failOnLoad = true),
+            )
+
+        val summary = repository.loadCatalog(XtreamContentType.MOVIE)
+
+        assertEquals(0, summary.loadedItemCount, "afirmou ter titulos sem nenhuma lista a funcionar")
+        assertTrue(!summary.account.authenticated, "diz-se autenticado sem nenhuma lista aberta")
+    }
+
+    /** And a merge holding nothing at all behaves the same. */
+    @Test
+    fun `an empty merge does not throw`() {
+        val repository = MergedCatalogueRepository(newDelegate = { FakeSource(emptyList()) })
+
+        val summary = repository.loadCatalog(XtreamContentType.MOVIE)
+
+        assertEquals(0, summary.loadedItemCount)
+    }
+
     /** And forgetting one that was never held changes nothing. */
     @Test
     fun `forgetting an unknown subscription is harmless`() {

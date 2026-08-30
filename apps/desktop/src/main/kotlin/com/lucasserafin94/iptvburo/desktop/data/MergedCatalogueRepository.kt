@@ -8,6 +8,7 @@ import com.lucasserafin94.iptvburo.domain.model.ContentIdentity
 import com.lucasserafin94.iptvburo.domain.model.LibraryCandidate
 import com.lucasserafin94.iptvburo.domain.model.MergedSources
 import com.lucasserafin94.iptvburo.domain.model.shelfDeduplicationKey
+import com.lucasserafin94.iptvburo.xtream.XtreamAccount
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
 import com.lucasserafin94.iptvburo.xtream.XtreamCategory
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
@@ -286,7 +287,30 @@ class MergedCatalogueRepository(
         // filter and the subscriptions are unchanged, only their contents. Dropped here so a
         // refresh actually shows the new catalogue.
         synchronized(lock) { mergeCache.clear() }
-        return summary() ?: error("No subscription is loaded.")
+        // Every list failing is a state to report, not to throw on.
+        //
+        // Thrown, it broke the whole home — the screen that has nothing to do with any one
+        // subscription — and the viewer got an error card instead of the connect screen. Seen on a
+        // real install whose stored credentials had gone: eight lists registered, none openable,
+        // and "BURO home FAILED: IllegalStateException" in the log.
+        //
+        // An empty summary is what the screens above already know how to read: it is the same
+        // shape they see before anything has been connected at all.
+        return summary()
+            ?: XtreamSessionSummary(
+                sourceId = "",
+                account =
+                    XtreamAccount(
+                        authenticated = false,
+                        status = null,
+                        isTrial = null,
+                        activeConnections = null,
+                        maximumConnections = null,
+                        allowedOutputFormats = emptySet(),
+                    ),
+                loadedItemCount = 0,
+                loadedContentTypes = emptySet(),
+            )
     }
 
     /**

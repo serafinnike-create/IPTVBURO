@@ -40,6 +40,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.lucasserafin94.iptvburo.domain.model.BannerTrailer
+import com.lucasserafin94.iptvburo.desktop.playback.TrailerBrowser
+import androidx.compose.ui.awt.SwingPanel
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -273,7 +277,16 @@ fun XtreamDailyHome(
             // and nothing runs again. Drawn as a skeleton, that is a home screen pretending to
             // build itself for ever. The film details and the live guide had the same defect.
             DailyHomeStatus.Idle -> {
-                LaunchedEffect(Unit) { appState.loadDailyHome(today) }
+                // Retried only while there is a catalogue to build from.
+                //
+                // With no subscription open, the load returns at once and leaves Idle behind, so
+                // this effect went round again on every recomposition — the app working steadily
+                // at a home it could not build. The welcome screen above already covers that case,
+                // so there is nothing to draw here; the skeleton simply must not keep retrying.
+                val hasCatalogue = (appState.xtreamSummary?.loadedItemCount ?: 0) > 0
+                if (hasCatalogue) {
+                    LaunchedEffect(Unit) { appState.loadDailyHome(today) }
+                }
                 HomeSkeleton(metrics, text)
             }
 
@@ -340,10 +353,20 @@ fun XtreamDailyHome(
                         // four of them may never be seen if the user moves on.
                         LaunchedEffect(heroItem?.contentType, heroItem?.providerId) {
                             heroItem?.let(appState::loadHeroSynopsis)
+                            // The trailer too, on the same terms: only for a title the banner has
+                            // actually reached. The rotation holds twenty and most are never seen.
+                            heroItem?.let(appState::loadHeroTrailer)
                         }
                         DailyHero(
                             item = heroItem,
                             synopsis = heroItem?.let(appState::heroSynopsisFor),
+                            trailerId = heroItem?.let(appState::heroTrailerFor),
+                            onTrailerFailed = {
+                                heroItem?.let(appState::rememberHeroTrailerFailure)
+                            },
+                            // Scrolling away stops the sound and the picture: the viewer has moved
+                            // on from the banner, so it is not what they are looking at.
+                            scrolling = homeState.isScrollInProgress,
                             date = snapshot.date,
                             metrics = metrics,
                             text = text,
@@ -466,6 +489,44 @@ fun XtreamDailyHome(
 // Hero
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * The banner's trailer, drawn behind the title.
+ *
+ * With sound, because a trailer without it is a moving poster. It stops when the viewer scrolls
+ * away and when they leave the screen — both handled by the caller withdrawing it, which disposes
+ * the browser here.
+ *
+ * When Chromium cannot start, [onFailed] is called and nothing is drawn: the artwork underneath is
+ * already on screen, so the banner simply stays as it was. A black rectangle on the opening screen
+ * would read as a broken app, which is the whole reason this is guarded rather than optimistic.
+ */
+@Composable
+private fun HeroTrailer(
+    youtubeId: String,
+    modifier: Modifier = Modifier,
+    onFailed: () -> Unit,
+) {
+    val browser = remember(youtubeId) { TrailerBrowser() }
+    DisposableEffect(browser) { onDispose { browser.dispose() } }
+
+    val panel =
+        remember(youtubeId) {
+            runCatching {
+                browser.createComponent(youtubeId = youtubeId, autoplay = true, muted = false)
+            }.getOrNull()
+        }
+
+    if (panel == null) {
+        DisposableEffect(youtubeId) {
+            onFailed()
+            onDispose { }
+        }
+        return
+    }
+
+    SwingPanel(factory = { panel }, modifier = modifier)
+}
+
 @Composable
 private fun DailyHero(
     item: XtreamCatalogItem?,
@@ -476,8 +537,33 @@ private fun DailyHero(
     synopsis: String?,
     onDetails: (XtreamCatalogItem) -> Unit,
     onPlay: (XtreamCatalogItem) -> Unit,
+    /**
+     * The trailer to play behind the title, or null to show the artwork.
+     *
+     * Null covers every reason not to play: no trailer, one that already failed, or something the
+     * viewer chose already playing. The banner does not decide any of that — see BannerTrailer.
+     */
+    trailerId: String? = null,
+    /** Told when the trailer will not start, so the next rotation shows artwork immediately. */
+    onTrailerFailed: () -> Unit = {},
+    /** True while the viewer is scrolling, which stops the sound and the picture. */
+    scrolling: Boolean = false,
 ) {
     Box(modifier = Modifier.fillMaxWidth().height(metrics.heroHeight).background(BuroColors.Surface)) {
+        // The trailer plays behind the title, and the artwork is what shows whenever it cannot.
+        //
+        // Started only after the banner has held this title for a moment: it rotates on its own,
+        // so beginning the instant a title appears would open and abandon a video per rotation.
+        var settled by remember(item?.providerId, trailerId) { mutableStateOf(false) }
+        LaunchedEffect(item?.providerId, trailerId) {
+            settled = false
+            if (trailerId != null) {
+                delay(BannerTrailer.SETTLE_MILLIS)
+                settled = true
+            }
+        }
+        val playing = trailerId != null && settled && !scrolling
+
         if (item != null) {
             BuroRemoteArtwork(
                 artworkUrl = item.artworkUrl,
@@ -487,6 +573,13 @@ private fun DailyHero(
             ) { HeroArtFallback() }
         } else {
             HeroArtFallback()
+        }
+        if (playing && trailerId != null) {
+            HeroTrailer(
+                youtubeId = trailerId,
+                modifier = Modifier.fillMaxSize(),
+                onFailed = onTrailerFailed,
+            )
         }
 
         // Two passes: horizontal protects the copy column, vertical anchors the hero to the rail

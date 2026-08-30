@@ -77,6 +77,7 @@ import com.lucasserafin94.iptvburo.domain.model.BestOfferPolicy
 import com.lucasserafin94.iptvburo.domain.model.MergedSources
 import com.lucasserafin94.iptvburo.domain.model.ProviderText
 import com.lucasserafin94.iptvburo.domain.model.EpgEntry
+import com.lucasserafin94.iptvburo.domain.model.BannerTrailer
 import com.lucasserafin94.iptvburo.domain.model.LiveGuide
 import com.lucasserafin94.iptvburo.domain.model.CacheBudget
 import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
@@ -3214,6 +3215,82 @@ class DesktopAppState(
      */
     private var heroSynopsis by mutableStateOf<Map<String, String>>(emptyMap())
         private set
+
+    // -----------------------------------------------------------------------------------------
+    // The banner's trailer
+    // -----------------------------------------------------------------------------------------
+
+    /** Trailer ids found for banner titles, by the same key the synopsis uses. */
+    private var heroTrailers by mutableStateOf<Map<String, String>>(emptyMap())
+
+    /**
+     * Trailers that failed, and when.
+     *
+     * The banner is the first thing anybody sees, so a video that will not play must not be tried
+     * again on every rotation — the viewer pays a wait each time for the same answer. See
+     * [BannerTrailer].
+     */
+    private var heroTrailerFailures by mutableStateOf<Map<String, Long>>(emptyMap())
+
+    /** The trailer for a banner title, or null when there is none worth playing. */
+    fun heroTrailerFor(item: XtreamCatalogItem): String? {
+        val key = heroSynopsisKey(item.contentType, item.providerId)
+        val videoId = heroTrailers[key] ?: return null
+        return videoId.takeIf {
+            BannerTrailer.shouldPlay(
+                videoId = it,
+                failedAtEpochSeconds = heroTrailerFailures[key],
+                nowEpochSeconds = System.currentTimeMillis() / 1_000L,
+                // A trailer that talked over the film somebody chose would not be a feature.
+                somethingElseIsPlaying = xtreamStatus is XtreamStatus.LoadingCatalog,
+            )
+        }
+    }
+
+    /**
+     * Records that a banner trailer would not play.
+     *
+     * Called by the screen, because only the player knows. Remembered so the next rotation shows
+     * the artwork immediately rather than trying again and failing again in front of the viewer.
+     */
+    fun rememberHeroTrailerFailure(item: XtreamCatalogItem) {
+        val key = heroSynopsisKey(item.contentType, item.providerId)
+        val nowSeconds = System.currentTimeMillis() / 1_000L
+        heroTrailerFailures =
+            BannerTrailer.pruneFailures(heroTrailerFailures, nowSeconds) + (key to nowSeconds)
+    }
+
+    /**
+     * Looks up the trailer for a banner title, once.
+     *
+     * Only for a title the banner has actually reached: the rotation holds twenty and most of them
+     * are never seen, so looking all twenty up would be twenty requests for one viewing.
+     */
+    fun loadHeroTrailer(item: XtreamCatalogItem) {
+        val key = heroSynopsisKey(item.contentType, item.providerId)
+        if (heroTrailers.containsKey(key)) return
+        if (item.contentType == XtreamContentType.LIVE) return
+        if (!metadataClient.isConfigured) return
+        val requestGeneration = dailyHomeRequestGeneration
+
+        streamingScope.launch {
+            val videoId =
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        // The same lookup the details page uses, so a title with a trailer there
+                        // has one here rather than the two disagreeing.
+                        metadataClient.findTrailer(
+                            title = item.name.editorialCatalogTitle(),
+                            year = item.year,
+                        )
+                    }
+                }.getOrNull()
+            if (requestGeneration != dailyHomeRequestGeneration) return@launch
+            // Recorded even when there is none, so the same title is not looked up on every pass
+            // of the rotation. Blank reads as "asked, and there is none".
+            heroTrailers = heroTrailers + (key to videoId.orEmpty())
+        }
+    }
 
     fun heroSynopsisFor(item: XtreamCatalogItem): String? =
         heroSynopsis[heroSynopsisKey(item.contentType, item.providerId)]
