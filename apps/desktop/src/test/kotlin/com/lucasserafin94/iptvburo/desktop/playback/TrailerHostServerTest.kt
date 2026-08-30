@@ -60,7 +60,7 @@ class TrailerHostServerTest {
     fun `a banner trailer loops and shows no controls`() {
         val host = started()
 
-        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = true, blendIntoHero = true))
+        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = true, blendIntoHero = true, unattended = true))
 
         assertTrue("mute=1" in page)
         assertTrue("controls=0" in page, "a banner trailer must not show controls")
@@ -79,7 +79,7 @@ class TrailerHostServerTest {
     fun `a banner trailer with sound still loops and shows no controls`() {
         val host = started()
 
-        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = false, blendIntoHero = true))
+        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = false, blendIntoHero = true, unattended = true))
 
         assertTrue("controls=0" in page, "the sound switch brought YouTube's controls with it")
         assertTrue("loop=1" in page, "the sound switch stopped the banner looping")
@@ -97,7 +97,7 @@ class TrailerHostServerTest {
     fun `a banner asked for sound still starts muted and raises it after`() {
         val host = started()
 
-        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = false, blendIntoHero = true))
+        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = false, blendIntoHero = true, unattended = true))
 
         assertTrue("mute=1" in page, "the banner asked for audio up front and will not autoplay")
         assertTrue("enablejsapi=1" in page, "nothing can unmute a player it cannot talk to")
@@ -119,7 +119,7 @@ class TrailerHostServerTest {
     fun `the sound is never raised on a timer, only when playing`() {
         val host = started()
 
-        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = false, blendIntoHero = true))
+        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = false, blendIntoHero = true, unattended = true))
 
         val marker = "var timer=setInterval(function(){"
         assertTrue(marker in page, "o temporizador mudou: este teste ja nao le nada")
@@ -142,10 +142,42 @@ class TrailerHostServerTest {
     fun `a banner left muted is not unmuted behind the viewer's back`() {
         val host = started()
 
-        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = true, blendIntoHero = true))
+        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = true, blendIntoHero = true, unattended = true))
 
         assertTrue("mute=1" in page)
         assertFalse("unMute" in page, "a banner the viewer silenced started making noise")
+    }
+
+    /**
+     * The Descobrir card gets the same treatment as the banner, without the banner's masks.
+     *
+     * It plays beside a poster and nobody asked for it, so it starts muted, shows no controls and
+     * repeats — but it is a card with its own edges, so the hero's edge-fading masks would only
+     * smear it. Those two things were one flag, and the card inherited the wrong half: it was
+     * served `mute=0&controls=1`, so it did not start at all and showed YouTube's play button.
+     */
+    @Test
+    fun `an unattended trailer outside the banner still starts muted and bare`() {
+        val host = started()
+
+        val page =
+            fetch(
+                host.pageUrlFor(
+                    "cTW78JSBoyw",
+                    autoplay = true,
+                    muted = false,
+                    blendIntoHero = false,
+                    unattended = true,
+                ),
+            )
+
+        assertTrue("mute=1" in page, "o cartao pede audio ao arrancar, e o motor recusa-o")
+        assertTrue("controls=0" in page, "o cartao mostra os controlos do YouTube")
+        assertTrue("loop=1" in page, "o trailer do cartao para no fim em vez de repetir")
+        assertFalse(
+            "class=\"cinematic-hero\"" in page,
+            "o cartao levou as mascaras do banner, que so lhe borram o video",
+        )
     }
 
     @Test

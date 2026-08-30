@@ -33,9 +33,22 @@ class TrailerHostServer private constructor(
         autoplay: Boolean = true,
         muted: Boolean = false,
         blendIntoHero: Boolean = false,
+        /**
+         * Whether the trailer plays beside something else rather than being opened on its own.
+         *
+         * True for the Home banner and the Descobrir card: both start by themselves, next to
+         * artwork somebody is actually looking at. Those get no controls, repeat, and start muted —
+         * no engine autoplays audio, so asking for sound means not starting at all.
+         *
+         * Not `autoplay`, which the deliberate trailer lightbox also uses, and not [blendIntoHero],
+         * which is only about the banner's masks. The question here is whether anybody asked for
+         * this video.
+         */
+        unattended: Boolean = false,
     ): String =
         "$origin/watch?v=$youtubeId&autoplay=${autoplay.asFlag()}" +
-            "&mute=${muted.asFlag()}&hero=${blendIntoHero.asFlag()}"
+            "&mute=${muted.asFlag()}&hero=${blendIntoHero.asFlag()}" +
+            "&unattended=${unattended.asFlag()}"
 
     private fun Boolean.asFlag(): String = if (this) "1" else "0"
 
@@ -82,6 +95,7 @@ class TrailerHostServer private constructor(
                                     autoplay = flag("autoplay"),
                                     muted = flag("mute"),
                                     blendIntoHero = flag("hero"),
+                                    unattended = flag("unattended"),
                                 )
                             } else {
                                 "<!doctype html><html><body style=\"background:#000\"></body></html>"
@@ -113,19 +127,21 @@ class TrailerHostServer private constructor(
             autoplay: Boolean,
             muted: Boolean,
             blendIntoHero: Boolean,
+            unattended: Boolean,
         ): String {
             val embed =
                 buildString {
                     append("https://www.youtube-nocookie.com/embed/").append(youtubeId)
                     append("?autoplay=").append(if (autoplay) 1 else 0)
-                    // Always muted on the banner, whatever the viewer asked for.
+                    // Anything that starts on its own starts muted, whatever the viewer asked
+                    // for — the banner and the Descobrir card alike.
                     //
                     // Every engine refuses to autoplay audio: asked for sound up front, the banner
                     // does not start at all and shows YouTube's play button over a still frame —
                     // seen exactly that way once the sound preference was remembered. So it starts
                     // silent and the script below unmutes it the moment it is actually playing,
                     // which is the closest any page can get to opening with sound.
-                    append("&mute=").append(if (muted || blendIntoHero) 1 else 0)
+                    append("&mute=").append(if (muted || unattended) 1 else 0)
                     // A trailer opened deliberately gets controls and plays once; the banner has
                     // neither, and repeats.
                     //
@@ -133,12 +149,16 @@ class TrailerHostServer private constructor(
                     // `muted`, so turning the banner's sound on put YouTube's pause button over it
                     // and stopped it looping — reported with a screenshot of the controls sitting
                     // there. The two questions are unrelated.
-                    append("&controls=").append(if (blendIntoHero) 0 else 1)
+                    // No controls on anything that plays itself: the banner and the Descobrir
+                    // card are both decoration beside something else, and a pause button over them
+                    // is clutter for a video nobody asked to open. A trailer somebody opened
+                    // deliberately still gets them.
+                    append("&controls=").append(if (unattended) 0 else 1)
                     append("&rel=0&modestbranding=1&playsinline=1")
                     // Lets the page below talk to the player at all, which is what makes unmuting
                     // after the start possible.
-                    if (blendIntoHero) append("&enablejsapi=1")
-                    if (blendIntoHero) append("&loop=1&playlist=").append(youtubeId)
+                    if (unattended) append("&enablejsapi=1")
+                    if (unattended) append("&loop=1&playlist=").append(youtubeId)
                     append("&origin=").append(origin)
                 }
             val bodyClass = if (blendIntoHero) " class=\"cinematic-hero\"" else ""
@@ -156,7 +176,7 @@ class TrailerHostServer private constructor(
              * It stops as soon as it has worked.
              */
             val unmuteScript =
-                if (blendIntoHero && !muted) {
+                if (unattended && !muted) {
                     """
                     <script>
                     (function(){

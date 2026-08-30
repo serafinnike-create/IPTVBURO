@@ -580,6 +580,9 @@ internal fun HeroTrailer(
                     // The browser surface always sits above Compose. Its own page therefore owns
                     // the side and bottom masks that make video, artwork and copy one hero.
                     blendIntoHero = blendIntoHero,
+                    // Both the banner and the Descobrir card play beside something else, and
+                    // neither was asked for: muted at the start, no controls, and repeating.
+                    unattended = true,
                 )
             }.getOrNull()
         }

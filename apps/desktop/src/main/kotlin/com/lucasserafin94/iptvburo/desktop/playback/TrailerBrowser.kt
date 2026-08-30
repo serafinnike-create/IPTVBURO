@@ -46,6 +46,8 @@ class TrailerBrowser {
          * into whatever is behind them, and on a card with its own edges they only smear the video.
          */
         blendIntoHero: Boolean = true,
+        /** True when the trailer plays beside something else. See TrailerHostServer. */
+        unattended: Boolean = false,
     ): JPanel? =
         runCatching {
             val app = sharedApp() ?: return null
@@ -59,7 +61,11 @@ class TrailerBrowser {
             val host = sharedHost() ?: return null
             val cefBrowser =
                 cefClient
-                    .createBrowser(host.pageUrlFor(youtubeId, autoplay, muted, blendIntoHero), false, false)
+                    .createBrowser(
+                        host.pageUrlFor(youtubeId, autoplay, muted, blendIntoHero, unattended),
+                        false,
+                        false,
+                    )
                     .also { browser = it }
 
             JPanel(BorderLayout()).apply {
