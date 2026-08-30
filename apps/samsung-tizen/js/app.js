@@ -330,11 +330,40 @@ var BuroApp = (function () {
         section: 'HOME',
         screen: 'BOOT',
         screenData: null,
+        /* O canal onde o guia esta, e o que ja foi buscado para ele. */
+        guideFocusedId: null,
+        guideSchedules: {},
+        guideFetchedAt: {},
+        guideInFlight: {},
         backStack: []
     };
 
+    /*
+      Quanto tempo uma programacao ja lida continua a valer.
+
+      Uma grelha muda quando o programa seguinte comeca, nao ao segundo.
+      Pedir outra vez a cada passagem seria um pedido por linha para dados
+      que nao mudaram; cinco minutos e curto o bastante para o "agora"
+      continuar honesto.
+    */
+    var GUIDE_FRESHNESS_SECONDS = 300;
+
+    /*
+      Quantas programacoes ficam guardadas.
+
+      Cada uma sao horas de programas de um canal. Chega para voltar atras
+      na lista e encontrar o que ja foi lido, sem que uma noite a percorrer
+      quatrocentos canais guarde a grelha inteira.
+    */
+    var GUIDE_MAX_SCHEDULES = 60;
+
+    /* Quantos canais de cada lado do foco valem a pena ir buscar antes de
+       serem alcancados. O mesmo numero que o Windows e o Android usam. */
+    var GUIDE_PREFETCH_RADIUS = 4;
+
     var NAVIGATION = [
         { section: 'HOME', label: 'home', icon: 'H' },
+        { section: 'GUIDE', label: 'guideTitle', icon: 'G' },
         { section: 'LIVE', label: 'live', icon: 'TV' },
         { section: 'MOVIES', label: 'movies', icon: 'M' },
         { section: 'SERIES', label: 'series', icon: 'S' },
@@ -363,7 +392,18 @@ var BuroApp = (function () {
     */
     function navigationEntries() {
         var entries = NAVIGATION.slice();
-        entries.splice(9, 0, { section: 'SUBSCRIPTIONS', label: 'subscriptions', icon: '$' });
+        var depoisDe = -1;
+        /*
+          Depois de MY_BURO, e nao numa posicao fixa.
+
+          Era splice(9, ...), que dependia de nada ser acrescentado acima. Assim
+          que o Guia entrou, Assinaturas passou a cair no meio de outra coisa --
+          um numero escrito a mao que a proxima seccao volta a partir.
+        */
+        entries.forEach(function (entry, posicao) {
+            if (entry.section === 'MY_BURO') { depoisDe = posicao; }
+        });
+        entries.splice(depoisDe + 1, 0, { section: 'SUBSCRIPTIONS', label: 'subscriptions', icon: '$' });
         return entries;
     }
 
@@ -835,6 +875,11 @@ var BuroApp = (function () {
         else if (action === 'subtitles') { openPlayerMenu('TEXT'); }
         else if (action === 'favorite') { togglePlayerFavorite(); }
         else if (action === 'guide') { openPlayerMenu('GUIDE'); }
+        /* Chegar a uma linha do guia ja escolhe esse canal: na televisao o
+           foco e a escolha, e pedir uma segunda tecla seria o trabalho que o
+           guia existe para tirar. */
+        else if (action === 'guide-focus') { focusGuideChannel(target.getAttribute('data-id')); }
+        else if (action === 'guide-watch') { beginPlayback(target.getAttribute('data-id'), 0); }
         else if (action === 'speed') { openPlayerMenu('SPEED'); }
         else if (action === 'aspect') { cyclePlayerDisplayMode(); }
         else if (action === 'sleep') { openPlayerMenu('SLEEP'); }
@@ -9490,8 +9535,183 @@ var BuroApp = (function () {
                 categories.length, '', 'guard-pagination') + '</div>', t('categoryControl'), true);
     }
 
+    /*
+      O guia ao vivo: canais de um lado, o que esta a dar do outro.
+
+      O catalogo responde "que canais ha". Isto responde "o que esta a dar", que
+      e a pergunta que uma pessoa tem quando se senta com o comando -- e por isso
+      e que toda a box de satelite tem este ecra.
+
+      Na televisao o D-pad e como tudo se move, por isso chegar a uma linha ja
+      escolhe esse canal: pedir uma segunda tecla para ver a programacao seria o
+      trabalho que o guia existe para tirar.
+    */
+    function renderGuide() {
+        var scope = catalogueScope('LIVE');
+        var channels = scope.rows || [];
+        var nowSeconds = Math.floor(Date.now() / 1000);
+        var focusedId = state.guideFocusedId;
+        var focused = null;
+        var lista;
+        var painel;
+
+        if (scope.rows === undefined && !scope.loading) {
+            window.setTimeout(function () { loadCatalogueShelf('LIVE', false); }, 0);
+        }
+        channels.forEach(function (channel) {
+            if (channel.id === focusedId) { focused = channel; }
+        });
+        if (!focused) { focused = channels[0] || null; }
+        if (focused && focused.id !== focusedId) {
+            state.guideFocusedId = focused.id;
+            window.setTimeout(function () { loadGuideSchedule(focused); }, 0);
+        }
+
+        lista = channels.map(function (channel) {
+            var schedule = state.guideSchedules[channel.id];
+            var agora = schedule ? guideOnNow(schedule, nowSeconds) : null;
+            return '<button class="guide-channel focusable' +
+                (focused && channel.id === focused.id ? ' selected' : '') +
+                '" data-action="guide-focus" data-id="' + attr(channel.id) + '">' +
+                '<strong>' + escapeHtml(channel.name) + '</strong>' +
+                (agora ? '<span>' + escapeHtml(agora.title) + '</span>' : '') +
+                '</button>';
+        }).join('');
+
+        if (!focused) {
+            painel = '<p class="guide-empty">' + escapeHtml(t('guideNoSchedule')) + '</p>';
+        } else {
+            painel = guidePanel(focused, state.guideSchedules[focused.id], nowSeconds);
+        }
+
+        shell('<div class="guide-layout"><div class="guide-channels">' + lista + '</div>' +
+            '<div class="guide-panel">' + painel + '</div></div>', t('guideTitle'), false);
+    }
+
+    /* O programa a decorrer, ou null quando nao ha nenhum com horas. */
+    function guideOnNow(schedule, nowSeconds) {
+        var atual = null;
+        (schedule || []).forEach(function (program) {
+            if (epgIsNow(program, nowSeconds)) { atual = program; }
+        });
+        return atual;
+    }
+
+    /* O canal em foco: nome, botao de ver, e a programacao a partir de agora. */
+    function guidePanel(channel, schedule, nowSeconds) {
+        var linhas;
+        if (schedule === undefined) {
+            return '<h2>' + escapeHtml(channel.name) + '</h2>' +
+                '<p class="guide-empty">' + escapeHtml(t('epgLoading')) + '</p>';
+        }
+        /* O que ja acabou sai: um guia e sobre o que vem a seguir. O que esta a
+           dar fica e vem primeiro, porque "o que estou a ver" e a pergunta que a
+           linha de cima responde. */
+        linhas = (schedule || []).filter(function (program) {
+            var fim = Number(program.endEpochSeconds);
+            return !(fim > 0 && fim <= nowSeconds);
+        }).map(function (program) {
+            var isNow = epgIsNow(program, nowSeconds);
+            var progresso = isNow ? epgProgress(program, nowSeconds) : 0;
+            return '<li class="guide-program' + (isNow ? ' now' : '') + '">' +
+                '<span class="guide-time">' + escapeHtml(epgClock(program, false)) + '</span>' +
+                '<span class="guide-title">' + escapeHtml(program.title || '') + '</span>' +
+                (isNow ? '<span class="guide-badge">' + escapeHtml(t('guideNow')) + '</span>' : '') +
+                (isNow ? '<span class="guide-bar"><span style="width:' + progresso + '%"></span></span>' : '') +
+                (isNow && program.description ?
+                    '<span class="guide-desc">' + escapeHtml(program.description) + '</span>' : '') +
+                '</li>';
+        }).join('');
+
+        return '<h2>' + escapeHtml(channel.name) + '</h2>' +
+            '<button class="guide-watch focusable" data-action="guide-watch" data-id="' +
+            attr(channel.id) + '">' + escapeHtml(t('guideWatch')) + '</button>' +
+            (linhas ? '<ul class="guide-schedule">' + linhas + '</ul>' :
+                '<p class="guide-empty">' + escapeHtml(t('guideNoSchedule')) + '</p>');
+    }
+
+    /*
+      A programacao de um canal, pedida uma vez e guardada.
+
+      O fornecedor nao tem chamada para varios canais, por isso e um pedido por
+      canal. O que ja esta em maos nao e pedido outra vez durante cinco minutos,
+      e o numero de programacoes guardadas tem tecto -- caso contrario uma noite
+      a percorrer quatrocentos canais guardava a grelha inteira.
+    */
+    function loadGuideSchedule(channel) {
+        var nowSeconds = Math.floor(Date.now() / 1000);
+        var buscadoEm = state.guideFetchedAt[channel.id];
+        var idade;
+        var found;
+        var secret;
+        if (buscadoEm) {
+            idade = nowSeconds - buscadoEm;
+            if (idade >= 0 && idade < GUIDE_FRESHNESS_SECONDS) { return; }
+        }
+        if (state.guideInFlight[channel.id]) { return; }
+        found = findItemAndSource(channel.id);
+        if (!found.item || !found.source || found.source.type !== 'XTREAM') { return; }
+        state.guideInFlight[channel.id] = true;
+        try { secret = BuroStorage.secureGet(found.source.id); }
+        catch (error) { delete state.guideInFlight[channel.id]; return; }
+        BuroXtream.loadLiveEpg(secret, channel, function (schedule) {
+            delete state.guideInFlight[channel.id];
+            state.guideFetchedAt[channel.id] = nowSeconds;
+            guideRemember(channel.id, schedule || []);
+            if (state.section === 'GUIDE') { render(); }
+        }, function () {
+            /* Um canal sem programacao fica registado como vazio, e nao por
+               buscar: caso contrario cada passagem por ele pedia outra vez a
+               mesma resposta ao fornecedor. */
+            delete state.guideInFlight[channel.id];
+            state.guideFetchedAt[channel.id] = nowSeconds;
+            guideRemember(channel.id, []);
+            if (state.section === 'GUIDE') { render(); }
+        });
+    }
+
+    /*
+      Move o guia para um canal e vai buscar o que precisa.
+
+      O canal em foco primeiro, depois os poucos de cada lado: descer uma lista
+      uma linha de cada vez e como se le um guia, por isso as proximas linhas
+      valem a pena ter em maos. A janela e a mesma que o Windows e o Android
+      usam -- vem do modelo partilhado.
+    */
+    function focusGuideChannel(channelId) {
+        var scope = catalogueScope('LIVE');
+        var channels = scope.rows || [];
+        var index = -1;
+        var primeiro;
+        var ultimo;
+        var i;
+        channels.forEach(function (channel, posicao) {
+            if (channel.id === channelId) { index = posicao; }
+        });
+        if (index < 0) { return; }
+        state.guideFocusedId = channelId;
+        render();
+        loadGuideSchedule(channels[index]);
+        primeiro = Math.max(0, index - GUIDE_PREFETCH_RADIUS);
+        ultimo = Math.min(channels.length - 1, index + GUIDE_PREFETCH_RADIUS);
+        for (i = primeiro; i <= ultimo; i += 1) {
+            if (i !== index) { loadGuideSchedule(channels[i]); }
+        }
+    }
+
+    function guideRemember(channelId, schedule) {
+        var chaves = Object.keys(state.guideSchedules);
+        if (chaves.length >= GUIDE_MAX_SCHEDULES) {
+            chaves.slice(0, chaves.length - GUIDE_MAX_SCHEDULES + 1).forEach(function (chave) {
+                delete state.guideSchedules[chave];
+            });
+        }
+        state.guideSchedules[channelId] = schedule;
+    }
+
     function renderShell() {
         if (state.section === 'HOME') { renderHome(); }
+        else if (state.section === 'GUIDE') { renderGuide(); }
         else if (state.section === 'LIVE') { renderCatalog('LIVE'); }
         else if (state.section === 'MOVIES') { renderCatalog('MOVIE'); }
         else if (state.section === 'SERIES') { renderCatalog('SERIES'); }

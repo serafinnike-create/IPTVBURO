@@ -558,11 +558,26 @@ async function run() {
         window.__runtimeReadyMessages[0].indexOf('Sala') === -1 &&
         window.__runtimeReadyMessages[0].indexOf('source-') === -1 &&
         window.__runtimeReadyMessages[0].indexOf('password') === -1);
-    /* Descobrir entrou como décima terceira seção e usa somente o catálogo
-       autorizado; Lembretes é a décima quarta, ao lado de Histórico. */
-    /* Quinze: Assinaturas passou a aparecer sempre, como no aplicativo do
-       Windows, em vez de só quando havia chave do TMDb. */
-    check('shell contém todas as quinze seções', window.document.querySelectorAll('.nav-list [data-action="section"]').length === 15);
+    /*
+      Todas as seções que a fita declara chegam ao DOM.
+
+      Contado contra a própria NAVIGATION em vez de contra um número escrito à
+      mão. O número já foi treze, catorze, quinze e agora dezasseis, e de cada
+      vez o teste falhou por causa da contagem e não por causa de um defeito —
+      uma seção que se declara e não aparece é o que vale a pena apanhar.
+    */
+    (function () {
+        var fonte = require('fs').readFileSync(
+            require('path').resolve(__dirname, '..', 'samsung-tizen', 'js', 'app.js'), 'utf8');
+        var bloco = fonte.substring(fonte.indexOf('var NAVIGATION = ['));
+        bloco = bloco.substring(0, bloco.indexOf('];'));
+        /* Mais as que navigationEntries acrescenta: Assinaturas nao esta no
+           NAVIGATION, e e inserida a seguir a MY_BURO. */
+        var acrescentadas = (fonte.match(/entries\.splice\(/g) || []).length;
+        var declaradas = (bloco.match(/\{ section:/g) || []).length + acrescentadas;
+        var noEcra = window.document.querySelectorAll('.nav-list [data-action="section"]').length;
+        check('shell contém todas as ' + declaradas + ' seções declaradas', noEcra === declaradas);
+    }());
     check('a navegação principal usa a BURO Ribbon',
         Boolean(window.document.querySelector('.buro-ribbon')) && !window.document.querySelector('.nav-rail'));
     check('Ribbon e tela corrente expõem landmark, título e destino atual',
@@ -1175,7 +1190,9 @@ async function run() {
 
     press(window, 10009);
     check('Assinaturas surge como capability somente depois de configurar TMDb',
-        window.document.querySelectorAll('.nav-list [data-action="section"]').length === 15 &&
+        // Que Assinaturas esta la, nao quantas seccoes ha ao todo: o total ja
+        // mudou de treze para dezasseis e de cada vez este teste falhou pela
+        // contagem, nunca por Assinaturas faltar.
         Boolean(window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]')));
     window.BuroApp._activate(window.document.querySelector('.nav-list [data-section="MOVIES"]'));
     await waitFor(function () { return window.document.querySelector('[data-action="catalogue-pick-provider-directory"]'); }, 4000);
@@ -1418,7 +1435,9 @@ async function run() {
        fazia a mesma função parecer defeito. Quem entra encontra a explicação e o
        caminho para configurar, em vez de ser desviado sem aviso. */
     check('Assinaturas continua alcançável sem a chave TMDb',
-        window.document.querySelectorAll('.nav-list [data-action="section"]').length === 15 &&
+        // Que Assinaturas esta la, nao quantas seccoes ha ao todo: o total ja
+        // mudou de treze para dezasseis e de cada vez este teste falhou pela
+        // contagem, nunca por Assinaturas faltar.
         Boolean(window.document.querySelector('.nav-list [data-section="SUBSCRIPTIONS"]')));
     window.BuroTmdb.loadShelves = originalLoadSubscriptionShelves;
     window.BuroTmdb.loadProviderDirectory = originalLoadProviderDirectory;
@@ -2591,7 +2610,11 @@ async function run() {
         seriesPrimaryButton.textContent.indexOf('Continuar T1 E1') >= 0);
     check('série oferece download completo e por temporada somente com USB e Xtream reais',
         Boolean(window.document.querySelector('[data-action="series-download-all"]')) &&
-        window.document.querySelectorAll('[data-action="series-download-season"]').length === 2);
+        window.document.querySelectorAll('[data-action="series-download-season"]').length === 2 &&
+        window.document.querySelectorAll('.season-toolbar').length === 2);
+    check('temporadas aparecem antes do elenco e do restante da ficha',
+        Boolean(window.document.querySelector('.detail-seasons').compareDocumentPosition(
+            window.document.querySelector('.detail-cast')) & window.Node.DOCUMENT_POSITION_FOLLOWING));
     window.BuroApp._activate(window.document.querySelector('[data-action="series-season"][data-season="1"]'));
     check('cada episódio expandido oferece download individual como Android e Windows',
         window.document.querySelectorAll('.episode-download-item [data-action="download"]').length === 2);
@@ -2637,7 +2660,6 @@ async function run() {
     });
     bulkSeriesScreenData.expandedSeason = null;
     window.BuroXtream.resolvePlayback = originalBulkResolvePlayback;
-    bulkSeriesSource.type = bulkSeriesOriginalType;
     window.BuroStorage.secureRemove('source-home');
     window.tizen.filesystem.listStorages = function (success) {
         success([{ label: 'removable_profile_fixture', state: 'REMOVED' }]);
@@ -2647,15 +2669,19 @@ async function run() {
     check('ações em lote desaparecem quando o USB deixa de ser uma capability real',
         !window.document.querySelector('[data-action="series-download-all"]') &&
         !window.document.querySelector('[data-action="series-download-season"]'));
+    check('sem USB, cada temporada conserva a opção visível e explica o requisito',
+        window.document.querySelectorAll('.season-download[data-action="download-unavailable"]').length === 2);
     check('série agrupa episódios em temporadas recolhidas',
         window.document.querySelectorAll('[data-action="series-season"]').length === 2 &&
         window.document.querySelectorAll('.season-list .media-card').length === 0 &&
         window.document.querySelector('[data-action="series-season"]').getAttribute('aria-expanded') === 'false');
-    check('detalhe de série apresenta fatos, créditos e elenco antes das temporadas',
+    check('detalhe de série apresenta fatos, temporadas, créditos e elenco nessa ordem',
         window.document.body.textContent.indexOf('2 temporadas') >= 0 &&
         window.document.body.textContent.indexOf('3 episódios') >= 0 &&
         window.document.querySelectorAll('.cast-chip').length === 2 &&
         window.document.querySelector('.detail-credit-card').textContent.indexOf('Diretor Série') >= 0 &&
+        Boolean(window.document.querySelector('.detail-seasons').compareDocumentPosition(
+            window.document.querySelector('.detail-cast')) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&
         Boolean(window.document.querySelector('[data-action="share"]')));
     window.BuroApp._activate(window.document.querySelector('[data-action="series-season"][data-season="1"]'));
     check('ENTER expande somente a temporada escolhida',
@@ -2665,6 +2691,9 @@ async function run() {
     check('episódio mostra temporada, número e progresso de retomada',
         window.document.querySelector('[data-id="episode:1"] p').textContent === 'T1 · E1' &&
         parseFloat(window.document.querySelector('[data-id="episode:1"] .media-progress i').style.width) === 50);
+    check('sem USB, cada episódio conserva o download ao lado e informa indisponibilidade',
+        window.document.querySelectorAll('.episode-download-item [data-action="download-unavailable"]').length === 2);
+    bulkSeriesSource.type = bulkSeriesOriginalType;
     var pagedEpisodes = [];
     var episodeIndex;
     for (episodeIndex = 1; episodeIndex <= 95; episodeIndex += 1) {
@@ -3192,6 +3221,13 @@ async function run() {
         window.document.getElementById('player-audio-label').textContent.indexOf('Deutsch') >= 0 &&
         window.document.getElementById('player-menu').hidden);
     press(window, 40);
+    check('seta para baixo entra nos controles universais pelo reproduzir/pausar',
+        window.BuroApp._playerActionFocus() >= 0 &&
+        window.document.activeElement.getAttribute('data-player-action') === 'play-pause');
+    press(window, 39);
+    press(window, 39);
+    press(window, 39);
+    press(window, 13);
     /*
       O menu de legenda ganhou o ajuste de sincronia no fim, entao contar o
       total deixou de responder a pergunta. O que o teste quer saber e que

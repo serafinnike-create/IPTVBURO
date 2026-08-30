@@ -685,7 +685,7 @@ body.reduced-motion .discover-card.current { animation: none; }
    de relance. */
 .detail-hero { flex-direction: row; align-items: flex-end; }
 .detail-poster {
-    flex: 0 0 300px; width: 300px; height: 450px; margin-right: 42px;
+    align-self: flex-start; flex: 0 0 300px; width: 300px; height: 450px; margin-right: 42px;
     border-radius: 18px; overflow: hidden; background: var(--elevated);
     box-shadow: 0 22px 50px rgba(0,0,0,.55);
 }
@@ -1463,9 +1463,12 @@ body.reduced-motion .download-fill { transition: none; }
     height: 5px; background: rgba(246,247,250,.24);
 }
 .media-progress i { display: block; height: 100%; background: var(--gold); }
+.detail-seasons { width: 100%; margin-top: 24px; }
 .season-list { padding-bottom: 40px; }
+.season-group { width: 100%; margin-bottom: 14px; }
+.season-toolbar { width: 100%; display: flex; align-items: stretch; }
 .season-header {
-    width: 100%; height: 68px; margin: 0 0 12px; padding: 0 24px;
+    flex: 1 1 auto; min-width: 0; height: 68px; margin: 0 14px 12px 0; padding: 0 24px;
     display: flex; align-items: center; justify-content: space-between;
     border: 3px solid transparent; border-radius: 18px;
     background: var(--surface); color: var(--text); text-align: left;
@@ -1473,7 +1476,9 @@ body.reduced-motion .download-fill { transition: none; }
 .season-header strong { font-size: 23px; }
 .season-header span { color: var(--gold); font-size: 17px; }
 .season-header.expanded { background: var(--elevated); }
-.season-download { margin: -2px 0 18px 18px; }
+.season-download { flex: 0 0 300px; min-height: 68px; margin: 0 0 12px; padding: 10px 18px; white-space: nowrap; }
+.season-download.unavailable,
+.episode-download-action.unavailable { opacity: .62; }
 .episode-download-row { align-items: stretch; }
 .episode-download-item { flex: 0 0 330px; width: 330px; margin-right: 18px; display: flex; flex-direction: column; }
 .episode-download-item .media-card { width: 100%; margin-right: 0; }
@@ -1839,7 +1844,7 @@ body.reduced-motion .catalogue-skeleton-card em { animation: none; }
 .player-error-panel .button.focused { border-color: var(--ivory); background: var(--ivory); color: #151718; transform: scale(1.04); }
 .player-overlay.playback-error .player-controls { opacity: 0; pointer-events: none; }
 .player-subtitle-cue {
-    position: absolute; right: 10%; bottom: 294px; left: 10%; z-index: 3;
+    position: absolute; right: 10%; bottom: 380px; left: 10%; z-index: 3;
     color: #fff; font-size: 34px; font-weight: 700; line-height: 1.32;
     text-align: center; white-space: pre-line; pointer-events: none;
     text-shadow: 0 2px 4px rgba(0,0,0,.96); transition: bottom 180ms ease-out;
@@ -1866,11 +1871,11 @@ body.reduced-motion .catalogue-skeleton-card em { animation: none; }
 .player-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .player-heading small { margin-top: 3px; overflow: hidden; color: var(--secondary); font-size: 16px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .player-controls {
-    position: absolute; right: 0; bottom: 0; left: 0; min-height: 250px; padding: 66px 72px 34px;
+    position: absolute; right: 0; bottom: 0; left: 0; min-height: 350px; padding: 72px 72px 26px;
     background: linear-gradient(180deg, transparent, rgba(5,6,8,.96));
     transition: opacity 180ms ease-out;
 }
-.player-status { margin-bottom: 19px; font-size: 25px; font-weight: 700; }
+.player-status { margin-bottom: 15px; font-size: 25px; font-weight: 700; }
 .player-status.error { color: var(--error); }
 .player-timeline { width: 100%; height: 8px; overflow: hidden; border-radius: 4px; background: rgba(246,247,250,.24); }
 .player-timeline span { display: block; width: 0; height: 100%; border-radius: 4px; background: var(--gold); }
@@ -1878,7 +1883,30 @@ body.reduced-motion .catalogue-skeleton-card em { animation: none; }
 .player-control-row { margin-top: 13px; color: var(--text); font-size: 21px; font-variant-numeric: tabular-nums; }
 .player-remote-actions { color: var(--secondary); font-size: 18px; }
 .player-remote-actions b { color: var(--ivory); }
-.player-track-row { justify-content: flex-start; flex-wrap: wrap; row-gap: 10px; margin-top: 18px; color: var(--secondary); font-size: 18px; }
+.player-action-bar {
+    width: 100%; margin-top: 18px; overflow: hidden; display: flex; align-items: center;
+    white-space: nowrap;
+}
+.player-action-button {
+    position: relative; flex: 0 0 auto; min-width: 104px; height: 56px; margin-right: 8px; padding: 0 12px;
+    border: 2px solid rgba(246,247,250,.2); border-radius: 14px;
+    background: rgba(17,18,20,.88); color: var(--text); font-size: 16px; font-weight: 750;
+}
+.player-action-button.primary { min-width: 132px; background: var(--ivory); color: #151718; }
+.player-action-button[hidden] { display: none; }
+.player-action-button.tone-red::before, .player-action-button.tone-green::before,
+.player-action-button.tone-yellow::before, .player-action-button.tone-blue::before {
+    content: ''; display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 5px;
+}
+.player-action-button.tone-red::before { background: #e94b4b; }
+.player-action-button.tone-green::before { background: #39c982; }
+.player-action-button.tone-yellow::before { background: #e7bb42; }
+.player-action-button.tone-blue::before { background: #4f91ef; }
+.player-action-button.focused {
+    z-index: 2; border-color: var(--ivory); background: var(--ivory); color: #151718;
+    box-shadow: 0 0 0 3px rgba(8,9,10,.72), 0 0 0 6px var(--ivory); transform: scale(1.045);
+}
+.player-track-row { justify-content: flex-start; flex-wrap: wrap; row-gap: 8px; margin-top: 14px; color: var(--secondary); font-size: 16px; }
 .player-track-row span { margin-right: 28px; }
 .player-lock-panel {
     position: absolute; top: 50%; left: 56px; z-index: 5; width: 390px; min-height: 108px;
@@ -1895,7 +1923,7 @@ body.reduced-motion .catalogue-skeleton-card em { animation: none; }
 .player-lock-panel strong { font-size: 23px; }
 .player-lock-panel small { margin-top: 8px; color: var(--secondary); font-size: 16px; line-height: 1.35; }
 .player-menu {
-    position: absolute; right: 72px; bottom: 300px; z-index: 4; width: 470px; max-height: 560px;
+    position: absolute; right: 72px; bottom: 390px; z-index: 4; width: 470px; max-height: 560px;
     padding: 30px; overflow: hidden; border: 1px solid rgba(232,225,207,.24); border-radius: 24px;
     background: rgba(9,13,16,.96); box-shadow: 0 24px 60px rgba(0,0,0,.46);
 }
@@ -1977,6 +2005,8 @@ body.reduced-motion .catalogue-skeleton-card em { animation: none; }
 body.high-contrast { --canvas:#000; --surface:#080808; --elevated:#151515; --text:#fff; --secondary:#fff; --muted:#c9c9c9; --gold:#ffd56d; }
 body.reduced-motion .focusable { transition: none; }
 body.reduced-motion .focusable.focused { transform: none; }
+body.reduced-motion .player-action-button { transition: none; }
+body.reduced-motion .player-action-button.focused { transform: none; }
 
 .boot-screen {
     position: relative;
@@ -2426,3 +2456,63 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
     pointer-events: none;
 }
 .live-preview[hidden] { display: none; }
+
+/*
+  O guia ao vivo: canais de um lado, o que esta a dar do outro.
+
+  Duas colunas fixas em vez de uma grelha flexivel: a televisao tem sempre 1920
+  de largura, e uma coluna de canais que encolhe conforme o nome mais comprido
+  faz a lista inteira saltar de largura ao mudar de pagina.
+*/
+/* Margem em vez de `gap`: flex gap exige Chromium 84+, e as TVs Samsung
+   suportadas comecam abaixo disso. Ja registado tres vezes neste ficheiro. */
+.guide-layout { display: flex; height: 100%; }
+.guide-channels { width: 520px; flex: none; overflow-y: auto; margin-right: 32px; }
+.guide-panel { flex: 1; min-width: 0; overflow-y: auto; }
+
+.guide-channel {
+    display: block; width: 100%; text-align: left;
+    padding: 18px 24px; margin: 0 0 8px; border-radius: 14px;
+    background: var(--surface); border: 3px solid transparent; color: var(--text);
+}
+.guide-channel strong { display: block; font-size: 28px; font-weight: 600; }
+/* O que esta a dar, por baixo do nome: a lista responde sem obrigar a parar em
+   cada linha para descobrir. */
+.guide-channel span {
+    display: block; margin-top: 6px; font-size: 22px; color: var(--text-muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.guide-channel.selected { background: var(--surface-raised); }
+.guide-channel.selected strong { color: var(--gold); }
+
+.guide-panel h2 { margin: 0 0 16px; font-size: 40px; color: var(--text); }
+.guide-watch {
+    padding: 16px 32px; border-radius: 12px; margin-bottom: 24px;
+    background: var(--surface-raised); border: 3px solid transparent;
+    color: var(--gold); font-size: 26px;
+}
+
+.guide-schedule { list-style: none; margin: 0; padding: 0; }
+.guide-program {
+    display: grid; grid-template-columns: 120px 1fr auto; align-items: center;
+    padding: 18px 24px; margin-bottom: 10px;
+    border-radius: 12px; background: var(--surface);
+}
+.guide-program.now { background: var(--surface-raised); }
+.guide-time { font-size: 24px; font-weight: 700; color: var(--text-muted); margin-right: 16px; }
+.guide-program.now .guide-time { color: var(--gold); }
+.guide-title {
+    font-size: 26px; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.guide-badge { font-size: 18px; font-weight: 700; color: var(--gold); margin-left: 16px; }
+/* A barra e a sinopse ocupam a linha inteira por baixo das tres colunas. */
+.guide-bar {
+    grid-column: 1 / -1; display: block; height: 4px; margin-top: 10px;
+    border-radius: 2px; background: var(--surface);
+}
+.guide-bar span { display: block; height: 4px; border-radius: 2px; background: var(--gold); }
+.guide-desc {
+    grid-column: 1 / -1; margin-top: 10px; font-size: 22px; color: var(--text-muted);
+}
+.guide-empty { font-size: 24px; color: var(--text-muted); }
