@@ -33,10 +33,27 @@ process.stdout.write('O trailer toca no banner\n');
 
 check('o banner desenha o trailer',
     app.indexOf("'<iframe class=\"hero-trailer\" src=\"'") >= 0);
-check('com som, sem controlos, em repeticao',
+check('sem controlos e em repeticao',
     trailer.indexOf('function bannerEmbedUrl') >= 0 &&
-    trailer.indexOf('mute=0&controls=0') >= 0 &&
+    trailer.indexOf('controls=0') >= 0 &&
+    trailer.indexOf('loop=1') >= 0 &&
     trailer.indexOf('bannerEmbedUrl: bannerEmbedUrl') >= 0);
+/*
+  Calado ao arrancar, e o som a subir so depois.
+
+  Nenhum motor deixa um video comecar sozinho com audio: pedido com som, o
+  banner nao arrancava de todo -- ficava um botao de play parado por cima de
+  uma imagem, que foi o que se viu no Windows com este mesmo embed. Por isso
+  mute=1 aqui nao e uma escolha de gosto, e a unica forma de ele tocar.
+*/
+check('arranca calado, porque so assim arranca',
+    trailer.indexOf('mute=1&controls=0') >= 0);
+check('e o som sobe assim que ele ja esta a tocar',
+    trailer.indexOf('function raiseBannerSound') >= 0 &&
+    trailer.indexOf("func: 'unMute'") >= 0 &&
+    trailer.indexOf('playerState === 1') >= 0 &&
+    trailer.indexOf('raiseBannerSound: raiseBannerSound') >= 0 &&
+    app.indexOf('BuroTrailer.raiseBannerSound(frame)') >= 0);
 /* Vem com o resto do enriquecimento, por isso não custa um pedido a mais. */
 check('o id do trailer atravessa o enriquecimento',
     enrichment.indexOf('youtubeTrailerId: cleanText(details && details.youtubeTrailerId, 32)') >= 0 &&

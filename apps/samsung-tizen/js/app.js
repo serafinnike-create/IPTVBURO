@@ -3652,6 +3652,22 @@ var BuroApp = (function () {
             scheduleHomeHeroRotation(data);
             scheduleHomeHeroEnrichment(data);
         }
+        raiseHomeHeroSound();
+    }
+
+    /*
+      Levanta o som do trailer do banner depois de a pagina o ter no DOM.
+
+      O iframe arranca calado porque nenhum motor deixa um video comecar sozinho
+      com audio: pedido com som, nao comecava de todo. Aqui ja existe um iframe
+      a que se pode falar, e o modulo do trailer espera que ele esteja mesmo a
+      tocar antes de subir o volume.
+    */
+    function raiseHomeHeroSound() {
+        var frame;
+        if (!BuroTrailer || !BuroTrailer.raiseBannerSound) { return; }
+        frame = document.querySelector('.hero-trailer');
+        if (frame) { BuroTrailer.raiseBannerSound(frame); }
     }
 
     function rankedInsert(rows, item, compare, limit) {

@@ -81,21 +81,69 @@ var BuroTrailer = (function () {
     }
 
     /*
-      O embed do banner: com som, sem controlos, em repeticao.
+      O embed do banner: sem controlos, em repeticao, e calado ao arrancar.
 
       Separado do overlay porque a pergunta e outra. O overlay e um trailer que
       alguem pediu, com teclas para pausar; o banner e o filme a apresentar-se
       sozinho, e um controlo por cima dele so estorva.
 
-      Com som porque um trailer sem som e um cartaz que se mexe. Para quando a
-      pessoa sai do ecra inicial, porque o iframe deixa de existir com ele.
+      Calado nao por escolha: nenhum motor deixa um video arrancar sozinho com
+      audio. Pedido com som (mute=0), o banner nao arrancava de todo - ficava um
+      botao de play parado por cima de uma imagem, que foi exatamente o que se
+      viu no Windows com o mesmo embed. Arranca em silencio e o raiseBannerSound
+      levanta o som assim que ele ja esta a tocar, que e o mais perto que uma
+      pagina chega de comecar com som.
+
+      Para quando a pessoa sai do ecra inicial, porque o iframe deixa de existir
+      com ele.
     */
     function bannerEmbedUrl(id) {
         var origin = pageOrigin();
         var base = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) +
-            '?autoplay=1&mute=0&controls=0&playsinline=1&rel=0&loop=1&playlist=' +
+            '?autoplay=1&mute=1&controls=0&playsinline=1&rel=0&loop=1&playlist=' +
             encodeURIComponent(id) + '&modestbranding=1';
         return origin ? base + '&enablejsapi=1&origin=' + encodeURIComponent(origin) : base;
+    }
+
+    /*
+      Levanta o som do banner depois de ele ja estar a tocar.
+
+      O motor ja concedeu o arranque nessa altura, por isso subir o volume a
+      seguir nao e um pedido novo. Tenta outra vez num temporizador alem do
+      evento: o player responde quando lhe apetece, e uma tentativa unica que
+      chegue cedo demais deixava o banner mudo para sempre. Para assim que
+      resultar, ou ao fim de dez segundos.
+    */
+    function raiseBannerSound(frame) {
+        if (!frame || !frame.contentWindow) { return; }
+        var done = false;
+        var tries = 0;
+
+        function send(message) {
+            if (!frame.contentWindow) { return; }
+            try { frame.contentWindow.postMessage(JSON.stringify(message), '*'); } catch (e) {}
+        }
+        function listen() { send({ event: 'listening', id: 1 }); }
+        function raise() {
+            if (done) { return; }
+            send({ event: 'command', func: 'unMute', args: [] });
+            send({ event: 'command', func: 'setVolume', args: [100] });
+        }
+
+        window.addEventListener('message', function (event) {
+            var data;
+            try { data = JSON.parse(event.data); } catch (e) { return; }
+            /* 1 e "a tocar": o arranque ja foi concedido, o som e seguro. */
+            if (data && data.info && data.info.playerState === 1) { raise(); done = true; }
+        });
+
+        listen();
+        var timer = setInterval(function () {
+            listen();
+            raise();
+            tries += 1;
+            if (done || tries > 20) { clearInterval(timer); }
+        }, 500);
     }
 
     /* O overlay pergunta isto para saber se as teclas de transporte tem a
@@ -297,6 +345,7 @@ var BuroTrailer = (function () {
         isOpen: isOpen,
         sanitize: sanitize,
         bannerEmbedUrl: bannerEmbedUrl,
+        raiseBannerSound: raiseBannerSound,
         currentVideoId: currentVideoId
     };
 }());
