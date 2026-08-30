@@ -155,13 +155,20 @@ class TrailerHostServer private constructor(
                     // deliberately still gets them.
                     append("&controls=").append(if (unattended) 0 else 1)
                     append("&rel=0&modestbranding=1&playsinline=1")
+                    if (unattended) append("&disablekb=1&fs=0&iv_load_policy=3")
                     // Lets the page below talk to the player at all, which is what makes unmuting
                     // after the start possible.
                     if (unattended) append("&enablejsapi=1")
                     if (unattended) append("&loop=1&playlist=").append(youtubeId)
                     append("&origin=").append(origin)
                 }
-            val bodyClass = if (blendIntoHero) " class=\"cinematic-hero\"" else ""
+            val bodyClass =
+                when {
+                    blendIntoHero -> " class=\"cinematic-hero unattended\""
+                    unattended -> " class=\"ambient-card unattended\""
+                    else -> ""
+                }
+            val pointerGlass = if (unattended) "<div id=\"pointer-glass\"></div>" else ""
 
             /*
              * Turns the sound on once the banner is already playing.
@@ -175,6 +182,49 @@ class TrailerHostServer private constructor(
              * like it, and a single attempt that lands too early leaves the banner silent for good.
              * It stops as soon as it has worked.
              */
+            /*
+             * Hides the player when YouTube refuses to play the video.
+             *
+             * The availability check before this asks YouTube's oEmbed whether the video is public,
+             * and a video can pass that and still be refused at playback — a region lock, an
+             * embedding restriction, a rights holder blocking this player. What shows then is
+             * YouTube's own card, "An error occurred. Please try again later", sitting beside the
+             * poster on the Descobrir card. Reported with a screenshot of exactly that: an error
+             * message is the one thing the opening screen and the deck must never show.
+             *
+             * So the page hides itself, and the artwork underneath — which is always drawn — is
+             * what remains. The engine cannot tell us this: the page loads perfectly, and the error
+             * is content inside it. Only the player knows, and this is how it says so.
+             */
+            val failureScript =
+                if (unattended) {
+                    """
+                    <script>
+                    (function(){
+                      var frame=document.querySelector('iframe');
+                      function listen(){
+                        if(!frame||!frame.contentWindow)return;
+                        frame.contentWindow.postMessage(JSON.stringify(
+                          {event:'listening',id:2}),'*');
+                      }
+                      frame&&frame.addEventListener('load',listen);
+                      listen();
+                      var poll=setInterval(listen,500);
+                      setTimeout(function(){clearInterval(poll)},30000);
+                      window.addEventListener('message',function(e){
+                        var d;try{d=JSON.parse(e.data)}catch(_){return}
+                        /* 2, 5, 100, 101 and 150 are YouTube's "cannot play this here" codes.
+                           Whichever arrives, the answer is the same: show the artwork instead. */
+                        if(d&&d.event==='onError'){
+                          document.documentElement.style.display='none';
+                        }
+                      });
+                    })();
+                    </script>
+                    """.trimIndent()
+                } else {
+                    ""
+                }
             val unmuteScript =
                 if (unattended && !muted) {
                     """
@@ -249,6 +299,23 @@ class TrailerHostServer private constructor(
                      width:100vw;height:56.25vw;min-height:100vh;min-width:177.78vh}
                 iframe{border:0;display:block;width:100%;height:100%}
 
+                /* Autoplay previews are not miniature YouTube pages. An invisible glass layer
+                   keeps pointer hover out of the cross-origin iframe, so moving the mouse through
+                   Descobrir does not summon its title, transport controls and bottom toolbar. */
+                body.unattended #pointer-glass{
+                     position:fixed;inset:0;z-index:4;background:transparent}
+
+                /* Descobrir owns a clean 16:9 card, not the hero's oversized crop. Keep a dark
+                   two-pixel inset inside the native rectangle so iframe edge artefacts and square
+                   white lines never read as a cut-off player; the page itself draws the radius
+                   because Compose cannot clip a heavyweight Chromium surface. */
+                body.ambient-card #fit{
+                     top:2px;right:2px;bottom:2px;left:2px;
+                     width:auto;height:auto;min-width:0;min-height:0;
+                     transform:none;border-radius:16px;overflow:hidden;
+                     animation:card-reveal 420ms ease-out both}
+                @keyframes card-reveal{from{opacity:0}to{opacity:1}}
+
                 /* Chromium is an AWT heavyweight surface, so a Compose scrim cannot be painted
                    over it. Put the cinematic masks in this page itself: the left edge becomes the
                    same BURO canvas as the copy column and the bottom dissolves into the first
@@ -300,7 +367,7 @@ class TrailerHostServer private constructor(
                 </style></head>
                 <body$bodyClass><div id="fit"><iframe src="$embed"
                 allow="autoplay; encrypted-media; fullscreen"
-                allowfullscreen></iframe></div>$unmuteScript</body></html>
+                allowfullscreen></iframe></div>$pointerGlass$failureScript$unmuteScript</body></html>
             """.trimIndent()
         }
     }

@@ -183,6 +183,55 @@ class TrailerHostServerTest {
             "class=\"cinematic-hero\"" in page,
             "o cartao levou as mascaras do banner, que so lhe borram o video",
         )
+        assertTrue("class=\"ambient-card unattended\"" in page)
+        assertTrue("id=\"pointer-glass\"" in page, "hover ainda mostra os controles do YouTube")
+        assertTrue("disablekb=1" in page)
+        assertTrue("body.ambient-card #fit" in page, "o card nao tem enquadramento proprio")
+        assertTrue("border-radius:16px" in page, "o Chromium continua com cantos quadrados")
+    }
+
+    /**
+     * A video YouTube refuses at playback hides itself, rather than showing its error card.
+     *
+     * The availability check asks oEmbed whether the video is public, and a video can pass that and
+     * still be refused when it actually plays — a region lock, an embedding restriction, a rights
+     * holder blocking this player. What showed then was YouTube's own "An error occurred. Please
+     * try again later" sitting beside the poster. Reported with a screenshot. The artwork is always
+     * drawn underneath, so hiding the page leaves the card exactly as it would have been.
+     */
+    @Test
+    fun `a video refused at playback hides itself instead of showing an error`() {
+        val host = started()
+
+        val page =
+            fetch(
+                host.pageUrlFor(
+                    "cTW78JSBoyw",
+                    autoplay = true,
+                    muted = true,
+                    blendIntoHero = true,
+                    unattended = true,
+                ),
+            )
+
+        assertTrue("onError" in page, "nada repara que o YouTube recusou o video")
+        assertTrue(
+            "style.display='none'" in page,
+            "o cartao de erro do YouTube fica a vista, ao lado da capa",
+        )
+    }
+
+    /** A trailer somebody opened keeps its error message: there, it is the answer they asked for. */
+    @Test
+    fun `a deliberately opened trailer is left to say what went wrong`() {
+        val host = started()
+
+        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = false))
+
+        assertFalse(
+            "onError" in page,
+            "o trailer aberto de proposito desaparece em vez de dizer o que correu mal",
+        )
     }
 
     @Test
@@ -216,7 +265,10 @@ class TrailerHostServerTest {
                 ),
             )
 
-        assertTrue("class=\"cinematic-hero\"" in page, "the banner did not select the blended page")
+        assertTrue(
+            "class=\"cinematic-hero unattended\"" in page,
+            "the banner did not select the blended page",
+        )
         assertTrue("body.cinematic-hero::before" in page, "the side seam has no mask")
         assertTrue("body.cinematic-hero::after" in page, "the bottom seam has no mask")
         assertTrue("linear-gradient(90deg" in page, "the video does not dissolve into the copy")
