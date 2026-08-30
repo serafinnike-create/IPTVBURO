@@ -599,7 +599,16 @@ internal fun HeroTrailer(
     // rebuilding the player on every recomposition. What was actually wrong is that Chromium's own
     // background defaults to white, and that is now set to black where the engine is configured —
     // so there is nothing to hide. See TrailerBrowser.
-    SwingPanel(factory = { panel }, modifier = modifier)
+    // background, because SwingPanel's own default is Color.White.
+    //
+    // Compose paints that behind the embedded component, and it is what shows wherever the browser
+    // has not drawn — which on this panel is the whole rectangle until the video arrives, and
+    // apparently for longer. It is the one white in this chain that is ours rather than Chromium's.
+    SwingPanel(
+        factory = { panel },
+        modifier = modifier,
+        background = BuroColors.Canvas,
+    )
 }
 
 @Composable
