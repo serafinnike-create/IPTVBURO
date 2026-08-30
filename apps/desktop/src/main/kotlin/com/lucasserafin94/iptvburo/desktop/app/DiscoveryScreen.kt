@@ -36,6 +36,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
@@ -195,8 +196,10 @@ fun DiscoveryScreen(
         )
         Text(
             text = text.hint,
-            color = BuroColors.TextSubtle,
-            style = MaterialTheme.typography.bodySmall,
+            color = BuroColors.TextMuted,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.widthIn(max = 620.dp),
         )
         Spacer(Modifier.height(BuroSpacing.Sm))
 
@@ -265,6 +268,7 @@ private fun DiscoveryCard(
     // Reset by keying the state on the item: the next card starts centred rather than inheriting
     // the offset that flung the last one away.
     var dragX by remember(item.providerId) { mutableStateOf(0f) }
+    var dragging by remember(item.providerId) { mutableStateOf(false) }
     val offsetX by animateFloatAsState(dragX, label = "discovery-drag")
 
     // The poster and the trailer, side by side.
@@ -284,9 +288,16 @@ private fun DiscoveryCard(
     // window — where a heavyweight browser surface is clipped by the window and paints nothing.
     // That is the white block beside the poster.
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val roomForTrailer = maxWidth - CARD_WIDTH - BuroSpacing.Lg * 2
+        // Room left over once the poster and the gaps either side of it are taken.
+        //
+        // Four gaps, not two: one between the poster and the video, and one at each outer edge so
+        // neither runs to the window's border. Counting only two left the row wider than the space
+        // it had, and the synopsis under it ran off the right of the screen.
+        val roomForTrailer = maxWidth - CARD_WIDTH - BuroSpacing.Lg * 4
         val trailerWidth = minOf(TRAILER_WIDTH, roomForTrailer)
         val trailerFits = trailerWidth >= TRAILER_MIN_WIDTH
+        val activeTrailerId = trailerId?.takeIf { trailerFits }
+        val trailerAvailable = activeTrailerId != null
 
     // Anchored to the top, not centred.
     //
@@ -312,7 +323,10 @@ private fun DiscoveryCard(
         verticalAlignment = Alignment.Top,
     ) {
         Column(
-            modifier = Modifier.width(CARD_WIDTH),
+            // During a swipe the heavyweight browser is withdrawn below and every visible layer
+            // is Compose again. The z-index then does what the gesture promises: the poster passes
+            // in front of the decision surface instead of being swallowed by the video rectangle.
+            modifier = Modifier.width(CARD_WIDTH).zIndex(if (dragging) 2f else 0f),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(
@@ -338,6 +352,7 @@ private fun DiscoveryCard(
                             shape = BuroRadius.Large,
                         ).pointerInput(item.providerId) {
                             detectDragGestures(
+                                onDragStart = { dragging = true },
                                 onDragEnd = {
                                     // Past the threshold the card is thrown; short of it, it returns.
                                     // Deciding on release rather than on crossing means a drag can be
@@ -345,10 +360,16 @@ private fun DiscoveryCard(
                                     when {
                                         dragX > DECISION_THRESHOLD -> onDecide(DiscoveryVerdict.KEPT)
                                         dragX < -DECISION_THRESHOLD -> onDecide(DiscoveryVerdict.SKIPPED)
-                                        else -> dragX = 0f
+                                        else -> {
+                                            dragX = 0f
+                                        }
                                     }
+                                    dragging = false
                                 },
-                                onDragCancel = { dragX = 0f },
+                                onDragCancel = {
+                                    dragX = 0f
+                                    dragging = false
+                                },
                             ) { change, dragAmount: Offset ->
                                 change.consume()
                                 // Rightward travel is capped short of the video.
@@ -407,40 +428,19 @@ private fun DiscoveryCard(
                 )
             }
 
-            // The synopsis is not here: it sits under the video, where there is room to read it.
-            // Beside a 300dp poster it was a narrow strip of text competing with the artwork.
-
-            Spacer(Modifier.height(BuroSpacing.Md))
-            Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Lg)) {
-                // Buttons as well as the drag, because a mouse is not a finger: dragging a card across
-                // a desktop screen is a chore next to clicking, and somebody on a trackpad should not
-                // have to.
-                DecisionButton(
-                    label = "✕",
-                    caption = text.skip,
-                    tint = BuroColors.TextMuted,
-                    onClick = { onDecide(DiscoveryVerdict.SKIPPED) },
-                )
-                DecisionButton(
-                    label = "✓",
-                    caption = text.keep,
-                    tint = BuroColors.Primary,
-                    onClick = { onDecide(DiscoveryVerdict.KEPT) },
-                )
-                // Neither a verdict nor a swipe: it opens the film's own page.
-                //
-                // Was "Detalhes", which read as a panel of extra facts. It goes to the title itself,
-                // and coming back returns to this card — so the deck is not lost by looking.
-                DecisionButton(
-                    label = "▶",
-                    caption = text.details,
-                    tint = BuroColors.TextMuted,
-                    onClick = onOpenDetails,
-                )
+            // With no trailer there is no right-hand decision column, so the synopsis belongs to
+            // the card. When a trailer exists it is placed directly below that video instead —
+            // never in the same bounds as the heavyweight browser.
+            if (!trailerAvailable) {
+                synopsis?.takeIf(String::isNotBlank)?.let { plot ->
+                    Spacer(Modifier.height(BuroSpacing.Md))
+                    DiscoverySynopsis(plot)
+                }
             }
+
         }
 
-        if (trailerId != null && trailerFits) {
+        if (activeTrailerId != null) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     modifier =
@@ -454,65 +454,128 @@ private fun DiscoveryCard(
                             // card that reads as a broken image.
                             .background(BuroColors.Canvas),
                 ) {
-                    HeroTrailer(
-                        youtubeId = trailerId,
-                        modifier = Modifier.fillMaxSize(),
-                        soundOn = soundOn,
-                        onFailed = onTrailerFailed,
-                        // Not the banner. Those masks fade the left edge and the bottom into the
-                        // hero behind them; on a card with its own edges they only smear the video.
-                        blendIntoHero = false,
-                    )
+                    if (dragging) {
+                        DiscoverySwipePreview(
+                            kept = dragX >= 0f,
+                            label = if (dragX >= 0f) text.keep else text.skip,
+                        )
+                    } else {
+                        HeroTrailer(
+                            youtubeId = activeTrailerId,
+                            modifier = Modifier.fillMaxSize().padding(2.dp),
+                            soundOn = soundOn,
+                            onFailed = onTrailerFailed,
+                            // Not the banner. The hosted page uses its dedicated card frame:
+                            // exact 16:9 bounds, dark inset corners and no interactive hover layer.
+                            blendIntoHero = false,
+                        )
+                    }
                 }
-                Spacer(Modifier.height(BuroSpacing.Sm))
-                // Beside the video rather than over it: the player is a browser surface that always
-                // paints above Compose, so a control laid on top of it is simply not there.
-                BuroInteractiveRow(
-                    onClick = onToggleSound,
-                    selected = false,
-                    shape = BuroRadius.Pill,
-                    contentDescription =
-                        if (soundOn) {
-                            strings.shareStrings.screens.trailerMute
-                        } else {
-                            strings.shareStrings.screens.trailerUnmute
-                        },
-                ) { _ ->
-                    Text(
-                        text =
+                if (!dragging) {
+                    Spacer(Modifier.height(BuroSpacing.Sm))
+                    // Beside the video rather than over it: the player is a browser surface that
+                    // always paints above Compose, so a control laid on top of it is simply absent.
+                    BuroInteractiveRow(
+                        onClick = onToggleSound,
+                        selected = false,
+                        shape = BuroRadius.Pill,
+                        contentDescription =
                             if (soundOn) {
                                 strings.shareStrings.screens.trailerMute
                             } else {
                                 strings.shareStrings.screens.trailerUnmute
                             },
-                        modifier =
-                            Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs),
-                        color = BuroColors.TextMuted,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    ) { _ ->
+                        Text(
+                            text =
+                                if (soundOn) {
+                                    strings.shareStrings.screens.trailerMute
+                                } else {
+                                    strings.shareStrings.screens.trailerUnmute
+                                },
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = BuroSpacing.Md,
+                                    vertical = BuroSpacing.Xs,
+                                ),
+                            color = BuroColors.TextMuted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                synopsis?.takeIf(String::isNotBlank)?.let { plot ->
+                    Spacer(Modifier.height(BuroSpacing.Md))
+                    DiscoverySynopsis(plot)
                 }
             }
         }
-
-        // The synopsis, under the whole row.
-        //
-        // Under the row and not inside the video's column, because a card with no trailer has no
-        // such column — and then the synopsis vanished entirely, which is what was reported. The
-        // point of the card is deciding, and deciding needs something to read whether or not there
-        // is a video beside the poster.
-        synopsis?.takeIf(String::isNotBlank)?.let { plot ->
-            Spacer(Modifier.height(BuroSpacing.Md))
-            Text(
-                text = plot,
-                modifier = Modifier.fillMaxWidth(),
-                color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
+    }
+        Spacer(Modifier.height(BuroSpacing.Lg))
+        Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xl)) {
+            DecisionButton(
+                label = "✕",
+                caption = text.skip,
+                tint = BuroColors.TextMuted,
+                onClick = { onDecide(DiscoveryVerdict.SKIPPED) },
+            )
+            DecisionButton(
+                label = "✓",
+                caption = text.keep,
+                tint = BuroColors.Primary,
+                onClick = { onDecide(DiscoveryVerdict.KEPT) },
+            )
+            DecisionButton(
+                label = "▶",
+                caption = text.details,
+                tint = BuroColors.TextMuted,
+                onClick = onOpenDetails,
             )
         }
     }
     }
+}
+
+@Composable
+private fun DiscoverySynopsis(plot: String) {
+    Text(
+        text = plot,
+        modifier = Modifier.fillMaxWidth(),
+        color = BuroColors.TextMuted,
+        style = MaterialTheme.typography.bodyMedium,
+        maxLines = 5,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/** The video yields during a swipe so the poster can genuinely be the front-most surface. */
+@Composable
+private fun DiscoverySwipePreview(
+    kept: Boolean,
+    label: String,
+) {
+    val tint = if (kept) BuroColors.Primary else BuroColors.TextSubtle
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(tint.copy(alpha = 0.12f))
+                .border(1.dp, tint.copy(alpha = 0.55f), BuroRadius.Large),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = if (kept) "✓" else "✕",
+                color = tint,
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = label,
+                color = BuroColors.Text,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
 }
 

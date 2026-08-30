@@ -144,4 +144,110 @@ class HeroSelectionTest {
         // Bounded by the pool, which is the point: a rotation cannot invent titles.
         assertEquals(10, HeroSelection.rotationFor(pool, dayOfEpoch = -3).size)
     }
+
+    private fun mixCandidate(
+        id: String,
+        year: Int,
+        isSeries: Boolean = false,
+        categories: List<String> = emptyList(),
+    ) = HeroCandidate(
+        id = id,
+        title = "Title $id",
+        year = year,
+        rating = 7.0,
+        categoryIds = categories,
+        isSeries = isSeries,
+    )
+
+    /** A rotation of thirty new films, plus one of everything else the mix asks for. */
+    private fun mixPool(thisYear: Int) =
+        (1..30).map { index -> mixCandidate("new$index", thisYear) } +
+            listOf(
+                mixCandidate("serie", thisYear, isSeries = true),
+                mixCandidate("velho1", thisYear - 30),
+                mixCandidate("velho2", thisYear - 25),
+                mixCandidate("meio1", thisYear - 8),
+                mixCandidate("meio2", thisYear - 9),
+                mixCandidate("anime", thisYear - 5, categories = listOf("Animes | Lancamentos")),
+            )
+
+    /**
+     * The banner is not thirty of the same thing.
+     *
+     * Ranked purely by score it fills with whatever the catalogue has most of, and somebody
+     * scrolling past twenty titles from the same year learns nothing about what else is there.
+     */
+    @Test
+    fun `the rotation carries old, middle and anime, not only new releases`() {
+        val thisYear = 2026
+
+        val mixed = HeroSelection.mixed(mixPool(thisYear), thisYear).take(8)
+        val ids = mixed.map { it.id }
+
+        assertTrue(ids.count { it.startsWith("velho") } >= 2, "sem titulos antigos: $ids")
+        assertTrue(ids.count { it.startsWith("meio") } >= 2, "sem titulos de meio-termo: $ids")
+        assertTrue("anime" in ids, "sem anime nenhum: $ids")
+    }
+
+    /** And it carries both a film and a series, because the app is for both. */
+    @Test
+    fun `the front of the rotation carries a film and a series`() {
+        val thisYear = 2026
+
+        val front = HeroSelection.mixed(mixPool(thisYear), thisYear).take(4)
+
+        assertTrue(front.any { !it.isSeries }, "o banner nao mostra nenhum filme")
+        assertTrue(front.any { it.isSeries }, "o banner nao mostra nenhuma serie")
+    }
+
+    /** The newest lead: what is new is the reason to look at the banner at all. */
+    @Test
+    fun `a new release comes first`() {
+        val thisYear = 2026
+
+        val first = HeroSelection.mixed(mixPool(thisYear), thisYear).first()
+
+        assertTrue(
+            first.year != null && first.year!! >= thisYear - HeroSelection.NEW_RELEASE_YEARS,
+            "o primeiro do banner nao e um lancamento: ${first.id} (${first.year})",
+        )
+    }
+
+    /** Nothing is lost and nothing is duplicated: the mix reorders, it does not filter. */
+    @Test
+    fun `the mix keeps every title exactly once`() {
+        val pool = mixPool(2026)
+
+        val mixed = HeroSelection.mixed(pool, 2026)
+
+        assertEquals(pool.size, mixed.size, "a mistura perdeu ou repetiu titulos")
+        assertEquals(pool.map { it.id }.toSet(), mixed.map { it.id }.toSet())
+    }
+
+    /**
+     * A catalogue with none of a kind simply carries more of the others.
+     *
+     * Slots are an aim, not a requirement: a small provider with no old titles must still fill the
+     * banner rather than showing fewer.
+     */
+    @Test
+    fun `a pool missing a kind still fills the banner`() {
+        val onlyNew = (1..10).map { index -> mixCandidate("new$index", 2026) }
+
+        val mixed = HeroSelection.mixed(onlyNew, 2026)
+
+        assertEquals(10, mixed.size)
+    }
+
+    /** A title with no year is treated as middle-aged, not as ancient. */
+    @Test
+    fun `an unknown year does not count as old`() {
+        val pool =
+            (1..8).map { index -> mixCandidate("new$index", 2026) } +
+                HeroCandidate(id = "sem-ano", title = "Sem ano", rating = 7.0)
+
+        val mixed = HeroSelection.mixed(pool, 2026)
+
+        assertEquals(pool.size, mixed.size)
+    }
 }

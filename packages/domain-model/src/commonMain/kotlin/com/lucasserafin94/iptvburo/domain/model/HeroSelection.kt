@@ -25,6 +25,8 @@ data class HeroCandidate(
      * actually watches. Empty is ordinary — plenty of playlists carry no categories at all.
      */
     val categoryIds: List<String> = emptyList(),
+    /** Whether this is a series rather than a film. The banner deliberately carries both. */
+    val isSeries: Boolean = false,
 )
 
 /**
@@ -185,4 +187,94 @@ object HeroSelection {
      * feature loses the viewer's trust.
      */
     private const val AFFINITY_WEIGHT = 1.5
+
+    /**
+     * How old a title may be and still count as a new release.
+     *
+     * Two years rather than one: a catalogue is not a cinema listing, and a film from last year is
+     * still what somebody means by "new" when they are looking at what to watch tonight.
+     */
+    const val NEW_RELEASE_YEARS = 2
+
+    /** Before this, a title is one of the old ones the mix deliberately keeps room for. */
+    const val OLD_RELEASE_YEARS = 15
+
+    /** How many of each kind the rotation aims to carry. See [mixed]. */
+    const val OLD_SLOTS = 2
+    const val MIDDLE_SLOTS = 2
+    const val ANIME_SLOTS = 1
+
+    /** The category words that mark a title as anime, matched case-insensitively. */
+    private val ANIME_WORDS = listOf("anime", "animação japonesa", "animacao japonesa")
+
+    /** Whether the provider files this title under anime. */
+    fun isAnime(candidate: HeroCandidate): Boolean =
+        candidate.categoryIds.any { category ->
+            val lower = category.lowercase()
+            ANIME_WORDS.any { word -> lower.contains(word) }
+        }
+
+    /** How old a title is, as the mix counts it. Untitled years count as middle-aged, not ancient. */
+    private fun ageBand(candidate: HeroCandidate, thisYear: Int): String {
+        val year = candidate.year ?: return "middle"
+        return when {
+            year >= thisYear - NEW_RELEASE_YEARS -> "new"
+            year < thisYear - OLD_RELEASE_YEARS -> "old"
+            else -> "middle"
+        }
+    }
+
+    /**
+     * The rotation, rearranged so it is not all one thing.
+     *
+     * Ranked purely by score, the banner fills with whatever the catalogue has most of — and a
+     * viewer scrolling past twenty titles from the same year and the same shelf learns nothing
+     * about what else is there. The mix keeps the quality order inside each kind and only decides
+     * how many of each kind appear:
+     *
+     *  - new releases lead, and always include both a film and a series where both exist;
+     *  - two older titles, so the catalogue's depth shows;
+     *  - two from the middle years;
+     *  - one anime, which is a shelf people either follow closely or never see at all.
+     *
+     * Everything not claimed by a slot keeps its place behind them, so nothing is lost — a small
+     * catalogue with no old titles simply carries more new ones rather than showing fewer.
+     */
+    fun mixed(
+        rotation: List<HeroCandidate>,
+        thisYear: Int,
+    ): List<HeroCandidate> {
+        if (rotation.size <= OLD_SLOTS + MIDDLE_SLOTS + ANIME_SLOTS) return rotation
+
+        val taken = LinkedHashSet<String>()
+        val picked = mutableListOf<HeroCandidate>()
+
+        fun take(
+            limit: Int,
+            predicate: (HeroCandidate) -> Boolean,
+        ) {
+            rotation
+                .asSequence()
+                .filter { it.id !in taken && predicate(it) }
+                .take(limit)
+                .forEach { picked += it; taken += it.id }
+        }
+
+        // The newest first, and one of each kind: a banner of nothing but films says the app has no
+        // series, which is the opposite of what it is for.
+        take(1) { ageBand(it, thisYear) == "new" && !it.isSeries }
+        take(1) { ageBand(it, thisYear) == "new" && it.isSeries }
+        take(ANIME_SLOTS, ::isAnime)
+        take(OLD_SLOTS) { ageBand(it, thisYear) == "old" }
+        take(MIDDLE_SLOTS) { ageBand(it, thisYear) == "middle" }
+
+        // Then everything else, still in its ranked order.
+        rotation.forEach { candidate ->
+            if (candidate.id !in taken) {
+                picked += candidate
+                taken += candidate.id
+            }
+        }
+        return picked
+    }
 }

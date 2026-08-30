@@ -5532,6 +5532,7 @@ class DesktopAppState(
                                     rating = item.rating,
                                     hasArtwork = !item.artworkUrl.isNullOrBlank(),
                                     categoryIds = item.categoryIds,
+                                    isSeries = item.contentType == XtreamContentType.SERIES,
                                 )
                             },
                         dayOfEpoch = date.toEpochDay(),
@@ -5541,7 +5542,14 @@ class DesktopAppState(
                         // a value: the selection stays pure, so the same day and the same catalogue
                         // always produce the same banner rather than reshuffling on recomposition.
                         affinity = affinity,
-                    )
+                    ).let { ranked ->
+                        // Rearranged so the banner is not twenty of the same thing.
+                        //
+                        // Ranked purely by score it fills with whatever the catalogue has most of,
+                        // and scrolling past twenty titles from the same year and the same shelf
+                        // teaches nobody what else is in there. See HeroSelection.mixed.
+                        HeroSelection.mixed(ranked, date.year)
+                    }
                 val heroPool =
                     heroRotation.mapNotNull { chosen ->
                         (movies + series).firstOrNull { item ->
