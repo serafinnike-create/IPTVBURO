@@ -143,6 +143,16 @@ class TrailerBrowser {
                         cache_path = null
                         persist_session_cookies = false
                         log_severity = CefSettings.LogSeverity.LOGSEVERITY_DISABLE
+                        // Black, because Chromium's own default is white.
+                        //
+                        // The engine paints this before any page arrives, and the browser is a
+                        // heavyweight surface above Compose that nothing can clip or cover — so the
+                        // default showed as a blank white rectangle wherever a trailer had not yet
+                        // loaded. Reported on the Descobrir card and then across the whole banner.
+                        //
+                        // Set here because this is the only place it can be: CefSettings is read
+                        // once, when the engine starts, and the engine is a process-wide singleton.
+                        background_color = ColorType(255, 8, 9, 10)
                     }
                 CefApp.startup(config.appArgs)
                 CefApp.getInstance(config.appArgs, settings).also { app = it }

@@ -266,7 +266,13 @@ private fun DiscoveryCard(
     // The card and a 460dp video together are wider than a modest window, and the overflow went off
     // the right edge — seen with the video half outside the screen. Below that width the video
     // takes what is left instead.
-    BoxWithConstraints {
+    // fillMaxWidth, so maxWidth below is the screen's width and not the row's own wish.
+    //
+    // Unconstrained, BoxWithConstraints reports what the content asked for, the centred column
+    // overflows equally on both sides, and the video ends up hanging past the right edge of the
+    // window — where a heavyweight browser surface is clipped by the window and paints nothing.
+    // That is the white block beside the poster.
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val roomForTrailer = maxWidth - CARD_WIDTH - BuroSpacing.Lg * 2
         val trailerWidth = minOf(TRAILER_WIDTH, roomForTrailer)
         val trailerFits = trailerWidth >= TRAILER_MIN_WIDTH
@@ -284,7 +290,10 @@ private fun DiscoveryCard(
         // deck moves. Reported as the artwork never staying still. Holding the width means the slot
         // beside the poster is simply empty when a card has no trailer, and the poster does not
         // move at all.
-        modifier = Modifier.width(CARD_WIDTH + BuroSpacing.Lg + trailerWidth),
+        modifier =
+            Modifier
+                .align(Alignment.TopCenter)
+                .width(CARD_WIDTH + BuroSpacing.Lg + trailerWidth),
         horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Lg),
         verticalAlignment = Alignment.Top,
     ) {
