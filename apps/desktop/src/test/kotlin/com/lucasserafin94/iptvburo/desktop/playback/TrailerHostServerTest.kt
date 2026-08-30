@@ -104,6 +104,39 @@ class TrailerHostServerTest {
         assertTrue("unMute" in page, "the sound was never raised after the start")
     }
 
+    /**
+     * And it is raised only once the player says it is playing — never on a timer.
+     *
+     * The previous attempt polled `raise()` every 500ms alongside the state request. An unMute
+     * arriving before playback has begun is read as a request to autoplay with audio, which the
+     * engine refuses outright, so the banner showed YouTube's play button over a still frame with
+     * the sound switch already on. Reported with a screenshot of exactly that.
+     *
+     * Asserted on the timer body rather than on the presence of unMute, because the broken version
+     * contained unMute too — what was wrong was when it ran.
+     */
+    @Test
+    fun `the sound is never raised on a timer, only when playing`() {
+        val host = started()
+
+        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = false, blendIntoHero = true))
+
+        val marker = "var timer=setInterval(function(){"
+        assertTrue(marker in page, "o temporizador mudou: este teste ja nao le nada")
+        val timerBody = page.substringAfter(marker).substringBefore("},500);")
+        assertFalse(
+            "raise()" in timerBody,
+            "o som e pedido antes do video tocar, e o motor recusa o arranque: $timerBody",
+        )
+
+        // The one place it may happen: the message saying playback has actually started.
+        val onPlaying = page.substringAfter("playerState===1").substringBefore("}")
+        assertTrue(
+            "raise()" in onPlaying,
+            "o som nao e levantado no momento em que o video comeca a tocar",
+        )
+    }
+
     /** A silent banner is left silent: no script, nothing to raise. */
     @Test
     fun `a banner left muted is not unmuted behind the viewer's back`() {

@@ -169,7 +169,7 @@ class TrailerHostServer private constructor(
                       }
                       function raise(){
                         if(done)return;
-                        ask('unMute');ask('setVolume',[100]);ask('playVideo');
+                        ask('unMute');ask('setVolume',[100]);
                       }
                       // Asks the player to report its state; without this it sends nothing and the
                       // listener below never hears that playback started.
@@ -185,9 +185,16 @@ class TrailerHostServer private constructor(
                         // 1 is "playing": the engine has granted the autoplay, so sound is safe.
                         if(d&&d.info&&d.info.playerState===1){raise();done=true}
                       });
+                      // The timer only ever asks the player to report itself. It must NOT call
+                      // raise(): an unMute that arrives before the video is playing is read as a
+                      // request to autoplay with audio, which the engine refuses outright — and
+                      // what the viewer gets is YouTube's play button parked over a still frame.
+                      // Reported exactly that way, with the sound switch already on.
+                      //
+                      // So the sound is raised in one place only: the PLAYING message below.
                       var tries=0;
                       var timer=setInterval(function(){
-                        listen();raise();
+                        listen();
                         if(done||++tries>20)clearInterval(timer);
                       },500);
                     })();

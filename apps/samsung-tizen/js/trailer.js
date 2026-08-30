@@ -138,9 +138,18 @@ var BuroTrailer = (function () {
         });
 
         listen();
+        /*
+          O temporizador so pede o estado ao player. Nunca chama raise().
+
+          Um unMute que chegue antes de o video estar a tocar e lido como um
+          pedido para arrancar com audio, e o motor recusa-o - o que se ve e o
+          botao de play do YouTube parado por cima de uma imagem, com o som ja
+          ligado. Foi assim que apareceu no Windows, com este mesmo desenho.
+
+          O som sobe num sitio so: na mensagem que diz que ja esta a tocar.
+        */
         var timer = setInterval(function () {
             listen();
-            raise();
             tries += 1;
             if (done || tries > 20) { clearInterval(timer); }
         }, 500);
