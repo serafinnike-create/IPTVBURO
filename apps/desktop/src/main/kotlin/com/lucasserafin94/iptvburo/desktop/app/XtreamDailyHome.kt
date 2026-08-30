@@ -568,16 +568,6 @@ internal fun HeroTrailer(
     // player rather than a message to the old one.
     val browser = remember(youtubeId, soundOn, blendIntoHero) { TrailerBrowser() }
 
-    /**
-     * Whether the page has finished loading and has something to show.
-     *
-     * Chromium paints its own white page before any content arrives, and the panel sits above
-     * Compose where nothing can cover it. On the banner that white never showed — the video fills a
-     * dark hero — but on the Descobrir card it was a blank white rectangle where the trailer should
-     * be. Reported with a screenshot. Hidden until there is a page, the card simply shows nothing
-     * for that moment, which is what it did before there was a trailer at all.
-     */
-    var ready by remember(youtubeId, soundOn, blendIntoHero) { mutableStateOf(false) }
     DisposableEffect(browser) { onDispose { browser.dispose() } }
 
     val panel =
@@ -590,9 +580,6 @@ internal fun HeroTrailer(
                     // The browser surface always sits above Compose. Its own page therefore owns
                     // the side and bottom masks that make video, artwork and copy one hero.
                     blendIntoHero = blendIntoHero,
-                    // Called on a CEF thread; Compose state is safe to set from anywhere here
-                    // because it is only ever flipped one way.
-                    onReady = { ready = true },
                 )
             }.getOrNull()
         }
@@ -605,7 +592,14 @@ internal fun HeroTrailer(
         return
     }
 
-    SwingPanel(factory = { panel }, modifier = modifier.alpha(if (ready) 1f else 0f))
+    // Always mounted, at its real size.
+    //
+    // Hiding it was the wrong answer twice over: Compose's alpha does not touch a heavyweight AWT
+    // surface, so the white stayed; and swapping the panel between two sizes to hide it risks
+    // rebuilding the player on every recomposition. What was actually wrong is that Chromium's own
+    // background defaults to white, and that is now set to black where the engine is configured —
+    // so there is nothing to hide. See TrailerBrowser.
+    SwingPanel(factory = { panel }, modifier = modifier)
 }
 
 @Composable

@@ -26,7 +26,6 @@ import org.cef.browser.CefBrowser
  */
 class TrailerBrowser {
     private val disposed = AtomicBoolean(false)
-
     private var client: CefClient? = null
     private var browser: CefBrowser? = null
 
@@ -40,18 +39,13 @@ class TrailerBrowser {
         youtubeId: String,
         autoplay: Boolean,
         muted: Boolean,
-        /** Adds the masks that visually merge the heavyweight browser into the Home hero. */
-        blendIntoHero: Boolean = false,
         /**
-         * Called once the page has finished loading, on whatever thread CEF uses.
+         * Whether this is the Home banner, which wants the masks that merge it into the hero.
          *
-         * Chromium paints its own white page before any content arrives, and the panel sits above
-         * Compose where nothing can cover it. On the Home banner that white is invisible — the
-         * video fills a dark hero — but on the Descobrir card it showed as a blank white rectangle
-         * where the trailer should be. Reported with a screenshot of exactly that. The caller keeps
-         * the panel hidden until this fires.
+         * False for a trailer in a card of its own: those masks fade the left edge and the bottom
+         * into whatever is behind them, and on a card with its own edges they only smear the video.
          */
-        onReady: () -> Unit = {},
+        blendIntoHero: Boolean = true,
     ): JPanel? =
         runCatching {
             val app = sharedApp() ?: return null
@@ -65,25 +59,8 @@ class TrailerBrowser {
             val host = sharedHost() ?: return null
             val cefBrowser =
                 cefClient
-                    .createBrowser(
-                        host.pageUrlFor(youtubeId, autoplay, muted, blendIntoHero),
-                        false,
-                        false,
-                    )
+                    .createBrowser(host.pageUrlFor(youtubeId, autoplay, muted, blendIntoHero), false, false)
                     .also { browser = it }
-
-            cefClient.addLoadHandler(
-                object : org.cef.handler.CefLoadHandlerAdapter() {
-                    override fun onLoadingStateChange(
-                        browser: CefBrowser?,
-                        isLoading: Boolean,
-                        canGoBack: Boolean,
-                        canGoForward: Boolean,
-                    ) {
-                        if (!isLoading) onReady()
-                    }
-                },
-            )
 
             JPanel(BorderLayout()).apply {
                 background = Color.BLACK
@@ -102,7 +79,6 @@ class TrailerBrowser {
     }
 
     companion object {
-
         @Volatile
         private var app: CefApp? = null
 

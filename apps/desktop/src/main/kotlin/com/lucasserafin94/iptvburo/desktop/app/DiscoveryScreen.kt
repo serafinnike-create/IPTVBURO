@@ -277,6 +277,14 @@ private fun DiscoveryCard(
     // recentred around it, so the artwork moved between cards even though it never changed size.
     // Pinned to the top it stays exactly where the eye left it.
     Row(
+        // The full width, always — with a trailer or without one.
+        //
+        // The row is centred by the column outside it, so a row that shrinks when there is no
+        // trailer gets recentred, and the poster slides to the middle of the screen and back as the
+        // deck moves. Reported as the artwork never staying still. Holding the width means the slot
+        // beside the poster is simply empty when a card has no trailer, and the poster does not
+        // move at all.
+        modifier = Modifier.width(CARD_WIDTH + BuroSpacing.Lg + trailerWidth),
         horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Lg),
         verticalAlignment = Alignment.Top,
     ) {
@@ -320,7 +328,17 @@ private fun DiscoveryCard(
                                 onDragCancel = { dragX = 0f },
                             ) { change, dragAmount: Offset ->
                                 change.consume()
-                                dragX += dragAmount.x
+                                // Rightward travel is capped short of the video.
+                                //
+                                // The player is a heavyweight browser surface, and it always paints
+                                // above Compose whatever the draw order — this codebase has the
+                                // note in three places. So a poster dragged right did not pass in
+                                // front of the trailer, it disappeared behind it, which reads as
+                                // the card being swallowed. It cannot be made to pass in front, so
+                                // it is stopped before it gets there: past the threshold the card
+                                // is thrown anyway, and the rest of the travel was only ever
+                                // decoration.
+                                dragX = (dragX + dragAmount.x).coerceAtMost(MAX_RIGHTWARD_DRAG)
                             }
                         },
             ) {
@@ -525,6 +543,15 @@ private val TRAILER_WIDTH = 460.dp
  * soundtrack. At that width the card goes back to being a card, which is what it was before.
  */
 private val TRAILER_MIN_WIDTH = 280.dp
+
+/**
+ * How far right a card may be dragged before it stops moving.
+ *
+ * Comfortably past [DECISION_THRESHOLD], so the gesture still completes and still feels like a
+ * throw, but short of the video beside it. The player paints above everything Compose draws, so a
+ * card that travelled that far vanished behind it rather than over it.
+ */
+private const val MAX_RIGHTWARD_DRAG = 190f
 
 
 private const val POSTER_RATIO = 2f / 3f
