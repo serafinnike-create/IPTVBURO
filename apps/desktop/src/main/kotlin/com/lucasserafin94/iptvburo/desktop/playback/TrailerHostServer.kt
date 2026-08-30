@@ -32,7 +32,10 @@ class TrailerHostServer private constructor(
         youtubeId: String,
         autoplay: Boolean = true,
         muted: Boolean = false,
-    ): String = "$origin/watch?v=$youtubeId&autoplay=${autoplay.asFlag()}&mute=${muted.asFlag()}"
+        blendIntoHero: Boolean = false,
+    ): String =
+        "$origin/watch?v=$youtubeId&autoplay=${autoplay.asFlag()}" +
+            "&mute=${muted.asFlag()}&hero=${blendIntoHero.asFlag()}"
 
     private fun Boolean.asFlag(): String = if (this) "1" else "0"
 
@@ -78,6 +81,7 @@ class TrailerHostServer private constructor(
                                     origin = "http://127.0.0.1:${http.address.port}",
                                     autoplay = flag("autoplay"),
                                     muted = flag("mute"),
+                                    blendIntoHero = flag("hero"),
                                 )
                             } else {
                                 "<!doctype html><html><body style=\"background:#000\"></body></html>"
@@ -108,18 +112,89 @@ class TrailerHostServer private constructor(
             origin: String,
             autoplay: Boolean,
             muted: Boolean,
+            blendIntoHero: Boolean,
         ): String {
             val embed =
                 buildString {
                     append("https://www.youtube-nocookie.com/embed/").append(youtubeId)
                     append("?autoplay=").append(if (autoplay) 1 else 0)
-                    append("&mute=").append(if (muted) 1 else 0)
-                    // A trailer opened deliberately gets controls; one playing behind a banner does
-                    // not, and must never make noise unasked.
-                    append("&controls=").append(if (muted) 0 else 1)
+                    // Always muted on the banner, whatever the viewer asked for.
+                    //
+                    // Every engine refuses to autoplay audio: asked for sound up front, the banner
+                    // does not start at all and shows YouTube's play button over a still frame —
+                    // seen exactly that way once the sound preference was remembered. So it starts
+                    // silent and the script below unmutes it the moment it is actually playing,
+                    // which is the closest any page can get to opening with sound.
+                    append("&mute=").append(if (muted || blendIntoHero) 1 else 0)
+                    // A trailer opened deliberately gets controls and plays once; the banner has
+                    // neither, and repeats.
+                    //
+                    // Decided by where the video sits, not by whether it has sound. These keyed off
+                    // `muted`, so turning the banner's sound on put YouTube's pause button over it
+                    // and stopped it looping — reported with a screenshot of the controls sitting
+                    // there. The two questions are unrelated.
+                    append("&controls=").append(if (blendIntoHero) 0 else 1)
                     append("&rel=0&modestbranding=1&playsinline=1")
-                    if (muted) append("&loop=1&playlist=").append(youtubeId)
+                    // Lets the page below talk to the player at all, which is what makes unmuting
+                    // after the start possible.
+                    if (blendIntoHero) append("&enablejsapi=1")
+                    if (blendIntoHero) append("&loop=1&playlist=").append(youtubeId)
                     append("&origin=").append(origin)
+                }
+            val bodyClass = if (blendIntoHero) " class=\"cinematic-hero\"" else ""
+
+            /*
+             * Turns the sound on once the banner is already playing.
+             *
+             * The banner always loads muted because that is the only way it loads at all, so a
+             * viewer who asked for sound would otherwise never get it. Waiting for the player to
+             * report that it is playing before unmuting keeps the autoplay: the engine has already
+             * granted it by then, and raising the volume afterwards is not a new request.
+             *
+             * Retried on a timer as well as on the ready event — the player answers when it feels
+             * like it, and a single attempt that lands too early leaves the banner silent for good.
+             * It stops as soon as it has worked.
+             */
+            val unmuteScript =
+                if (blendIntoHero && !muted) {
+                    """
+                    <script>
+                    (function(){
+                      var frame=document.querySelector('iframe');
+                      var done=false;
+                      function ask(what,args){
+                        if(!frame||!frame.contentWindow)return;
+                        frame.contentWindow.postMessage(JSON.stringify(
+                          {event:'command',func:what,args:args||[]}),'*');
+                      }
+                      function raise(){
+                        if(done)return;
+                        ask('unMute');ask('setVolume',[100]);ask('playVideo');
+                      }
+                      // Asks the player to report its state; without this it sends nothing and the
+                      // listener below never hears that playback started.
+                      function listen(){
+                        if(!frame||!frame.contentWindow)return;
+                        frame.contentWindow.postMessage(JSON.stringify(
+                          {event:'listening',id:1}),'*');
+                      }
+                      frame&&frame.addEventListener('load',listen);
+                      listen();
+                      window.addEventListener('message',function(e){
+                        var d;try{d=JSON.parse(e.data)}catch(_){return}
+                        // 1 is "playing": the engine has granted the autoplay, so sound is safe.
+                        if(d&&d.info&&d.info.playerState===1){raise();done=true}
+                      });
+                      var tries=0;
+                      var timer=setInterval(function(){
+                        listen();raise();
+                        if(done||++tries>20)clearInterval(timer);
+                      },500);
+                    })();
+                    </script>
+                    """.trimIndent()
+                } else {
+                    ""
                 }
             return """
                 <!doctype html>
@@ -134,10 +209,33 @@ class TrailerHostServer private constructor(
                    the artwork behind it has always been cropped the same way. */
                 #fit{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
                      width:100vw;height:56.25vw;min-height:100vh;min-width:177.78vh}
-                iframe{border:0;display:block;width:100%;height:100%}</style></head>
-                <body><div id="fit"><iframe src="$embed"
+                iframe{border:0;display:block;width:100%;height:100%}
+
+                /* Chromium is an AWT heavyweight surface, so a Compose scrim cannot be painted
+                   over it. Put the cinematic masks in this page itself: the left edge becomes the
+                   same BURO canvas as the copy column and the bottom dissolves into the first
+                   shelf. Without these two masks the player reads as a rectangle laid on top of
+                   the hero. This class is used only by the Home banner; the explicit trailer
+                   lightbox keeps an unobstructed 16:9 player and its controls. */
+                body.cinematic-hero::before,body.cinematic-hero::after{
+                     content:"";position:fixed;z-index:2;pointer-events:none}
+                body.cinematic-hero::before{
+                     inset:0 auto 0 0;width:28%;
+                     background:linear-gradient(90deg,
+                         rgba(8,9,10,1) 0%,rgba(8,9,10,.92) 22%,
+                         rgba(8,9,10,.58) 58%,rgba(8,9,10,0) 100%)}
+                body.cinematic-hero::after{
+                     inset:auto 0 0 0;height:38%;
+                     background:linear-gradient(0deg,
+                         rgba(8,9,10,.96) 0%,rgba(8,9,10,.64) 34%,
+                         rgba(8,9,10,0) 100%)}
+                body.cinematic-hero #fit{animation:hero-reveal 460ms ease-out both}
+                @keyframes hero-reveal{from{opacity:0}to{opacity:1}}
+                @media (prefers-reduced-motion:reduce){body.cinematic-hero #fit{animation:none}}
+                </style></head>
+                <body$bodyClass><div id="fit"><iframe src="$embed"
                 allow="autoplay; encrypted-media; fullscreen"
-                allowfullscreen></iframe></div></body></html>
+                allowfullscreen></iframe></div>$unmuteScript</body></html>
             """.trimIndent()
         }
     }

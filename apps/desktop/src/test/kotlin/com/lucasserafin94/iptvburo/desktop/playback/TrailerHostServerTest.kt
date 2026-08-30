@@ -57,14 +57,62 @@ class TrailerHostServerTest {
     }
 
     @Test
-    fun `a muted trailer loops silently and shows no controls`() {
+    fun `a banner trailer loops and shows no controls`() {
         val host = started()
 
-        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = true))
+        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = true, blendIntoHero = true))
 
         assertTrue("mute=1" in page)
         assertTrue("controls=0" in page, "a banner trailer must not show controls")
         assertTrue("loop=1" in page)
+    }
+
+    /**
+     * Turning the banner's sound on changes the sound and nothing else.
+     *
+     * These two were one: controls and looping were decided by `muted`, so turning the sound on put
+     * YouTube's pause button over the banner and stopped it repeating. Reported with a screenshot of
+     * the controls sitting there over a stopped video. Where the video sits and whether it has sound
+     * are unrelated questions.
+     */
+    @Test
+    fun `a banner trailer with sound still loops and shows no controls`() {
+        val host = started()
+
+        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = false, blendIntoHero = true))
+
+        assertTrue("controls=0" in page, "the sound switch brought YouTube's controls with it")
+        assertTrue("loop=1" in page, "the sound switch stopped the banner looping")
+    }
+
+    /**
+     * The banner loads muted even when the sound is wanted, and raises it once it is playing.
+     *
+     * Asking for sound up front does not produce a loud trailer — it produces no trailer, because
+     * every engine refuses to autoplay audio and shows its play button over a still frame instead.
+     * Seen exactly that way on the banner once the sound preference had been remembered. Starting
+     * silent and unmuting after the engine has granted the autoplay is the only order that plays.
+     */
+    @Test
+    fun `a banner asked for sound still starts muted and raises it after`() {
+        val host = started()
+
+        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = false, blendIntoHero = true))
+
+        assertTrue("mute=1" in page, "the banner asked for audio up front and will not autoplay")
+        assertTrue("enablejsapi=1" in page, "nothing can unmute a player it cannot talk to")
+        assertTrue("unMute" in page, "the sound was never raised after the start")
+    }
+
+    /** A silent banner is left silent: no script, nothing to raise. */
+    @Test
+    fun `a banner left muted is not unmuted behind the viewer's back`() {
+        val host = started()
+
+        val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = true, blendIntoHero = true))
+
+        assertTrue("mute=1" in page)
+        assertFalse("unMute" in page, "a banner the viewer silenced started making noise")
     }
 
     @Test
@@ -75,6 +123,35 @@ class TrailerHostServerTest {
 
         assertTrue("mute=0" in page)
         assertTrue("controls=1" in page)
+        assertFalse("class=\"cinematic-hero\"" in page, "the trailer lightbox must stay unobstructed")
+    }
+
+    /**
+     * The Home banner is partly Compose and partly an embedded AWT surface.
+     *
+     * A Compose gradient cannot cover the latter, so the page itself must feather both seams or
+     * the moving picture looks like a rectangular player laid over the artwork.
+     */
+    @Test
+    fun `the home trailer blends its left and bottom edges into the hero`() {
+        val host = started()
+
+        val page =
+            fetch(
+                host.pageUrlFor(
+                    "cTW78JSBoyw",
+                    autoplay = true,
+                    muted = true,
+                    blendIntoHero = true,
+                ),
+            )
+
+        assertTrue("class=\"cinematic-hero\"" in page, "the banner did not select the blended page")
+        assertTrue("body.cinematic-hero::before" in page, "the side seam has no mask")
+        assertTrue("body.cinematic-hero::after" in page, "the bottom seam has no mask")
+        assertTrue("linear-gradient(90deg" in page, "the video does not dissolve into the copy")
+        assertTrue("linear-gradient(0deg" in page, "the video does not dissolve into the shelf")
+        assertTrue("pointer-events:none" in page, "the masks intercept the embedded player")
     }
 
     /**
@@ -117,6 +194,7 @@ class TrailerHostServerTest {
         assertTrue("v=abc123XYZ_-" in url)
         assertTrue("autoplay=0" in url)
         assertTrue("mute=1" in url)
+        assertTrue("hero=0" in url)
         assertNotNull(URI(url).port.takeIf { it > 0 })
         assertEquals("127.0.0.1", URI(url).host)
     }

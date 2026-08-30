@@ -547,7 +547,14 @@ private fun HeroTrailer(
     val panel =
         remember(youtubeId, soundOn) {
             runCatching {
-                browser.createComponent(youtubeId = youtubeId, autoplay = true, muted = !soundOn)
+                browser.createComponent(
+                    youtubeId = youtubeId,
+                    autoplay = true,
+                    muted = !soundOn,
+                    // The browser surface always sits above Compose. Its own page therefore owns
+                    // the side and bottom masks that make video, artwork and copy one hero.
+                    blendIntoHero = true,
+                )
             }.getOrNull()
         }
 
@@ -642,8 +649,8 @@ private fun DailyHero(
             }
         }
 
-        // Two passes: horizontal protects the copy column, vertical anchors the hero to the rail
-        // underneath so the composition does not float.
+        // Two passes protect and anchor the still artwork. While Chromium is present, its matching
+        // masks live inside the hosted page because an AWT heavyweight surface paints above these.
         Box(Modifier.fillMaxSize().background(BuroScrim.heroHorizontal()))
         Box(Modifier.fillMaxSize().background(BuroScrim.heroVertical()))
 
@@ -652,7 +659,18 @@ private fun DailyHero(
                 Modifier
                     .align(Alignment.CenterStart)
                     .padding(horizontal = metrics.gutter)
-                    .widthIn(max = if (metrics.wide) 620.dp else 520.dp),
+                    // The copy keeps clear of the trailer rather than running under it. At full
+                    // width the last line of the synopsis disappeared behind the video — reported
+                    // as the synopsis being cut off. Without a trailer nothing changes: the text
+                    // has the whole banner, as it always did.
+                    .widthIn(
+                        max =
+                            when {
+                                trailerPlaying -> if (metrics.wide) 460.dp else 380.dp
+                                metrics.wide -> 620.dp
+                                else -> 520.dp
+                            },
+                    ),
             verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
         ) {
             HeroEyebrow(
@@ -688,7 +706,14 @@ private fun DailyHero(
                 color = BuroColors.TextMuted,
                 style = MaterialTheme.typography.bodyLarge,
                 // Three lines for a real synopsis, which needs the room; the fixed line fits in two.
-                maxLines = if (synopsis.isNullOrBlank()) 2 else 3,
+                // Five while a trailer plays: the column is narrower there, so the same synopsis
+                // needs more lines to say as much, not fewer.
+                maxLines =
+                    when {
+                        synopsis.isNullOrBlank() -> 2
+                        trailerPlaying -> 5
+                        else -> 3
+                    },
                 overflow = TextOverflow.Ellipsis,
             )
             item?.let { selected ->
