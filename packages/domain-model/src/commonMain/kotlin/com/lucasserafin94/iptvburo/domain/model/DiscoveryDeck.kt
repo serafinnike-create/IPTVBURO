@@ -186,6 +186,36 @@ object DiscoveryDeck {
      */
     const val SURPRISE_SLOTS = 2
 
+    /**
+     * How long a card holds while its trailer plays, before the deck moves on by itself.
+     *
+     * Long enough to watch a trailer and make up your mind, rather than a slideshow that moves while
+     * somebody is still reading. Matches the banner's own hold, so the two screens do not disagree
+     * about how long a trailer is worth.
+     */
+    const val TRAILER_HOLD_MILLIS = 60_000L
+
+    /**
+     * Whether a card advances on its own once its trailer has run.
+     *
+     * Only a card that actually has a trailer: one showing a still poster has nothing to finish, so
+     * it waits for a verdict rather than sliding away from somebody still reading it.
+     */
+    fun advancesOnItsOwn(trailerId: String?): Boolean = !trailerId.isNullOrBlank()
+
+    /**
+     * The deck after a card was passed over rather than judged.
+     *
+     * Passing over is deliberately not a verdict. A card whose trailer simply ran out was decided on
+     * by nobody, and filing it as a rejection would teach the taste profile something the viewer
+     * never said — and bury the title, since a judged card does not come round again. So the card
+     * leaves the deck and nothing else changes: no verdict, no favourite, not marked as seen.
+     */
+    fun afterPassingOver(
+        deck: List<DiscoveryCandidate>,
+        passedOverKey: String,
+    ): List<DiscoveryCandidate> = deck.filterNot { candidate -> candidate.id == passedOverKey }
+
     fun build(
         candidates: List<DiscoveryCandidate>,
         taste: TasteProfile,

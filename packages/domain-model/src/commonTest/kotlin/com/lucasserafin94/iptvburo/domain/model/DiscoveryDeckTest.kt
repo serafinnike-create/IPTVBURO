@@ -229,4 +229,65 @@ class DiscoveryDeckTest {
 
         assertEquals(1, deck.size)
     }
+
+    /**
+     * A card with a trailer moves on by itself; one without waits to be judged.
+     *
+     * The card shows a trailer beside the poster now, and once it has played its while the deck
+     * advances. A card showing only a still poster has nothing to finish, so advancing it would be
+     * sliding the screen away from somebody still reading it.
+     */
+    @Test
+    fun `only a card with a trailer advances on its own`() {
+        assertTrue(DiscoveryDeck.advancesOnItsOwn("abc123XYZ_-"))
+        assertFalse(DiscoveryDeck.advancesOnItsOwn(null), "um cartao sem trailer passou sozinho")
+        assertFalse(DiscoveryDeck.advancesOnItsOwn("   "), "um id vazio contou como trailer")
+    }
+
+    /** The card that ran out its trailer leaves the deck, and only that card. */
+    @Test
+    fun `passing over removes just that card`() {
+        val deck = listOf(candidate("um"), candidate("dois"), candidate("tres"))
+
+        val rest = DiscoveryDeck.afterPassingOver(deck, "dois")
+
+        assertEquals(listOf("um", "tres"), rest.map { it.id })
+    }
+
+    /**
+     * Passing over is not a verdict, and the taste profile must not learn from it.
+     *
+     * Wired to a decision, every card whose trailer simply finished would be filed as a film this
+     * viewer rejected — a profile built from choices nobody made. The rule is that passing over
+     * touches the deck and nothing else.
+     */
+    @Test
+    fun `passing over teaches the session nothing`() {
+        val untouched = SessionTaste()
+        val terror = listOf("Terror")
+
+        // A real verdict does move the leaning — asserted here so the check below is known to be
+        // capable of failing, rather than passing because nothing could ever change it.
+        val judged = untouched.after(terror, DiscoveryVerdict.SKIPPED)
+        assertTrue(
+            judged.leaningFor(terror) != untouched.leaningFor(terror),
+            "um veredicto real nao mexeu no perfil, entao este teste nao prova nada",
+        )
+
+        DiscoveryDeck.afterPassingOver(listOf(candidate("um", terror)), "um")
+
+        assertEquals(
+            0.0,
+            untouched.leaningFor(terror),
+            "passar a frente ensinou alguma coisa ao perfil de gosto",
+        )
+    }
+
+    /** A card nobody judged is not dropped from a deck it was never in. */
+    @Test
+    fun `passing over an unknown card changes nothing`() {
+        val deck = listOf(candidate("um"), candidate("dois"))
+
+        assertEquals(deck, DiscoveryDeck.afterPassingOver(deck, "nao-existe"))
+    }
 }

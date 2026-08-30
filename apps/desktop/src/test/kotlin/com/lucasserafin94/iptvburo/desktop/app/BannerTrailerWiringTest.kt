@@ -42,6 +42,10 @@ class BannerTrailerWiringTest {
             home.contains("trailerId = heroItem?.let(appState::heroTrailerFor)"),
             "o banner nao recebe o trailer",
         )
+        assertTrue(
+            home.contains("blendIntoHero = true"),
+            "o Chromium fica como um retangulo sobreposto, sem se fundir ao hero",
+        )
     }
 
     /**
@@ -88,7 +92,13 @@ class BannerTrailerWiringTest {
      */
     @Test
     fun `nothing is drawn when the player cannot start`() {
-        val block = home.substringAfter("private fun HeroTrailer(").substringBefore("\n}")
+        // Asserted before slicing: substringAfter hands back the whole file when the marker is
+        // missing, so a renamed or deleted composable would leave this test passing against nothing.
+        // It already broke once the other way, when the function stopped being private.
+        val marker = "fun HeroTrailer("
+        assertTrue(marker in home, "HeroTrailer mudou de nome: este teste ja nao le nada")
+
+        val block = home.substringAfter(marker).substringBefore("\n}")
 
         assertTrue(block.contains("if (panel == null)"), "um painel que nao abre fica na tela")
         assertTrue(block.contains("onFailed()"), "a falha nao e comunicada")

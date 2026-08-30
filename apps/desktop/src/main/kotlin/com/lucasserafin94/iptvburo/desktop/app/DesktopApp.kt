@@ -756,6 +756,14 @@ fun DesktopApp(
                                 // loaders actually run — see openTitle.
                                 onOpenDetails = appState::openTitle,
                                 onAnother = appState::loadDiscoveryDeck,
+                                // The banner's own lookup, so a title with a trailer there has one
+                                // here rather than the two screens disagreeing about the same film.
+                                trailerFor = appState::heroTrailerFor,
+                                onNeedTrailer = appState::loadHeroTrailer,
+                                onTrailerFailed = appState::rememberHeroTrailerFailure,
+                                onPassOver = appState::passOverDiscovery,
+                                soundOn = appState.bannerTrailerSound,
+                                onToggleSound = appState::toggleBannerTrailerSound,
                             )
                         } else if (visibleDestination == DesktopDestination.REMINDERS) {
                             RemindersGallery(

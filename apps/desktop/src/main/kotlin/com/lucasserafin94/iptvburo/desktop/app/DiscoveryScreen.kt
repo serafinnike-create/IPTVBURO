@@ -52,8 +52,10 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import com.lucasserafin94.iptvburo.domain.model.DiscoveryDeck
 import com.lucasserafin94.iptvburo.domain.model.DiscoveryVerdict
 import com.lucasserafin94.iptvburo.xtream.XtreamCatalogItem
+import kotlinx.coroutines.delay
 
 /**
  * One title at a time: keep it or pass over it.
@@ -82,10 +84,50 @@ fun DiscoveryScreen(
      */
     onOpenDetails: (XtreamCatalogItem) -> Unit,
     onAnother: () -> Unit,
+    /**
+     * The trailer for a card, when there is one that plays.
+     *
+     * The same lookup the home banner uses, and deliberately so: a title with a trailer there has
+     * one here rather than the two screens disagreeing about the same film.
+     */
+    trailerFor: (XtreamCatalogItem) -> String? = { null },
+    /** Asks for a card's trailer. Called for the card on top, not for the whole deck. */
+    onNeedTrailer: (XtreamCatalogItem) -> Unit = {},
+    /** Reported when the player will not play, so the next card is not made to wait for it too. */
+    onTrailerFailed: (XtreamCatalogItem) -> Unit = {},
+    /**
+     * Moves past a card whose trailer has finished its while, without filing a verdict.
+     *
+     * Not [onDecide]: nobody judged this film, and recording a rejection for a card that ran out
+     * the clock would teach the taste profile something the viewer never said.
+     */
+    onPassOver: (XtreamCatalogItem) -> Unit = {},
+    /** Whether the trailer carries sound, shared with the banner so the choice is made once. */
+    soundOn: Boolean = false,
+    onToggleSound: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val text = strings.shareStrings.discovery
     val top = deck.firstOrNull()
+
+    // Asked for as the card reaches the top, not for the whole deck: most of a deck is never seen,
+    // and looking every card up would be a request per title for one viewing.
+    LaunchedEffect(top?.providerId) { top?.let(onNeedTrailer) }
+
+    val trailerId = top?.let(trailerFor)
+
+    /**
+     * A card whose trailer has played its while moves on by itself.
+     *
+     * Only when there is a trailer: a card showing a still poster has nothing to finish, so it
+     * waits for a verdict rather than sliding away from somebody still reading it. Passing on is
+     * not a verdict either — skipping would teach the app that a film nobody judged was unwanted.
+     */
+    LaunchedEffect(top?.providerId, trailerId) {
+        if (top == null || !DiscoveryDeck.advancesOnItsOwn(trailerId)) return@LaunchedEffect
+        delay(DiscoveryDeck.TRAILER_HOLD_MILLIS)
+        onPassOver(top)
+    }
 
     /**
      * The screen has to hold focus to receive keys at all.
@@ -183,6 +225,10 @@ fun DiscoveryScreen(
                     genres = genresFor(top),
                     onDecide = { verdict -> onDecide(top, verdict) },
                     onOpenDetails = { onOpenDetails(top) },
+                    trailerId = trailerId,
+                    onTrailerFailed = { onTrailerFailed(top) },
+                    soundOn = soundOn,
+                    onToggleSound = onToggleSound,
                 )
         }
     }
@@ -195,6 +241,10 @@ private fun DiscoveryCard(
     genres: List<String>,
     onDecide: (DiscoveryVerdict) -> Unit,
     onOpenDetails: () -> Unit,
+    trailerId: String?,
+    onTrailerFailed: () -> Unit,
+    soundOn: Boolean,
+    onToggleSound: () -> Unit,
 ) {
     val text = strings.shareStrings.discovery
 
@@ -205,131 +255,188 @@ private fun DiscoveryCard(
     var dragX by remember(item.providerId) { mutableStateOf(0f) }
     val offsetX by animateFloatAsState(dragX, label = "discovery-drag")
 
-    Column(
-        modifier = Modifier.width(CARD_WIDTH),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    // The poster and the trailer, side by side.
+    //
+    // The card was a poster alone, which asks somebody to judge a film by its artwork; the trailer
+    // beside it is what turns a guess into a decision. When there is no trailer the row holds only
+    // the card and the screen looks exactly as it did.
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Lg),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(POSTER_RATIO)
-                    .graphicsLayer {
-                        translationX = offsetX
-                        // A small tilt, because a card that slides without turning reads as a
-                        // panel being scrolled rather than one being thrown away.
-                        rotationZ = (offsetX / CARD_WIDTH.value) * MAX_TILT_DEGREES
-                    }.clip(BuroRadius.Large)
-                    .background(BuroColors.SurfaceRaised)
-                    .border(
-                        width = 1.dp,
-                        color =
-                            when {
-                                dragX > DECISION_THRESHOLD -> BuroColors.Primary
-                                dragX < -DECISION_THRESHOLD -> BuroColors.TextSubtle
-                                else -> BuroColors.BorderSoft
-                            },
-                        shape = BuroRadius.Large,
-                    ).pointerInput(item.providerId) {
-                        detectDragGestures(
-                            onDragEnd = {
-                                // Past the threshold the card is thrown; short of it, it returns.
-                                // Deciding on release rather than on crossing means a drag can be
-                                // reconsidered mid-gesture, which is what makes it feel forgiving.
-                                when {
-                                    dragX > DECISION_THRESHOLD -> onDecide(DiscoveryVerdict.KEPT)
-                                    dragX < -DECISION_THRESHOLD -> onDecide(DiscoveryVerdict.SKIPPED)
-                                    else -> dragX = 0f
-                                }
-                            },
-                            onDragCancel = { dragX = 0f },
-                        ) { change, dragAmount: Offset ->
-                            change.consume()
-                            dragX += dragAmount.x
-                        }
-                    },
+        Column(
+            modifier = Modifier.width(CARD_WIDTH),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            BuroRemoteArtwork(
-                artworkUrl = item.artworkUrl,
-                contentDescription = item.name,
-                modifier = Modifier.fillMaxSize(),
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(POSTER_RATIO)
+                        .graphicsLayer {
+                            translationX = offsetX
+                            // A small tilt, because a card that slides without turning reads as a
+                            // panel being scrolled rather than one being thrown away.
+                            rotationZ = (offsetX / CARD_WIDTH.value) * MAX_TILT_DEGREES
+                        }.clip(BuroRadius.Large)
+                        .background(BuroColors.SurfaceRaised)
+                        .border(
+                            width = 1.dp,
+                            color =
+                                when {
+                                    dragX > DECISION_THRESHOLD -> BuroColors.Primary
+                                    dragX < -DECISION_THRESHOLD -> BuroColors.TextSubtle
+                                    else -> BuroColors.BorderSoft
+                                },
+                            shape = BuroRadius.Large,
+                        ).pointerInput(item.providerId) {
+                            detectDragGestures(
+                                onDragEnd = {
+                                    // Past the threshold the card is thrown; short of it, it returns.
+                                    // Deciding on release rather than on crossing means a drag can be
+                                    // reconsidered mid-gesture, which is what makes it feel forgiving.
+                                    when {
+                                        dragX > DECISION_THRESHOLD -> onDecide(DiscoveryVerdict.KEPT)
+                                        dragX < -DECISION_THRESHOLD -> onDecide(DiscoveryVerdict.SKIPPED)
+                                        else -> dragX = 0f
+                                    }
+                                },
+                                onDragCancel = { dragX = 0f },
+                            ) { change, dragAmount: Offset ->
+                                change.consume()
+                                dragX += dragAmount.x
+                            }
+                        },
             ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = item.name.editorialTitle().take(1).uppercase(),
-                        color = BuroColors.TextSubtle,
-                        style = MaterialTheme.typography.headlineLarge,
-                    )
+                BuroRemoteArtwork(
+                    artworkUrl = item.artworkUrl,
+                    contentDescription = item.name,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = item.name.editorialTitle().take(1).uppercase(),
+                            color = BuroColors.TextSubtle,
+                            style = MaterialTheme.typography.headlineLarge,
+                        )
+                    }
                 }
+            }
+
+            Spacer(Modifier.height(BuroSpacing.Sm))
+            Text(
+                text = item.name.editorialTitle(),
+                color = BuroColors.Text,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            // Year and genres on one quiet line: what the film is, in the two words somebody uses to
+            // decide. Terror, ação, comédia — the reason the card is worth reading at all.
+            val facts =
+                listOfNotNull(
+                    item.year?.toString(),
+                    genres.take(MAX_GENRES).joinToString(" · ").takeIf(String::isNotBlank),
+                ).joinToString("  ·  ")
+            if (facts.isNotBlank()) {
+                Text(
+                    text = facts,
+                    color = BuroColors.TextMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            synopsis?.takeIf(String::isNotBlank)?.let { plot ->
+                Spacer(Modifier.height(BuroSpacing.Xs))
+                Text(
+                    text = plot,
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Spacer(Modifier.height(BuroSpacing.Md))
+            Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Lg)) {
+                // Buttons as well as the drag, because a mouse is not a finger: dragging a card across
+                // a desktop screen is a chore next to clicking, and somebody on a trackpad should not
+                // have to.
+                DecisionButton(
+                    label = "✕",
+                    caption = text.skip,
+                    tint = BuroColors.TextMuted,
+                    onClick = { onDecide(DiscoveryVerdict.SKIPPED) },
+                )
+                DecisionButton(
+                    label = "✓",
+                    caption = text.keep,
+                    tint = BuroColors.Primary,
+                    onClick = { onDecide(DiscoveryVerdict.KEPT) },
+                )
+                // Neither a verdict nor a swipe: a way to read more before giving one.
+                //
+                // The card shows a poster, a year and a genre, and the synopsis only after TMDb answers
+                // — so on most cards there was nothing to judge but the artwork. Deciding blind is what
+                // this button exists to avoid.
+                DecisionButton(
+                    label = "ℹ",
+                    caption = text.details,
+                    tint = BuroColors.TextMuted,
+                    onClick = onOpenDetails,
+                )
             }
         }
 
-        Spacer(Modifier.height(BuroSpacing.Sm))
-        Text(
-            text = item.name.editorialTitle(),
-            color = BuroColors.Text,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-
-        // Year and genres on one quiet line: what the film is, in the two words somebody uses to
-        // decide. Terror, ação, comédia — the reason the card is worth reading at all.
-        val facts =
-            listOfNotNull(
-                item.year?.toString(),
-                genres.take(MAX_GENRES).joinToString(" · ").takeIf(String::isNotBlank),
-            ).joinToString("  ·  ")
-        if (facts.isNotBlank()) {
-            Text(
-                text = facts,
-                color = BuroColors.TextMuted,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        synopsis?.takeIf(String::isNotBlank)?.let { plot ->
-            Spacer(Modifier.height(BuroSpacing.Xs))
-            Text(
-                text = plot,
-                color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        Spacer(Modifier.height(BuroSpacing.Md))
-        Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Lg)) {
-            // Buttons as well as the drag, because a mouse is not a finger: dragging a card across
-            // a desktop screen is a chore next to clicking, and somebody on a trackpad should not
-            // have to.
-            DecisionButton(
-                label = "✕",
-                caption = text.skip,
-                tint = BuroColors.TextMuted,
-                onClick = { onDecide(DiscoveryVerdict.SKIPPED) },
-            )
-            DecisionButton(
-                label = "✓",
-                caption = text.keep,
-                tint = BuroColors.Primary,
-                onClick = { onDecide(DiscoveryVerdict.KEPT) },
-            )
-            // Neither a verdict nor a swipe: a way to read more before giving one.
-            //
-            // The card shows a poster, a year and a genre, and the synopsis only after TMDb answers
-            // — so on most cards there was nothing to judge but the artwork. Deciding blind is what
-            // this button exists to avoid.
-            DecisionButton(
-                label = "ℹ",
-                caption = text.details,
-                tint = BuroColors.TextMuted,
-                onClick = onOpenDetails,
-            )
+        if (trailerId != null) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier =
+                        Modifier
+                            .width(TRAILER_WIDTH)
+                            .aspectRatio(16f / 9f)
+                            .clip(BuroRadius.Large)
+                            .background(BuroColors.SurfaceRaised),
+                ) {
+                    HeroTrailer(
+                        youtubeId = trailerId,
+                        modifier = Modifier.fillMaxSize(),
+                        soundOn = soundOn,
+                        onFailed = onTrailerFailed,
+                    )
+                }
+                Spacer(Modifier.height(BuroSpacing.Sm))
+                // Beside the video rather than over it: the player is a browser surface that always
+                // paints above Compose, so a control laid on top of it is simply not there.
+                BuroInteractiveRow(
+                    onClick = onToggleSound,
+                    selected = false,
+                    shape = BuroRadius.Pill,
+                    contentDescription =
+                        if (soundOn) {
+                            strings.shareStrings.screens.trailerMute
+                        } else {
+                            strings.shareStrings.screens.trailerUnmute
+                        },
+                ) { _ ->
+                    Text(
+                        text =
+                            if (soundOn) {
+                                strings.shareStrings.screens.trailerMute
+                            } else {
+                                strings.shareStrings.screens.trailerUnmute
+                            },
+                        modifier =
+                            Modifier.padding(horizontal = BuroSpacing.Md, vertical = BuroSpacing.Xs),
+                        color = BuroColors.TextMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
         }
     }
 }
@@ -369,6 +476,17 @@ private fun DecisionButton(
 
 /** Wide enough for a poster to read as one, narrow enough to sit in a window beside a sidebar. */
 private val CARD_WIDTH = 300.dp
+
+/**
+ * The trailer that plays beside the poster.
+ *
+ * Wider than the card, because a 16:9 video next to a 2:3 poster looks starved at the poster's
+ * width. The two together are what the screen is for: the artwork says what the film looks like and
+ * the trailer says what it is, which is the difference between guessing and deciding.
+ */
+private val TRAILER_WIDTH = 460.dp
+
+
 private const val POSTER_RATIO = 2f / 3f
 
 /** How far a card travels before releasing it counts as a decision. */

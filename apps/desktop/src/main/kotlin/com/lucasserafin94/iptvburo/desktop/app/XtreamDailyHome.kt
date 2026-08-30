@@ -526,7 +526,7 @@ fun XtreamDailyHome(
  * would read as a broken app, which is the whole reason this is guarded rather than optimistic.
  */
 @Composable
-private fun HeroTrailer(
+internal fun HeroTrailer(
     youtubeId: String,
     modifier: Modifier = Modifier,
     /**

@@ -2260,6 +2260,19 @@ class DesktopAppState(
         items.flatMap { item -> item.categoryIds }
 
     /**
+     * Moves to the next card without recording anything.
+     *
+     * For a card that advanced on its own once its trailer had played its while. Deliberately not
+     * [decideDiscovery]: passing over a film nobody judged is not a verdict, and filing it as a
+     * rejection would teach the taste profile something the viewer never said. The title is not
+     * marked as seen either, so it can come round again and be decided on properly.
+     */
+    fun passOverDiscovery(item: XtreamCatalogItem) {
+        val key = item.contentIdentity().key
+        discoveryDeck = discoveryDeck.filterNot { held -> held.contentIdentity().key == key }
+    }
+
+    /**
      * Records a decision and moves to the next card.
      *
      * Accepting adds the title to favourites, which is what the product asked for and also what
