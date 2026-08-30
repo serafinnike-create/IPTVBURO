@@ -53,6 +53,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import com.lucasserafin94.iptvburo.R
+import com.lucasserafin94.iptvburo.ui.screens.MutedTrailerBackdrop
 import com.lucasserafin94.iptvburo.ui.designsystem.ProviderMark
 import com.lucasserafin94.iptvburo.ui.designsystem.rememberProviderIdentity
 import com.lucasserafin94.iptvburo.ui.designsystem.providerIdentityFor
@@ -74,6 +75,13 @@ fun BuroHero(
     onOpenSources: () -> Unit,
     modifier: Modifier = Modifier,
     requestFocus: Boolean = false,
+    /**
+     * The trailer to play behind the title, or null to show the artwork.
+     *
+     * Null covers every reason not to play — no trailer, one that already failed, something the
+     * viewer chose already playing. The banner does not decide any of that; see BannerTrailer.
+     */
+    trailerId: String? = null,
 ) {
     BoxWithConstraints(
         modifier = modifier
@@ -115,6 +123,18 @@ fun BuroHero(
                 modifier = Modifier.fillMaxSize(),
                 alignment = Alignment.CenterEnd,
                 contentScale = ContentScale.Crop,
+            )
+        }
+        // The trailer plays over the artwork, which stays underneath as the fallback.
+        //
+        // MutedTrailerBackdrop removes itself from the composition when the embed fails rather than
+        // fading to nothing, so a trailer that will not load leaves the poster exactly as it was —
+        // no black rectangle on the opening screen. It also waits before appearing, which is what
+        // keeps the rotation from opening a video per title.
+        if (trailerId != null) {
+            MutedTrailerBackdrop(
+                youtubeId = trailerId,
+                modifier = Modifier.fillMaxSize(),
             )
         }
         Box(

@@ -80,6 +80,24 @@ var BuroTrailer = (function () {
         return origin ? base + '&enablejsapi=1&origin=' + encodeURIComponent(origin) : base;
     }
 
+    /*
+      O embed do banner: com som, sem controlos, em repeticao.
+
+      Separado do overlay porque a pergunta e outra. O overlay e um trailer que
+      alguem pediu, com teclas para pausar; o banner e o filme a apresentar-se
+      sozinho, e um controlo por cima dele so estorva.
+
+      Com som porque um trailer sem som e um cartaz que se mexe. Para quando a
+      pessoa sai do ecra inicial, porque o iframe deixa de existir com ele.
+    */
+    function bannerEmbedUrl(id) {
+        var origin = pageOrigin();
+        var base = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) +
+            '?autoplay=1&mute=0&controls=0&playsinline=1&rel=0&loop=1&playlist=' +
+            encodeURIComponent(id) + '&modestbranding=1';
+        return origin ? base + '&enablejsapi=1&origin=' + encodeURIComponent(origin) : base;
+    }
+
     /* O overlay pergunta isto para saber se as teclas de transporte tem a
        quem falar. */
     function apiAvailable() { return pageOrigin() !== null; }
@@ -278,6 +296,7 @@ var BuroTrailer = (function () {
         toggleMute: toggleMute,
         isOpen: isOpen,
         sanitize: sanitize,
+        bannerEmbedUrl: bannerEmbedUrl,
         currentVideoId: currentVideoId
     };
 }());

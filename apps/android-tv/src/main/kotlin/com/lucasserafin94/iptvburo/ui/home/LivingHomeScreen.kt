@@ -87,6 +87,15 @@ fun LivingHomeScreen(
     streamingShelves: List<ProviderShelfUi> = emptyList(),
     /** Real synopses for banner titles, keyed by channel id. */
     synopses: Map<String, String> = emptyMap(),
+    /**
+     * The trailer for a banner title, or null to show the artwork.
+     *
+     * Asked of the caller rather than decided here: whether a trailer may play depends on failures
+     * remembered across the session and on what else is playing, neither of which a screen knows.
+     */
+    heroTrailerFor: (String) -> String? = { null },
+    /** Looks up the trailer for a title the banner has reached. */
+    onLoadHeroTrailer: (id: String, title: String) -> Unit = { _, _ -> },
     onItemFocused: (String) -> Unit,
     onOpenItem: (String) -> Unit,
     onImportSource: () -> Unit,
@@ -200,6 +209,8 @@ fun LivingHomeScreen(
                 val resolvedInitialFocusedItemId =
                     section.resolveInitialFocusId(initialFocusedItemId)
                 ReadyHome(
+                    heroTrailerFor = heroTrailerFor,
+                    onLoadHeroTrailer = onLoadHeroTrailer,
                     section = section,
                     sourceCount = sources.distinctBy(HomeSourceSummary::id).size,
                     metrics = metrics,
@@ -237,6 +248,10 @@ private fun ReadyHome(
     sourceCount: Int,
     metrics: HomeLayoutMetrics,
     initialFocusedItemId: String?,
+    /** The trailer for the banner title, or null to show the artwork. */
+    heroTrailerFor: (String) -> String?,
+    /** Looks up the trailer for a title the banner has reached. */
+    onLoadHeroTrailer: (id: String, title: String) -> Unit,
     onItemFocused: (String) -> Unit,
     onOpenItem: (String) -> Unit,
     onOpenSources: () -> Unit,
@@ -294,8 +309,14 @@ private fun ReadyHome(
                 }
             }
             val heroItem = rotation.getOrNull(heroIndex) ?: section.hero
+            // Looked up as the banner reaches each title rather than all twenty up front: most of
+            // them are never seen, so that would be twenty requests for one viewing.
+            LaunchedEffect(heroItem.id) {
+                onLoadHeroTrailer(heroItem.id, heroItem.title)
+            }
             BuroHero(
                 item = heroItem,
+                trailerId = heroTrailerFor(heroItem.id),
                 sourceCount = sourceCount,
                 onItemFocused = { id ->
                     heroFocused = true

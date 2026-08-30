@@ -407,6 +407,8 @@ private fun IptvBuroRoot(
                 onOpenCategory = viewModel::openCategory,
                 onOpenChannel = viewModel::openChannel,
                 onFocusGuideChannel = viewModel::focusGuideChannel,
+                onHeroTrailerFor = viewModel::heroTrailerFor,
+                onLoadHeroTrailer = viewModel::loadHeroTrailer,
                 onSearch = viewModel::search,
                 onPlayMovie = viewModel::playSelectedMovie,
                 onToggleMovieFavorite = viewModel::toggleSelectedMovieFavorite,

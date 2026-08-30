@@ -212,6 +212,10 @@ fun AppShellScreen(
     onOpenChannel: (ChannelUi) -> Unit,
     /** Moves the guide to a channel, which fetches its schedule and those around it. */
     onFocusGuideChannel: (ChannelUi) -> Unit = {},
+    /** The trailer for the banner title, or null to show the artwork. */
+    onHeroTrailerFor: (String) -> String? = { null },
+    /** Looks up the trailer for a title the banner has reached. */
+    onLoadHeroTrailer: (id: String, title: String) -> Unit = { _, _ -> },
     /** Runs a catalogue search. Called once the field settles, not per keystroke. */
     onSearch: (String) -> Unit,
     onPlayMovie: () -> Unit,
@@ -585,6 +589,8 @@ fun AppShellScreen(
                             reminders = state.reminders,
                             streamingShelves = state.subscriptions.shelves,
                             synopses = state.heroSynopses,
+                            heroTrailerFor = onHeroTrailerFor,
+                            onLoadHeroTrailer = onLoadHeroTrailer,
                             initialFocusedItemId =
                                 state.lastFocusedHomeItemId ?: DemoHomeCatalog.HERO_ID,
                             onItemFocused = { itemId ->

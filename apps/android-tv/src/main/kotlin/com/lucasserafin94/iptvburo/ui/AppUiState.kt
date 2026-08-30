@@ -762,6 +762,20 @@ data class AppUiState(
     /** The whole schedule for the open live channel, for the guide. Empty when there is none. */
     val liveSchedule: List<LiveProgramUi> = emptyList(),
     /**
+     * Trailer ids found for banner titles, by home item id.
+     *
+     * A blank value means "asked, and there is none": stored so the rotation does not look the same
+     * title up again on every pass.
+     */
+    val heroTrailers: Map<String, String> = emptyMap(),
+    /**
+     * Trailers that would not play, and when.
+     *
+     * The banner is the first thing anybody sees, so a video that fails must not be retried on
+     * every rotation — the viewer pays a wait each time for the same answer. See BannerTrailer.
+     */
+    val heroTrailerFailures: Map<String, Long> = emptyMap(),
+    /**
      * The channel the guide is sitting on, and the schedules it has fetched.
      *
      * Its own selection, separate from what is playing: the guide is a screen somebody moves down

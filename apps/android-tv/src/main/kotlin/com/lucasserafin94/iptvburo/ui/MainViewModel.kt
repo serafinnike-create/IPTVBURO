@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lucasserafin94.iptvburo.domain.model.Reminder
+import com.lucasserafin94.iptvburo.domain.model.BannerTrailer
 import com.lucasserafin94.iptvburo.domain.model.LiveGuide
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.core.logging.AppLogger
@@ -2530,6 +2531,85 @@ class MainViewModel @Inject constructor(
      * into one screen. Generous enough that the ordinary list arrives whole.
      */
     private val GUIDE_CHANNEL_LIMIT = 400
+
+    // ---------------------------------------------------------------------------------------
+    // The banner's trailer
+    // ---------------------------------------------------------------------------------------
+
+    /** Titles already being looked up, so a rotation does not ask twice for the same one. */
+    private val heroTrailerLookups = mutableSetOf<String>()
+
+    /**
+     * The trailer for a banner title, or null when there is none worth playing.
+     *
+     * Every null is a reason the viewer would otherwise meet a failure on the opening screen. The
+     * decision itself is the shared one, so the three apps cannot drift.
+     */
+    fun heroTrailerFor(itemId: String): String? {
+        val state = mutableState.value
+        val videoId = state.heroTrailers[itemId] ?: return null
+        return videoId.takeIf {
+            BannerTrailer.shouldPlay(
+                videoId = it,
+                failedAtEpochSeconds = state.heroTrailerFailures[itemId],
+                nowEpochSeconds = System.currentTimeMillis() / 1_000L,
+                // A trailer talking over the film somebody chose would not be a feature.
+                somethingElseIsPlaying = state.content is AppContent.Player,
+            )
+        }
+    }
+
+    /**
+     * Looks up the trailer for a banner title, once.
+     *
+     * Only for a title the banner has actually reached: the rotation holds twenty and most of them
+     * are never seen, so looking all twenty up would be twenty requests for one viewing.
+     */
+    fun loadHeroTrailer(itemId: String, title: String) {
+        if (mutableState.value.heroTrailers.containsKey(itemId)) return
+        if (!heroTrailerLookups.add(itemId)) return
+
+        viewModelScope.launch {
+            val apiKey = activeMetadataKey()
+            if (apiKey.isNullOrBlank()) {
+                heroTrailerLookups.remove(itemId)
+                return@launch
+            }
+            val client =
+                TmdbClient(
+                    apiKey = apiKey,
+                    client = okHttpClient,
+                    language = Locale.getDefault().toLanguageTag(),
+                )
+            val videoId =
+                withContext(ioDispatcher) {
+                    runCatching { client.findTrailer(title = title, year = null) }.getOrNull()
+                }
+            heroTrailerLookups.remove(itemId)
+            // Stored even when null — blank reads as "asked, and there is none" — which is what
+            // stops a miss being looked up again on every pass of the rotation.
+            mutableState.update { state ->
+                state.copy(heroTrailers = state.heroTrailers + (itemId to videoId.orEmpty()))
+            }
+        }
+    }
+
+    /**
+     * Records that a banner trailer would not play.
+     *
+     * Called by the screen, because only the player knows. Remembered so the next rotation shows
+     * the artwork immediately rather than failing again in front of the viewer.
+     */
+    fun rememberHeroTrailerFailure(itemId: String) {
+        val nowSeconds = System.currentTimeMillis() / 1_000L
+        mutableState.update { state ->
+            state.copy(
+                heroTrailerFailures =
+                    BannerTrailer.pruneFailures(state.heroTrailerFailures, nowSeconds) +
+                        (itemId to nowSeconds),
+            )
+        }
+    }
 
     private fun loadLiveEpg(channel: ChannelUi, providerStreamId: String) {
         viewModelScope.launch {

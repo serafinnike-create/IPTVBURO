@@ -331,6 +331,9 @@ var BuroApp = (function () {
         screen: 'BOOT',
         screenData: null,
         /* O canal onde o guia esta, e o que ja foi buscado para ele. */
+        /* Trailers encontrados para titulos do banner, e os que nao tocaram. */
+        heroTrailers: {},
+        heroTrailerFailures: {},
         guideFocusedId: null,
         guideSchedules: {},
         guideFetchedAt: {},
@@ -360,6 +363,16 @@ var BuroApp = (function () {
     /* Quantos canais de cada lado do foco valem a pena ir buscar antes de
        serem alcancados. O mesmo numero que o Windows e o Android usam. */
     var GUIDE_PREFETCH_RADIUS = 4;
+
+    /*
+      Quanto tempo uma falha de trailer e lembrada.
+
+      Um video retirado ou tornado privado continua assim, e tentar outra vez
+      a cada volta da rotacao custa uma espera de cada vez pela mesma
+      resposta. Um dia, porque o contrario -- um video que volta -- vale a pena
+      apanhar sem obrigar a reinstalar.
+    */
+    var HERO_TRAILER_MEMORY_SECONDS = 86400;
 
     var NAVIGATION = [
         { section: 'HOME', label: 'home', icon: 'H' },
@@ -595,9 +608,52 @@ var BuroApp = (function () {
         var poster = usableArtworkUrl(item, enrichment && enrichment.artworkUrl) || stored;
         var primary = backdrop || poster;
         var fallback = backdrop && poster && backdrop !== poster ? poster : null;
-        if (!primary) { return ''; }
-        return '<span class="hero-art"><img src="' + attr(primary) + '"' +
-            (fallback ? ' data-artwork-fallback="' + attr(fallback) + '"' : '') + ' alt=""></span>';
+        var trailer = heroTrailerFor(item);
+        if (!primary && !trailer) { return ''; }
+        /*
+          A capa fica por baixo e o trailer por cima.
+
+          Desenhados os dois, e nao um ou o outro: se o embed nao arrancar -- rede
+          fora, video retirado, TV sem o motor -- o que se ve e a capa, exactamente
+          como estava. Um rectangulo preto no primeiro ecra parece uma aplicacao
+          avariada, e e por isso que isto e uma camada e nao uma troca.
+        */
+        return '<span class="hero-art">' +
+            (primary ? '<img src="' + attr(primary) + '"' +
+                (fallback ? ' data-artwork-fallback="' + attr(fallback) + '"' : '') + ' alt="">' : '') +
+            (trailer ? '<iframe class="hero-trailer" src="' + attr(BuroTrailer.bannerEmbedUrl(trailer)) +
+                '" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>' : '') +
+            '</span>';
+    }
+
+    /*
+      O trailer deste titulo do banner, ou nada.
+
+      Cada "nada" e uma razao pela qual a pessoa veria uma falha no primeiro ecra:
+      sem trailer, um que ja falhou, ou alguma coisa que ela escolheu a tocar. A
+      decisao em si e a partilhada, para os tres apps nao divergirem.
+    */
+    function heroTrailerFor(item) {
+        var videoId;
+        var nowSeconds;
+        if (!item || !item.id) { return null; }
+        videoId = state.heroTrailers[item.id];
+        if (!videoId) { return null; }
+        nowSeconds = Math.floor(Date.now() / 1000);
+        /* Um que falhou nao e tentado outra vez durante um dia: um video retirado
+           continua retirado, e cada tentativa custa uma espera a quem esta a ver. */
+        if (heroTrailerRecentlyFailed(item.id, nowSeconds)) { return null; }
+        return BuroDomain.sanitizeYouTubeReference(videoId) ? videoId : null;
+    }
+
+    function heroTrailerRecentlyFailed(itemId, nowSeconds) {
+        var falhouEm = state.heroTrailerFailures[itemId];
+        var idade;
+        if (!falhouEm) { return false; }
+        idade = nowSeconds - falhouEm;
+        /* Um marco do futuro -- relogio corrigido para tras -- conta como expirado,
+           senao um trailer que funciona ficava suprimido para sempre. */
+        return idade >= 0 && idade < HERO_TRAILER_MEMORY_SECONDS;
     }
 
     function rememberDetailBackdrop(itemId, value) {
@@ -3433,6 +3489,12 @@ var BuroApp = (function () {
                                 !liveData || liveData.kind !== 'home' || liveData.requestId !== requestId ||
                                 !state.activeSource || state.activeSource.id !== source.id) { return; }
                         rememberArtwork(item.id, enrichment.artworkUrl);
+                        /* O trailer chega com o resto do enriquecimento, por isso nao
+                           custa um pedido a mais. Guardado mesmo quando nao ha nenhum
+                           -- vazio le-se como "ja se perguntou" -- para a rotacao nao
+                           voltar a perguntar pelo mesmo titulo a cada volta. */
+                        state.heroTrailers[item.id] =
+                            BuroDomain.sanitizeYouTubeReference(enrichment.youtubeTrailerId) || '';
                         current = liveData.heroRotation && liveData.heroRotation[Number(liveData.heroIndex) || 0];
                         if (current && current.id === item.id) { render(); }
                     }

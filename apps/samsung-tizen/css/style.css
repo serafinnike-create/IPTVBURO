@@ -2516,3 +2516,22 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
     grid-column: 1 / -1; margin-top: 10px; font-size: 22px; color: var(--text-muted);
 }
 .guide-empty { font-size: 24px; color: var(--text-muted); }
+
+/*
+  O trailer do banner, por cima da capa.
+
+  Absoluto e por baixo do degrade (que e ::after no .hero-art), para o titulo
+  continuar legivel sobre a imagem em movimento tal como era sobre a parada.
+
+  A capa fica desenhada por baixo: se o embed nao arrancar -- rede fora, video
+  retirado, TV sem o motor -- o que se ve e a capa, exactamente como estava. Um
+  rectangulo preto no primeiro ecra parece uma aplicacao avariada.
+
+  pointer-events: none porque o banner ja tem os seus botoes; um iframe que
+  apanhasse o foco tirava o D-pad a quem o esta a usar.
+*/
+.hero-trailer {
+    position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+    width: 100%; height: 100%; border: 0;
+    pointer-events: none;
+}

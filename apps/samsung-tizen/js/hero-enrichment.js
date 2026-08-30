@@ -58,7 +58,10 @@ var BuroHeroEnrichment = (function () {
             releaseDate: cleanText(details && details.releaseDate, 80) || null,
             rating: isFinite(rating) && rating > 0 ? rating : null,
             artworkUrl: boundedUrl(details && details.artworkUrl),
-            backdropUrl: boundedUrl(details && details.backdropUrl)
+            backdropUrl: boundedUrl(details && details.backdropUrl),
+            /* Vem com o resto, por isso nao custa um pedido a mais. O banner
+               usa-o para tocar o trailer em vez da capa parada. */
+            youtubeTrailerId: cleanText(details && details.youtubeTrailerId, 32) || null
         };
         if (!value.synopsis && !value.genre && !value.duration && !value.rating &&
                 !value.artworkUrl && !value.backdropUrl) { value.status = 'EMPTY'; }
@@ -84,7 +87,8 @@ var BuroHeroEnrichment = (function () {
             releaseDate: value.releaseDate,
             rating: value.rating,
             artworkUrl: value.artworkUrl,
-            backdropUrl: value.backdropUrl
+            backdropUrl: value.backdropUrl,
+            youtubeTrailerId: value.youtubeTrailerId
         };
     }
 
