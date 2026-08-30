@@ -305,6 +305,19 @@ class DesktopUserStore(
      * profile that saw a different library from the one next to it would be confusing rather than
      * useful.
      */
+    /**
+     * Whether the banner's trailer plays with sound.
+     *
+     * Off by default, and not merely because a trailer starts muted: an app that makes noise the
+     * moment it opens is one somebody turns down at the wall. Remembered, so the choice survives
+     * the next launch either way.
+     */
+    fun bannerTrailerSound(): Boolean = preferences.getBoolean(KEY_BANNER_TRAILER_SOUND, false)
+
+    fun setBannerTrailerSound(enabled: Boolean) {
+        preferences.putBoolean(KEY_BANNER_TRAILER_SOUND, enabled)
+    }
+
     fun mergeAllSources(): Boolean = preferences.getBoolean(KEY_MERGE_SOURCES, false)
 
     fun setMergeAllSources(enabled: Boolean) {
@@ -1088,6 +1101,7 @@ class DesktopUserStore(
         const val KEY_FIRST_STARTUP_DONE = "first-startup-done"
         const val KEY_CAST_AUTO_START = "cast-receiver-auto-start"
         const val KEY_MERGE_SOURCES = "merge-all-sources"
+        const val KEY_BANNER_TRAILER_SOUND = "banner-trailer-sound"
         const val KEY_CAST_PAIRING_CODE = "cast-pairing-code"
         const val KEY_CACHE_BUDGET_GB = "cache-budget-gb"
 

@@ -2,6 +2,8 @@ package com.lucasserafin94.iptvburo.metadata
 
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import kotlin.test.AfterTest
@@ -21,17 +23,15 @@ class TmdbClientTest {
         server.start()
     }
 
-    @AfterTest
-    fun tearDown() {
-        server.shutdown()
-    }
-
     private fun client(apiKey: String? = "test-key"): TmdbClient =
         TmdbClient(
             apiKey = apiKey,
             client = OkHttpClient(),
             baseUrl = server.url("/3/").toString().toHttpUrl(),
             imageBaseUrl = "https://images.test",
+            // Answered by the dispatcher above rather than by the real YouTube: the fake ids in
+            // these fixtures are not public videos.
+            youtubeOEmbedUrl = server.url("/oembed").toString(),
         )
 
     private fun json(body: String) =
@@ -254,6 +254,9 @@ class TmdbClientTest {
                 {"site":"YouTube","type":"Trailer","key":"right1"}]}""",
             ),
         )
+        // The client asks YouTube whether the video it picked is still public before handing it
+        // back — a trailer that was pulled loads a card saying so rather than failing.
+        server.enqueue(json("""{"title":"ok"}"""))
 
         assertEquals("right1", client().findTrailer("A Film", 2026))
     }
@@ -264,6 +267,7 @@ class TmdbClientTest {
         server.enqueue(json("""{"results":[{"id":42,"title":"A Film"}]}"""))
         server.enqueue(json("""{"results":[]}"""))
         server.enqueue(json("""{"results":[{"site":"YouTube","type":"Trailer","key":"any1"}]}"""))
+        server.enqueue(json("""{"title":"ok"}"""))
 
         assertEquals("any1", client().findTrailer("A Film", null))
     }
@@ -272,6 +276,7 @@ class TmdbClientTest {
     fun `a teaser counts when no full trailer exists`() {
         server.enqueue(json("""{"results":[{"id":42,"title":"A Film"}]}"""))
         server.enqueue(json("""{"results":[{"site":"YouTube","type":"Teaser","key":"teas1"}]}"""))
+        server.enqueue(json("""{"title":"ok"}"""))
 
         assertEquals("teas1", client().findTrailer("A Film", null))
     }

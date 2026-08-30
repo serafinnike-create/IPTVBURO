@@ -48,6 +48,13 @@ class TmdbClient(
     private val baseUrl: HttpUrl = DEFAULT_BASE_URL.toHttpUrl(),
     private val imageBaseUrl: String = DEFAULT_IMAGE_BASE_URL,
     private val language: String = "pt-BR",
+    /**
+     * Where to ask YouTube whether it will serve a video to an embedder.
+     *
+     * Injected so a test can answer without the network: the fake ids in a fixture are not
+     * public videos, and a real check would refuse every one of them.
+     */
+    private val youtubeOEmbedUrl: String = DEFAULT_YOUTUBE_OEMBED_URL,
 ) {
     /**
      * Failures observed by the current blocking catalogue operation.
@@ -229,21 +236,46 @@ class TmdbClient(
      * Prefers the user's language and falls back to whatever exists: a trailer in the wrong language
      * is better than none.
      */
-    fun findTrailer(title: String, year: Int?): String? {
+    fun findTrailer(
+        title: String,
+        year: Int?,
+        /**
+         * Whether to search the television catalogue rather than the film one.
+         *
+         * TMDb keeps them apart, so a series searched as a film finds nothing at all. This looked
+         * only at films, which meant the home banner never found a trailer for any series it
+         * showed — and it shows series as often as films.
+         */
+        isSeries: Boolean = false,
+    ): String? {
         val key = apiKey?.takeIf(String::isNotBlank) ?: return null
-        if (title.isBlank()) return null
+        // The caller strips the provider's decoration — "Teogonia [L]", "72 Horas em Miami 4K
+        // [DV][HDR]" — because it owns the catalogue's own idea of a display title. Repeating that
+        // here would be a second copy of the rule for the two to disagree over.
+        val query = title.trim()
+        if (query.isBlank()) return null
 
+        val mediaPath = if (isSeries) "tv" else "movie"
         val searchUrl =
             baseUrl.newBuilder()
-                .addPathSegments("search/movie")
+                .addPathSegments("search/$mediaPath")
                 .addQueryParameter("api_key", key)
-                .addQueryParameter("query", title.trim())
+                .addQueryParameter("query", query)
                 .addQueryParameter("language", language)
                 .addQueryParameter("include_adult", "false")
-                .apply { year?.let { addQueryParameter("year", it.toString()) } }
+                // A film carries `year`; a series carries `first_air_date_year`, and sending the
+                // wrong one filters every result away rather than being ignored.
+                .apply {
+                    year?.let {
+                        addQueryParameter(
+                            if (isSeries) "first_air_date_year" else "year",
+                            it.toString(),
+                        )
+                    }
+                }
                 .build()
 
-        val movieId =
+        val id =
             get(searchUrl)
                 ?.getAsJsonArray("results")
                 ?.firstOrNull()
@@ -253,7 +285,60 @@ class TmdbClient(
                 ?: return null
 
         // Language first, then anything: TMDb returns an empty list rather than falling back itself.
-        return trailerFor(movieId, key, language) ?: trailerFor(movieId, key, null)
+        // The first one that actually plays, not merely the first one listed.
+        //
+        // TMDb keeps entries for videos that have since been made private, deleted or blocked, and
+        // an embed for one of those does not fail — it loads a card saying "This video is private".
+        // On the home banner that is worse than no trailer, and it is exactly what was reported.
+        // Asking YouTube whether it will serve the video is the only way to know before showing it.
+        //
+        // The second language is asked for only when the first found nothing playable, so a title
+        // whose trailer is right there costs one request rather than two.
+        return trailerCandidates(id, key, language, mediaPath).firstOrNull(::isEmbeddable)
+            ?: trailerCandidates(id, key, null, mediaPath).firstOrNull(::isEmbeddable)
+    }
+
+    /**
+     * Whether YouTube will actually serve [videoId] to an embedder.
+     *
+     * oEmbed answers 200 for a public, embeddable video and an error for anything else — private,
+     * deleted, or blocked. That is the question the banner needs answered, and no amount of
+     * inspecting the embed afterwards answers it: the player loads perfectly and shows a message.
+     */
+    private fun isEmbeddable(videoId: String): Boolean =
+        runCatching {
+            val url =
+                youtubeOEmbedUrl.toHttpUrl().newBuilder()
+                    .addQueryParameter("format", "json")
+                    .addQueryParameter("url", "https://www.youtube.com/watch?v=$videoId")
+                    .build()
+            client.newCall(Request.Builder().url(url).header("Accept", "application/json").build())
+                .execute()
+                .use { response -> response.isSuccessful }
+        }.getOrDefault(false)
+
+    /** Every YouTube trailer TMDb lists for this title, best first. */
+    private fun trailerCandidates(
+        movieId: Int,
+        key: String,
+        forLanguage: String?,
+        mediaPath: String,
+    ): List<String> {
+        val url =
+            baseUrl.newBuilder()
+                .addPathSegments("$mediaPath/$movieId/videos")
+                .addQueryParameter("api_key", key)
+                .apply { forLanguage?.let { addQueryParameter("language", it) } }
+                .build()
+
+        val videos = get(url)?.getAsJsonArray("results") ?: return emptyList()
+        return videos
+            .mapNotNull { element -> element.takeIf { it.isJsonObject }?.asJsonObject }
+            .filter { video -> video.string("site").equals("YouTube", ignoreCase = true) }
+            // A full trailer before a teaser, which is what somebody means by "the trailer".
+            .sortedByDescending { video -> if (video.string("type") == "Trailer") 1 else 0 }
+            .filter { video -> video.string("type") in TRAILER_TYPES }
+            .mapNotNull { video -> video.string("key") }
     }
 
     /**
@@ -317,10 +402,16 @@ class TmdbClient(
         )
     }
 
-    private fun trailerFor(movieId: Int, key: String, forLanguage: String?): String? {
+    private fun trailerFor(
+        movieId: Int,
+        key: String,
+        forLanguage: String?,
+        /** "movie" or "tv": TMDb keeps their video lists on separate paths. */
+        mediaPath: String = "movie",
+    ): String? {
         val url =
             baseUrl.newBuilder()
-                .addPathSegments("movie/$movieId/videos")
+                .addPathSegments("$mediaPath/$movieId/videos")
                 .addQueryParameter("api_key", key)
                 .apply { forLanguage?.let { addQueryParameter("language", it) } }
                 .build()
@@ -942,6 +1033,15 @@ class TmdbClient(
     private companion object {
         const val DEFAULT_BASE_URL = "https://api.themoviedb.org/3/"
         const val DEFAULT_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
+
+        /**
+         * Where YouTube says whether it will serve a video to an embedder.
+         *
+         * 200 for a public, embeddable video; an error for anything else. TMDb keeps
+         * entries for videos that have since been made private or deleted, and an embed for
+         * one of those does not fail — it loads a card saying so, on the banner.
+         */
+        const val DEFAULT_YOUTUBE_OEMBED_URL = "https://www.youtube.com/oembed"
 
         /** A teaser is still worth showing when no full trailer was published. */
         val TRAILER_TYPES = setOf("Trailer", "Teaser")

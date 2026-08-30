@@ -145,6 +145,15 @@ private const val HOME_SCROLL_PIXELS = 300f
 /** How long each banner title holds before the next one. */
 private const val HERO_ROTATION_MILLIS = 10_000L
 
+/**
+ * How much of the banner's width the trailer covers, from the right.
+ *
+ * The copy column takes the left: an embedded video always paints above Compose, so anything it
+ * covers is gone — the title, the synopsis and the buttons vanished behind it when it filled the
+ * banner. Just over half leaves the text its room and still gives the picture the larger share.
+ */
+private const val HERO_TRAILER_WIDTH_FRACTION = 0.58f
+
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun XtreamDailyHome(
@@ -341,10 +350,23 @@ fun XtreamDailyHome(
                         // surface in the app.
                         val rotation = snapshot.heroRotation.ifEmpty { listOfNotNull(snapshot.hero) }
                         var heroIndex by remember(snapshot.date, snapshot.sourceId) { mutableStateOf(0) }
-                        LaunchedEffect(rotation.size) {
+                        // A minute while a trailer plays, ten seconds otherwise.
+                        //
+                        // Ten seconds is right for a still poster and wrong for a trailer: it cut
+                        // them off mid-sentence, one after another, and the viewer never saw the
+                        // part that decides whether they want the film. Reported after watching it.
+                        var heroPlaying by
+                            remember(snapshot.date, snapshot.sourceId) { mutableStateOf(false) }
+                        LaunchedEffect(rotation.size, heroPlaying) {
                             if (rotation.size <= 1) return@LaunchedEffect
                             while (true) {
-                                delay(HERO_ROTATION_MILLIS)
+                                delay(
+                                    if (heroPlaying) {
+                                        BannerTrailer.HOLD_WHILE_PLAYING_MILLIS
+                                    } else {
+                                        HERO_ROTATION_MILLIS
+                                    },
+                                )
                                 heroIndex = (heroIndex + 1) % rotation.size
                             }
                         }
@@ -364,6 +386,9 @@ fun XtreamDailyHome(
                             onTrailerFailed = {
                                 heroItem?.let(appState::rememberHeroTrailerFailure)
                             },
+                            onTrailerPlaying = { playing -> heroPlaying = playing },
+                            soundOn = appState.bannerTrailerSound,
+                            onToggleSound = appState::toggleBannerTrailerSound,
                             // Scrolling away stops the sound and the picture: the viewer has moved
                             // on from the banner, so it is not what they are looking at.
                             scrolling = homeState.isScrollInProgress,
@@ -504,15 +529,25 @@ fun XtreamDailyHome(
 private fun HeroTrailer(
     youtubeId: String,
     modifier: Modifier = Modifier,
+    /**
+     * Whether the viewer has asked for sound.
+     *
+     * Starting muted is not a preference, it is the only way to start at all: every browser engine
+     * refuses to autoplay audio, and asking for it produced a play button on the banner instead of
+     * a playing trailer — reported exactly that way. Sound is then a switch the viewer holds.
+     */
+    soundOn: Boolean,
     onFailed: () -> Unit,
 ) {
-    val browser = remember(youtubeId) { TrailerBrowser() }
+    // Keyed on the sound too: the flag is baked into the embed URL, so changing it means a new
+    // player rather than a message to the old one.
+    val browser = remember(youtubeId, soundOn) { TrailerBrowser() }
     DisposableEffect(browser) { onDispose { browser.dispose() } }
 
     val panel =
-        remember(youtubeId) {
+        remember(youtubeId, soundOn) {
             runCatching {
-                browser.createComponent(youtubeId = youtubeId, autoplay = true, muted = false)
+                browser.createComponent(youtubeId = youtubeId, autoplay = true, muted = !soundOn)
             }.getOrNull()
         }
 
@@ -546,6 +581,15 @@ private fun DailyHero(
     trailerId: String? = null,
     /** Told when the trailer will not start, so the next rotation shows artwork immediately. */
     onTrailerFailed: () -> Unit = {},
+    /**
+     * Told whether a trailer is on screen, so the rotation can wait for it.
+     *
+     * Ten seconds is right for a still poster and cuts a trailer off mid-sentence.
+     */
+    onTrailerPlaying: (Boolean) -> Unit = {},
+    /** Whether the viewer has asked for sound. Off until they do — see HeroTrailer. */
+    soundOn: Boolean = false,
+    onToggleSound: () -> Unit = {},
     /** True while the viewer is scrolling, which stops the sound and the picture. */
     scrolling: Boolean = false,
 ) {
@@ -574,12 +618,28 @@ private fun DailyHero(
         } else {
             HeroArtFallback()
         }
-        if (playing && trailerId != null) {
-            HeroTrailer(
-                youtubeId = trailerId,
+        // The rotation is told either way, so a title showing only artwork keeps the ordinary
+        // ten-second pace rather than sitting for a minute on a still image.
+        val trailerPlaying = playing && trailerId != null
+        LaunchedEffect(trailerPlaying) { onTrailerPlaying(trailerPlaying) }
+        if (trailerPlaying && trailerId != null) {
+            // The right half only, where the artwork already is.
+            //
+            // An embedded video is a heavyweight surface: it always paints above Compose, whatever
+            // the drawing order says. Filling the banner put it over the title, the synopsis and
+            // the buttons — the copy column disappeared behind a cartoon. The artwork underneath
+            // has always kept its subject on this side for the same reason.
+            Box(
                 modifier = Modifier.fillMaxSize(),
-                onFailed = onTrailerFailed,
-            )
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                HeroTrailer(
+                    youtubeId = trailerId,
+                    modifier = Modifier.fillMaxHeight().fillMaxWidth(HERO_TRAILER_WIDTH_FRACTION),
+                    soundOn = soundOn,
+                    onFailed = onTrailerFailed,
+                )
+            }
         }
 
         // Two passes: horizontal protects the copy column, vertical anchors the hero to the rail
@@ -659,6 +719,35 @@ private fun DailyHero(
                             PaddingValues(horizontal = BuroSpacing.Lg, vertical = 14.dp),
                     ) {
                         Text(text.details, fontWeight = FontWeight.SemiBold)
+                    }
+                    // The sound switch, beside the banner's other buttons.
+                    //
+                    // Not floating over the trailer: an embedded video is a heavyweight surface and
+                    // always paints above Compose, so a control drawn on top of it cannot be seen.
+                    // Here it sits in the text overlay, which is drawn beside the video rather than
+                    // over it, and reads as one of the banner's own controls.
+                    //
+                    // Only while a trailer is playing: with a still poster there is nothing to
+                    // silence, and a dead button is worse than no button.
+                    if (trailerPlaying) {
+                        OutlinedButton(
+                            onClick = onToggleSound,
+                            shape = BuroRadius.Small,
+                            colors =
+                                ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
+                            contentPadding =
+                                PaddingValues(horizontal = BuroSpacing.Md, vertical = 14.dp),
+                        ) {
+                            Text(
+                                text =
+                                    if (soundOn) {
+                                        text.shareStrings.screens.trailerMute
+                                    } else {
+                                        text.shareStrings.screens.trailerUnmute
+                                    },
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
                     }
                 }
             }

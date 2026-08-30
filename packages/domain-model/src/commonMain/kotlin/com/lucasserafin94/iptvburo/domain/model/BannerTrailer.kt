@@ -48,6 +48,18 @@ object BannerTrailer {
      */
     const val SETTLE_MILLIS = 1_200L
 
+    /**
+     * How long the banner holds a title once its trailer is playing.
+     *
+     * The rotation moves every ten seconds, which is right for a still poster and wrong for a
+     * trailer: it cut them off mid-sentence, one after another. A minute is enough to watch the
+     * part that decides whether you want the film.
+     *
+     * Only when a trailer is actually playing. A title showing artwork keeps the ordinary pace,
+     * because there is nothing to interrupt.
+     */
+    const val HOLD_WHILE_PLAYING_MILLIS = 60_000L
+
     /** Whether [videoId] is shaped like something a player can be handed. */
     fun isPlayableId(videoId: String?): Boolean =
         videoId != null && VIDEO_ID.matches(videoId)

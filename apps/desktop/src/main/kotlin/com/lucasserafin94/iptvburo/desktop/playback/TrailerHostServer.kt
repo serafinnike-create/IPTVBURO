@@ -125,9 +125,19 @@ class TrailerHostServer private constructor(
                 <!doctype html>
                 <html><head><meta charset="utf-8"><title>Trailer</title>
                 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}
+                /* The banner is wider than 16:9, and the player letterboxes rather than filling it
+                   — black bars either side of the video, which on the opening screen reads as a
+                   broken image. Scaled to cover instead, the way the artwork underneath is: the
+                   frame is made 16:9 by whichever side is short, then blown up to overflow.
+
+                   The trailer is decoration, so losing a little at the edges is the right trade;
+                   the artwork behind it has always been cropped the same way. */
+                #fit{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+                     width:100vw;height:56.25vw;min-height:100vh;min-width:177.78vh}
                 iframe{border:0;display:block;width:100%;height:100%}</style></head>
-                <body><iframe src="$embed" allow="autoplay; encrypted-media; fullscreen"
-                allowfullscreen></iframe></body></html>
+                <body><div id="fit"><iframe src="$embed"
+                allow="autoplay; encrypted-media; fullscreen"
+                allowfullscreen></iframe></div></body></html>
             """.trimIndent()
         }
     }

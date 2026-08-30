@@ -107,6 +107,56 @@ class BannerTrailerWiringTest {
         )
     }
 
+    /**
+     * The trailer starts muted, which is the only way it starts at all.
+     *
+     * Every browser engine refuses to autoplay audio: asking for sound produced a play button on
+     * the banner instead of a playing trailer. Reported exactly that way.
+     */
+    @Test
+    fun `the trailer starts muted so it can autoplay`() {
+        assertTrue(
+            home.contains("muted = !soundOn"),
+            "o trailer pede som ao arrancar e o motor bloqueia-o",
+        )
+        assertTrue(
+            state.contains("userStore.bannerTrailerSound()"),
+            "a escolha de som nao sobrevive ao proximo arranque",
+        )
+    }
+
+    /** And the viewer holds a switch for the sound, both ways round. */
+    @Test
+    fun `the viewer can turn the sound on and off`() {
+        assertTrue(
+            home.contains("onClick = onToggleSound"),
+            "nao ha como ligar nem calar o som do banner",
+        )
+        assertTrue(
+            state.contains("fun toggleBannerTrailerSound()"),
+            "nada guarda a escolha do som",
+        )
+    }
+
+    /**
+     * The banner holds a title while its trailer plays.
+     *
+     * Ten seconds is right for a still poster and cut every trailer off mid-sentence, one after
+     * another — the viewer never saw the part that decides whether they want the film.
+     */
+    @Test
+    fun `the rotation waits while a trailer is playing`() {
+        assertTrue(
+            home.contains("BannerTrailer.HOLD_WHILE_PLAYING_MILLIS"),
+            "a rotacao corta o trailer a meio",
+        )
+        // Only while one is actually playing: a title showing artwork keeps the ordinary pace.
+        assertTrue(
+            home.contains("LaunchedEffect(trailerPlaying) { onTrailerPlaying(trailerPlaying) }"),
+            "uma capa parada ficaria um minuto no ecra",
+        )
+    }
+
     /** A live channel is never asked about: a channel has no trailer. */
     @Test
     fun `a live channel is not looked up`() {

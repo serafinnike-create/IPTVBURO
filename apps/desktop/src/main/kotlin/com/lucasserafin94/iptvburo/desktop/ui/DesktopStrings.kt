@@ -654,6 +654,8 @@ data class DesktopStrings(
                             mergeSourcesFailed = "%1${'$'}s no respondió. Las demás listas siguen funcionando.",
                             mergeSourcesOffline = "No responde",
                             mergeSourcesRemoveOffline = "Quitar las listas que no responden (%1${'$'}d)",
+                            trailerUnmute = "Activar el sonido",
+                            trailerMute = "Silenciar",
                             guideTitle = "Guía",
                             guideNoSchedule = "Este canal no envió programación.",
                             guideWatch = "Ver este canal",
@@ -1430,6 +1432,8 @@ data class DesktopStrings(
                             mergeSourcesFailed = "%1${'$'}s não respondeu. As outras listas continuam a funcionar.",
                             mergeSourcesOffline = "Não responde",
                             mergeSourcesRemoveOffline = "Remover as listas que nao respondem (%1${'$'}d)",
+                            trailerUnmute = "Ligar o som",
+                            trailerMute = "Silenciar",
                             guideTitle = "Guia",
                             guideNoSchedule = "Este canal nao enviou programacao.",
                             guideWatch = "Ver este canal",
@@ -2206,6 +2210,8 @@ data class DesktopStrings(
                             mergeSourcesFailed = "%1${'$'}s did not answer. Your other playlists are still working.",
                             mergeSourcesOffline = "Not answering",
                             mergeSourcesRemoveOffline = "Remove the lists that are not answering (%1${'$'}d)",
+                            trailerUnmute = "Turn the sound on",
+                            trailerMute = "Mute",
                             guideTitle = "Guide",
                             guideNoSchedule = "This channel sent no schedule.",
                             guideWatch = "Watch this channel",
@@ -2981,6 +2987,8 @@ data class DesktopStrings(
                             mergeSourcesFailed = "%1${'$'}s hat nicht geantwortet. Die anderen Listen funktionieren weiter.",
                             mergeSourcesOffline = "Antwortet nicht",
                             mergeSourcesRemoveOffline = "Nicht antwortende Listen entfernen (%1${'$'}d)",
+                            trailerUnmute = "Ton einschalten",
+                            trailerMute = "Stummschalten",
                             guideTitle = "Programm",
                             guideNoSchedule = "Dieser Sender hat kein Programm gesendet.",
                             guideWatch = "Diesen Sender ansehen",
@@ -3761,6 +3769,8 @@ data class DesktopStrings(
                             mergeSourcesFailed = "%1${'$'}s non ha risposto. Le altre liste continuano a funzionare.",
                             mergeSourcesOffline = "Non risponde",
                             mergeSourcesRemoveOffline = "Rimuovi le liste che non rispondono (%1${'$'}d)",
+                            trailerUnmute = "Attiva l'audio",
+                            trailerMute = "Silenzia",
                             guideTitle = "Guida",
                             guideNoSchedule = "Questo canale non ha inviato la programmazione.",
                             guideWatch = "Guarda questo canale",
@@ -4919,6 +4929,18 @@ data class ScreenStrings(
      * confirmation each; this is the same decision made once.
      */
     val mergeSourcesRemoveOffline: String,
+    /**
+     * The banner trailer's sound switch.
+     *
+     * It starts muted because that is the only way it starts at all — every engine refuses to
+     * autoplay audio — so this is both how the sound is turned on and how it is silenced when the
+     * app opens and the viewer did not want it. Reported both ways round.
+     *
+     * Here rather than on DesktopStrings: that constructor sits two parameters from the JVM's limit
+     * of 254, and crossing it ships an app that will not start at all.
+     */
+    val trailerUnmute: String,
+    val trailerMute: String,
     /** The guide screen: channels one side, what is on them the other. */
     val guideTitle: String,
     /** Said when a channel's schedule is empty, so an empty column is not read as a fault. */

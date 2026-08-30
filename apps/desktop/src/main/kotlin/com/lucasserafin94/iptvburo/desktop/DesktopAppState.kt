@@ -1152,6 +1152,22 @@ class DesktopAppState(
         private set
 
     /**
+     * Whether the banner's trailer plays with sound.
+     *
+     * Off until asked for. A trailer must start muted — every engine refuses to autoplay audio, and
+     * asking for it produced a play button instead of a playing trailer — so this is how the sound
+     * is turned on, and how it is silenced when the app opens and the viewer did not want it.
+     */
+    var bannerTrailerSound by mutableStateOf(userStore.bannerTrailerSound())
+        private set
+
+    fun toggleBannerTrailerSound() {
+        val enabled = !bannerTrailerSound
+        userStore.setBannerTrailerSound(enabled)
+        bannerTrailerSound = enabled
+    }
+
+    /**
      * Stores the choice.
      *
      * Takes effect on the next load rather than immediately: rebuilding the catalogue underneath
@@ -3282,6 +3298,9 @@ class DesktopAppState(
                         metadataClient.findTrailer(
                             title = item.name.editorialCatalogTitle(),
                             year = item.year,
+                            // TMDb keeps films and series apart, so a series searched as a film
+                            // finds nothing — and the banner shows series as often as films.
+                            isSeries = item.contentType == XtreamContentType.SERIES,
                         )
                     }
                 }.getOrNull()
