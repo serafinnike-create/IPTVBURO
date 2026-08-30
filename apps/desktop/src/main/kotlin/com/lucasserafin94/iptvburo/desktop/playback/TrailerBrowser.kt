@@ -138,9 +138,20 @@ class TrailerBrowser {
                 val settings =
                     config.cefSettings.apply {
                         windowless_rendering_enabled = false
-                        // Nothing about a trailer needs to survive the session, and a browser cache
-                        // inside an IPTV app is a store of browsing history nobody asked for.
-                        cache_path = null
+                        // A cache directory of its own, thrown away when the app exits.
+                        //
+                        // `cache_path = null` looked like the private choice, and it was what made
+                        // every trailer a white rectangle: with no cache path CEF refuses to come
+                        // up at all — `N_Initialize failed` in its own log, and then every call on
+                        // every browser answering "can't invoke native method … before native
+                        // context initialized". The player was created, sized and parented, and had
+                        // no engine behind it. That took eight wrong guesses to find, because from
+                        // the outside it looks exactly like a rendering fault.
+                        //
+                        // The privacy intent is kept, and kept better: a directory nobody else
+                        // shares, deleted on the way out, so nothing about what was watched
+                        // survives the session. See [scratchCache].
+                        cache_path = scratchCache()
                         persist_session_cookies = false
                         log_severity = CefSettings.LogSeverity.LOGSEVERITY_DISABLE
                         // Black, because Chromium's own default is white.
@@ -177,6 +188,26 @@ class TrailerBrowser {
          * ordinary case rather than an error, so this must be cheap and must never throw: the caller
          * falls back to the system browser.
          */
+        /**
+         * A cache directory for Chromium, emptied when the app exits.
+         *
+         * CEF will not start without one — see the note where this is used. What it must not be is
+         * somewhere permanent: a browser cache inside an IPTV app is a record of what was watched,
+         * and nobody asked for that. So it lives under the system temp directory, under this
+         * install's own name, and a shutdown hook deletes it.
+         *
+         * Best effort on the way out: a machine that loses power leaves the directory behind, and
+         * the next run reuses that same path and clears it at exit anyway.
+         */
+        private fun scratchCache(): String {
+            val dir = File(System.getProperty("java.io.tmpdir"), "iptvburo-trailer-cache")
+            dir.mkdirs()
+            Runtime.getRuntime().addShutdownHook(
+                Thread { runCatching { dir.deleteRecursively() } },
+            )
+            return dir.absolutePath
+        }
+
         private fun locateNativeRuntime(): File? {
             val resources = System.getProperty("compose.application.resources.dir")?.let(::File)
             val workingDirectory = File(System.getProperty("user.dir"))
