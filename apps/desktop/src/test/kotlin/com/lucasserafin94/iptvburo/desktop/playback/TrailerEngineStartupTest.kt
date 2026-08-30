@@ -81,6 +81,26 @@ class TrailerEngineStartupTest {
     }
 
     /**
+     * Chromium is told it may start a video without being clicked first.
+     *
+     * Its default policy is `document-user-activation-required`: a page may not play anything until
+     * somebody has interacted with it. A banner nobody clicks never satisfies that, so the trailer
+     * sat on its first frame however correct the embed was — `autoplay=1` and `mute=1` both arrived
+     * intact and were simply refused. Reported as the video not starting on its own, in the banner
+     * and on the Descobrir card alike.
+     *
+     * This is a separate rule from the muted-audio one, which stays: the trailer still starts
+     * silent and raises the sound once it is playing.
+     */
+    @Test
+    fun `the engine may start a video nobody clicked`() {
+        assertTrue(
+            browser.contains("--autoplay-policy=no-user-gesture-required"),
+            "o Chromium exige um clique antes de tocar, e o banner nunca leva nenhum",
+        )
+    }
+
+    /**
      * Chromium's logging stays off in what ships.
      *
      * It was turned on to find this, and it writes a file naming every page the engine loads —

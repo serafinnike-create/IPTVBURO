@@ -172,7 +172,19 @@ class TrailerBrowser {
                         background_color = ColorType(255, 8, 9, 10)
                     }
                 CefApp.startup(config.appArgs)
-                CefApp.getInstance(config.appArgs, settings).also { app = it }
+                // Chromium's autoplay policy, relaxed for this embedded engine only.
+                //
+                // The default is `document-user-activation-required`: a page may not start a video
+                // until somebody has clicked in it. A banner nobody clicks never satisfies that, so
+                // the trailer sat on its first frame however correct the embed URL was — autoplay=1
+                // and mute=1 both arrived intact and were simply refused.
+                //
+                // This is not the muted-audio rule, which stays: the trailer still starts silent
+                // and raises the sound once it is playing. It is the separate policy about who
+                // asked for the video, and the answer here is that the app did, deliberately, on a
+                // page it serves itself.
+                val args = config.appArgs + "--autoplay-policy=no-user-gesture-required"
+                CefApp.getInstance(args, settings).also { app = it }
             }.getOrElse { error ->
                 // The type only. The message was included here on the reasoning that a Chromium
                 // startup failure talks about libraries rather than media — but the exception is

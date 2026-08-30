@@ -2302,12 +2302,19 @@ class DesktopAppState(
      * a game somebody plays in bursts into a screen that waits.
      */
     fun discoverySynopsis(item: XtreamCatalogItem): String? =
-        (movieDetailsStatus as? MovieDetailsStatus.Loaded)
-            ?.details
-            ?.takeIf { details -> details.title == item.name }
-            ?.plot
-            // Hidden when the provider's encoding destroyed the accents, the same as the banner.
-            ?.let(ProviderText::usableOrNull)
+        // The banner's own store, not the details page's.
+        //
+        // This read movieDetailsStatus, which is only filled once somebody opens a title — and on a
+        // Descobrir card nobody has opened anything, so it was always null and the synopsis never
+        // appeared. Reported as exactly that. The banner's store is fetched per title, cached, and
+        // already handles series, which the details page's does not here.
+        heroSynopsisFor(item)
+            ?: (movieDetailsStatus as? MovieDetailsStatus.Loaded)
+                ?.details
+                ?.takeIf { details -> details.title == item.name }
+                ?.plot
+                // Hidden when the provider's encoding destroyed the accents, same as the banner.
+                ?.let(ProviderText::usableOrNull)
 
     /**
      * The genres to print under the title.

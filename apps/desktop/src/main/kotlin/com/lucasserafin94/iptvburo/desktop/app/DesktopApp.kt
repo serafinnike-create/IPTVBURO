@@ -759,7 +759,12 @@ fun DesktopApp(
                                 // The banner's own lookup, so a title with a trailer there has one
                                 // here rather than the two screens disagreeing about the same film.
                                 trailerFor = appState::heroTrailerFor,
-                                onNeedTrailer = appState::loadHeroTrailer,
+                                // The synopsis as well as the trailer: the card needs something
+                                // to read, and nothing else on this screen fetches one.
+                                onNeedTrailer = { item ->
+                                    appState.loadHeroTrailer(item)
+                                    appState.loadHeroSynopsis(item)
+                                },
                                 onTrailerFailed = appState::rememberHeroTrailerFailure,
                                 onPassOver = appState::passOverDiscovery,
                                 soundOn = appState.bannerTrailerSound,

@@ -172,7 +172,18 @@ fun DiscoveryScreen(
                         else -> false
                     }
                 }.verticalScroll(rememberScrollState())
-                .padding(BuroSpacing.Lg),
+                // More room at the foot than at the head.
+                //
+                // The decision buttons are the last thing in the card and were reported cut off at
+                // the bottom of the window: an even padding leaves them flush against the edge, and
+                // a round button flush against an edge reads as clipped even when it is not. This
+                // is the same trick the shelves use, and it also gives the scroll somewhere to end.
+                .padding(
+                    start = BuroSpacing.Lg,
+                    end = BuroSpacing.Lg,
+                    top = BuroSpacing.Lg,
+                    bottom = BuroSpacing.Xxl,
+                ),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
     ) {
@@ -282,10 +293,10 @@ private fun DiscoveryCard(
     // Centring made the poster jump: each card's text is a different height, and the whole row was
     // recentred around it, so the artwork moved between cards even though it never changed size.
     // Pinned to the top it stays exactly where the eye left it.
-    Row(
+    Column(
         // The full width, always — with a trailer or without one.
         //
-        // The row is centred by the column outside it, so a row that shrinks when there is no
+        // This is centred by the column outside it, so something that shrinks when there is no
         // trailer gets recentred, and the poster slides to the middle of the screen and back as the
         // deck moves. Reported as the artwork never staying still. Holding the width means the slot
         // beside the poster is simply empty when a card has no trailer, and the poster does not
@@ -294,6 +305,9 @@ private fun DiscoveryCard(
             Modifier
                 .align(Alignment.TopCenter)
                 .width(CARD_WIDTH + BuroSpacing.Lg + trailerWidth),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+    Row(
         horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Lg),
         verticalAlignment = Alignment.Top,
     ) {
@@ -450,23 +464,6 @@ private fun DiscoveryCard(
                         blendIntoHero = false,
                     )
                 }
-                // The synopsis, under the video and as wide as it.
-                //
-                // It used to sit beside the poster, in a 300dp strip competing with the artwork.
-                // Here it has the video's full width, which is where there is room to actually read
-                // it — and the point of the card is deciding, which needs reading.
-                synopsis?.takeIf(String::isNotBlank)?.let { plot ->
-                    Spacer(Modifier.height(BuroSpacing.Sm))
-                    Text(
-                        text = plot,
-                        modifier = Modifier.width(trailerWidth),
-                        color = BuroColors.TextSubtle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 5,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
                 Spacer(Modifier.height(BuroSpacing.Sm))
                 // Beside the video rather than over it: the player is a browser surface that always
                 // paints above Compose, so a control laid on top of it is simply not there.
@@ -496,6 +493,25 @@ private fun DiscoveryCard(
                 }
             }
         }
+
+        // The synopsis, under the whole row.
+        //
+        // Under the row and not inside the video's column, because a card with no trailer has no
+        // such column — and then the synopsis vanished entirely, which is what was reported. The
+        // point of the card is deciding, and deciding needs something to read whether or not there
+        // is a video beside the poster.
+        synopsis?.takeIf(String::isNotBlank)?.let { plot ->
+            Spacer(Modifier.height(BuroSpacing.Md))
+            Text(
+                text = plot,
+                modifier = Modifier.fillMaxWidth(),
+                color = BuroColors.TextSubtle,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
     }
     }
 }

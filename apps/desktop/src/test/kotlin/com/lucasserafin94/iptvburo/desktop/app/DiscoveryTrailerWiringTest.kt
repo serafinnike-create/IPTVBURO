@@ -26,9 +26,16 @@ class DiscoveryTrailerWiringTest {
             screen.contains("top?.let(onNeedTrailer)"),
             "o cartao nunca procura trailer nenhum",
         )
+        // The card asks for the synopsis too, so this is no longer a one-line method reference.
+        // What matters is that reaching a card fetches both: the trailer to play, and something to
+        // read while deciding — the synopsis was missing entirely because nothing here fetched one.
         assertTrue(
-            app.contains("onNeedTrailer = appState::loadHeroTrailer"),
-            "a procura do cartao nao esta ligada a nada",
+            app.contains("appState.loadHeroTrailer(item)"),
+            "a procura do trailer do cartao nao esta ligada a nada",
+        )
+        assertTrue(
+            app.contains("appState.loadHeroSynopsis(item)"),
+            "o cartao nunca pede a sinopse, e fica sem nada para ler",
         )
     }
 
