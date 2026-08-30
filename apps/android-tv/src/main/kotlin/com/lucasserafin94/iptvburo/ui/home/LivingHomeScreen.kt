@@ -94,6 +94,9 @@ fun LivingHomeScreen(
      * remembered across the session and on what else is playing, neither of which a screen knows.
      */
     heroTrailerFor: (String) -> String? = { null },
+    /** Whether the banner trailer carries sound, and the switch that changes it. */
+    bannerTrailerSound: Boolean = false,
+    onToggleBannerTrailerSound: (() -> Unit)? = null,
     /** Looks up the trailer for a title the banner has reached. */
     onLoadHeroTrailer: (id: String, title: String) -> Unit = { _, _ -> },
     onItemFocused: (String) -> Unit,
@@ -210,6 +213,8 @@ fun LivingHomeScreen(
                     section.resolveInitialFocusId(initialFocusedItemId)
                 ReadyHome(
                     heroTrailerFor = heroTrailerFor,
+                    bannerTrailerSound = bannerTrailerSound,
+                    onToggleBannerTrailerSound = onToggleBannerTrailerSound,
                     onLoadHeroTrailer = onLoadHeroTrailer,
                     section = section,
                     sourceCount = sources.distinctBy(HomeSourceSummary::id).size,
@@ -250,6 +255,8 @@ private fun ReadyHome(
     initialFocusedItemId: String?,
     /** The trailer for the banner title, or null to show the artwork. */
     heroTrailerFor: (String) -> String?,
+    bannerTrailerSound: Boolean,
+    onToggleBannerTrailerSound: (() -> Unit)?,
     /** Looks up the trailer for a title the banner has reached. */
     onLoadHeroTrailer: (id: String, title: String) -> Unit,
     onItemFocused: (String) -> Unit,
@@ -317,6 +324,8 @@ private fun ReadyHome(
             BuroHero(
                 item = heroItem,
                 trailerId = heroTrailerFor(heroItem.id),
+                trailerSoundOn = bannerTrailerSound,
+                onToggleTrailerSound = onToggleBannerTrailerSound,
                 sourceCount = sourceCount,
                 onItemFocused = { id ->
                     heroFocused = true

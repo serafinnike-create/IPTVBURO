@@ -96,4 +96,8 @@
     <string name="home_badge_series">SERIE</string>
     <string name="home_rail_releases">Uscite %1$d</string>
     <string name="home_badge_hero">IN EVIDENZA</string>
+    <!-- The banner trailer's sound switch. It always starts muted: no engine
+         autoplays audio, so the sound is raised once it is already playing. -->
+    <string name="buro_trailer_unmute">Attiva l\'audio</string>
+    <string name="buro_trailer_mute">Silenzia</string>
 </resources>

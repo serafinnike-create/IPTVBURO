@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.runtime.Composable
@@ -82,6 +84,15 @@ fun BuroHero(
      * viewer chose already playing. The banner does not decide any of that; see BannerTrailer.
      */
     trailerId: String? = null,
+    /** Whether that trailer carries sound. Ignored when there is no trailer to hear. */
+    trailerSoundOn: Boolean = false,
+    /**
+     * Turns the trailer's sound on or off, or null where no switch belongs.
+     *
+     * Null on the demonstration banner, which plays nothing: a control for a sound that cannot
+     * happen is a button that does nothing when pressed.
+     */
+    onToggleTrailerSound: (() -> Unit)? = null,
 ) {
     BoxWithConstraints(
         modifier = modifier
@@ -135,6 +146,7 @@ fun BuroHero(
             MutedTrailerBackdrop(
                 youtubeId = trailerId,
                 modifier = Modifier.fillMaxSize(),
+                soundOn = trailerSoundOn,
             )
         }
         Box(
@@ -215,20 +227,48 @@ fun BuroHero(
             // is that title — "Ver fontes" was source administration sitting on the most prominent
             // surface in the app, where the desktop puts Watch. Sources remain reachable from the
             // navigation, which is where managing them belongs.
-            HeroAction(
-                label =
-                    if (item.isDemonstration) {
-                        stringResource(R.string.buro_home_view_story)
-                    } else {
-                        stringResource(R.string.buro_home_view_details)
-                    },
-                icon = Icons.Default.Info,
-                primary = true,
-                onClick = { onOpenItem(item.id) },
-                onFocused = { onItemFocused(item.id) },
-                requestFocus = requestFocus,
-                modifier = if (phonePortrait) Modifier.fillMaxWidth() else Modifier,
-            )
+            // Still one action. The sound switch appears only while a trailer is actually playing,
+            // and it is not a second thing to do with the title — it controls what is already
+            // making noise on screen. With no trailer there is nothing to silence and the row is
+            // exactly the single button it was.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                HeroAction(
+                    label =
+                        if (item.isDemonstration) {
+                            stringResource(R.string.buro_home_view_story)
+                        } else {
+                            stringResource(R.string.buro_home_view_details)
+                        },
+                    icon = Icons.Default.Info,
+                    primary = true,
+                    onClick = { onOpenItem(item.id) },
+                    onFocused = { onItemFocused(item.id) },
+                    requestFocus = requestFocus,
+                    modifier = if (phonePortrait) Modifier.weight(1f) else Modifier,
+                )
+                if (trailerId != null && onToggleTrailerSound != null) {
+                    HeroAction(
+                        label =
+                            if (trailerSoundOn) {
+                                stringResource(R.string.buro_trailer_mute)
+                            } else {
+                                stringResource(R.string.buro_trailer_unmute)
+                            },
+                        icon =
+                            if (trailerSoundOn) {
+                                Icons.AutoMirrored.Filled.VolumeOff
+                            } else {
+                                Icons.AutoMirrored.Filled.VolumeUp
+                            },
+                        primary = false,
+                        onClick = onToggleTrailerSound,
+                        onFocused = { onItemFocused(item.id) },
+                    )
+                }
+            }
         }
     }
 }

@@ -95,4 +95,8 @@
     <string name="home_badge_series">SERIES</string>
     <string name="home_rail_releases">%1$d releases</string>
     <string name="home_badge_hero">FEATURED</string>
+    <!-- The banner trailer's sound switch. It always starts muted: no engine
+         autoplays audio, so the sound is raised once it is already playing. -->
+    <string name="buro_trailer_unmute">Turn the sound on</string>
+    <string name="buro_trailer_mute">Mute</string>
 </resources>

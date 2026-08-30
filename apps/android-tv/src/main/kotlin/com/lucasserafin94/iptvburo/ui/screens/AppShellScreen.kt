@@ -214,6 +214,9 @@ fun AppShellScreen(
     onFocusGuideChannel: (ChannelUi) -> Unit = {},
     /** The trailer for the banner title, or null to show the artwork. */
     onHeroTrailerFor: (String) -> String? = { null },
+    /** Whether the banner trailer carries sound, and the switch that changes it. */
+    bannerTrailerSound: Boolean = false,
+    onToggleBannerTrailerSound: (() -> Unit)? = null,
     /** Looks up the trailer for a title the banner has reached. */
     onLoadHeroTrailer: (id: String, title: String) -> Unit = { _, _ -> },
     /** Runs a catalogue search. Called once the field settles, not per keystroke. */
@@ -590,6 +593,8 @@ fun AppShellScreen(
                             streamingShelves = state.subscriptions.shelves,
                             synopses = state.heroSynopses,
                             heroTrailerFor = onHeroTrailerFor,
+                            bannerTrailerSound = bannerTrailerSound,
+                            onToggleBannerTrailerSound = onToggleBannerTrailerSound,
                             onLoadHeroTrailer = onLoadHeroTrailer,
                             initialFocusedItemId =
                                 state.lastFocusedHomeItemId ?: DemoHomeCatalog.HERO_ID,

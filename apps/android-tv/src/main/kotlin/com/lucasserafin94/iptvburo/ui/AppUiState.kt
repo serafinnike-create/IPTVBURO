@@ -843,6 +843,13 @@ data class AppUiState(
     /** How subtitles are drawn, applied to the next player that opens. */
     val subtitles: SubtitlePresentation = SubtitlePresentation(),
     /**
+     * Whether the home banner's trailer carries sound.
+     *
+     * Off until somebody asks. Note it never changes how the trailer *starts*: no engine autoplays
+     * audio, so it always begins muted and the sound is raised once it is genuinely playing.
+     */
+    val bannerTrailerSound: Boolean = false,
+    /**
      * What the cast sheet is doing. [CastUiState.Idle] means it is closed.
      *
      * Held here rather than inside a composable so that leaving the details screen mid-search does

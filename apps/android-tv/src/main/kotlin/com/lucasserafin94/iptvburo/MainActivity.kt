@@ -408,6 +408,8 @@ private fun IptvBuroRoot(
                 onOpenChannel = viewModel::openChannel,
                 onFocusGuideChannel = viewModel::focusGuideChannel,
                 onHeroTrailerFor = viewModel::heroTrailerFor,
+                bannerTrailerSound = state.bannerTrailerSound,
+                onToggleBannerTrailerSound = viewModel::toggleBannerTrailerSound,
                 onLoadHeroTrailer = viewModel::loadHeroTrailer,
                 onSearch = viewModel::search,
                 onPlayMovie = viewModel::playSelectedMovie,

@@ -49,6 +49,19 @@ internal fun MutedTrailerBackdrop(
             webView = null
         }
     }
+    /**
+     * Answers the switch while a trailer is already on screen.
+     *
+     * Without this, turning the sound on would do nothing until the banner rotated to the next
+     * title — the sound is otherwise raised from the playing callback, which for the trailer
+     * currently running has long since passed. Muting works the same way round, and matters more:
+     * somebody reaching for the switch to stop the noise means now, not at the next title.
+     */
+    LaunchedEffect(soundOn, pageReady) {
+        val live = webView ?: return@LaunchedEffect
+        if (!pageReady) return@LaunchedEffect
+        live.evaluateJavascript(if (soundOn) TRAILER_RAISE_SOUND else TRAILER_SILENCE, null)
+    }
     if (!visible) return
 
     // Fully transparent until the embed reports itself ready, and **removed from the composition**
@@ -148,6 +161,21 @@ private val TRAILER_RAISE_SOUND =
       var target = frame.contentWindow || frame;
       target.postMessage('{"event":"command","func":"unMute","args":[]}', '*');
       target.postMessage('{"event":"command","func":"setVolume","args":[100]}', '*');
+    })();
+    """.trimIndent()
+
+/**
+ * Silences a trailer that is already playing.
+ *
+ * Somebody reaching for the switch to stop the noise means now, not at the next title — so muting
+ * is answered on the running player rather than only on the one after it.
+ */
+private val TRAILER_SILENCE =
+    """
+    (function () {
+      var frame = document.querySelector('iframe') || window;
+      var target = frame.contentWindow || frame;
+      target.postMessage('{"event":"command","func":"mute","args":[]}', '*');
     })();
     """.trimIndent()
 

@@ -131,6 +131,74 @@ class BannerTrailerWiringTest {
     }
 
     /**
+     * The sound switch reaches the banner, and only while there is a trailer to hear.
+     *
+     * A control for a sound that cannot happen is a button that does nothing when pressed, and on a
+     * TV it would also be one more stop on the D-pad path to the only action that matters.
+     */
+    @Test
+    fun `the sound switch is offered only while a trailer plays`() {
+        assertTrue(
+            "o botao de som nao esta no banner",
+            components.contains("onToggleTrailerSound"),
+        )
+        assertTrue(
+            "o botao aparece mesmo sem trailer para ouvir",
+            components.contains("if (trailerId != null && onToggleTrailerSound != null)"),
+        )
+        assertTrue(
+            "o interruptor nao chega ao ecra a partir da app",
+            activity.contains("onToggleBannerTrailerSound = viewModel::toggleBannerTrailerSound"),
+        )
+    }
+
+    /**
+     * The choice is remembered, so nobody has to make it twice.
+     *
+     * Household-wide rather than per profile, matching Windows: whether the room wants noise from
+     * the opening screen is a property of the room.
+     */
+    @Test
+    fun `the sound choice survives the app closing`() {
+        val preferences =
+            Path.of(
+                "src/main/kotlin/com/lucasserafin94/iptvburo/data/preferences/BannerSoundPreferences.kt",
+            ).readText()
+
+        assertTrue(
+            "a escolha do som nao e guardada em lado nenhum",
+            preferences.contains("booleanPreferencesKey(\"banner_trailer_sound\")"),
+        )
+        assertTrue(
+            "o som comeca ligado, e a TV passa a falar sozinha ao ligar",
+            preferences.contains("stored[SOUND_ON] ?: false"),
+        )
+    }
+
+    /**
+     * Turning the sound on answers the trailer already playing, not only the next one.
+     *
+     * The sound is otherwise raised from the playing callback, which for the trailer currently on
+     * screen has long since passed — so without this the switch would appear to do nothing until
+     * the banner rotated. Silencing matters more still: somebody reaching for it means now.
+     */
+    @Test
+    fun `the switch answers the trailer already on screen`() {
+        val backdrop =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/ui/screens/MutedTrailerBackdrop.kt")
+                .readText()
+
+        assertTrue(
+            "nada silencia um trailer que ja esta a tocar",
+            backdrop.contains("TRAILER_SILENCE"),
+        )
+        assertTrue(
+            "mudar o interruptor nao mexe no trailer que ja esta no ecra",
+            backdrop.contains("LaunchedEffect(soundOn, pageReady)"),
+        )
+    }
+
+    /**
      * And the sound is raised only from the playing callback.
      *
      * Anywhere earlier is a request the engine can still refuse; by the time the player reports

@@ -29,6 +29,7 @@ import com.lucasserafin94.iptvburo.data.local.entity.FavoriteEntity
 import com.lucasserafin94.iptvburo.data.local.entity.PlaybackProgressEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ProfileEntity
 import com.lucasserafin94.iptvburo.data.preferences.CatalogueGuard
+import com.lucasserafin94.iptvburo.data.preferences.BannerSoundSettings
 import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
 import com.lucasserafin94.iptvburo.data.local.dao.SeriesWatchDao
 import com.lucasserafin94.iptvburo.data.local.entity.SeriesWatchEntity
@@ -113,6 +114,49 @@ class MainViewModelNavigationTest {
      *
      * The television case is not covered by that reversal and is asserted separately below.
      */
+    /**
+     * The banner starts silent, and the switch turns the sound on.
+     *
+     * Off by default because a television that starts talking on its own the moment it is switched
+     * on is worse than a quiet one. What the switch cannot change is how a trailer *starts*: no
+     * engine autoplays audio, so every one begins muted and the sound is raised once it is playing.
+     */
+    @Test
+    fun `the banner trailer is silent until somebody asks for sound`() = runTest {
+        val viewModel = createViewModel(FakeCatalogRepository())
+        runCurrent()
+
+        assertFalse(
+            "a TV comeca a falar sozinha sem ninguem pedir",
+            viewModel.state.value.bannerTrailerSound,
+        )
+
+        viewModel.toggleBannerTrailerSound()
+        runCurrent()
+
+        assertTrue(
+            "o interruptor do som nao liga nada",
+            viewModel.state.value.bannerTrailerSound,
+        )
+    }
+
+    /** And it turns it off again, which is the half somebody reaches for in a hurry. */
+    @Test
+    fun `the switch silences the banner again`() = runTest {
+        val viewModel = createViewModel(FakeCatalogRepository())
+        runCurrent()
+
+        viewModel.toggleBannerTrailerSound()
+        runCurrent()
+        viewModel.toggleBannerTrailerSound()
+        runCurrent()
+
+        assertFalse(
+            "nao ha forma de calar o banner outra vez",
+            viewModel.state.value.bannerTrailerSound,
+        )
+    }
+
     @Test
     fun `downloads destination opens on a phone under ADR-008`() = runTest {
         val viewModel = createViewModel(FakeCatalogRepository())
@@ -967,6 +1011,7 @@ class MainViewModelNavigationTest {
             // Off, which is the default and what these navigation assertions assume.
             sourceMergeSettings = NoSourceMerge,
             subtitlePreferences = FakeSubtitleSettings,
+            bannerSoundPreferences = FakeBannerSoundSettings(),
             logger = logger,
             // A real tester over fakes: these assertions never open the diagnostics screen, and a
             // null context degrades its local readings to "unknown" exactly as a device with no
@@ -1044,6 +1089,22 @@ private data object FakeSubtitleSettings : SubtitleSettings {
     override val presentation = flowOf(SubtitlePresentation())
 
     override suspend fun save(presentation: SubtitlePresentation) = Unit
+}
+
+/**
+ * Remembers what it was told, rather than answering a fixed no.
+ *
+ * A store that always says "off" would let a toggle that saves nothing pass every test — the state
+ * would read false before and after, exactly as if it worked and the viewer had turned it back.
+ */
+private class FakeBannerSoundSettings : BannerSoundSettings {
+    private val state = MutableStateFlow(false)
+
+    override val soundOn: Flow<Boolean> = state
+
+    override suspend fun setSoundOn(enabled: Boolean) {
+        state.value = enabled
+    }
 }
 
 private data object FakeLicenseService : AndroidLicenseService {

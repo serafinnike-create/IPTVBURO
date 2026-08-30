@@ -27,6 +27,7 @@ import com.lucasserafin94.iptvburo.data.preferences.CacheSettingsStore
 import com.lucasserafin94.iptvburo.domain.model.CacheBudget
 import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
 import com.lucasserafin94.iptvburo.data.preferences.PlaybackSessionStore
+import com.lucasserafin94.iptvburo.data.preferences.BannerSoundSettings
 import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.data.licensing.RedeemOutcome
@@ -146,6 +147,7 @@ class MainViewModel @Inject constructor(
     private val catalogueGuardPreferences: CatalogueGuard,
     private val sourceMergeSettings: SourceMergeSettings,
     private val subtitlePreferences: SubtitleSettings,
+    private val bannerSoundPreferences: BannerSoundSettings,
     private val logger: AppLogger,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
@@ -267,6 +269,7 @@ class MainViewModel @Inject constructor(
         observeSources()
         observeCatalogueGuard()
         observeSubtitles()
+        observeBannerSound()
         // Device-wide, like the notification hour below and unlike the bell: the cache is a
         // property of this machine's storage, not of whoever happens to be signed in.
         observeCacheSettings()
@@ -346,6 +349,26 @@ class MainViewModel @Inject constructor(
                 mutableState.update { it.copy(subtitles = presentation) }
             }
         }
+    }
+
+    private fun observeBannerSound() {
+        viewModelScope.launch {
+            bannerSoundPreferences.soundOn.collect { enabled ->
+                mutableState.update { it.copy(bannerTrailerSound = enabled) }
+            }
+        }
+    }
+
+    /**
+     * Turns the banner trailer's sound on or off, and remembers.
+     *
+     * Answered on the trailer already playing, not only on the next one — somebody reaching for the
+     * switch to stop the noise means now. What it cannot change is how a trailer *starts*: no engine
+     * autoplays audio, so every one begins muted whatever this says.
+     */
+    fun toggleBannerTrailerSound() {
+        val enabled = !mutableState.value.bannerTrailerSound
+        viewModelScope.launch { bannerSoundPreferences.setSoundOn(enabled) }
     }
 
     /**
