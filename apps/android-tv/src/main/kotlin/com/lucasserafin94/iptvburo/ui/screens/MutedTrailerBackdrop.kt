@@ -22,6 +22,15 @@ import kotlinx.coroutines.delay
 internal fun MutedTrailerBackdrop(
     youtubeId: String?,
     modifier: Modifier = Modifier,
+    /**
+     * Whether the trailer should carry sound.
+     *
+     * It always *starts* muted regardless — no engine lets a video autoplay with audio, and asking
+     * for sound up front means it does not start at all, leaving a play button over a still frame.
+     * So the sound is raised once the embed reports itself playing, which is the point at which the
+     * autoplay has already been granted and the volume is no longer a new request.
+     */
+    soundOn: Boolean = false,
 ) {
     val safeId = youtubeId?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{6,32}")) } ?: return
     var visible by remember(safeId) { mutableStateOf(false) }
@@ -73,7 +82,13 @@ internal fun MutedTrailerBackdrop(
                         fun onPlaying() {
                             // The bridge is called on a WebView worker thread; Compose state must
                             // be touched from the main thread.
-                            host.post { pageReady = true }
+                            host.post {
+                                pageReady = true
+                                // Raised here and nowhere earlier: the engine has just granted the
+                                // autoplay, so turning the volume up is not a fresh request it can
+                                // refuse. Asked for up front, the trailer would not have started.
+                                if (soundOn) host.evaluateJavascript(TRAILER_RAISE_SOUND, null)
+                            }
                         }
                     },
                     TRAILER_BRIDGE,
@@ -118,6 +133,23 @@ private const val TRAILER_DELAY_MILLIS = 2_000L
 
 /** Name the page sees for the one-bit bridge back into the app. */
 private const val TRAILER_BRIDGE = "BuroTrailer"
+
+/**
+ * Turns the sound up on a trailer that is already playing.
+ *
+ * Run only from the playing callback. The embed always loads muted because that is the only way it
+ * loads at all; by the time the player reports PLAYING the autoplay has been granted, and raising
+ * the volume afterwards is not something the engine refuses.
+ */
+private val TRAILER_RAISE_SOUND =
+    """
+    (function () {
+      var frame = document.querySelector('iframe') || window;
+      var target = frame.contentWindow || frame;
+      target.postMessage('{"event":"command","func":"unMute","args":[]}', '*');
+      target.postMessage('{"event":"command","func":"setVolume","args":[100]}', '*');
+    })();
+    """.trimIndent()
 
 /**
  * Reports the embed as ready only once it is genuinely playing.

@@ -113,4 +113,43 @@ class BannerTrailerWiringTest {
             viewModel.contains("somethingElseIsPlaying = state.content is AppContent.Player"),
         )
     }
+
+    /**
+     * The embed always loads muted, whatever the sound preference says.
+     *
+     * No engine autoplays audio. Asked for sound up front the trailer does not start at all and
+     * leaves a play button over a still frame — seen exactly that way on the Windows banner, which
+     * used the same embed. So mute=1 here is not a preference, it is the only way it plays.
+     */
+    @Test
+    fun `the embed loads muted so it can start`() {
+        val backdrop =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/ui/screens/MutedTrailerBackdrop.kt")
+                .readText()
+
+        assertTrue("o embed pede audio ao arrancar e o motor bloqueia-o", backdrop.contains("mute=1"))
+    }
+
+    /**
+     * And the sound is raised only from the playing callback.
+     *
+     * Anywhere earlier is a request the engine can still refuse; by the time the player reports
+     * PLAYING the autoplay has been granted and the volume is no longer a new ask.
+     */
+    @Test
+    fun `the sound is raised only once it is playing`() {
+        val backdrop =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/ui/screens/MutedTrailerBackdrop.kt")
+                .readText()
+
+        assertTrue("nada levanta o som depois do arranque", backdrop.contains("TRAILER_RAISE_SOUND"))
+
+        val marker = "fun onPlaying() {"
+        assertTrue("onPlaying mudou: este teste ja nao le nada", backdrop.contains(marker))
+        val playing = backdrop.substringAfter(marker).substringBefore("\n                        }")
+        assertTrue(
+            "o som nao e levantado no momento em que o video comeca a tocar",
+            playing.contains("TRAILER_RAISE_SOUND"),
+        )
+    }
 }
