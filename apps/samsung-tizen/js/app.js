@@ -3672,6 +3672,10 @@ var BuroApp = (function () {
     */
     function raiseHomeHeroSound() {
         var frame;
+        /* So quando a pessoa o pediu. O trailer arranca sempre calado - nenhum
+           motor deixa arrancar com audio - e sem esta condicao a TV comecava a
+           falar sozinha a cada arranque, sem ninguem ter escolhido nada. */
+        if (!state.preferences.bannerTrailerSound) { return; }
         if (!BuroTrailer || !BuroTrailer.raiseBannerSound) { return; }
         frame = document.querySelector('.hero-trailer');
         if (frame) { BuroTrailer.raiseBannerSound(frame); }
@@ -3839,6 +3843,27 @@ var BuroApp = (function () {
             '" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>';
     }
 
+    /*
+      A sinopse do cartao, quando o enriquecimento ja a trouxe.
+
+      Vem da mesma fonte que o banner usa, e nao de uma procura propria: e o
+      mesmo titulo, e uma chamada de metadados por cartao seriam quinze por mao.
+      Sem sinopse nao desenha nada -- um cartao com um paragrafo vazio por baixo
+      dos factos le-se como uma falha, e nao ha nada de errado em ainda nao ter
+      chegado.
+
+      O ponto do cartao e decidir, e decidir precisa de algo para ler.
+    */
+    function discoverSynopsisHtml(item) {
+        var enrichment;
+        var plot;
+        if (!item || !state.activeSource) { return ''; }
+        enrichment = BuroHeroEnrichment.get(state.activeSource.id, item.id);
+        plot = enrichment && enrichment.synopsis;
+        if (!plot) { return ''; }
+        return '<p class="discover-synopsis">' + escapeHtml(plot) + '</p>';
+    }
+
     function renderDiscoverCard(item, layer) {
         var genres = discoveryGenres(item);
         var facts = [];
@@ -3852,7 +3877,8 @@ var BuroApp = (function () {
             artworkHtml(item, 'discover-art') + discoverTrailerHtml(item, layer) +
             '<span class="badge">' + escapeHtml(item.contentType) +
             '</span><div class="discover-card-copy"><h3>' + escapeHtml(item.name) + '</h3><p>' +
-            escapeHtml(facts.join('  ·  ')) + '</p></div></article>';
+            escapeHtml(facts.join('  ·  ')) + '</p>' + discoverSynopsisHtml(item) +
+            '</div></article>';
     }
 
     function renderDiscover() {
@@ -7664,7 +7690,8 @@ var BuroApp = (function () {
             t('storageTitle') + '</h3><p>' + escapeHtml(t('storageHint')) + '</p></div><strong>›</strong></button></div>' +
             '<div class="section-heading"><h2>' + t('settings') + '</h2></div><div class="settings-grid">' +
             settingCard('reducedMotion', 'reducedMotion') + settingCard('highContrast', 'highContrast') +
-            settingCard('removeTransparency', 'reducedTransparency') + '</div>' +
+            settingCard('removeTransparency', 'reducedTransparency') +
+            settingCard('bannerTrailerSound', 'bannerTrailerSound') + '</div>' +
             clockSettingsPanel() +
             '<div class="section-heading settings-language-heading"><div><h2>' + t('language') + '</h2><p>' +
             t('settingsLanguageHint') + '</p></div></div><div class="settings-language-list">' + languages + '</div>' +

@@ -18,6 +18,7 @@ var path = require('path');
 var APP_DIR = path.resolve(__dirname, '..', 'samsung-tizen');
 var app = fs.readFileSync(path.join(APP_DIR, 'js', 'app.js'), 'utf8');
 var trailer = fs.readFileSync(path.join(APP_DIR, 'js', 'trailer.js'), 'utf8');
+var storage = fs.readFileSync(path.join(APP_DIR, 'js', 'storage.js'), 'utf8');
 var enrichment = fs.readFileSync(path.join(APP_DIR, 'js', 'hero-enrichment.js'), 'utf8');
 var css = fs.readFileSync(path.join(APP_DIR, 'css', 'style.css'), 'utf8');
 
@@ -54,6 +55,26 @@ check('e o som sobe assim que ele ja esta a tocar',
     trailer.indexOf('playerState === 1') >= 0 &&
     trailer.indexOf('raiseBannerSound: raiseBannerSound') >= 0 &&
     app.indexOf('BuroTrailer.raiseBannerSound(frame)') >= 0);
+/*
+  Uma televisão que começa a falar sozinha assim que se liga é pior que uma
+  calada. O trailer arranca sempre em silêncio -- nenhum motor deixa arrancar
+  com áudio -- e o som só sobe depois, e só se alguém o tiver pedido.
+*/
+check('o som só sobe quando foi pedido',
+    app.indexOf('if (!state.preferences.bannerTrailerSound) { return; }') >= 0);
+check('e há onde o pedir',
+    app.indexOf("settingCard('bannerTrailerSound', 'bannerTrailerSound')") >= 0 &&
+    storage.indexOf('bannerTrailerSound: false') >= 0);
+
+/*
+  O ouvinte de mensagens é retirado quando deixa de ser preciso. Isto corre a
+  cada desenho da Home, e um addEventListener que ninguém tira acumula um
+  ouvinte por desenho -- numa TV, que fica ligada dias a fio, é uma fuga a
+  sério. O teste de resistência da suíte apanhou-a.
+*/
+check('o ouvinte do som não fica pendurado',
+    trailer.indexOf("window.removeEventListener('message', onMessage)") >= 0);
+
 /* Vem com o resto do enriquecimento, por isso não custa um pedido a mais. */
 check('o id do trailer atravessa o enriquecimento',
     enrichment.indexOf('youtubeTrailerId: cleanText(details && details.youtubeTrailerId, 32)') >= 0 &&

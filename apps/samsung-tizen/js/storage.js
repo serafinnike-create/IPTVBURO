@@ -32,6 +32,10 @@ var BuroStorage = (function () {
             activeProfileId: null,
             section: 'HOME',
             reducedMotion: false,
+            /* Uma televisao que comeca a falar sozinha assim que se liga e pior
+               que uma calada. O trailer arranca sempre em silencio; isto so diz
+               se o som sobe depois de ele ja estar a tocar. */
+            bannerTrailerSound: false,
             highContrast: false,
             reducedTransparency: false,
             hiddenCategoryIds: [],

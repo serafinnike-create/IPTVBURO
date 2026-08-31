@@ -2536,6 +2536,14 @@ body.reduced-transparency .nav-rail, body.reduced-transparency .toast, body.redu
     pointer-events: none;
 }
 
+/* A sinopse do cartao: quatro linhas no maximo, para nao empurrar os botoes de
+   decisao para fora do ecra. Sem -webkit-line-clamp, que estas TVs nao tem. */
+.discover-synopsis {
+    margin: 8px 0 0; font-size: 22px; line-height: 1.4;
+    color: rgba(233, 236, 242, 0.72);
+    max-height: 123px; overflow: hidden;
+}
+
 /* O trailer do cartao do Descobrir, por cima da capa e com as mesmas regras:
    sem rato, e a arte por baixo como recurso quando o embed nao arranca. */
 .discover-trailer {
