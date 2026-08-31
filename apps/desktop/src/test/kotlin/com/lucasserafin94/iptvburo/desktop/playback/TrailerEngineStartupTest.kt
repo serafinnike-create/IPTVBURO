@@ -71,6 +71,37 @@ class TrailerEngineStartupTest {
         )
     }
 
+    /**
+     * A cache directory per run, and a sweep of the ones nobody is using.
+     *
+     * Chromium takes a singleton lock on its cache directory. A run that did not shut down cleanly
+     * leaves that lock held, and the next start then fails outright — `N_Initialize failed`, and
+     * every trailer in the app is a dead rectangle. That is exactly what came back the morning
+     * after this was first fixed: the directory was still there from the night before.
+     *
+     * The sweep skips directories whose process is still alive, so a second copy of the app running
+     * right now keeps its own cache rather than having it deleted underneath it.
+     */
+    @Test
+    fun `a stale cache lock cannot stop the engine starting`() {
+        val marker = "private fun scratchCache(): String {"
+        assertTrue(marker in browser, "scratchCache mudou de nome: este teste ja nao le nada")
+        val body = browser.substringAfter(marker).substringBefore("\n        }")
+
+        assertTrue(
+            body.contains("ProcessHandle.current().pid()"),
+            "duas copias da app partilham o mesmo directorio, e disputam o mesmo bloqueio",
+        )
+        assertTrue(
+            body.contains("ProcessHandle.of(pid).isEmpty"),
+            "a limpeza apagaria a cache de uma copia da app que esta a correr agora",
+        )
+        assertTrue(
+            body.contains("deleteRecursively"),
+            "um bloqueio deixado por um arranque anterior impede o motor de arrancar outra vez",
+        )
+    }
+
     /** And session cookies are still not persisted: the cache is for starting, not for keeping. */
     @Test
     fun `session cookies are still not kept`() {

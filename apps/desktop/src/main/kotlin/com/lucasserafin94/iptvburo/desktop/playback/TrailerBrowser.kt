@@ -11,6 +11,10 @@ import org.cef.CefClient
 import org.cef.CefSettings
 import org.cef.SystemBootstrap
 import org.cef.browser.CefBrowser
+import org.cef.browser.CefMessageRouter
+import org.cef.callback.CefQueryCallback
+import org.cef.handler.CefMessageRouterHandlerAdapter
+import javax.swing.SwingUtilities
 
 /**
  * Plays a trailer inside the app, using an embedded Chromium.
@@ -28,6 +32,8 @@ class TrailerBrowser {
     private val disposed = AtomicBoolean(false)
     private var client: CefClient? = null
     private var browser: CefBrowser? = null
+    private var messageRouter: CefMessageRouter? = null
+    private var nativeComponent: java.awt.Component? = null
 
     /**
      * Builds the panel showing [youtubeId], or null when Chromium is unavailable.
@@ -48,10 +54,53 @@ class TrailerBrowser {
         blendIntoHero: Boolean = true,
         /** True when the trailer plays beside something else. See TrailerHostServer. */
         unattended: Boolean = false,
+        /** Called only after YouTube reports actual playback, not merely a loaded host page. */
+        onPlaying: () -> Unit = {},
+        /** Called when the player refuses the video or never begins within its readiness window. */
+        onFailed: () -> Unit = {},
     ): JPanel? =
         runCatching {
             val app = sharedApp() ?: return null
             val cefClient = app.createClient().also { client = it }
+            lateinit var browserComponent: java.awt.Component
+            val router =
+                CefMessageRouter.create(
+                    object : CefMessageRouterHandlerAdapter() {
+                        override fun onQuery(
+                            browser: CefBrowser?,
+                            frame: org.cef.browser.CefFrame?,
+                            queryId: Long,
+                            request: String?,
+                            persistent: Boolean,
+                            callback: CefQueryCallback?,
+                        ): Boolean {
+                            when (request) {
+                                "playing" ->
+                                    SwingUtilities.invokeLater {
+                                        browserComponent.isVisible = true
+                                        browserComponent.parent?.revalidate()
+                                        browserComponent.repaint()
+                                        browser?.wasResized(
+                                            browserComponent.width.coerceAtLeast(1),
+                                            browserComponent.height.coerceAtLeast(1),
+                                        )
+                                        onPlaying()
+                                    }
+                                "failed" ->
+                                    SwingUtilities.invokeLater {
+                                        browserComponent.isVisible = false
+                                        onFailed()
+                                    }
+                                else -> return false
+                            }
+                            callback?.success("ok")
+                            return true
+                        }
+                    },
+                ).also {
+                    messageRouter = it
+                    cefClient.addMessageRouter(it)
+                }
 
             // Served from a loopback page rather than loading the embed as the top-level document.
             // YouTube refuses to configure its player for a frame with no page behind it — "Video
@@ -70,7 +119,25 @@ class TrailerBrowser {
 
             JPanel(BorderLayout()).apply {
                 background = Color.BLACK
-                add(cefBrowser.uiComponent, BorderLayout.CENTER)
+                // The native child paints before the loopback page and sits above both this panel
+                // and Compose. Its AWT default is white, so colouring only the parent still leaves
+                // a bright rectangle during a slow or failed first navigation.
+                browserComponent =
+                    cefBrowser.uiComponent.apply {
+                        background = Color.BLACK
+                        // Automatic previews stay withdrawn until the embedded player itself says
+                        // it is playing, so slow networks leave the artwork visible. A trailer the
+                        // viewer explicitly opened must remain displayable: windowed JCEF does not
+                        // create its native peer (and therefore does not run the page) while hidden.
+                        isVisible = !unattended
+                    }
+                nativeComponent = browserComponent
+                add(browserComponent, BorderLayout.CENTER)
+                // Windowed JCEF otherwise waits for an AWT hierarchy event that SwingPanel does
+                // not reliably forward. The page can be playing while the native child remains a
+                // black rectangle; creating it now gives the child a real browser context, and the
+                // resize notification above makes it paint when Compose reveals it.
+                cefBrowser.createImmediately()
             }
         }.getOrNull()
 
@@ -78,9 +145,14 @@ class TrailerBrowser {
         if (!disposed.compareAndSet(false, true)) return
         // Only this browser and client. CefApp is process-wide and shutting it down would stop
         // every other trailer in the session, including one the user is watching.
+        runCatching { nativeComponent?.isVisible = false }
         runCatching { browser?.close(true) }
+        runCatching { messageRouter?.let { client?.removeMessageRouter(it) } }
+        runCatching { messageRouter?.dispose() }
         runCatching { client?.dispose() }
         browser = null
+        nativeComponent = null
+        messageRouter = null
         client = null
     }
 
@@ -218,13 +290,36 @@ class TrailerBrowser {
          * the next run reuses that same path and clears it at exit anyway.
          */
         private fun scratchCache(): String {
-            val dir = File(System.getProperty("java.io.tmpdir"), "iptvburo-trailer-cache")
+            val root = File(System.getProperty("java.io.tmpdir"))
+
+            // Anything a previous run left behind, cleared first.
+            //
+            // Chromium takes a singleton lock on its cache directory. A run that did not shut down
+            // cleanly leaves that lock held, and the next start then fails outright —
+            // `N_Initialize failed`, and every trailer in the app is a dead rectangle. That is what
+            // came back the morning after this was first fixed: the directory was still there from
+            // the night before. Sweeping ours at startup means a crash costs the next run nothing.
+            // Only the ones whose process is gone: the name carries the pid that made it, so a
+            // second copy of the app running right now keeps its own cache and its own lock.
+            runCatching {
+                root.listFiles { file -> file.name.startsWith(CACHE_PREFIX) }
+                    ?.filter { stale ->
+                        val pid = stale.name.removePrefix(CACHE_PREFIX).toLongOrNull()
+                        pid == null || ProcessHandle.of(pid).isEmpty
+                    }?.forEach { stale -> stale.deleteRecursively() }
+            }
+
+            // And its own directory per run, so two copies of the app never contend for one lock.
+            val dir = File(root, "$CACHE_PREFIX${ProcessHandle.current().pid()}")
             dir.mkdirs()
             Runtime.getRuntime().addShutdownHook(
                 Thread { runCatching { dir.deleteRecursively() } },
             )
             return dir.absolutePath
         }
+
+        /** Shared by the sweep and the directory it creates, so the two cannot drift apart. */
+        private const val CACHE_PREFIX = "iptvburo-trailer-cache-"
 
         private fun locateNativeRuntime(): File? {
             val resources = System.getProperty("compose.application.resources.dir")?.let(::File)
