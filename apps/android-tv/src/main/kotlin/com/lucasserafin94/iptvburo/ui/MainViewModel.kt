@@ -2588,7 +2588,20 @@ class MainViewModel @Inject constructor(
      * Only for a title the banner has actually reached: the rotation holds twenty and most of them
      * are never seen, so looking all twenty up would be twenty requests for one viewing.
      */
-    fun loadHeroTrailer(itemId: String, title: String) {
+    fun loadHeroTrailer(
+        itemId: String,
+        title: String,
+        /**
+         * The release year, and whether this is a series.
+         *
+         * TMDb keeps television and film in separate catalogues, so a series searched as a film
+         * finds nothing at all — and the banner shows series as often as films. Windows had exactly
+         * this defect and no trailer ever played for a series there. Defaulted so existing callers
+         * keep working, and both are passed where they are known.
+         */
+        year: Int? = null,
+        isSeries: Boolean = false,
+    ) {
         if (mutableState.value.heroTrailers.containsKey(itemId)) return
         if (!heroTrailerLookups.add(itemId)) return
 
@@ -2606,7 +2619,9 @@ class MainViewModel @Inject constructor(
                 )
             val videoId =
                 withContext(ioDispatcher) {
-                    runCatching { client.findTrailer(title = title, year = null) }.getOrNull()
+                    runCatching {
+                        client.findTrailer(title = title, year = year, isSeries = isSeries)
+                    }.getOrNull()
                 }
             heroTrailerLookups.remove(itemId)
             // Stored even when null — blank reads as "asked, and there is none" — which is what

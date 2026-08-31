@@ -171,6 +171,31 @@ class BannerTrailerWiringTest {
         )
     }
 
+    /**
+     * A title whose provider carries no plot gets one from TMDb.
+     *
+     * Providers leave the description empty constantly, and a provider whose encoding destroyed the
+     * accents is treated the same way. Both left the banner showing its fixed line about the daily
+     * selection — which reads as a description of the title and describes nothing. Reported with a
+     * 2024 series showing that line rather than its own plot.
+     */
+    @Test
+    fun `an empty provider plot falls back to TMDb`() {
+        assertTrue(
+            state.contains("metadataClient.findOverview("),
+            "sem sinopse do fornecedor o banner fica com a frase fixa para sempre",
+        )
+        // Ordered: the provider first, TMDb only when it had nothing usable. A search per banner
+        // title regardless would be a request for something already in hand.
+        val marker = "fun loadHeroSynopsis("
+        assertTrue(marker in state, "loadHeroSynopsis mudou de nome: este teste ja nao le nada")
+        val body = state.substringAfter(marker).substringBefore("\n    }")
+        assertTrue(
+            body.indexOf("ProviderText::usableOrNull") < body.indexOf("findOverview("),
+            "a sinopse do TMDb e pedida antes de se olhar para a do fornecedor",
+        )
+    }
+
     /** A live channel is never asked about: a channel has no trailer. */
     @Test
     fun `a live channel is not looked up`() {

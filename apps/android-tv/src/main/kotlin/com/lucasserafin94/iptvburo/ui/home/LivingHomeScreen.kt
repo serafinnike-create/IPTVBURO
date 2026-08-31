@@ -98,7 +98,9 @@ fun LivingHomeScreen(
     bannerTrailerSound: Boolean = false,
     onToggleBannerTrailerSound: (() -> Unit)? = null,
     /** Looks up the trailer for a title the banner has reached. */
-    onLoadHeroTrailer: (id: String, title: String) -> Unit = { _, _ -> },
+    /** Asks for a title's trailer. The year and kind travel with it — TMDb keeps them apart. */
+    onLoadHeroTrailer: (id: String, title: String, year: Int?, isSeries: Boolean) -> Unit =
+        { _, _, _, _ -> },
     onItemFocused: (String) -> Unit,
     onOpenItem: (String) -> Unit,
     onImportSource: () -> Unit,
@@ -258,7 +260,7 @@ private fun ReadyHome(
     bannerTrailerSound: Boolean,
     onToggleBannerTrailerSound: (() -> Unit)?,
     /** Looks up the trailer for a title the banner has reached. */
-    onLoadHeroTrailer: (id: String, title: String) -> Unit,
+    onLoadHeroTrailer: (id: String, title: String, year: Int?, isSeries: Boolean) -> Unit,
     onItemFocused: (String) -> Unit,
     onOpenItem: (String) -> Unit,
     onOpenSources: () -> Unit,
@@ -319,7 +321,10 @@ private fun ReadyHome(
             // Looked up as the banner reaches each title rather than all twenty up front: most of
             // them are never seen, so that would be twenty requests for one viewing.
             LaunchedEffect(heroItem.id) {
-                onLoadHeroTrailer(heroItem.id, heroItem.title)
+                // The year and kind are not on HomeItem, so the banner asks without them and
+                // the lookup falls back to a title-only search. The Descobrir card, which holds the
+                // whole channel, passes both — see AppShellScreen.
+                onLoadHeroTrailer(heroItem.id, heroItem.title, null, false)
             }
             BuroHero(
                 item = heroItem,

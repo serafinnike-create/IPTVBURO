@@ -218,7 +218,14 @@ fun AppShellScreen(
     bannerTrailerSound: Boolean = false,
     onToggleBannerTrailerSound: (() -> Unit)? = null,
     /** Looks up the trailer for a title the banner has reached. */
-    onLoadHeroTrailer: (id: String, title: String) -> Unit = { _, _ -> },
+    /**
+     * Asks for a title's trailer.
+     *
+     * The year and the kind travel with it: TMDb keeps television and film in separate catalogues,
+     * so a series searched as a film finds nothing at all.
+     */
+    onLoadHeroTrailer: (id: String, title: String, year: Int?, isSeries: Boolean) -> Unit =
+        { _, _, _, _ -> },
     /** Runs a catalogue search. Called once the field settles, not per keystroke. */
     onSearch: (String) -> Unit,
     onPlayMovie: () -> Unit,
@@ -830,7 +837,16 @@ fun AppShellScreen(
                             // The banner's own lookup, so a title with a trailer there has one here
                             // rather than the two screens disagreeing about the same film.
                             trailerFor = { channel -> onHeroTrailerFor(channel.id) },
-                            onNeedTrailer = { channel -> onLoadHeroTrailer(channel.id, channel.name) },
+                            onNeedTrailer = { channel ->
+                                // The year and the kind as well as the name: TMDb keeps television
+                                // and film apart, and a series searched as a film finds nothing.
+                                onLoadHeroTrailer(
+                                    channel.id,
+                                    channel.name,
+                                    channel.year,
+                                    channel.contentType == CatalogContentType.SERIES,
+                                )
+                            },
                             trailerSoundOn = bannerTrailerSound,
                         )
 

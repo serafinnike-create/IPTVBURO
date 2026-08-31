@@ -193,6 +193,52 @@ class TrailerLookupTest {
         assertEquals(null, client().findTrailer(title = "Um Filme", year = null))
     }
 
+    /**
+     * A series' plot is searched in the television catalogue, filtered by its own year parameter.
+     *
+     * Providers leave the description empty constantly, and the banner then falls back to a fixed
+     * line about the daily selection — which reads as a description of the title and describes
+     * nothing. Reported with a 2024 series showing exactly that. The search shape matters as much
+     * as the lookup: sending a film's `year` to a television search filters every result away
+     * rather than being ignored, so a wrong shape here is a different way of finding nothing.
+     */
+    @Test
+    fun `a series overview is searched as a series`() {
+        client().findOverview(title = "Uma Serie", year = 2024, isSeries = true)
+
+        val search = paths.first { it.startsWith("/search/") }
+        assertTrue("a sinopse da serie foi procurada nos filmes: $paths", "/search/tv" in search)
+        assertTrue(
+            "a serie foi filtrada pelo parametro errado: $search",
+            "first_air_date_year=2024" in search,
+        )
+    }
+
+    /** And a film's plot goes to the film catalogue. */
+    @Test
+    fun `a film overview is searched as a film`() {
+        client().findOverview(title = "Um Filme", year = 1973)
+
+        val search = paths.first { it.startsWith("/search/") }
+        assertTrue("a sinopse do filme foi procurada nas series: $paths", "/search/movie" in search)
+    }
+
+    /** A title TMDb does not carry answers nothing, rather than an empty paragraph. */
+    @Test
+    fun `a title with no overview answers nothing`() {
+        server.dispatcher =
+            object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    paths += request.path.orEmpty()
+                    return MockResponse()
+                        .setHeader("Content-Type", "application/json")
+                        .setBody("""{"results":[{"id":77,"overview":"   "}]}""")
+                }
+            }
+
+        assertEquals(null, client().findOverview(title = "Um Filme", year = null))
+    }
+
     /** A blank title asks nothing at all. */
     @Test
     fun `a blank title is not searched`() {

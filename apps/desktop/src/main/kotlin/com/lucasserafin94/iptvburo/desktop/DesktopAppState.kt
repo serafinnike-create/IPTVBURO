@@ -3374,6 +3374,25 @@ class DesktopAppState(
                     // back — the bytes are gone before we see them — so the banner keeps its fixed
                     // line rather than showing a paragraph the viewer has to decipher.
                     ?.let(ProviderText::usableOrNull)
+                    // TMDb when the provider had nothing usable.
+                    //
+                    // Providers leave the description empty constantly, and a provider whose
+                    // encoding destroyed the accents is treated the same way — both leave the
+                    // banner showing its fixed line about the daily selection, which reads as a
+                    // description of the title and describes nothing. Reported with a 2024 series
+                    // showing that line. One search, and only for a title the banner has reached.
+                    ?: runCatching {
+                        withContext(Dispatchers.IO) {
+                            metadataClient.findOverview(
+                                title = item.name.editorialCatalogTitle(),
+                                year = item.year,
+                                // Television and film are separate catalogues, so a series searched
+                                // as a film finds nothing at all.
+                                isSeries = item.contentType == XtreamContentType.SERIES,
+                            )
+                        }
+                    }.getOrNull()
+                        ?.takeIf(String::isNotBlank)
                     ?: return@launch
             // A profile/provider/policy switch invalidates the Home while this network request is
             // running. Its old synopsis must not be published into the new catalogue afterwards.

@@ -28,7 +28,7 @@ class BannerTrailerWiringTest {
     fun `the banner looks up a trailer for the title on screen`() {
         assertTrue(
             "o banner nunca procura trailer nenhum",
-            home.contains("onLoadHeroTrailer(heroItem.id, heroItem.title)"),
+            home.contains("onLoadHeroTrailer(heroItem.id, heroItem.title,"),
         )
         assertTrue(
             "nada liga a procura ao modelo",
@@ -128,6 +128,29 @@ class BannerTrailerWiringTest {
                 .readText()
 
         assertTrue("o embed pede audio ao arrancar e o motor bloqueia-o", backdrop.contains("mute=1"))
+    }
+
+    /**
+     * A series is searched as a series.
+     *
+     * TMDb keeps television and film in separate catalogues, so a series searched as a film finds
+     * nothing at all. The lookup passed `year = null` and no kind, which meant every series on this
+     * app got the film catalogue and therefore no trailer — the same defect Windows had, where no
+     * series trailer ever played until it was fixed.
+     */
+    @Test
+    fun `a series trailer is searched in the television catalogue`() {
+        assertTrue(
+            "a procura ignora o tipo, e uma serie procurada nos filmes nao encontra nada",
+            viewModel.contains("client.findTrailer(title = title, year = year, isSeries = isSeries)"),
+        )
+        val shell =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/ui/screens/AppShellScreen.kt")
+                .readText()
+        assertTrue(
+            "o cartao do Descobrir sabe o tipo e nao o envia",
+            shell.contains("channel.contentType == CatalogContentType.SERIES"),
+        )
     }
 
     /**

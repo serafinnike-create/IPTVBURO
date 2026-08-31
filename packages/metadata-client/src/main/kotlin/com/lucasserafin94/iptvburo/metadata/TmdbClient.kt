@@ -299,6 +299,53 @@ class TmdbClient(
     }
 
     /**
+     * The plot for a title, when the provider did not supply one.
+     *
+     * Providers leave the description empty constantly, and the banner then falls back to its fixed
+     * line about the daily selection — which reads as a description of the title and describes
+     * nothing. Reported with a series showing that line instead of its own plot.
+     *
+     * The search is the same shape as [findTrailer]'s, deliberately: television and film are
+     * separate catalogues, and sending a film's `year` to a series search filters every result away
+     * rather than being ignored. The overview comes back with the search result, so this costs one
+     * request rather than a search followed by a details fetch.
+     */
+    fun findOverview(
+        title: String,
+        year: Int?,
+        isSeries: Boolean = false,
+    ): String? {
+        val key = apiKey?.takeIf(String::isNotBlank) ?: return null
+        val query = title.trim()
+        if (query.isBlank()) return null
+
+        val searchUrl =
+            baseUrl.newBuilder()
+                .addPathSegments(if (isSeries) "search/tv" else "search/movie")
+                .addQueryParameter("api_key", key)
+                .addQueryParameter("query", query)
+                .addQueryParameter("language", language)
+                .addQueryParameter("include_adult", "false")
+                .apply {
+                    year?.let {
+                        addQueryParameter(
+                            if (isSeries) "first_air_date_year" else "year",
+                            it.toString(),
+                        )
+                    }
+                }
+                .build()
+
+        return get(searchUrl)
+            ?.getAsJsonArray("results")
+            ?.firstOrNull()
+            ?.takeIf { it.isJsonObject }
+            ?.asJsonObject
+            ?.string("overview")
+            ?.takeIf(String::isNotBlank)
+    }
+
+    /**
      * Whether YouTube will actually serve [videoId] to an embedder.
      *
      * oEmbed answers 200 for a public, embeddable video and an error for anything else — private,
