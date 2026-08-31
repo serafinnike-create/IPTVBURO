@@ -4,6 +4,8 @@ import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
 import com.lucasserafin94.iptvburo.domain.model.Reminder
 import com.lucasserafin94.iptvburo.domain.model.SeasonalCollection
 import com.lucasserafin94.iptvburo.domain.model.SeasonalCollections
+import com.lucasserafin94.iptvburo.domain.model.HeroCandidate
+import com.lucasserafin94.iptvburo.domain.model.HeroSelection
 import com.lucasserafin94.iptvburo.ui.ChannelUi
 import com.lucasserafin94.iptvburo.ui.dailyEditorialRank
 import com.lucasserafin94.iptvburo.ui.localEditorialDay
@@ -155,7 +157,28 @@ object RealHomeCatalog {
                         // The rest rotate in a daily order, so the banner is different tomorrow
                         // without the lead title moving around.
                         .sortedBy { dailyEditorialRank(it.id, localEditorialDay()) }
-            ).take(HERO_ROTATION_SIZE)
+            ).let { ranked ->
+                // Rearranged so the banner is not twenty of the same thing.
+                //
+                // Ordered by rank alone it fills with whatever the catalogue has most of, and
+                // scrolling past twenty titles from the same year and the same shelf teaches
+                // nobody what else is in there. The same rule the other two apps use, so the
+                // three do not disagree about what a good banner looks like.
+                HeroSelection
+                    .mixed(
+                        ranked.map { channel ->
+                            HeroCandidate(
+                                id = channel.id,
+                                title = channel.name,
+                                year = channel.year,
+                                rating = channel.rating,
+                                categoryIds = listOfNotNull(channel.categoryName),
+                                isSeries = channel.contentType == CatalogContentType.SERIES,
+                            )
+                        },
+                        currentYear,
+                    ).mapNotNull { candidate -> ranked.firstOrNull { it.id == candidate.id } }
+            }.take(HERO_ROTATION_SIZE)
 
         val heroChannel = rotationSource.firstOrNull() ?: distinct.first()
         val heroRotation =

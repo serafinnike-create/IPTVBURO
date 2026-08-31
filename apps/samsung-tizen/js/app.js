@@ -3080,11 +3080,18 @@ var BuroApp = (function () {
             (result.currentReleases || []).filter(function (item) { return !continuedIds[item.id]; })[0] ||
             (result.topRated || []).filter(function (item) { return !continuedIds[item.id] && Number(item.rating) >= 7; })[0] ||
             heroCandidates[0] || catalog[0] || continued[0];
-        rotation = (lead ? [lead] : []).concat(heroCandidates.filter(function (item) {
-            return !lead || item.id !== lead.id;
-        }).sort(function (left, right) {
-            return homeEditorialRank(left) - homeEditorialRank(right);
-        })).slice(0, HOME_HERO_LIMIT);
+        /* Misturado antes de cortar: ordenado so por posicao editorial, o banner
+           enche-se do que o catalogo tem mais, e passar por vinte titulos do
+           mesmo ano nao ensina nada sobre o resto. A regra e a mesma dos outros
+           dois apps - ver BuroDomain.mixHeroRotation. */
+        rotation = BuroDomain.mixHeroRotation(
+            (lead ? [lead] : []).concat(heroCandidates.filter(function (item) {
+                return !lead || item.id !== lead.id;
+            }).sort(function (left, right) {
+                return homeEditorialRank(left) - homeEditorialRank(right);
+            })),
+            new Date().getFullYear()
+        ).slice(0, HOME_HERO_LIMIT);
         hero = rotation[0];
         continued.forEach(function (item) {
             consumedIds[item.id] = true;
@@ -3813,6 +3820,25 @@ var BuroApp = (function () {
         });
     }
 
+    /*
+      O trailer por cima da capa do cartao de cima.
+
+      So o de cima: o de tras e uma fatia que da profundidade a pilha, e um
+      video a tocar onde ninguem o ve e um leitor desperdicado. A capa fica por
+      baixo, como no banner, para que um embed que nao arranque deixe o cartao
+      exatamente como estava. A decisao de tocar e a partilhada -- ver
+      heroTrailerFor -- para o cartao e o banner nao discordarem do mesmo filme.
+    */
+    function discoverTrailerHtml(item, layer) {
+        var trailer;
+        if (layer === 'next') { return ''; }
+        trailer = heroTrailerFor(item);
+        if (!trailer) { return ''; }
+        return '<iframe class="discover-trailer" src="' +
+            attr(BuroTrailer.bannerEmbedUrl(trailer)) +
+            '" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>';
+    }
+
     function renderDiscoverCard(item, layer) {
         var genres = discoveryGenres(item);
         var facts = [];
@@ -3823,7 +3849,8 @@ var BuroApp = (function () {
         return '<article class="discover-card ' + layer + (artworkFor(item) ? ' has-art' : '') +
             '" data-id="' + attr(item.id) + '"' + (layer === 'next' ? ' aria-hidden="true"' :
                 ' aria-label="' + attr(item.name) + '"') + '>' +
-            artworkHtml(item, 'discover-art') + '<span class="badge">' + escapeHtml(item.contentType) +
+            artworkHtml(item, 'discover-art') + discoverTrailerHtml(item, layer) +
+            '<span class="badge">' + escapeHtml(item.contentType) +
             '</span><div class="discover-card-copy"><h3>' + escapeHtml(item.name) + '</h3><p>' +
             escapeHtml(facts.join('  ·  ')) + '</p></div></article>';
     }

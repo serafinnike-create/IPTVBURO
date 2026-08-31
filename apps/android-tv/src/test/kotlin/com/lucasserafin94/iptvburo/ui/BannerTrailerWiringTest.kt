@@ -131,6 +131,37 @@ class BannerTrailerWiringTest {
     }
 
     /**
+     * The Descobrir card plays the same trailer the banner would.
+     *
+     * Two lookups would mean two answers for the same film — a trailer on the home screen and none
+     * on the card, or the other way round, for no reason a viewer could see. And only the card on
+     * top gets one: the card behind it is a sliver giving the pile depth, and a video playing where
+     * nobody can see it is a wasted player.
+     */
+    @Test
+    fun `the discover card plays the banner's trailer`() {
+        val shell =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/ui/screens/AppShellScreen.kt")
+                .readText()
+        val discover =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/ui/screens/DiscoverScreen.kt")
+                .readText()
+
+        assertTrue(
+            "o cartao do Descobrir usa uma procura diferente da do banner",
+            shell.contains("trailerFor = { channel -> onHeroTrailerFor(channel.id) }"),
+        )
+        assertTrue(
+            "nada toca o trailer no cartao do Descobrir",
+            discover.contains("MutedTrailerBackdrop("),
+        )
+        assertTrue(
+            "o trailer nao chega ao cartao de cima",
+            discover.contains("trailerId = trailerFor(deck.first())"),
+        )
+    }
+
+    /**
      * The sound switch reaches the banner, and only while there is a trailer to hear.
      *
      * A control for a sound that cannot happen is a button that does nothing when pressed, and on a

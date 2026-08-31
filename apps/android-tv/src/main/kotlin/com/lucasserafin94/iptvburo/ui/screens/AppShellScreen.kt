@@ -827,6 +827,11 @@ fun AppShellScreen(
                             onDealAgain = onDiscoverDealAgain,
                             onBack = onBack,
                             dealtCount = state.discoverDealtCount,
+                            // The banner's own lookup, so a title with a trailer there has one here
+                            // rather than the two screens disagreeing about the same film.
+                            trailerFor = { channel -> onHeroTrailerFor(channel.id) },
+                            onNeedTrailer = { channel -> onLoadHeroTrailer(channel.id, channel.name) },
+                            trailerSoundOn = bannerTrailerSound,
                         )
 
                         AppContent.Reminders -> RemindersScreen(

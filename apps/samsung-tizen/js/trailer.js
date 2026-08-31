@@ -118,6 +118,7 @@ var BuroTrailer = (function () {
         if (!frame || !frame.contentWindow) { return; }
         var done = false;
         var tries = 0;
+        var timer = null;
 
         function send(message) {
             if (!frame.contentWindow) { return; }
@@ -130,12 +131,29 @@ var BuroTrailer = (function () {
             send({ event: 'command', func: 'setVolume', args: [100] });
         }
 
-        window.addEventListener('message', function (event) {
+        /*
+          O ouvinte e removido quando deixa de ser preciso.
+
+          Isto e chamado a cada desenho da Home, e um addEventListener que
+          ninguem tira acumula um ouvinte por desenho: numa TV, que fica ligada
+          dias a fio, isso e uma fuga a serio. O teste de resistencia da suite
+          -- 960 trocas de ecra -- foi o que a apanhou.
+        */
+        function onMessage(event) {
             var data;
             try { data = JSON.parse(event.data); } catch (e) { return; }
             /* 1 e "a tocar": o arranque ja foi concedido, o som e seguro. */
-            if (data && data.info && data.info.playerState === 1) { raise(); done = true; }
-        });
+            if (data && data.info && data.info.playerState === 1) {
+                raise();
+                done = true;
+                stop();
+            }
+        }
+        function stop() {
+            window.removeEventListener('message', onMessage);
+            if (timer) { clearInterval(timer); timer = null; }
+        }
+        window.addEventListener('message', onMessage);
 
         listen();
         /*
@@ -148,10 +166,10 @@ var BuroTrailer = (function () {
 
           O som sobe num sitio so: na mensagem que diz que ja esta a tocar.
         */
-        var timer = setInterval(function () {
+        timer = setInterval(function () {
             listen();
             tries += 1;
-            if (done || tries > 20) { clearInterval(timer); }
+            if (done || tries > 20) { stop(); }
         }, 500);
     }
 

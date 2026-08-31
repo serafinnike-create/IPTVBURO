@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import com.lucasserafin94.iptvburo.ui.screens.MutedTrailerBackdrop
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.ui.ChannelUi
 import com.lucasserafin94.iptvburo.ui.components.FocusSurface
@@ -93,7 +94,22 @@ fun DiscoverScreen(
     onBack: () -> Unit,
     /** Total the deck started with, so the counter can say "3 of 15" rather than just what is left. */
     dealtCount: Int,
+    /**
+     * The trailer for the card on top, when there is one that plays.
+     *
+     * The same lookup the home banner uses, so a title with a trailer there has one here rather
+     * than the two screens disagreeing about the same film.
+     */
+    trailerFor: (ChannelUi) -> String? = { null },
+    /** Asks for that card's trailer. Called for the card on top, not for the whole deck. */
+    onNeedTrailer: (ChannelUi) -> Unit = {},
+    /** Whether the trailer carries sound, shared with the banner so the choice is made once. */
+    trailerSoundOn: Boolean = false,
 ) {
+    // Asked for as the card reaches the top, not for the whole hand: most of a hand is never seen,
+    // and looking every card up would be a request per title for one viewing.
+    val top = deck.firstOrNull()
+    LaunchedEffect(top?.id) { top?.let(onNeedTrailer) }
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(BuroCanvas)) {
         val compact = maxWidth < 600.dp
         Column(
@@ -176,6 +192,10 @@ fun DiscoverScreen(
                             compact = compact,
                             onKeep = onKeep,
                             onSkip = onSkip,
+                            // Only the top card: the one behind is a sliver giving the pile depth,
+                            // and a video playing where nobody can see it is a wasted player.
+                            trailerId = trailerFor(deck.first()),
+                            trailerSoundOn = trailerSoundOn,
                         )
                     }
                     Spacer(Modifier.height(if (compact) 10.dp else 16.dp))
@@ -203,6 +223,9 @@ private fun SwipeableCard(
     compact: Boolean,
     onKeep: (ChannelUi) -> Unit,
     onSkip: (ChannelUi) -> Unit,
+    /** The trailer for this card, and whether it carries sound. Only the top card gets one. */
+    trailerId: String? = null,
+    trailerSoundOn: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -274,7 +297,14 @@ private fun SwipeableCard(
                 }
             },
     ) {
-        DiscoverCard(channel = channel, details = details, compact = compact, leaning = leaning)
+        DiscoverCard(
+            channel = channel,
+            details = details,
+            compact = compact,
+            leaning = leaning,
+            trailerId = trailerId,
+            trailerSoundOn = trailerSoundOn,
+        )
     }
 }
 
@@ -294,6 +324,15 @@ private fun DiscoverCard(
     modifier: Modifier = Modifier,
     /** True while a release would keep, false while it would skip, null while undecided. */
     leaning: Boolean? = null,
+    /**
+     * The trailer to play over the artwork, or null to leave the poster alone.
+     *
+     * Only ever passed for the card on top. The one behind it is a sliver of a still poster giving
+     * the pile depth, and a video playing in a sliver nobody can see is a wasted player.
+     */
+    trailerId: String? = null,
+    /** Whether that trailer carries sound. */
+    trailerSoundOn: Boolean = false,
 ) {
     // Poster above, facts below, rather than text laid over the artwork.
     //
@@ -322,6 +361,18 @@ private fun DiscoverCard(
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
+                )
+            }
+            // The trailer plays over the artwork, which stays underneath as the fallback.
+            //
+            // MutedTrailerBackdrop removes itself from the composition when the embed fails rather
+            // than fading to nothing, so a trailer that will not load leaves the poster exactly as
+            // it was. It also starts muted, because no engine autoplays audio.
+            if (trailerId != null) {
+                MutedTrailerBackdrop(
+                    youtubeId = trailerId,
+                    modifier = Modifier.fillMaxSize(),
+                    soundOn = trailerSoundOn,
                 )
             }
             // A short wash where the artwork meets the panel, so a bright poster does not end in a

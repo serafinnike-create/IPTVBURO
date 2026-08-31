@@ -773,8 +773,91 @@ var BuroDomain = (function () {
             .substring(0, 240);
     }
 
+    /*
+      A mistura do banner, igual a do Windows.
+
+      Ordenado so por pontuacao, o banner enche-se do que o catalogo tem mais, e
+      quem passa por vinte titulos do mesmo ano e da mesma prateleira nao fica a
+      saber o que mais ha la dentro. Isto mantem a ordem de qualidade dentro de
+      cada especie e so decide quantos de cada aparecem: os lancamentos a
+      frente, sempre com um filme e uma serie quando existem os dois; dois
+      antigos; dois de meio-termo; e um anime.
+
+      As vagas sao um objetivo, nao uma exigencia: o que nenhuma reclama fica
+      atras pela mesma ordem, por isso um catalogo sem titulos antigos leva mais
+      lancamentos em vez de mostrar menos. Espelha o HeroSelection.mixed do
+      modelo partilhado, para os tres apps nao divergirem.
+    */
+    var HERO_NEW_RELEASE_YEARS = 2;
+    var HERO_OLD_RELEASE_YEARS = 15;
+    var HERO_OLD_SLOTS = 2;
+    var HERO_MIDDLE_SLOTS = 2;
+    var HERO_ANIME_SLOTS = 1;
+    var HERO_ANIME_WORDS = ['anime', 'animacao japonesa', 'animação japonesa'];
+
+    function heroIsAnime(item) {
+        var categories = (item && item.categoryIds) || [];
+        var name = String((item && item.categoryName) || '');
+        var haystack = categories.concat([name]).join(' ').toLowerCase();
+        return HERO_ANIME_WORDS.some(function (word) { return haystack.indexOf(word) >= 0; });
+    }
+
+    /* Um titulo sem ano conta como meio-termo, e nao como antigo: os
+       fornecedores deixam o campo vazio a toda a hora. */
+    function heroAgeBand(item, thisYear) {
+        var year = Number(item && item.year);
+        if (!year) { return 'middle'; }
+        if (year >= thisYear - HERO_NEW_RELEASE_YEARS) { return 'new'; }
+        if (year < thisYear - HERO_OLD_RELEASE_YEARS) { return 'old'; }
+        return 'middle';
+    }
+
+    function heroIsSeries(item) {
+        return Boolean(item) && item.contentType === CONTENT.SERIES;
+    }
+
+    function mixHeroRotation(rotation, thisYear) {
+        var rows = rotation || [];
+        if (rows.length <= HERO_OLD_SLOTS + HERO_MIDDLE_SLOTS + HERO_ANIME_SLOTS) { return rows; }
+
+        var taken = {};
+        var picked = [];
+
+        function take(limit, predicate) {
+            var count = 0;
+            rows.forEach(function (item) {
+                if (count >= limit || taken[item.id] || !predicate(item)) { return; }
+                picked.push(item);
+                taken[item.id] = true;
+                count += 1;
+            });
+        }
+
+        /* Um de cada: um banner so de filmes diz que a app nao tem series. */
+        take(1, function (item) {
+            return heroAgeBand(item, thisYear) === 'new' && !heroIsSeries(item);
+        });
+        take(1, function (item) {
+            return heroAgeBand(item, thisYear) === 'new' && heroIsSeries(item);
+        });
+        take(HERO_ANIME_SLOTS, heroIsAnime);
+        take(HERO_OLD_SLOTS, function (item) {
+            return heroAgeBand(item, thisYear) === 'old';
+        });
+        take(HERO_MIDDLE_SLOTS, function (item) {
+            return heroAgeBand(item, thisYear) === 'middle';
+        });
+
+        rows.forEach(function (item) {
+            if (!taken[item.id]) { picked.push(item); taken[item.id] = true; }
+        });
+        return picked;
+    }
+
     return {
         CONTENT: CONTENT,
+        mixHeroRotation: mixHeroRotation,
+        heroIsAnime: heroIsAnime,
         SOURCE: SOURCE,
         SECTIONS: SECTIONS,
         clamp: clamp,
