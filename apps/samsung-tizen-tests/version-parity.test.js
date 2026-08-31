@@ -45,6 +45,28 @@ check('o release manifest acompanha o pacote Samsung', manifestVersion === tizen
 check('a maturidade Samsung continua explícita como preview',
     samsungRelease && samsungRelease.status === 'HARDWARE_VALIDATION' && /-preview$/.test(samsungRelease.version || ''));
 
+/*
+  A loja Samsung recusa uma atualizacao cuja versao nao seja maior que a
+  publicada — a mesma versao ou uma menor nao e aceita como atualizacao.
+
+  Um numero mal formado passa despercebido aqui e so falha no portal, depois de
+  empacotar, assinar e submeter. Verificar a forma custa nada e evita descobrir
+  isso no fim.
+
+  Ver `docs/operations/samsung-store-updates.md`.
+*/
+check('a versao Samsung tem a forma que a loja aceita comparar',
+    /^\d+\.\d+\.\d+$/.test(String(tizenVersion)),
+    String(tizenVersion));
+/*
+  E o identificador do pacote nao pode mudar entre versoes: e ele que diz a loja
+  que este .wgt e uma atualizacao daquele aplicativo, e nao um aplicativo novo.
+  Muda-lo publica um segundo aplicativo e deixa a base instalada para tras.
+*/
+check('o identificador do pacote continua o mesmo de sempre',
+    /id="IPTVBUROxx\.IPTVBURO"/.test(tizenConfig),
+    'tizen:application id');
+
 if (failures.length) {
     process.stdout.write('\n' + failures.length + ' falha(s); ' + passed + ' passaram\n');
     failures.forEach(function (failure) { process.stdout.write(' - ' + failure + '\n'); });
