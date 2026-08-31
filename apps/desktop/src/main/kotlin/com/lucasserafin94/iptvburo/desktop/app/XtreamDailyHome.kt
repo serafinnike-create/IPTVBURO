@@ -145,32 +145,6 @@ private const val HOME_SCROLL_PIXELS = 300f
 /** How long each banner title holds before the next one. */
 private const val HERO_ROTATION_MILLIS = 10_000L
 
-/**
- * How much of the banner's width the trailer covers, from the right.
- *
- * The copy column takes the left: an embedded video always paints above Compose, so anything it
- * covers is gone — the title, the synopsis and the buttons vanished behind it when it filled the
- * banner. Just over half leaves the text its room and still gives the picture the larger share.
- */
-private const val HERO_TRAILER_WIDTH_FRACTION = 0.58f
-
-/**
- * The gap between the end of the copy and the edge of the trailer.
- *
- * Text that stops exactly where a video begins reads as text running into it, and the video's own
- * left mask is a gradient rather than a hard edge — the last word would sit in the fade.
- */
-private val HERO_TRAILER_CLEARANCE = 24.dp
-
-/**
- * The narrowest the copy column may be squeezed while a trailer plays.
- *
- * At some window width the remainder stops being a column and becomes one word per line — the
- * failure this app has produced before. Below this the text is allowed to reach under the video
- * instead: a synopsis partly behind a trailer is still readable, a one-word column is not.
- */
-private val HERO_COPY_MIN_WIDTH = 300.dp
-
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun XtreamDailyHome(
@@ -563,10 +537,13 @@ internal fun HeroTrailer(
      * than as anything blending. The Descobrir card is a rectangle with its own edges.
      */
     blendIntoHero: Boolean = true,
+    onPlaying: () -> Unit = {},
 ) {
     // Keyed on the sound too: the flag is baked into the embed URL, so changing it means a new
     // player rather than a message to the old one.
     val browser = remember(youtubeId, soundOn, blendIntoHero) { TrailerBrowser() }
+    var playbackConfirmed by
+        remember(youtubeId, soundOn, blendIntoHero) { mutableStateOf(false) }
 
     DisposableEffect(browser) { onDispose { browser.dispose() } }
 
@@ -583,6 +560,11 @@ internal fun HeroTrailer(
                     // Both the banner and the Descobrir card play beside something else, and
                     // neither was asked for: muted at the start, no controls, and repeating.
                     unattended = true,
+                    onPlaying = {
+                        playbackConfirmed = true
+                        onPlaying()
+                    },
+                    onFailed = onFailed,
                 )
             }.getOrNull()
         }
@@ -593,6 +575,11 @@ internal fun HeroTrailer(
             onDispose { }
         }
         return
+    }
+
+    LaunchedEffect(panel, youtubeId) {
+        delay(TRAILER_READY_TIMEOUT_MILLIS)
+        if (!playbackConfirmed) onFailed()
     }
 
     // Always mounted, at its real size.
@@ -609,10 +596,22 @@ internal fun HeroTrailer(
     // apparently for longer. It is the one white in this chain that is ours rather than Chromium's.
     SwingPanel(
         factory = { panel },
+        // At its real size from the start.
+        //
+        // It was held at one pixel until playback was confirmed, which is a loop that never closes:
+        // a video inside a one-pixel panel is never drawn, so it never reaches PLAYING, so the panel
+        // is never resized. No trailer appeared anywhere — reported on the banner and the Descobrir
+        // card alike, with the lookup logging real video ids the whole time.
+        //
+        // Nothing needs hiding any more. The white rectangle this was guarding against was
+        // Chromium's own default background, and that is now set at the engine — see
+        // TrailerBrowser. What shows before the video arrives is the app's canvas.
         modifier = modifier,
         background = BuroColors.Canvas,
     )
 }
+
+private const val TRAILER_READY_TIMEOUT_MILLIS = 10_000L
 
 @Composable
 private fun DailyHero(
@@ -664,7 +663,8 @@ private fun DailyHero(
                 settled = true
             }
         }
-        val playing = trailerId != null && settled && !scrolling
+        val activeTrailerId = trailerId?.takeIf { settled && !scrolling }
+        var browserPlaying by remember(activeTrailerId) { mutableStateOf(false) }
 
         if (item != null) {
             BuroRemoteArtwork(
@@ -678,9 +678,9 @@ private fun DailyHero(
         }
         // The rotation is told either way, so a title showing only artwork keeps the ordinary
         // ten-second pace rather than sitting for a minute on a still image.
-        val trailerPlaying = playing && trailerId != null
+        val trailerPlaying = activeTrailerId != null && browserPlaying
         LaunchedEffect(trailerPlaying) { onTrailerPlaying(trailerPlaying) }
-        if (trailerPlaying && trailerId != null) {
+        if (activeTrailerId != null) {
             // The right half only, where the artwork already is.
             //
             // An embedded video is a heavyweight surface: it always paints above Compose, whatever
@@ -692,10 +692,14 @@ private fun DailyHero(
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 HeroTrailer(
-                    youtubeId = trailerId,
-                    modifier = Modifier.fillMaxHeight().fillMaxWidth(HERO_TRAILER_WIDTH_FRACTION),
+                    youtubeId = activeTrailerId,
+                    modifier =
+                        Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(BannerTrailer.TRAILER_WIDTH_FRACTION),
                     soundOn = soundOn,
                     onFailed = onTrailerFailed,
+                    onPlaying = { browserPlaying = true },
                 )
             }
         }
@@ -723,10 +727,11 @@ private fun DailyHero(
                                 // sized as a fraction of the window, and at a narrow width the
                                 // synopsis ran under the video and was cut off mid-sentence.
                                 trailerPlaying ->
-                                    (
-                                        bannerWidth * (1f - HERO_TRAILER_WIDTH_FRACTION) -
-                                            metrics.gutter * 2 - HERO_TRAILER_CLEARANCE
-                                    ).coerceAtLeast(HERO_COPY_MIN_WIDTH)
+                                    BannerTrailer
+                                        .copyWidthBesideTrailer(
+                                            bannerWidth = bannerWidth.value,
+                                            gutter = metrics.gutter.value,
+                                        ).dp
                                 metrics.wide -> 620.dp
                                 else -> 520.dp
                             },
@@ -1164,18 +1169,19 @@ private fun ContinueWatchingRow(
             ) { entry ->
                 val title = entry.item.name.editorialTitle()
                 val fraction = entry.progress.progressPercent.toFloat().coerceIn(0f, 1f)
+                val cardWidth = if (metrics.wide) 336.dp else metrics.landscapeWidth
                 BuroInteractiveSurface(
                     onClick = { onClick(entry) },
-                    modifier = Modifier.width(metrics.landscapeWidth),
+                    modifier = Modifier.width(cardWidth),
                     shape = BuroRadius.Medium,
                     contentDescription = title,
-                ) {
+                ) { state ->
                     Column {
                         Box(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .height(metrics.landscapeWidth * 9f / 16f)
+                                    .height(cardWidth * 9f / 16f)
                                     .clip(BuroRadius.Medium)
                                     .background(BuroColors.SurfaceRaised),
                         ) {
@@ -1185,11 +1191,25 @@ private fun ContinueWatchingRow(
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop,
                             ) { CardArtFallback(title) }
+                            if (state.active) {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.Center)
+                                            .size(46.dp)
+                                            .clip(CircleShape)
+                                            .background(BuroColors.Canvas.copy(alpha = 0.78f))
+                                            .border(1.dp, BuroColors.Primary.copy(alpha = 0.7f), CircleShape),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text("▶", color = BuroColors.Primary, style = MaterialTheme.typography.titleLarge)
+                                }
+                            }
                             Box(
                                 Modifier
                                     .align(Alignment.BottomStart)
                                     .fillMaxWidth()
-                                    .height(4.dp)
+                                    .height(6.dp)
                                     .background(BuroColors.Canvas.copy(alpha = 0.7f)),
                             ) {
                                 Box(
@@ -1214,7 +1234,7 @@ private fun ContinueWatchingRow(
                                 identity.seasonNumber?.let { season ->
                                     "T$season · E${identity.episodeNumber ?: "—"}"
                                 } ?: "${(fraction * 100).toInt()}% ${text.watched}",
-                            color = BuroColors.TextSubtle,
+                            color = BuroColors.TextMuted,
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
                         )
