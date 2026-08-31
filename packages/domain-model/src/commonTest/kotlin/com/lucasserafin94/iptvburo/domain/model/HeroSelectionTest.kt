@@ -150,6 +150,7 @@ class HeroSelectionTest {
         year: Int,
         isSeries: Boolean = false,
         categories: List<String> = emptyList(),
+        addedAt: Long? = null,
     ) = HeroCandidate(
         id = id,
         title = "Title $id",
@@ -157,11 +158,17 @@ class HeroSelectionTest {
         rating = 7.0,
         categoryIds = categories,
         isSeries = isSeries,
+        addedAtEpochSeconds = addedAt,
     )
 
-    /** A rotation of thirty new films, plus one of everything else the mix asks for. */
-    private fun mixPool(thisYear: Int) =
-        (1..30).map { index -> mixCandidate("new$index", thisYear) } +
+    /**
+     * Three of today's arrivals, thirty other current releases, and one of every other kind.
+     *
+     * [now] is null for a provider that does not date its entries, which many do not.
+     */
+    private fun mixPool(thisYear: Int, now: Long? = null) =
+        (1..3).map { index -> mixCandidate("hoje$index", thisYear, addedAt = now?.minus(3_600L)) } +
+            (1..30).map { index -> mixCandidate("new$index", thisYear) } +
             listOf(
                 mixCandidate("serie", thisYear, isSeries = true),
                 mixCandidate("velho1", thisYear - 30),
@@ -172,21 +179,28 @@ class HeroSelectionTest {
             )
 
     /**
-     * The banner is not thirty of the same thing.
+     * The banner leads with what arrived today, then one of each thing it would otherwise miss.
      *
      * Ranked purely by score it fills with whatever the catalogue has most of, and somebody
-     * scrolling past twenty titles from the same year learns nothing about what else is there.
+     * scrolling past twenty titles from the same year learns nothing about what else is there. But
+     * the point of the banner is what is new, so the other kinds get one slot each and no more.
      */
     @Test
-    fun `the rotation carries old, middle and anime, not only new releases`() {
+    fun `the rotation leads with today and carries one of each other kind`() {
         val thisYear = 2026
+        val now = 1_800_000_000L
 
-        val mixed = HeroSelection.mixed(mixPool(thisYear), thisYear).take(8)
+        val mixed = HeroSelection.mixed(mixPool(thisYear, now), thisYear, now).take(6)
         val ids = mixed.map { it.id }
 
-        assertTrue(ids.count { it.startsWith("velho") } >= 2, "sem titulos antigos: $ids")
-        assertTrue(ids.count { it.startsWith("meio") } >= 2, "sem titulos de meio-termo: $ids")
+        assertEquals(
+            listOf("hoje1", "hoje2", "hoje3"),
+            ids.take(3),
+            "os lancamentos do dia nao vem a frente: $ids",
+        )
         assertTrue("anime" in ids, "sem anime nenhum: $ids")
+        assertTrue("serie" in ids, "sem serie nenhuma: $ids")
+        assertTrue("velho1" in ids, "sem filme antigo nenhum: $ids")
     }
 
     /** And it carries both a film and a series, because the app is for both. */
@@ -200,17 +214,33 @@ class HeroSelectionTest {
         assertTrue(front.any { it.isSeries }, "o banner nao mostra nenhuma serie")
     }
 
-    /** The newest lead: what is new is the reason to look at the banner at all. */
+    /**
+     * Everything after the four reserved slots is a current release.
+     *
+     * The banner is about what is new. The anime, the series and the old film are there so it is
+     * not *only* that — not so it becomes a survey of the catalogue.
+     */
     @Test
-    fun `a new release comes first`() {
+    fun `the rest of the rotation is current releases`() {
         val thisYear = 2026
+        val now = 1_800_000_000L
 
-        val first = HeroSelection.mixed(mixPool(thisYear), thisYear).first()
+        val rest = HeroSelection.mixed(mixPool(thisYear, now), thisYear, now).drop(6).take(8)
 
         assertTrue(
-            first.year != null && first.year!! >= thisYear - HeroSelection.NEW_RELEASE_YEARS,
-            "o primeiro do banner nao e um lancamento: ${first.id} (${first.year})",
+            rest.all { it.year != null && it.year!! >= thisYear - HeroSelection.NEW_RELEASE_YEARS },
+            "o resto do banner nao sao lancamentos: ${rest.map { "${it.id}(${it.year})" }}",
         )
+    }
+
+    /** A provider that does not date its entries still fills the banner. */
+    @Test
+    fun `a catalogue with no dates still fills the banner`() {
+        val pool = mixPool(2026, now = null)
+
+        val mixed = HeroSelection.mixed(pool, 2026, nowEpochSeconds = 1_800_000_000L)
+
+        assertEquals(pool.size, mixed.size)
     }
 
     /** Nothing is lost and nothing is duplicated: the mix reorders, it does not filter. */

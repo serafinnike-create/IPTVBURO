@@ -177,6 +177,11 @@ object RealHomeCatalog {
                             )
                         },
                         currentYear,
+                        // No clock passed, deliberately: ChannelUi does not carry the date the
+                        // provider added a title, so nothing here can tell today's arrivals from
+                        // any other 2026 release. Without it the three leading slots go unclaimed
+                        // and the rest of the mix applies unchanged — which is the right answer
+                        // until the catalogue carries that date up to this layer.
                     ).mapNotNull { candidate -> ranked.firstOrNull { it.id == candidate.id } }
             }.take(HERO_ROTATION_SIZE)
 

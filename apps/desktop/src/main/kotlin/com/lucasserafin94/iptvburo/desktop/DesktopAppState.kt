@@ -5552,6 +5552,9 @@ class DesktopAppState(
                                     hasArtwork = !item.artworkUrl.isNullOrBlank(),
                                     categoryIds = item.categoryIds,
                                     isSeries = item.contentType == XtreamContentType.SERIES,
+                                    // What turned up today leads the banner, and only this can
+                                    // tell that apart from a 2026 film added six months ago.
+                                    addedAtEpochSeconds = item.addedAtEpochSeconds,
                                 )
                             },
                         dayOfEpoch = date.toEpochDay(),
@@ -5567,7 +5570,13 @@ class DesktopAppState(
                         // Ranked purely by score it fills with whatever the catalogue has most of,
                         // and scrolling past twenty titles from the same year and the same shelf
                         // teaches nobody what else is in there. See HeroSelection.mixed.
-                        HeroSelection.mixed(ranked, date.year)
+                        HeroSelection.mixed(
+                            ranked,
+                            date.year,
+                            // Captured with the rest of the inputs rather than read inside, so the
+                            // same day and the same catalogue always produce the same banner.
+                            nowEpochSeconds = System.currentTimeMillis() / 1_000L,
+                        )
                     }
                 val heroPool =
                     heroRotation.mapNotNull { chosen ->

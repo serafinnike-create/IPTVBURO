@@ -790,9 +790,11 @@ var BuroDomain = (function () {
     */
     var HERO_NEW_RELEASE_YEARS = 2;
     var HERO_OLD_RELEASE_YEARS = 15;
-    var HERO_OLD_SLOTS = 2;
-    var HERO_MIDDLE_SLOTS = 2;
     var HERO_ANIME_SLOTS = 1;
+    var HERO_OLD_FILM_SLOTS = 1;
+    var HERO_SERIES_SLOTS = 1;
+    var HERO_TODAY_SLOTS = 3;
+    var HERO_ARRIVED_TODAY_SECONDS = 86400;
     var HERO_ANIME_WORDS = ['anime', 'animacao japonesa', 'animação japonesa'];
 
     function heroIsAnime(item) {
@@ -818,10 +820,22 @@ var BuroDomain = (function () {
 
     function mixHeroRotation(rotation, thisYear) {
         var rows = rotation || [];
-        if (rows.length <= HERO_OLD_SLOTS + HERO_MIDDLE_SLOTS + HERO_ANIME_SLOTS) { return rows; }
+        if (rows.length <= HERO_ANIME_SLOTS + HERO_OLD_FILM_SLOTS +
+                HERO_SERIES_SLOTS + HERO_TODAY_SLOTS) { return rows; }
 
+        var now = Math.floor(Date.now() / 1000);
         var taken = {};
         var picked = [];
+
+        /* Um titulo que o fornecedor nao data nao e reclamado como novo: disputa
+           as vagas normais como qualquer outro. */
+        function arrivedToday(item) {
+            var addedAt = Number(item && (item.addedAtEpochSeconds || item.addedAt));
+            var age;
+            if (!addedAt) { return false; }
+            age = now - addedAt;
+            return age >= 0 && age < HERO_ARRIVED_TODAY_SECONDS;
+        }
 
         function take(limit, predicate) {
             var count = 0;
@@ -833,19 +847,17 @@ var BuroDomain = (function () {
             });
         }
 
-        /* Um de cada: um banner so de filmes diz que a app nao tem series. */
-        take(1, function (item) {
-            return heroAgeBand(item, thisYear) === 'new' && !heroIsSeries(item);
-        });
-        take(1, function (item) {
-            return heroAgeBand(item, thisYear) === 'new' && heroIsSeries(item);
-        });
+        /* O que chegou hoje vem a frente: e para isso que o banner serve. */
+        take(HERO_TODAY_SLOTS, arrivedToday);
+        /* Depois um de cada coisa que o banner nunca mostraria de outra forma. */
         take(HERO_ANIME_SLOTS, heroIsAnime);
-        take(HERO_OLD_SLOTS, function (item) {
-            return heroAgeBand(item, thisYear) === 'old';
+        take(HERO_SERIES_SLOTS, heroIsSeries);
+        take(HERO_OLD_FILM_SLOTS, function (item) {
+            return !heroIsSeries(item) && heroAgeBand(item, thisYear) === 'old';
         });
-        take(HERO_MIDDLE_SLOTS, function (item) {
-            return heroAgeBand(item, thisYear) === 'middle';
+        /* E tudo o que vem a seguir e lancamento, que e o resto da rotacao. */
+        take(rows.length, function (item) {
+            return heroAgeBand(item, thisYear) === 'new';
         });
 
         rows.forEach(function (item) {

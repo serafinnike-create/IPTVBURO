@@ -34,13 +34,14 @@ var BuroDomain = window.BuroDomain;
 
 var THIS_YEAR = 2026;
 
-function item(id, year, contentType, categoryIds) {
+function item(id, year, contentType, categoryIds, addedAt) {
     return {
         id: id,
         name: 'Titulo ' + id,
         year: year,
         contentType: contentType || 'MOVIE',
         categoryIds: categoryIds || [],
+        addedAtEpochSeconds: addedAt || null,
     };
 }
 
@@ -48,6 +49,10 @@ function item(id, year, contentType, categoryIds) {
 function pool() {
     var rows = [];
     var index;
+    var hoje = Math.floor(Date.now() / 1000) - 3600;
+    for (index = 1; index <= 3; index += 1) {
+        rows.push(item('hoje' + index, THIS_YEAR, 'MOVIE', [], hoje));
+    }
     for (index = 1; index <= 30; index += 1) {
         rows.push(item('novo' + index, THIS_YEAR));
     }
@@ -67,23 +72,21 @@ function idsOf(rows) {
 process.stdout.write('O banner não é vinte vezes a mesma coisa\n');
 
 var mixed = BuroDomain.mixHeroRotation(pool(), THIS_YEAR);
-var front = idsOf(mixed.slice(0, 8));
+var front = idsOf(mixed.slice(0, 6));
 
-check('leva títulos antigos',
-    front.filter(function (id) { return id.indexOf('velho') === 0; }).length >= 2);
-check('leva títulos de meio-termo',
-    front.filter(function (id) { return id.indexOf('meio') === 0; }).length >= 2);
+/* O que chegou hoje vem à frente: é para isso que o banner serve. */
+check('os lançamentos do dia vêm à frente',
+    idsOf(mixed.slice(0, 3)).join(',') === 'hoje1,hoje2,hoje3');
 check('leva um anime', front.indexOf('anime') >= 0);
+check('leva uma série', front.indexOf('serie') >= 0);
+check('leva um filme antigo', front.indexOf('velho1') >= 0);
 
-/* Um banner só de filmes diz que a app não tem séries, que é o contrário do
-   que ela é. */
-var head = mixed.slice(0, 4);
-check('leva um filme e uma série à frente',
-    head.some(function (row) { return row.contentType !== 'SERIES'; }) &&
-    head.some(function (row) { return row.contentType === 'SERIES'; }));
-
-check('começa por um lançamento',
-    Number(mixed[0].year) >= THIS_YEAR - 2);
+/* E tudo o que vem depois é lançamento: o banner é sobre o que é novo, e as
+   outras três vagas existem para ele não ser *só* isso. */
+check('o resto são lançamentos',
+    mixed.slice(6, 14).every(function (row) {
+        return Number(row.year) >= THIS_YEAR - 2;
+    }));
 
 process.stdout.write('A mistura reordena, não filtra\n');
 

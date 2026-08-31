@@ -245,4 +245,32 @@ class TrailerLookupTest {
         assertEquals(null, client().findTrailer(title = "   ", year = null))
         assertTrue("pediu alguma coisa para um titulo vazio: $paths", paths.isEmpty())
     }
+
+    /**
+     * The banner's backdrop is asked for at full resolution.
+     *
+     * It is the largest picture in the app, and on a wide or high-DPI screen it is painted well past
+     * 1280 wide — where a w1280 backdrop is visibly soft. Reported as the banner's image quality
+     * being poor. Posters and logos stay small on purpose: they are drawn at a couple of hundred
+     * pixels and a sharper file would cost bandwidth for nothing anybody can see.
+     */
+    @Test
+    fun `the backdrop is fetched at full resolution`() {
+        server.dispatcher =
+            object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    paths += request.path.orEmpty()
+                    return MockResponse()
+                        .setHeader("Content-Type", "application/json")
+                        .setBody("""{"id":77,"backdrop_path":"/fundo.jpg","poster_path":"/capa.jpg"}""")
+                }
+            }
+
+        val details = client().titleDetails(tmdbId = 77)
+
+        assertTrue(
+            "o fundo do banner vem em baixa resolucao: ${details?.backdropUrl}",
+            details?.backdropUrl?.contains("/original/") == true,
+        )
+    }
 }

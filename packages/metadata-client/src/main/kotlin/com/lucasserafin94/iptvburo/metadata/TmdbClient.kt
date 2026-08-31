@@ -890,7 +890,14 @@ class TmdbClient(
             title = root.string(if (isSeries) "name" else "title").orEmpty(),
             overview = root.string("overview"),
             // The wide image behind the page, not the poster: a backdrop is 16:9 and made for this.
-            backdropUrl = root.string("backdrop_path")?.let { path -> "$imageBaseUrl/w1280$path" },
+            // The banner is the largest picture in the app, and on a wide or high-DPI screen it is
+            // painted well past 1280 wide — where a w1280 backdrop is visibly soft. Reported as the
+            // banner's image quality being poor. `original` is TMDb's own master, typically around
+            // 3840 wide, which is the only size that survives being stretched across a 4K panel.
+            //
+            // Only the backdrop. Posters and logos are drawn small and would cost bandwidth for a
+            // sharpness nobody can see at 185 pixels wide.
+            backdropUrl = root.string("backdrop_path")?.let { path -> "$imageBaseUrl/original$path" },
             posterUrl = root.string("poster_path")?.let { path -> "$imageBaseUrl/w342$path" },
             year = root.string(if (isSeries) "first_air_date" else "release_date")?.take(4)?.toIntOrNull(),
             rating = root.double("vote_average"),

@@ -45,6 +45,8 @@ class TrailerBrowser {
         youtubeId: String,
         autoplay: Boolean,
         muted: Boolean,
+        /** Artwork kept under the Home preview so still image and motion share one surface. */
+        artworkUrl: String? = null,
         /**
          * Whether this is the Home banner, which wants the masks that merge it into the hero.
          *
@@ -111,7 +113,14 @@ class TrailerBrowser {
             val cefBrowser =
                 cefClient
                     .createBrowser(
-                        host.pageUrlFor(youtubeId, autoplay, muted, blendIntoHero, unattended),
+                        host.pageUrlFor(
+                            youtubeId = youtubeId,
+                            autoplay = autoplay,
+                            muted = muted,
+                            blendIntoHero = blendIntoHero,
+                            unattended = unattended,
+                            artworkUrl = artworkUrl,
+                        ),
                         false,
                         false,
                     )
@@ -146,6 +155,14 @@ class TrailerBrowser {
         // Only this browser and client. CefApp is process-wide and shutting it down would stop
         // every other trailer in the session, including one the user is watching.
         runCatching { nativeComponent?.isVisible = false }
+        // Silenced before anything else, and synchronously.
+        //
+        // `close(true)` asks the render process to go away, and it takes its time — meanwhile the
+        // video keeps playing. On a banner that rotates every ten seconds the old trailer was still
+        // audible under the new one, and after a few turns several were talking at once. Reported
+        // exactly that way. Loading a blank page stops the audio the moment it is asked, so the
+        // slow teardown afterwards is silent.
+        runCatching { browser?.loadURL("about:blank") }
         runCatching { browser?.close(true) }
         runCatching { messageRouter?.let { client?.removeMessageRouter(it) } }
         runCatching { messageRouter?.dispose() }

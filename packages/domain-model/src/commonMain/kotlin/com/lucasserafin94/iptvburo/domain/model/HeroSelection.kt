@@ -27,6 +27,14 @@ data class HeroCandidate(
     val categoryIds: List<String> = emptyList(),
     /** Whether this is a series rather than a film. The banner deliberately carries both. */
     val isSeries: Boolean = false,
+    /**
+     * When the provider added this to the catalogue, if it says.
+     *
+     * Distinct from [year]: a 2026 film added six months ago is a current release, but it is not one
+     * of *today's* arrivals. The banner leads with what turned up today, and this is the only field
+     * that can tell them apart.
+     */
+    val addedAtEpochSeconds: Long? = null,
 )
 
 /**
@@ -199,13 +207,40 @@ object HeroSelection {
     /** Before this, a title is one of the old ones the mix deliberately keeps room for. */
     const val OLD_RELEASE_YEARS = 15
 
-    /** How many of each kind the rotation aims to carry. See [mixed]. */
-    const val OLD_SLOTS = 2
-    const val MIDDLE_SLOTS = 2
+    /**
+     * How many of each kind the rotation aims to carry. See [mixed].
+     *
+     * One each of anime, an old film and a series; three of the day's own arrivals; and everything
+     * after that a current release. The banner is meant to be about what is new — the other three
+     * are there so it is not *only* that, not so it becomes a survey of the catalogue.
+     */
     const val ANIME_SLOTS = 1
+    const val OLD_FILM_SLOTS = 1
+    const val SERIES_SLOTS = 1
+    const val TODAY_SLOTS = 3
 
     /** The category words that mark a title as anime, matched case-insensitively. */
     private val ANIME_WORDS = listOf("anime", "animação japonesa", "animacao japonesa")
+
+    /** A day, in seconds: how recently a title must have arrived to count as today's. */
+    private const val ARRIVED_TODAY_SECONDS = 86_400L
+
+    /**
+     * Whether this turned up in the catalogue within the last day.
+     *
+     * False when the provider does not date its entries, which many do not — a title of unknown age
+     * is not claimed as new, it simply competes for the ordinary slots. A date in the future is
+     * treated the same way: a provider's clock is not something to trust into the banner's lead.
+     */
+    private fun arrivedToday(
+        candidate: HeroCandidate,
+        nowEpochSeconds: Long,
+    ): Boolean {
+        if (nowEpochSeconds <= 0L) return false
+        val addedAt = candidate.addedAtEpochSeconds ?: return false
+        val age = nowEpochSeconds - addedAt
+        return age in 0 until ARRIVED_TODAY_SECONDS
+    }
 
     /** Whether the provider files this title under anime. */
     fun isAnime(candidate: HeroCandidate): Boolean =
@@ -232,10 +267,11 @@ object HeroSelection {
      * about what else is there. The mix keeps the quality order inside each kind and only decides
      * how many of each kind appear:
      *
-     *  - new releases lead, and always include both a film and a series where both exist;
-     *  - two older titles, so the catalogue's depth shows;
-     *  - two from the middle years;
-     *  - one anime, which is a shelf people either follow closely or never see at all.
+     *  - three of the day's own arrivals lead, because that is what the banner is for;
+     *  - one anime, a shelf people either follow closely or never see at all;
+     *  - one series, so a banner of nothing but films does not say the app has no series;
+     *  - one old film, so the catalogue's depth shows;
+     *  - and everything after that a current release.
      *
      * Everything not claimed by a slot keeps its place behind them, so nothing is lost — a small
      * catalogue with no old titles simply carries more new ones rather than showing fewer.
@@ -243,8 +279,15 @@ object HeroSelection {
     fun mixed(
         rotation: List<HeroCandidate>,
         thisYear: Int,
+        /**
+         * Now, for deciding what counts as arriving today.
+         *
+         * Passed rather than read, so the same catalogue and the same day always produce the same
+         * banner instead of drifting as the clock moves during a session.
+         */
+        nowEpochSeconds: Long = 0L,
     ): List<HeroCandidate> {
-        if (rotation.size <= OLD_SLOTS + MIDDLE_SLOTS + ANIME_SLOTS) return rotation
+        if (rotation.size <= ANIME_SLOTS + OLD_FILM_SLOTS + SERIES_SLOTS + TODAY_SLOTS) return rotation
 
         val taken = LinkedHashSet<String>()
         val picked = mutableListOf<HeroCandidate>()
@@ -260,13 +303,14 @@ object HeroSelection {
                 .forEach { picked += it; taken += it.id }
         }
 
-        // The newest first, and one of each kind: a banner of nothing but films says the app has no
-        // series, which is the opposite of what it is for.
-        take(1) { ageBand(it, thisYear) == "new" && !it.isSeries }
-        take(1) { ageBand(it, thisYear) == "new" && it.isSeries }
+        // What arrived today leads, because that is what the banner is for.
+        take(TODAY_SLOTS) { arrivedToday(it, nowEpochSeconds) }
+        // Then one of each of the three the banner would otherwise never show.
         take(ANIME_SLOTS, ::isAnime)
-        take(OLD_SLOTS) { ageBand(it, thisYear) == "old" }
-        take(MIDDLE_SLOTS) { ageBand(it, thisYear) == "middle" }
+        take(SERIES_SLOTS) { it.isSeries }
+        take(OLD_FILM_SLOTS) { !it.isSeries && ageBand(it, thisYear) == "old" }
+        // And everything after that is a current release, which is the rest of the rotation.
+        take(rotation.size) { ageBand(it, thisYear) == "new" }
 
         // Then everything else, still in its ranked order.
         rotation.forEach { candidate ->
