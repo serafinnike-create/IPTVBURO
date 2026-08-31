@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -520,6 +521,8 @@ fun XtreamDailyHome(
 internal fun HeroTrailer(
     youtubeId: String,
     modifier: Modifier = Modifier,
+    /** Same backdrop already under the banner, used to feather still image into moving image. */
+    artworkUrl: String? = null,
     /**
      * Whether the viewer has asked for sound.
      *
@@ -541,19 +544,20 @@ internal fun HeroTrailer(
 ) {
     // Keyed on the sound too: the flag is baked into the embed URL, so changing it means a new
     // player rather than a message to the old one.
-    val browser = remember(youtubeId, soundOn, blendIntoHero) { TrailerBrowser() }
+    val browser = remember(youtubeId, soundOn, blendIntoHero, artworkUrl) { TrailerBrowser() }
     var playbackConfirmed by
-        remember(youtubeId, soundOn, blendIntoHero) { mutableStateOf(false) }
+        remember(youtubeId, soundOn, blendIntoHero, artworkUrl) { mutableStateOf(false) }
 
     DisposableEffect(browser) { onDispose { browser.dispose() } }
 
     val panel =
-        remember(youtubeId, soundOn, blendIntoHero) {
+        remember(youtubeId, soundOn, blendIntoHero, artworkUrl) {
             runCatching {
                 browser.createComponent(
                     youtubeId = youtubeId,
                     autoplay = true,
                     muted = !soundOn,
+                    artworkUrl = artworkUrl,
                     // The browser surface always sits above Compose. Its own page therefore owns
                     // the side and bottom masks that make video, artwork and copy one hero.
                     blendIntoHero = blendIntoHero,
@@ -693,6 +697,7 @@ private fun DailyHero(
             ) {
                 HeroTrailer(
                     youtubeId = activeTrailerId,
+                    artworkUrl = item?.artworkUrl,
                     modifier =
                         Modifier
                             .fillMaxHeight()
@@ -783,7 +788,17 @@ private fun DailyHero(
             )
             item?.let { selected ->
                 Spacer(Modifier.height(BuroSpacing.Xxs))
-                Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm)) {
+                // Wrapping, not a plain Row.
+                //
+                // While a trailer plays the copy column narrows to leave the video its half, and
+                // three buttons plus their spacing no longer fit across it. A Row does not wrap: it
+                // lays them out anyway and each button clips its own label, which showed as three
+                // outlined buttons with no text in them at all. Reported exactly that way, with the
+                // title and synopsis directly above rendering perfectly.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
+                    verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+                ) {
                     // Series need an episode before anything can play, so the direct Play action
                     // is only offered for content that resolves to a single stream.
                     if (selected.contentType != XtreamContentType.SERIES) {
