@@ -133,6 +133,8 @@ var BuroApp = (function () {
     var homeHeroTimer = null;
     var homeEnrichmentTimer = null;
     var discoverRequestId = 0;
+    var discoverEnrichmentTimer = null;
+    var discoverEnrichmentComplete = {};
     var discoverSessionKey = null;
     var discoverSessionTaste = { leaningByGenre: {} };
     var discoverJudgedIds = {};
@@ -621,8 +623,10 @@ var BuroApp = (function () {
         return '<span class="hero-art">' +
             (primary ? '<img src="' + attr(primary) + '"' +
                 (fallback ? ' data-artwork-fallback="' + attr(fallback) + '"' : '') + ' alt="">' : '') +
-            (trailer ? '<iframe class="hero-trailer" src="' + attr(BuroTrailer.bannerEmbedUrl(trailer)) +
-                '" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>' : '') +
+            (trailer ? '<span class="hero-trailer-stage" aria-hidden="true">' +
+                '<iframe class="hero-trailer" src="' + attr(BuroTrailer.bannerEmbedUrl(trailer)) +
+                '" data-trailer-item-id="' + attr(item.id) + '" tabindex="-1"' +
+                ' frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></span>' : '') +
             '</span>';
     }
 
@@ -637,6 +641,9 @@ var BuroApp = (function () {
         var videoId;
         var nowSeconds;
         if (!item || !item.id) { return null; }
+        /* Reduzir movimento desliga vídeo automático, como no contrato
+           cinematográfico. A capa continua exatamente no mesmo lugar. */
+        if (state.preferences.reducedMotion) { return null; }
         videoId = state.heroTrailers[item.id];
         if (!videoId) { return null; }
         nowSeconds = Math.floor(Date.now() / 1000);
@@ -3338,7 +3345,8 @@ var BuroApp = (function () {
         return false;
     }
 
-    function scheduleHomeHeroRotation(data) {
+    function scheduleHomeHeroRotation(data, requestedDelay) {
+        var delay = Number(requestedDelay) > 0 ? Number(requestedDelay) : HOME_HERO_ROTATION_MILLIS;
         if (homeHeroTimer) { window.clearTimeout(homeHeroTimer); homeHeroTimer = null; }
         if (state.preferences.reducedMotion || !data.heroRotation || data.heroRotation.length <= 1) { return; }
         homeHeroTimer = window.setTimeout(function () {
@@ -3357,6 +3365,7 @@ var BuroApp = (function () {
             var preferred;
             if (state.screen !== 'SHELL' || state.section !== 'HOME' || state.screenData !== data) { return; }
             if (heroFocused) { scheduleHomeHeroRotation(data); return; }
+            data.heroTrailerPlayingId = null;
             data.heroIndex = ((Number(data.heroIndex) || 0) + 1) % data.heroRotation.length;
             render();
             focusables.some(function (element, index) {
@@ -3365,7 +3374,7 @@ var BuroApp = (function () {
                 return false;
             });
             if (preferred != null) { focusIndex = preferred; applyFocus(); }
-        }, HOME_HERO_ROTATION_MILLIS);
+        }, delay);
     }
 
     function tmdbHeroDetails(metadata) {
@@ -3659,7 +3668,28 @@ var BuroApp = (function () {
             scheduleHomeHeroRotation(data);
             scheduleHomeHeroEnrichment(data);
         }
+        observeBackgroundTrailers();
         raiseHomeHeroSound();
+    }
+
+    function observeBackgroundTrailers() {
+        if (!window.BuroTrailer || !BuroTrailer.observeBackgroundFrames) { return; }
+        BuroTrailer.observeBackgroundFrames(function (itemId) {
+            state.heroTrailerFailures[itemId] = Math.floor(Date.now() / 1000);
+        }, function (itemId) {
+            var data = state.screenData;
+            var current;
+            if (state.screen !== 'SHELL' || state.section !== 'HOME' || !data || data.kind !== 'home') { return; }
+            current = data.heroRotation && data.heroRotation[Number(data.heroIndex) || 0];
+            if (!current || current.id !== itemId) { return; }
+            data.heroTrailerPlayingId = itemId;
+            /* Uma imagem fixa troca em dez segundos. Um trailer que realmente
+               começou ganha um minuto, como no Windows, para não ser cortado
+               no meio de uma frase. A próxima troca recria o iframe com o id
+               do novo título, portanto imagem, texto e vídeo permanecem
+               atômicos. */
+            scheduleHomeHeroRotation(data, 60000);
+        });
     }
 
     /*
@@ -3834,13 +3864,19 @@ var BuroApp = (function () {
       heroTrailerFor -- para o cartao e o banner nao discordarem do mesmo filme.
     */
     function discoverTrailerHtml(item, layer) {
+        var enrichment;
         var trailer;
         if (layer === 'next') { return ''; }
-        trailer = heroTrailerFor(item);
+        enrichment = item && state.activeSource ?
+            BuroHeroEnrichment.get(state.activeSource.id, item.id) : null;
+        trailer = BuroDomain.sanitizeYouTubeReference(enrichment && enrichment.youtubeTrailerId) ||
+            heroTrailerFor(item);
+        if (trailer && heroTrailerRecentlyFailed(item.id, Math.floor(Date.now() / 1000))) { trailer = null; }
         if (!trailer) { return ''; }
         return '<iframe class="discover-trailer" src="' +
             attr(BuroTrailer.bannerEmbedUrl(trailer)) +
-            '" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>';
+            '" data-trailer-item-id="' + attr(item.id) + '" aria-hidden="true" tabindex="-1"' +
+            ' frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>';
     }
 
     /*
@@ -3860,8 +3896,78 @@ var BuroApp = (function () {
         if (!item || !state.activeSource) { return ''; }
         enrichment = BuroHeroEnrichment.get(state.activeSource.id, item.id);
         plot = enrichment && enrichment.synopsis;
-        if (!plot) { return ''; }
+        if (!plot) {
+            return '<p class="discover-synopsis pending" aria-live="polite">' +
+                t('discoverDetailsLoading') + '</p>';
+        }
         return '<p class="discover-synopsis">' + escapeHtml(plot) + '</p>';
+    }
+
+    function discoverPreviewHtml(item) {
+        var enrichment = item && state.activeSource ?
+            BuroHeroEnrichment.get(state.activeSource.id, item.id) : null;
+        var poster = artworkFor(item);
+        var backdrop = usableArtworkUrl(item, enrichment && enrichment.backdropUrl);
+        var primary = backdrop || poster;
+        return '<div class="discover-preview">' +
+            (primary ? '<img src="' + attr(primary) + '"' +
+                (backdrop && poster && backdrop !== poster ? ' data-artwork-fallback="' + attr(poster) + '"' : '') +
+                ' alt="">' : '<span class="discover-preview-empty">B</span>') +
+            discoverTrailerHtml(item, 'current') + '<span class="discover-preview-shade"></span></div>';
+    }
+
+    function scheduleDiscoverEnrichment(data, item) {
+        var source = state.activeSource;
+        var tmdbKey = BuroTmdb.keyForProfile(state.activeProfile && state.activeProfile.id);
+        var sync;
+        var allowProvider;
+        var identity;
+        if (discoverEnrichmentTimer) {
+            window.clearTimeout(discoverEnrichmentTimer);
+            discoverEnrichmentTimer = null;
+        }
+        if (!source || !item) { return; }
+        identity = source.id + ':' + item.id;
+        if (BuroHeroEnrichment.get(source.id, item.id) || discoverEnrichmentComplete[identity]) { return; }
+        sync = catalogueSyncStatus(source);
+        allowProvider = source.type === 'XTREAM' && !(sync && sync.state === 'RUNNING');
+        if (!allowProvider && !tmdbKey) {
+            discoverEnrichmentComplete[identity] = true;
+            return;
+        }
+        discoverEnrichmentTimer = window.setTimeout(function () {
+            var status;
+            discoverEnrichmentTimer = null;
+            if (state.screen !== 'SHELL' || state.section !== 'DISCOVER' || state.screenData !== data ||
+                    !state.activeSource || state.activeSource.id !== source.id ||
+                    !data.deck || !data.deck[0] || data.deck[0].id !== item.id) { return; }
+            function finish(enrichment) {
+                if (discoverEnrichmentComplete[identity]) { return; }
+                discoverEnrichmentComplete[identity] = true;
+                if (enrichment) {
+                    rememberArtwork(item.id, enrichment.artworkUrl);
+                    state.heroTrailers[item.id] =
+                        BuroDomain.sanitizeYouTubeReference(enrichment.youtubeTrailerId) || '';
+                }
+                if (state.screen === 'SHELL' && state.section === 'DISCOVER' && state.screenData === data &&
+                        data.deck && data.deck[0] && data.deck[0].id === item.id) { render(); }
+            }
+            try {
+                status = BuroHeroEnrichment.start(source, [item], {
+                    modeKey: allowProvider ? 'provider-tmdb-fallback' : 'tmdb',
+                    loadDetails: function (candidate, success, failure) {
+                        return loadHomeHeroDetails(source, tmdbKey, allowProvider, candidate, success, failure);
+                    },
+                    onItem: function (candidate, enrichment) {
+                        if (candidate && candidate.id === item.id) { finish(enrichment); }
+                    },
+                    onComplete: function () { finish(BuroHeroEnrichment.get(source.id, item.id)); }
+                });
+                if (status && status.state === 'COMPLETE') {
+                    finish(BuroHeroEnrichment.get(source.id, item.id));
+                }
+            } catch (ignoredDiscoverEnrichment) { finish(null); }
+        }, 0);
     }
 
     function renderDiscoverCard(item, layer) {
@@ -3874,10 +3980,10 @@ var BuroApp = (function () {
         return '<article class="discover-card ' + layer + (artworkFor(item) ? ' has-art' : '') +
             '" data-id="' + attr(item.id) + '"' + (layer === 'next' ? ' aria-hidden="true"' :
                 ' aria-label="' + attr(item.name) + '"') + '>' +
-            artworkHtml(item, 'discover-art') + discoverTrailerHtml(item, layer) +
+            artworkHtml(item, 'discover-art') +
             '<span class="badge">' + escapeHtml(item.contentType) +
             '</span><div class="discover-card-copy"><h3>' + escapeHtml(item.name) + '</h3><p>' +
-            escapeHtml(facts.join('  ·  ')) + '</p>' + discoverSynopsisHtml(item) +
+            escapeHtml(facts.join('  ·  ')) + '</p>' +
             '</div></article>';
     }
 
@@ -3920,16 +4026,20 @@ var BuroApp = (function () {
         content += '<section class="discover-workspace" aria-label="' + attr(t('discover')) + '">' +
             '<p class="discover-counter" aria-live="polite">' +
             escapeHtml(t('discoverCounter').replace('{current}', position).replace('{total}', Math.max(position, Number(data.dealtCount) || 0))) +
-            '</p><div class="discover-stage">' + (deck[1] ? renderDiscoverCard(deck[1], 'next') : '') +
-            renderDiscoverCard(current, 'current') + '</div><div class="discover-actions">' +
+            '</p><div class="discover-stage"><div class="discover-poster-stack">' +
+            (deck[1] ? renderDiscoverCard(deck[1], 'next') : '') + renderDiscoverCard(current, 'current') +
+            '</div><aside class="discover-decision-panel">' + discoverPreviewHtml(current) +
+            '<div class="discover-decision-copy">' + discoverSynopsisHtml(current) + '</div><div class="discover-actions">' +
             '<button class="discover-action skip focusable" data-action="discover-skip" data-id="' + attr(current.id) +
             '" aria-label="' + attr(t('discoverSkip')) + '"><span>×</span><strong>' + t('discoverSkip') + '</strong></button>' +
             '<button class="discover-action keep focusable" data-action="discover-keep" data-id="' + attr(current.id) +
             '" aria-label="' + attr(t('discoverKeep')) + '"><span>✓</span><strong>' + t('discoverKeep') + '</strong></button>' +
             '<button class="discover-action details focusable" data-action="discover-details" data-id="' + attr(current.id) +
             '" aria-label="' + attr(t('discoverDetails')) + '"><span>i</span><strong>' + t('discoverDetails') + '</strong></button>' +
-            '</div></section>';
+            '</div></aside></div></section>';
         shell(content, t('discover'), true);
+        observeBackgroundTrailers();
+        scheduleDiscoverEnrichment(data, current);
     }
 
     function advanceDiscover(item, verdict) {
@@ -4600,7 +4710,8 @@ var BuroApp = (function () {
             (artworkFor(item) ? ' has-art' : '') + '" data-action="' + action + '" data-id="' + attr(item.id) + '">' +
             art + (marks ? '<span class="badge">' + marks + '</span>' : '') + '<h3>' +
             escapeHtml(item.name) + '</h3><p>' + metadata + '</p>' +
-            (playback ? '<span class="media-progress"><i style="width:' + playback.percent.toFixed(2) + '%"></i></span>' : '') + '</button>';
+            (playback ? '<span class="media-play-affordance" aria-hidden="true">▶</span>' +
+                '<span class="media-progress"><i style="width:' + playback.percent.toFixed(2) + '%"></i></span>' : '') + '</button>';
     }
 
     /*
@@ -9899,11 +10010,100 @@ var BuroApp = (function () {
         return result;
     }
 
+    /*
+      As telas que uma licenca vencida ainda pode ver.
+
+      Escolher o idioma e aceitar o aviso legal vem antes de qualquer licenca —
+      bloquear ali deixaria a pessoa presa numa lingua que talvez nao leia. A
+      propria tela de ativacao, obviamente. E a abertura, que e onde a decisao
+      ainda esta sendo carregada.
+
+      Os diagnosticos ficam alcancaveis de proposito: quando a licenca nao valida
+      por falta de rede, e ali que se descobre por que, e recusar o acesso a isso
+      deixaria a pessoa sem nenhum caminho.
+    */
+    var LICENCE_FREE_SCREENS = [
+        'LANGUAGE', 'LEGAL', 'BOOT', 'LICENCE', 'DIAGNOSTICS',
+        /*
+          Criar e escolher perfil tambem ficam de fora.
+
+          A abertura leva a `PROFILES` quando ainda nao ha nenhum, e bloquear ali
+          deixaria a pessoa sem forma de chegar a lugar algum: sem perfil nao ha
+          shell, e com o bloqueio nao ha perfil. Nada de catalogo aparece nessas
+          telas, entao nada e servido a quem nao pagou.
+        */
+        'PROFILES', 'PROFILE_FORM', 'PROFILE_PHOTO_PICKER'
+    ];
+
+    /*
+      Uma assinatura vencida nao ve o catalogo.
+
+      A TV mostrava "Assinatura vencida" numa etiqueta no topo e continuava
+      servindo filmes e series: a etiqueta informava sem impedir nada. O
+      aplicativo do Windows resolve isto antes de compor qualquer coisa,
+      justamente para que um aplicativo bloqueado nunca componha um catalogo que
+      nao tem direito de mostrar.
+
+      A guarda fica no comeco do `render`, que e o equivalente aqui: todo caminho
+      que leve a desenhar passa por ela, inclusive os que a navegacao por
+      controle remoto alcanca sem clicar em nada.
+
+      A saida e pagar ou receber uma chave — a mesma tela de ativacao que ja
+      existia, agora imposta em vez de oferecida.
+    */
+    /* As tres razoes em que o servidor de facto disse nao. Uma funcao so, para
+       o bloqueio da interface e o da reproducao nao poderem divergir. */
+    function licenceBlocks(decision) {
+        return Boolean(decision) && !decision.allowed &&
+            ['TRIAL_ENDED', 'EXPIRED', 'REVOKED'].indexOf(decision.reason) >= 0;
+    }
+
+    function enforceLicenceGate() {
+        var decision;
+        if (LICENCE_FREE_SCREENS.indexOf(state.screen) >= 0) { return false; }
+        if (typeof BuroLicense === 'undefined' || !BuroLicense.decide) { return false; }
+        decision = BuroLicense.decide();
+        if (decision.allowed) { return false; }
+        /*
+          Bloqueia so quando o servidor disse nao — e nao por tudo o que nega.
+
+          `decide()` devolve `allowed: false` por cinco razoes muito diferentes,
+          e tratar as cinco igual tranca o aplicativo por motivos que nao sao do
+          cliente:
+
+          - `UNAVAILABLE`: este build nao tem a chave publica do servidor. E um
+            problema de empacotamento, e bloquear ali seria o aplicativo se
+            trancar sozinho.
+          - `UNREGISTERED`: o aparelho ainda nao se apresentou. O registro e
+            assincrono e silencioso na abertura, entao bloquear aqui trancaria a
+            primeira execucao antes de a resposta chegar — e para sempre sem
+            rede.
+          - `NEEDS_VERIFICATION`: a licenca existe e nao pode ser reconferida
+            agora, quase sempre por falta de internet. Quem pagou e esta sem rede
+            nao deve perder o que tem.
+
+          Sobram as tres em que o servidor de facto disse nao: o teste acabou, a
+          assinatura venceu, ou a licenca foi revogada. So essas trancam.
+
+          O aplicativo do Windows faz a mesma distincao por outro caminho — ele
+          so bloqueia quando ha um estado de licenca de verdade.
+        */
+        if (!licenceBlocks(decision)) { return false; }
+        /* Uma reproducao em curso e encerrada junto: deixar o filme correndo por
+           tras da tela de bloqueio seria bloquear so a vitrine. */
+        if (document.body.classList.contains('playing')) { stopPlayback(); }
+        state.screen = 'LICENCE';
+        state.screenData = {};
+        return true;
+    }
+
     function render() {
         var previousAction = focusables[focusIndex] && focusables[focusIndex].getAttribute('data-action');
         var previousFocusKey = focusIdentity(focusables[focusIndex]);
         if (homeHeroTimer) { window.clearTimeout(homeHeroTimer); homeHeroTimer = null; }
         if (homeEnrichmentTimer) { window.clearTimeout(homeEnrichmentTimer); homeEnrichmentTimer = null; }
+        enforceLicenceGate();
+        if (discoverEnrichmentTimer) { window.clearTimeout(discoverEnrichmentTimer); discoverEnrichmentTimer = null; }
         if (state.screen === 'LANGUAGE') { renderLanguageSelection(); }
         else if (state.screen === 'BOOT') { renderBoot(); }
         else if (state.screen === 'LEGAL') { renderLegal(); }
@@ -12727,6 +12927,17 @@ var BuroApp = (function () {
           verde deixava de abrir o guia. Cancelar na raiz vale para todos os
           caminhos.
         */
+        /*
+          Uma licenca vencida nao inicia reproducao nenhuma.
+
+          O `render` ja bloqueia a interface, mas este caminho e alcancado por
+          teclas de midia e pelo encadeamento automatico de episodios, que nao
+          passam por um desenho antes de tocar.
+        */
+        if (typeof BuroLicense !== 'undefined' && BuroLicense.decide && licenceBlocks(BuroLicense.decide())) {
+            render();
+            return;
+        }
         cancelNextEpisode(true);
         /* Uma reproducao de verdade encerra a previa: dois fluxos ao mesmo
            tempo e o dobro do custo, e o audio brigaria. */
@@ -14230,6 +14441,7 @@ var BuroApp = (function () {
         _forgetHomeCache: forgetHomeCache,
         _matchSubscriptionLocal: matchSubscriptionLocal,
         _schedulePreview: schedulePreview,
+        _playItem: playItem,
         /* Envelhece o cache sem o descartar: e o estado de uma segunda visita
            horas depois, que e quando a conferencia serve. */
         _ageHomeCacheForTest: function () { if (homeCache) { homeCache.at = 0; } },
