@@ -514,7 +514,11 @@ private fun XtreamToolbar(
                 .padding(horizontal = BuroSpacing.GutterCompact, vertical = BuroSpacing.Xs),
         verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Md),
+            verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
+        ) {
             // Segmented control rather than three filled buttons: only one type can be active, and
             // three competing gold buttons made every state read as "selected".
             //
@@ -527,7 +531,6 @@ private fun XtreamToolbar(
                 label = { type -> type.label(text) },
                 onSelect = onTypeSelected,
             )
-            Spacer(Modifier.width(BuroSpacing.Md))
             OutlinedTextField(
                 value = query,
                 onValueChange = onQueryChange,
@@ -552,7 +555,6 @@ private fun XtreamToolbar(
             // They had a row to themselves above a third row of selectors: three bands of chrome
             // over the catalogue, which is what somebody came to look at. Asked for three times.
             if (selectedType != XtreamContentType.LIVE) {
-                Spacer(Modifier.width(BuroSpacing.Md))
                 YearAndRatingFilters(
                     text = text,
                     selectedYear = selectedYear,
@@ -561,7 +563,6 @@ private fun XtreamToolbar(
                     onMinimumRatingSelected = onMinimumRatingSelected,
                 )
             }
-            Spacer(Modifier.weight(1f))
         }
 
         Row(
@@ -2135,7 +2136,7 @@ internal fun XtreamItemDetail(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        item.name,
+                        item.name.editorialTitle(),
                         color = BuroColors.Text,
                         style =
                             if (compact) {
@@ -2216,6 +2217,10 @@ internal fun XtreamItemDetail(
                     containerExtension = item.containerExtension,
                     contentKey = item.contentIdentity().key,
                 )
+                val movieTrailerId =
+                    (movieStatus as? MovieDetailsStatus.Loaded)?.details?.youtubeTrailerId
+                var secondaryActionsVisible by
+                    remember(item.providerId) { mutableStateOf(false) }
                 // Actions sit on one line at their natural width. Full-width stacked buttons made
                 // a page about a film look like a settings form.
                 FlowRow(
@@ -2248,26 +2253,20 @@ internal fun XtreamItemDetail(
                             fontWeight = FontWeight.Bold,
                         )
                     }
-                    if (resumeDecisionFor(mediaTarget) is ResumeDecision.ResumeFrom) {
-                        OutlinedButton(
-                            onClick = {
-                                onOpenExternal(
-                                    PendingXtreamExternal(
-                                        item.name,
-                                        mediaTarget,
-                                        startPositionMillis = 0L,
-                                    ),
-                                )
-                            },
-                            modifier = Modifier.height(48.dp),
-                            shape = BuroRadius.Small,
-                            colors =
-                                ButtonDefaults.outlinedButtonColors(
-                                    contentColor = BuroColors.Text,
-                                ),
-                        ) { Text("Assistir do início") }
-                    }
                     if (item.contentType == XtreamContentType.MOVIE) {
+                        movieTrailerId?.let { trailerId ->
+                            OutlinedButton(
+                                onClick = { onOpenTrailer(trailerId) },
+                                modifier = Modifier.height(48.dp),
+                                shape = BuroRadius.Small,
+                                colors =
+                                    ButtonDefaults.outlinedButtonColors(
+                                        contentColor = BuroColors.Text,
+                                    ),
+                            ) {
+                                Text("▷  Trailer", fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                         OutlinedButton(
                             onClick = onToggleFavorite,
                             modifier = Modifier.height(48.dp),
@@ -2283,90 +2282,99 @@ internal fun XtreamItemDetail(
                                 fontWeight = FontWeight.SemiBold,
                             )
                         }
-                        // Beside Favourites, which is the action it most resembles: both mark a
-                        // title for later rather than doing anything to it now. A favourite says
-                        // "I like this", a reminder says "come back to this one".
-                        onToggleReminder?.let { toggle ->
-                            OutlinedButton(
-                                onClick = toggle,
-                                modifier = Modifier.height(48.dp),
-                                shape = BuroRadius.Small,
-                                colors =
-                                    ButtonDefaults.outlinedButtonColors(
-                                        contentColor =
-                                            if (hasReminder) BuroColors.Primary else BuroColors.Text,
-                                    ),
-                            ) {
-                                Text(
-                                    // Outline when unmarked, filled once marked — the same pair
-                                    // Favoritos uses beside it. Text glyphs rather than an emoji
-                                    // bell: Windows renders emoji in colour at their own width,
-                                    // which would make this the one loud button in a row of five.
-                                    if (hasReminder) {
-                                        "◉  ${text.savedForLater.reminderActive}"
-                                    } else {
-                                        "○  ${text.savedForLater.reminderAdd}"
-                                    },
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                            }
+                        OutlinedButton(
+                            onClick = { secondaryActionsVisible = !secondaryActionsVisible },
+                            modifier = Modifier.height(48.dp),
+                            shape = BuroRadius.Small,
+                            colors =
+                                ButtonDefaults.outlinedButtonColors(
+                                    contentColor = BuroColors.TextMuted,
+                                ),
+                        ) {
+                            Text(
+                                "${if (secondaryActionsVisible) "▴" else "▾"}  ${text.settingsText.moreSettingsTitle}",
+                                fontWeight = FontWeight.SemiBold,
+                            )
                         }
-                        // Beside Favourites: both are things you do *about* a film rather than
-                        // with it, and they belong together after the play actions.
-                        onShare?.let { share ->
+                    }
+                    if (
+                        item.contentType != XtreamContentType.MOVIE ||
+                            secondaryActionsVisible
+                    ) {
+                        if (resumeDecisionFor(mediaTarget) is ResumeDecision.ResumeFrom) {
                             OutlinedButton(
-                                onClick = share,
+                                onClick = {
+                                    onOpenExternal(
+                                        PendingXtreamExternal(
+                                            item.name,
+                                            mediaTarget,
+                                            startPositionMillis = 0L,
+                                        ),
+                                    )
+                                },
                                 modifier = Modifier.height(48.dp),
                                 shape = BuroRadius.Small,
                                 colors =
                                     ButtonDefaults.outlinedButtonColors(
                                         contentColor = BuroColors.Text,
                                     ),
-                            ) {
-                                Text("↗  ${text.shareStrings.share}", fontWeight = FontWeight.SemiBold)
-                            }
+                            ) { Text("Assistir do início") }
                         }
-                        // Sending this title to another screen on the network — a television, a
-                        // phone, another computer. Beside Compartilhar because it is the same idea
-                        // with a different destination: both hand over *which* title, never a
-                        // stream, so the other end plays from its own list and this machine's
-                        // credentials stay here.
-                        onCast?.let { cast ->
-                            OutlinedButton(
-                                onClick = cast,
-                                modifier = Modifier.height(48.dp),
-                                shape = BuroRadius.Small,
-                                colors =
-                                    ButtonDefaults.outlinedButtonColors(
-                                        contentColor = BuroColors.Text,
-                                    ),
-                            ) {
-                                Text("⇥  ${text.shareStrings.cast.castAction}", fontWeight = FontWeight.SemiBold)
+                        if (item.contentType == XtreamContentType.MOVIE) {
+                            onToggleReminder?.let { toggle ->
+                                OutlinedButton(
+                                    onClick = toggle,
+                                    modifier = Modifier.height(48.dp),
+                                    shape = BuroRadius.Small,
+                                    colors =
+                                        ButtonDefaults.outlinedButtonColors(
+                                            contentColor =
+                                                if (hasReminder) BuroColors.Primary else BuroColors.Text,
+                                        ),
+                                ) {
+                                    Text(
+                                        if (hasReminder) {
+                                            "◉  ${text.savedForLater.reminderActive}"
+                                        } else {
+                                            "○  ${text.savedForLater.reminderAdd}"
+                                        },
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
                             }
-                        }
-                        // Beside the other actions, where the series page has always had it.
-                        //
-                        // This used to sit at the very bottom of the full record, after the plot,
-                        // the director and the cast strip, so on a long page it was below the fold
-                        // and read as missing. Same button, somewhere it can be found.
-                        //
-                        // Still only drawn when TMDb actually gave a trailer id for this title:
-                        // a button that opens nothing would be worse than its absence.
-                        (movieStatus as? MovieDetailsStatus.Loaded)?.details?.youtubeTrailerId?.let { trailerId ->
-                            OutlinedButton(
-                                onClick = { onOpenTrailer(trailerId) },
-                                modifier = Modifier.height(48.dp),
-                                shape = BuroRadius.Small,
-                                colors =
-                                    ButtonDefaults.outlinedButtonColors(
-                                        contentColor = BuroColors.Text,
-                                    ),
-                            ) {
-                                Text("▶  Trailer", fontWeight = FontWeight.SemiBold)
+                            onShare?.let { share ->
+                                OutlinedButton(
+                                    onClick = share,
+                                    modifier = Modifier.height(48.dp),
+                                    shape = BuroRadius.Small,
+                                    colors =
+                                        ButtonDefaults.outlinedButtonColors(
+                                            contentColor = BuroColors.Text,
+                                        ),
+                                ) {
+                                    Text("↗  ${text.shareStrings.share}", fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                            onCast?.let { cast ->
+                                OutlinedButton(
+                                    onClick = cast,
+                                    modifier = Modifier.height(48.dp),
+                                    shape = BuroRadius.Small,
+                                    colors =
+                                        ButtonDefaults.outlinedButtonColors(
+                                            contentColor = BuroColors.Text,
+                                        ),
+                                ) {
+                                    Text("⇥  ${text.shareStrings.cast.castAction}", fontWeight = FontWeight.SemiBold)
+                                }
                             }
                         }
                     }
-                    if (downloadState != null && onDownload != null) {
+                    if (
+                        downloadState != null &&
+                            onDownload != null &&
+                            (item.contentType != XtreamContentType.MOVIE || secondaryActionsVisible)
+                    ) {
                         DownloadButton(
                             state = downloadState,
                             text = text,
@@ -2406,7 +2414,11 @@ internal fun XtreamItemDetail(
                 // Only once marked, and only here — saying it before the button is pressed would
                 // argue against pressing it. Said at all because Windows stores the reminder but
                 // has nothing that announces one, and a bell that never rings is a broken promise.
-                if (hasReminder && onToggleReminder != null) {
+                if (
+                    hasReminder &&
+                        onToggleReminder != null &&
+                        (item.contentType != XtreamContentType.MOVIE || secondaryActionsVisible)
+                ) {
                     Spacer(Modifier.height(BuroSpacing.Xs))
                     Text(
                         text = text.savedForLater.reminderNoNotice,
@@ -2732,8 +2744,15 @@ private fun MovieDetailContent(
                 listOfNotNull(
                     details.releaseDate?.let { "Lançamento $it" },
                     details.duration,
-                    details.genre,
-                    details.country,
+                    // Accents put back where the provider's encoding destroyed them.
+                    //
+                    // A fact line reading "Thriller, A??o • Fic??o cient?fica" was reported, and a
+                    // short label cannot be hidden the way a damaged synopsis can: dropping the
+                    // genre leaves a hole and says even less. Words the repair does not recognise
+                    // pass through untouched — a question mark is honest about a broken feed,
+                    // while an invented spelling reads as the app not knowing the language.
+                    ProviderText.repairLabel(details.genre),
+                    ProviderText.repairLabel(details.country),
                     // Zero is "nobody has rated this", not a verdict of nought out of ten.
                     //
                     // Providers send 0 for anything unrated, and a title released days ago is

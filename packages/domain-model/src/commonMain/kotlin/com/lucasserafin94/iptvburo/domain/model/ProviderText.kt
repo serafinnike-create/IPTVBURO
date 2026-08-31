@@ -52,4 +52,54 @@ object ProviderText {
      * message about encodings, which would tell the viewer nothing they can act on.
      */
     fun usableOrNull(text: String?): String? = text?.takeUnless { isDamaged(it) }
+
+    /**
+     * The words a provider's broken encoding turns into question marks, and what they should be.
+     *
+     * A short label cannot be hidden the way a paragraph can: a fact line reading
+     * "Lançamento 2022-08-02 • Thriller, A??o" is ugly, but dropping the genre outright leaves a
+     * line with a hole in it and tells the viewer even less. These are the handful of category
+     * names an IPTV catalogue actually carries, so the damage is repairable rather than merely
+     * detectable.
+     *
+     * Deliberately a fixed list and not a guess. Restoring accents by rule would put them in words
+     * the provider spelled correctly, and a wrong accent is worse than a question mark: one reads
+     * as a broken feed, the other as the app not knowing the language.
+     */
+    private val KNOWN_LABELS =
+        listOf(
+            "A??o" to "Ação",
+            "A?ão" to "Ação",
+            "Aç?o" to "Ação",
+            "Fic??o cient?fica" to "Ficção científica",
+            "Fic??o Cient?fica" to "Ficção Científica",
+            "Fic??o" to "Ficção",
+            "Anima??o" to "Animação",
+            "Com?dia" to "Comédia",
+            "Fam?lia" to "Família",
+            "Fantas?a" to "Fantasia",
+            "Hist?ria" to "História",
+            "M?sica" to "Música",
+            "Myst?rio" to "Mistério",
+            "Mist?rio" to "Mistério",
+            "Rom?ntico" to "Romântico",
+            "Document?rio" to "Documentário",
+            "Guerra e Pol?tica" to "Guerra e Política",
+            "Cinema TV" to "Cinema TV",
+        )
+
+    /**
+     * A short label with its accents put back, where they are known.
+     *
+     * For genres, countries and the like — anything printed as a fact rather than read as prose.
+     * Words this does not recognise are returned untouched: a question mark is honest about a
+     * provider's encoding, and inventing a spelling is not.
+     */
+    fun repairLabel(text: String?): String? {
+        val value = text?.takeIf(String::isNotBlank) ?: return text
+        if (!value.contains('?')) return value
+        return KNOWN_LABELS.fold(value) { repaired, (broken, correct) ->
+            repaired.replace(broken, correct)
+        }
+    }
 }

@@ -97,4 +97,46 @@ class ProviderTextTest {
         assertEquals(clean, ProviderText.usableOrNull(clean))
         assertEquals(null, ProviderText.usableOrNull("o exterm?nio com o n?mero de homic?dios"))
     }
+
+    /**
+     * A short label is repaired rather than hidden.
+     *
+     * "Thriller, A??o • Fic??o cient?fica" was reported on a details page. Dropping the genre the
+     * way a damaged synopsis is dropped would leave the fact line with a hole in it and tell the
+     * viewer even less, so the handful of category names a catalogue actually carries are put back.
+     */
+    @Test
+    fun `a damaged genre gets its accents back`() {
+        assertEquals("Ação", ProviderText.repairLabel("A??o"))
+        assertEquals("Ficção científica", ProviderText.repairLabel("Fic??o cient?fica"))
+        assertEquals("Animação", ProviderText.repairLabel("Anima??o"))
+        assertEquals("Comédia", ProviderText.repairLabel("Com?dia"))
+    }
+
+    /** A label that arrived intact is not touched. */
+    @Test
+    fun `an undamaged label passes through`() {
+        assertEquals("Thriller", ProviderText.repairLabel("Thriller"))
+        assertEquals("Ficção científica", ProviderText.repairLabel("Ficção científica"))
+        assertEquals("United States of America", ProviderText.repairLabel("United States of America"))
+    }
+
+    /**
+     * And a word the repair does not know keeps its question mark.
+     *
+     * Restoring accents by rule would put them in words the provider spelled correctly, and a wrong
+     * accent is worse than a question mark: one reads as a broken feed, the other as the app not
+     * knowing the language.
+     */
+    @Test
+    fun `an unknown word is left as it arrived`() {
+        assertEquals("Zorglub?vski", ProviderText.repairLabel("Zorglub?vski"))
+    }
+
+    /** Nothing in, nothing out — the caller's own fallback still applies. */
+    @Test
+    fun `a blank label is handed back unchanged`() {
+        assertEquals(null, ProviderText.repairLabel(null))
+        assertEquals("", ProviderText.repairLabel(""))
+    }
 }
