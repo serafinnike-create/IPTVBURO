@@ -129,13 +129,63 @@ class BannerTrailerWiringTest {
      */
     @Test
     fun `the trailer starts muted so it can autoplay`() {
+        // Always muted at the start, not `!soundOn`. The switch is a message to the running
+        // player now, so the embed no longer carries the sound choice at all — and asking for
+        // audio up front is what stops a trailer starting in the first place.
         assertTrue(
-            home.contains("muted = !soundOn"),
+            home.contains("muted = true"),
             "o trailer pede som ao arrancar e o motor bloqueia-o",
+        )
+        assertTrue(
+            home.contains("browser.setSound(soundOn)"),
+            "o som nunca chega ao leitor que ja esta a tocar",
         )
         assertTrue(
             state.contains("userStore.bannerTrailerSound()"),
             "a escolha de som nao sobrevive ao proximo arranque",
+        )
+    }
+
+    /**
+     * The artwork stops where the trailer starts, and takes the banner when there is none.
+     *
+     * It used to run the whole width and sit behind the video — a picture nobody can see paying for
+     * a decode and a crop on every rotation, and on the seam its own subject showed through the
+     * player's edge. Reported as the photo appearing behind the trailer.
+     */
+    @Test
+    fun `the artwork stops where the trailer begins`() {
+        assertTrue(
+            home.contains("bannerWidth * (1f - BannerTrailer.TRAILER_WIDTH_FRACTION)"),
+            "a capa passa por tras do trailer em vez de parar onde ele comeca",
+        )
+        assertTrue(
+            home.contains("Modifier.width(artworkWidth).fillMaxHeight()"),
+            "a capa nao e limitada a largura que lhe sobra",
+        )
+    }
+
+    /**
+     * And it is the best picture the provider has.
+     *
+     * The catalogue's own artwork is a poster: portrait, often a few hundred pixels wide, and
+     * visibly soft stretched across the largest image in the app. A backdrop is landscape and made
+     * for this, and it arrives with the synopsis the banner already fetches.
+     */
+    @Test
+    fun `the banner uses the widest picture available`() {
+        assertTrue(
+            home.contains("appState::heroArtworkFor"),
+            "o banner usa a capa de retrato em vez da melhor imagem",
+        )
+        assertTrue(
+            state.contains("heroBackdrop[heroSynopsisKey(item.contentType, item.providerId)]"),
+            "nada guarda o fundo largo do titulo",
+        )
+        // From the details the synopsis fetch already makes: a picture is not worth a second call.
+        assertTrue(
+            state.contains("rememberHeroBackdrop(item, details.backdropUrls.firstOrNull())"),
+            "o fundo custa um pedido proprio quando ja vinha com a sinopse",
         )
     }
 

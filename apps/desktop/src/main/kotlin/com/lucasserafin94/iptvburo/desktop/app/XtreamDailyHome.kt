@@ -373,6 +373,11 @@ fun XtreamDailyHome(
                         }
                         DailyHero(
                             item = heroItem,
+                            // The best picture there is for this title: the provider's landscape
+                            // backdrop where it has one, and its poster otherwise. The banner is
+                            // the largest image in the app, and a portrait poster stretched across
+                            // it is visibly soft — reported as the banner's image quality.
+                            artworkUrl = heroItem?.let(appState::heroArtworkFor),
                             synopsis = heroItem?.let(appState::heroSynopsisFor),
                             trailerId = heroItem?.let(appState::heroTrailerFor),
                             onTrailerFailed = {
@@ -542,21 +547,29 @@ internal fun HeroTrailer(
     blendIntoHero: Boolean = true,
     onPlaying: () -> Unit = {},
 ) {
-    // Keyed on the sound too: the flag is baked into the embed URL, so changing it means a new
-    // player rather than a message to the old one.
-    val browser = remember(youtubeId, soundOn, blendIntoHero, artworkUrl) { TrailerBrowser() }
+    // Not keyed on the sound.
+    //
+    // It used to be, because the flag is baked into the embed URL — so pressing the switch threw
+    // the player away and built another. The picture went black, the video restarted and had to
+    // buffer again from nothing. Reported as the switch blanking the screen rather than simply
+    // cutting the sound. The sound is now a message to the player that is already running; only
+    // the video, the masks and the artwork behind it decide whether a new player is needed.
+    val browser = remember(youtubeId, blendIntoHero, artworkUrl) { TrailerBrowser() }
     var playbackConfirmed by
-        remember(youtubeId, soundOn, blendIntoHero, artworkUrl) { mutableStateOf(false) }
+        remember(youtubeId, blendIntoHero, artworkUrl) { mutableStateOf(false) }
 
     DisposableEffect(browser) { onDispose { browser.dispose() } }
 
     val panel =
-        remember(youtubeId, soundOn, blendIntoHero, artworkUrl) {
+        remember(youtubeId, blendIntoHero, artworkUrl) {
             runCatching {
                 browser.createComponent(
                     youtubeId = youtubeId,
                     autoplay = true,
-                    muted = !soundOn,
+                    // Always muted at the start, whatever the switch says: no engine autoplays
+                    // audio, and asking for it means the trailer does not start at all. The sound
+                    // is raised below, once the player has reported that it is playing.
+                    muted = true,
                     artworkUrl = artworkUrl,
                     // The browser surface always sits above Compose. Its own page therefore owns
                     // the side and bottom masks that make video, artwork and copy one hero.
@@ -572,6 +585,18 @@ internal fun HeroTrailer(
                 )
             }.getOrNull()
         }
+
+    /**
+     * The switch, answered on the player that is already running.
+     *
+     * Waits for playback: an unMute that arrives before the engine has granted the autoplay is read
+     * as a request to start with audio, which it refuses outright. Once the video is playing the
+     * volume is no longer a new request, and muting is answered the same way round — somebody
+     * reaching for the switch to stop the noise means now.
+     */
+    LaunchedEffect(soundOn, playbackConfirmed) {
+        if (playbackConfirmed) browser.setSound(soundOn)
+    }
 
     if (panel == null) {
         DisposableEffect(youtubeId) {
@@ -620,6 +645,13 @@ private const val TRAILER_READY_TIMEOUT_MILLIS = 10_000L
 @Composable
 private fun DailyHero(
     item: XtreamCatalogItem?,
+    /**
+     * The best picture there is for this title, or null to fall back to the catalogue's own.
+     *
+     * A landscape backdrop where the provider has one. The banner is the largest image in the app
+     * and a portrait poster stretched across it is visibly soft — reported as the banner's quality.
+     */
+    artworkUrl: String?,
     date: LocalDate,
     metrics: HomeMetrics,
     text: DesktopStrings,
@@ -670,15 +702,30 @@ private fun DailyHero(
         val activeTrailerId = trailerId?.takeIf { settled && !scrolling }
         var browserPlaying by remember(activeTrailerId) { mutableStateOf(false) }
 
-        if (item != null) {
-            BuroRemoteArtwork(
-                artworkUrl = item.artworkUrl,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            ) { HeroArtFallback() }
-        } else {
-            HeroArtFallback()
+        // The artwork stops where the trailer starts, and fills the banner when there is none.
+        //
+        // It used to run the whole width and sit behind the video, which is a picture nobody can
+        // see paying for a decode and a crop on every rotation — and on the seam between the two
+        // the artwork's own subject showed through the player's edge. Reported as the photo
+        // appearing behind the trailer. Without a trailer nothing changes: it takes everything, as
+        // a banner of one still image should.
+        val artworkWidth =
+            if (activeTrailerId != null) {
+                bannerWidth * (1f - BannerTrailer.TRAILER_WIDTH_FRACTION)
+            } else {
+                bannerWidth
+            }
+        Box(modifier = Modifier.width(artworkWidth).fillMaxHeight()) {
+            if (item != null) {
+                BuroRemoteArtwork(
+                    artworkUrl = artworkUrl ?: item.artworkUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                ) { HeroArtFallback() }
+            } else {
+                HeroArtFallback()
+            }
         }
         // The rotation is told either way, so a title showing only artwork keeps the ordinary
         // ten-second pace rather than sitting for a minute on a still image.
@@ -697,7 +744,9 @@ private fun DailyHero(
             ) {
                 HeroTrailer(
                     youtubeId = activeTrailerId,
-                    artworkUrl = item?.artworkUrl,
+                    // The same picture that is drawn beside it, so the feathered edge matches
+                    // what it is feathering into rather than a different image entirely.
+                    artworkUrl = artworkUrl ?: item?.artworkUrl,
                     modifier =
                         Modifier
                             .fillMaxHeight()

@@ -150,6 +150,37 @@ class TrailerBrowser {
             }
         }.getOrNull()
 
+    /**
+     * Turns the sound on or off on the player that is already running.
+     *
+     * A message to the live page, not a new player. The sound used to be baked into the embed URL,
+     * so changing it rebuilt the whole browser: the picture went black, the video restarted, and
+     * the trailer had to buffer again from nothing. Reported as the switch blanking the screen
+     * instead of simply cutting the sound.
+     *
+     * Best effort by design. If the page has not finished loading, or the player has not answered
+     * yet, nothing happens and the trailer keeps whatever sound it had — which is the right failure
+     * for a control over decoration.
+     */
+    fun setSound(enabled: Boolean) {
+        val live = browser ?: return
+        val command = if (enabled) "unMute" else "mute"
+        val script =
+            """
+            (function(){
+              var frame=document.querySelector('iframe');
+              if(!frame||!frame.contentWindow)return;
+              frame.contentWindow.postMessage(JSON.stringify(
+                {event:'command',func:'$command',args:[]}),'*');
+              ${if (enabled) """
+              frame.contentWindow.postMessage(JSON.stringify(
+                {event:'command',func:'setVolume',args:[100]}),'*');
+              """ else ""}
+            })();
+            """.trimIndent()
+        runCatching { live.executeJavaScript(script, live.url, 0) }
+    }
+
     fun dispose() {
         if (!disposed.compareAndSet(false, true)) return
         // Only this browser and client. CefApp is process-wide and shutting it down would stop

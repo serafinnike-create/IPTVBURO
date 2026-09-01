@@ -3252,6 +3252,38 @@ class DesktopAppState(
     private var heroSynopsis by mutableStateOf<Map<String, String>>(emptyMap())
         private set
 
+    /**
+     * The wide picture for a banner title, when the provider has one.
+     *
+     * The catalogue's own `artworkUrl` is a poster: portrait, and often only a few hundred pixels
+     * wide. Stretched across the banner — the largest image in the app — it is visibly soft, which
+     * is what was reported. A backdrop is landscape and made for exactly this, and it arrives with
+     * the synopsis the banner already fetches, so it costs no extra request.
+     */
+    private var heroBackdrop by mutableStateOf<Map<String, String>>(emptyMap())
+
+    /** The best picture for this banner title: the backdrop where there is one, else the poster. */
+    fun heroArtworkFor(item: XtreamCatalogItem): String? =
+        heroBackdrop[heroSynopsisKey(item.contentType, item.providerId)] ?: item.artworkUrl
+
+    /** Called from the synopsis fetch, which already has the details in hand. */
+    private fun rememberHeroBackdrop(
+        item: XtreamCatalogItem,
+        url: String?,
+    ) {
+        val backdrop = url?.takeIf(String::isNotBlank) ?: return
+        val key = heroSynopsisKey(item.contentType, item.providerId)
+        // Bounded like the synopses beside it: the rotation is twenty titles and a session left
+        // open all day would otherwise accumulate one entry per title it ever showed.
+        heroBackdrop =
+            if (heroBackdrop.size >= MAX_HERO_SYNOPSES) {
+                heroBackdrop.entries.drop(heroBackdrop.size / 2).associate { it.key to it.value } +
+                    (key to backdrop)
+            } else {
+                heroBackdrop + (key to backdrop)
+            }
+    }
+
     // -----------------------------------------------------------------------------------------
     // The banner's trailer
     // -----------------------------------------------------------------------------------------
@@ -3351,10 +3383,18 @@ class DesktopAppState(
         val fetch: suspend () -> String? =
             when (item.contentType) {
                 XtreamContentType.MOVIE -> {
-                    { xtreamRepository.movieDetails(item.providerId).plot }
+                    {
+                        val details = xtreamRepository.movieDetails(item.providerId)
+                        rememberHeroBackdrop(item, details.backdropUrls.firstOrNull())
+                        details.plot
+                    }
                 }
                 XtreamContentType.SERIES -> {
-                    { xtreamRepository.seriesDetails(item.providerId).plot }
+                    {
+                        val details = xtreamRepository.seriesDetails(item.providerId)
+                        rememberHeroBackdrop(item, details.backdropUrls.firstOrNull())
+                        details.plot
+                    }
                 }
                 else -> return
             }
