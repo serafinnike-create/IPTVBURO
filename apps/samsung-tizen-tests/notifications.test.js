@@ -70,6 +70,10 @@ function loadApp(preferences) {
     SCRIPT_FILES.forEach(function (file) {
         window.eval(fs.readFileSync(path.join(APP_DIR, file), 'utf8'));
     });
+    /* Esta suíte verifica avisos. A licença usa relógio e tem cobertura
+       própria; mantenha o shell determinístico quando os termos já estão
+       aceitos. */
+    window.BuroLicense.decide = function () { return { allowed: true, trial: false, expiresAt: null }; };
     window.BuroApp.init();
     return window;
 }

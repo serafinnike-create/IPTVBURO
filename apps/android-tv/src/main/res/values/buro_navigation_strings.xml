@@ -52,6 +52,7 @@
     <string name="discover_subtitle">Swipe right to keep, left to skip</string>
     <string name="discover_keep">Keep</string>
     <string name="discover_skip">Skip</string>
+    <string name="discover_details">Details</string>
     <string name="discover_kept">Saved to favourites</string>
     <string name="discover_empty_title">That is the whole deck</string>
     <string name="discover_empty_body">You have been through everything we picked for you. Come back after watching a few things and there will be a new hand.</string>

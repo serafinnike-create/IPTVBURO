@@ -90,9 +90,37 @@ process.stdout.write('\nA capa continua por baixo\n');
 */
 check('a capa e o trailer sao camadas, nao uma troca',
     app.indexOf("(primary ? '<img src=\"'") >= 0 &&
-    app.indexOf("(trailer ? '<iframe class=\"hero-trailer\"") >= 0);
+    app.indexOf("(trailer ? '<span class=\"hero-trailer-stage\"") >= 0 &&
+    app.indexOf("'<iframe class=\"hero-trailer\" src=\"'") >= 0);
 check('o trailer fica absoluto por cima da capa',
     css.indexOf('.hero-trailer') >= 0 && css.indexOf('pointer-events: none;') >= 0);
+check('o trailer ocupa uma janela integrada no canto inferior direito',
+    app.indexOf('<span class="hero-trailer-stage"') >= 0 &&
+    css.indexOf('.hero-trailer-stage') >= 0 &&
+    /\.hero-trailer-stage\s*\{[^}]*right:\s*0;\s*bottom:\s*0;[^}]*width:\s*58%;\s*height:\s*84%/s.test(css) &&
+    css.indexOf('.real-home-hero.hero-trailer-playing .hero-synopsis') >= 0);
+check('cada troca conserva o trailer atômico com o item do banner',
+    app.indexOf('data-trailer-item-id="\' + attr(item.id)') >= 0 &&
+    app.indexOf('current.id !== itemId') >= 0 &&
+    app.indexOf('data.heroTrailerPlayingId = null;') >= 0);
+check('um trailer em reprodução não é cortado na rotação curta',
+    app.indexOf('scheduleHomeHeroRotation(data, 60000);') >= 0 &&
+    app.indexOf('function scheduleHomeHeroRotation(data, requestedDelay)') >= 0);
+check('reduzir movimento mantém a capa e desliga o vídeo automático',
+    app.indexOf('if (state.preferences.reducedMotion) { return null; }') >= 0);
+check('o iframe so aparece depois de reproducao confirmada',
+    trailer.indexOf('function observeBackgroundFrames') >= 0 &&
+    trailer.indexOf("payload.event === 'onStateChange'") >= 0 &&
+    trailer.indexOf('Number(payload.info) === 1') >= 0 &&
+    trailer.indexOf('BACKGROUND_READY_TIMEOUT_MILLIS = 10000') >= 0 &&
+    css.indexOf('.hero-trailer.trailer-ready') >= 0 &&
+    app.indexOf('observeBackgroundTrailers();') >= 0);
+check('Descobrir busca metadados do cartao atual e reserva uma coluna para o trailer',
+    app.indexOf('function scheduleDiscoverEnrichment') >= 0 &&
+    app.indexOf('BuroHeroEnrichment.start(source, [item]') >= 0 &&
+    app.indexOf('discoverPreviewHtml(current)') >= 0 &&
+    css.indexOf('.discover-decision-panel') >= 0 &&
+    css.indexOf('.discover-preview') >= 0);
 
 process.stdout.write('\nO que falha nao volta a ser tentado\n');
 

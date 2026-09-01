@@ -20,7 +20,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
@@ -33,6 +37,7 @@ import com.lucasserafin94.iptvburo.desktop.playback.TrailerBrowser
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
+import kotlinx.coroutines.delay
 
 /**
  * The trailer, played in a panel over the app rather than in the user's browser.
@@ -52,15 +57,29 @@ fun TrailerOverlay(
 ) {
     val browser = remember(youtubeId) { TrailerBrowser() }
     DisposableEffect(browser) { onDispose { browser.dispose() } }
+    var failed by remember(youtubeId) { mutableStateOf(false) }
+    var playing by remember(youtubeId) { mutableStateOf(false) }
 
     val panel =
         remember(youtubeId) {
-            browser.createComponent(youtubeId = youtubeId, autoplay = true, muted = false)
+            browser.createComponent(
+                youtubeId = youtubeId,
+                autoplay = true,
+                muted = false,
+                onPlaying = { playing = true },
+                onFailed = { failed = true },
+            )
         }
+
+    LaunchedEffect(panel, youtubeId) {
+        if (panel == null) return@LaunchedEffect
+        delay(10_000L)
+        if (!playing) failed = true
+    }
 
     // Nothing to show: hand it to the browser and close, rather than presenting an empty black box
     // the user has to dismiss themselves.
-    if (panel == null) {
+    if (panel == null || failed) {
         DisposableEffect(youtubeId) {
             onFallback()
             onClose()
@@ -120,7 +139,11 @@ fun TrailerOverlay(
                         .clip(BuroRadius.Medium)
                         .background(Color.Black),
             ) {
-                SwingPanel(factory = { panel }, modifier = Modifier.fillMaxSize())
+                SwingPanel(
+                    factory = { panel },
+                    modifier = Modifier.fillMaxSize(),
+                    background = Color.Black,
+                )
             }
         }
     }

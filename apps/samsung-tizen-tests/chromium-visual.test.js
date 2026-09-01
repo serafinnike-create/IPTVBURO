@@ -328,7 +328,14 @@ function seedScaleCatalogue(totalItems) {
 function showSyntheticSeriesDetail() {
     var state = BuroApp.state;
     var parent = state.items.filter(function (item) { return item.id === 'series-horizon'; })[0];
+    var source = state.sources.filter(function (item) { return item.id === parent.sourceId; })[0];
     var now = Date.now();
+    /* A série visual representa o mesmo contrato Xtream usado pela fila real de
+       temporadas. Sem isto os episódios tinham locator Xtream, mas a fonte de
+       demonstração continuava classificada como M3U e ocultava corretamente os
+       controles que este cenário precisa validar. */
+    if (source) { source.type = 'XTREAM'; }
+    if (state.activeSource && state.activeSource.id === parent.sourceId) { state.activeSource.type = 'XTREAM'; }
     var episodes = [1, 2, 3, 4].map(function (number) {
         return BuroDomain.createItem({
             id: 'episode-horizon-' + number, sourceId: parent.sourceId, categoryId: parent.id,
@@ -554,6 +561,10 @@ function showSyntheticPlayer(itemId) {
     var source = state.sources[0];
     var item = state.items.filter(function (candidate) { return candidate.id === itemId; })[0];
     if (!source || !item) { return false; }
+    /* A tela de licença é exercitada antes desta cena e pode restaurar a
+       decisão real. O player visual usa um aparelho sintético autorizado; os
+       gates de entitlement permanecem nas suítes dedicadas. */
+    BuroLicense.decide = function () { return { allowed: true, trial: false, expiresAt: null }; };
     source.type = 'XTREAM';
     item.locator = {
         kind: 'xtream', contentType: item.contentType,
@@ -754,8 +765,13 @@ async function main() {
     check('marca nao sobrepoe o cartao legal', !rectanglesOverlap(legal.rectangles[0], legal.rectangles[1]));
     check('aceite legal recebe foco e permanece visivel', legal.focused && legal.focused.action === 'legal-accept' && rectInside(legal.rectangles[2]));
 
-    await evaluate("document.querySelector('[data-action=legal-accept]').click(); true");
-    await waitFor("BuroApp.state.screen === 'PROFILES'");
+    /* Esta é uma suíte de composição, não de licença. A data real não pode
+       desviar o roteiro para a tela de ativação antes de os layouts serem
+       medidos; os contratos de licença têm testes próprios. */
+    await evaluate("BuroLicense.decide=function(){return {allowed:true,trial:false,expiresAt:null};}; true");
+    var postLegalScreen = await evaluate("(function(){document.querySelector('[data-action=legal-accept]').click();return BuroApp.state.screen;}())");
+    check('aceitar os termos abre imediatamente a escolha de perfil', postLegalScreen === 'PROFILES');
+    await waitFor("BuroApp.state.screen === 'PROFILES'", 5000);
     var profiles = await geometry(['.brand-mark', '[data-action=profile-form]']);
     check('adicionar perfil recebe foco e fica inteiro na area segura', profiles.focused && profiles.focused.action === 'profile-form' && rectInside(profiles.rectangles[1]));
 
@@ -797,10 +813,8 @@ async function main() {
     await waitFor("BuroApp.state.section === 'HOME' && !BuroApp.state.screenData && document.querySelectorAll('[data-demo-rail]').length === 3");
     check('voltar do detalhe restaura a Home demonstrativa completa', await evaluate("document.querySelectorAll('.demo-media-card').length === 14"));
 
-    /* As capturas de loja representam um aparelho ativado. O gate de licença
-       real continua coberto pelos testes dedicados; aqui só evitamos publicar
-       imagens promocionais com o aviso sintético "Dispositivo não registrado". */
-    await evaluate("BuroLicense.decide=function(){return {allowed:true,trial:false,expiresAt:null};}; true");
+    /* As capturas de loja representam o aparelho ativado acima. O gate de
+       licença real continua coberto pelos testes dedicados. */
     var seeded = await evaluate('(' + seedVisualCatalogue.toString() + ')()');
     await waitFor("BuroApp.state.screenData && BuroApp.state.screenData.kind === 'home' && !BuroApp.state.screenData.loading && document.querySelector('.real-home-hero')", 10000);
     await waitFor("document.querySelectorAll('.buro-progressive-image').length > 0 && Array.prototype.every.call(document.querySelectorAll('.buro-progressive-image'),function(image){return image.classList.contains('image-ready') || image.style.display === 'none';})", 10000);
@@ -834,6 +848,24 @@ async function main() {
     check('ajuda do controle remoto ocupa faixa própria e não cobre capas',
         await evaluate("(function(){var content=document.querySelector('.content').getBoundingClientRect();var hint=document.querySelector('.bottom-hint').getBoundingClientRect();return content.bottom<=hint.top&&hint.bottom===1080&&hint.height>=44;}())"));
     check('Home real produz um quadro PNG não vazio', await screenshotIsRendered('real-home'));
+
+    /* O vídeo real depende da rede e da política regional do YouTube. Para o
+       contrato visual, a mesma moldura recebe uma cópia da arte já carregada:
+       isto mede a posição e os degradês sem tornar a suíte dependente de um
+       trailer público que pode desaparecer. trailer.test.js cobre PLAYING. */
+    var heroTrailerPanel = await evaluate("(function(){var hero=document.querySelector('.real-home-hero');var art=hero&&hero.querySelector('.hero-art');var source=art&&art.querySelector('img');if(!hero||!art||!source){return null;}var stage=document.createElement('span');var image=source.cloneNode(false);stage.className='hero-trailer-stage trailer-ready';stage.setAttribute('data-visual-trailer','true');stage.appendChild(image);art.appendChild(stage);hero.classList.add('hero-trailer-playing');var hr=hero.getBoundingClientRect();var sr=stage.getBoundingClientRect();var tr=hero.querySelector('h2').getBoundingClientRect();var pr=hero.querySelector('.hero-synopsis').getBoundingClientRect();var buttons=hero.querySelectorAll('.home-hero-actions .button');var ar=buttons[buttons.length-1].getBoundingClientRect();return {hero:{left:hr.left,top:hr.top,right:hr.right,bottom:hr.bottom,width:hr.width,height:hr.height},stage:{left:sr.left,top:sr.top,right:sr.right,bottom:sr.bottom,width:sr.width,height:sr.height},title:{right:tr.right,bottom:tr.bottom},synopsis:{right:pr.right,bottom:pr.bottom},actions:{right:ar.right,bottom:ar.bottom}};}())");
+    check('janela do trailer ocupa o canto inferior direito dentro do Hero',
+        heroTrailerPanel && Math.abs(heroTrailerPanel.stage.right - heroTrailerPanel.hero.right) <= 1 &&
+        Math.abs(heroTrailerPanel.stage.bottom - heroTrailerPanel.hero.bottom) <= 1 &&
+        Math.abs(heroTrailerPanel.stage.width / heroTrailerPanel.hero.width - 0.58) <= 0.01 &&
+        Math.abs(heroTrailerPanel.stage.height / heroTrailerPanel.hero.height - 0.84) <= 0.01);
+    check('texto, sinopse e ações ficam à esquerda sem entrar na janela do trailer',
+        heroTrailerPanel && heroTrailerPanel.title.right < heroTrailerPanel.stage.left &&
+        heroTrailerPanel.synopsis.right < heroTrailerPanel.stage.left &&
+        heroTrailerPanel.actions.right < heroTrailerPanel.stage.left &&
+        heroTrailerPanel.actions.bottom <= heroTrailerPanel.hero.bottom);
+    check('janela integrada do trailer produz quadro PNG não vazio', await screenshotIsRendered('real-home-trailer-panel'));
+    await evaluate("(function(){var stage=document.querySelector('[data-visual-trailer]');var hero=document.querySelector('.real-home-hero');if(stage&&stage.parentNode){stage.parentNode.removeChild(stage);}if(hero){hero.classList.remove('hero-trailer-playing');}return true;}())");
 
     /* A data da máquina não deve decidir se este layout pode ser exercitado.
        Injeta na fotografia já varrida a mesma coleção pública que dezembro
@@ -1003,6 +1035,10 @@ async function main() {
     check('detalhe de filme abre o título correto com ação principal', movieDetailData.title === 'Aurora de Vidro' && movieDetailData.play === 1);
     check('sinopse da ficha usa a leitura de 24 px do Windows, não o tamanho padrão do navegador', await evaluate("(function(){var copy=document.querySelector('.detail-hero-copy > p');if(!copy){return false;}var style=getComputedStyle(copy);return parseFloat(style.fontSize)===24&&Math.abs(parseFloat(style.lineHeight)-34.8)<0.2&&parseFloat(style.maxWidth)===1040;}())"));
     check('detalhe de filme preserva chrome e conteúdo inicial visíveis', movieDetail.rectangles.every(rectVisible) && movieDetailData.mainScroll === 0);
+    var posterAlignment = await evaluate("(function(){var poster=document.querySelector('.detail-poster');var copy=document.querySelector('.detail-hero-copy');if(!poster||!copy){return null;}var pr=poster.getBoundingClientRect();var cr=copy.getBoundingClientRect();return {posterTop:pr.top,copyTop:cr.top,posterBottom:pr.bottom,copyBottom:cr.bottom};}())");
+    check('capa do detalhe fica acima do conteúdo em vez de presa ao rodapé',
+        posterAlignment && posterAlignment.posterTop < posterAlignment.copyTop &&
+        posterAlignment.posterBottom < posterAlignment.copyBottom);
     /*
       A sinopse cabe na coluna, e a coluna cabe no hero.
 
@@ -1057,8 +1093,10 @@ async function main() {
     var episodeCount = await evaluate('(' + showSyntheticSeriesDetail.toString() + ')()');
     await waitFor("BuroApp.state.screenData && BuroApp.state.screenData.kind === 'series' && document.querySelector('.season-header')");
     var seriesTop = await geometry(['.buro-ribbon', '.topbar', '.detail-hero', '.detail-actions']);
-    var seriesData = await evaluate("({ title:document.querySelector('.detail-hero h2').textContent, seasons:document.querySelectorAll('.season-header').length, episodes:document.querySelectorAll('.episode-download-item .media-card').length, mainScroll:document.querySelector('.main-pane').scrollTop })");
+    var seriesData = await evaluate("(function(){var seasons=document.querySelector('.detail-seasons');var cast=document.querySelector('.detail-cast');var toolbar=document.querySelector('.season-toolbar');var header=document.querySelector('.season-header');var download=document.querySelector('.season-download');var range=document.createRange();if(download){range.selectNodeContents(download);}return {title:document.querySelector('.detail-hero h2').textContent,seasons:document.querySelectorAll('.season-header').length,episodes:document.querySelectorAll('.episode-download-item .media-card').length,mainScroll:document.querySelector('.main-pane').scrollTop,seasonsBeforeCast:!!seasons&&!!cast&&Boolean(seasons.compareDocumentPosition(cast)&Node.DOCUMENT_POSITION_FOLLOWING),seasonActionsBeside:!!toolbar&&!!header&&!!download&&Math.abs(header.getBoundingClientRect().top-download.getBoundingClientRect().top)<2,seasonDownloadSingleLine:!!download&&range.getClientRects().length===1};}())");
     check('detalhe de série reúne metadados, temporada e quatro episódios', episodeCount === 4 && seriesData.title === 'Horizonte Norte' && seriesData.seasons === 1 && seriesData.episodes === 4);
+    check('temporadas ficam antes do elenco e o download fica ao lado do cabeçalho', seriesData.seasonsBeforeCast && seriesData.seasonActionsBeside);
+    check('download da temporada conserva o rótulo inteiro em uma linha', seriesData.seasonDownloadSingleLine);
     check('topo da série preserva Ribbon, topbar e ações visíveis', seriesTop.rectangles.every(rectVisible) && seriesData.mainScroll === 0);
     check('detalhe de série produz um quadro PNG não vazio', await screenshotIsRendered('series-detail'));
     var seriesEpisodes = await evaluate("(function(){ var content=document.querySelector('.content.scrollable'); var season=document.querySelector('.season-header'); content.scrollTop=Math.max(0, season.offsetTop-170); var r=season.getBoundingClientRect(); return { ribbon:document.querySelector('.buro-ribbon').getBoundingClientRect().top, topbar:document.querySelector('.topbar').getBoundingClientRect().top, season:{left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}, scroll:content.scrollTop }; }())");
@@ -1095,11 +1133,13 @@ async function main() {
 
     await evaluate("document.querySelector('[data-action=section][data-section=DISCOVER]').click(); true");
     await waitFor("BuroApp.state.section === 'DISCOVER' && BuroApp.state.screenData && BuroApp.state.screenData.kind === 'discover' && !BuroApp.state.screenData.loading && document.querySelector('.discover-card.current')", 10000);
-    var discover = await geometry(['.buro-ribbon', '.topbar', '.discover-intro', '.discover-card.current', '.discover-actions']);
-    var discoverData = await evaluate("(function(){ var next=document.querySelector('.discover-card.next'); var copy=next&&next.querySelector('.discover-card-copy'); return { cards:document.querySelectorAll('.discover-card').length, actions:document.querySelectorAll('.discover-action').length, counter:document.querySelector('.discover-counter').textContent, mainScroll:document.querySelector('.main-pane').scrollTop, nextHidden:!next||(next.getAttribute('aria-hidden')==='true'&&getComputedStyle(copy).visibility==='hidden') }; }())");
+    var discover = await geometry(['.buro-ribbon', '.topbar', '.discover-intro', '.discover-card.current', '.discover-decision-panel', '.discover-preview', '.discover-synopsis', '.discover-actions']);
+    var discoverData = await evaluate("(function(){ var next=document.querySelector('.discover-card.next'); var copy=next&&next.querySelector('.discover-card-copy'); var poster=document.querySelector('.discover-poster-stack').getBoundingClientRect(); var panel=document.querySelector('.discover-decision-panel').getBoundingClientRect(); var actions=document.querySelector('.discover-actions').getBoundingClientRect(); return { cards:document.querySelectorAll('.discover-card').length, actions:document.querySelectorAll('.discover-action').length, counter:document.querySelector('.discover-counter').textContent, mainScroll:document.querySelector('.main-pane').scrollTop, nextHidden:!next||(next.getAttribute('aria-hidden')==='true'&&getComputedStyle(copy).visibility==='hidden'), sideBySide:poster.right<panel.left, actionsBeforePosterEnd:actions.top<poster.bottom, labels:Array.prototype.map.call(document.querySelectorAll('.discover-action strong'),function(node){return node.textContent;}) }; }())");
     process.stdout.write('Descobrir e Pesquisa\n');
     check('Descobrir desenha somente carta atual/próxima e três decisões', discoverData.cards === 2 && discoverData.actions === 3 && /1/.test(discoverData.counter));
     check('a carta seguinte preserva profundidade sem vazar título ou metadados', discoverData.nextHidden);
+    check('pôster, trailer/sinopse e três decisões ocupam colunas sem se encobrir',
+        discoverData.sideBySide && discoverData.actionsBeforePosterEnd && discoverData.labels.length === 3);
     check('Descobrir mantém composição e chrome visíveis sem rolagem indevida', discover.rectangles.every(rectVisible) && discoverData.mainScroll === 0);
     check('Descobrir produz um quadro PNG válido', await screenshotIsRendered('discover'));
 
@@ -1357,8 +1397,9 @@ async function main() {
     await evaluate("document.querySelector('#av-player').style.display='none'; document.documentElement.style.background='#050608'; document.body.style.background='#050608'; true");
     var playerReady = await evaluate('(' + showSyntheticPlayer.toString() + ")('movie-aurora')");
     await waitFor("document.body.classList.contains('playing') && !document.querySelector('#player-overlay').hidden");
-    var player = await geometry(['.player-topbar', '.player-controls', '.player-timeline', '.player-control-row', '.player-track-row']);
+    var player = await geometry(['.player-topbar', '.player-controls', '.player-timeline', '.player-control-row', '.player-action-bar', '.player-track-row']);
     check('player VOD mostra título, progresso e atalhos inteiros no viewport', playerReady && player.rectangles.every(rectVisible) && await evaluate("document.querySelector('#player-timeline').getAttribute('aria-valuenow') === '30'"));
+    check('todos os botões principais do player cabem no primeiro quadro', await evaluate("(function(){var bar=document.querySelector('.player-action-bar');var buttons=bar.querySelectorAll('.player-action-button:not([hidden])');var first=buttons[0].getBoundingClientRect();var last=buttons[buttons.length-1].getBoundingClientRect();var bounds=bar.getBoundingClientRect();return bar.scrollWidth<=bar.clientWidth+1&&first.left>=bounds.left-1&&last.right<=bounds.right+1;}())"));
     check('player VOD produz um quadro PNG válido', await screenshotIsRendered('player-vod'));
 
     var playerLocked = await evaluate("(function(){BuroApp._onKeyDown({keyCode:13,preventDefault:function(){}});return new Promise(function(resolve){setTimeout(function(){BuroApp._onKeyUp({keyCode:13,preventDefault:function(){}});resolve(document.querySelector('#player-overlay').classList.contains('controls-locked'));},950);});}())");
@@ -1372,7 +1413,7 @@ async function main() {
     var audioMenu = await geometry(['.player-menu', '#player-menu-title', '.player-menu-option.focused']);
     check('menu de áudio mostra duas faixas e foco dentro do quadro', audioMenu.rectangles.every(rectVisible));
     check('menu de áudio produz um quadro PNG válido', await screenshotIsRendered('player-audio-menu'));
-    await evaluate("BuroApp._onKeyDown({keyCode:10009,preventDefault:function(){}}); BuroApp._onKeyDown({keyCode:40,preventDefault:function(){}}); true");
+    await evaluate("BuroApp._onKeyDown({keyCode:10009,preventDefault:function(){}}); BuroApp._onKeyDown({keyCode:40,preventDefault:function(){}}); BuroApp._onKeyDown({keyCode:39,preventDefault:function(){}}); BuroApp._onKeyDown({keyCode:39,preventDefault:function(){}}); BuroApp._onKeyDown({keyCode:39,preventDefault:function(){}}); BuroApp._onKeyDown({keyCode:13,preventDefault:function(){}}); true");
     /* O menu de legenda leva o ajuste de sincronia depois das faixas, entao a
        espera conta "Desligadas mais as faixas" e nao o total. */
     await waitFor("!document.querySelector('#player-menu').hidden && document.querySelectorAll('#player-menu [data-player-option]').length >= 3");

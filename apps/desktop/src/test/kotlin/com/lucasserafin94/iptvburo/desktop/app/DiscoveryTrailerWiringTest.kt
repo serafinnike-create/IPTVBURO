@@ -63,6 +63,26 @@ class DiscoveryTrailerWiringTest {
         )
     }
 
+    /** Chromium yields while the poster is moving, so Compose can really draw it in front. */
+    @Test
+    fun `the poster stays above the trailer while swiping`() {
+        assertTrue(screen.contains("onDragStart = { dragging = true }"))
+        assertTrue(screen.contains("zIndex(if (dragging) 2f else 0f)"))
+        assertTrue(screen.contains("if (dragging) {"))
+        assertTrue(screen.contains("DiscoverySwipePreview("))
+    }
+
+    /** The plot has a dedicated readable location below the video, never inside its bounds. */
+    @Test
+    fun `the synopsis sits outside the native player`() {
+        assertTrue(screen.contains("private fun DiscoverySynopsis(plot: String)"))
+        val trailerColumn = screen.substringAfter("if (activeTrailerId != null)")
+        assertTrue(
+            trailerColumn.indexOf("DiscoverySynopsis(plot)") > trailerColumn.indexOf("HeroTrailer("),
+            "a sinopse continua dentro ou atras do player",
+        )
+    }
+
     /**
      * A card that ran out its trailer is passed over, never judged.
      *

@@ -25,6 +25,11 @@ var BuroTrailer = (function () {
     var copy = {};
     var readyTimer = null;
     var failureTimer = null;
+    var backgroundMessageInstalled = false;
+    var backgroundFailureHandler = null;
+    var backgroundPlayingHandler = null;
+    var BACKGROUND_SETTLE_MILLIS = 3000;
+    var BACKGROUND_READY_TIMEOUT_MILLIS = 10000;
 
     function clean(value) {
         return String(value == null ? '' : value).replace(/^\s+|\s+$/g, '');
@@ -185,6 +190,176 @@ var BuroTrailer = (function () {
             tries += 1;
             if (done || tries > 20) { stop(); }
         }, 500);
+    }
+
+    /*
+      Banner e Descobrir só revelam o iframe depois de PLAYING.
+
+      `load` prova apenas que uma página chegou. A página de consentimento, um
+      vídeo retirado e um player preto também chegam a `load`; revelar qualquer
+      um deles cobre a capa e faz a Home parecer avariada. O Windows passou a
+      usar a mesma prova e esta é a adaptação para o Web Runtime Tizen.
+    */
+    function backgroundFrameFor(source) {
+        var frames = document.querySelectorAll('.hero-trailer, .discover-trailer');
+        var index;
+        for (index = 0; index < frames.length; index += 1) {
+            if (frames[index].contentWindow === source) { return frames[index]; }
+        }
+        return null;
+    }
+
+    function stopBackgroundProbe(frame) {
+        if (!frame) { return; }
+        if (frame._buroProbeInterval) {
+            window.clearInterval(frame._buroProbeInterval);
+            frame._buroProbeInterval = null;
+        }
+        if (frame._buroProbeTimeout) {
+            window.clearTimeout(frame._buroProbeTimeout);
+            frame._buroProbeTimeout = null;
+        }
+        if (frame._buroRevealTimeout) {
+            window.clearTimeout(frame._buroRevealTimeout);
+            frame._buroRevealTimeout = null;
+        }
+    }
+
+    function backgroundParentWithClass(frame, className) {
+        var current = frame;
+        while (current && current !== document.documentElement) {
+            if (current.classList && current.classList.contains(className)) { return current; }
+            current = current.parentNode;
+        }
+        return null;
+    }
+
+    function markBackgroundStage(frame, stateClass) {
+        var stage = backgroundParentWithClass(frame, 'hero-trailer-stage');
+        var hero = backgroundParentWithClass(frame, 'real-home-hero');
+        if (stage) {
+            stage.classList.remove('trailer-ready');
+            stage.classList.remove('trailer-unverified');
+            stage.classList.remove('trailer-failed');
+            stage.classList.add(stateClass);
+        }
+        if (hero) {
+            if (stateClass === 'trailer-failed') { hero.classList.remove('hero-trailer-playing'); }
+            else { hero.classList.add('hero-trailer-playing'); }
+        }
+    }
+
+    function announceBackgroundPlaying(frame) {
+        var itemId = clean(frame && frame.getAttribute('data-trailer-item-id'));
+        if (itemId && typeof backgroundPlayingHandler === 'function') {
+            backgroundPlayingHandler(itemId);
+        }
+    }
+
+    function revealBackgroundFrame(frame) {
+        if (!frame || frame._buroPlaybackReady || !document.documentElement.contains(frame)) { return; }
+        frame._buroPlaybackReady = true;
+        stopBackgroundProbe(frame);
+        frame.classList.remove('trailer-awaiting');
+        frame.classList.add('trailer-ready');
+        markBackgroundStage(frame, 'trailer-ready');
+        announceBackgroundPlaying(frame);
+    }
+
+    function backgroundFramePlaying(frame) {
+        var elapsed;
+        var remaining;
+        if (!frame || frame._buroPlaybackReady) { return; }
+        elapsed = Date.now() - Number(frame._buroProbeStarted || Date.now());
+        remaining = Math.max(0, BACKGROUND_SETTLE_MILLIS - elapsed);
+        if (!remaining) { revealBackgroundFrame(frame); return; }
+        if (!frame._buroRevealTimeout) {
+            frame._buroRevealTimeout = window.setTimeout(function () {
+                frame._buroRevealTimeout = null;
+                revealBackgroundFrame(frame);
+            }, remaining);
+        }
+    }
+
+    function failBackgroundFrame(frame) {
+        var itemId;
+        if (!frame || frame._buroPlaybackReady) { return; }
+        stopBackgroundProbe(frame);
+        if (!document.documentElement.contains(frame)) { return; }
+        itemId = clean(frame.getAttribute('data-trailer-item-id'));
+        frame.classList.remove('trailer-awaiting');
+        frame.classList.add('trailer-failed');
+        markBackgroundStage(frame, 'trailer-failed');
+        frame.src = 'about:blank';
+        if (itemId && typeof backgroundFailureHandler === 'function') {
+            backgroundFailureHandler(itemId);
+        }
+    }
+
+    function onBackgroundMessage(event) {
+        var frame;
+        var payload;
+        var info;
+        if (!TRUSTED_ORIGINS[event.origin] ||
+                (typeof event.data === 'string' && event.data.length > 16384)) { return; }
+        frame = backgroundFrameFor(event.source);
+        if (!frame) { return; }
+        try { payload = typeof event.data === 'string' ? JSON.parse(event.data) : event.data; }
+        catch (ignoredJson) { return; }
+        if (!payload || typeof payload !== 'object') { return; }
+        if (payload.event === 'onError') { failBackgroundFrame(frame); return; }
+        if (payload.event === 'onStateChange' && Number(payload.info) === 1) {
+            backgroundFramePlaying(frame);
+            return;
+        }
+        info = payload.event === 'infoDelivery' && payload.info;
+        if (info && (Number(info.playerState) === 1 || Number(info.currentTime) > 0)) {
+            backgroundFramePlaying(frame);
+        }
+    }
+
+    function observeBackgroundFrames(onFailure, onPlaying) {
+        var frames = document.querySelectorAll('.hero-trailer, .discover-trailer');
+        var index;
+        backgroundFailureHandler = typeof onFailure === 'function' ? onFailure : null;
+        backgroundPlayingHandler = typeof onPlaying === 'function' ? onPlaying : null;
+        if (!backgroundMessageInstalled) {
+            window.addEventListener('message', onBackgroundMessage);
+            backgroundMessageInstalled = true;
+        }
+        for (index = 0; index < frames.length; index += 1) {
+            (function (current) {
+                function subscribe() {
+                    if (!current.contentWindow || !document.documentElement.contains(current)) { return; }
+                    try {
+                        current.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'iptvburo-background' }), '*');
+                        current.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'addEventListener', args: ['onStateChange'] }), '*');
+                        current.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'addEventListener', args: ['onError'] }), '*');
+                    } catch (ignoredPost) {}
+                }
+                if (current.getAttribute('data-buro-observed') === 'true') { return; }
+                current.setAttribute('data-buro-observed', 'true');
+                current._buroProbeStarted = Date.now();
+                /* No widget file:// a API do YouTube não pode ser habilitada sem
+                   erro de origem. Mantemos o fallback já validado no hardware:
+                   toca sem API, mas não finge que consegue confirmar PLAYING. */
+                if (!apiAvailable()) {
+                    current.classList.add('trailer-unverified');
+                    markBackgroundStage(current, 'trailer-unverified');
+                    announceBackgroundPlaying(current);
+                    return;
+                }
+                current.classList.add('trailer-awaiting');
+                current.addEventListener('load', function () {
+                    window.setTimeout(subscribe, 200);
+                });
+                subscribe();
+                current._buroProbeInterval = window.setInterval(subscribe, 750);
+                current._buroProbeTimeout = window.setTimeout(function () {
+                    failBackgroundFrame(current);
+                }, BACKGROUND_READY_TIMEOUT_MILLIS);
+            }(frames[index]));
+        }
     }
 
     /* O overlay pergunta isto para saber se as teclas de transporte tem a
@@ -387,6 +562,7 @@ var BuroTrailer = (function () {
         sanitize: sanitize,
         bannerEmbedUrl: bannerEmbedUrl,
         raiseBannerSound: raiseBannerSound,
+        observeBackgroundFrames: observeBackgroundFrames,
         currentVideoId: currentVideoId
     };
 }());

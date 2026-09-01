@@ -52,6 +52,7 @@
     <string name="discover_subtitle">Scorri a destra per tenere, a sinistra per saltare</string>
     <string name="discover_keep">Tieni</string>
     <string name="discover_skip">Salta</string>
+    <string name="discover_details">Dettagli</string>
     <string name="discover_kept">Salvato nei preferiti</string>
     <string name="discover_empty_title">Giro finito</string>
     <string name="discover_empty_body">Hai visto tutto quello che abbiamo scelto per te. Guarda qualche titolo e torna: ci sarà un nuovo giro.</string>

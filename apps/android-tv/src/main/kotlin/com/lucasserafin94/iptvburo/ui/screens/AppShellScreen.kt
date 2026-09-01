@@ -831,6 +831,7 @@ fun AppShellScreen(
                             hasCatalogue = state.sources.isNotEmpty(),
                             onKeep = onDiscoverKeep,
                             onSkip = onDiscoverSkip,
+                            onOpenDetails = onOpenChannel,
                             onDealAgain = onDiscoverDealAgain,
                             onBack = onBack,
                             dealtCount = state.discoverDealtCount,

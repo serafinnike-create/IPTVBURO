@@ -432,11 +432,17 @@ private fun DiscoveryCard(
             // With no trailer there is no right-hand decision column, so the synopsis belongs to
             // the card. When a trailer exists it is placed directly below that video instead —
             // never in the same bounds as the heavyweight browser.
-            if (!trailerAvailable) {
+            if (!trailerAvailable && !trailerFits) {
                 synopsis?.takeIf(String::isNotBlank)?.let { plot ->
                     Spacer(Modifier.height(BuroSpacing.Md))
                     DiscoverySynopsis(plot)
                 }
+                Spacer(Modifier.height(BuroSpacing.Lg))
+                DiscoveryDecisionActions(
+                    text = text,
+                    onDecide = onDecide,
+                    onOpenDetails = onOpenDetails,
+                )
             }
 
         }
@@ -463,7 +469,9 @@ private fun DiscoveryCard(
                     } else {
                         HeroTrailer(
                             youtubeId = activeTrailerId,
-                            modifier = Modifier.fillMaxSize().padding(2.dp),
+                            // The hosted page owns the rounded crop. Padding here exposed the AWT
+                            // panel's top and right edges as a thin grey frame around the film.
+                            modifier = Modifier.fillMaxSize(),
                             soundOn = soundOn,
                             onFailed = onTrailerFailed,
                             // Not the banner. The hosted page uses its dedicated card frame:
@@ -504,35 +512,63 @@ private fun DiscoveryCard(
                         )
                     }
                 }
+                Spacer(Modifier.height(BuroSpacing.Md))
+                DiscoveryDecisionActions(
+                    text = text,
+                    onDecide = onDecide,
+                    onOpenDetails = onOpenDetails,
+                )
                 synopsis?.takeIf(String::isNotBlank)?.let { plot ->
                     Spacer(Modifier.height(BuroSpacing.Md))
                     DiscoverySynopsis(plot)
                 }
             }
+        } else if (trailerFits) {
+            Column(
+                modifier = Modifier.width(trailerWidth),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(BuroSpacing.Md),
+            ) {
+                DiscoveryDecisionActions(
+                    text = text,
+                    onDecide = onDecide,
+                    onOpenDetails = onOpenDetails,
+                )
+                synopsis?.takeIf(String::isNotBlank)?.let { plot ->
+                    DiscoverySynopsis(plot)
+                }
+            }
         }
     }
-        Spacer(Modifier.height(BuroSpacing.Lg))
-        Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xl)) {
-            DecisionButton(
-                label = "✕",
-                caption = text.skip,
-                tint = BuroColors.TextMuted,
-                onClick = { onDecide(DiscoveryVerdict.SKIPPED) },
-            )
-            DecisionButton(
-                label = "✓",
-                caption = text.keep,
-                tint = BuroColors.Primary,
-                onClick = { onDecide(DiscoveryVerdict.KEPT) },
-            )
-            DecisionButton(
-                label = "▶",
-                caption = text.details,
-                tint = BuroColors.TextMuted,
-                onClick = onOpenDetails,
-            )
-        }
     }
+    }
+}
+
+@Composable
+private fun DiscoveryDecisionActions(
+    text: com.lucasserafin94.iptvburo.desktop.ui.DiscoveryStrings,
+    onDecide: (DiscoveryVerdict) -> Unit,
+    onOpenDetails: () -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xl)) {
+        DecisionButton(
+            label = "✕",
+            caption = text.skip,
+            tint = BuroColors.TextMuted,
+            onClick = { onDecide(DiscoveryVerdict.SKIPPED) },
+        )
+        DecisionButton(
+            label = "✓",
+            caption = text.keep,
+            tint = BuroColors.Primary,
+            onClick = { onDecide(DiscoveryVerdict.KEPT) },
+        )
+        DecisionButton(
+            label = "▶",
+            caption = text.details,
+            tint = BuroColors.TextMuted,
+            onClick = onOpenDetails,
+        )
     }
 }
 

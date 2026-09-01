@@ -94,6 +94,45 @@ async function run() {
             return entry.payload.func === 'seekTo' && entry.payload.args[0] === 30;
         }));
 
+    process.stdout.write('Trailers automaticos do banner e Descobrir\n');
+    var background = window.document.createElement('iframe');
+    var backgroundStage = window.document.createElement('span');
+    var backgroundHero = window.document.createElement('section');
+    backgroundHero.className = 'real-home-hero';
+    backgroundStage.className = 'hero-trailer-stage';
+    background.className = 'hero-trailer';
+    background.setAttribute('data-trailer-item-id', 'synthetic-item');
+    backgroundStage.appendChild(background);
+    backgroundHero.appendChild(backgroundStage);
+    window.document.body.appendChild(backgroundHero);
+    var failedItem = null;
+    var playingItem = null;
+    window.BuroTrailer.observeBackgroundFrames(function (itemId) { failedItem = itemId; }, function (itemId) { playingItem = itemId; });
+    window.dispatchEvent(new window.MessageEvent('message', {
+        origin: 'https://www.youtube-nocookie.com', source: background.contentWindow,
+        data: JSON.stringify({ event: 'onStateChange', info: 1 })
+    }));
+    await wait(3100);
+    check('PLAYING revela o iframe somente depois do tempo de assentamento',
+        background.classList.contains('trailer-ready') &&
+        !background.classList.contains('trailer-failed') &&
+        backgroundStage.classList.contains('trailer-ready') &&
+        backgroundHero.classList.contains('hero-trailer-playing') &&
+        playingItem === 'synthetic-item');
+
+    var failingBackground = window.document.createElement('iframe');
+    failingBackground.className = 'discover-trailer';
+    failingBackground.setAttribute('data-trailer-item-id', 'synthetic-failure');
+    window.document.body.appendChild(failingBackground);
+    window.BuroTrailer.observeBackgroundFrames(function (itemId) { failedItem = itemId; });
+    window.dispatchEvent(new window.MessageEvent('message', {
+        origin: 'https://www.youtube-nocookie.com', source: failingBackground.contentWindow,
+        data: JSON.stringify({ event: 'onError', info: 150 })
+    }));
+    check('erro mantem a capa e memoriza o item que falhou',
+        failingBackground.classList.contains('trailer-failed') &&
+        failingBackground.src === 'about:blank' && failedItem === 'synthetic-failure');
+
     window.dispatchEvent(new window.MessageEvent('message', {
         origin: 'https://www.youtube-nocookie.com', source: frame.contentWindow,
         data: JSON.stringify({ event: 'onError', info: 150 })

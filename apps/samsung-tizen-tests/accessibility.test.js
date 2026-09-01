@@ -52,6 +52,16 @@ check('player e trailer expõem progresso numérico',
     document.getElementById('player-timeline').getAttribute('aria-valuemin') === '0' &&
     document.getElementById('player-timeline').getAttribute('aria-valuemax') === '100' &&
     document.getElementById('trailer-timeline').getAttribute('role') === 'progressbar');
+check('player oferece uma barra de controles utilizável sem teclas coloridas',
+    document.getElementById('player-action-bar').getAttribute('role') === 'toolbar' &&
+    document.querySelectorAll('#player-action-bar [data-player-action]').length >= 9 &&
+    Boolean(document.querySelector('[data-player-action="play-pause"]')) &&
+    Boolean(document.querySelector('[data-player-action="audio"]')) &&
+    Boolean(document.querySelector('[data-player-action="subtitles"]')));
+check('cores do controle são aceleradores e cada ação conserva texto próprio',
+    Array.prototype.every.call(document.querySelectorAll('.player-action-button.tone-red, .player-action-button.tone-green, .player-action-button.tone-yellow, .player-action-button.tone-blue'), function (button) {
+        return Boolean(button.getAttribute('data-player-action'));
+    }));
 check('iframe do trailer tem título e decoração do boot fica fora da árvore acessível',
     Boolean(document.getElementById('trailer-frame').getAttribute('title')) &&
     document.querySelector('.boot-backdrop').getAttribute('aria-hidden') === 'true' &&
@@ -75,7 +85,8 @@ check('foco possui borda clara adicional e modo de alto contraste dedicado',
     /body\.high-contrast\s*\{[^}]*--text:\s*#fff/s.test(css));
 check('movimento reduzido elimina transição e escala do foco',
     /body\.reduced-motion \.focusable\s*\{[^}]*transition:\s*none/s.test(css) &&
-    /body\.reduced-motion \.focusable\.focused\s*\{[^}]*transform:\s*none/s.test(css));
+    /body\.reduced-motion \.focusable\.focused\s*\{[^}]*transform:\s*none/s.test(css) &&
+    /body\.reduced-motion \.player-action-button\.focused\s*\{[^}]*transform:\s*none/s.test(css));
 check('movimento reduzido também desliga animações do boot',
     /body\.reduced-motion \.boot-indicator\s*\{[^}]*animation:\s*none/s.test(css) &&
     /body\.reduced-motion \.boot-mark\s*\{[^}]*animation:\s*none/s.test(css));
@@ -90,6 +101,7 @@ check('controles compactos continuam acima do alvo mínimo de 44 px',
     /\.subtitle-choice\s*\{[^}]*height:\s*70px/s.test(css) &&
     /\.episode-download-action\s*\{[^}]*min-height:\s*46px/s.test(css) &&
     /\.discover-action\s*\{[^}]*min-width:\s*176px;\s*min-height:\s*70px/s.test(css) &&
+    /\.player-action-button\s*\{[^}]*height:\s*56px/s.test(css) &&
     /\.button\s*\{[^}]*min-height:\s*64px/s.test(css));
 
 if (failures.length) {

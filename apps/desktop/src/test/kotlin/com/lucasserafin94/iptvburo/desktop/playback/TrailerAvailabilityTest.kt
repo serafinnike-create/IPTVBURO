@@ -1,8 +1,11 @@
 package com.lucasserafin94.iptvburo.desktop.playback
 
+import java.nio.file.Path
+import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * The trailer panel must be honest about whether it can show anything.
@@ -15,6 +18,22 @@ import kotlin.test.assertNull
  * path, which is the one that was broken.
  */
 class TrailerAvailabilityTest {
+    @Test
+    fun `the heavyweight browser child never inherits the white AWT background`() {
+        val source =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/playback/TrailerBrowser.kt")
+                .readText()
+        assertTrue(
+            source.contains("browserComponent =") &&
+                source.contains("background = Color.BLACK") &&
+                source.contains("isVisible = !unattended") &&
+                source.contains("nativeComponent?.isVisible = false") &&
+                source.contains("cefBrowser.createImmediately()") &&
+                source.contains("browser?.wasResized("),
+            "o componente nativo do trailer voltou a mostrar branco antes da pagina",
+        )
+    }
+
     /**
      * Availability must follow the runtime on disk, in both directions.
      *

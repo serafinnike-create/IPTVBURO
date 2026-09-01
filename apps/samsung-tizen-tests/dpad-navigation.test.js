@@ -536,6 +536,9 @@ async function run() {
         !window.document.querySelector('[data-action="legal-toggle"]'));
     check('o foco real do documento acompanha o aceite legal',
         window.document.activeElement === window.document.querySelector('[data-action="legal-accept"]'));
+    /* A navegação não depende da data do trial. Licença possui suíte própria;
+       aqui o gate precisa ficar aberto para o ENTER alcançar Perfis. */
+    window.BuroLicense.decide = function () { return { allowed: true, trial: false, expiresAt: null }; };
     press(window, 13);
     check('um ENTER registra o aceite e avança para perfis',
         window.BuroApp.state.preferences.acceptedLegal &&

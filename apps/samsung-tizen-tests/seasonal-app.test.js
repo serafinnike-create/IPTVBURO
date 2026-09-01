@@ -56,6 +56,9 @@ function loadApp() {
         application: { getCurrentApplication: function () { return { exit: function () {} }; } }
     };
     scripts.forEach(function (file) { window.eval(fs.readFileSync(path.join(APP_DIR, file), 'utf8')); });
+    /* A coleção sazonal é independente do trial. Fixar a decisão evita que a
+       data da máquina desvie o teste do shell para a ativação. */
+    window.BuroLicense.decide = function () { return { allowed: true, trial: false, expiresAt: null }; };
     window.BuroApp.init();
     return window;
 }

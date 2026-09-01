@@ -182,6 +182,30 @@ class BannerTrailerWiringTest {
             "o trailer nao chega ao cartao de cima",
             discover.contains("trailerId = trailerFor(deck.first())"),
         )
+        assertTrue(
+            "o Descobrir móvel perdeu a terceira decisão do Windows e da Samsung",
+            discover.contains("onOpenDetails: (ChannelUi) -> Unit") &&
+                discover.contains("R.string.discover_details") &&
+                shell.contains("onOpenDetails = onOpenChannel"),
+        )
+    }
+
+    /** A loaded web page is not proof that its video actually started. */
+    @Test
+    fun `an unconfirmed trailer times out back to the artwork`() {
+        val backdrop =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/ui/screens/MutedTrailerBackdrop.kt")
+                .readText()
+
+        assertTrue(
+            "o Android nao espera o mesmo tempo deliberado do contrato compartilhado",
+            backdrop.contains("delay(BannerTrailer.SETTLE_MILLIS)"),
+        )
+        assertTrue(
+            "um WebView que nunca toca permanece vivo para sempre",
+            backdrop.contains("TRAILER_READY_TIMEOUT_MILLIS") &&
+                backdrop.contains("if (!pageReady) failed = true"),
+        )
     }
 
     /**

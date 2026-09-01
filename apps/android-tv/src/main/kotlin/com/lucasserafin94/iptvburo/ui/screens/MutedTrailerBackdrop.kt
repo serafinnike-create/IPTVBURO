@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.viewinterop.AndroidView
+import com.lucasserafin94.iptvburo.domain.model.BannerTrailer
 import kotlinx.coroutines.delay
 
 /** Official YouTube embed used only for source-provided trailer IDs; playback starts muted. */
@@ -39,8 +40,21 @@ internal fun MutedTrailerBackdrop(
     var failed by remember(safeId) { mutableStateOf(false) }
     var webView by remember(safeId) { mutableStateOf<WebView?>(null) }
     LaunchedEffect(safeId) {
-        delay(TRAILER_DELAY_MILLIS)
+        // Use the same deliberate pause as Windows: the artwork and copy settle before motion
+        // arrives, so the trailer does not look like a late layer covering the opening frame.
+        delay(BannerTrailer.SETTLE_MILLIS)
         visible = true
+        // A page that loaded but never reached PLAYING is still a failed trailer. Keeping its
+        // invisible WebView alive wastes memory and can leave audio/session resources attached.
+        delay(TRAILER_READY_TIMEOUT_MILLIS)
+        if (!pageReady) failed = true
+    }
+    LaunchedEffect(failed) {
+        if (failed) {
+            webView?.stopLoading()
+            webView?.destroy()
+            webView = null
+        }
     }
     DisposableEffect(safeId) {
         onDispose {
@@ -142,7 +156,7 @@ internal fun MutedTrailerBackdrop(
     )
 }
 
-private const val TRAILER_DELAY_MILLIS = 2_000L
+private const val TRAILER_READY_TIMEOUT_MILLIS = 10_000L
 
 /** Name the page sees for the one-bit bridge back into the app. */
 private const val TRAILER_BRIDGE = "BuroTrailer"

@@ -68,6 +68,10 @@ function bootApp(factory, storedPreferences) {
     SCRIPT_FILES.forEach(function (file) {
         window.eval(fs.readFileSync(path.join(APP_DIR, file), 'utf8'));
     });
+    /* Lembretes não testam entitlement. Sem uma decisão determinística, a
+       passagem do relógio leva este roteiro para Licença antes de criar o
+       shell e transforma uma suíte funcional em teste de data. */
+    window.BuroLicense.decide = function () { return { allowed: true, trial: false, expiresAt: null }; };
     return window;
 }
 

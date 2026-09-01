@@ -55,15 +55,11 @@
         <!-- Pular a abertura. Nao recebe foco: as teclas sao tratadas direto,
              porque numa TV a pessoa ja tem o controle na mao e navegar ate um
              alvo custaria mais do que os trinta segundos que ele economiza. -->
+        <button id="player-skip-intro" class="player-skip-intro" hidden></button>
         <!-- A moldura da previa do canal focado. Fica fora do overlay do player
              porque nao e uma reproducao: e uma janela ao lado da lista, e o
              overlay inteiro apareceria por cima dela. -->
         <div id="live-preview" class="live-preview" aria-hidden="true" hidden></div>
-        <button id="player-skip-intro" class="player-skip-intro" hidden></button>
-        <!-- Pular a abertura. Nao recebe foco: as teclas sao tratadas direto,
-             porque numa TV a pessoa ja tem o controle na mao e navegar ate um
-             alvo custaria mais do que os trinta segundos que ele economiza. -->
-        <button id="player-skip-intro" class="player-skip-intro" hidden></button>
         <section id="player-next-panel" class="player-next-panel" role="status" aria-live="polite" hidden>
             <p id="player-next-title" class="player-next-title"></p>
             <p id="player-next-countdown" class="player-next-countdown"></p>
@@ -91,16 +87,23 @@
                  aria-valuemax="100" aria-valuenow="0"><span id="player-progress"></span></div>
             <div class="player-control-row">
                 <span id="player-elapsed">00:00</span>
-                <span class="player-remote-actions"><b>◀</b> 10s&nbsp;&nbsp; <b>ENTER</b> play/pause&nbsp;&nbsp; 30s <b>▶</b></span>
+                <span class="player-remote-actions"></span>
                 <span id="player-duration">--:--</span>
             </div>
+            <div id="player-action-bar" class="player-action-bar" role="toolbar">
+                <button id="player-action-rewind" class="player-action-button" data-player-action="seek-back"></button>
+                <button id="player-action-toggle" class="player-action-button primary" data-player-action="play-pause"></button>
+                <button id="player-action-forward" class="player-action-button" data-player-action="seek-forward"></button>
+                <button id="player-audio-label" class="player-action-button" data-player-action="audio"></button>
+                <button id="player-subtitle-label" class="player-action-button" data-player-action="subtitles"></button>
+                <button id="player-favorite-label" class="player-action-button tone-red" data-player-action="favorite" hidden></button>
+                <button id="player-guide-label" class="player-action-button tone-green" data-player-action="guide" hidden></button>
+                <button id="player-speed-label" class="player-action-button tone-yellow" data-player-action="speed" hidden></button>
+                <button id="player-aspect-label" class="player-action-button tone-blue" data-player-action="aspect" hidden></button>
+                <button id="player-action-sleep" class="player-action-button" data-player-action="sleep"></button>
+                <button id="player-action-stats" class="player-action-button" data-player-action="stats"></button>
+            </div>
             <div class="player-track-row">
-                <span id="player-audio-label">▲ Áudio</span>
-                <span id="player-subtitle-label">▼ Legenda</span>
-                <span id="player-favorite-label" hidden>RED Minha BURO</span>
-                <span id="player-guide-label" hidden>GREEN Guia de programação</span>
-                <span id="player-speed-label" hidden>YELLOW Velocidade: 1×</span>
-                <span id="player-aspect-label" hidden>BLUE Formato: Original</span>
                 <!-- Aparece so quando o temporizador esta armado: um rotulo
                      permanente competiria com os que ensinam as teclas. -->
                 <span id="player-sleep-label" hidden></span>

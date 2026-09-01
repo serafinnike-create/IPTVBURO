@@ -22,7 +22,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
@@ -116,13 +119,10 @@ fun BuroInteractiveSurface(
                     indication = null,
                     enabled = enabled,
                     onClick = onClick,
-                ).then(
-                    if (contentDescription == null) {
-                        Modifier
-                    } else {
-                        Modifier.semantics { this.contentDescription = contentDescription }
-                    },
-                ),
+                ).semantics(mergeDescendants = true) {
+                    role = Role.Button
+                    contentDescription?.let { this.contentDescription = it }
+                },
     ) {
         content(state)
     }
@@ -177,13 +177,11 @@ fun BuroInteractiveRow(
                     interactionSource = interactionSource,
                     indication = null,
                     onClick = onClick,
-                ).then(
-                    if (contentDescription == null) {
-                        Modifier
-                    } else {
-                        Modifier.semantics { this.contentDescription = contentDescription }
-                    },
-                ),
+                ).semantics(mergeDescendants = true) {
+                    role = Role.Button
+                    this.selected = selected
+                    contentDescription?.let { this.contentDescription = it }
+                },
     ) {
         content(state)
     }

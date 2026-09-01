@@ -52,6 +52,7 @@
     <string name="discover_subtitle">Desliza a la derecha para guardar, a la izquierda para saltar</string>
     <string name="discover_keep">Guardar</string>
     <string name="discover_skip">Saltar</string>
+    <string name="discover_details">Detalles</string>
     <string name="discover_kept">Guardado en favoritos</string>
     <string name="discover_empty_title">Se acabó la ronda</string>
     <string name="discover_empty_body">Has pasado por todo lo que elegimos para ti. Mira algunas cosas y vuelve: habrá una ronda nueva.</string>

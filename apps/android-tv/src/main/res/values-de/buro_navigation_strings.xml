@@ -52,6 +52,7 @@
     <string name="discover_subtitle">Nach rechts wischen zum Merken, nach links zum Überspringen</string>
     <string name="discover_keep">Merken</string>
     <string name="discover_skip">Überspringen</string>
+    <string name="discover_details">Details</string>
     <string name="discover_kept">Zu Favoriten hinzugefügt</string>
     <string name="discover_empty_title">Das war die Runde</string>
     <string name="discover_empty_body">Sie haben alles gesehen, was wir für Sie ausgewählt haben. Schauen Sie ein paar Titel und kommen Sie wieder — dann gibt es eine neue Runde.</string>

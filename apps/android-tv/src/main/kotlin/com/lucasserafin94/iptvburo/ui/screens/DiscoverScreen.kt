@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -90,6 +91,7 @@ fun DiscoverScreen(
     hasCatalogue: Boolean,
     onKeep: (ChannelUi) -> Unit,
     onSkip: (ChannelUi) -> Unit,
+    onOpenDetails: (ChannelUi) -> Unit,
     onDealAgain: () -> Unit,
     onBack: () -> Unit,
     /** Total the deck started with, so the counter can say "3 of 15" rather than just what is left. */
@@ -202,6 +204,7 @@ fun DiscoverScreen(
                     DiscoverActions(
                         onSkip = { onSkip(deck.first()) },
                         onKeep = { onKeep(deck.first()) },
+                        onOpenDetails = { onOpenDetails(deck.first()) },
                         compact = compact,
                     )
                 }
@@ -462,6 +465,7 @@ private fun DiscoverCard(
 private fun DiscoverActions(
     onSkip: () -> Unit,
     onKeep: () -> Unit,
+    onOpenDetails: () -> Unit,
     compact: Boolean,
 ) {
     Row(
@@ -476,12 +480,20 @@ private fun DiscoverActions(
             onClick = onSkip,
             compact = compact,
         )
-        Spacer(Modifier.width(if (compact) 36.dp else 52.dp))
+        Spacer(Modifier.width(if (compact) 24.dp else 42.dp))
         VerdictButton(
             icon = Icons.Default.Check,
             tint = BuroGold,
             label = stringResource(R.string.discover_keep),
             onClick = onKeep,
+            compact = compact,
+        )
+        Spacer(Modifier.width(if (compact) 24.dp else 42.dp))
+        VerdictButton(
+            icon = Icons.Default.Info,
+            tint = BuroTextSecondary,
+            label = stringResource(R.string.discover_details),
+            onClick = onOpenDetails,
             compact = compact,
         )
     }

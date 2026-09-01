@@ -1517,7 +1517,7 @@ private fun SourceSidebar(
                 modifier = Modifier.clickable(onClick = onToggleCollapsed).padding(BuroSpacing.Xs),
             )
         }
-        Spacer(Modifier.height(30.dp))
+        Spacer(Modifier.height(22.dp))
 
         // Everything below the brand scrolls.
         //
@@ -1577,6 +1577,7 @@ private fun SourceSidebar(
             selected = destination == DesktopDestination.DISCOVER,
             onClick = onDiscover,
         )
+        Spacer(Modifier.height(12.dp))
         NavigationItem(
             label = text.movies,
             icon = Icons.Default.Movie,
@@ -1607,6 +1608,16 @@ private fun SourceSidebar(
                     catalogType == XtreamContentType.LIVE,
             onClick = onLive,
         )
+        if (hasSubscriptions) {
+            NavigationItem(
+                label = text.subscriptions,
+                icon = Icons.Default.Subscriptions,
+                selected = destination == DesktopDestination.SUBSCRIPTIONS,
+                onClick = onSubscriptions,
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
         NavigationItem(
             label = text.continueWatching,
             icon = Icons.Default.PlayCircle,
@@ -1652,23 +1663,12 @@ private fun SourceSidebar(
                 onClick = onMusic,
             )
         }
-        // Only while something can actually answer "where can I watch this" — currently the demo
-        // catalogue. With nothing behind it the entry disappears rather than opening a dead screen.
-        if (hasSubscriptions) {
-            NavigationItem(
-                label = text.subscriptions,
-                icon = Icons.Default.Subscriptions,
-                selected = destination == DesktopDestination.SUBSCRIPTIONS,
-                onClick = onSubscriptions,
-            )
-        }
-
         // Account and settings, after the content destinations and separated from them.
         //
         // Someone walking this list is looking for something to watch; who they are signed in as
         // and how the app behaves are a different kind of question, so they sit at the end rather
         // than among the shelves.
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(14.dp))
         NavigationItem(
             // Named for where it goes, like every other row in this list, and nothing else. The
             // active profile's name was shown here — first as the label, then as a subtitle — and
@@ -1880,8 +1880,8 @@ private fun SourceSidebar(
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
                 style =
                     LocalScrollbarStyle.current.copy(
-                        thickness = 8.dp,
-                        unhoverColor = BuroColors.BorderSoft,
+                        thickness = 6.dp,
+                        unhoverColor = BuroColors.BorderSoft.copy(alpha = 0.24f),
                         hoverColor = BuroColors.Primary,
                     ),
             )
@@ -1994,7 +1994,7 @@ private fun NavigationItem(
         contentDescription = label,
     ) { state ->
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 11.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // The colour is the whole effect, and it is the same rule the label follows: the mark

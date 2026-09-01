@@ -509,6 +509,29 @@ private fun ArtworkFallback(
             )
         }
 
+        // Continue-watching cards answer focus with the same direct play affordance as Windows.
+        // It appears only while focused and only on landscape progress cards, so ordinary covers
+        // stay unobstructed and touch users still receive the card's normal click target.
+        if (isFocused && compactTitle && item.progress != null) {
+            Box(
+                modifier =
+                    Modifier
+                        .align(Alignment.Center)
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(BuroCanvas.copy(alpha = 0.78f))
+                        .border(1.dp, BuroGold.copy(alpha = 0.72f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "▶",
+                    color = BuroGold,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+
         // Progress stays on the artwork: it describes the image it sits on, and a bar under the
         // caption would read as belonging to the text.
         item.progress?.let { progress ->
