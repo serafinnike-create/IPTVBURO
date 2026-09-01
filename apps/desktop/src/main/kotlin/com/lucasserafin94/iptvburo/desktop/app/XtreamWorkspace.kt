@@ -1879,6 +1879,10 @@ internal fun XtreamInternalDetailsPage(
                 onLoadSeries = { scope.launch { appState.loadSelectedSeriesDetails() } },
                 onLoadEpg = { scope.launch { appState.loadSelectedLiveEpg() } },
                 onOpenTrailer = { trailerId -> openTrailerId = trailerId },
+                // The banner's own lookup: most providers send no trailer id, so without this the
+                // button never appears at all — for a film or for a series.
+                lookedUpTrailerId = appState.heroTrailerFor(item),
+                onNeedTrailer = { appState.loadHeroTrailer(item) },
                 onOpenExternal = onOpenExternal,
                 onOpenPerson = onOpenPerson,
                 isFavorite = appState.isFavorite(item),
@@ -2013,6 +2017,17 @@ internal fun XtreamItemDetail(
     /** Asks for the guide again, for the same reason the film details can be asked for again. */
     onLoadEpg: () -> Unit,
     onOpenTrailer: (String) -> Unit,
+    /**
+     * The trailer this title has, when the provider did not send one itself.
+     *
+     * Most providers send no trailer id at all, so the button simply never appeared — reported for
+     * films and series alike. The banner has searched TMDb for this since it started playing
+     * trailers and caches the answer per title, so reusing it costs nothing new and gives the two
+     * screens the same answer about the same film.
+     */
+    lookedUpTrailerId: String? = null,
+    /** Asks for that lookup, once, for the title being shown. */
+    onNeedTrailer: () -> Unit = {},
     onOpenExternal: (PendingXtreamExternal) -> Unit,
     onOpenPerson: (String) -> Unit,
     castPhotoFor: (String) -> String? = { null },
@@ -2217,8 +2232,16 @@ internal fun XtreamItemDetail(
                     containerExtension = item.containerExtension,
                     contentKey = item.contentIdentity().key,
                 )
-                val movieTrailerId =
+                // The provider's own id first, then the one the banner already looks up.
+                //
+                // Most providers send no trailer id at all, so the button simply never appeared —
+                // reported for films and series alike. The banner has searched TMDb for this since
+                // it started playing trailers, and it caches per title, so asking here costs
+                // nothing new and gives the two screens the same answer about the same film.
+                LaunchedEffect(item.providerId, item.contentType) { onNeedTrailer() }
+                val trailerId =
                     (movieStatus as? MovieDetailsStatus.Loaded)?.details?.youtubeTrailerId
+                        ?: lookedUpTrailerId
                 var secondaryActionsVisible by
                     remember(item.providerId) { mutableStateOf(false) }
                 // Actions sit on one line at their natural width. Full-width stacked buttons made
@@ -2253,20 +2276,23 @@ internal fun XtreamItemDetail(
                             fontWeight = FontWeight.Bold,
                         )
                     }
-                    if (item.contentType == XtreamContentType.MOVIE) {
-                        movieTrailerId?.let { trailerId ->
-                            OutlinedButton(
-                                onClick = { onOpenTrailer(trailerId) },
-                                modifier = Modifier.height(48.dp),
-                                shape = BuroRadius.Small,
-                                colors =
-                                    ButtonDefaults.outlinedButtonColors(
-                                        contentColor = BuroColors.Text,
-                                    ),
-                            ) {
-                                Text("▷  Trailer", fontWeight = FontWeight.SemiBold)
-                            }
+                    // Series as well as films. The button used to live inside the film-only
+                    // branch, so a series never offered a trailer even when one existed — and the
+                    // banner shows series as often as films.
+                    trailerId?.let { id ->
+                        OutlinedButton(
+                            onClick = { onOpenTrailer(id) },
+                            modifier = Modifier.height(48.dp),
+                            shape = BuroRadius.Small,
+                            colors =
+                                ButtonDefaults.outlinedButtonColors(
+                                    contentColor = BuroColors.Text,
+                                ),
+                        ) {
+                            Text("▷  Trailer", fontWeight = FontWeight.SemiBold)
                         }
+                    }
+                    if (item.contentType == XtreamContentType.MOVIE) {
                         OutlinedButton(
                             onClick = onToggleFavorite,
                             modifier = Modifier.height(48.dp),

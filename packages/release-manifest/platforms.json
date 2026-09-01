@@ -5,7 +5,7 @@
     {
       "id": "android-tv",
       "status": "TESTING",
-      "version": "3.7.0",
+      "version": "3.8.0",
       "build": "PASSING",
       "hardware": "TV_PENDING",
       "notes": [
@@ -17,7 +17,7 @@
     {
       "id": "android-mobile",
       "status": "TESTING",
-      "version": "3.7.0",
+      "version": "3.8.0",
       "build": "PASSING",
       "hardware": "PARTIAL",
       "notes": [
@@ -55,7 +55,7 @@
     {
       "id": "samsung-tizen",
       "status": "HARDWARE_VALIDATION",
-      "version": "3.7.0-preview",
+      "version": "3.8.0-preview",
       "build": "PASSING",
       "hardware": "NOT_VALIDATED",
       "notes": [
@@ -99,7 +99,7 @@
     {
       "id": "windows",
       "status": "TESTING",
-      "version": "3.7.0",
+      "version": "3.8.0",
       "build": "PARTIAL",
       "hardware": "PARTIAL",
       "notes": [

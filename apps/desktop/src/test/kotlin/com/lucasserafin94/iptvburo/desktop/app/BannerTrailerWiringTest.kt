@@ -209,6 +209,41 @@ class BannerTrailerWiringTest {
         )
     }
 
+    /**
+     * The details page offers a trailer for series as well as films, and finds one.
+     *
+     * The button was inside a film-only branch and read only the provider's own field. Most
+     * providers send no trailer id at all, so it never appeared for anything — reported for films
+     * and series alike. The banner has searched TMDb for this all along and caches per title, so
+     * reusing it costs nothing and makes the two screens agree about the same film.
+     */
+    @Test
+    fun `the details page offers a trailer it can actually find`() {
+        val workspace =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/XtreamWorkspace.kt")
+                .readText()
+
+        assertTrue(
+            workspace.contains("lookedUpTrailerId = appState.heroTrailerFor(item)"),
+            "os detalhes so olham para o campo do fornecedor, que quase nunca vem preenchido",
+        )
+        assertTrue(
+            workspace.contains("onNeedTrailer = { appState.loadHeroTrailer(item) }"),
+            "nada pede a procura do trailer para o titulo aberto",
+        )
+        // Outside the film-only branch: a series shows trailers as often as a film does.
+        val detail =
+            workspace.substringAfter("internal fun XtreamItemDetail(")
+                .substringBefore("private fun LiveEpgContent(")
+        val trailerAt = detail.indexOf("trailerId?.let { id ->")
+        val filmOnlyAt = detail.indexOf("if (item.contentType == XtreamContentType.MOVIE) {")
+        assertTrue(trailerAt > 0, "o botao do trailer desapareceu dos detalhes")
+        assertTrue(
+            trailerAt < filmOnlyAt,
+            "o botao do trailer voltou para dentro do ramo so-de-filmes",
+        )
+    }
+
     /** And the viewer holds a switch for the sound, both ways round. */
     @Test
     fun `the viewer can turn the sound on and off`() {

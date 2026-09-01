@@ -76,7 +76,10 @@ class WindowsDesignPolishTest {
     fun `movie detail keeps four primary decisions and folds secondary actions`() {
         val detail = workspace.substringAfter("internal fun XtreamItemDetail(").substringBefore("private fun LiveEpgContent(")
         val play = detail.indexOf("playbackButtonLabel")
-        val trailer = detail.indexOf("movieTrailerId?.let")
+        // `trailerId`, not `movieTrailerId`: the id now comes from the banner's TMDb lookup as well
+        // as the provider's own field, and the button is offered for series too — most providers
+        // send no trailer id at all, so it never appeared for anything.
+        val trailer = detail.indexOf("trailerId?.let")
         val favorite = detail.indexOf("onClick = onToggleFavorite")
         val more = detail.indexOf("secondaryActionsVisible = !secondaryActionsVisible")
         val reminder = detail.indexOf("onToggleReminder?.let")
@@ -93,5 +96,16 @@ class WindowsDesignPolishTest {
         val toolbar = workspace.substringAfter("private fun XtreamToolbar(").substringBefore("private fun YearAndRatingFilters(")
         assertTrue(toolbar.contains("FlowRow("))
         assertTrue(toolbar.contains("verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)"))
+    }
+
+    @Test
+    fun `discovery trailer fills its native surface without exposing a grey frame`() {
+        val discovery =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/DiscoveryScreen.kt")
+                .readText()
+        val trailer = discovery.substringAfter("HeroTrailer(").substringBefore("soundOn = soundOn")
+
+        assertTrue(trailer.contains("modifier = Modifier.fillMaxSize()"))
+        assertFalse(trailer.contains("padding(2.dp)"))
     }
 }
