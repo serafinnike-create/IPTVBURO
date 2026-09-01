@@ -30,6 +30,40 @@ object BannerTrailer {
      */
     private val VIDEO_ID = Regex("""^[A-Za-z0-9_-]{11}$""")
 
+    /** How much of the banner's width the trailer covers, from the right. */
+    const val TRAILER_WIDTH_FRACTION = 0.58f
+
+    /**
+     * The gap left between the end of the copy and the edge of the trailer, in display units.
+     *
+     * Text stopping exactly where a video begins reads as text running into it, and the video's
+     * own left mask is a gradient rather than a hard edge — the last word would sit in the fade.
+     */
+    const val TRAILER_CLEARANCE = 24f
+
+    /**
+     * The narrowest the copy column may be squeezed while a trailer plays.
+     *
+     * Past some window width the remainder stops being a column and becomes one word per line,
+     * which this app has produced before. Below this the text is allowed to reach under the video
+     * instead: a synopsis partly behind a trailer is still readable, a one-word column is not.
+     */
+    const val COPY_MIN_WIDTH = 300f
+
+    /**
+     * How wide the banner's title and synopsis may be while a trailer plays.
+     *
+     * What the trailer leaves, less the gutters and the clearance. Measured rather than fixed: a
+     * constant cap cannot track a video sized as a fraction of the window, and at a narrow window
+     * the two overlapped and the synopsis was cut off mid-sentence. Reported twice.
+     */
+    fun copyWidthBesideTrailer(
+        bannerWidth: Float,
+        gutter: Float,
+    ): Float =
+        (bannerWidth * (1f - TRAILER_WIDTH_FRACTION) - gutter * 2f - TRAILER_CLEARANCE)
+            .coerceAtLeast(COPY_MIN_WIDTH)
+
     /**
      * How long a failure is remembered.
      *
@@ -43,10 +77,11 @@ object BannerTrailer {
      * How long the banner waits on a title before starting its trailer.
      *
      * The banner rotates on its own and the viewer scrolls past it, so starting the instant a title
-     * appears would open and abandon a video per rotation. Long enough that only a title somebody
-     * is actually looking at begins to play.
+     * appears would open and abandon a video per rotation. Three seconds lets the artwork and copy
+     * settle as a deliberate banner before motion arrives, instead of making the trailer look like
+     * a late layer dropping over the opening screen.
      */
-    const val SETTLE_MILLIS = 1_200L
+    const val SETTLE_MILLIS = 3_000L
 
     /**
      * How long the banner holds a title once its trailer is playing.

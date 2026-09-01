@@ -149,9 +149,54 @@ class BannerTrailerTest {
     /** The settle delay is long enough that a rotation does not start a video per title. */
     @Test
     fun `the banner waits before it starts`() {
-        assertTrue(
-            BannerTrailer.SETTLE_MILLIS >= 1_000L,
-            "o banner comeca depressa demais e abre um video por rotacao",
+        assertEquals(
+            3_000L,
+            BannerTrailer.SETTLE_MILLIS,
+            "o trailer nao respeita os tres segundos de leitura do banner",
         )
+    }
+
+    /**
+     * The copy never reaches under the trailer.
+     *
+     * The synopsis was reported cut off twice: once because the column had the whole banner and the
+     * video was drawn over its last line, and again at a narrow window, where a fixed cap could not
+     * track a video measured as a fraction. So the answer is arithmetic, not a constant.
+     */
+    @Test
+    fun `the copy stops before the trailer starts`() {
+        // Every width from a small laptop to a 4K panel, with the gutter each one uses.
+        listOf(1_000f to 24f, 1_280f to 24f, 1_600f to 48f, 1_920f to 48f, 3_840f to 48f)
+            .forEach { (banner, gutter) ->
+                val copy = BannerTrailer.copyWidthBesideTrailer(banner, gutter)
+                val trailerStarts = banner * (1f - BannerTrailer.TRAILER_WIDTH_FRACTION)
+
+                assertTrue(
+                    copy + gutter <= trailerStarts,
+                    "a ${banner}px a sinopse passa por baixo do trailer: $copy",
+                )
+            }
+    }
+
+    /** And it is never squeezed into a column one word wide. */
+    @Test
+    fun `the copy is never squeezed to nothing`() {
+        // A window far narrower than the app is meant for: the remainder would go to almost zero.
+        val copy = BannerTrailer.copyWidthBesideTrailer(bannerWidth = 600f, gutter = 48f)
+
+        assertEquals(
+            BannerTrailer.COPY_MIN_WIDTH,
+            copy,
+            "a coluna foi espremida ate uma letra por linha, outra vez",
+        )
+    }
+
+    /** A wider banner gives the copy more room, not less. */
+    @Test
+    fun `a wider banner widens the copy`() {
+        val narrow = BannerTrailer.copyWidthBesideTrailer(1_280f, 24f)
+        val wide = BannerTrailer.copyWidthBesideTrailer(1_920f, 24f)
+
+        assertTrue(wide > narrow, "alargar a janela nao deu mais espaco ao texto: $narrow -> $wide")
     }
 }
