@@ -3489,6 +3489,14 @@ class DesktopAppState(
      */
     fun dispose() {
         streamingScope.cancel()
+        // The download scope too.
+        //
+        // It was left running, and its coroutines write Compose state when they finish — a cast
+        // discovery that was still out when the window closed came back to a scene with no Skia
+        // layer behind it, and Compose put "SkiaLayer is disposed" on screen in a dialog box.
+        // Reported as an error that appears constantly. Cancelling both means nothing survives the
+        // window that could try to draw into it.
+        downloadScope.cancel()
     }
 
     /** Switches the shelves between films, series and upcoming releases. */
