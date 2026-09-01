@@ -189,6 +189,26 @@ class BannerTrailerWiringTest {
         )
     }
 
+    /**
+     * The trailer leaves the scrollbar its lane down the right edge.
+     *
+     * An embedded video is a heavyweight surface: it paints above Compose whatever the drawing
+     * order says. A trailer running to the window's edge buries the scrollbar under itself — still
+     * drawn, and no longer clickable or draggable. Reported as the sidebar disappearing under the
+     * trailer with no way to scroll the page.
+     */
+    @Test
+    fun `the trailer does not bury the scrollbar`() {
+        assertTrue(
+            home.contains("padding(end = HERO_SCROLLBAR_LANE)"),
+            "o trailer corre ate a borda e enterra a barra de rolagem por baixo dele",
+        )
+        assertTrue(
+            home.contains("private val HERO_SCROLLBAR_LANE"),
+            "a faixa da barra de rolagem nao tem largura propria",
+        )
+    }
+
     /** And the viewer holds a switch for the sound, both ways round. */
     @Test
     fun `the viewer can turn the sound on and off`() {

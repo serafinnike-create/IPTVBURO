@@ -146,6 +146,19 @@ private const val HOME_SCROLL_PIXELS = 300f
 /** How long each banner title holds before the next one. */
 private const val HERO_ROTATION_MILLIS = 10_000L
 
+/**
+ * The lane down the right edge the banner's trailer must not enter.
+ *
+ * The scrollbar lives there, and an embedded video is a heavyweight surface: it paints above
+ * Compose whatever the drawing order says, so a trailer running to the window's edge buries the
+ * scrollbar under itself. It is still drawn, and it can no longer be clicked or dragged — reported
+ * as the sidebar disappearing under the trailer with no way to scroll the page.
+ *
+ * Wider than the 10dp bar itself so there is somewhere to aim: a control flush against a video is
+ * hard to hit even when the pixels technically respond.
+ */
+private val HERO_SCROLLBAR_LANE = 18.dp
+
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun XtreamDailyHome(
@@ -739,7 +752,7 @@ private fun DailyHero(
             // the buttons — the copy column disappeared behind a cartoon. The artwork underneath
             // has always kept its subject on this side for the same reason.
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().padding(end = HERO_SCROLLBAR_LANE),
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 HeroTrailer(
@@ -750,6 +763,8 @@ private fun DailyHero(
                     modifier =
                         Modifier
                             .fillMaxHeight()
+                            // The padding on the box already reserves the lane, so the video takes
+                            // its plain share of what is left rather than subtracting it twice.
                             .fillMaxWidth(BannerTrailer.TRAILER_WIDTH_FRACTION),
                     soundOn = soundOn,
                     onFailed = onTrailerFailed,
