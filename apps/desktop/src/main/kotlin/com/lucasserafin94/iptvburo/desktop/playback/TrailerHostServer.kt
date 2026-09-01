@@ -4,6 +4,8 @@ import com.sun.net.httpserver.HttpServer
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -22,6 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class TrailerHostServer private constructor(
     private val server: HttpServer,
+    private val artworkByToken: ConcurrentHashMap<String, String>,
 ) {
     private val stopped = AtomicBoolean(false)
 
@@ -45,12 +48,37 @@ class TrailerHostServer private constructor(
          * this video.
          */
         unattended: Boolean = false,
+        /** Kept server-side: private or signed artwork URLs never enter the visible browser URL. */
+        artworkUrl: String? = null,
     ): String =
         "$origin/watch?v=$youtubeId&autoplay=${autoplay.asFlag()}" +
             "&mute=${muted.asFlag()}&hero=${blendIntoHero.asFlag()}" +
-            "&unattended=${unattended.asFlag()}"
+            "&unattended=${unattended.asFlag()}" +
+            artworkUrl
+                ?.takeIf { blendIntoHero && it.isSafeArtworkUrl() }
+                ?.let { safeUrl ->
+                    val token = UUID.randomUUID().toString()
+                    // Bounded, because only a page that is actually fetched removes its own token.
+                    //
+                    // A trailer that fails, or one the rotation replaces before its page loads,
+                    // leaves its entry behind — and the banner rotates all day. Each entry holds an
+                    // artwork address, so an app left open accumulates them for as long as it runs.
+                    // The oldest are dropped rather than the newest refused: a token that has not
+                    // been redeemed in the last few hundred rotations is not going to be.
+                    if (artworkByToken.size >= MAX_ARTWORK_TOKENS) {
+                        artworkByToken.keys.take(artworkByToken.size / 2).forEach(artworkByToken::remove)
+                    }
+                    artworkByToken[token] = safeUrl
+                    "&art=$token"
+                }.orEmpty()
 
-    private fun Boolean.asFlag(): String = if (this) "1" else "0"
+        private fun Boolean.asFlag(): String = if (this) "1" else "0"
+
+    private fun String.isSafeArtworkUrl(): Boolean =
+        runCatching {
+            val uri = java.net.URI(this)
+            uri.scheme.equals("https", ignoreCase = true) || uri.scheme.equals("http", ignoreCase = true)
+        }.getOrDefault(false)
 
     fun stop() {
         if (!stopped.compareAndSet(false, true)) return
@@ -70,6 +98,7 @@ class TrailerHostServer private constructor(
                 // Port 0 lets the OS pick a free one; binding explicitly to loopback means the
                 // socket is never reachable from the network.
                 val http = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0)
+                val artworkByToken = ConcurrentHashMap<String, String>()
 
                 http.createContext("/watch") { exchange ->
                     runCatching {
@@ -87,6 +116,15 @@ class TrailerHostServer private constructor(
                         fun flag(name: String): Boolean =
                             query.split('&').any { part -> part == "$name=1" }
 
+                        val artworkToken =
+                            query
+                                .split('&')
+                                .firstOrNull { part -> part.startsWith("art=") }
+                                ?.removePrefix("art=")
+                        // One-use lookup: the real URL is never placed in the page address and the
+                        // server does not retain credentials after producing the document.
+                        val artworkUrl = artworkToken?.let(artworkByToken::remove)
+
                         val body =
                             if (requestedId.matches(VIDEO_ID)) {
                                 page(
@@ -96,6 +134,7 @@ class TrailerHostServer private constructor(
                                     muted = flag("mute"),
                                     blendIntoHero = flag("hero"),
                                     unattended = flag("unattended"),
+                                    artworkUrl = artworkUrl,
                                 )
                             } else {
                                 "<!doctype html><html><body style=\"background:#000\"></body></html>"
@@ -111,10 +150,18 @@ class TrailerHostServer private constructor(
 
                 http.executor = null
                 http.start()
-                TrailerHostServer(http)
+                TrailerHostServer(http, artworkByToken)
             }.getOrNull()
 
         private val VIDEO_ID = Regex("[A-Za-z0-9_-]{6,32}")
+
+        /**
+         * How many unredeemed artwork tokens to keep.
+         *
+         * Generous: the banner holds twenty titles and the Descobrir deck fifteen, so this is many
+         * sessions' worth of rotation. It exists to stop unbounded growth, not to be reached.
+         */
+        private const val MAX_ARTWORK_TOKENS = 256
 
         /**
          * The host page: a black background and one iframe filling it.
@@ -128,6 +175,7 @@ class TrailerHostServer private constructor(
             muted: Boolean,
             blendIntoHero: Boolean,
             unattended: Boolean,
+            artworkUrl: String?,
         ): String {
             val embed =
                 buildString {
@@ -162,8 +210,19 @@ class TrailerHostServer private constructor(
                     if (unattended) append("&loop=1&playlist=").append(youtubeId)
                     append("&origin=").append(origin)
                 }
+            val safeArtworkCss =
+                artworkUrl
+                    ?.takeIf { blendIntoHero }
+                    ?.replace("\\", "\\\\")
+                    ?.replace("\"", "\\\"")
+                    ?.replace("<", "%3C")
+                    ?.replace(">", "%3E")
+                    ?.replace("\r", "")
+                    ?.replace("\n", "")
             val bodyClass =
                 when {
+                    blendIntoHero && safeArtworkCss != null ->
+                        " class=\"cinematic-hero unattended with-art\""
                     blendIntoHero -> " class=\"cinematic-hero unattended\""
                     unattended -> " class=\"ambient-card unattended\""
                     else -> ""
@@ -196,12 +255,19 @@ class TrailerHostServer private constructor(
              * what remains. The engine cannot tell us this: the page loads perfectly, and the error
              * is content inside it. Only the player knows, and this is how it says so.
              */
+            val hideRejectedPlayer =
+                if (unattended) "document.documentElement.style.display='none';" else ""
             val failureScript =
-                if (unattended) {
-                    """
+                """
                     <script>
                     (function(){
                       var frame=document.querySelector('iframe');
+                      var resolved=false;
+                      function signal(value){
+                        if(value==='playing'&&resolved)return;
+                        if(value==='playing')resolved=true;
+                        if(window.cefQuery)window.cefQuery({request:value});
+                      }
                       function listen(){
                         if(!frame||!frame.contentWindow)return;
                         frame.contentWindow.postMessage(JSON.stringify(
@@ -216,15 +282,19 @@ class TrailerHostServer private constructor(
                         /* 2, 5, 100, 101 and 150 are YouTube's "cannot play this here" codes.
                            Whichever arrives, the answer is the same: show the artwork instead. */
                         if(d&&d.event==='onError'){
-                          document.documentElement.style.display='none';
+                          $hideRejectedPlayer
+                          signal('failed');
+                          return;
+                        }
+                        if(d&&d.info){
+                          var state=d.info.playerState;
+                          if(state===1||d.info.currentTime>0)signal('playing');
                         }
                       });
+                      setTimeout(function(){if(!resolved)signal('failed')},10000);
                     })();
                     </script>
-                    """.trimIndent()
-                } else {
-                    ""
-                }
+                """.trimIndent()
             val unmuteScript =
                 if (unattended && !muted) {
                     """
@@ -305,15 +375,16 @@ class TrailerHostServer private constructor(
                 body.unattended #pointer-glass{
                      position:fixed;inset:0;z-index:4;background:transparent}
 
-                /* Descobrir owns a clean 16:9 card, not the hero's oversized crop. Keep a dark
-                   two-pixel inset inside the native rectangle so iframe edge artefacts and square
-                   white lines never read as a cut-off player; the page itself draws the radius
-                   because Compose cannot clip a heavyweight Chromium surface. */
+                /* Descobrir owns a clean 16:9 card, not the hero's oversized crop. Overscan the
+                   iframe by two pixels rather than insetting it: an inset exposed Chromium's own
+                   top and right edges as a grey rule around the moving picture. The page itself
+                   draws the radius because Compose cannot clip a heavyweight Chromium surface. */
                 body.ambient-card #fit{
-                     top:2px;right:2px;bottom:2px;left:2px;
+                     top:-2px;right:-2px;bottom:-2px;left:-2px;
                      width:auto;height:auto;min-width:0;min-height:0;
-                     transform:none;border-radius:16px;overflow:hidden;
+                     transform:none;border-radius:18px;overflow:hidden;
                      animation:card-reveal 420ms ease-out both}
+                body.ambient-card iframe{outline:0}
                 @keyframes card-reveal{from{opacity:0}to{opacity:1}}
 
                 /* Chromium is an AWT heavyweight surface, so a Compose scrim cannot be painted
@@ -324,7 +395,7 @@ class TrailerHostServer private constructor(
                    lightbox keeps an unobstructed 16:9 player and its controls. */
                 body.cinematic-hero::before,body.cinematic-hero::after{
                      content:"";position:fixed;z-index:2;pointer-events:none}
-                body.cinematic-hero::before{
+                body.cinematic-hero:not(.with-art)::before{
                      /* Wide enough to actually dissolve.
                         At 28% the fade covered a narrow strip of a player that is itself only just
                         over half the banner, so what showed was a hard vertical edge where the
@@ -335,8 +406,25 @@ class TrailerHostServer private constructor(
                          rgba(8,9,10,1) 0%,rgba(8,9,10,1) 14%,
                          rgba(8,9,10,.86) 34%,rgba(8,9,10,.46) 66%,
                          rgba(8,9,10,0) 100%)}
+                /* Repeat the exact banner artwork inside Chromium and dissolve it into motion.
+                   A transparent CSS edge cannot reveal Compose under a heavyweight AWT window; it
+                   reveals Chromium's black canvas. Mirroring the still here removes that black
+                   vertical seam, so the poster genuinely becomes the trailer in one surface. */
+                body.cinematic-hero.with-art::before{
+                     inset:0;
+                     background-image:linear-gradient(rgba(8,9,10,.08),rgba(8,9,10,.08)),
+                         url(\"${safeArtworkCss.orEmpty()}\");
+                     background-size:100% 100%,172.414% auto;
+                     background-position:center,right center;
+                     background-repeat:no-repeat;
+                     -webkit-mask-image:linear-gradient(90deg,
+                         #000 0%,#000 18%,rgba(0,0,0,.88) 34%,
+                         rgba(0,0,0,.42) 58%,transparent 78%);
+                     mask-image:linear-gradient(90deg,
+                         #000 0%,#000 18%,rgba(0,0,0,.88) 34%,
+                         rgba(0,0,0,.42) 58%,transparent 78%)}
                 body.cinematic-hero::after{
-                     inset:auto 0 0 0;height:38%;
+                     inset:auto 0 0 0;height:46%;
                      background:linear-gradient(0deg,
                          rgba(8,9,10,.96) 0%,rgba(8,9,10,.64) 34%,
                          rgba(8,9,10,0) 100%)}

@@ -187,7 +187,9 @@ class TrailerHostServerTest {
         assertTrue("id=\"pointer-glass\"" in page, "hover ainda mostra os controles do YouTube")
         assertTrue("disablekb=1" in page)
         assertTrue("body.ambient-card #fit" in page, "o card nao tem enquadramento proprio")
-        assertTrue("border-radius:16px" in page, "o Chromium continua com cantos quadrados")
+        assertTrue("top:-2px;right:-2px;bottom:-2px;left:-2px" in page, "a borda nativa continua exposta")
+        assertTrue("border-radius:18px" in page, "o Chromium continua com cantos quadrados")
+        assertTrue("body.ambient-card iframe{outline:0}" in page, "o iframe ainda pode desenhar contorno")
     }
 
     /**
@@ -221,16 +223,57 @@ class TrailerHostServerTest {
         )
     }
 
-    /** A trailer somebody opened keeps its error message: there, it is the answer they asked for. */
+    /** A trailer somebody opened reports readiness too, so its lightbox never stays blank. */
     @Test
-    fun `a deliberately opened trailer is left to say what went wrong`() {
+    fun `a deliberately opened trailer reports playback and failure to its lightbox`() {
         val host = started()
 
         val page = fetch(host.pageUrlFor("cTW78JSBoyw", autoplay = true, muted = false))
 
+        assertTrue("onError" in page, "o lightbox nao descobre que o trailer falhou")
+        assertTrue("signal('playing')" in page, "o lightbox nao descobre que o video iniciou")
+        assertTrue("signal('failed')" in page, "o lightbox fica vazio depois de uma recusa")
+        assertTrue("window.cefQuery" in page, "a pagina nao comunica o estado ao aplicativo")
         assertFalse(
-            "onError" in page,
-            "o trailer aberto de proposito desaparece em vez de dizer o que correu mal",
+            "document.documentElement.style.display='none';" in page,
+            "o trailer manual esconde a mensagem antes de o fallback assumir",
+        )
+    }
+
+    /**
+     * Unredeemed artwork tokens do not accumulate for ever.
+     *
+     * A token is minted for every banner page built, and only a page that is actually fetched
+     * removes its own. A trailer that fails, or one the rotation replaces before its page loads,
+     * leaves its entry behind — and the banner rotates all day, each entry holding an artwork
+     * address. Left unbounded, an app open all evening keeps every one of them.
+     */
+    @Test
+    fun `unredeemed artwork tokens are bounded`() {
+        val host = started()
+
+        // Far more pages than a session would ever build, none of them fetched.
+        repeat(600) { index ->
+            host.pageUrlFor(
+                "cTW78JSBoyw",
+                blendIntoHero = true,
+                artworkUrl = "https://images.invalid/$index.jpg",
+            )
+        }
+
+        // The most recent token still works: dropping the oldest must not break the page being
+        // built right now, which is the whole point of dropping the oldest rather than refusing.
+        val url =
+            host.pageUrlFor(
+                "cTW78JSBoyw",
+                blendIntoHero = true,
+                artworkUrl = "https://images.invalid/final.jpg",
+            )
+
+        assertTrue("art=" in url, "o token da arte deixou de ser emitido")
+        assertTrue(
+            "images.invalid/final.jpg" in fetch(url),
+            "o token mais recente foi descartado, e a pagina ficou sem a arte",
         )
     }
 
@@ -280,6 +323,28 @@ class TrailerHostServerTest {
             "translate(-50%,-50%) scale(1)" in page,
             "the reveal does not finish in the correctly centred position",
         )
+    }
+
+    @Test
+    fun `the home trailer carries the still artwork through the moving picture seam`() {
+        val host = started()
+        val privateArtwork = "https://images.example.test/backdrop.jpg?token=secret-value"
+        val pageUrl =
+            host.pageUrlFor(
+                "cTW78JSBoyw",
+                autoplay = true,
+                muted = true,
+                blendIntoHero = true,
+                unattended = true,
+                artworkUrl = privateArtwork,
+            )
+
+        assertFalse(privateArtwork in pageUrl, "a signed artwork URL leaked into browser history")
+        val page = fetch(pageUrl)
+        assertTrue("class=\"cinematic-hero unattended with-art\"" in page)
+        assertTrue(privateArtwork in page, "the still artwork did not reach the transition surface")
+        assertTrue("mask-image:linear-gradient(90deg" in page)
+        assertTrue("background-position:center,right center" in page)
     }
 
     /**
