@@ -102,6 +102,33 @@ class TrailerEngineStartupTest {
         )
     }
 
+    /**
+     * A pid alone does not prove a directory is still in use.
+     *
+     * The sweep skipped any directory whose pid belonged to a live process. But the operating
+     * system hands pid numbers out again, so a directory left by a run that crashed before a
+     * restart can carry a number some unrelated program now holds — and it would be spared for
+     * ever, its Chromium lock held, with the engine refusing to start on every launch after that.
+     * That failure already cost a night once; age closes the hole a pid leaves open.
+     */
+    @Test
+    fun `an abandoned cache is swept even when its pid was handed out again`() {
+        val marker = "private fun scratchCache(): String {"
+        assertTrue(marker in browser, "scratchCache mudou de nome: este teste ja nao le nada")
+        val body = browser.substringAfter(marker).substringBefore("\n        }")
+
+        assertTrue(
+            body.contains("stale.lastModified() < staleBefore"),
+            "um pid reciclado deixa a pasta antiga para sempre, e o motor nunca mais arranca",
+        )
+        // And never our own, whatever its age: a machine left running for days would otherwise
+        // have a second copy of the app delete the cache the first one is still using.
+        assertTrue(
+            body.contains("pid == ours -> false"),
+            "uma segunda copia da app apaga a cache que a primeira ainda esta a usar",
+        )
+    }
+
     /** And session cookies are still not persisted: the cache is for starting, not for keeping. */
     @Test
     fun `session cookies are still not kept`() {

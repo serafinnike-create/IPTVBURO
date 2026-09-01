@@ -349,11 +349,27 @@ class TrailerBrowser {
             // the night before. Sweeping ours at startup means a crash costs the next run nothing.
             // Only the ones whose process is gone: the name carries the pid that made it, so a
             // second copy of the app running right now keeps its own cache and its own lock.
+            //
+            // Age as well as the pid, because a pid alone is not proof of anything across a
+            // restart. The operating system hands numbers out again, so a directory left by a run
+            // that crashed before rebooting can carry a number some unrelated program now holds —
+            // and it would then be spared for ever, its Chromium lock held, with the engine
+            // refusing to start every time. Nothing this app made yesterday is still in use today.
             runCatching {
+                val staleBefore = System.currentTimeMillis() - CACHE_MAX_AGE_MILLIS
+                val ours = ProcessHandle.current().pid()
                 root.listFiles { file -> file.name.startsWith(CACHE_PREFIX) }
                     ?.filter { stale ->
                         val pid = stale.name.removePrefix(CACHE_PREFIX).toLongOrNull()
-                        pid == null || ProcessHandle.of(pid).isEmpty
+                        // Never our own, whatever its age: a machine left running for days would
+                        // otherwise have a second copy of the app delete the cache the first one
+                        // is still using.
+                        when {
+                            pid == ours -> false
+                            pid == null -> true
+                            ProcessHandle.of(pid).isEmpty -> true
+                            else -> stale.lastModified() < staleBefore
+                        }
                     }?.forEach { stale -> stale.deleteRecursively() }
             }
 
@@ -368,6 +384,15 @@ class TrailerBrowser {
 
         /** Shared by the sweep and the directory it creates, so the two cannot drift apart. */
         private const val CACHE_PREFIX = "iptvburo-trailer-cache-"
+
+        /**
+         * Past this, a cache directory is treated as abandoned whatever its pid says.
+         *
+         * A day, because a session does not outlive one and a pid does not survive a restart with
+         * its meaning intact. Generous enough that a machine left running never has its live cache
+         * swept from under it.
+         */
+        private const val CACHE_MAX_AGE_MILLIS = 24L * 60 * 60 * 1000
 
         private fun locateNativeRuntime(): File? {
             val resources = System.getProperty("compose.application.resources.dir")?.let(::File)
