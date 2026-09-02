@@ -42,7 +42,11 @@ jobs:
       - name: Build preview APK
         run: |
           chmod +x gradlew
-          ./gradlew test lint assembleDebug --stacktrace
+          # This job builds the Android package, so it runs the Android module's tests and the
+          # shared ones it depends on. A bare `test` runs every module — including the desktop's,
+          # whose Compose UI tests need a display and fail on a headless Linux runner. The Windows
+          # job runs those, on a machine that can actually draw them.
+          ./gradlew :apps:android-tv:testDebugUnitTest :packages:domain-model:jvmTest :packages:metadata-client:test :apps:android-tv:lintDebug :apps:android-tv:assembleDebug --stacktrace
           mkdir -p artifacts
           cp apps/android-tv/build/outputs/apk/debug/android-tv-debug.apk \
             "artifacts/IPTV-BURO-${RELEASE_TAG}-android-debug.apk"
