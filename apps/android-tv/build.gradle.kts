@@ -149,6 +149,19 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        unitTests.all { test ->
+            // A fresh JVM per test class.
+            //
+            // All 54 classes shared one, and `Dispatchers.Main` is global to it: a class that
+            // installs a test dispatcher and leaves anything running behind poisons whichever
+            // class runs next. The symptom was a different innocent test failing each run with
+            // `UncaughtExceptionsBeforeTest`, always passing when run alone — read for weeks as a
+            // network flake in the cast tests, which it never was.
+            //
+            // The cost is startup time per class, which is the right trade for a suite that must
+            // be trusted: a red build nobody believes is worse than a slow one.
+            test.forkEvery = 1
+        }
     }
 
     sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
