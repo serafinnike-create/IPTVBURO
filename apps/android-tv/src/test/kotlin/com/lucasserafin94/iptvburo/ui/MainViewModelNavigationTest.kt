@@ -98,14 +98,55 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.cancelChildren
+import org.junit.Before
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModelNavigationTest {
+    /**
+     * The main dispatcher is installed before every test, and taken down after every one.
+     *
+     * It used to be installed inside the ViewModel factory, so a test that never built one left
+     * `Dispatchers.Main` pointing at Android's real `Looper` — which does not exist in a unit-test
+     * JVM. `resetMain` in the teardown then threw, the exception escaped the test that caused it,
+     * and `kotlinx.coroutines.test` reported it against whichever test ran next:
+     * `UncaughtExceptionsBeforeTest`, usually landing on CastControllerTest.
+     *
+     * That is the whole of the flakiness this suite has shown for weeks — a different test named
+     * each run, none of them at fault, and every one passing when run alone. It was read as a
+     * network flake in the cast tests; it is neither the network nor the cast tests.
+     */
+    @Before
+    fun installMainDispatcher() {
+        Dispatchers.setMain(mainDispatcher)
+    }
+
     @After
     fun tearDown() {
+        // Every ViewModel this test built is cleared, then the queue is drained, then the
+        // dispatcher goes.
+        //
+        // A ViewModel keeps `viewModelScope`, which is bound to `Dispatchers.Main`, and nothing
+        // here clears it. Work still queued when the dispatcher is reset wakes to an absent Main,
+        // throws, and — with nobody left to catch it — is reported against whichever test runs
+        // next: `UncaughtExceptionsBeforeTest`, landing on a different innocent test each run.
+        //
+        // Draining alone was not enough: a coroutine that reschedules itself is idle at the moment
+        // it is asked and queued again a tick later. Cancelling the scopes first stops them for
+        // good, and the drain then only has to finish what was already in flight.
+        built.forEach { viewModel -> runCatching { viewModel.viewModelScope.coroutineContext.cancelChildren() } }
+        built.clear()
+        mainDispatcher.scheduler.advanceUntilIdle()
         Dispatchers.resetMain()
     }
+
+    /** One dispatcher for the installation and the drain, so they cannot disagree. */
+    private val mainDispatcher = StandardTestDispatcher()
+
+    /** Every ViewModel this test made, so the teardown can stop all of them. */
+    private val built = mutableListOf<MainViewModel>()
 
     /**
      * These two assert ADR-008, which deliberately reversed the GDD 6 rule: VOD downloads are
@@ -970,6 +1011,7 @@ class MainViewModelNavigationTest {
                         }
                 }
             }
+        // Recorded so the teardown can stop it; see tearDown.
         return MainViewModel(
             contextProvider = contextProvider,
             catalogRepository = repository,
@@ -1024,7 +1066,7 @@ class MainViewModelNavigationTest {
                     ioDispatcher = dispatcher,
                 ),
             ioDispatcher = dispatcher,
-        )
+        ).also(built::add)
     }
 }
 
