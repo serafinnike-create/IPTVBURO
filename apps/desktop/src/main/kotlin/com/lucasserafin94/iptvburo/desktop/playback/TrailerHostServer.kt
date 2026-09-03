@@ -269,6 +269,20 @@ class TrailerHostServer private constructor(
              */
             val hideRejectedPlayer =
                 if (unattended) "document.documentElement.style.display='none';" else ""
+
+            /*
+             * An automatic preview opens invisible and shows itself once it is really playing.
+             *
+             * The panel itself now stays visible so the window has a real size from the start — a
+             * hidden windowed component has no native peer and therefore no size, and the page was
+             * measured loading into `0x0`, which is what left the video stuck at a fallback size in
+             * the corner of a grown panel. Withdrawing the page instead of the panel keeps what the
+             * viewer sees the same: nothing until the video runs, with the artwork behind it.
+             */
+            val startHidden =
+                if (unattended) "<style>html{visibility:hidden}</style>" else ""
+            val revealOnPlay =
+                if (unattended) "document.documentElement.style.visibility='visible';" else ""
             val failureScript =
                 """
                     <script>
@@ -300,7 +314,10 @@ class TrailerHostServer private constructor(
                         }
                         if(d&&d.info){
                           var state=d.info.playerState;
-                          if(state===1||d.info.currentTime>0)signal('playing');
+                          if(state===1||d.info.currentTime>0){
+                            $revealOnPlay
+                            signal('playing');
+                          }
                           // 0 is YouTube's own "ended". Real end-of-video, not a guess from a
                           // fixed timer: a trailer held for a flat sixty seconds was cut off
                           // mid-scene as often as it was allowed to finish naturally, and one
@@ -470,7 +487,7 @@ class TrailerHostServer private constructor(
                      from{opacity:0;transform:translate(-50%,-50%) scale(1.035)}
                      to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
                 @media (prefers-reduced-motion:reduce){body.cinematic-hero #fit{animation:none}}
-                </style></head>
+                </style>$startHidden</head>
                 <body$bodyClass><div id="fit"><iframe src="$embed"
                 allow="autoplay; encrypted-media; fullscreen"
                 allowfullscreen></iframe></div>$pointerGlass$failureScript$unmuteScript</body></html>

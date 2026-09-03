@@ -26,11 +26,42 @@ class TrailerAvailabilityTest {
         assertTrue(
             source.contains("browserComponent =") &&
                 source.contains("background = Color.BLACK") &&
-                source.contains("isVisible = !unattended") &&
+                // Visible from the start, so the window has a real size while the page lays out.
+                //
+                // This used to be `isVisible = !unattended`, which withdrew an automatic preview
+                // until the player reported itself. Measured from inside the engine, that cost the
+                // window its native peer and therefore its size: the page loaded reporting
+                // `0x0 dpr=1.25 fit=0x0`, and YouTube's player, which measures its container once,
+                // settled on a fallback size it then kept. The page hides itself instead — see
+                // `startHidden` in TrailerHostServer — so nothing shows before playback either way.
+                source.contains("isVisible = true") &&
                 source.contains("nativeComponent?.isVisible = false") &&
                 source.contains("cefBrowser.createImmediately()") &&
                 source.contains("browser?.wasResized("),
             "o componente nativo do trailer voltou a mostrar branco antes da pagina",
+        )
+    }
+
+    /**
+     * And an automatic preview shows nothing until it is really playing.
+     *
+     * The panel is visible from the start now, so this is what keeps a slow or failing trailer from
+     * showing a black rectangle where the artwork should be: the page itself opens hidden and
+     * reveals only once the player reports playback.
+     */
+    @Test
+    fun `an automatic preview keeps its page hidden until playback`() {
+        val page =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/playback/TrailerHostServer.kt")
+                .readText()
+
+        assertTrue(
+            page.contains("html{visibility:hidden}"),
+            "a previa automatica deixou de abrir escondida, e mostra o painel antes do video",
+        )
+        assertTrue(
+            page.contains("style.visibility='visible'"),
+            "a pagina da previa ja nao se mostra quando o video comeca",
         )
     }
 

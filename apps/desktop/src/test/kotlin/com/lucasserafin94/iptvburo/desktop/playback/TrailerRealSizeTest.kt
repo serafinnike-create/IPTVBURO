@@ -75,45 +75,59 @@ class TrailerRealSizeTest {
     }
 
     /**
-     * And the size handed to the player is physical pixels, not AWT's logical ones.
+     * Chromium is told the display scale, because that is where the page is laid out.
      *
-     * Measured: AWT called the banner's panel 735x372 while it occupied 902x467 on screen, a 1.25
-     * display scale. The video, sized from the AWT number, filled 81% of the width and 79% of the
-     * height -- which is 1/1.25 on both axes, and was every "video pequeno dentro do trailer"
-     * report. A system-wide DPI query misses this: GetDpiForWindow answers 120 for this window
-     * while the monitor reports 96.
+     * Measured on a screen at 125%: Windows gives the panel 919x465 physical pixels while Chromium
+     * laid the page out for 735x372 and painted it into the top-left corner -- black down the right
+     * and along the bottom, the video filling exactly 80% of each axis. Sizing the player from the
+     * Java side was tried first and measured to change nothing, because the player takes its size
+     * from the iframe element, and that element is sized by the page's CSS against Chromium's own
+     * viewport.
      */
     @Test
-    fun `the player is sized in physical pixels, not logical ones`() {
+    fun `the engine is told the display scale factor`() {
+        assertTrue(
+            "--force-device-scale-factor=" in browser,
+            "o Chromium volta a assumir uma escala de 1.0, e o video encolhe para 80% num ecra a 125%",
+        )
+        assertTrue(
+            "--high-dpi-support=1" in browser,
+            "o suporte de alta densidade deixou de ser pedido ao Chromium",
+        )
+    }
+
+    /**
+     * And the scale reaches the flag as a dot, whatever the machine's locale says.
+     *
+     * Chromium parses "1,25" as 1, so a comma locale would silently undo the whole fix -- and the
+     * machine this was found on is set to one.
+     */
+    @Test
+    fun `the scale is formatted with a dot, not the locale's separator`() {
+        val marker = "private fun primaryScreenScale"
+        assertTrue(marker in browser, "o primaryScreenScale mudou de nome: este teste ja nao le nada")
+
+        val body = browser.substringAfter(marker).substringBefore("private fun sharedApp")
+
+        assertTrue(
+            "Locale.ROOT" in body,
+            "a escala volta a ser formatada com a virgula da localizacao, e o Chromium le-a como 1",
+        )
+    }
+
+    /**
+     * The player itself is sized in logical pixels, since the engine now handles the scale.
+     */
+    @Test
+    fun `the player size is not scaled a second time`() {
         val marker = "private fun pushPlayerSize"
         assertTrue(marker in browser, "o pushPlayerSize mudou de nome: este teste ja nao le nada")
 
         val body = browser.substringAfter(marker).substringBefore("fun setSound")
 
         assertTrue(
-            "screenScale()" in body,
-            "o tamanho enviado ao player volta a ser logico, e o video encolhe pelo factor de " +
-                "escala do ecra",
-        )
-        assertTrue(
-            "(widthPx * scale)" in body && "(heightPx * scale)" in body,
-            "a escala do ecra deixou de ser aplicada as duas dimensoes",
-        )
-    }
-
-    /**
-     * The scale is read from the component, because the system-wide answer is wrong here.
-     */
-    @Test
-    fun `the screen scale comes from the component's own graphics configuration`() {
-        val marker = "private fun screenScale"
-        assertTrue(marker in browser, "o screenScale mudou de nome: este teste ja nao le nada")
-
-        val body = browser.substringAfter(marker).substringBefore("private fun pushPlayerSize")
-
-        assertTrue(
-            "graphicsConfiguration" in body && "defaultTransform" in body,
-            "a escala volta a ser lida de outro sitio que nao a superficie onde o painel e desenhado",
+            "val width = widthPx" in body && "val height = heightPx" in body,
+            "a escala do ecra volta a ser aplicada aqui, em cima da que o motor ja aplica",
         )
     }
 }

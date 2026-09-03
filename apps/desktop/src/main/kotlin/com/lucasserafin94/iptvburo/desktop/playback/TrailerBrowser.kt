@@ -181,11 +181,22 @@ class TrailerBrowser {
                 browserComponent =
                     cefBrowser.uiComponent.apply {
                         background = Color.BLACK
-                        // Automatic previews stay withdrawn until the embedded player itself says
-                        // it is playing, so slow networks leave the artwork visible. A trailer the
-                        // viewer explicitly opened must remain displayable: windowed JCEF does not
-                        // create its native peer (and therefore does not run the page) while hidden.
-                        isVisible = !unattended
+                        // Visible from the start, including automatic previews.
+                        //
+                        // Hiding it was how a preview stayed withdrawn until the player reported
+                        // itself, so a slow network left the artwork showing. The cost was measured
+                        // from inside the engine: a hidden windowed component has no native peer and
+                        // therefore no size, so the page loaded into a window reporting
+                        // `0x0 dpr=1.25 fit=0x0`. YouTube's player measures its container once, when
+                        // it initialises, and an initialisation against nothing settles on a
+                        // fallback size it then keeps — the video sitting at a fixed size in the
+                        // corner of a panel that had long since grown, with black down the right and
+                        // along the bottom, and no later resize from either side reaching it.
+                        //
+                        // The page hides itself instead: it opens blank on the app's own canvas
+                        // colour and shows nothing until playback starts, which is the same thing
+                        // the viewer saw before, from a window that has a real size the whole time.
+                        isVisible = true
                     }
                 nativeComponent = browserComponent
                 add(browserComponent, BorderLayout.CENTER)
@@ -289,11 +300,15 @@ class TrailerBrowser {
     private fun pushPlayerSize(widthPx: Int, heightPx: Int) {
         if (widthPx <= 0 || heightPx <= 0) return
         val live = browser ?: return
-        // Scaled to physical pixels: the sizes AWT hands out are logical, and the player draws onto
-        // the physical surface. See [screenScale].
-        val scale = screenScale()
-        val width = (widthPx * scale).toInt().coerceAtLeast(1)
-        val height = (heightPx * scale).toInt().coerceAtLeast(1)
+        // Logical pixels, deliberately.
+        //
+        // Scaling these was tried and measured to change nothing at all: the video stayed at
+        // exactly 80% on a 125% display, because the player takes its size from the iframe element,
+        // and that element is sized by the page's own CSS against Chromium's viewport. The scale
+        // belongs where the layout happens — the engine's device scale factor, set at startup —
+        // and once it is set there, scaling here as well would apply it twice.
+        val width = widthPx
+        val height = heightPx
         val script =
             """
             (function(){
@@ -402,6 +417,37 @@ class TrailerBrowser {
          * native libraries does not pay the startup cost again on every trailer.
          */
         @Synchronized
+        /**
+         * The display scale Chromium should lay pages out at.
+         *
+         * Read from the default screen device, because this is needed before any browser panel
+         * exists — the engine's flags are fixed when the process-wide engine starts, and it is the
+         * page layout itself that has to know the scale.
+         *
+         * The primary screen, not the one the window happens to be on. A per-monitor answer would
+         * be more correct on a mixed-DPI desk, but the flag is process-wide and cannot be changed
+         * once the engine is up; the primary screen is the honest single answer, and matches what
+         * the window is on in every reported case so far.
+         *
+         * Formatted rather than passed as a raw Double so the argument never carries a locale's
+         * decimal comma — Chromium parses "1,25" as 1 and the whole fix would silently do nothing
+         * on a machine set to a comma locale, which this one is.
+         */
+        private fun primaryScreenScale(): String {
+            val scale =
+                runCatching {
+                    java.awt.GraphicsEnvironment
+                        .getLocalGraphicsEnvironment()
+                        .defaultScreenDevice
+                        .defaultConfiguration
+                        .defaultTransform
+                        .scaleX
+                }.getOrNull()
+                    ?.takeIf { it > 0.0 }
+                    ?: 1.0
+            return String.format(java.util.Locale.ROOT, "%.2f", scale)
+        }
+
         private fun sharedApp(): CefApp? {
             if (unavailable) return null
             app?.let { return it }
@@ -466,7 +512,26 @@ class TrailerBrowser {
                 // and raises the sound once it is playing. It is the separate policy about who
                 // asked for the video, and the answer here is that the app did, deliberately, on a
                 // page it serves itself.
-                val args = config.appArgs + "--autoplay-policy=no-user-gesture-required"
+                // And the display's scale, which Chromium otherwise assumes is 1.0.
+                //
+                // Measured on a screen at 125%: the panel is given 919x465 physical pixels by
+                // Windows, while Chromium laid the page out for 735x372 and painted that into the
+                // top-left corner — black down the right side and along the bottom, the video
+                // filling exactly 80% of each axis, which is 1/1.25. Every "o video esta pequeno
+                // dentro do trailer" screenshot measured 80% on both axes, on the banner and on the
+                // Descobrir card alike.
+                //
+                // Setting it on the engine rather than per browser, because this is where it can be
+                // set at all: the flags are read once, when the process-wide engine starts. Sizing
+                // the page from the Java side cannot fix it — the video is drawn by Chromium's own
+                // layout, which needs to know the scale before it lays anything out.
+                val deviceScale = primaryScreenScale()
+                val args =
+                    config.appArgs +
+                        "--autoplay-policy=no-user-gesture-required" +
+                        "--high-dpi-support=1" +
+                        "--force-device-scale-factor=$deviceScale"
+                println("[trailer] Chromium device scale factor $deviceScale")
                 CefApp.getInstance(args, settings).also { app = it }
             }.getOrElse { error ->
                 // The type only. The message was included here on the reasoning that a Chromium
