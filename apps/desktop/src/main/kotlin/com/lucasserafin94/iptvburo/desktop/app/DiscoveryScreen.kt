@@ -471,7 +471,15 @@ private fun DiscoveryCard(
                             youtubeId = activeTrailerId,
                             // The hosted page owns the rounded crop. Padding here exposed the AWT
                             // panel's top and right edges as a thin grey frame around the film.
-                            modifier = Modifier.fillMaxSize(),
+                            //
+                            // One pixel short at the bottom, though. The panel's own final row
+                            // renders near-white (measured 239,239,239 across the full 511px width
+                            // of the card) whatever the page paints — the page already overscans
+                            // two pixels every side and body is #000, so the row is Chromium's
+                            // surface edge, below the HTML. Compose cannot cover it: a heavyweight
+                            // AWT surface always paints above. Ending the panel a pixel early puts
+                            // that row outside the card instead, where the Canvas behind shows.
+                            modifier = Modifier.fillMaxSize().padding(bottom = 1.dp),
                             soundOn = soundOn,
                             onFailed = onTrailerFailed,
                             // Not the banner. The hosted page uses its dedicated card frame:
@@ -529,6 +537,17 @@ private fun DiscoveryCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(BuroSpacing.Md),
             ) {
+                // The space the trailer would have taken, held empty.
+                //
+                // Without it the buttons and the synopsis climbed to the top of the column on any
+                // film with no trailer, so the one screen changed shape between cards — reported as
+                // the text and buttons jumping upwards. Reserving the 16:9 box keeps them where the
+                // eye already found them on the card before.
+                Spacer(
+                    Modifier
+                        .width(trailerWidth)
+                        .aspectRatio(16f / 9f),
+                )
                 DiscoveryDecisionActions(
                     text = text,
                     onDecide = onDecide,

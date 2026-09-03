@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
@@ -445,13 +446,24 @@ fun AccountSetupGate(
                                 Text("✕", color = BuroColors.TextMuted)
                             }
                         } else {
+                            // A radio mark, not just a tick when chosen.
+                            //
+                            // The row used to be a name with Renomear and Remover beside it, which
+                            // reads as a list you manage rather than one you pick from: reported as
+                            // "reconheceu a lista mas nao me deixa avancar", because nothing said
+                            // the row itself had to be clicked. An empty circle asks the question;
+                            // a tick alone only ever answered it.
+                            RadioButton(
+                                selected = selected,
+                                onClick = { reusedSourceId = if (selected) null else source.id },
+                            )
+                            Spacer(Modifier.width(BuroSpacing.Sm))
                             Text(
                                 text = source.label,
                                 color = if (selected) BuroColors.Primary else BuroColors.Text,
                                 style = MaterialTheme.typography.bodyLarge,
                                 modifier = Modifier.weight(1f),
                             )
-                            if (selected) Text("✓", color = BuroColors.Primary)
                             TextButton(
                                 onClick = {
                                     renameDraft = source.label

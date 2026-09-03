@@ -417,65 +417,73 @@ fun DesktopApp(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Row(modifier = Modifier.fillMaxSize()) {
-                    SourceSidebar(
-                        sources = appState.sourceSummaries,
-                        selectedSourceId = appState.selectedSourceId,
-                        onSourceSelected = appState::selectSource,
-                        destination = visibleDestination,
-                        catalogType = appState.xtreamContentType,
-                        downloads = if (capabilities.offlineSupported) appState.downloadEntries else emptyList(),
-                        onCancelDownload = appState::cancelDownload,
-                        onHome = appState::openHome,
-                        onSearch = appState::openSearch,
-                        onProfiles = { showProfileGate = true },
-                        onSettings = { settingsOpen = true },
-                        activeProfileName = appState.activeProfile?.name,
-                        onMovies = {
-                            scope.launch { appState.openCatalog(XtreamContentType.MOVIE) }
-                        },
-                        onSeries = {
-                            scope.launch { appState.openCatalog(XtreamContentType.SERIES) }
-                        },
-                        onLive = {
-                            scope.launch { appState.openCatalog(XtreamContentType.LIVE) }
-                        },
-                        onGuide = { scope.launch { appState.openGuide() } },
-                        onFavorites = { scope.launch { appState.setFavoritesOnly(true) } },
-                        onReminders = appState::openReminders,
-                        onDiscover = appState::openDiscovery,
-                        onConnectXtream = { showXtreamLogin = true },
-                        mergeSources = appState.mergeAllSources,
-                        // Applied on the spot rather than stored for the next launch: the switch
-                        // used to change a preference and nothing visible, which reads as a dead
-                        // button.
-                        onToggleMergeSources = { enabled ->
-                            scope.launch { appState.applyMergeAllSources(enabled) }
-                        },
-                        onRenameSource = appState::renameSavedSource,
-                        onRemoveSource = appState::removeSavedSource,
-                        onImportM3u = {
-                            chooseLocalPlaylist(ownerWindow)?.let { path ->
-                                scope.launch { appState.importLocalPlaylist(path) }
-                            }
-                        },
-                        onAddRemoteSource = { showRemoteSource = true },
-                        onContinueWatching = appState::openContinueWatching,
-                        onHistory = appState::openHistory,
-                        onDownloads = appState::openDownloads,
-                        hasOffline = capabilities.offlineSupported,
-                        // Shown whenever music is released, not only once a playlist is loaded.
-                        //
-                        // Hiding it until a library existed meant a profile without an M3U had no
-                        // way to learn the feature was there, and nothing said why: the section was
-                        // simply absent, indistinguishable from not being built. The workspace
-                        // explains what to add instead.
-                        hasMusic = capabilities.audioSupported,
-                        onMusic = appState::openMusic,
-                        hasSubscriptions = appState.streamingDiscoveryCapability.isVisible,
-                        onSubscriptions = appState::openSubscriptions,
-                        collapsed = sidebarCollapsed,
-                        onToggleCollapsed = { sidebarCollapsed = !sidebarCollapsed },
-                    )
+                    // Hidden while the profile gate is up on a first run.
+                    //
+                    // Every item in it — Filmes, Series, Guia — leads nowhere until somebody is
+                    // watching, and the gate centres inside the Row beside it, so the first screen
+                    // of a new install was a full menu the viewer cannot use with the one question
+                    // that matters pushed off-centre next to it.
+                    if (appState.activeProfile != null) {
+                        SourceSidebar(
+                            sources = appState.sourceSummaries,
+                            selectedSourceId = appState.selectedSourceId,
+                            onSourceSelected = appState::selectSource,
+                            destination = visibleDestination,
+                            catalogType = appState.xtreamContentType,
+                            downloads = if (capabilities.offlineSupported) appState.downloadEntries else emptyList(),
+                            onCancelDownload = appState::cancelDownload,
+                            onHome = appState::openHome,
+                            onSearch = appState::openSearch,
+                            onProfiles = { showProfileGate = true },
+                            onSettings = { settingsOpen = true },
+                            activeProfileName = appState.activeProfile?.name,
+                            onMovies = {
+                                scope.launch { appState.openCatalog(XtreamContentType.MOVIE) }
+                            },
+                            onSeries = {
+                                scope.launch { appState.openCatalog(XtreamContentType.SERIES) }
+                            },
+                            onLive = {
+                                scope.launch { appState.openCatalog(XtreamContentType.LIVE) }
+                            },
+                            onGuide = { scope.launch { appState.openGuide() } },
+                            onFavorites = { scope.launch { appState.setFavoritesOnly(true) } },
+                            onReminders = appState::openReminders,
+                            onDiscover = appState::openDiscovery,
+                            onConnectXtream = { showXtreamLogin = true },
+                            mergeSources = appState.mergeAllSources,
+                            // Applied on the spot rather than stored for the next launch: the switch
+                            // used to change a preference and nothing visible, which reads as a dead
+                            // button.
+                            onToggleMergeSources = { enabled ->
+                                scope.launch { appState.applyMergeAllSources(enabled) }
+                            },
+                            onRenameSource = appState::renameSavedSource,
+                            onRemoveSource = appState::removeSavedSource,
+                            onImportM3u = {
+                                chooseLocalPlaylist(ownerWindow)?.let { path ->
+                                    scope.launch { appState.importLocalPlaylist(path) }
+                                }
+                            },
+                            onAddRemoteSource = { showRemoteSource = true },
+                            onContinueWatching = appState::openContinueWatching,
+                            onHistory = appState::openHistory,
+                            onDownloads = appState::openDownloads,
+                            hasOffline = capabilities.offlineSupported,
+                            // Shown whenever music is released, not only once a playlist is loaded.
+                            //
+                            // Hiding it until a library existed meant a profile without an M3U had no
+                            // way to learn the feature was there, and nothing said why: the section was
+                            // simply absent, indistinguishable from not being built. The workspace
+                            // explains what to add instead.
+                            hasMusic = capabilities.audioSupported,
+                            onMusic = appState::openMusic,
+                            hasSubscriptions = appState.streamingDiscoveryCapability.isVisible,
+                            onSubscriptions = appState::openSubscriptions,
+                            collapsed = sidebarCollapsed,
+                            onToggleCollapsed = { sidebarCollapsed = !sidebarCollapsed },
+                        )
+                    }
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                         TopBar(
                             channelCount = appState.selectedSourceItemCount,
@@ -803,7 +811,8 @@ fun DesktopApp(
                                 onDelete = appState::deleteDownload,
                             )
                         } else if (appState.cacheChoicePending && appState.isXtreamSelected &&
-                            visibleDestination == DesktopDestination.HOME
+                            visibleDestination == DesktopDestination.HOME &&
+                            appState.activeProfile != null
                         ) {
                             // Offered here rather than in the setup steps, because the estimate
                             // needs a loaded catalogue to be worth anything: "about 4 GB" is only
@@ -811,6 +820,11 @@ fun DesktopApp(
                             //
                             // Shown once. Choosing — including choosing zero — answers the question,
                             // and a panel that returned after being answered would be nagging.
+                            //
+                            // And only once somebody is watching. The profile gate draws over this
+                            // same area on a first run, so without the active-profile check the
+                            // very first screen of a new install was this panel and "Quem esta
+                            // assistindo?" painted through each other, both unreadable.
                             CacheFirstRunPanel(appState = appState)
                         } else if (appState.isXtreamSelected && visibleDestination == DesktopDestination.HOME) {
                             XtreamDailyHome(
@@ -3401,7 +3415,17 @@ private fun DesktopProfileGate(
     // cancels the first, rather than arming two at once.
     var confirmingDelete by remember { mutableStateOf<String?>(null) }
     Box(
-        modifier = Modifier.fillMaxSize().background(BuroColors.Scrim),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                // Opaque when there is no way out of it, the same rule the onboarding steps follow.
+                //
+                // The scrim is 76% and reads as a dialog over something. On a first run there is
+                // nothing behind this to look at yet, and the home screen showed straight through
+                // it: "IPTV BURO" landed on top of a film title and both became unreadable. With a
+                // profile already active the gate is a switcher over a library the viewer knows,
+                // and seeing it dimmed underneath is the point.
+                .background(if (onDismiss == null) BuroColors.Canvas else BuroColors.Scrim),
         contentAlignment = Alignment.Center,
     ) {
         if (onDismiss != null) {
