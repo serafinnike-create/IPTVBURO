@@ -360,20 +360,25 @@ fun XtreamDailyHome(
                         // Ten seconds is right for a still poster and wrong for a trailer: it cut
                         // them off mid-sentence, one after another, and the viewer never saw the
                         // part that decides whether they want the film. Reported after watching it.
+                        //
+                        // A playing trailer no longer waits out a flat hold at all — it advances on
+                        // YouTube's own "ended" signal instead, so a short trailer is never held
+                        // past its end on a frozen last frame and a long one is never cut off
+                        // mid-scene. The hold constant below stays only as a ceiling: a trailer
+                        // that never reports playing, or whose "ended" is lost to a slow network,
+                        // still moves on eventually rather than stopping the rotation for the day.
                         var heroPlaying by
                             remember(snapshot.date, snapshot.sourceId) { mutableStateOf(false) }
                         LaunchedEffect(rotation.size, heroPlaying) {
                             if (rotation.size <= 1) return@LaunchedEffect
-                            while (true) {
-                                delay(
-                                    if (heroPlaying) {
-                                        BannerTrailer.HOLD_WHILE_PLAYING_MILLIS
-                                    } else {
-                                        HERO_ROTATION_MILLIS
-                                    },
-                                )
-                                heroIndex = (heroIndex + 1) % rotation.size
-                            }
+                            delay(
+                                if (heroPlaying) {
+                                    BannerTrailer.HOLD_WHILE_PLAYING_MILLIS
+                                } else {
+                                    HERO_ROTATION_MILLIS
+                                },
+                            )
+                            heroIndex = (heroIndex + 1) % rotation.size
                         }
                         val heroItem = rotation.getOrNull(heroIndex) ?: snapshot.hero
                         // Fetched as the banner reaches each title rather than all five up front:
@@ -397,6 +402,11 @@ fun XtreamDailyHome(
                                 heroItem?.let(appState::rememberHeroTrailerFailure)
                             },
                             onTrailerPlaying = { playing -> heroPlaying = playing },
+                            // Real end of video, from YouTube's own state — moves on immediately
+                            // rather than waiting out whatever is left of the hold above.
+                            onTrailerEnded = {
+                                if (rotation.size > 1) heroIndex = (heroIndex + 1) % rotation.size
+                            },
                             soundOn = appState.bannerTrailerSound,
                             onToggleSound = appState::toggleBannerTrailerSound,
                             // Scrolling away stops the sound and the picture: the viewer has moved
@@ -559,6 +569,16 @@ internal fun HeroTrailer(
      */
     blendIntoHero: Boolean = true,
     onPlaying: () -> Unit = {},
+    /**
+     * Whether the video repeats instead of ending.
+     *
+     * True by default, which is what every existing caller wants: a trailer playing beside
+     * something else usually should keep going rather than freeze on its last frame. The banner
+     * passes false so it can react to [onEnded] instead.
+     */
+    loop: Boolean = true,
+    /** Called once YouTube itself reports the video finished. Only meaningful when [loop] is false. */
+    onEnded: () -> Unit = {},
 ) {
     // Not keyed on the sound.
     //
@@ -588,13 +608,16 @@ internal fun HeroTrailer(
                     // the side and bottom masks that make video, artwork and copy one hero.
                     blendIntoHero = blendIntoHero,
                     // Both the banner and the Descobrir card play beside something else, and
-                    // neither was asked for: muted at the start, no controls, and repeating.
+                    // neither was asked for: muted at the start and no controls. Whether it repeats
+                    // is the separate `loop` question below.
                     unattended = true,
+                    loop = loop,
                     onPlaying = {
                         playbackConfirmed = true
                         onPlaying()
                     },
                     onFailed = onFailed,
+                    onEnded = onEnded,
                 )
             }.getOrNull()
         }
@@ -687,6 +710,14 @@ private fun DailyHero(
      * Ten seconds is right for a still poster and cuts a trailer off mid-sentence.
      */
     onTrailerPlaying: (Boolean) -> Unit = {},
+    /**
+     * Told the moment YouTube itself reports the video has finished.
+     *
+     * The banner plays its trailer once rather than looping, unlike the Descobrir card, so this is
+     * the real signal to move the rotation on — never a guess from a fixed hold that either cut a
+     * long trailer short or sat on a finished one's last frame for whatever was left of the guess.
+     */
+    onTrailerEnded: () -> Unit = {},
     /** Whether the viewer has asked for sound. Off until they do — see HeroTrailer. */
     soundOn: Boolean = false,
     onToggleSound: () -> Unit = {},
@@ -777,6 +808,10 @@ private fun DailyHero(
                     soundOn = soundOn,
                     onFailed = onTrailerFailed,
                     onPlaying = { browserPlaying = true },
+                    // Plays once, unlike the Descobrir card: the banner reacts to the real end
+                    // instead of holding for a fixed guess.
+                    loop = false,
+                    onEnded = onTrailerEnded,
                 )
             }
         }

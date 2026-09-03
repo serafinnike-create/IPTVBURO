@@ -48,12 +48,21 @@ class TrailerHostServer private constructor(
          * this video.
          */
         unattended: Boolean = false,
+        /**
+         * Whether the video repeats instead of ending.
+         *
+         * Separate from [unattended]: the Descobrir card still wants to loop a short trailer while
+         * somebody reads the synopsis beside it, but the Home banner needs the opposite — YouTube's
+         * own playerState 0 only ever fires once, and looping is what a fixed-timer rotation used
+         * to fall back on before this existed.
+         */
+        loop: Boolean = unattended,
         /** Kept server-side: private or signed artwork URLs never enter the visible browser URL. */
         artworkUrl: String? = null,
     ): String =
         "$origin/watch?v=$youtubeId&autoplay=${autoplay.asFlag()}" +
             "&mute=${muted.asFlag()}&hero=${blendIntoHero.asFlag()}" +
-            "&unattended=${unattended.asFlag()}" +
+            "&unattended=${unattended.asFlag()}&loop=${loop.asFlag()}" +
             artworkUrl
                 ?.takeIf { blendIntoHero && it.isSafeArtworkUrl() }
                 ?.let { safeUrl ->
@@ -134,6 +143,7 @@ class TrailerHostServer private constructor(
                                     muted = flag("mute"),
                                     blendIntoHero = flag("hero"),
                                     unattended = flag("unattended"),
+                                    loop = flag("loop"),
                                     artworkUrl = artworkUrl,
                                 )
                             } else {
@@ -175,6 +185,8 @@ class TrailerHostServer private constructor(
             muted: Boolean,
             blendIntoHero: Boolean,
             unattended: Boolean,
+            /** Whether the video repeats instead of ending. See pageUrlFor. */
+            loop: Boolean,
             artworkUrl: String?,
         ): String {
             val embed =
@@ -207,7 +219,7 @@ class TrailerHostServer private constructor(
                     // Lets the page below talk to the player at all, which is what makes unmuting
                     // after the start possible.
                     if (unattended) append("&enablejsapi=1")
-                    if (unattended) append("&loop=1&playlist=").append(youtubeId)
+                    if (loop) append("&loop=1&playlist=").append(youtubeId)
                     append("&origin=").append(origin)
                 }
             val safeArtworkCss =
@@ -289,6 +301,12 @@ class TrailerHostServer private constructor(
                         if(d&&d.info){
                           var state=d.info.playerState;
                           if(state===1||d.info.currentTime>0)signal('playing');
+                          // 0 is YouTube's own "ended". Real end-of-video, not a guess from a
+                          // fixed timer: a trailer held for a flat sixty seconds was cut off
+                          // mid-scene as often as it was allowed to finish naturally, and one
+                          // that ran shorter left the banner sitting on a frozen last frame for
+                          // however long was left of that guess.
+                          if(state===0)signal('ended');
                         }
                       });
                       setTimeout(function(){if(!resolved)signal('failed')},10000);

@@ -68,10 +68,19 @@ class TrailerBrowser {
         blendIntoHero: Boolean = true,
         /** True when the trailer plays beside something else. See TrailerHostServer. */
         unattended: Boolean = false,
+        /** Whether the video repeats instead of ending. See TrailerHostServer.pageUrlFor. */
+        loop: Boolean = unattended,
         /** Called only after YouTube reports actual playback, not merely a loaded host page. */
         onPlaying: () -> Unit = {},
         /** Called when the player refuses the video or never begins within its readiness window. */
         onFailed: () -> Unit = {},
+        /**
+         * Called once YouTube itself reports the video has finished — its own state 0, not a guess
+         * from a fixed timer. Lets a rotation move to the next title exactly when this one is done,
+         * rather than being cut off mid-scene or left frozen on its last frame for however long a
+         * flat hold guessed wrong.
+         */
+        onEnded: () -> Unit = {},
     ): JPanel? =
         runCatching {
             val app = sharedApp() ?: return null
@@ -105,6 +114,7 @@ class TrailerBrowser {
                                         browserComponent.isVisible = false
                                         onFailed()
                                     }
+                                "ended" -> SwingUtilities.invokeLater(onEnded)
                                 else -> return false
                             }
                             callback?.success("ok")
@@ -131,6 +141,7 @@ class TrailerBrowser {
                             muted = muted,
                             blendIntoHero = blendIntoHero,
                             unattended = unattended,
+                            loop = loop,
                             artworkUrl = artworkUrl,
                         ),
                         false,
