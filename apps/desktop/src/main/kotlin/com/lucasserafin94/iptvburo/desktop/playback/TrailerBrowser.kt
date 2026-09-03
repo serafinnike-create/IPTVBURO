@@ -205,7 +205,10 @@ class TrailerBrowser {
                         override fun componentResized(event: java.awt.event.ComponentEvent?) {
                             val child = nativeComponent ?: return
                             if (child.width <= 0 || child.height <= 0) return
-                            println("[trailer] AWT layout settled at ${child.width}x${child.height}")
+                            println(
+                                "[trailer] AWT layout settled at ${child.width}x${child.height} " +
+                                    "(scale ${screenScale()})",
+                            )
                             browser?.wasResized(child.width, child.height)
                             // wasResized() changes what CEF paints into — the browser's own render
                             // surface. It does not make YouTube's IFrame Player recompute its
@@ -257,16 +260,47 @@ class TrailerBrowser {
      * `postMessage` — the one channel that does cross the origin boundary, which is also how the
      * sound switch above already talks to the same player.
      */
+    /**
+     * What one AWT pixel is worth on this screen.
+     *
+     * AWT reports a component's size in logical pixels; the screen draws in physical ones, and on a
+     * display scaled to 125% those differ by exactly that factor. Measured: AWT called the banner's
+     * panel 735x372 while it occupied 902x467 on screen — 1.25x — and the video, sized from the AWT
+     * number, filled 81% of the width and 79% of the height of the frame it sat in. Every "the
+     * video is small inside the trailer" report was that one ratio, on both the banner and the
+     * Descobrir card.
+     *
+     * Read from the component rather than from the system: GetDpiForWindow answers 120 for this
+     * window while the monitor itself reports 96, so a system-wide DPI query says 100% and misses
+     * it entirely. The component's own GraphicsConfiguration is the only source that describes the
+     * surface this panel is actually drawn onto.
+     *
+     * Falls back to 1.0 when there is no configuration yet, which is the right answer for a panel
+     * not yet on screen: the layout listener runs again once it is.
+     */
+    private fun screenScale(): Double =
+        nativeComponent
+            ?.graphicsConfiguration
+            ?.defaultTransform
+            ?.scaleX
+            ?.takeIf { it > 0.0 }
+            ?: 1.0
+
     private fun pushPlayerSize(widthPx: Int, heightPx: Int) {
         if (widthPx <= 0 || heightPx <= 0) return
         val live = browser ?: return
+        // Scaled to physical pixels: the sizes AWT hands out are logical, and the player draws onto
+        // the physical surface. See [screenScale].
+        val scale = screenScale()
+        val width = (widthPx * scale).toInt().coerceAtLeast(1)
+        val height = (heightPx * scale).toInt().coerceAtLeast(1)
         val script =
             """
             (function(){
               var frame=document.querySelector('iframe');
               if(!frame||!frame.contentWindow)return;
               frame.contentWindow.postMessage(JSON.stringify(
-                {event:'command',func:'setSize',args:[$widthPx,$heightPx]}),'*');
+                {event:'command',func:'setSize',args:[$width,$height]}),'*');
             })();
             """.trimIndent()
         runCatching { live.executeJavaScript(script, live.url, 0) }

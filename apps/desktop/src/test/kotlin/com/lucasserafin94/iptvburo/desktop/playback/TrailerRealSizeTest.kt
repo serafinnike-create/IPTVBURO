@@ -73,4 +73,47 @@ class TrailerRealSizeTest {
                 "do player, que so o setSize da API do YouTube alcanca",
         )
     }
+
+    /**
+     * And the size handed to the player is physical pixels, not AWT's logical ones.
+     *
+     * Measured: AWT called the banner's panel 735x372 while it occupied 902x467 on screen, a 1.25
+     * display scale. The video, sized from the AWT number, filled 81% of the width and 79% of the
+     * height -- which is 1/1.25 on both axes, and was every "video pequeno dentro do trailer"
+     * report. A system-wide DPI query misses this: GetDpiForWindow answers 120 for this window
+     * while the monitor reports 96.
+     */
+    @Test
+    fun `the player is sized in physical pixels, not logical ones`() {
+        val marker = "private fun pushPlayerSize"
+        assertTrue(marker in browser, "o pushPlayerSize mudou de nome: este teste ja nao le nada")
+
+        val body = browser.substringAfter(marker).substringBefore("fun setSound")
+
+        assertTrue(
+            "screenScale()" in body,
+            "o tamanho enviado ao player volta a ser logico, e o video encolhe pelo factor de " +
+                "escala do ecra",
+        )
+        assertTrue(
+            "(widthPx * scale)" in body && "(heightPx * scale)" in body,
+            "a escala do ecra deixou de ser aplicada as duas dimensoes",
+        )
+    }
+
+    /**
+     * The scale is read from the component, because the system-wide answer is wrong here.
+     */
+    @Test
+    fun `the screen scale comes from the component's own graphics configuration`() {
+        val marker = "private fun screenScale"
+        assertTrue(marker in browser, "o screenScale mudou de nome: este teste ja nao le nada")
+
+        val body = browser.substringAfter(marker).substringBefore("private fun pushPlayerSize")
+
+        assertTrue(
+            "graphicsConfiguration" in body && "defaultTransform" in body,
+            "a escala volta a ser lida de outro sitio que nao a superficie onde o painel e desenhado",
+        )
+    }
 }
