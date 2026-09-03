@@ -2,7 +2,20 @@ name: Publish app preview
 
 on:
   push:
-    tags: ["v*-alpha.*", "v*-beta.*", "v*-rc.*"]
+    # Final releases as well as previews. A tag like v4.0.0 carries no suffix, so the three
+    # suffixed patterns never matched it and pushing one built nothing at all.
+    #
+    # These are globs, not regular expressions: `[0-9]` is a character class here but `+` would be
+    # a literal plus sign, so the repetition has to be written out. The publish job validates the
+    # exact shape with a real regex afterwards, which is what keeps a stray tag from shipping.
+    tags:
+      - "v*-alpha.*"
+      - "v*-beta.*"
+      - "v*-rc.*"
+      - "v[0-9].[0-9].[0-9]"
+      - "v[0-9].[0-9].[0-9][0-9]"
+      - "v[0-9].[0-9][0-9].[0-9]"
+      - "v[0-9][0-9].[0-9].[0-9]"
   workflow_dispatch:
     inputs:
       tag:
@@ -191,8 +204,9 @@ jobs:
       - name: Validate preview tag
         shell: bash
         run: |
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.[0-9]+$ ]]; then
-            echo "The release tag does not match the supported preview format." >&2
+          # A preview (v1.2.3-rc.4) or a final release (v1.2.3), and nothing else.
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; then
+            echo "The release tag does not match the supported format." >&2
             exit 1
           fi
           git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}" >/dev/null
@@ -222,9 +236,17 @@ jobs:
           MSI_PATH="${msi_files[0]}"
           SUM_PATH="artifacts/SHA256SUMS.txt"
           if [[ "$MSI_PATH" == *-unsigned.msi ]]; then
-            RELEASE_NOTES="Windows preview for testing. The MSI is not yet code-signed, so Windows may display an Unknown publisher or SmartScreen warning. The package passed the clean-data privacy audit."
+            RELEASE_NOTES="Windows and Android packages. The MSI is not code-signed, so Windows may display an Unknown publisher or SmartScreen warning on install. The package passed the clean-data privacy audit."
           else
-            RELEASE_NOTES="Signed Windows preview and Android debug package."
+            RELEASE_NOTES="Signed Windows package and Android debug package."
+          fi
+          # A suffixed tag is a preview; a bare v1.2.3 is a final release and is published as one,
+          # because marking a finished release "pre-release" tells everyone who downloads it that
+          # it is not ready.
+          if [[ "$RELEASE_TAG" =~ -(alpha|beta|rc)\. ]]; then
+            MATURITY_FLAG="--prerelease"
+          else
+            MATURITY_FLAG="--latest"
           fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" \
@@ -236,6 +258,6 @@ jobs:
               "$APK_PATH" "$MSI_PATH" "$SUM_PATH" \
               --title "IPTV BURO $RELEASE_TAG" \
               --notes "$RELEASE_NOTES" \
-              --prerelease \
+              $MATURITY_FLAG \
               --verify-tag
           fi

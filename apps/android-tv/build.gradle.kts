@@ -63,7 +63,7 @@ android {
         minSdk = 23
         targetSdk = 36
         versionCode = 17
-        versionName = "3.8.0"
+        versionName = "4.0.0"
 
         buildConfigField("boolean", "OFFLINE_SUPPORTED", androidOfflineSupported.toString())
         // Production builds must never embed a developer-owned TMDB credential. Users can provide
