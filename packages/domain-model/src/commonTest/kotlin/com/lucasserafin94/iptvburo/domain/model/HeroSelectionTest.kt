@@ -145,6 +145,68 @@ class HeroSelectionTest {
         assertEquals(10, HeroSelection.rotationFor(pool, dayOfEpoch = -3).size)
     }
 
+    /**
+     * Two openings of the app do not play the same banner.
+     *
+     * The day decides the composition; the seed decides which titles fill it. Without this, opening
+     * the app three times in an afternoon showed the same trailers in the same order every time --
+     * reported exactly that way.
+     */
+    @Test
+    fun `a different launch draws a different set`() {
+        val thisYear = 2026
+        val now = 1_800_000_000L
+        val pool = mixPool(thisYear, now)
+
+        val first = HeroSelection.mixed(pool, thisYear, now, shuffleSeed = 1L).map { it.id }
+        val second = HeroSelection.mixed(pool, thisYear, now, shuffleSeed = 2L).map { it.id }
+
+        assertTrue(
+            first != second,
+            "duas aberturas da app dao exactamente a mesma sequencia: $first",
+        )
+    }
+
+    /**
+     * And the same launch is stable, so the banner does not reshuffle while somebody watches it.
+     */
+    @Test
+    fun `the same seed always draws the same set`() {
+        val thisYear = 2026
+        val now = 1_800_000_000L
+        val pool = mixPool(thisYear, now)
+
+        assertEquals(
+            HeroSelection.mixed(pool, thisYear, now, shuffleSeed = 7L).map { it.id },
+            HeroSelection.mixed(pool, thisYear, now, shuffleSeed = 7L).map { it.id },
+            "a mesma abertura da resultados diferentes: o banner mudaria enquanto e visto",
+        )
+    }
+
+    /**
+     * A shuffled draw still obeys the day's composition.
+     *
+     * The seed is allowed to change which anime or which series appears -- never whether one does.
+     */
+    @Test
+    fun `a shuffled draw still carries one of each kind`() {
+        val thisYear = 2026
+        val now = 1_800_000_000L
+        val mixed = HeroSelection.mixed(mixPool(thisYear, now), thisYear, now, shuffleSeed = 3L)
+        val head = mixed.take(6).map { it.id }
+
+        assertTrue(
+            head.count { it.startsWith("hoje") } == 3,
+            "os lancamentos do dia deixaram de vir a frente com uma seed: $head",
+        )
+        assertTrue(head.any { it == "anime" }, "o anime desapareceu da mistura: $head")
+        assertTrue(head.any { it == "serie" }, "a serie desapareceu da mistura: $head")
+        assertTrue(
+            head.any { it.startsWith("velho") },
+            "o filme antigo desapareceu da mistura: $head",
+        )
+    }
+
     private fun mixCandidate(
         id: String,
         year: Int,

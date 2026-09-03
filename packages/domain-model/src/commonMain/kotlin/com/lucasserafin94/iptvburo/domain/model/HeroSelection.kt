@@ -286,17 +286,36 @@ object HeroSelection {
          * banner instead of drifting as the clock moves during a session.
          */
         nowEpochSeconds: Long = 0L,
+        /**
+         * Varies which titles fill each slot, without changing what the slots are.
+         *
+         * The composition is the day's: what arrived today leads, then one anime, one series, one
+         * older film, then current releases. That part is deliberate and stays fixed. What was not
+         * deliberate is that the *same* titles filled those slots on every launch — open the app
+         * three times in an afternoon and the banner played the same trailers in the same order,
+         * which is what was reported.
+         *
+         * Zero keeps the old exact ordering, which is what the tests pin: they are checking the
+         * composition rules, and a shuffled list would make them assert nothing.
+         */
+        shuffleSeed: Long = 0L,
     ): List<HeroCandidate> {
         if (rotation.size <= ANIME_SLOTS + OLD_FILM_SLOTS + SERIES_SLOTS + TODAY_SLOTS) return rotation
 
         val taken = LinkedHashSet<String>()
         val picked = mutableListOf<HeroCandidate>()
 
+        // Ranked order, or the same titles lightly reordered when a seed is given. Each category
+        // still draws from the whole rotation, so a shuffle changes who appears rather than which
+        // kinds do.
+        val pool =
+            if (shuffleSeed == 0L) rotation else rotation.shuffled(kotlin.random.Random(shuffleSeed))
+
         fun take(
             limit: Int,
             predicate: (HeroCandidate) -> Boolean,
         ) {
-            rotation
+            pool
                 .asSequence()
                 .filter { it.id !in taken && predicate(it) }
                 .take(limit)
@@ -312,8 +331,8 @@ object HeroSelection {
         // And everything after that is a current release, which is the rest of the rotation.
         take(rotation.size) { ageBand(it, thisYear) == "new" }
 
-        // Then everything else, still in its ranked order.
-        rotation.forEach { candidate ->
+        // Then everything else, still in the order the pool gave.
+        pool.forEach { candidate ->
             if (candidate.id !in taken) {
                 picked += candidate
                 taken += candidate.id

@@ -628,6 +628,16 @@ class DesktopAppState(
         private set
 
     /**
+     * Varies the banner's draw between one opening of the app and the next.
+     *
+     * Fixed for the life of this run, deliberately: the banner must not reshuffle under somebody
+     * who is looking at it, and a rotation that changed on every recomposition would do exactly
+     * that. What it changes is that two openings on the same afternoon no longer play the same
+     * trailers in the same order -- reported after opening the app more than once in a day.
+     */
+    private val launchSeed: Long = System.nanoTime()
+
+    /**
      * Days until the viewer's subscription to this list runs out, or null when the panel does not
      * say.
      *
@@ -5671,8 +5681,16 @@ class DesktopAppState(
                             ranked,
                             date.year,
                             // Captured with the rest of the inputs rather than read inside, so the
-                            // same day and the same catalogue always produce the same banner.
+                            // banner does not drift as the clock moves during a session.
                             nowEpochSeconds = System.currentTimeMillis() / 1_000L,
+                            // A different draw each time the app opens.
+                            //
+                            // The day decides the composition -- what arrived today, then an anime,
+                            // a series, an older film, then current releases -- and that stays. What
+                            // changes is which titles fill those slots, because opening the app
+                            // three times in an afternoon showed the same trailers in the same
+                            // order every time.
+                            shuffleSeed = launchSeed,
                         )
                     }
                 val heroPool =
