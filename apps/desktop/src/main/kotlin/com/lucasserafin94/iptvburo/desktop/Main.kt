@@ -36,6 +36,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.lucasserafin94.iptvburo.domain.model.CacheBudget
 import com.lucasserafin94.iptvburo.desktop.user.DesktopUserStore
 import com.lucasserafin94.iptvburo.desktop.user.StoredWindowGeometry
+import kotlin.system.exitProcess
 
 /**
  * The window size to open at: the preferred size, shrunk to fit the usable screen.
@@ -83,6 +84,53 @@ private val MIN_HEIGHT = 560.dp
  * per edge, so 24dp covers that overshoot and still leaves the window clear of the screen edges.
  */
 private val WINDOW_MARGIN = 24.dp
+
+/**
+ * Ends the process, after the app has already torn itself down.
+ *
+ * Compose's own exit closes the window and stops the composition, and on its own that is where a
+ * well-behaved app would stop. This one embeds Chromium, and JCEF shuts the engine down on a
+ * background thread that deliberately sleeps about a second first — so the window disappears while
+ * non-daemon threads are still running, and the JVM stays up waiting for them. Measured with the
+ * window closed and nothing on screen: two processes left, one holding 881 MB. Beside it, the
+ * "SkiaLayer is disposed" dialog, which is what a CEF callback arriving after teardown looks like
+ * when it tries to write Compose state.
+ *
+ * Called last, from every exit path, once the state, the repositories and the engine have all been
+ * asked to close. Nothing after this point is expected to run.
+ */
+private fun leaveForGood() {
+    // A watchdog first, then the ordinary exit.
+    //
+    // `System.exit` runs the shutdown hooks, and those matter here: one deletes this run's Chromium
+    // cache directory, the other kills any VLC process still alive. `halt` would skip both and leak
+    // them. But `exit` also blocks until every hook finishes, and JCEF's own shutdown sleeps about
+    // a second before it even begins — so on its own it can leave the process up for longer than
+    // anybody watching a window disappear would accept.
+    //
+    // The daemon thread below is the floor: the hooks get their few seconds, and if they have not
+    // finished by then the process ends anyway. Daemon, so it never becomes the reason the JVM
+    // stays alive — which is the very thing being fixed.
+    Thread {
+        runCatching { Thread.sleep(EXIT_GRACE_MILLIS) }
+        Runtime.getRuntime().halt(0)
+    }.apply {
+        isDaemon = true
+        name = "iptvburo-exit-watchdog"
+    }.start()
+    exitProcess(0)
+}
+
+/**
+ * How long the shutdown hooks get before the process is ended regardless.
+ *
+ * Four seconds was not enough: the Chromium cache directory for the run survived the exit, because
+ * the watchdog fired while its hook was still deleting. Ten leaves room for a cache with real files
+ * in it while still being far below what anybody would sit and wait for — and a directory that does
+ * slip through is swept by pid on the next launch, so the cost of being wrong here is a stale
+ * folder for one run rather than something the viewer ever sees.
+ */
+private const val EXIT_GRACE_MILLIS = 10_000L
 
 fun main(args: Array<String>) {
     // A share link, when the app was started by clicking one. Windows launches the registered
@@ -293,6 +341,7 @@ fun main(args: Array<String>) {
                 // trying to hand a link to a process that has gone.
                 SingleInstance.release()
                 exitApplication()
+                leaveForGood()
             },
             state = windowState,
             title = "IPTV BURO",
@@ -402,6 +451,7 @@ fun main(args: Array<String>) {
                     localRepository.clear()
                     SingleInstance.release()
                     exitApplication()
+                    leaveForGood()
                 },
             )
         }

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -369,7 +370,14 @@ fun XtreamDailyHome(
                         // still moves on eventually rather than stopping the rotation for the day.
                         var heroPlaying by
                             remember(snapshot.date, snapshot.sourceId) { mutableStateOf(false) }
-                        LaunchedEffect(rotation.size, heroPlaying) {
+                        // Keyed on the index as well, so each title starts the wait for the next.
+                        //
+                        // Without it this ran once and stopped: the effect only restarted when
+                        // `heroPlaying` changed, so after the first advance the banner sat on
+                        // whatever it had reached. Reported as the rotation showing two titles and
+                        // then freezing. The loop it replaced restarted itself; this one is a
+                        // single wait, and a single wait has to be re-keyed to happen again.
+                        LaunchedEffect(rotation.size, heroPlaying, heroIndex) {
                             if (rotation.size <= 1) return@LaunchedEffect
                             delay(
                                 if (heroPlaying) {
@@ -853,7 +861,17 @@ private fun DailyHero(
                                 metrics.wide -> 620.dp
                                 else -> 520.dp
                             },
-                    ),
+                    )
+                    // And never taller than the banner it sits in.
+                    //
+                    // The column is centre-aligned with no height of its own, so content that does
+                    // not fit simply runs past the top and bottom edges — and what is at the bottom
+                    // is the buttons. On a short window with a five-line synopsis beside a trailer,
+                    // Assistir, Ver detalhes and Silenciar were all pushed out of the banner and
+                    // vanished. Reported exactly that way. Bounding the column makes the overflow
+                    // land on the synopsis, which ellipsises, instead of on the controls, which
+                    // just disappear.
+                    .heightIn(max = metrics.heroHeight - BuroSpacing.Lg * 2),
             verticalArrangement = Arrangement.spacedBy(BuroSpacing.Sm),
         ) {
             HeroEyebrow(
@@ -891,10 +909,14 @@ private fun DailyHero(
                 // Three lines for a real synopsis, which needs the room; the fixed line fits in two.
                 // Five while a trailer plays: the column is narrower there, so the same synopsis
                 // needs more lines to say as much, not fewer.
+                // Five lines beside a trailer only when the banner is tall enough to hold them
+                // and the buttons underneath. A short window has to give the room back, and the
+                // synopsis is what can lose a line without anything becoming unreachable.
                 maxLines =
                     when {
                         synopsis.isNullOrBlank() -> 2
-                        trailerPlaying -> 5
+                        trailerPlaying && metrics.heroHeight >= 460.dp -> 5
+                        trailerPlaying -> 3
                         else -> 3
                     },
                 overflow = TextOverflow.Ellipsis,

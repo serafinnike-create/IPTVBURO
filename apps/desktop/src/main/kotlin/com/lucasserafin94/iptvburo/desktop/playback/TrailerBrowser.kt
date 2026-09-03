@@ -381,6 +381,21 @@ class TrailerBrowser {
          */
         fun disposeAll() {
             live.toList().forEach { browser -> browser.dispose() }
+            // And the engine itself, which is what actually lets the process end.
+            //
+            // Closing every browser is not enough: CefApp keeps native subprocesses and non-daemon
+            // threads of its own, so the JVM stayed alive after the window was gone. Measured with
+            // the app closed and nothing on screen — a leftover process still holding 500 MB, and
+            // beside it the "SkiaLayer is disposed" dialog, which is what a CEF callback arriving
+            // after teardown looks like when it tries to write Compose state.
+            //
+            // Last, and only here: this is process-wide, so it must come after every browser has
+            // been closed, and nothing may ask for a trailer afterwards. The window is closing, so
+            // nothing will.
+            runCatching { app?.dispose() }
+            app = null
+            runCatching { host?.stop() }
+            host = null
         }
 
         @Volatile
