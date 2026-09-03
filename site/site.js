@@ -311,6 +311,35 @@
     renderDemo('home');
   }
 
+  /**
+   * The poster field is an enhancement, never a dependency: it is imported
+   * only after the page is interactive, only where the device can carry it,
+   * and any failure leaves the static hero exactly as it was.
+   */
+  function setupHero3d() {
+    const mount = $('[data-hero-canvas]');
+    if (!mount) return;
+
+    const begin = async () => {
+      try {
+        const module = await import('./hero3d.js');
+        if (!module.supported()) return;
+        await module.start(mount);
+        mount.classList.add('live');
+        $('.hero').classList.add('has-3d');
+      } catch (_) {
+        // WebGL refused, the chunk failed, the GPU is busy — the static hero
+        // is already on screen, so there is nothing to fall back to.
+      }
+    };
+
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(begin, { timeout: 2500 });
+    } else {
+      window.setTimeout(begin, 900);
+    }
+  }
+
   function setupReveal() {
     const elements = $$('.reveal');
     if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -346,6 +375,7 @@
   setupPayment();
   setupDemo();
   setupReveal();
+  setupHero3d();
   setupFaq();
   applyLanguage(initialLanguage);
 })();
