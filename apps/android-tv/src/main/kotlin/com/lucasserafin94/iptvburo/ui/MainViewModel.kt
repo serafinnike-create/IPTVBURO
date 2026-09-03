@@ -4787,6 +4787,25 @@ class MainViewModel @Inject constructor(
                                     expiresAtEpochSeconds = activeSource?.subscriptionExpiresAtEpochSeconds,
                                     nowEpochSeconds = System.currentTimeMillis() / 1000L,
                                 ),
+                            subscriptionExpiresOn =
+                                activeSource
+                                    ?.subscriptionExpiresAtEpochSeconds
+                                    ?.takeIf { seconds -> seconds > 0L }
+                                    ?.let { seconds ->
+                                        // Written the way the viewer's own language writes a date:
+                                        // the same day reads 26/10 here and 10/26 elsewhere, and a
+                                        // date nobody can parse at a glance is worse than none.
+                                        java.time.Instant
+                                            .ofEpochSecond(seconds)
+                                            .atZone(java.time.ZoneId.systemDefault())
+                                            .toLocalDate()
+                                            .format(
+                                                java.time.format.DateTimeFormatter
+                                                    .ofLocalizedDate(
+                                                        java.time.format.FormatStyle.SHORT,
+                                                    ).withLocale(Locale.getDefault()),
+                                            )
+                                    },
                         )
                     }
                     if (active != null) {

@@ -649,18 +649,22 @@ class DesktopAppState(
      * Shown beside the countdown rather than instead of it: the days say whether to act now, and
      * the date is what somebody needs when they go to renew with whoever sold them the list.
      *
-     * Day and month only. The year is almost always this one or the next, and reading it off a
-     * header chip is not what anybody is doing there — the days already carry that.
+     * Written in the app's own language, not a fixed order. The same day reads 26/10 to somebody
+     * using Portuguese and 10/26 to somebody using English, and a date read the wrong way round is
+     * worse than no date at all — it quietly says the wrong month.
      */
     val subscriptionExpiresOn: String?
         get() =
             xtreamSummary?.account?.expiresAtEpochSeconds?.takeIf { it > 0L }?.let { seconds ->
-                val date =
-                    java.time.Instant
-                        .ofEpochSecond(seconds)
-                        .atZone(java.time.ZoneId.systemDefault())
-                        .toLocalDate()
-                "%02d/%02d".format(date.dayOfMonth, date.monthValue)
+                java.time.Instant
+                    .ofEpochSecond(seconds)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDate()
+                    .format(
+                        java.time.format.DateTimeFormatter
+                            .ofLocalizedDate(java.time.format.FormatStyle.SHORT)
+                            .withLocale(java.util.Locale.forLanguageTag(language.tag)),
+                    )
             }
 
     var selectedSourceId by mutableStateOf<String?>(null)

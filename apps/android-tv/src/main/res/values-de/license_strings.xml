@@ -68,7 +68,7 @@
     <string name="tmdb_settings_shared_hint">Wird von jedem Profil ohne eigenen Schlüssel verwendet.</string>
     <string name="tmdb_settings_profile_label">Schlüssel für %1$s</string>
     <string name="tmdb_settings_profile_hint">Ersetzt den Haushaltsschlüssel nur für dieses Profil. TMDB begrenzt Anfragen pro Schlüssel.</string>
-    <string name="subscription_days_left">Liste: noch %1$d Tage</string>
-    <string name="subscription_last_day">Liste: letzter Tag</string>
-    <string name="subscription_expired">Liste abgelaufen</string>
+    <string name="subscription_days_left">Liste: %1$d Tage · %2$s</string>
+    <string name="subscription_last_day">Liste: letzter Tag · %1$s</string>
+    <string name="subscription_expired">Liste abgelaufen · %1$s</string>
 </resources>

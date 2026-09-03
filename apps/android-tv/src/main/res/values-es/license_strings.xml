@@ -68,7 +68,7 @@
     <string name="tmdb_settings_shared_hint">La usa cualquier perfil que no tenga la suya.</string>
     <string name="tmdb_settings_profile_label">Clave de %1$s</string>
     <string name="tmdb_settings_profile_hint">Sustituye a la clave de la casa solo en este perfil. TMDB limita las peticiones por clave.</string>
-    <string name="subscription_days_left">Lista: quedan %1$d días</string>
-    <string name="subscription_last_day">Lista: último día</string>
-    <string name="subscription_expired">Lista vencida</string>
+    <string name="subscription_days_left">Lista: %1$d días · %2$s</string>
+    <string name="subscription_last_day">Lista: último día · %1$s</string>
+    <string name="subscription_expired">Lista vencida · %1$s</string>
 </resources>

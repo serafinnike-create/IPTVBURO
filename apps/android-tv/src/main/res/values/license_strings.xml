@@ -39,9 +39,9 @@
     <string name="license_redeem_activated">Key activated. This device is now licensed.</string>
     <plurals name="license_redeem_activated_days"><item quantity="one">Key activated · %1$d day of access</item><item quantity="other">Key activated · %1$d days of access</item></plurals>
     <string name="license_gate_privacy">This code comes from an Android Keystore key, not from the phone MAC address.</string>
-    <string name="license_status_active">Active</string>
-    <plurals name="license_status_trial_days"><item quantity="one">Trial · %1$d day left</item><item quantity="other">Trial · %1$d days left</item></plurals>
-    <plurals name="license_status_active_days"><item quantity="one">Active · %1$d day left</item><item quantity="other">Active · %1$d days left</item></plurals>
+    <string name="license_status_active">App · active</string>
+    <plurals name="license_status_trial_days"><item quantity="one">App · trial, %1$d day left</item><item quantity="other">App · trial, %1$d days left</item></plurals>
+    <plurals name="license_status_active_days"><item quantity="one">App · %1$d day left</item><item quantity="other">App · %1$d days left</item></plurals>
     <string name="license_status_offline">Offline verification</string>
     <string name="tmdb_settings_title">TMDB artwork and trailers</string>
     <string name="tmdb_settings_body">Optional per profile. A TMDB API v3 key fills missing trailers without sending playlist credentials.</string>
@@ -68,7 +68,7 @@
     <string name="tmdb_settings_shared_hint">Used by every profile that has not set its own.</string>
     <string name="tmdb_settings_profile_label">Key for %1$s</string>
     <string name="tmdb_settings_profile_hint">Overrides the household key for this profile only. TMDB limits requests per key.</string>
-    <string name="subscription_days_left">Playlist: %1$d days left</string>
-    <string name="subscription_last_day">Playlist: last day</string>
-    <string name="subscription_expired">Playlist expired</string>
+    <string name="subscription_days_left">Playlist: %1$d days · %2$s</string>
+    <string name="subscription_last_day">Playlist: last day · %1$s</string>
+    <string name="subscription_expired">Playlist expired · %1$s</string>
 </resources>

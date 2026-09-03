@@ -581,6 +581,13 @@ data class AppUiState(
      */
     val subscriptionDaysLeft: Int? = null,
     /**
+     * The day that subscription ends, as the viewer would write it.
+     *
+     * Beside the countdown rather than instead of it: the days say whether to act now, and the date
+     * is what somebody needs when they go to renew with whoever sold them the list.
+     */
+    val subscriptionExpiresOn: String? = null,
+    /**
      * Outcome of the last activation-key attempt, from either the gate or the Settings card.
      *
      * Held outside [license] because a key can be redeemed while the licence is valid — extending a

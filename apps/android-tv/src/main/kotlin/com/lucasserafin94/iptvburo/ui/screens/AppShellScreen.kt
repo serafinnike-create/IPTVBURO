@@ -953,6 +953,7 @@ fun AppShellScreen(
                     onSelectSection(AppSection.SETTINGS)
                 },
                 subscriptionDaysLeft = state.subscriptionDaysLeft,
+                subscriptionExpiresOn = state.subscriptionExpiresOn,
                 subscriptionsVisible = state.subscriptions.capability.isVisible,
                 offlineSupported = offlineSupported,
                 onSelect = { section ->
@@ -1277,6 +1278,8 @@ private fun MobileNavigationDrawer(
     onOpenLicense: () -> Unit,
     /** Days left on the active source's own subscription, from the panel — not [license]. */
     subscriptionDaysLeft: Int?,
+    /** The day that subscription ends, as the viewer would write it. */
+    subscriptionExpiresOn: String?,
     subscriptionsVisible: Boolean,
     offlineSupported: Boolean,
     onSelect: (AppSection) -> Unit,
@@ -1336,7 +1339,7 @@ private fun MobileNavigationDrawer(
             // locked out one morning.
             LicenseChip(license = license, onClick = onOpenLicense)
             // The list's own subscription, separate from the licence above.
-            SubscriptionChip(daysLeft = subscriptionDaysLeft)
+            SubscriptionChip(daysLeft = subscriptionDaysLeft, expiresOn = subscriptionExpiresOn)
             Spacer(Modifier.height(14.dp))
             // Scrolls, because the list is longer than a phone screen.
             //
@@ -4632,18 +4635,17 @@ private const val LICENSE_URGENT_DAYS = 7L
  * panel never sent an expiry date — most of the time that means nothing to check, not a defect.
  */
 @Composable
-private fun SubscriptionChip(daysLeft: Int?) {
-    if (daysLeft == null) return
+private fun SubscriptionChip(daysLeft: Int?, expiresOn: String?) {
+    if (daysLeft == null || expiresOn == null) return
     val expired = SubscriptionExpiry.hasExpired(daysLeft)
-    if (!expired && !SubscriptionExpiry.isExpiringSoon(daysLeft)) return
 
     val colors = BuroTheme.colors
     val urgent = expired || SubscriptionExpiry.isUrgent(daysLeft)
     val label =
         when {
-            expired -> stringResource(R.string.subscription_expired)
-            daysLeft <= 1 -> stringResource(R.string.subscription_last_day)
-            else -> stringResource(R.string.subscription_days_left, daysLeft)
+            expired -> stringResource(R.string.subscription_expired, expiresOn)
+            daysLeft <= 1 -> stringResource(R.string.subscription_last_day, expiresOn)
+            else -> stringResource(R.string.subscription_days_left, daysLeft, expiresOn)
         }
 
     Row(

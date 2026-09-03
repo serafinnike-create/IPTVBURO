@@ -1245,7 +1245,7 @@ data class DesktopStrings(
                         licenseHaveKey = "Tengo un código de activación",
                         licenseKeyPlaceholder = "Código",
                         licenseRedeem = "Usar código",
-                        licenseDaysLeft = "Quedan %d días",
+                        licenseDaysLeft = "App: quedan %d días",
                                                 epgShowSchedule = "Ver programación (%d)",
                         epgHideSchedule = "Ocultar programación",
                         parentalUnlock = "Escribe la contraseña para ver esta categoría",
@@ -1317,10 +1317,10 @@ data class DesktopStrings(
                         clockWarning =
                             "El reloj de este ordenador parece incorrecto. Las fechas de la licencia vienen del "
                                 + "servidor de todos modos.",
-                        trialDaysLeft = "Quedan %d días de prueba",
-                        licenseDaysLeft = "Quedan %d días",
-                        licenseLastDay = "Último día",
-                        trialLastDay = "Último día de prueba",
+                        trialDaysLeft = "App: %d días de prueba",
+                        licenseDaysLeft = "App: quedan %d días",
+                        licenseLastDay = "App: último día",
+                        trialLastDay = "App: último día de prueba",
                         buyNow = "Activar",
                     ),
             )
@@ -2029,7 +2029,7 @@ data class DesktopStrings(
                         licenseHaveKey = "Tenho um código de ativação",
                         licenseKeyPlaceholder = "Código",
                         licenseRedeem = "Usar código",
-                        licenseDaysLeft = "Faltam %d dias",
+                        licenseDaysLeft = "App: faltam %d dias",
                                                 epgShowSchedule = "Ver programação (%d)",
                         epgHideSchedule = "Ocultar programação",
                         parentalUnlock = "Digite a senha para ver esta categoria",
@@ -2101,10 +2101,10 @@ data class DesktopStrings(
                         clockWarning =
                             "O relógio deste computador parece errado. As datas da licença vêm do "
                                 + "servidor de qualquer forma.",
-                        trialDaysLeft = "Faltam %d dias de teste",
-                        licenseDaysLeft = "Faltam %d dias",
-                        licenseLastDay = "Último dia",
-                        trialLastDay = "Último dia de teste",
+                        trialDaysLeft = "App: %d dias de teste",
+                        licenseDaysLeft = "App: faltam %d dias",
+                        licenseLastDay = "App: último dia",
+                        trialLastDay = "App: último dia de teste",
                         buyNow = "Ativar",
                     ),
             )
@@ -2812,7 +2812,7 @@ data class DesktopStrings(
                         licenseHaveKey = "I have an activation code",
                         licenseKeyPlaceholder = "Code",
                         licenseRedeem = "Use code",
-                        licenseDaysLeft = "%d days left",
+                        licenseDaysLeft = "App: %d days left",
                                                 epgShowSchedule = "See schedule (%d)",
                         epgHideSchedule = "Hide schedule",
                         parentalUnlock = "Enter the PIN to open this category",
@@ -2883,10 +2883,10 @@ data class DesktopStrings(
                         clockWarning =
                             "This computer's clock looks wrong. Your licence dates come from the server "
                                 + "either way.",
-                        trialDaysLeft = "%d days left in your trial",
-                        licenseDaysLeft = "%d days left",
-                        licenseLastDay = "Last day",
-                        trialLastDay = "Last day of your trial",
+                        trialDaysLeft = "App: %d days of trial",
+                        licenseDaysLeft = "App: %d days left",
+                        licenseLastDay = "App: last day",
+                        trialLastDay = "App: last day of trial",
                         buyNow = "Activate",
                     ),
             )
@@ -3597,7 +3597,7 @@ data class DesktopStrings(
                         licenseHaveKey = "Ich habe einen Aktivierungscode",
                         licenseKeyPlaceholder = "Code",
                         licenseRedeem = "Code einlösen",
-                        licenseDaysLeft = "Noch %d Tage",
+                        licenseDaysLeft = "App: noch %d Tage",
                                                 epgShowSchedule = "Programm ansehen (%d)",
                         epgHideSchedule = "Programm ausblenden",
                         parentalUnlock = "PIN eingeben, um diese Kategorie zu öffnen",
@@ -3673,10 +3673,10 @@ data class DesktopStrings(
                         clockWarning =
                             "Die Uhr dieses Rechners scheint falsch zu gehen. Die Lizenzdaten kommen "
                                 + "ohnehin vom Server.",
-                        trialDaysLeft = "Noch %d Tage im Test",
-                        licenseDaysLeft = "Noch %d Tage",
-                        licenseLastDay = "Letzter Tag",
-                        trialLastDay = "Letzter Testtag",
+                        trialDaysLeft = "App: %d Tage im Test",
+                        licenseDaysLeft = "App: noch %d Tage",
+                        licenseLastDay = "App: letzter Tag",
+                        trialLastDay = "App: letzter Testtag",
                         buyNow = "Aktivieren",
                     ),
             )
@@ -4383,7 +4383,7 @@ data class DesktopStrings(
                         licenseHaveKey = "Ho un codice di attivazione",
                         licenseKeyPlaceholder = "Codice",
                         licenseRedeem = "Usa codice",
-                        licenseDaysLeft = "%d giorni rimasti",
+                        licenseDaysLeft = "App: %d giorni rimasti",
                                                 epgShowSchedule = "Vedi programmazione (%d)",
                         epgHideSchedule = "Nascondi programmazione",
                         parentalUnlock = "Inserisci il PIN per aprire questa categoria",
@@ -4455,10 +4455,10 @@ data class DesktopStrings(
                         clockWarning =
                             "L'orologio del computer sembra sbagliato. Le date della licenza vengono "
                                 + "comunque dal server.",
-                        trialDaysLeft = "%d giorni di prova rimasti",
-                        licenseDaysLeft = "%d giorni rimasti",
-                        licenseLastDay = "Ultimo giorno",
-                        trialLastDay = "Ultimo giorno di prova",
+                        trialDaysLeft = "App: %d giorni di prova",
+                        licenseDaysLeft = "App: %d giorni rimasti",
+                        licenseLastDay = "App: ultimo giorno",
+                        trialLastDay = "App: ultimo giorno di prova",
                         buyNow = "Attiva",
                     ),
             )
