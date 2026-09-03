@@ -38,8 +38,16 @@ class TrailerRealSizeTest {
             "o sinal de playing volta a fingir um tamanho de 1x1 em vez do real",
         )
         assertTrue(
-            "if (w > 0 && h > 0) browser?.wasResized(w, h)" in handler,
+            "if (w > 0 && h > 0) {" in handler,
             "o sinal de playing ja nao guarda o CEF de um tamanho fabricado",
+        )
+        assertTrue(
+            "browser?.wasResized(w, h)" in handler,
+            "o sinal de playing deixou de informar o CEF do tamanho quando ele e real",
+        )
+        assertTrue(
+            "pushPlayerSize(w, h)" in handler,
+            "o sinal de playing deixou de pedir ao proprio player do YouTube para se redimensionar",
         )
     }
 
@@ -57,6 +65,12 @@ class TrailerRealSizeTest {
         assertTrue(
             "wasResized(child.width, child.height)" in body,
             "o listener de resize ja nao informa o CEF do tamanho real assim que ele existe",
+        )
+        assertTrue(
+            "pushPlayerSize(child.width, child.height)" in body,
+            "o listener de resize deixou de pedir ao proprio player do YouTube para se " +
+                "redimensionar -- wasResized() muda a superficie do CEF mas nao o layout interno " +
+                "do player, que so o setSize da API do YouTube alcanca",
         )
     }
 }

@@ -122,7 +122,10 @@ class TrailerBrowser {
                                         // ComponentListener below calls it once real layout exists,
                                         // which is the only viewport this video should ever measure
                                         // itself against.
-                                        if (w > 0 && h > 0) browser?.wasResized(w, h)
+                                        if (w > 0 && h > 0) {
+                                            browser?.wasResized(w, h)
+                                            pushPlayerSize(w, h)
+                                        }
                                         println("[trailer] playing at ${w}x${h}")
                                         onPlaying()
                                     }
@@ -204,6 +207,20 @@ class TrailerBrowser {
                             if (child.width <= 0 || child.height <= 0) return
                             println("[trailer] AWT layout settled at ${child.width}x${child.height}")
                             browser?.wasResized(child.width, child.height)
+                            // wasResized() changes what CEF paints into — the browser's own render
+                            // surface. It does not make YouTube's IFrame Player recompute its
+                            // internal layout: measured with a log, that call was reaching CEF
+                            // correctly and the video still rendered at whatever size the player
+                            // first measured when "playing" fired at 0x0. A resized CSS box around
+                            // a cross-origin iframe does not by itself make the page inside it
+                            // re-lay-out its own elements; only the iframe's own outer box repaints
+                            // at the new size, cropping or padding whatever the page drew at its own
+                            // chosen dimensions.
+                            //
+                            // setSize is YouTube's own documented IFrame API command for exactly
+                            // this — telling the player, across the origin boundary a plain resize
+                            // event cannot cross, what size to actually lay itself out at.
+                            pushPlayerSize(child.width, child.height)
                         }
                     },
                 )
@@ -227,6 +244,34 @@ class TrailerBrowser {
      * yet, nothing happens and the trailer keeps whatever sound it had — which is the right failure
      * for a control over decoration.
      */
+    /**
+     * Tells the YouTube player itself what size to lay out at, over the API a plain resize event
+     * cannot cross.
+     *
+     * `wasResized()` only changes what CEF paints into — the browser's own render surface. It does
+     * not make the player recompute its internal layout: measured with a log, that call reached
+     * CEF correctly, and the video still rendered at whatever size the player first measured when
+     * "playing" fired while the panel was still 0x0. A resized CSS box around a cross-origin iframe
+     * repaints the iframe's own outer box at the new size; it does not make the page inside lay
+     * itself out again. `setSize` is the IFrame Player API's own command for that, delivered by
+     * `postMessage` — the one channel that does cross the origin boundary, which is also how the
+     * sound switch above already talks to the same player.
+     */
+    private fun pushPlayerSize(widthPx: Int, heightPx: Int) {
+        if (widthPx <= 0 || heightPx <= 0) return
+        val live = browser ?: return
+        val script =
+            """
+            (function(){
+              var frame=document.querySelector('iframe');
+              if(!frame||!frame.contentWindow)return;
+              frame.contentWindow.postMessage(JSON.stringify(
+                {event:'command',func:'setSize',args:[$widthPx,$heightPx]}),'*');
+            })();
+            """.trimIndent()
+        runCatching { live.executeJavaScript(script, live.url, 0) }
+    }
+
     fun setSound(enabled: Boolean) {
         val live = browser ?: return
         val command = if (enabled) "unMute" else "mute"
