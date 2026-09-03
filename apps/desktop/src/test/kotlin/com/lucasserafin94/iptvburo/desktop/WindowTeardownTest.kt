@@ -68,4 +68,23 @@ class WindowTeardownTest {
             "ha uma saida da app que nao desmonta o estado antes de sair",
         )
     }
+
+    /**
+     * And that teardown closes every trailer still playing, not just the coroutine scopes.
+     *
+     * Each TrailerBrowser disposes itself through Compose's own DisposableEffect in the normal
+     * case, but exitApplication() stops the composition without guaranteeing every onDispose runs
+     * first — a heavyweight Chromium child can survive it. Reported as the trailer's audio still
+     * playing, and the process still resident, after the window had already closed.
+     */
+    @Test
+    fun `closing the window silences every trailer still playing`() {
+        val marker = "fun dispose() {"
+        val body = state.substringAfter(marker).substringBefore("\n    }")
+
+        assertTrue(
+            "TrailerBrowser.disposeAll()" in body,
+            "fechar a janela deixa o trailer a tocar som, e o processo residente",
+        )
+    }
 }

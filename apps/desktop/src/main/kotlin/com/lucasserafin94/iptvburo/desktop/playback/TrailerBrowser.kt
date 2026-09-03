@@ -35,6 +35,18 @@ class TrailerBrowser {
     private var messageRouter: CefMessageRouter? = null
     private var nativeComponent: java.awt.Component? = null
 
+    init {
+        // Registered on the process-wide set below, so a window closing abruptly can still find and
+        // silence every trailer that is currently playing.
+        //
+        // Each instance is disposed through Compose's own DisposableEffect in the normal case, but
+        // exitApplication() stops the composition and there is no guarantee every onDispose runs
+        // before the process is asked to exit — a heavyweight AWT/Chromium child is exactly the
+        // kind of resource that can outlive it. Reported as the trailer's audio still playing, and
+        // the process still resident, after the window was gone from the screen and the taskbar.
+        live.add(this)
+    }
+
     /**
      * Builds the panel showing [youtubeId], or null when Chromium is unavailable.
      *
@@ -203,6 +215,7 @@ class TrailerBrowser {
 
     fun dispose() {
         if (!disposed.compareAndSet(false, true)) return
+        live.remove(this)
         // Only this browser and client. CefApp is process-wide and shutting it down would stop
         // every other trailer in the session, including one the user is watching.
         runCatching { nativeComponent?.isVisible = false }
@@ -225,6 +238,24 @@ class TrailerBrowser {
     }
 
     companion object {
+        // A concurrent set: dispose() runs on the AWT thread through Compose's own lifecycle, and
+        // disposeAll() runs from the window's onCloseRequest, which is the same thread here — but
+        // nothing prevents a future caller from being elsewhere, and a set that silently corrupted
+        // under two removes at once would be a worse bug than the one this exists to close.
+        private val live: MutableSet<TrailerBrowser> =
+            java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+
+        /**
+         * Silences and closes every trailer still playing, wherever it was opened from.
+         *
+         * Called once, from the window's own close handler, because that is the one path every
+         * exit goes through — the banner, Descobrir and the explicit lightbox all end up here
+         * without each needing its own shutdown wiring.
+         */
+        fun disposeAll() {
+            live.toList().forEach { browser -> browser.dispose() }
+        }
+
         @Volatile
         private var app: CefApp? = null
 

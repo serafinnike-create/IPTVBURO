@@ -71,6 +71,7 @@ import com.lucasserafin94.iptvburo.desktop.user.ProfilePhotoStore
 import com.lucasserafin94.iptvburo.desktop.user.StoredNotification
 import com.lucasserafin94.iptvburo.desktop.user.StoredParentalLock
 import com.lucasserafin94.iptvburo.desktop.user.StoredReminder
+import com.lucasserafin94.iptvburo.domain.model.SubscriptionExpiry
 import com.lucasserafin94.iptvburo.domain.model.AppNotification
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
 import com.lucasserafin94.iptvburo.domain.model.BestOfferPolicy
@@ -625,6 +626,22 @@ class DesktopAppState(
 
     var xtreamSummary by mutableStateOf<XtreamSessionSummary?>(null)
         private set
+
+    /**
+     * Days until the viewer's subscription to this list runs out, or null when the panel does not
+     * say.
+     *
+     * The list's own subscription, not the app's licence — the two sit near each other in the
+     * header and mean entirely different things. Most panels report `exp_date`; the ones that do
+     * not, and lines that never expire, arrive as null and show nothing rather than a warning about
+     * a subscription that is in no trouble.
+     */
+    val subscriptionDaysLeft: Int?
+        get() =
+            SubscriptionExpiry.daysLeft(
+                expiresAtEpochSeconds = xtreamSummary?.account?.expiresAtEpochSeconds,
+                nowEpochSeconds = kotlin.time.Clock.System.now().epochSeconds,
+            )
 
     var selectedSourceId by mutableStateOf<String?>(null)
         private set
@@ -3497,6 +3514,14 @@ class DesktopAppState(
         // Reported as an error that appears constantly. Cancelling both means nothing survives the
         // window that could try to draw into it.
         downloadScope.cancel()
+        // Every trailer still playing, explicitly — not left to Compose's own disposal.
+        //
+        // Each TrailerBrowser is torn down through a DisposableEffect in the ordinary case, but
+        // exitApplication() stops the composition without guaranteeing every onDispose runs first.
+        // A heavyweight Chromium child is exactly the resource that can survive that: reported as
+        // the trailer's audio still playing, and the process still resident, after the window had
+        // already closed.
+        com.lucasserafin94.iptvburo.desktop.playback.TrailerBrowser.disposeAll()
     }
 
     /** Switches the shelves between films, series and upcoming releases. */
