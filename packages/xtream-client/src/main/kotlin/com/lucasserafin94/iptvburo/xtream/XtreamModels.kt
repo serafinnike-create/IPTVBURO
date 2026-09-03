@@ -18,6 +18,14 @@ data class XtreamAccount(
     val activeConnections: Int?,
     val maximumConnections: Int?,
     val allowedOutputFormats: Set<String>,
+    /**
+     * When the viewer's subscription to this list runs out, in epoch seconds.
+     *
+     * Null on the panels that do not send `exp_date` at all, and on the ones that send it empty or
+     * as "null" for a line that never expires. Absent is not the same as expired: a missing date
+     * must show nothing rather than a warning about a subscription that is fine.
+     */
+    val expiresAtEpochSeconds: Long? = null,
 )
 
 enum class XtreamContentType {

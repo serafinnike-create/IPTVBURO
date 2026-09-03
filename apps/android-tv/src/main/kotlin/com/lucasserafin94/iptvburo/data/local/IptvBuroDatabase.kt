@@ -35,7 +35,7 @@ import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
         ReminderEntity::class,
         SeriesWatchEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 abstract class IptvBuroDatabase : RoomDatabase() {
@@ -226,6 +226,23 @@ abstract class IptvBuroDatabase : RoomDatabase() {
          * point exactly as it was, and simply starts counting series from the next check — which is
          * also why the first count of any series announces nothing.
          */
+        /**
+         * Remembers when the viewer's subscription to a source runs out.
+         *
+         * Nullable, and null for every row that already exists: the panels report `exp_date` at
+         * sign-in, so a source imported before this column existed has no date until it is
+         * refreshed. Null means "not known", which the screens show as nothing at all — never as an
+         * expired subscription, which would be a warning invented from a missing field.
+         */
+        val MIGRATION_10_11: Migration =
+            object : Migration(10, 11) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE sources ADD COLUMN subscription_expires_at_epoch_seconds INTEGER",
+                    )
+                }
+            }
+
         val MIGRATION_9_10: Migration =
             object : Migration(9, 10) {
                 override fun migrate(db: SupportSQLiteDatabase) {

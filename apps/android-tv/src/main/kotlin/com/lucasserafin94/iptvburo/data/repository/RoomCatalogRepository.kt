@@ -517,6 +517,7 @@ class RoomCatalogRepository @Inject constructor(
                             updatedAtEpochMillis = importedAt,
                             channelCount = 0,
                             preferredLiveExtension = preferredLiveExtension,
+                            subscriptionExpiresAtEpochSeconds = account.expiresAtEpochSeconds,
                         ),
                     )
                     categoriesByProviderKey.values
@@ -577,6 +578,7 @@ class RoomCatalogRepository @Inject constructor(
                             updatedAtEpochMillis = importedAt,
                             channelCount = totalItemCount,
                             preferredLiveExtension = preferredLiveExtension,
+                            subscriptionExpiresAtEpochSeconds = account.expiresAtEpochSeconds,
                         ),
                     )
                 },

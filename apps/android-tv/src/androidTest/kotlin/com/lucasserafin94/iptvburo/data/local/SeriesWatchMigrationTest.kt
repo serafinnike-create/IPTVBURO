@@ -150,4 +150,9 @@ class SeriesWatchMigrationTest {
                 assertFalse("the database should still be open", false)
             }
     }
+
+    // Referenced throughout this file but never declared: the androidTest source set has not
+    // compiled since. Named for this test alone so its database cannot collide with another
+    // migration test running beside it.
+    private companion object { const val DATABASE_NAME = "migration-series-watch" }
 }

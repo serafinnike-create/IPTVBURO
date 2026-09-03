@@ -13,6 +13,14 @@ data class Source(
     val createdAtEpochMillis: Long = 0L,
     val updatedAtEpochMillis: Long? = null,
     val channelCount: Int = 0,
+    /**
+     * When this source's own subscription runs out, in epoch seconds — not the app's licence.
+     *
+     * Null when the panel never sent `exp_date`, when the line does not expire, and for a source
+     * imported before this was tracked. All three mean the same thing to a viewer: nothing to show,
+     * never an invented warning.
+     */
+    val subscriptionExpiresAtEpochSeconds: Long? = null,
 )
 
 enum class SourceType {

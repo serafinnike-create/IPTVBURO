@@ -17,6 +17,7 @@ fun SourceEntity.toDomain(): Source =
         createdAtEpochMillis = createdAtEpochMillis,
         updatedAtEpochMillis = updatedAtEpochMillis,
         channelCount = channelCount,
+        subscriptionExpiresAtEpochSeconds = subscriptionExpiresAtEpochSeconds,
     )
 
 fun CategoryEntity.toDomain(): Category =

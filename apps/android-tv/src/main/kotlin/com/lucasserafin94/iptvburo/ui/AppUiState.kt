@@ -573,6 +573,14 @@ data class AppUiState(
     val isSearching: Boolean = false,
     val license: LicenseUiState = LicenseUiState.NotChecked,
     /**
+     * Days until the active source's own subscription runs out, or null when unknown.
+     *
+     * The source's subscription, from the panel's `exp_date` — not [license], which is the app's
+     * own licence. Null whenever the panel never reported a date, when no source is loaded yet, and
+     * on any source imported before this was tracked.
+     */
+    val subscriptionDaysLeft: Int? = null,
+    /**
      * Outcome of the last activation-key attempt, from either the gate or the Settings card.
      *
      * Held outside [license] because a key can be redeemed while the licence is valid — extending a

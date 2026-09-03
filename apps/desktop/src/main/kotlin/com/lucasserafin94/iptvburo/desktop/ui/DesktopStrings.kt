@@ -646,6 +646,9 @@ data class DesktopStrings(
                         ScreenStrings(
                             setupMissingProfileName = "Escriba el nombre del perfil para continuar",
                             setupMissingConnection = "Complete el servidor, el usuario y la contraseña, o elija una lista ya configurada",
+                            subscriptionDaysLeft = "Lista: quedan %d días",
+                            subscriptionLastDay = "Lista: último día",
+                            subscriptionExpired = "Lista vencida",
                             diagnosticsAction = "Diagnóstico",
                             diagnosticsTitle = "Diagnóstico de conexión",
                             mergeSourcesTitle = "Unir todas las listas",
@@ -1426,6 +1429,9 @@ data class DesktopStrings(
                         ScreenStrings(
                             setupMissingProfileName = "Escreva o nome do perfil para continuar",
                             setupMissingConnection = "Preencha servidor, usuário e senha, ou escolha uma lista já configurada",
+                            subscriptionDaysLeft = "Lista: faltam %d dias",
+                            subscriptionLastDay = "Lista: último dia",
+                            subscriptionExpired = "Lista vencida",
                             diagnosticsAction = "Diagnóstico",
                             diagnosticsTitle = "Diagnóstico da ligação",
                             mergeSourcesTitle = "Juntar todas as listas",
@@ -2206,6 +2212,9 @@ data class DesktopStrings(
                         ScreenStrings(
                             setupMissingProfileName = "Enter a profile name to continue",
                             setupMissingConnection = "Fill in the server, username and password, or pick a playlist you already have",
+                            subscriptionDaysLeft = "Playlist: %d days left",
+                            subscriptionLastDay = "Playlist: last day",
+                            subscriptionExpired = "Playlist expired",
                             diagnosticsAction = "Diagnostics",
                             diagnosticsTitle = "Connection diagnostics",
                             mergeSourcesTitle = "Merge every playlist",
@@ -2985,6 +2994,9 @@ data class DesktopStrings(
                         ScreenStrings(
                             setupMissingProfileName = "Geben Sie einen Profilnamen ein, um fortzufahren",
                             setupMissingConnection = "Server, Benutzer und Passwort ausfüllen oder eine vorhandene Liste wählen",
+                            subscriptionDaysLeft = "Liste: noch %d Tage",
+                            subscriptionLastDay = "Liste: letzter Tag",
+                            subscriptionExpired = "Liste abgelaufen",
                             diagnosticsAction = "Diagnose",
                             diagnosticsTitle = "Verbindungsdiagnose",
                             mergeSourcesTitle = "Alle Listen zusammenführen",
@@ -3769,6 +3781,9 @@ data class DesktopStrings(
                         ScreenStrings(
                             setupMissingProfileName = "Inserisci un nome profilo per continuare",
                             setupMissingConnection = "Compila server, utente e password, oppure scegli una lista già configurata",
+                            subscriptionDaysLeft = "Lista: mancano %d giorni",
+                            subscriptionLastDay = "Lista: ultimo giorno",
+                            subscriptionExpired = "Lista scaduta",
                             diagnosticsAction = "Diagnostica",
                             diagnosticsTitle = "Diagnostica della connessione",
                             mergeSourcesTitle = "Unisci tutte le liste",
@@ -4966,6 +4981,10 @@ data class ScreenStrings(
      */
     val setupMissingProfileName: String,
     val setupMissingConnection: String,
+    /** How long the viewer's subscription to the list still has to run. */
+    val subscriptionDaysLeft: String,
+    val subscriptionLastDay: String,
+    val subscriptionExpired: String,
     /**
      * The connection test, beside the button that refreshes the lists.
      *

@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lucasserafin94.iptvburo.domain.model.Reminder
+import com.lucasserafin94.iptvburo.domain.model.SubscriptionExpiry
 import com.lucasserafin94.iptvburo.domain.model.BannerTrailer
 import com.lucasserafin94.iptvburo.domain.model.LiveGuide
 import com.lucasserafin94.iptvburo.R
@@ -4769,10 +4770,25 @@ class MainViewModel @Inject constructor(
                         it.copy(sources = sources.map { source -> source.toUi() })
                     }
                     val active = mutableState.value.activeProfile
-                    val sourceId =
-                        sources.firstOrNull { source -> source.id == active?.sourceId }?.id
-                            ?: sources.firstOrNull { it.type == SourceType.XTREAM }?.id
-                            ?: sources.firstOrNull()?.id
+                    val activeSource =
+                        sources.firstOrNull { source -> source.id == active?.sourceId }
+                            ?: sources.firstOrNull { it.type == SourceType.XTREAM }
+                            ?: sources.firstOrNull()
+                    val sourceId = activeSource?.id
+                    // The active source's own subscription, not the app's licence.
+                    //
+                    // Recomputed on every source emission rather than once, so the count keeps
+                    // moving while the app sits open across midnight rather than freezing at
+                    // whatever it read on launch.
+                    mutableState.update {
+                        it.copy(
+                            subscriptionDaysLeft =
+                                SubscriptionExpiry.daysLeft(
+                                    expiresAtEpochSeconds = activeSource?.subscriptionExpiresAtEpochSeconds,
+                                    nowEpochSeconds = System.currentTimeMillis() / 1000L,
+                                ),
+                        )
+                    }
                     if (active != null) {
                         loadBootBackdrop(sourceId = sourceId, profile = active)
                     } else {

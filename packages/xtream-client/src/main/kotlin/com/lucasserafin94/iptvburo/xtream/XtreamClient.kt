@@ -102,6 +102,14 @@ class XtreamClient(
                     ?.map(String::lowercase)
                     ?.toSet()
                     .orEmpty(),
+            // Epoch seconds, and only when the panel actually sends a date.
+            //
+            // A line that never expires comes back as an empty string or the text "null" on the
+            // panels that send the field at all, and flexibleLong reads both as absent — which is
+            // what the screens want, because "no date" must show nothing rather than a warning
+            // about a subscription that is in no trouble. Zero is treated the same way: no panel
+            // means the epoch, it means the field was never filled in.
+            expiresAtEpochSeconds = userInfo.flexibleLong("exp_date")?.takeIf { it > 0L },
         )
     }
 

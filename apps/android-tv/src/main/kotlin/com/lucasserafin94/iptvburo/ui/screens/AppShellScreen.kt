@@ -114,6 +114,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.tv.material3.Button
@@ -135,6 +136,7 @@ import com.lucasserafin94.iptvburo.ui.LicenseUiState
 import com.lucasserafin94.iptvburo.ui.RedemptionUi
 import com.lucasserafin94.iptvburo.ui.CategoryUi
 import com.lucasserafin94.iptvburo.domain.model.Reminder
+import com.lucasserafin94.iptvburo.domain.model.SubscriptionExpiry
 import com.lucasserafin94.iptvburo.ui.ChannelUi
 import com.lucasserafin94.iptvburo.ui.ContinueWatchingUi
 import com.lucasserafin94.iptvburo.ui.DownloadEntryUi
@@ -950,6 +952,7 @@ fun AppShellScreen(
                     showMobileNavigation = false
                     onSelectSection(AppSection.SETTINGS)
                 },
+                subscriptionDaysLeft = state.subscriptionDaysLeft,
                 subscriptionsVisible = state.subscriptions.capability.isVisible,
                 offlineSupported = offlineSupported,
                 onSelect = { section ->
@@ -1272,6 +1275,8 @@ private fun MobileNavigationDrawer(
     profile: ProfileUi?,
     license: LicenseUiState,
     onOpenLicense: () -> Unit,
+    /** Days left on the active source's own subscription, from the panel — not [license]. */
+    subscriptionDaysLeft: Int?,
     subscriptionsVisible: Boolean,
     offlineSupported: Boolean,
     onSelect: (AppSection) -> Unit,
@@ -1330,6 +1335,8 @@ private fun MobileNavigationDrawer(
             // ADR-004; without it the only sign of an expiring licence on Android was being
             // locked out one morning.
             LicenseChip(license = license, onClick = onOpenLicense)
+            // The list's own subscription, separate from the licence above.
+            SubscriptionChip(daysLeft = subscriptionDaysLeft)
             Spacer(Modifier.height(14.dp))
             // Scrolls, because the list is longer than a phone screen.
             //
@@ -4616,6 +4623,53 @@ private fun LicenseChip(
 
 /** Where the countdown starts reading as urgent rather than as background information. */
 private const val LICENSE_URGENT_DAYS = 7L
+
+/**
+ * How long the active source's own subscription has left, shown beside the app licence.
+ *
+ * A different subscription from [LicenseChip]'s, and easy to confuse with it, so this one always
+ * names what it is about: "Lista: faltam 12 dias", never a bare number. Absent entirely when the
+ * panel never sent an expiry date — most of the time that means nothing to check, not a defect.
+ */
+@Composable
+private fun SubscriptionChip(daysLeft: Int?) {
+    if (daysLeft == null) return
+    val expired = SubscriptionExpiry.hasExpired(daysLeft)
+    if (!expired && !SubscriptionExpiry.isExpiringSoon(daysLeft)) return
+
+    val colors = BuroTheme.colors
+    val urgent = expired || SubscriptionExpiry.isUrgent(daysLeft)
+    val label =
+        when {
+            expired -> stringResource(R.string.subscription_expired)
+            daysLeft <= 1 -> stringResource(R.string.subscription_last_day)
+            else -> stringResource(R.string.subscription_days_left, daysLeft)
+        }
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Default.EventBusy,
+            contentDescription = null,
+            tint = if (urgent) colors.error else BuroTextSecondary,
+        )
+        Text(
+            text = label,
+            color = if (urgent) colors.error else BuroTextSecondary,
+            fontSize = 12.sp,
+            fontWeight = if (urgent) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
 /**
  * One TMDB key: its current state, a field to replace it, and a way to remove it.

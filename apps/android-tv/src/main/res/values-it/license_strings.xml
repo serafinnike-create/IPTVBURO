@@ -68,4 +68,7 @@
     <string name="tmdb_settings_shared_hint">Usata da ogni profilo che non ne ha una propria.</string>
     <string name="tmdb_settings_profile_label">Chiave di %1$s</string>
     <string name="tmdb_settings_profile_hint">Sostituisce la chiave di casa solo per questo profilo. TMDB limita le richieste per chiave.</string>
+    <string name="subscription_days_left">Lista: mancano %1$d giorni</string>
+    <string name="subscription_last_day">Lista: ultimo giorno</string>
+    <string name="subscription_expired">Lista scaduta</string>
 </resources>

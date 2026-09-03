@@ -72,6 +72,36 @@ class XtreamClientTest {
         assertFalse(credentials.toString().contains("sample-pass"))
     }
 
+    /**
+     * The subscription's end date, which the viewer needs to know when to renew.
+     *
+     * Panels send `exp_date` as epoch seconds and usually as a string. A line that never expires
+     * arrives empty or as the text "null", and both must read as absent rather than as a date in
+     * 1970 — a viewer with no expiry must not be told their subscription has run out.
+     */
+    @Test
+    fun `authenticate reads the subscription expiry, and tolerates a line without one`() {
+        server.enqueue(
+            MockResponse()
+                .setBody("""{"user_info":{"auth":1,"status":"Active","exp_date":"1790000000"}}""")
+                .setHeader("Content-Type", "application/json"),
+        )
+        server.enqueue(
+            MockResponse()
+                .setBody("""{"user_info":{"auth":1,"status":"Active","exp_date":""}}""")
+                .setHeader("Content-Type", "application/json"),
+        )
+        server.enqueue(
+            MockResponse()
+                .setBody("""{"user_info":{"auth":1,"status":"Active"}}""")
+                .setHeader("Content-Type", "application/json"),
+        )
+
+        assertEquals(1_790_000_000L, client.authenticate(credentials()).expiresAtEpochSeconds)
+        assertNull(client.authenticate(credentials()).expiresAtEpochSeconds)
+        assertNull(client.authenticate(credentials()).expiresAtEpochSeconds)
+    }
+
     @Test
     fun `catalog tolerates schema drift and skips invalid entries`() {
         server.enqueue(
