@@ -52,4 +52,27 @@ class DiscoveryLayoutTest {
             "as linhas brancas voltam a aparecer nas margens do trailer em Descobrir",
         )
     }
+
+    /**
+     * And the banner's player, which is the same surface with a different frame.
+     *
+     * Fixed on the Descobrir card first; the banner kept its bright rule down the right-hand side,
+     * against the scrollbar lane, because the two call sites carry their own modifiers.
+     */
+    @Test
+    fun `the banner trailer panel stops short of its frame`() {
+        val home =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/XtreamDailyHome.kt")
+                .readText()
+
+        val marker = "HeroTrailer("
+        assertTrue(marker in home, "o trailer do banner mudou de nome: este teste ja nao le nada")
+
+        val call = home.substringAfter("youtubeId = activeTrailerId").substringBefore("soundOn =")
+
+        assertTrue(
+            "padding(1.dp)" in call,
+            "a linha branca volta a aparecer na margem do trailer do banner",
+        )
+    }
 }

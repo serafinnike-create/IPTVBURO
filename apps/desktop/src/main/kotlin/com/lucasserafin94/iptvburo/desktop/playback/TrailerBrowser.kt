@@ -142,6 +142,26 @@ class TrailerBrowser {
                     }
                 nativeComponent = browserComponent
                 add(browserComponent, BorderLayout.CENTER)
+                // Tell Chromium its size every time AWT lays the panel out, not only when the page
+                // reports playback.
+                //
+                // The "playing" message carries a wasResized because a windowed child otherwise
+                // stays a black rectangle. But that message can arrive while the panel is still
+                // being sized — the lightbox opens at its full size in one pass — and then the only
+                // resize the child ever gets is the one for the wrong dimensions. The audio ran and
+                // the picture stayed black: reported twice, on the film screen's trailer button.
+                //
+                // A component listener answers whatever the real geometry turns out to be, whenever
+                // it settles.
+                browserComponent.addComponentListener(
+                    object : java.awt.event.ComponentAdapter() {
+                        override fun componentResized(event: java.awt.event.ComponentEvent?) {
+                            val child = nativeComponent ?: return
+                            if (child.width <= 0 || child.height <= 0) return
+                            browser?.wasResized(child.width, child.height)
+                        }
+                    },
+                )
                 // Windowed JCEF otherwise waits for an AWT hierarchy event that SwingPanel does
                 // not reliably forward. The page can be playing while the native child remains a
                 // black rectangle; creating it now gives the child a real browser context, and the

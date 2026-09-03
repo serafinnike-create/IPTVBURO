@@ -765,7 +765,15 @@ private fun DailyHero(
                             .fillMaxHeight()
                             // The padding on the box already reserves the lane, so the video takes
                             // its plain share of what is left rather than subtracting it twice.
-                            .fillMaxWidth(BannerTrailer.TRAILER_WIDTH_FRACTION),
+                            .fillMaxWidth(BannerTrailer.TRAILER_WIDTH_FRACTION)
+                            // And a pixel short all round, the same as the Descobrir card.
+                            //
+                            // The panel's outermost row renders pale whatever the page paints —
+                            // it is Chromium's surface edge, outside the HTML, and Compose cannot
+                            // cover it because a heavyweight AWT surface always paints above. Here
+                            // it showed as a bright vertical rule down the banner's right side,
+                            // against the scrollbar lane.
+                            .padding(1.dp),
                     soundOn = soundOn,
                     onFailed = onTrailerFailed,
                     onPlaying = { browserPlaying = true },
