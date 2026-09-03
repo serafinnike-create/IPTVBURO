@@ -18,10 +18,18 @@ import kotlin.test.assertTrue
  * a running app; what it pins is that every scope is cancelled and every exit path cancels them.
  */
 class WindowTeardownTest {
+    // Normalized to \n: a fresh checkout on Windows applies core.autocrlf and turns every line
+    // ending into \r\n. A substringBefore("\n    }") that never matches does not fail loudly — it
+    // returns the whole rest of the file, and a `"... " in body` assertion against that oversized
+    // body can pass by accident on text found anywhere further down, not at the boundary intended.
     private val state =
-        Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/DesktopAppState.kt").readText()
+        Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/DesktopAppState.kt")
+            .readText()
+            .replace("\r\n", "\n")
     private val main =
-        Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/Main.kt").readText()
+        Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/Main.kt")
+            .readText()
+            .replace("\r\n", "\n")
 
     /**
      * Every long-lived scope is cancelled, not just the one somebody remembered.

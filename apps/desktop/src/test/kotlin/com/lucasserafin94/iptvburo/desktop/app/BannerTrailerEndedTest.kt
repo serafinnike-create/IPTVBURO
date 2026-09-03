@@ -18,8 +18,14 @@ import kotlin.test.assertTrue
  * title. What it pins is that the banner disables the loop and reacts to the real end.
  */
 class BannerTrailerEndedTest {
+    // Normalized to \n: a fresh checkout on Windows applies core.autocrlf and turns every line
+    // ending into \r\n, which silently breaks a marker string with a hardcoded \n baked into it.
+    // The failure showed up only in CI's clean checkout, never against a working tree already
+    // edited in place, which is why it passed here and failed there.
     private val home =
-        Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/XtreamDailyHome.kt").readText()
+        Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/app/XtreamDailyHome.kt")
+            .readText()
+            .replace("\r\n", "\n")
 
     @Test
     fun `the banner plays its trailer once instead of looping`() {
