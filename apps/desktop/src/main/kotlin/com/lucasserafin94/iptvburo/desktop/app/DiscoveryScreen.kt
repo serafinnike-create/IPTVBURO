@@ -472,14 +472,17 @@ private fun DiscoveryCard(
                             // The hosted page owns the rounded crop. Padding here exposed the AWT
                             // panel's top and right edges as a thin grey frame around the film.
                             //
-                            // One pixel short at the bottom, though. The panel's own final row
-                            // renders near-white (measured 239,239,239 across the full 511px width
-                            // of the card) whatever the page paints — the page already overscans
-                            // two pixels every side and body is #000, so the row is Chromium's
-                            // surface edge, below the HTML. Compose cannot cover it: a heavyweight
-                            // AWT surface always paints above. Ending the panel a pixel early puts
-                            // that row outside the card instead, where the Canvas behind shows.
-                            modifier = Modifier.fillMaxSize().padding(bottom = 1.dp),
+                            // A pixel short on every side, though.
+                            //
+                            // The panel's own outermost row renders pale whatever the page paints:
+                            // measured 239,239,239 along the full 511px width at the bottom, and a
+                            // lighter row at the top too (52 against the 31 of the picture under
+                            // it). The page already overscans two pixels every side and its body is
+                            // #000, so this is Chromium's surface edge, outside the HTML — and
+                            // Compose cannot cover it, because a heavyweight AWT surface always
+                            // paints above. Ending the panel a pixel early on each side puts those
+                            // rows outside the card, where the Canvas behind shows instead.
+                            modifier = Modifier.fillMaxSize().padding(1.dp),
                             soundOn = soundOn,
                             onFailed = onTrailerFailed,
                             // Not the banner. The hosted page uses its dedicated card frame:

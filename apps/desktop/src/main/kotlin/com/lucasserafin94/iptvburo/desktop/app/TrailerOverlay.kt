@@ -66,6 +66,17 @@ fun TrailerOverlay(
                 youtubeId = youtubeId,
                 autoplay = true,
                 muted = false,
+                // Not the banner, despite the default.
+                //
+                // blendIntoHero defaults to true, so this lightbox was being served the hero page:
+                // a bottom mask 46% tall at 96% opacity, a left mask half the width, and the player
+                // blown up to 126vw to carry YouTube's controls out of view. In a box of its own
+                // that combination is a black rectangle with sound playing behind it — reported as
+                // the trailer screen going black while the audio ran.
+                //
+                // Here the controls are the point and the edges are the card's own, so the page
+                // must be the plain one.
+                blendIntoHero = false,
                 onPlaying = { playing = true },
                 onFailed = { failed = true },
             )
