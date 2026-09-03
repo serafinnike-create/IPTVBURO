@@ -799,6 +799,7 @@ data class DesktopStrings(
                             another = "Buscar más",
                             loading = "Creando tu selección…",
                             kept = "Guardado en favoritos",
+                            noTrailer = "Sin trailer disponible.",
                         ),
                     settingsTabs =
                         SettingsTabStrings(
@@ -1582,6 +1583,7 @@ data class DesktopStrings(
                             another = "Buscar mais",
                             loading = "Montando sua seleção...",
                             kept = "Guardado nos favoritos",
+                            noTrailer = "Sem trailer disponivel.",
                         ),
                     settingsTabs =
                         SettingsTabStrings(
@@ -2365,6 +2367,7 @@ data class DesktopStrings(
                             another = "Find more",
                             loading = "Building your selection...",
                             kept = "Saved to favourites",
+                            noTrailer = "No trailer available.",
                         ),
                     settingsTabs =
                         SettingsTabStrings(
@@ -3147,6 +3150,7 @@ data class DesktopStrings(
                             another = "Mehr finden",
                             loading = "Auswahl wird erstellt…",
                             kept = "Zu Favoriten hinzugefügt",
+                            noTrailer = "Kein Trailer verfuegbar.",
                         ),
                     settingsTabs =
                         SettingsTabStrings(
@@ -3934,6 +3938,7 @@ data class DesktopStrings(
                             another = "Trova altri",
                             loading = "Creazione della selezione...",
                             kept = "Aggiunto ai preferiti",
+                            noTrailer = "Nessun trailer disponibile.",
                         ),
                     settingsTabs =
                         SettingsTabStrings(
@@ -4748,6 +4753,14 @@ data class DiscoveryStrings(
     val loading: String,
     /** Confirms what keeping did, since the card leaves immediately. */
     val kept: String,
+    /**
+     * Shown in the space the trailer would occupy, on a title that has none.
+     *
+     * That space is reserved either way so the buttons and synopsis do not jump between cards —
+     * without this, an empty reserved box looked like a broken player rather than an honest "there
+     * is nothing here to load".
+     */
+    val noTrailer: String,
 )
 
 data class CacheStrings(

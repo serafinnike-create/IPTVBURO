@@ -540,17 +540,30 @@ private fun DiscoveryCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(BuroSpacing.Md),
             ) {
-                // The space the trailer would have taken, held empty.
+                // The space the trailer would have taken, held rather than skipped.
                 //
                 // Without it the buttons and the synopsis climbed to the top of the column on any
                 // film with no trailer, so the one screen changed shape between cards — reported as
                 // the text and buttons jumping upwards. Reserving the 16:9 box keeps them where the
                 // eye already found them on the card before.
-                Spacer(
-                    Modifier
-                        .width(trailerWidth)
-                        .aspectRatio(16f / 9f),
-                )
+                //
+                // Left empty, that box read as a broken player rather than an honest answer — asked
+                // for directly. A quiet line says there is nothing to wait for.
+                Box(
+                    modifier =
+                        Modifier
+                            .width(trailerWidth)
+                            .aspectRatio(16f / 9f)
+                            .clip(BuroRadius.Large)
+                            .background(BuroColors.SurfaceRaised),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = text.noTrailer,
+                        color = BuroColors.TextMuted,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 DiscoveryDecisionActions(
                     text = text,
                     onDecide = onDecide,

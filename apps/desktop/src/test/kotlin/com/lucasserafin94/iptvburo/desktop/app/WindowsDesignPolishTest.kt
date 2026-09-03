@@ -67,7 +67,8 @@ class WindowsDesignPolishTest {
     fun `a trailer that never starts is reported and gives up the banner`() {
         val trailer = home.substringAfter("internal fun HeroTrailer(").substringBefore("private fun DailyHero(")
         assertTrue(trailer.contains("TRAILER_READY_TIMEOUT_MILLIS"))
-        assertTrue(trailer.contains("if (!playbackConfirmed) onFailed()"))
+        assertTrue(trailer.contains("if (!playbackConfirmed) {"))
+        assertTrue(trailer.contains("onFailed()"))
         // And it is not hidden by being shrunk, which is what deadlocked it.
         assertFalse(trailer.contains("Modifier.size(1.dp)"))
     }

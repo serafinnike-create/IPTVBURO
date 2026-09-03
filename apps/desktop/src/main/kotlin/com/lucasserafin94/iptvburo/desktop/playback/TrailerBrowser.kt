@@ -103,15 +103,36 @@ class TrailerBrowser {
                                         browserComponent.isVisible = true
                                         browserComponent.parent?.revalidate()
                                         browserComponent.repaint()
-                                        browser?.wasResized(
-                                            browserComponent.width.coerceAtLeast(1),
-                                            browserComponent.height.coerceAtLeast(1),
-                                        )
+                                        val w = browserComponent.width
+                                        val h = browserComponent.height
+                                        // Measured: "playing" was seen arriving while the panel was
+                                        // still genuinely 0x0, before Compose had laid the SwingPanel
+                                        // out — coerceAtLeast(1) on this call used to mask exactly
+                                        // that and hand CEF a viewport of 1x1. YouTube's own IFrame
+                                        // Player script sizes itself from that viewport once, on
+                                        // load, and does not reliably re-measure afterward even once
+                                        // wasResized() later reports the real size — which is why the
+                                        // video kept rendering small and off-centre, with YouTube's
+                                        // own controls showing, long after the panel had grown to
+                                        // its correct size on screen.
+                                        //
+                                        // wasResized() is skipped here rather than sent with a
+                                        // padded minimum: sending it now would be exactly the wrong
+                                        // viewport, permanently, for the reason above. The
+                                        // ComponentListener below calls it once real layout exists,
+                                        // which is the only viewport this video should ever measure
+                                        // itself against.
+                                        if (w > 0 && h > 0) browser?.wasResized(w, h)
+                                        println("[trailer] playing at ${w}x${h}")
                                         onPlaying()
                                     }
                                 "failed" ->
                                     SwingUtilities.invokeLater {
                                         browserComponent.isVisible = false
+                                        println(
+                                            "[trailer] failed at " +
+                                                "${browserComponent.width}x${browserComponent.height}",
+                                        )
                                         onFailed()
                                     }
                                 "ended" -> SwingUtilities.invokeLater(onEnded)
@@ -181,6 +202,7 @@ class TrailerBrowser {
                         override fun componentResized(event: java.awt.event.ComponentEvent?) {
                             val child = nativeComponent ?: return
                             if (child.width <= 0 || child.height <= 0) return
+                            println("[trailer] AWT layout settled at ${child.width}x${child.height}")
                             browser?.wasResized(child.width, child.height)
                         }
                     },

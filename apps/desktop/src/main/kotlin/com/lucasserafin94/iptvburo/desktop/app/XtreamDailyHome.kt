@@ -644,7 +644,13 @@ internal fun HeroTrailer(
 
     LaunchedEffect(panel, youtubeId) {
         delay(TRAILER_READY_TIMEOUT_MILLIS)
-        if (!playbackConfirmed) onFailed()
+        if (!playbackConfirmed) {
+            // Distinguishes a silent timeout from an explicit "failed" signal — the video-sizing
+            // reports so far have never come with a matching log line either way, so it is not yet
+            // known whether autoplay is actually refused, or the video plays at the wrong size.
+            println("[trailer] $youtubeId never confirmed playing within the readiness window")
+            onFailed()
+        }
     }
 
     // Always mounted, at its real size.
