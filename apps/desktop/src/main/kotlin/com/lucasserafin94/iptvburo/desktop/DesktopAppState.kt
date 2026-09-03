@@ -643,6 +643,26 @@ class DesktopAppState(
                 nowEpochSeconds = kotlin.time.Clock.System.now().epochSeconds,
             )
 
+    /**
+     * The day the list's subscription ends, as the viewer would write it.
+     *
+     * Shown beside the countdown rather than instead of it: the days say whether to act now, and
+     * the date is what somebody needs when they go to renew with whoever sold them the list.
+     *
+     * Day and month only. The year is almost always this one or the next, and reading it off a
+     * header chip is not what anybody is doing there — the days already carry that.
+     */
+    val subscriptionExpiresOn: String?
+        get() =
+            xtreamSummary?.account?.expiresAtEpochSeconds?.takeIf { it > 0L }?.let { seconds ->
+                val date =
+                    java.time.Instant
+                        .ofEpochSecond(seconds)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .toLocalDate()
+                "%02d/%02d".format(date.dayOfMonth, date.monthValue)
+            }
+
     var selectedSourceId by mutableStateOf<String?>(null)
         private set
 

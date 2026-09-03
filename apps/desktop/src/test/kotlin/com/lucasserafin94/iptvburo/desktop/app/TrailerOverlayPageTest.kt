@@ -31,4 +31,28 @@ class TrailerOverlayPageTest {
             "o lightbox do trailer volta a receber as mascaras do banner e fica preto",
         )
     }
+
+    /**
+     * And the page can talk to the player, whoever opened it.
+     *
+     * `enablejsapi` was set only for an automatic preview, so the lightbox's page never completed
+     * the `listening` handshake and never learned the player's state. `signal('playing')` could not
+     * fire, the readiness timeout called onFailed after ten seconds, and the viewer got a black box
+     * with the trailer's audio playing behind it — reported twice as exactly that.
+     */
+    @Test
+    fun `every trailer page can read the player's state`() {
+        val host =
+            Path.of("src/main/kotlin/com/lucasserafin94/iptvburo/desktop/playback/TrailerHostServer.kt")
+                .readText()
+
+        assertTrue(
+            "append(\"&enablejsapi=1\")" in host,
+            "a pagina do trailer voltou a nao poder ler o estado do player",
+        )
+        assertTrue(
+            "if (unattended) append(\"&enablejsapi=1\")" !in host,
+            "o enablejsapi voltou a ser so para a previa automatica, e o lightbox fica preto",
+        )
+    }
 }

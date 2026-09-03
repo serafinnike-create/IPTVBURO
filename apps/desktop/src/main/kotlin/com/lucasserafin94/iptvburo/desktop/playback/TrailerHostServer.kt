@@ -218,7 +218,13 @@ class TrailerHostServer private constructor(
                     if (unattended) append("&disablekb=1&fs=0&iv_load_policy=3")
                     // Lets the page below talk to the player at all, which is what makes unmuting
                     // after the start possible.
-                    if (unattended) append("&enablejsapi=1")
+                    //
+                    // Always, not only for an automatic preview. The lightbox had it off, so its
+                    // page never completed the `listening` handshake and never learned the player's
+                    // state: `signal('playing')` could not fire, the readiness timeout called
+                    // onFailed after ten seconds, and what the viewer got was a black box with the
+                    // trailer's audio playing behind it. Reported twice as exactly that.
+                    append("&enablejsapi=1")
                     if (loop) append("&loop=1&playlist=").append(youtubeId)
                     append("&origin=").append(origin)
                 }

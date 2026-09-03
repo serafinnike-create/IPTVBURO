@@ -27,9 +27,14 @@ import com.lucasserafin94.iptvburo.domain.model.SubscriptionExpiry
  *
  * ## When it appears
  *
- * Only inside the last month, and once it has run out. A viewer with eight months left does not
- * need a daily reminder, and the header is deliberately sparse — a permanent second countdown next
- * to the licence one would turn it back into the debug toolbar it used to be.
+ * Whenever the panel gives a date — not only near the end. This was written to appear only inside
+ * the final month, on the reasoning that a permanent second countdown would clutter a deliberately
+ * sparse header. That was a rule nobody asked for: what was wanted is knowing when the list runs
+ * out, which is a thing to check at any time and not only once it is nearly too late. A viewer who
+ * cannot see the date has to guess it.
+ *
+ * Both numbers, because they answer different questions: the days are what tells somebody to act,
+ * and the date is what they need to renew with whoever sold them the list.
  *
  * Nothing at all when the panel does not send a date. Plenty do not, and a line that never expires
  * arrives the same way; inventing "expired" from a missing field would be worse than silence.
@@ -37,18 +42,18 @@ import com.lucasserafin94.iptvburo.domain.model.SubscriptionExpiry
 @Composable
 fun SubscriptionChip(
     daysLeft: Int?,
+    expiresOn: String?,
     text: ScreenStrings,
 ) {
-    if (daysLeft == null) return
+    if (daysLeft == null || expiresOn == null) return
     val expired = SubscriptionExpiry.hasExpired(daysLeft)
-    if (!expired && !SubscriptionExpiry.isExpiringSoon(daysLeft)) return
 
     val urgent = expired || SubscriptionExpiry.isUrgent(daysLeft)
     val label =
         when {
-            expired -> text.subscriptionExpired
-            daysLeft <= 1 -> text.subscriptionLastDay
-            else -> text.subscriptionDaysLeft.format(daysLeft)
+            expired -> text.subscriptionExpired.format(expiresOn)
+            daysLeft <= 1 -> text.subscriptionLastDay.format(expiresOn)
+            else -> text.subscriptionDaysLeft.format(daysLeft, expiresOn)
         }
 
     Row(

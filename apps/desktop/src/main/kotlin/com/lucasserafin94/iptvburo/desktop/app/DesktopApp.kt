@@ -522,6 +522,7 @@ fun DesktopApp(
                             licenseStatus = appState.licenseStatus,
                             onOpenPurchase = { showLicenseDetails = true },
                             subscriptionDaysLeft = appState.subscriptionDaysLeft,
+                            subscriptionExpiresOn = appState.subscriptionExpiresOn,
                             onUpdate = ::checkAndDownloadUpdate,
                         )
 
@@ -2257,6 +2258,8 @@ private fun TopBar(
      * Separate from [licenseStatus], which is the app's own licence.
      */
     subscriptionDaysLeft: Int?,
+    /** The day the list's subscription ends, as the viewer would write it. */
+    subscriptionExpiresOn: String?,
 ) {
     val text = strings
     // A Row does not shrink unweighted children: once their intrinsic widths exceed the space they
@@ -2401,8 +2404,12 @@ private fun TopBar(
             // Read from the panel's own exp_date, so the viewer knows when to renew with whoever
             // sold them the list. Silent unless it is inside its last month or already gone, and
             // silent entirely on the panels that do not send a date.
-            if (subscriptionDaysLeft != null) {
-                SubscriptionChip(daysLeft = subscriptionDaysLeft, text = strings.shareStrings.screens)
+            if (subscriptionDaysLeft != null && subscriptionExpiresOn != null) {
+                SubscriptionChip(
+                    daysLeft = subscriptionDaysLeft,
+                    expiresOn = subscriptionExpiresOn,
+                    text = strings.shareStrings.screens,
+                )
                 Spacer(Modifier.width(BuroSpacing.Md))
             }
             // The clock, then who is watching, and nothing else. Four loose language buttons plus

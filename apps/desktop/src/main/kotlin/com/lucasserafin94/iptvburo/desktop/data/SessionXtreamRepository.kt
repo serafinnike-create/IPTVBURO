@@ -149,6 +149,16 @@ class SessionXtreamRepository(
             synchronized(lock) {
                 checkGeneration(currentGeneration)
                 account = authenticatedAccount
+                // Whether this panel says when the subscription ends, and nothing else about it.
+                //
+                // Plenty of panels never send `exp_date`, and a line that does not expire looks the
+                // same from here — so an empty header chip is the correct outcome as often as it is
+                // a defect, and the two cannot be told apart from a screenshot. A boolean says which
+                // without putting an account's dates in a log file.
+                println(
+                    "[xtream] panel reports a subscription end date: " +
+                        (authenticatedAccount.expiresAtEpochSeconds != null),
+                )
                 categories.putAll(loadedCategories)
                 catalogs[XtreamContentType.LIVE] = liveCatalog
                 refreshPlaceholdersLocked()
