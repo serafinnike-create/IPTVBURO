@@ -58,6 +58,7 @@ export async function start(mount) {
   const tiles = new Float32Array(COUNT * 2);
   const phases = new Float32Array(COUNT);
   const scales = new Float32Array(COUNT);
+  const tilts = new Float32Array(COUNT * 2);
 
   // Deterministic layout: a seeded generator keeps the composition identical
   // on every load, so the hero cannot render a visibly worse arrangement by
@@ -69,22 +70,44 @@ export async function start(mount) {
   };
 
   for (let i = 0; i < COUNT; i++) {
-    const depth = 5 - rand() * 22;           // world z: +5 (near) .. -17 (far)
+    // The whole field sits behind the camera plane rather than straddling it.
+    // Cards in front of z=0 fill the frame and swallow both the headline and
+    // the product shot, which is the opposite of what a backdrop is for.
+    const depth = -2 - rand() * 19;          // world z: -2 (near) .. -21 (far)
     const spread = 6.0 + (14 - depth) * 0.30;
-    offsets[i * 3] = (rand() - 0.5) * spread * 2;
-    offsets[i * 3 + 1] = (rand() - 0.5) * spread * 1.1;
+    // Posters are pushed out of the middle of the frame rather than scattered
+    // evenly: the headline sits there, and a poster drifting under a letter is
+    // the one thing that makes a field like this look accidental. The bias is
+    // horizontal only, so the wall still fills the top and bottom edges.
+    // The gap has to be measured in what the camera sees, not in world units.
+    // A perspective camera shrinks distant cards toward the centre, so a fixed
+    // world-space push lets the far rows drift back under the headline exactly
+    // where they must not be. Scaling the push by distance keeps the clear
+    // corridor the same width all the way to the back of the field.
+    const side = rand() < 0.5 ? -1 : 1;
+    const push = 0.34 + rand() * 0.66;
+    const perspective = (camera.position.z - depth) / camera.position.z;
+    offsets[i * 3] = side * (4.2 + push * spread * 0.58) * perspective;
+    offsets[i * 3 + 1] = (rand() - 0.5) * spread * 1.15;
     offsets[i * 3 + 2] = depth;
     const tile = Math.floor(rand() * TILES);
     tiles[i * 2] = tile % COLS;
     tiles[i * 2 + 1] = Math.floor(tile / COLS);
     phases[i] = rand() * Math.PI * 2;
-    scales[i] = 2.6 + rand() * 2.2;
+    scales[i] = 2.2 + rand() * 1.7;
+    // A few degrees of yaw and pitch per poster. Without this every card faces
+    // the camera dead-on and the field reads as flat cut-outs on a backdrop;
+    // the parallax alone cannot sell depth that the geometry denies. Cards
+    // turn to face the centre of the frame, the way a physical wall would.
+    tilts[i * 2] = -side * (0.16 + rand() * 0.22);
+    tilts[i * 2 + 1] = (rand() - 0.5) * 0.20;
   }
 
   geometry.setAttribute('aOffset', new THREE.InstancedBufferAttribute(offsets, 3));
   geometry.setAttribute('aTile', new THREE.InstancedBufferAttribute(tiles, 2));
   geometry.setAttribute('aPhase', new THREE.InstancedBufferAttribute(phases, 1));
   geometry.setAttribute('aScale', new THREE.InstancedBufferAttribute(scales, 1));
+  geometry.setAttribute('aTilt', new THREE.InstancedBufferAttribute(tilts, 2));
   geometry.instanceCount = COUNT;
 
   const uniforms = {
@@ -107,6 +130,7 @@ export async function start(mount) {
       'attribute vec2 aTile;',
       'attribute float aPhase;',
       'attribute float aScale;',
+      'attribute vec2 aTilt;',
       'uniform float uTime;',
       'uniform float uScroll;',
       'uniform vec2 uPointer;',
@@ -114,11 +138,24 @@ export async function start(mount) {
       'varying vec2 vTile;',
       'varying float vDepth;',
       'varying float vLit;',
+      'varying vec2 vNdc;',
       'void main() {',
       '  vUv = uv;',
       '  vTile = aTile;',
       '  vec3 pos = position * aScale;',
       '  vLit = position.x + 0.5;',
+      // Yaw then pitch, breathing by a few hundredths of a radian so the wall
+      // never freezes into a still. The rotation happens in local space before
+      // the instance offset, so each card turns about its own centre.
+      '  float yaw = aTilt.x + sin(uTime * 0.19 + aPhase) * 0.035;',
+      '  float pitch = aTilt.y + cos(uTime * 0.23 + aPhase) * 0.028;',
+      '  float cy = cos(yaw), sy = sin(yaw);',
+      '  pos = vec3(pos.x * cy + pos.z * sy, pos.y, -pos.x * sy + pos.z * cy);',
+      '  float cp = cos(pitch), sp = sin(pitch);',
+      '  pos = vec3(pos.x, pos.y * cp - pos.z * sp, pos.y * sp + pos.z * cp);',
+      // The key light follows the card's own turn, so a poster angled away
+      // from the centre falls off into shadow instead of staying evenly lit.
+      '  vLit = mix(vLit, clamp(vLit + sy * 0.55, 0.0, 1.0), 0.85);',
       '  vec3 world = aOffset;',
       // Slow drift, phase-shifted per instance so the field never pulses in
       // unison, plus scroll pushing the whole wall toward the camera.
@@ -132,9 +169,27 @@ export async function start(mount) {
       '  world.y += uPointer.y * para * 0.6;',
       // Posters that travel past the camera wrap to the back of the field
       // rather than vanishing, so the wall never runs out.
-      '  world.z = mod(world.z + 17.0, 22.0) - 17.0;',
+      // Wrap inside the same band the layout uses (-21..-2). A card that
+      // drifts past the near edge reappears at the back, so the wall never
+      // thins out, and it never crosses in front of the camera.
+      '  world.z = mod(world.z + 21.0, 19.0) - 21.0;',
       '  vDepth = 14.0 - world.z;',
-      '  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos + world, 1.0);',
+      '  vec4 clip = projectionMatrix * modelViewMatrix * vec4(pos + world, 1.0);',
+      // How far this vertex lands from the centre of the screen, in NDC. The
+      // headline occupies the middle band, and pushing cards apart in world
+      // space cannot keep them out of it — perspective pulls distant cards
+      // back toward the centre however far out they start. Measuring in clip
+      // space is the only test that holds at every depth, so the fade is
+      // computed here and applied to alpha in the fragment stage.
+      '  float ndcX = clip.x / max(clip.w, 0.0001);',
+      '  float ndcY = clip.y / max(clip.w, 0.0001);',
+      // The copy is not centred — it occupies the right half of the frame,
+      // roughly ndcX 0.03..0.75 and the middle band vertically. Fading by
+      // distance from screen centre would leave exactly the region the
+      // headline sits in at full strength, which is what happened. So the
+      // quiet zone is an explicit rectangle around the text instead.
+      '  vNdc = vec2(ndcX, ndcY);',
+      '  gl_Position = clip;',
       '}',
     ].join('\n'),
     fragmentShader: [
@@ -145,16 +200,37 @@ export async function start(mount) {
       'varying vec2 vTile;',
       'varying float vDepth;',
       'varying float vLit;',
+      'varying vec2 vNdc;',
       'void main() {',
       '  vec2 cell = vec2(vTile.x + vUv.x, (uGrid.y - 1.0 - vTile.y) + vUv.y) / uGrid;',
       '  vec3 rgb = texture2D(uMap, cell).rgb;',
-      '  rgb *= 0.74 + 0.55 * smoothstep(0.0, 1.0, vLit);',
-      '  rgb += vec3(0.84, 0.66, 0.34) * pow(smoothstep(0.75, 1.0, vLit), 2.0) * 0.22;',
+      // A raking key light across each poster: the lit edge carries the gold
+      // the rest of the page is built from, so the wall belongs to the brand
+      // rather than looking like stock artwork parked behind the text.
+      '  float key = smoothstep(0.0, 1.0, vLit);',
+      '  rgb *= 0.82 + 0.62 * key;',
+      '  rgb += vec3(0.96, 0.74, 0.38) * pow(smoothstep(0.62, 1.0, vLit), 2.0) * 0.30;',
+      // Rounded corners, and a hairline rim so each poster reads as a card
+      // with an edge instead of a soft rectangle bleeding into its neighbour.
       '  vec2 q = abs(vUv - 0.5) - vec2(0.5 - 0.045, 0.5 - 0.03);',
-      '  float mask = 1.0 - smoothstep(0.0, 0.012, length(max(q, 0.0)) - 0.045);',
-      '  float depthFade = smoothstep(9.0, 13.0, vDepth) * (1.0 - smoothstep(20.0, 33.0, vDepth));',
-      '  rgb = mix(vec3(0.055, 0.062, 0.082), rgb, 0.40 + 0.42 * depthFade);',
-      '  gl_FragColor = vec4(rgb, mask * (0.22 + 0.78 * depthFade) * 0.34 * uFade);',
+      '  float dist = length(max(q, 0.0)) - 0.045;',
+      '  float mask = 1.0 - smoothstep(0.0, 0.010, dist);',
+      '  float rim = smoothstep(0.016, 0.004, abs(dist + 0.006));',
+      '  rgb += vec3(0.92, 0.72, 0.40) * rim * 0.30;',
+      // Aerial perspective: near posters stay saturated, far ones sink into
+      // the page background. This is what carries the depth once the field is
+      // bright enough to actually see.
+      '  float depthFade = smoothstep(8.0, 12.5, vDepth) * (1.0 - smoothstep(21.0, 34.0, vDepth));',
+      '  rgb = mix(vec3(0.050, 0.057, 0.078), rgb, 0.58 + 0.42 * depthFade);',
+      // The quiet zone is evaluated per fragment, not per vertex. A poster is
+      // several world units across, so interpolating a vertex-side mask left
+      // the middle of a large card bright even when its corners were inside
+      // the zone — which is exactly how a title kept surfacing under the
+      // headline. Screen position per pixel is the only version that holds.
+      '  float inX = 1.0 - smoothstep(0.02, 0.22, abs(vNdc.x - 0.40) - 0.36);',
+      '  float inY = 1.0 - smoothstep(0.05, 0.32, abs(vNdc.y) - 0.46);',
+      '  float clear = 0.05 + 0.95 * (1.0 - inX * inY);',
+      '  gl_FragColor = vec4(rgb, mask * (0.30 + 0.70 * depthFade) * 0.78 * clear * uFade);',
       '}',
     ].join('\n'),
   });

@@ -1,0 +1,5 @@
+#EXTM3U playlist-name="IPTV BURO Certification QA"
+# Official Apple HLS example stream for application playback testing.
+# Source: https://developer.apple.com/streaming/examples/
+#EXTINF:-1 tvg-id="apple-bipbop-qa" tvg-name="Apple Bip Bop — Official HLS Test" group-title="Legal Samples",Apple Bip Bop — Official HLS Test
+https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8

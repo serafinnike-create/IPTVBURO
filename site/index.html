@@ -18,6 +18,7 @@
   <title>IPTV BURO — Sua biblioteca, finalmente organizada</title>
   <link rel="icon" href="buro-mark.png">
   <link rel="canonical" href="https://iptvburo.pages.dev/">
+  <link rel="preload" href="fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/app-hero.webp" as="image" type="image/webp" fetchpriority="high">
   <link rel="stylesheet" href="styles.css">
   <script src="site.js" defer></script>
@@ -54,6 +55,23 @@
           <option value="it">IT</option>
         </select>
       </label>
+      <div class="download-menu" data-download-menu>
+        <button class="header-download" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="download-list" data-download-toggle>
+          <span class="download-arrow" aria-hidden="true">↓</span>
+          <span data-i18n="download">Baixar</span>
+        </button>
+        <div class="download-list" id="download-list" role="menu" hidden data-download-list>
+          <a role="menuitem" href="https://github.com/serafinnike-create/IPTVBURO/releases/download/v4.0.0/IPTV-BURO-v4.0.0-windows-x64-unsigned.msi" data-platform="windows">
+            <span class="download-symbol" aria-hidden="true">⊞</span>
+            <span><b>Windows 10/11</b><small data-i18n="downloadWindowsMeta">Instalador MSI · 323 MB</small></span>
+          </a>
+          <a role="menuitem" href="https://github.com/serafinnike-create/IPTVBURO/releases/download/v4.0.0/IPTV-BURO-v4.0.0-android-debug.apk" data-platform="android">
+            <span class="download-symbol" aria-hidden="true">△</span>
+            <span><b>Android / Android TV</b><small data-i18n="downloadAndroidMeta">Pacote APK · 32 MB</small></span>
+          </a>
+          <p class="download-note" data-i18n="downloadNote">Versões de prévia da v4.0.0. O Windows pode mostrar um aviso do SmartScreen e o Android pede permissão para instalar fora da loja.</p>
+        </div>
+      </div>
       <a class="header-cta" href="#pagamento" data-i18n="activate">Ativar dispositivo</a>
     </div>
   </header>
@@ -146,6 +164,10 @@
             </div>
             <div class="stage-backdrop" data-stage-backdrop></div>
             <div class="stage-gradient" aria-hidden="true"></div>
+            <figure class="real-screen" aria-label="Captura real do IPTV BURO">
+              <img src="assets/app-home-real.png" data-real-screen alt="Tela inicial real do IPTV BURO, com destaque e continuar assistindo" width="953" height="535" loading="eager">
+              <figcaption><span aria-hidden="true"></span>CAPTURA REAL DO APP</figcaption>
+            </figure>
             <div class="stage-copy">
               <span class="stage-badge" data-stage-badge>CONTINUE ASSISTINDO</span>
               <h3 data-stage-title>No limite do horizonte</h3>
@@ -181,8 +203,10 @@
           <li data-i18n="motionThree">Português, inglês, alemão e italiano</li>
         </ul>
       </div>
-      <div class="motion-player reveal">
-        <img src="assets/app-hero.webp" alt="Interface do IPTV BURO" width="900" height="790" loading="lazy">
+      <div class="motion-player reveal" data-parallax="-38">
+        <video autoplay muted loop playsinline preload="metadata" poster="assets/poster-wall-variety-v2.png" aria-label="Vinheta cinematográfica do IPTV BURO">
+          <source src="assets/buro-reel.mp4" type="video/mp4">
+        </video>
         <div class="video-caption"><span class="live-dot"></span><span data-i18n="motionCaption">Experiência visual IPTV BURO</span></div>
       </div>
     </section>
@@ -197,8 +221,8 @@
       </div>
 
       <div class="feature-story reveal">
-        <div class="feature-story-art">
-          <img src="assets/app-hero.webp" alt="Biblioteca do IPTV BURO organizada por categorias" width="900" height="790" loading="lazy">
+        <div class="feature-story-art" data-parallax="-26">
+          <img src="assets/feature-poster-grid-v2.png" alt="Coleção cinematográfica do IPTV BURO, com experiências para TV ao vivo, famílias, biblioteca e múltiplas telas" width="1024" height="1536" loading="lazy">
         </div>
         <div class="feature-story-copy">
           <span class="number">01</span>
@@ -243,13 +267,13 @@
       </div>
 
       <div class="offline-story reveal" id="offline">
-        <div class="offline-visual" aria-hidden="true">
+        <div class="offline-visual" aria-hidden="true" data-parallax="-34">
           <div class="offline-glow"></div>
           <div class="offline-phone">
             <div class="offline-phone-bar"><span>20:48</span><span>● ● ●</span></div>
             <div class="offline-phone-title"><img src="buro-mark.png" alt="" width="24" height="24"><span>OFFLINE VAULT</span></div>
             <div class="offline-cover">
-              <img src="assets/category-cinema.webp" alt="" width="1024" height="1024" loading="lazy">
+              <img src="assets/poster-wall-series-v2.png" alt="" width="1667" height="937" loading="lazy">
               <span>↓</span>
             </div>
             <div class="offline-progress"><i></i></div>
@@ -276,7 +300,7 @@
     </section>
 
     <section class="screens-section" aria-labelledby="screens-title">
-      <div class="screens-backdrop" aria-hidden="true"></div>
+      <div class="screens-backdrop" aria-hidden="true" data-parallax="26"></div>
       <div class="screens-copy reveal">
         <p class="kicker" data-i18n="screensKicker">UMA LINGUAGEM, VÁRIAS TELAS</p>
         <h2 id="screens-title" data-i18n="screensTitle">A mesma calma,<br>onde você estiver.</h2>
@@ -313,7 +337,7 @@
     </section>
 
     <section class="pricing-section" id="pagamento" aria-labelledby="pricing-title">
-      <div class="pricing-backdrop" aria-hidden="true"></div>
+      <div class="pricing-backdrop" aria-hidden="true" data-parallax="30"></div>
       <div class="pricing-intro reveal">
         <p class="kicker" data-i18n="pricingKicker">ATIVAÇÃO SEGURA</p>
         <h2 id="pricing-title" data-i18n="pricingTitle">Teste primeiro.<br>Pague uma vez.</h2>

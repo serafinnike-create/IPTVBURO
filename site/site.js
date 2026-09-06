@@ -7,6 +7,7 @@
   const languageNames = { pt: 'pt-BR', en: 'en', de: 'de', it: 'it' };
 
   const pt = {
+    download: 'Baixar', downloadWindowsMeta: 'Instalador MSI · 323 MB', downloadAndroidMeta: 'Pacote APK · 32 MB', downloadNote: 'Versões de prévia da v4.0.0. O Windows pode mostrar um aviso do SmartScreen e o Android pede permissão para instalar fora da loja.',
     skip: 'Pular para o conteúdo', menu: 'Abrir menu', closeMenu: 'Fechar menu', language: 'Idioma',
     navDemo: 'Demonstração', navFeatures: 'Funções', navPlatforms: 'Plataformas', navPricing: 'Ativar', navFaq: 'Perguntas', activate: 'Ativar dispositivo',
     heroEyebrow: 'PLAYER PREMIUM · SUA FONTE, SUA BIBLIOTECA', heroTitle: 'Tudo o que você assiste.<br>Finalmente no lugar certo.',
@@ -30,6 +31,7 @@
 
   const en = {
     ...pt,
+    download: 'Download', downloadWindowsMeta: 'MSI installer · 323 MB', downloadAndroidMeta: 'APK package · 32 MB', downloadNote: 'Preview builds of v4.0.0. Windows may show a SmartScreen warning, and Android asks for permission to install outside the store.',
     skip: 'Skip to content', menu: 'Open menu', closeMenu: 'Close menu', language: 'Language', navDemo: 'Demo', navFeatures: 'Features', navPlatforms: 'Platforms', navPricing: 'Activate', navFaq: 'Questions', activate: 'Activate device',
     heroEyebrow: 'PREMIUM PLAYER · YOUR SOURCE, YOUR LIBRARY', heroTitle: 'Everything you watch.<br>Finally in the right place.', heroLead: 'Organize live TV, movies, and series from media sources you are authorized to use — in a fast, private, cinematic experience.', watchDemo: 'See how it works', startTrial: 'Start the 7-day trial', factTrial: 'free days', factTerm: 'years per payment', factContent: 'content supplied', explore: 'Explore', trustIntro: 'Built for the sources you already use', trustPrivate: 'Protected credentials',
     demoKicker: 'INTERACTIVE DEMO', demoTitle: 'Six screens. One library.', demoLead: 'Explore today’s features and discover IPTV BURO’s next major mobile experience.', demoHome: 'Home', demoHomeSub: 'Your evening, ready', demoLive: 'Live TV', demoLiveSub: 'Now and next', demoMovies: 'Movies', demoMoviesSub: 'Artwork and details', demoSeries: 'Series', demoSeriesSub: 'Organized seasons', demoMultiSub: 'Up to four channels', demoOffline: 'Downloads', demoOfflineSub: 'Coming to mobile', pauseTour: 'Pause tour', resumeTour: 'Resume tour', demoConnected: 'Source connected', play: 'Play', details: 'Details', downloadAction: 'Download', offlineLibrary: 'Downloads',
@@ -45,6 +47,7 @@
 
   const de = {
     ...pt,
+    download: 'Herunterladen', downloadWindowsMeta: 'MSI-Installer · 323 MB', downloadAndroidMeta: 'APK-Paket · 32 MB', downloadNote: 'Vorschauversionen von v4.0.0. Windows zeigt möglicherweise eine SmartScreen-Warnung, und Android fragt nach der Erlaubnis zur Installation außerhalb des Stores.',
     skip: 'Zum Inhalt springen', menu: 'Menü öffnen', closeMenu: 'Menü schließen', language: 'Sprache', navDemo: 'Demo', navFeatures: 'Funktionen', navPlatforms: 'Plattformen', navPricing: 'Aktivieren', navFaq: 'Fragen', activate: 'Gerät aktivieren',
     heroEyebrow: 'PREMIUM-PLAYER · DEINE QUELLE, DEINE MEDIATHEK', heroTitle: 'Alles, was du ansiehst.<br>Endlich am richtigen Ort.', heroLead: 'Organisiere Live-TV, Filme und Serien aus Medienquellen, zu deren Nutzung du berechtigt bist — schnell, privat und filmisch.', watchDemo: 'So funktioniert es', startTrial: '7 Tage kostenlos testen', factTrial: 'Tage kostenlos', factTerm: 'Jahre pro Zahlung', factContent: 'Inhalte enthalten', explore: 'Entdecken', trustIntro: 'Für die Quellen, die du bereits nutzt', trustPrivate: 'Geschützte Zugangsdaten',
     demoKicker: 'INTERAKTIVE DEMO', demoTitle: 'Sechs Ansichten. Eine Mediathek.', demoLead: 'Entdecke die aktuellen Funktionen und das nächste große mobile Erlebnis von IPTV BURO.', demoHome: 'Start', demoHomeSub: 'Dein Abend ist bereit', demoLive: 'Live-TV', demoLiveSub: 'Jetzt und danach', demoMovies: 'Filme', demoMoviesSub: 'Cover und Details', demoSeries: 'Serien', demoSeriesSub: 'Geordnete Staffeln', demoMultiSub: 'Bis zu vier Sender', demoOffline: 'Downloads', demoOfflineSub: 'Demnächst mobil', pauseTour: 'Tour pausieren', resumeTour: 'Tour fortsetzen', demoConnected: 'Quelle verbunden', play: 'Abspielen', details: 'Details', downloadAction: 'Herunterladen', offlineLibrary: 'Downloads',
@@ -60,6 +63,7 @@
 
   const it = {
     ...pt,
+    download: 'Scarica', downloadWindowsMeta: 'Installer MSI · 323 MB', downloadAndroidMeta: 'Pacchetto APK · 32 MB', downloadNote: 'Versioni di anteprima della v4.0.0. Windows può mostrare un avviso SmartScreen e Android chiede il permesso di installare fuori dallo store.',
     skip: 'Vai al contenuto', menu: 'Apri menu', closeMenu: 'Chiudi menu', language: 'Lingua', navDemo: 'Demo', navFeatures: 'Funzioni', navPlatforms: 'Piattaforme', navPricing: 'Attiva', navFaq: 'Domande', activate: 'Attiva dispositivo',
     heroEyebrow: 'PLAYER PREMIUM · LA TUA FONTE, LA TUA LIBRERIA', heroTitle: 'Tutto ciò che guardi.<br>Finalmente al posto giusto.', heroLead: 'Organizza TV in diretta, film e serie dalle fonti multimediali che sei autorizzato a usare — in un’esperienza veloce, privata e cinematografica.', watchDemo: 'Scopri come funziona', startTrial: 'Inizia i 7 giorni gratuiti', factTrial: 'giorni gratuiti', factTerm: 'anni per pagamento', factContent: 'contenuti forniti', explore: 'Esplora', trustIntro: 'Pensato per le fonti che già usi', trustPrivate: 'Credenziali protette',
     demoKicker: 'DEMO INTERATTIVA', demoTitle: 'Sei schermate. Una libreria.', demoLead: 'Esplora le funzioni attuali e scopri la prossima grande esperienza mobile di IPTV BURO.', demoHome: 'Home', demoHomeSub: 'La tua serata è pronta', demoLive: 'In diretta', demoLiveSub: 'Ora e dopo', demoMovies: 'Film', demoMoviesSub: 'Copertine e dettagli', demoSeries: 'Serie', demoSeriesSub: 'Stagioni organizzate', demoMultiSub: 'Fino a quattro canali', demoOffline: 'Download', demoOfflineSub: 'In arrivo su mobile', pauseTour: 'Metti in pausa il tour', resumeTour: 'Riprendi il tour', demoConnected: 'Fonte collegata', play: 'Riproduci', details: 'Dettagli', downloadAction: 'Scarica', offlineLibrary: 'Download',
@@ -120,6 +124,17 @@
   let currentDemo = 'home';
   let demoPaused = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let demoTimer;
+  // These are captures of the running product, not a marketing illustration.
+  // The feature tabs still describe the journey, while the frame always makes
+  // it clear that the visitor is looking at a real application surface.
+  const realScreenSources = {
+    home: ['assets/app-home-real.png', 'Tela inicial real do IPTV BURO, com destaque e continuar assistindo'],
+    live: ['assets/app-home-real.png', 'Tela real do IPTV BURO, com navegação para TV ao vivo'],
+    movies: ['assets/app-discover-real.png', 'Tela real Descobrir do IPTV BURO, com um título em foco e trailer'],
+    series: ['assets/app-discover-real.png', 'Tela real Descobrir do IPTV BURO, com um título em foco e trailer'],
+    multiview: ['assets/app-home-real.png', 'Tela real da biblioteca do IPTV BURO'],
+    offline: ['assets/app-hero.webp', 'Tela real de biblioteca do IPTV BURO'],
+  };
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -173,6 +188,12 @@
     const [badge, title, description, rail] = demoCopy[currentLanguage][currentDemo];
     const stage = $('[data-demo-stage]');
     stage.dataset.demoStage = currentDemo;
+    const [screenSource, screenDescription] = realScreenSources[currentDemo] || realScreenSources.home;
+    const screen = $('[data-real-screen]');
+    if (screen) {
+      screen.src = screenSource;
+      screen.alt = screenDescription;
+    }
     $('[data-stage-badge]').textContent = badge;
     $('[data-stage-title]').textContent = title;
     $('[data-stage-description]').textContent = description;
@@ -340,6 +361,18 @@
     }
   }
 
+  /**
+   * Reveal-on-scroll, with the one rule that matters: nothing may stay hidden.
+   *
+   * A plain `threshold: 0.12` observer loses two cases, and both of them are
+   * reachable from links this site publishes itself. Landing on #demonstracao
+   * scrolls before the observer registers, so the sections above and around
+   * the anchor never *enter* the viewport and never fire. And a section taller
+   * than the viewport can never reach twelve percent visibility at all. Either
+   * one leaves a block at opacity 0 permanently — a black page on a shared
+   * link. So the threshold is a list: zero fires as soon as any sliver shows,
+   * and anything already on screen when we start is revealed immediately.
+   */
   function setupReveal() {
     const elements = $$('.reveal');
     if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -348,13 +381,155 @@
     }
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-          observer.unobserve(entry.target);
-        }
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('visible');
+        observer.unobserve(entry.target);
       });
-    }, { threshold: 0.12 });
+    }, { threshold: [0, 0.12], rootMargin: '0px 0px -8% 0px' });
+
+    // A geometric sweep backs the observer up, because the observer alone
+    // loses anything the viewport skips over rather than crosses: an anchor
+    // jump, a wheel flick, a scrollbar drag, or restored scroll on reload all
+    // move past whole sections without ever generating an intersection for
+    // them, and those sections then sit at opacity 0 for the rest of the
+    // visit. The sweep also covers the deferred-script timing: this file runs
+    // before the browser applies the URL fragment, so scrollY is still 0 here
+    // and the jump lands between DOMContentLoaded and load.
+    let queued = false;
+    const sweep = () => {
+      queued = false;
+      let remaining = 0;
+      elements.forEach((element) => {
+        if (element.classList.contains('visible')) return;
+        const box = element.getBoundingClientRect();
+        if (box.top < window.innerHeight && box.bottom > 0) {
+          element.classList.add('visible');
+          observer.unobserve(element);
+          return;
+        }
+        remaining += 1;
+      });
+      // Once every block has been revealed there is nothing left to listen for.
+      if (remaining === 0) window.removeEventListener('scroll', onScroll);
+    };
+    const onScroll = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(sweep);
+    };
+
     elements.forEach((element) => observer.observe(element));
+    sweep();
+    window.addEventListener('load', sweep, { once: true });
+    window.addEventListener('scroll', onScroll, { passive: true });
+  }
+
+  /**
+   * Motion that answers the scroll: parallax layers, staggered entrances, and
+   * a sheen that follows the pointer across a card.
+   *
+   * All three share one rule — they may only ever write transforms and custom
+   * properties. Nothing here reads layout during a scroll or touches a
+   * property that would force one, because the whole point is that the page
+   * stays smooth while it moves. Positions are measured once per frame inside
+   * a rAF, and the listeners retire as soon as they have nothing left to do.
+   */
+  function setupMotion() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    // Entrance order. Reading the index off the DOM here means the CSS never
+    // has to hardcode how many cards a grid holds.
+    $$('.feature-grid .reveal, .platform-grid > *, .steps-grid > li, .offline-benefits li, .faq-list details')
+      .forEach((element, index) => {
+        element.style.setProperty('--stagger', String(index % 6));
+      });
+
+    const layers = $$('[data-parallax]');
+    if (layers.length) {
+      let queued = false;
+      const frame = () => {
+        queued = false;
+        const viewport = window.innerHeight;
+        layers.forEach((layer) => {
+          const box = layer.getBoundingClientRect();
+          if (box.bottom < 0 || box.top > viewport) return;
+          // -1 when the element is entering at the bottom, +1 when it leaves
+          // at the top; the depth attribute scales that into pixels.
+          const progress = (box.top + box.height / 2 - viewport / 2) / viewport;
+          const depth = Number(layer.dataset.parallax) || 0;
+          layer.style.transform = 'translate3d(0, ' + (progress * depth).toFixed(2) + 'px, 0)';
+        });
+      };
+      const onScroll = () => {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(frame);
+      };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll, { passive: true });
+      frame();
+    }
+
+    // The sheen is delegated from the section rather than bound per card: one
+    // listener survives any number of cards and needs no teardown.
+    $$('.feature-grid, .platform-grid').forEach((grid) => {
+      grid.addEventListener('pointermove', (event) => {
+        const card = event.target.closest('.feature-card, .platform-card');
+        if (!card) return;
+        const box = card.getBoundingClientRect();
+        card.style.setProperty('--px', (event.clientX - box.left) + 'px');
+        card.style.setProperty('--py', (event.clientY - box.top) + 'px');
+      }, { passive: true });
+    });
+  }
+
+  /**
+   * The header download menu.
+   *
+   * The links are plain anchors straight to the release assets, so they work
+   * with JavaScript disabled and with middle-click; this only adds the open
+   * and close behaviour around them. The platform the visitor is on is listed
+   * first, because offering an APK to someone on Windows is a small insult.
+   */
+  function setupDownload() {
+    const root = $('[data-download-menu]');
+    if (!root) return;
+    const toggle = $('[data-download-toggle]', root);
+    const list = $('[data-download-list]', root);
+
+    const setOpen = (open) => {
+      list.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+    };
+
+    toggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setOpen(list.hidden);
+    });
+
+    // Any click elsewhere, and Escape, close it. Without this the panel can be
+    // left hanging over the page while the visitor scrolls.
+    document.addEventListener('click', (event) => {
+      if (!list.hidden && !root.contains(event.target)) setOpen(false);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !list.hidden) {
+        setOpen(false);
+        toggle.focus();
+      }
+    });
+
+    // Put the visitor's own platform at the top of the list. userAgentData is
+    // the modern signal and userAgent the fallback; neither is trusted for
+    // anything but ordering, so a wrong guess costs nothing.
+    const platform = String(
+      (navigator.userAgentData && navigator.userAgentData.platform) || navigator.userAgent || '',
+    ).toLowerCase();
+    const mine = /android/.test(platform) ? 'android' : /win/.test(platform) ? 'windows' : '';
+    if (mine) {
+      const preferred = $(`[data-platform="${mine}"]`, list);
+      if (preferred) list.insertBefore(preferred, list.firstElementChild);
+    }
   }
 
   function setupFaq() {
@@ -375,7 +550,11 @@
   setupPayment();
   setupDemo();
   setupReveal();
-  setupHero3d();
+  setupMotion();
+  // The hero uses the restrained poster wall in CSS. The older WebGL field
+  // looked like coloured floating blocks on some GPUs, so it is deliberately
+  // not started here; the first paint remains cinematic and consistent.
+  setupDownload();
   setupFaq();
   applyLanguage(initialLanguage);
 })();

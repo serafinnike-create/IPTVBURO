@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#090A0D">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Política de privacidade do IPTV BURO para Android, Android TV, Windows e o serviço de ativação.">
+  <meta name="description" content="Política de privacidade do IPTV BURO para Android, Android TV, Samsung TV, Windows e o serviço de ativação.">
   <title>Política de privacidade — IPTV BURO</title>
   <link rel="icon" href="buro-mark.png">
   <link rel="canonical" href="https://iptvburo.pages.dev/privacy.html">
@@ -23,9 +23,9 @@
   </header>
 
   <main class="legal-main" id="conteudo">
-    <p class="legal-meta">Atualizada em 11 de agosto de 2026</p>
+    <p class="legal-meta">Atualizada em 29 de agosto de 2026</p>
     <h1>Política de privacidade</h1>
-    <p class="legal-lead">Esta política explica quais dados o IPTV BURO usa, onde eles ficam e como são protegidos nos aplicativos para Android, Android TV e Windows e no serviço de ativação.</p>
+    <p class="legal-lead">Esta política explica quais dados o IPTV BURO usa, onde eles ficam e como são protegidos nos aplicativos para Android, Android TV, Samsung TV e Windows e no serviço de ativação.</p>
 
     <section class="legal-section">
       <h2>1. O que é o IPTV BURO</h2>
@@ -40,7 +40,7 @@
         <li>perfis, foto de perfil escolhida, preferências, favoritos, histórico e progresso de reprodução;</li>
         <li>catálogo em cache, metadados de downloads e arquivos de mídia baixados pelo próprio usuário.</li>
       </ul>
-      <p>No Android, os segredos das fontes e a chave opcional do TMDB são cifrados com uma chave protegida pelo Android Keystore. O backup do aplicativo está desativado. Os arquivos baixados ficam no armazenamento privado do aplicativo.</p>
+      <p>No Android, os segredos das fontes e as chaves opcionais de metadados são cifrados com uma chave protegida pelo Android Keystore. O backup do aplicativo está desativado. Na Samsung TV, credenciais e chaves opcionais usam o armazenamento seguro disponível no Tizen; downloads só são oferecidos quando há armazenamento USB removível compatível. O aplicativo não inclui listas, contas ou chaves de terceiros.</p>
       <p class="legal-note">As listas e credenciais não são enviadas ao servidor do IPTV BURO. Para carregar ou reproduzir uma fonte, o aplicativo se conecta diretamente ao provedor escolhido pelo usuário.</p>
     </section>
 
@@ -70,7 +70,9 @@
         <li><strong>Cloudflare:</strong> hospeda o site, a API de ativação e o banco de licenças. Pode processar endereço IP, país aproximado e dados técnicos da requisição para entrega e segurança. O país é usado para sugerir moeda; o IP é usado por limites temporários contra abuso.</li>
         <li><strong>Google Play:</strong> distribui o aplicativo Android, processa compras e informa o estado delas.</li>
         <li><strong>Stripe:</strong> processa pagamentos feitos fora do Google Play.</li>
-        <li><strong>TMDB:</strong> somente quando o usuário configura uma chave ou solicita metadados compatíveis. O pedido é enviado diretamente ao serviço do TMDB.</li>
+        <li><strong>TMDB:</strong> somente quando o usuário configura uma chave ou solicita metadados e disponibilidade compatíveis. O pedido é enviado diretamente ao serviço do TMDB. Informações de disponibilidade de streaming são fornecidas pelo JustWatch por meio do TMDB.</li>
+        <li><strong>OMDb:</strong> somente quando o usuário configura uma chave para consultar avaliações públicas compatíveis. O pedido é enviado diretamente ao serviço do OMDb.</li>
+        <li><strong>Samsung:</strong> distribui e certifica a versão para Samsung Smart TV. O aplicativo não integra publicidade nem pagamento Samsung nesta versão.</li>
         <li><strong>Provedor de mídia do usuário:</strong> recebe os dados necessários para autenticar e entregar a fonte escolhida. Esse provedor é independente do IPTV BURO.</li>
       </ul>
     </section>
