@@ -37,7 +37,7 @@ pela rede via `sdb`.
 
 ## 2. O que já existe na sua máquina
 
-Verificado nesta máquina (atualizado em 11/08/2026):
+Verificado nesta máquina (atualizado em 20/08/2026):
 
 | Item | Estado |
 | --- | --- |
@@ -52,8 +52,8 @@ Verificado nesta máquina (atualizado em 11/08/2026):
 | Certificado de assinatura | OK — perfil `iptvburo`, ativo |
 | **Empacotamento `.wgt`** | **OK — pacote assinado gerado** |
 
-**O ambiente está completo.** O app já compila e é assinado com sucesso.
-O que falta é executá-lo (seção 5).
+**O ambiente está completo.** O app compila, é assinado e o runner da seção 5
+inicia a VM, instala e abre o pacote automaticamente.
 
 > Java 8 satisfaz o requisito. Se o instalador reclamar, instale um JDK 17
 > (Temurin) e aponte o Tizen Studio para ele. Evite alterar o Java padrão
@@ -113,7 +113,10 @@ A TV **recusa** qualquer app não assinado. São dois certificados:
 - **Author** — identifica você. Guarde-o: perdê-lo impede atualizar o app.
 - **Distributor** — define onde o app pode rodar.
 
-**CONCLUÍDO.** O perfil `iptvburo` existe e está ativo.
+**CONCLUÍDO.** Para o emulador, o runner usa o perfil
+`burocertificate-emulator`, que combina o Author Samsung existente com o
+Distributor do emulador. O perfil histórico `iptvburo` pode continuar listado,
+mas não é o padrão do comando automatizado.
 
 Foi criado pela CLI (mais rápido que a interface). Registrado aqui para você
 saber reproduzir — por exemplo em outra máquina:
@@ -138,7 +141,7 @@ cmd /c '"C:\tizen-studio\tools\ide\bin\tizen.bat" cli-config "profiles.path=C:\t
 Conferir a qualquer momento:
 
 ```powershell
-tizen security-profiles list   # 'iptvburo' deve aparecer com Active = O
+tizen security-profiles list   # confira iptvburo e/ou burocertificate-emulator
 ```
 
 Arquivos gerados (ambos **fora** do repositório):
@@ -175,8 +178,44 @@ npm test
 ```
 
 Carrega o `index.html` num DOM simulado e exercita a navegação por D-pad.
-Cobre renderização, movimento do foco, o limite nas bordas e o caminho de
-erro quando a AVPlay não existe. **8 testes, todos passando.**
+Cobre contratos, armazenamento, fontes, catálogos, renderização, acessibilidade,
+movimento do foco, player, licenciamento e caminhos de erro. Também abre as
+fontes de produção em Chrome/Edge headless a 1920×1080 e percorre idioma,
+carregamento, aviso legal, perfil, Home demonstrativa e real, categorias e
+detalhes de Ao Vivo, catálogo, detalhes de filme/série, episódios, Descobrir,
+Pesquisa, Minha BURO, Continuar, Histórico, Lembretes, Notificações, Fontes,
+Perfis, Configurações, edição de perfil, gerenciamento e formulário Xtream, PIN
+parental, categorias, TMDb/OMDb e seus guias, armazenamento, downloads,
+Assinaturas/Ver mais/detalhe, pessoa, compartilhamento, M3U remoto/USB, Stalker,
+foto USB, retomada, download em lote, licença, player VOD/ao vivo, menus de
+faixas/velocidade/guia, erro e trailer, verificando cortes,
+overflow, foco, área segura e sobreposição. Configurações, Stalker, retomada e
+erro do player também são repetidos nos cinco idiomas; um contrato separado
+confere as 672 chaves e seus parâmetros antes do fallback. A suíte completa deve passar antes
+de empacotar.
+
+Para guardar as 79 capturas produzidas pelo smoke visual, sem incluí-las no
+WGT, defina `TIZEN_VISUAL_ARTIFACT_DIR` antes de executar `npm test`.
+O mesmo smoke também faz 960 trocas de tela e mede retenção de DOM, listeners,
+documentos e heap do Chromium após coleta de lixo; essa etapa não gera PNG extra.
+Depois ele grava 12.000 títulos sintéticos pelo caminho real de importação e
+confere responsividade do event loop, Home, busca e paginação; também não gera
+captura extra nem usa rede, playlist ou credencial.
+São elas: `language`, `boot`, `demo-home`, `demo-detail`, `real-home`,
+`movie-categories`, `movie-catalogue`, `movie-detail`, `series-detail`,
+`series-episodes`, `settings`, `settings-languages`, `live-categories`,
+`live-detail`, `discover`, `search-results`, `my-buro`, `continue-watching`,
+`history`, `reminders`, `notifications`, `sources`, `profiles`, `profile-form`,
+`source-manage`, `source-choice`, `source-xtream`, `parental-pin`,
+`category-settings`, `tmdb-settings`, `tmdb-settings-profile`, `tmdb-guide`,
+`tmdb-guide-end`, `omdb-settings`, `omdb-guide`, `omdb-guide-end`,
+`storage-settings`, `downloads`, `subscriptions`, `subscription-detail`,
+`person`, `share`, `source-m3u`, `source-stalker-top`, `source-stalker`,
+`source-usb-m3u`, `profile-photo-picker`, `resume-prompt`,
+`bulk-download-confirm`, `licence`, `player-vod`, `player-locked`,
+`player-audio-menu`, `player-subtitle-menu`, `player-speed-menu`,
+`player-error`, `player-live-guide` e `trailer`, além de
+`locale-{pt-br,en,de,it,es}-{settings,stalker,resume,player-error}`.
 
 Rode isto antes de empacotar — é muito mais rápido que abrir o simulador.
 
@@ -245,43 +284,96 @@ foco e navegação**, nunca playback.
 
 ### 5.2 Emulador (mais fiel)
 
-O **TV Emulator** é uma máquina virtual com Tizen real. Reproduz vídeo e
-aceita `sdb`. Exige VT-x ativo e Hyper-V desligado.
+O **TV Emulator** é uma máquina virtual com Tizen real, aceita `sdb` e usa
+WHPX nesta máquina. Não desligue o Hyper-V: a configuração atual já funciona.
 
 Criar: **Tools → Emulator Manager → Create → TV** e escolher a imagem 10.0
 (64-bit).
 
-#### Estado verificado desta máquina (11/08/2026)
+#### Estado verificado desta máquina (20/08/2026)
 
 ```text
-CPU .................. Intel Core i7-12700H (14 núcleos)  → suficiente
-RAM .................. 15,7 GB                            → suficiente
-HypervisorPresent .... True                               → BLOQUEIA o emulador
+VM ................... T-samsung-10.0-x86_64
+Imagem ............... tv-samsung-10.0-x86_64
+Motor ................. WHPX operacional
+Resultado ............. pacote compila, assina, instala e abre
 ```
 
-**Conclusão: o emulador Tizen não vai abrir nesta máquina hoje.** O Hyper-V
-está ativo e toma o VT-x para si — é por isso que
-`VirtualizationFirmwareEnabled` aparece como `False`: o hipervisor já
-capturou o recurso.
+**Conclusão atual:** o emulador Tizen abre nesta máquina usando WHPX. Em
+20/08/2026 o fluxo real chegou até a Home e respondeu a setas, ENTER e RETURN.
+Um smoke isolado também reutilizou os adapters AVPlay/teclas de produção e
+comprovou um HLS público em `PLAYING → PAUSED → PLAYING`, seguido por avanço e
+retrocesso via setas e teclas dedicadas. A sequência chegou a 34.784, 26.128,
+57.072 e 50.045 ms, com conclusão dos seeks no log nativo. A fixture multifaixa
+enumerou 2 áudios e 8 legendas; o AVPlay aceitou a segunda faixa de cada tipo e
+o pipeline registrou segmentos e buffers WebVTT da legenda selecionada.
 
-Duas saídas:
-
-**(a) Use o simulador** — recomendado agora. Não exige virtualização e é
-suficiente para aprender navegação, foco e layout, que é o objetivo desta
-primeira fase.
-
-**(b) Desligue o Hyper-V** — só se realmente precisar do emulador. Requer
-PowerShell **como administrador** e reinício:
+Para repetir o ciclo completo, mesmo com a VM fechada, use:
 
 ```powershell
-bcdedit /set hypervisorlaunchtype off
+cd "d:\CURSOR APPS\IPTVBURO"
+.\scripts\run-samsung-emulator.ps1
 ```
 
-> Isso **desativa WSL2, Docker Desktop e sandboxes do Windows** enquanto
-> estiver desligado. Se você usa qualquer um deles, prefira o simulador
-> agora e valide o vídeo direto na TV física quando ela chegar.
->
-> Para reverter: `bcdedit /set hypervisorlaunchtype auto` + reinício.
+O runner inicia a VM Samsung padrão, espera o SDB e os serviços da TV com
+timeout, executa os testes, cria uma staging fechada, assina, instala e abre o
+app. Em seguida espera cinco segundos, ativa o pacote novamente e exige que o
+launcher retorne o mesmo PID; um processo que caiu e foi recriado reprova o
+ciclo. A janela pode ser ajustada entre 3 e 60 segundos com
+`-LaunchStabilitySeconds`. Em 20/08/2026 esse caminho foi medido desde zero dispositivos até o app
+aberto em 70,3 segundos usando `-SkipTests`; sem essa opção ele também executa
+a suíte completa. O simulador continua útil para layout rápido, mas não
+substitui o emulador nem uma TV física para AVPlay e APIs nativas.
+
+Em 24/08/2026, a revisão `tizen-emulator-20260824-153120` repetiu o ciclo com
+`-LaunchStabilitySeconds 30`: instalação 100%, PID 15253 preservado e 37/37
+arquivos do payload idênticos aos fontes. A janela real do emulador mostrou a
+Home com hero, continuidade e capas carregadas; filmes exibiram `Assistir` e
+`Ver detalhes` dentro do painel, enquanto séries exibiram apenas detalhes até a
+escolha do episódio. O cache opcional de arte em USB
+agora possui preenchimento completo, progresso, pausa/retomada e atualização em
+Configurações. A validação real carregou prateleiras regionais e capas pelo TMDb,
+uma nota IMDb pelo OMDb e o Hero enriquecido antes de revelar a Home. TMDb e
+OMDb continuaram configurados no KeyManager. Capas carregadas depois do primeiro
+quadro agora mantêm placeholder e fallback até a decodificação; os valores
+nunca entram na staging ou no WGT. A correção do nonce e da prova ECDSA para
+Base64URL sem padding também concluiu o primeiro registro real: o topo mudou de
+`Dispositivo não registrado` para `Faltam 7 dias`. A ficha também oferece
+títulos semelhantes do próprio catálogo enquanto o TMDb não responde, sempre
+restritos à mesma fonte e às regras do perfil. Quando a resposta pública chega,
+filmes mostram franquia por lançamento antes das recomendações e usam
+`/similar` apenas como fallback; séries usam recomendações. Um resultado
+presente na fonte abre a ficha local, enquanto um ausente abre Assinaturas/Onde
+assistir. A volta recompõe a ficha anterior com a mesma rolagem e o mesmo card
+focado, inclusive em navegação encadeada.
+
+A revisão posterior `tizen-emulator-20260824-182522` adicionou os atalhos
+visuais do diretório TMDb ao topo de Filmes/Séries. O ciclo com
+`-LaunchStabilitySeconds 30` instalou o pacote e conservou o PID 3969. O WGT tem
+714.718 bytes, 39 entradas, duas assinaturas, 37/37 payloads idênticos aos
+fontes e SHA-256
+`F4E45B1A1753BB650384211C9DF7E0C1BBB72AF7846C32BE4B0E6260353882CC`.
+Na janela real, Netflix abriu diretamente a grade de 100 títulos e RETURN
+voltou ao filtro Filmes de Assinaturas. Os 55 grupos pós-gate passaram em 156,7
+segundos; TMDb 44/44, D-pad 349/349 e visual 267/267. Nenhuma chave entrou no
+staging ou no pacote.
+
+Para repetir a prova AVPlay sem adicionar lista ou URL ao WGT de produção:
+
+```powershell
+.\scripts\run-samsung-playback-smoke.ps1 -DeviceSerial emulator-26101
+```
+
+O smoke usa um package id separado, fixture HTTPS pública e callback local. Ele
+falha por timeout ou erro nativo e só imprime `AVPLAY_SMOKE_PASS` depois de tocar,
+pausar, retomar, avançar 30 segundos, retroceder 10 segundos por eventos ECP e
+selecionar faixas alternativas reais de áudio e legenda.
+No `finally`, ele desinstala `BUROSMK001.PlaybackSmoke`, inclusive após timeout
+ou erro, para liberar os recursos nativos antes de abrir o aplicativo normal.
+Na imagem 10.0, o ECP usa os códigos das skins (`244` Play/Pause, `106/105`
+direita/esquerda e `208/168` Fast Forward/Rewind), não os códigos DOM
+`10252/39/37/417/412` observados pelo JavaScript. Ele não substitui a confirmação
+de imagem, áudio e codecs numa TV física.
 
 ---
 
@@ -301,7 +393,7 @@ cd "d:\CURSOR APPS\IPTVBURO\apps\samsung-tizen"
 tizen build-web -- .
 
 # 2) Assinar (gera o .wgt dentro de .buildResult)
-tizen package -t wgt -s iptvburo -- .buildResult
+tizen package -t wgt -s burocertificate-emulator -- .buildResult
 ```
 
 Resultado esperado:

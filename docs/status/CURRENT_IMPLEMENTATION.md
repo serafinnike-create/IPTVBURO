@@ -3,13 +3,13 @@
 - Data da auditoria: 24 de agosto de 2026
 - Branch: `codex/windows-clean-release`
 - Baseline anterior: `v0.1.0-alpha.1`
-- Tag mais recente no repositório atual: `v3.3.0`
+- Tag mais recente no repositório atual: `v4.0.0`
 - Releases publicadas: `v2.0.0-alpha.7`, `v2.0.0-alpha.11`, `v2.0.0-alpha.12`
   como prévia; `v3.0.0`, `v3.0.1`, `v3.0.3`, `v3.0.4`, `v3.0.5`, `v3.0.6`, `v3.1.0`, `v3.1.1`, `v3.1.2`, `v3.2.0`, `v3.2.1` e `v3.3.0` como versões finais do Windows
   (a `v3.0.2` foi despublicada: atualizar por ela apagava o aplicativo)
-- Windows: `v3.3.0`; MSI ainda sem assinatura Authenticode
-- Android/Android TV: `v3.0.1`, ainda prévia — a 3.0.2 é só do Windows. A
-  numeração passou a ser compartilhada com o Windows a partir da 3.0.1; o APK é
+- Windows: `v4.0.0` (`apps/desktop/build.gradle.kts`); MSI ainda sem assinatura Authenticode
+- Android/Android TV: `v4.0.0` (`apps/android-tv/build.gradle.kts`), ainda prévia. A
+  numeração é compartilhada com o Windows desde a 3.0.1; o APK é
   de depuração e não é versão de loja, e a numeração comum alinha as aplicações,
   não a maturidade
 - `packages/domain-model` compila para todos os alvos declarados desde
@@ -92,13 +92,123 @@
   de chave de metadados embutida e SHA-256
   `3BBD2EC7683EE1F5528D9C6D697A35AA77F103ADC90C4F7CDBBDD3631008AC5C`.
 - O gate global de versão ainda falha porque Android está em 3.0.1 e Windows em
-  3.2.1; isso não foi alterado nesta etapa. TV física, latência em hardware,
+  3.3.0; isso não foi alterado nesta etapa. TV física, latência em hardware,
   formatos AVPlay, USB e um portal Stalker real continuam pendentes.
 - Canais Xtream que declaram `tv_archive` e uma duração positiva agora expõem
   catch-up na ficha e no guia do player. A janela, o horário local e a duração
   são validados antes do ENTER; a URL autenticada nasce somente no play e não
   é persistida. A revisão `20260824-190924` passou 55/55 grupos pós-gate,
   D-pad 353/353 e visual 270/270; o WGT manteve PID 6674 por 30 segundos.
+- A Samsung agora oferece a mesma gestão prática de continuidade do Windows:
+  remoção individual em Continuar assistindo (conclui sem apagar do histórico),
+  remoção individual no Histórico, busca local tolerante a acentos/decoração e
+  limpeza integral com confirmação. Todas as operações exigem o perfil ativo;
+  limpar usa uma única transação IndexedDB pelo índice `byProfile` e preserva
+  catálogo, favoritos, downloads e outros perfis. A revisão `20260824-192911`
+  passou 55/55 grupos pós-gate, D-pad 358/358 e visual 274/274. O WGT assinado
+  manteve PID 7219 por 30 segundos no emulador.
+- A tela Continuar assistindo da Samsung também ganhou as decisões diretas do
+  Windows: `Continuar de HH:MM:SS`, `Assistir do início` e `Remover`. Quando o
+  card representa uma série, as duas primeiras ações resolvem o episódio real
+  associado à linha de progresso, sem tentar reproduzir o pai Série e sem abrir
+  um segundo diálogo. A linha e o perfil são revalidados antes do player, e URL
+  e credenciais continuam resolvidas apenas em memória. A revisão
+  `20260824-194551` passou 55/55 grupos pós-gate, biblioteca 29/29, D-pad
+  361/361 e visual multilíngue 284/284. O WGT assinado manteve PID 7762 por 30
+  segundos no `emulator-26101`.
+- A Home Samsung foi comparada lado a lado com o executável Windows em execução.
+  O fluxo de boot já bloqueava corretamente a revelação até catálogo,
+  prateleiras TMDb, Hero enriquecido e capas do primeiro quadro terminarem; a
+  diferença encontrada era de composição. O Hero real passou de 390 para 510 px
+  — 51,6% da área útil, dentro do contrato Windows de 42–58% —, aceita três
+  linhas de sinopse e ganhou degradê vertical até a primeira prateleira. A
+  revisão `20260824-195253` passou 55/55 grupos pós-gate, boot 14/14 + 12/12,
+  D-pad 361/361 e visual 286/286. O WGT manteve PID 8268 por 30 segundos e a
+  inspeção da janela real confirmou Hero, ações e primeiro trilho sem recorte.
+- A mesma comparação de janelas encontrou uma regressão de legibilidade nas
+  fichas Samsung: a regra de 24 px da sinopse apontava para
+  `.detail-hero > p`, mas o markup real mantém o texto dentro de
+  `.detail-hero-copy`. O seletor foi corrigido e agora a ficha real exibe
+  sinopse, nota, progresso, `Assistir`, ações, créditos e elenco com a hierarquia
+  do Windows no primeiro quadro. A revisão `20260824-200843` passou 55/55 grupos
+  pós-gate, D-pad 361/361 e visual 287/287; o WGT manteve PID 9318 por 30
+  segundos no emulador.
+- A comparação do catálogo real mostrou outra lacuna: o Windows oferece
+  `Buscar neste catálogo…` dentro de Filmes/Séries, mas a Samsung obrigava sair
+  para Pesquisa. A busca contextual agora fica antes dos filtros, publica após
+  300 ms, combina texto normalizado com tipo, ano, nota, gênero e serviço e lê
+  blocos paginados do IndexedDB. Resultado vazio conserva a tela de catálogo,
+  explica que não houve correspondência e oferece `Limpar filtros`, sem voltar
+  aos cartões de categoria. D-pad passou 364/364, visual 288/288, idiomas 21/21,
+  compatibilidade antiga 38/38 e os 55 grupos pós-gate passaram. O WGT
+  `20260824-202626` manteve o PID 10312 por 30 segundos no emulador.
+- A faixa superior do catálogo Samsung agora replica a troca interna do Windows:
+  `Ao vivo`, `Filmes` e `Séries` formam um `tablist` acessível, conservam uma
+  única seleção e dividem a mesma linha com a busca contextual. A troca reutiliza
+  a ação de seção da Ribbon, portanto mantém cancelamento de tarefas, seção
+  persistida e restauração de foco já existentes. Atalhos de serviço, filtros e
+  capas continuam no primeiro quadro. A revisão `20260824-203834` passou 55/55
+  grupos pós-gate em 156,5 segundos, D-pad 366/366, visual 288/288,
+  compatibilidade antiga 38/38 e idiomas 21/21. O WGT assinado manteve o PID
+  10851 por 30 segundos no `emulator-26101`; 37/37 payloads coincidem com o
+  staging e nenhuma credencial literal foi embutida.
+- A associação e entrega quente de `iptvburo://title` foram finalmente provadas
+  pelo App Control real da VM, não apenas por mocks. Um remetente temporário com
+  pacote isolado entregou identidade pública sintética ao app de produção, que
+  mostrou o aviso acessível e respondeu a seta/ENTER. A prova também revelou que
+  o último pedido podia reaparecer após o limite de deduplicação de cinco
+  segundos. O consumidor agora mantém a mesma URI deduplicada enquanto ela está
+  pendente e não refaz a busca em cada render; retry explícito ou URI nova ainda
+  resolvem normalmente. Após sete segundos fora de foco o aviso fechado não
+  voltou. A revisão `20260824-205359` passou 55/55 grupos pós-gate em 154,7
+  segundos e manteve o PID 11855 por 30 segundos no emulador.
+- A abertura fria do mesmo App Control também passou. O runner desliga a TV pela
+  `KEY_POWER=116` da skin Samsung, espera o serial ficar offline, relança a mesma
+  VM sem reset e inicia somente o remetente depois do boot. Na revisão
+  `20260824-210854`, o IPTV BURO nasceu já com o aviso do link, respondeu a
+  seta/ENTER, preservou perfil, fonte, catálogo e KeyManager, e manteve o PID
+  3690 por 30 segundos. O primeiro método avaliado — fechar a janela da VM —
+  mostrou um aviso de force stop e foi cancelado/removido; a automação atual
+  recusa fechamento forçado, `Kill`, `reset` e `delete`. Runner passou 10/10,
+  consumidor 12/12 e os 55 grupos pós-gate passaram em 157,6 segundos.
+- A correspondência positiva de App Control passou quente e fria com identidade
+  pública de um título existente na fonte autorizada. As execuções
+  `20260824-220349` e `20260824-220437` retornaram
+  `APPCONTROL_LAUNCH_PASS`, omitiram a URI completa e removeram o remetente.
+  O player Samsung agora repete uma única vez, após 1,5 segundo, somente falha
+  transitória de conexão; a segunda falha mantém o painel manual e sair cancela
+  o timer. A revisão `20260824-220051` passou 56/56 grupos pós-gate em 138,7
+  segundos, D-pad 366/366, visual 288/288, recuperação 8/8 e integração 17/17.
+  O WGT assinado tem 38/38 payloads exatos, zero literal de credencial e manteve
+  PID 4565 por 30 segundos; após o boot frio, PID 3652 também ficou estável.
+- O relógio do cabeçalho Samsung agora oferece a mesma escolha 24/12 horas do
+  Windows. Vinte e quatro horas continua sendo o padrão; a opção de 12 horas usa
+  `h:mm AM/PM`, muda o cabeçalho imediatamente e persiste entre aberturas. As
+  duas escolhas são alvos D-pad com estado acessível e possuem textos em PT-BR,
+  EN, DE, IT e ES. O ciclo TDD registrou RED pela ausência dos controles e depois
+  passou 10/10. A revisão completa passou 57/57 grupos pós-gate em 140,8 segundos,
+  D-pad 366/366, idiomas 21/21, armazenamento 27/27 e visual 288/288. O WGT
+  `20260824-224036` tem 724.763 bytes, 40 entradas, 38/38 payloads exatos, duas
+  assinaturas, nenhum arquivo inseguro, zero padrão literal de credencial e
+  SHA-256 `00A7E0C6634419932C05E91C86B2CF6E0048A713CAF7426C79DCDDA4D1AEB194`.
+  Instalado no `emulator-26101`, conservou PID 3983 após 30 segundos.
+- O catálogo Samsung agora replica a preferência do Windows para juntar cópias
+  do mesmo título. A visualização limpa é o padrão, preserva a primeira variante
+  do provedor e pode ser desligada em Configurações pelo D-pad, sem excluir nada
+  do IndexedDB. Qualidade, codec, dublagem e prefixo de serviço são ignorados;
+  tipo, número de sequência, subtítulo real e ano estruturado permanecem na
+  identidade, portanto remakes homônimos não são escondidos. A regra vale tanto
+  na categoria aberta quanto na prateleira completa paginada, e total/página
+  usam o mesmo predicado. O ciclo TDD registrou RED por contrato ausente, RED na
+  prateleira integral e RED para remakes; depois passou 14/14, com o seletor de
+  anos em 15/15. Idiomas passaram 21/21, armazenamento 27/27, motor antigo 39/39
+  e D-pad 366/366. A regressão completa passou 58/58 grupos pós-gate em 143,3
+  segundos; o gate de versão segue 4/5 apenas por Android/Samsung 3.0.1 versus
+  Windows 3.3.0. O WGT `20260824-230918` possui 726.789 bytes, 40 entradas,
+  duas assinaturas, 38/38 payloads exatos, zero caminho inseguro, zero padrão de
+  atribuição literal de credencial e SHA-256
+  `B3B64A7EBF41BF8C10E7600921A0DB06356DBB9570C13EAD1B4148FC3561FB77`.
+  Instalado no `emulator-26101`, manteve PID 5239 por 30 segundos.
 
 ## Correções de 17 de agosto de 2026
 
@@ -826,7 +936,16 @@ e a GitHub Pre-release com seu APK foram publicadas pelo workflow
 | `packages/domain-model` | Modelos de fonte, categoria, canal e capacidades |
 | `packages/playlist-parser` | Parser M3U streaming e redaction de warnings |
 | `packages/xtream-client` | Cliente e modelos Xtream compartilhados |
+| `packages/stalker-client` | Cliente e modelos Stalker/Ministra compartilhados |
+| `packages/metadata-client` | Integração de metadados (TMDb) compartilhada |
+| `packages/media-source-spi` | SPI de fontes de mídia: validação, scan, resolução tardia e eventos |
+| `packages/webdav-client` | Cliente WebDAV compartilhado |
 | `packages/test-fixtures` | Fixtures sintéticas e públicas, somente em testes |
+| `apps/android-tv-baselineprofile` | Gera o Baseline Profile de inicialização do `apps/android-tv`; nunca é empacotado |
+
+Fora do Gradle: `apps/samsung-tizen` (aplicativo web Tizen, verificado por
+`apps/samsung-tizen-tests` via Node) e `services/license-server` (Worker de
+licença) não são módulos Gradle e não aparecem em `settings.gradle.kts`.
 
 ## Vertical funcional
 
@@ -944,6 +1063,129 @@ busca e paginação, player Android, rotação e retomada após background.
 - breakpoint do workspace Windows foi antecipado para manter a ficha visível em
   telas de notebook.
 
+## Samsung — região de streaming por perfil — 24 de agosto de 2026
+
+- Configurações expõe BR, PT, US, DE e IT como escolhas diretas por D-pad, com
+  seleção visual e `aria-pressed`, usando os mesmos países já aceitos por
+  Assinaturas.
+- A região deixou de ser uma preferência única da instalação e passou a ser
+  persistida por perfil, como no Windows. Perfis novos começam em BR e a
+  preferência global de instalações anteriores é migrada para o perfil que
+  estava ativo.
+- Home pública, diretórios de serviços, filtro por serviço, Assinaturas,
+  recomendações externas e detalhes usam a mesma região ativa. Trocar perfil
+  ou país aborta e invalida respostas antigas para que uma consulta anterior
+  não preencha a tela com disponibilidade do país errado.
+- O índice de serviços agora inclui também o tipo de conteúdo em sua identidade;
+  Filmes e Séries não compartilham um resultado regional por engano.
+- O teste dedicado passou 16/16. A regressão completa Samsung passou 59/59
+  grupos posteriores ao gate em 150,4 segundos; o gate de versão permanece 4/5
+  pela diferença conhecida Android/Samsung 3.0.1 versus Windows 3.3.0.
+- O WGT assinado
+  `workspace/tizen-emulator-20260824-233124/.buildResult/IPTVBURO.wgt` possui
+  728.268 bytes, SHA-256
+  `21302894D10A607BD65124AA409CF5CBFE1812584AF6F526337D974E969456E4`, duas
+  assinaturas e 38/38 payloads idênticos ao staging. Instalado no
+  `emulator-26101`, manteve PID 6251 por 30 segundos.
+
+Isso comprova persistência, navegação e isolamento assíncrono no Web Runtime do
+emulador. A resposta real de cada catálogo regional, legibilidade e desempenho
+percebido ainda precisam ser conferidos numa TV Samsung física.
+
+## Samsung — receber título de outro aparelho — 24 de agosto de 2026
+
+- Configurações ganhou a ação D-pad “Receber título”, equivalente ao receptor
+  apresentado no Android/Windows, adaptada à limitação do Web Runtime Tizen:
+  a TV cria um código temporário no relay em vez de abrir um socket de escuta.
+- O relay aceita somente `open_title`. A TV valida exclusivamente a URI privada
+  registrada ou o link público oficial do IPTV BURO, não usa a identidade como
+  URL de reprodução e procura o título no IndexedDB completo da fonte e do
+  perfil ativos, respeitando categorias ocultas e Kids.
+- Payload inválido permanece na tela com erro; título ausente usa o aviso e a
+  tentativa já existentes. O link recebido fica apenas em memória e não entra
+  nas preferências nem no cofre de credenciais.
+- A página móvel do servidor possui texto específico para link de título quando
+  recebe `kind=open_title`, preservando o formulário sem JavaScript e todas as
+  proteções/limites do código. Essa melhoria de texto requer implantação do
+  Worker; o endpoint de pareamento já era compatível.
+- TDD dedicado: 11/11. A matriz visual passou 289/289 e confirmou o cartão
+  inteiro no primeiro quadro 1920×1080. A regressão Samsung passou 60/60 grupos
+  pós-gate em 166,8 segundos; servidor de licença/relay passou 204/204. O gate de
+  versão segue 4/5 somente por Android/Samsung 3.0.1 versus Windows 3.3.0.
+- WGT assinado:
+  `workspace/tizen-emulator-20260824-234859/.buildResult/IPTVBURO.wgt`, 729.350
+  bytes, SHA-256
+  `9E979C5CAE40A0CE901EDE562E49C431077A83175DD2224277C9B822BD861C19`, 40
+  entradas, duas assinaturas, 38/38 payloads idênticos ao staging, nenhum caminho
+  inseguro e zero atribuição de credencial com padrão de chave/token. Instalado
+  no `emulator-26101`, manteve PID 6827 por 30 segundos.
+
+Isso comprova a adaptação e a estabilidade no emulador. A descoberta direta por
+LAN do Windows não é tecnicamente equivalente no Web Runtime e o fluxo ainda
+precisa ser repetido entre aparelhos reais e numa TV Samsung física.
+
+## Samsung — consulta da chave antes do resgate — 25 de agosto de 2026
+
+- A tela de licença passou a consultar `/v1/key-info` 600 ms após o fim da
+  digitação, como Android/Windows, antes de habilitar o resgate. Ela distingue
+  chave disponível, já pertencente à TV, em uso noutro aparelho, expirada e
+  desconhecida; quando disponível, mostra os dias concedidos.
+- A consulta usa prova ECDSA de `validate`, omite os campos exclusivos do
+  registro, limita e valida a resposta e nunca grava uma licença. Apenas a ação
+  explícita “Usar chave” chama `/v1/redeem`; respostas de uma chave anterior são
+  descartadas por geração.
+- O rascunho permanece somente em memória durante a tela. As credenciais TMDb e
+  OMDb continuam configuráveis pelo app e guardadas no KeyManager; nenhuma chave
+  fornecida pelo usuário foi embutida no código ou no WGT.
+- TDD do cliente e da tela: 9/9 + 9/9. O contrato existente do Worker passou
+  4/4. Compatibilidade ES5 passou 39/39, idiomas 21/21 com 711 chaves por idioma,
+  acessibilidade 15/15, D-pad 366/366 e visual Chromium 291/291. Os 62 grupos
+  posteriores ao gate passaram em 167,1 segundos. O gate permanece 4/5 apenas
+  por Android/Samsung 3.0.1 versus Windows 3.3.0.
+- O WGT assinado
+  `workspace/tizen-emulator-20260825-001055/.buildResult/IPTVBURO.wgt` possui
+  731.877 bytes, SHA-256
+  `9B4086D0A5FC347AF91FFC317915102E8253DE44C97D5C39D525456163EAF1A5`, 40
+  entradas, duas assinaturas, 38/38 payloads idênticos ao staging, zero caminho
+  inseguro e zero atribuição de credencial com dígitos. Instalado no
+  `emulator-26101`, manteve PID 7424 por 30 segundos.
+
+A captura sintética 1920×1080 está em
+`workspace/visual-20260825-000645/licence-key-info.png`. Isso comprova contrato,
+composição e estabilidade no emulador, mas ainda não substitui resgate real e
+legibilidade numa TV Samsung física.
+
+## Samsung — XMLTV M3U e Home sazonal — 27 de agosto de 2026
+
+- Fontes M3U agora leem `url-tvg`/`x-tvg-url`, guardam apenas a referência do
+  guia no KeyManager e relacionam `tvg-id` aos canais sem colocar URL, token ou
+  credencial no IndexedDB, DOM ou logs. O detalhe Ao Vivo carrega o XMLTV sob
+  demanda, usa cache limitado e mantém o canal reproduzível quando o guia falha.
+- A Home passou a usar o mesmo calendário sazonal do domínio Kotlin. Natal, Ano
+  Novo, Halloween, Namorados e férias em família procuram o catálogo local
+  inteiro durante a varredura já existente, inclusive títulos além das primeiras
+  24 escolhas editoriais, e produzem uma fileira limitada a 18 itens.
+- A fileira sazonal fica antes das escolhas editoriais, tem título localizado e
+  selo explicativo, continua visível quando seu único item também é o Hero e não
+  aumenta o número de leituras do IndexedDB.
+- TDD sazonal passou 11/11 e integração da Home 5/5. Compatibilidade ES5 passou
+  41/41. A matriz Chromium passou 295/295 em 1920×1080; a captura está em
+  `workspace/visual-20260827-seasonal/seasonal-home.png`.
+- Os 67 grupos funcionais restantes passaram em 149,3 segundos; somados ao
+  visual, os 68 grupos posteriores ao gate passaram. O gate de versão ficou
+  4/5: Android/Samsung estão em 3.6.0 e Windows em 3.6.2.
+- O WGT assinado
+  `workspace/tizen-emulator-20260827-095303/.buildResult/IPTVBURO.wgt` possui
+  743.487 bytes, 42 entradas, duas assinaturas e 40/40 payloads idênticos ao
+  staging. Não contém caminhos inseguros, artefatos de teste nem atribuições de
+  credencial. SHA-256:
+  `52FCEE8535771F33F1D42FE6EDF738D92DA719C6D3E94AEFE6D8D869BB65DA9A`.
+  Foi instalado no `emulator-26101` e permaneceu no PID 4039.
+
+Essas provas cobrem contrato, composição e estabilidade na VM. XMLTV real,
+overscan, Voice Guide, desempenho percebido e reprodução ainda precisam ser
+repetidos numa TV Samsung física com fontes autorizadas.
+
 ## Publicação
 
 - GitHub Pre-release:
@@ -994,3 +1236,217 @@ busca e paginação, player Android, rotação e retomada após background.
   seus valores não foram incluídos no código ou nos artefatos;
 - o APK atualizado foi instalado preservando dados no aparelho conectado, mas
   a inspeção visual e a importação no Android aguardam desbloqueio manual.
+
+## Samsung — carregamento cinematográfico leve (28 de agosto de 2026)
+
+- A abertura Samsung agora desenha 12 capas em duas fileiras que se deslocam
+  lentamente em sentidos opostos. As capas repetem quatro arquivos WebP locais;
+  não há download adicional durante o boot.
+- Somente as duas fileiras animam `transform`, reduzindo o trabalho de composição
+  em relação a animar cada uma das 12 capas. A preferência de movimento reduzido
+  continua interrompendo as animações.
+- A barra passou de uma linha de 4 px para um indicador legível de 30 px e mostra
+  a porcentagem dentro dela. Texto, largura preenchida e `aria-valuenow` usam o
+  mesmo valor calculado pelo progresso real do catálogo.
+- Testes específicos passaram 19/19; compatibilidade ES5/CSS antigo passou
+  44/44; Chromium 1920×1080 passou 299/299, incluindo 960 trocas de tela e
+  catálogo sintético de 12.000 itens. A suíte Samsung integral passou 65 grupos,
+  1.769 verificações, em 185,4 segundos.
+- O WGT 3.7.0 assinado
+  `workspace/tizen-emulator-20260828-192135/.buildResult/IPTVBURO.wgt` possui
+  783.513 bytes, 45 arquivos, duas assinaturas, zero artefato de desenvolvimento
+  e 43/43 payloads idênticos aos fontes. SHA-256:
+  `F3043FAD7A8C6099111F2EC3BA2FF53EB108E3BC7BFEB769557CD4C54393596B`.
+  Foi instalado no `emulator-26101` e permanece aberto no PID 3921.
+
+Essa evidência comprova o layout e o processo no emulador. Fluidez percebida,
+overscan e consumo na GPU ainda precisam ser confirmados numa TV Samsung física.
+
+## Samsung — seletor compacto de serviços (28 de agosto de 2026)
+
+- A fileira horizontal permanente “Navegar por serviço” foi substituída por um
+  seletor compacto com quantidade de serviços e lista vertical
+  sobreposta. Abrir a lista não empurra nem redesenha as capas.
+- Ano, nota, diretório de serviços, gênero e filtro de serviço passaram a ocupar
+  uma única faixa. As duas funções de serviço continuam separadas: o diretório
+  abre o catálogo público do serviço e o filtro limita apenas a lista do usuário.
+- A lista abre ancorada no botão, aceita D-pad, rola quando há mais de seis
+  opções e conserva a contagem total. Filmes e Séries usam diretórios próprios.
+- Filtros/âncoras passaram 12/12 + 15/15; D-pad passou 367/367;
+  compatibilidade ES5/CSS antigo passou 44/44; Chromium 1920×1080 passou
+  302/302. A suíte Samsung integral passou 65 grupos e 1.772 verificações em
+  174,2 segundos.
+- Evidências visuais:
+  `workspace/visual-20260828-service-selector/movie-categories.png` e
+  `workspace/visual-20260828-service-selector/movie-service-selector.png`.
+- O WGT 3.7.0 assinado
+  `workspace/tizen-emulator-20260828-231921/.buildResult/IPTVBURO.wgt` possui
+  784.087 bytes, 45 arquivos, duas assinaturas, zero artefato de desenvolvimento
+  e 43/43 payloads idênticos aos fontes. SHA-256:
+  `4B36F1E44A86E4A60B6D46FA6D2DC24347BAAF69E79835EFCF53EE0A04582244`.
+  Foi instalado no `emulator-26101` e permaneceu aberto no PID 6965.
+
+## Samsung — ficha e preparação do Seller Office (29 de agosto de 2026)
+
+- Elenco passou a usar retratos maiores em uma única faixa horizontal, e elenco
+  e títulos parecidos agora exibem indicador de rolagem e continuam navegáveis
+  pelo D-pad para além dos itens inicialmente visíveis.
+- `config.xml` declara `http://tizen.org/feature/screen.size.all`, exigido pela
+  verificação prévia do Seller Office.
+- A política pública em `https://iptvburo.pages.dev/privacy` foi atualizada para
+  Samsung TV, armazenamento Tizen e provedores de metadados.
+- Foi preparado o candidato em
+  `workspace/samsung-seller-3.7.0-20260829`, com WGT assinado, hash, textos de
+  ficha, instruções de QA, ícones e quatro screenshots sintéticos nos limites
+  de dimensões e tamanho da Samsung.
+- A suíte Samsung integral passou 65 grupos em 187,3 segundos. D-pad passou
+  368/368 e Chromium 1920×1080 passou 304/304, incluindo o deslocamento real das
+  duas faixas horizontais e um catálogo sintético de 12.000 itens.
+- O WGT 3.7.0 final possui 784.333 bytes, 45 entradas, duas assinaturas, nenhum
+  artefato de teste/diagnóstico e SHA-256
+  `7295EE1B407BEADA91814951F88B335EBB0BBD87597C545B2E2E0F5140102B60`.
+  Foi instalado no `emulator-26101` e permaneceu aberto no PID 4032.
+
+O pacote ainda não foi submetido. Permanecem obrigatórios: validação em TV
+Samsung física, credencial/fonte autorizada para QA, preenchimento das escolhas
+de classificação/países/modelos e o PPTX oficial de descrição de UI, cujo
+download requer sessão autenticada no portal Samsung.
+
+## Samsung — nova rodada de paridade com Windows (29 de agosto de 2026)
+
+- O atalho `Atualizar listas` do cabeçalho deixou de ser exclusivo de Xtream:
+  M3U remoto/local e Stalker agora reutilizam a atualização transacional já
+  existente sem obrigar o usuário a entrar em Gerenciar fonte nem trocar de tela.
+- A ajuda fixa do controle remoto passou a ocupar uma faixa própria de 48 px;
+  a área rolável termina antes dela e capas, ações e fichas não ficam mais
+  encobertas no limite inferior.
+- O fallback de trailer para widget `file://` foi destravado. Sem origem HTTP, o
+  embed usa os controles próprios do YouTube e texto específico; com origem
+  HTTP, o D-pad continua controlando reprodução, seek e áudio via IFrame API.
+- Atualização passou 21/21, trailer 17/17, idiomas 21/21 com 785 chaves por
+  idioma, compatibilidade Tizen antiga 44/44, D-pad 368/368 e a matriz visual
+  1920×1080 passou 305/305. A suíte integral passou 65 grupos em 193,2 segundos.
+- O WGT 3.7.0 em
+  `workspace/tizen-emulator-20260829-005035/.buildResult/IPTVBURO.wgt` possui
+  788.690 bytes, 45 entradas, duas assinaturas, nenhum artefato de teste e
+  SHA-256 `3B974809D5674EE6085BD3E3FF9CB17A411530B563A278D4E6C909453803E8D9`.
+  Foi instalado no `emulator-26101` e permaneceu aberto no PID 4915.
+
+## Samsung — imagens adaptativas ao painel (29 de agosto de 2026)
+
+- A viewport e o AVPlay continuam no sistema lógico Samsung 1920×1080.
+- Um adapter ES5 consulta `PANEL`, usa `DISPLAY` como fallback e só então usa
+  `devicePixelRatio`, classificando a tela como FHD, UHD ou 8K.
+- Capas, backdrops, logos de serviços e fotos do elenco provenientes do TMDb
+  recebem tamanhos maiores em UHD/8K, com allowlists e cache atualizados.
+- Ícones internos continuam vetoriais; imagens fotográficas mantêm
+  reamostragem normal, sem `pixelated`/`crisp-edges`.
+- Evidência: resolução 13/13, engine antiga 45/45, TMDb 44/44, visual 305/305,
+  D-pad 368/368 e suíte integral final exit 0 em 189,5 segundos.
+- WGT: `workspace/tizen-emulator-20260829-093834/.buildResult/IPTVBURO.wgt`,
+  794.451 bytes, 46 entradas, duas assinaturas, 44/44 payloads idênticos e
+  SHA-256 `49BA82FD9ADE42EF42D3A2050E5A23FF66FCE8431A07E8787529BAD02515AFE6`;
+  instalado e estável no emulador com PID 4529.
+
+Limitação: o Web Runtime Samsung compõe a interface em 1920×1080 também em
+painéis 4K/8K. A rodada melhora a qualidade das fontes raster antes do upscale,
+mas nitidez física, GPU e memória ainda não foram medidas em hardware.
+
+## Samsung — temporadas e downloads na ficha de série (29 de agosto de 2026)
+
+- O bloco recolhível de temporadas passou a aparecer logo depois do Hero da
+  série, antes de créditos, elenco e títulos parecidos, acompanhando a ordem de
+  decisão da ficha Windows.
+- Cada temporada Xtream elegível mostra a ação de download na mesma linha do
+  cabeçalho; quando expandida, cada capa de episódio conserva sua própria ação.
+- Com USB montado, as ações reutilizam a fila real existente, a confirmação em
+  lote, a ordenação T/E e a resolução tardia da URL. Sem USB, continuam
+  visíveis e explicam o requisito, sem criar uma transferência falsa.
+- D-pad passou 372/372; matriz Chromium 1920×1080 passou 307/307; acessibilidade
+  17/17; compatibilidade Tizen antiga 45/45; download USB 51/51; disponibilidade
+  8/8. `git diff --check` não encontrou erro (somente avisos de CRLF).
+- O WGT assinado em
+  `workspace/tizen-emulator-20260829-193513/.buildResult/IPTVBURO.wgt` possui
+  797.157 bytes e SHA-256
+  `192A757780930ABFB26FC9704491EB8288B717DDB4DE82C7AA0D39CA36D9F9C2`.
+  Foi instalado no `emulator-26101` e permaneceu aberto no PID 6814 durante o
+  gate de estabilidade de 8 segundos.
+
+Limitação: o emulador valida composição e contratos sintéticos, mas a API
+`tizen.download` e a gravação de uma temporada completa ainda precisam ser
+repetidas numa TV Samsung física com USB e uma fonte autorizada.
+
+## Samsung — auditoria de acabamento e candidato local (29 de agosto de 2026)
+
+- Todos os controles essenciais do player estão disponíveis na própria tela e
+  cabem no quadro 1920×1080, inclusive `Leituras`; controles coloridos continuam
+  atalhos opcionais, não requisito de hardware.
+- Temporadas permanecem acima do elenco e têm ação de download em uma linha;
+  episódios conservam ação própria e feedback explicativo quando falta USB.
+- O cabeçalho foi descongestionado e três helpers do player deixaram de ser
+  declarados três vezes.
+- A suíte Samsung integral terminou com código 0 em 192,1 segundos. A matriz
+  visual passou 309/309, D-pad 372/372, downloads USB 51/51 e engine antiga
+  45/45.
+- O WGT assinado em
+  `workspace/tizen-emulator-20260829-195008/.buildResult/IPTVBURO.wgt` possui
+  797.209 bytes, 46 entradas, duas assinaturas, 44/44 payloads idênticos ao
+  staging, zero artefato de desenvolvimento e SHA-256
+  `530188FD7BF725A29EE4DC289F1B3B177F6B02EEFFBFF02617BFED0036656418`.
+  Foi instalado no `emulator-26101` e permaneceu aberto no PID 7345 por 15 s.
+
+Permanece `hardware: NOT_VALIDATED`: emulador não substitui reprodução, codecs,
+overscan, Voice Guide, USB e desempenho medidos em uma Samsung TV física. O
+Seller Office também exige credencial/fonte de QA, PPTX oficial, classificação,
+países/modelos e Auto Pre-Test autenticado.
+
+## Samsung/Android — paridade visual com o Windows (31 de agosto de 2026)
+
+- Trailers automáticos do Hero e do Descobrir não cobrem mais a arte apenas
+  porque o iframe/WebView carregou. O conteúdo móvel aguarda o assentamento
+  compartilhado de 3 segundos e exige reprodução confirmada; falha ou ausência
+  de `PLAYING` por 10 segundos volta silenciosamente para a capa.
+- O Android destrói o WebView após falha, evitando manter sessão e recursos de
+  mídia invisíveis. No widget Samsung `file://`, onde a IFrame API não pode ser
+  confirmada com segurança, permanece o fallback já validado pelo runtime, sem
+  afirmar confirmação de reprodução.
+- O Descobrir Android passou a oferecer Pular, Guardar e Detalhes, acompanhando
+  as decisões disponíveis no Windows e Samsung, com localização nos cinco
+  idiomas existentes.
+- Cards de continuidade em foco exibem um affordance central de reprodução no
+  Android e Samsung. A ação, progresso e acessibilidade originais do card foram
+  preservados.
+- Evidência Samsung: testes focados 19/19 e 15/15; suíte integral de 79 grupos
+  com código 0 em 181,6 segundos. Evidência Android: compilação Kotlin, teste
+  focado e suíte completa `testDebugUnitTest` aprovados; `BUILD SUCCESSFUL`, 47
+  tarefas.
+
+Limitação: esta rodada valida código, contratos e composição automatizada. A
+nitidez, o início real dos trailers, consumo do WebView, D-pad/Voice Guide e
+desempenho ainda precisam ser conferidos em celular, Android TV e Samsung TV
+físicos.
+
+## Samsung — Descobrir em duas colunas (31 de agosto de 2026)
+
+- Corrigida a sobreposição que deixava Pular, Guardar e Detalhes atrás do pôster.
+- A tela agora apresenta pôster 2:3 à esquerda e trailer/backdrop 16:9, sinopse e
+  decisões à direita, seguindo a hierarquia do Windows e preservando D-pad.
+- O item atual solicita enriquecimento próprio pelo provedor/TMDb; não depende
+  mais de ter aparecido anteriormente no Hero da Home. Trailer e metadados
+  continuam transitórios e URLs autenticadas não são persistidas.
+- Foi adicionado estado localizado “Carregando sinopse e trailer…” em PT-BR, EN,
+  DE, IT e ES. Falha de trailer conserva o backdrop/capa.
+- Evidências: D-pad 372/372; trailer 20/20; idiomas 21/21; engine Tizen antiga
+  45/45. A composição Descobrir passou na matriz visual 1920×1080; a imagem está
+  em `workspace/visual-20260831-discover-parity/discover.png`.
+- O pacote
+  `workspace/tizen-emulator-20260831-190802/.buildResult/IPTVBURO.wgt` foi
+  compilado, assinado e instalado no `emulator-26101`; PID 4660 permaneceu
+  estável por 10 segundos. Tamanho 810.969 bytes, SHA-256
+  `0FBDB55305C899964FE86F39872F60C9E1E2D8FAABBBB32E765CB74535E614E1`.
+
+Limitações: a matriz visual completa terminou com uma falha de resistência no
+limite de listeners após 960 mudanças de tela (313 verificações aprovadas). O
+emulador está com assinatura vencida e bloqueou a inspeção do catálogo real;
+não houve tentativa de contornar o gate. Trailer, sinopse e reprodução ainda
+precisam ser conferidos após reativação e em TV física.

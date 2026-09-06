@@ -17,7 +17,7 @@ O projeto não fornece conteúdo, listas, credenciais ou mecanismos para contorn
 - Parser streaming: `packages/playlist-parser`.
 - Clientes: `packages/xtream-client` e `packages/stalker-client`.
 - Perfis, Kids, favoritos, catálogo, detalhes e continuidade já possuem implementação parcial/real conforme o status documentado.
-- GDD 8 está documentado, mas a experiência de áudio ainda não está liberada.
+- GDD 8: a Fase 0 (contratos universais) já foi executada. A experiência de áudio está em preview somente no desktop — `packages/platform-capabilities/windows-preview.json` declara `audio.supported: true` e a `MusicWorkspace` está ligada em `DesktopApp.kt` — e não está liberada no Android nem no Samsung Tizen (os respectivos arquivos de capabilities não declaram `audio`).
 
 Não confie somente neste resumo. Leia `docs/status/CURRENT_IMPLEMENTATION.md` e audite o código.
 
@@ -59,23 +59,22 @@ Para Media SuperHub/áudio:
 
 ## Branch de trabalho atual
 
-A documentação do GDD 8 foi adicionada à branch:
+A branch de trabalho real é:
 
 ```text
-agent/iptv-buro-0.2-preview
+codex/windows-clean-release
 ```
 
-Antes de trabalhar, confirme a branch real e o estado do repositório. Não suponha que este texto esteja atualizado se a branch mudou.
+Antes de trabalhar, confirme a branch real e o estado do repositório (`git branch --show-current`). Não suponha que este texto esteja atualizado se a branch mudou.
 
 ## Próxima tarefa oficial do GDD 8
 
-Executar somente a **Fase 0 — contratos universais e proteção contra regressão**, conforme:
+A **Fase 0 — contratos universais e proteção contra regressão** já foi executada, conforme:
 
-```text
-docs/PROMPT_CLAUDE_IMPLEMENT_GDD8.md
-```
+- `docs/audits/GDD8_PHASE0_ARCHITECTURE_AUDIT.md`;
+- a seção "Fundação Media SuperHub — Fase 0" em `docs/status/CURRENT_IMPLEMENTATION.md`.
 
-A Fase 0 não deve expor Música/Rádio na interface nem implementar fonte real de áudio. Ela deve preparar domínio, capabilities, identidade, adapters e testes sem regressão no vertical de vídeo.
+A próxima fase real é a **Fase 1 — rádio vertical**, conforme `docs/GDD_8_MEDIA_SUPERHUB_AUDIO.md` (seção 27, "Fases de implementação"): adicionar uma estação por URL/M3U autorizado, persistir estação, listar favoritas/recentes, tocar em background no Android, ICY metadata quando disponível, player compacto e tela completa, e Windows com capability honesta. O escopo e o processo de execução seguem `docs/PROMPT_CLAUDE_IMPLEMENT_GDD8.md`.
 
 ## Relatório obrigatório
 
