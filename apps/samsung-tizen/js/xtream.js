@@ -45,8 +45,18 @@ var BuroXtream = (function () {
             var user = payload && payload.user_info;
             var auth = user && (user.auth === 1 || user.auth === '1');
             var status = user && String(user.status || '').toLowerCase();
+            var expiry;
             if (!auth || (status && status !== 'active')) { failure({ code: 'AUTH_REJECTED' }); return; }
-            success({ username: user.username || '', status: user.status || 'Active', expiresAt: user.exp_date || null });
+            /* exp_date so conta quando e uma data a serio. Uma linha que nao expira
+               chega como vazio, "0" ou "null" conforme o painel, e nenhum desses
+               quer dizer que a assinatura terminou -- mostrar isso como vencida
+               seria um aviso inventado a partir de um campo por preencher. */
+            expiry = Number(user.exp_date);
+            success({
+                username: user.username || '',
+                status: user.status || 'Active',
+                expiresAt: (isFinite(expiry) && expiry > 0) ? expiry : null
+            });
         }, failure);
     }
 

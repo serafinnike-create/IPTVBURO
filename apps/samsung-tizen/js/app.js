@@ -87,6 +87,10 @@ var BuroApp = (function () {
     var pairingRequest = null;
     var homeArtworkRedrawTimer = null;
     var clockTimer = null;
+    /* O tique de minuto do guia: para poder parar e para só redesenhar quando
+       o minuto realmente virou, mesmo com o intervalo de um segundo. */
+    var guideClockTimer = null;
+    var guideMinuteRendered = 0;
     var bootSweepTimer = null;
     var bootSweepDone = null;
     var homeCache = null;
@@ -284,7 +288,7 @@ var BuroApp = (function () {
         { tag: 'it', name: 'Italiano' },
         { tag: 'es', name: 'Español' }
     ];
-    var APP_VERSION_FALLBACK = '3.8.0';
+    var APP_VERSION_FALLBACK = '4.0.0';
 
     /*
       Quanto tempo o teste fica visivel mesmo quando acaba antes.
@@ -316,6 +320,13 @@ var BuroApp = (function () {
         ready: false,
         busy: false,
         preferences: null,
+        /* Quando a assinatura da lista termina, em segundos epoch, ou null quando
+           o painel nao diz. E a assinatura da lista, nao a licenca da app: as duas
+           ficam lado a lado no topo e querem dizer coisas diferentes. Nulo cobre
+           tanto o painel que nao manda exp_date como a linha que nao expira, e nos
+           dois casos nao se mostra nada -- inventar um aviso a partir de um campo
+           ausente seria pior que o silencio. */
+        playlistExpiresAt: null,
         profiles: [],
         sources: [],
         categories: [],
@@ -2520,7 +2531,7 @@ var BuroApp = (function () {
             /* O indicador fica fora do <h1>: o título tem de continuar sendo
                exatamente o nome da seção, que é o que a tela anuncia. */
             '</h1>' + catalogueSyncChip() + topbarSubtitleHtml() + (topbarExtra || '') +
-            '<div class="topbar-status">' + refreshChipHtml() + diagnosticsChipHtml() + downloadChipHtml() + licenceChipHtml() + clockHtml() + profileChipHtml() +
+            '<div class="topbar-status">' + refreshChipHtml() + diagnosticsChipHtml() + downloadChipHtml() + licenceChipHtml() + playlistChipHtml() + clockHtml() + profileChipHtml() +
             notificationBellHtml() + '</div></header><section class="content ' + (scrollable ? 'scrollable' : '') + '">' +
             sharedTitleNoticeHtml() + content + '</section><div class="bottom-hint">' + t('useArrows') + '</div></main></div>';
     }
@@ -6476,6 +6487,48 @@ var BuroApp = (function () {
     }
 
     /*
+      O guia envelhece sozinho.
+
+      O “agora” do guia, a barra do programa em curso e a ficha de canal ao
+      vivo são calculados quando a tela é desenhada. Quem fica parado no guia
+      via o relógio da barra avançar enquanto a linha “agora” não se move — o
+      mesmo defeito que o Windows corrigiu alinhando o tique do guia ao minuto
+      (`rememberGuideClock`). Aqui um tique de um segundo confere se o minuto
+      virou e só então redesenha, e apenas sobre o guia ou a ficha de canal ao
+      vivo: uma troca de minuto na Home não reconstrói tela nenhuma. Durante a
+      reprodução o shell fica em `aria-hidden` sob o player, e redesenhar ali
+      só gastaria trabalho — então não acontece. O `render` conserva o foco
+      pela identidade do elemento, então a linha escolhida continua escolhida.
+    */
+    function guideScreenVisible() {
+        if (state.section === 'GUIDE') { return true; }
+        return state.section === 'LIVE' && Boolean(state.screenData &&
+            state.screenData.kind === 'live');
+    }
+
+    function guideClockTick(nowMs) {
+        var minute = Math.floor((Number(nowMs) || Date.now()) / 60000);
+        if (minute === guideMinuteRendered) { return false; }
+        guideMinuteRendered = minute;
+        if (guideScreenVisible() && !document.body.classList.contains('playing')) {
+            render();
+            return true;
+        }
+        return false;
+    }
+
+    function startGuideClock() {
+        if (guideClockTimer) { window.clearInterval(guideClockTimer); }
+        guideMinuteRendered = Math.floor(Date.now() / 60000);
+        guideClockTimer = window.setInterval(function () { guideClockTick(); }, 1000);
+    }
+
+    function stopGuideClock() {
+        if (guideClockTimer) { window.clearInterval(guideClockTimer); }
+        guideClockTimer = null;
+    }
+
+    /*
       Quantos títulos o catálogo tem, de verdade.
 
       A barra contava `state.items`, que é a amostra do boot mais o que as telas
@@ -6639,6 +6692,46 @@ var BuroApp = (function () {
     function catalogueSyncShortLabel(status) {
         if (!status || !status.total) { return t('refreshingCatalogue'); }
         return status.completed + '/' + status.total;
+    }
+
+    /* Quanto falta da assinatura da lista, ao lado da licenca da app.
+
+       Sao assinaturas diferentes e ficam faceis de confundir, por isso o texto
+       diz sempre de qual fala: "Lista: faltam 12 dias", nunca um numero solto.
+       So aparece no ultimo mes ou ja vencida -- a mesma regra que a licenca ja
+       segue, para nao virar um aviso permanente no topo. */
+    /* Guarda o que o painel disse sobre o fim da assinatura.
+
+       Vazio, "0" ou "null" contam todos como ausente: um painel que nao preenche
+       o campo nao esta a dizer que a assinatura acabou em 1970, e mostrar isso
+       como vencida seria um aviso inventado. */
+    function rememberPlaylistExpiry(account) {
+        var raw = account && account.expiresAt;
+        var seconds = Number(raw);
+        state.playlistExpiresAt = (raw && isFinite(seconds) && seconds > 0) ? seconds : null;
+    }
+
+    function playlistChipHtml() {
+        var seconds = Number(state.playlistExpiresAt);
+        var days;
+        var label;
+        var when;
+        if (!seconds || !isFinite(seconds) || seconds <= 0) { return ''; }
+        days = Math.ceil((seconds * 1000 - Date.now()) / 86400000);
+        if (!isFinite(days)) { return ''; }
+        /* A data escrita como o idioma do utilizador a escreve: o mesmo dia le-se
+           26/10 em portugues e 10/26 noutros, e uma data lida ao contrario e pior
+           que nenhuma -- diz calado o mes errado. */
+        when = new Date(seconds * 1000).toLocaleDateString(BuroI18n.language(), {
+            day: '2-digit', month: '2-digit'
+        });
+        if (days < 0) { label = t('playlistExpired').replace('{date}', when); }
+        else if (days <= 1) { label = t('playlistDayLeft').replace('{date}', when); }
+        else {
+            label = t('playlistDaysLeft').replace('{count}', days).replace('{date}', when);
+        }
+        return '<span class="topbar-chip ' + (days <= 3 ? 'urgent' : '') + '">' +
+            escapeHtml(label) + '</span>';
     }
 
     function licenceChipHtml() {
@@ -11388,7 +11481,8 @@ var BuroApp = (function () {
             BuroLicense.confirmAssignedSource('bad_credentials');
             return;
         }
-        BuroXtream.authenticate(secret, function () {
+        BuroXtream.authenticate(secret, function (account) {
+            rememberPlaylistExpiry(account);
             BuroStorage.secureSave(source.id, secret, function () {
                 loadAssignedCategorySets(secret, source, ['LIVE', 'MOVIE', 'SERIES'], [], assigned);
             }, function () { BuroLicense.confirmAssignedSource('store_failed'); });
@@ -11475,7 +11569,8 @@ var BuroApp = (function () {
                 password: document.getElementById('source-password').value
             });
         } catch (error) { sourceFailed(error); return; }
-        BuroXtream.authenticate(secret, function () {
+        BuroXtream.authenticate(secret, function (account) {
+            rememberPlaylistExpiry(account);
             BuroStorage.secureSave(source.id, secret, function () {
                 loadXtreamCategorySets(secret, source, ['LIVE', 'MOVIE', 'SERIES'], []);
             }, sourceFailed);
@@ -11739,7 +11834,8 @@ var BuroApp = (function () {
             if (resumeOnFailure) { startXtreamHydration(source, false); }
         }
         if (source.type === 'XTREAM') {
-            BuroXtream.authenticate(secret, function () {
+            BuroXtream.authenticate(secret, function (account) {
+                rememberPlaylistExpiry(account);
                 fetchXtreamCategorySets(secret, source, ['LIVE', 'MOVIE', 'SERIES'], [], function (categories) {
                     finishSourceRefresh(requestId, source, categories, [], false, null, draft);
                 }, failed);
@@ -12646,6 +12742,24 @@ var BuroApp = (function () {
             .replace('{season}', season).replace('{episode}', episode);
     }
 
+    /*
+      O botão principal da ficha de filme diz o que vai fazer, como no Windows:
+      “Continuar de 12:03” quando existe progresso retomável, “Assistir
+      novamente” quando o título já foi concluído e “Assistir” quando nunca foi
+      aberto. A decisão vem da mesma função do player, então o rótulo nunca
+      promete uma posição que o toque não vai cumprir. O prompt de retomada
+      continua existindo: é a adaptação de TV contra o ENTER acidental, e os
+      testes de D-pad o cobrem.
+    */
+    function detailPlayLabel(item) {
+        var progress = playbackProgress(item.id);
+        var decision = BuroDomain.resumeDecision(progress && progress.entry, true);
+        if (decision.kind === 'resume') {
+            return t('detailResumeFrom').replace('{time}', formatPlaybackTime(decision.positionMs));
+        }
+        return progress && progress.completed ? t('detailWatchAgain') : t('watch');
+    }
+
     function detailActionsHtml(item, isSeries, episodeRows, trailerId) {
         var favorite = isFavorite(item.id);
         var marked = hasReminder(item);
@@ -12653,7 +12767,7 @@ var BuroApp = (function () {
         var glyphs = '';
         var primary = !isSeries ?
             '<div class="action-row detail-actions"><button class="button primary focusable" data-action="play" data-id="' +
-                attr(item.id) + '">' + t('watch') + '</button></div>' :
+                attr(item.id) + '">' + escapeHtml(detailPlayLabel(item)) + '</button></div>' :
             (seriesPrimary ? '<div class="action-row detail-actions"><button class="button primary focusable" data-action="series-primary-play" data-id="' +
                 attr(seriesPrimary.item.id) + '">▶ ' + escapeHtml(seriesPrimaryLabel(seriesPrimary)) + '</button></div>' : '');
         /* Rótulo curto nesta barra: `addFavorite` é "Adicionar à Minha BURO",
@@ -14264,6 +14378,7 @@ var BuroApp = (function () {
         BuroTrailer.init();
         BuroKeys.registerMediaKeys();
         startClock();
+        startGuideClock();
         BuroPlayer.setListeners({
             onStatus: function (code, value) {
                 var message = playerStatusText(code, value);
@@ -14442,6 +14557,16 @@ var BuroApp = (function () {
         _matchSubscriptionLocal: matchSubscriptionLocal,
         _schedulePreview: schedulePreview,
         _playItem: playItem,
+        /* Expostas para o teste: o rótulo do botão principal da ficha depende
+           do progresso do perfil ativo, que só existe montado num teste. */
+        _detailPlayLabel: detailPlayLabel,
+        _detailActionsHtml: detailActionsHtml,
+        /* Exposta para o teste: o tique de minuto do guia não pode esperar
+           sessenta segundos reais para ser exercitado. */
+        _guideClockTick: guideClockTick,
+        /* Exposta para o teste: com o relógio real parado, os tiques explícitos
+           ficam determinísticos e não correm contra a virada do minuto real. */
+        _guideClockStop: stopGuideClock,
         /* Envelhece o cache sem o descartar: e o estado de uma segunda visita
            horas depois, que e quando a conferencia serve. */
         _ageHomeCacheForTest: function () { if (homeCache) { homeCache.at = 0; } },

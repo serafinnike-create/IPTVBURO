@@ -72,6 +72,7 @@ async function run() {
     var profile = { id: 'profile-seasonal-app', name: 'Teste', avatarKey: 'gold', isKids: false,
         sourceId: source.id, createdAt: Date.now() };
     var items = [];
+    var addedAt;
     var christmas;
     var rail;
     var seasonalCard;
@@ -92,16 +93,28 @@ async function run() {
     await waitFor(function () {
         return window.BuroApp.state.ready && window.BuroApp.state.screen !== 'BOOT';
     }, 15000);
+    /*
+      Um único carimbo de inclusão para o catálogo inteiro.
+
+      Sem ele cada createItem recebe o Date.now() da sua volta no laço, e quando
+      o laço cruza um milissegundo a fileira "recent" (addedAt desc) escolhe um
+      grupo diferente do que "topRated" e "movies" (sortOrder) — as sobras
+      alimentam uma fileira extra e a Home chega a materializar os 32 títulos,
+      derrubando a verificação de limite por azar de relógio, não por regressão.
+      O que o teste prova continua de pé: com o catálogo inteiro disponível, a
+      Home fica abaixo do total.
+    */
+    addedAt = Date.now();
     for (index = 0; index < 31; index += 1) {
         items.push(window.BuroDomain.createItem({
             sourceId: source.id, providerItemId: 'ordinary-' + index,
             name: 'Filme comum ' + ('0' + index).slice(-2), categoryId: category.id,
-            contentType: 'MOVIE', sortOrder: index, year: 2020, rating: 5
+            contentType: 'MOVIE', sortOrder: index, year: 2020, rating: 5, addedAt: addedAt
         }));
     }
     items.push(window.BuroDomain.createItem({
         sourceId: source.id, providerItemId: 'grinch-deep', name: 'O Grinch — Especial de Natal',
-        categoryId: category.id, contentType: 'MOVIE', sortOrder: 99, year: 2000, rating: 5
+        categoryId: category.id, contentType: 'MOVIE', sortOrder: 99, year: 2000, rating: 5, addedAt: addedAt
     }));
     await call(window, window.BuroStorage.replaceSourceCatalogue, [source, [category], items, true]);
     christmas = window.BuroSeasonal.primaryCollectionFor(new window.Date(2026, 11, 10, 12, 0, 0));

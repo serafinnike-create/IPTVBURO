@@ -1552,11 +1552,26 @@ async function main() {
     var beforeDomNodes = await evaluate("document.querySelectorAll('*').length");
 
     var endurance = await evaluate("(function(){var sections=['MOVIES','SERIES','LIVE','MY_BURO','CONTINUE_WATCHING','HISTORY','REMINDERS','DOWNLOADS','PROFILES','SOURCES','SETTINGS','SEARCH'];var languages=['pt-BR','en','de','it','es'];var started=performance.now();var index;for(index=0;index<960;index+=1){BuroApp.state.screen='SHELL';BuroApp.state.section=sections[index%sections.length];BuroApp.state.screenData=null;if(index%48===0){BuroApp.state.preferences.language=languages[(index/48)%languages.length];BuroI18n.setLanguage(BuroApp.state.preferences.language);}BuroApp.render();BuroApp._onKeyDown({keyCode:index%2?40:39,preventDefault:function(){}});if(index%31===0){BuroApp.state.screen='SOURCE_FORM';BuroApp.state.section='SOURCES';BuroApp.state.screenData={type:index%62===0?'STALKER':'REMOTE_M3U'};BuroApp.render();}if(index%37===0){BuroApp.state.screen='RESUME_PROMPT';BuroApp.state.screenData={itemId:'movie-atlas',positionMs:2520000};BuroApp.render();}}BuroApp.state.preferences.language='pt-BR';BuroI18n.setLanguage('pt-BR');BuroApp.state.screen='SHELL';BuroApp.state.section='MOVIES';BuroApp.state.screenData=null;BuroApp.render();window.scrollTo(0,0);var root=document.getElementById('app');return {elapsedMs:performance.now()-started,domNodes:document.querySelectorAll('*').length,shells:root.querySelectorAll('.shell').length,ribbons:root.querySelectorAll('.buro-ribbon').length,topbars:root.querySelectorAll('.topbar').length,focused:root.querySelectorAll('.focused').length,globalScroll:window.scrollY,rootTextHasUndefined:/\\b(undefined|null)\\b/.test(root.textContent),playing:document.body.classList.contains('playing'),playerHidden:document.getElementById('player-overlay').hidden,trailerHidden:document.getElementById('trailer-overlay').hidden};}())");
-    await delay(100);
-    await send('HeapProfiler.collectGarbage');
-    var afterMetricsResult = await send('Performance.getMetrics');
+    /* O contador JSEventListeners do CDP nem sempre zera na primeira coleta
+       forcada: sob carga, a varredura do GC termina em passadas seguintes e a
+       metrica oscila (ja observado 4, 44 e 276 para o mesmo codigo). Insistir
+       algumas vezes mantem a prova de vazamento real sem depender do timing
+       do coletor. */
     var afterMetrics = {};
-    (afterMetricsResult.metrics || []).forEach(function (metric) { afterMetrics[metric.name] = metric.value; });
+    var settledListenerGrowth = 0;
+    var settleAttempt = 0;
+    var afterMetricsResult;
+    for (settleAttempt = 0; settleAttempt < 10; settleAttempt += 1) {
+        await delay(250);
+        await send('HeapProfiler.collectGarbage');
+        afterMetricsResult = await send('Performance.getMetrics');
+        afterMetrics = {};
+        (afterMetricsResult.metrics || []).forEach(function (metric) { afterMetrics[metric.name] = metric.value; });
+        settledListenerGrowth = (afterMetrics.JSEventListeners || 0) - (beforeMetrics.JSEventListeners || 0);
+        if (settledListenerGrowth <= 12) {
+            break;
+        }
+    }
     var heapGrowth = (afterMetrics.JSHeapUsedSize || 0) - (beforeMetrics.JSHeapUsedSize || 0);
     var nodeGrowth = (afterMetrics.Nodes || 0) - (beforeMetrics.Nodes || 0);
     var listenerGrowth = (afterMetrics.JSEventListeners || 0) - (beforeMetrics.JSEventListeners || 0);
