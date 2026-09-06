@@ -1,6 +1,7 @@
 package com.lucasserafin94.iptvburo.desktop.playback
 
 import com.jetbrains.cef.JCefAppConfig
+import com.lucasserafin94.iptvburo.desktop.DebugLog
 import java.awt.BorderLayout
 import java.awt.Color
 import java.io.File
@@ -126,7 +127,7 @@ class TrailerBrowser {
                                             browser?.wasResized(w, h)
                                             pushPlayerSize(w, h)
                                         }
-                                        println("[trailer] playing at ${w}x${h}")
+                                        DebugLog.d("trailer") { "playing at ${w}x${h}" }
                                         onPlaying()
                                     }
                                 "failed" ->
@@ -216,10 +217,10 @@ class TrailerBrowser {
                         override fun componentResized(event: java.awt.event.ComponentEvent?) {
                             val child = nativeComponent ?: return
                             if (child.width <= 0 || child.height <= 0) return
-                            println(
-                                "[trailer] AWT layout settled at ${child.width}x${child.height} " +
-                                    "(scale ${screenScale()})",
-                            )
+                            DebugLog.d("trailer") {
+                                "AWT layout settled at ${child.width}x${child.height} " +
+                                    "(scale ${screenScale()})"
+                            }
                             browser?.wasResized(child.width, child.height)
                             // wasResized() changes what CEF paints into — the browser's own render
                             // surface. It does not make YouTube's IFrame Player recompute its
@@ -418,7 +419,7 @@ class TrailerBrowser {
             host?.let { return it }
             return TrailerHostServer.start()?.also { started ->
                 host = started
-                println("[trailer] host page server on ${started.origin}")
+                DebugLog.d("trailer") { "host page server on ${started.origin}" }
             } ?: run {
                 println("[trailer] host page server failed to bind")
                 null
@@ -476,7 +477,7 @@ class TrailerBrowser {
                 unavailable = true
                 return null
             }
-            println("[trailer] Chromium runtime at ${runtime.absolutePath}")
+            DebugLog.d("trailer") { "Chromium runtime at ${runtime.absolutePath}" }
             return runCatching {
                 // Chromium lives beside the app, not on the library path, so the bundle directory
                 // has to be handed to JCEF explicitly. JCefAppConfig derives the whole layout from
@@ -546,7 +547,7 @@ class TrailerBrowser {
                         "--autoplay-policy=no-user-gesture-required" +
                         "--high-dpi-support=1" +
                         "--force-device-scale-factor=$deviceScale"
-                println("[trailer] Chromium device scale factor $deviceScale")
+                DebugLog.d("trailer") { "Chromium device scale factor $deviceScale" }
                 CefApp.getInstance(args, settings).also { app = it }
             }.getOrElse { error ->
                 // The type only. The message was included here on the reasoning that a Chromium

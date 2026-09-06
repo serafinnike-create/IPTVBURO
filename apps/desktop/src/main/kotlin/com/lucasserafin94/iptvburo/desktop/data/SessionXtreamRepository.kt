@@ -1,5 +1,6 @@
 package com.lucasserafin94.iptvburo.desktop.data
 
+import com.lucasserafin94.iptvburo.desktop.DebugLog
 import com.lucasserafin94.iptvburo.desktop.model.XtreamCatalogPage
 import com.lucasserafin94.iptvburo.desktop.model.XtreamPlaybackTarget
 import com.lucasserafin94.iptvburo.desktop.model.XtreamSessionSummary
@@ -155,10 +156,10 @@ class SessionXtreamRepository(
                 // same from here — so an empty header chip is the correct outcome as often as it is
                 // a defect, and the two cannot be told apart from a screenshot. A boolean says which
                 // without putting an account's dates in a log file.
-                println(
-                    "[xtream] panel reports a subscription end date: " +
-                        (authenticatedAccount.expiresAtEpochSeconds != null),
-                )
+                DebugLog.d("xtream") {
+                    "panel reports a subscription end date: " +
+                        (authenticatedAccount.expiresAtEpochSeconds != null)
+                }
                 categories.putAll(loadedCategories)
                 catalogs[XtreamContentType.LIVE] = liveCatalog
                 refreshPlaceholdersLocked()
@@ -815,8 +816,9 @@ class SessionXtreamRepository(
         }.onFailure { failure ->
             // Logged, because a silent null here is what made the first build unexplainable: the
             // screen said "could not measure" and there was nothing anywhere saying why. The class
-            // and message only — never the URL, which carries the account's credentials.
-            println("[diagnostico] transferencia falhou: ${failure::class.simpleName}: ${failure.message}")
+            // only, never the message: OkHttp puts the full request URL into its IOException
+            // messages, and the URL carries the account's credentials.
+            println("[diagnostics] transfer measure failed: ${failure::class.simpleName}")
         }.getOrNull()?.let { (bytes, millis) -> TransferSample(bytes = bytes, milliseconds = millis) }
     }
 
@@ -826,7 +828,9 @@ class SessionXtreamRepository(
             runCatching {
                 withCredentials { credentials -> client.measureLatency(credentials, attempts) }
             }.onFailure { failure ->
-                println("[diagnostico] latencia falhou: ${failure::class.simpleName}: ${failure.message}")
+                // The class only, never the message — the message can carry the request URL, and
+                // the URL carries the account's credentials.
+                println("[diagnostics] latency measure failed: ${failure::class.simpleName}")
             }.getOrDefault(emptyList())
         // Reported even when every attempt failed: "none of eight requests came back" is the most
         // useful thing this screen can say, and an empty result would hide it.

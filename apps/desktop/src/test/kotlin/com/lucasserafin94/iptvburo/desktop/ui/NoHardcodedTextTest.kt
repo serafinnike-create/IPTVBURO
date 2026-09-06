@@ -25,13 +25,7 @@ class NoHardcodedTextTest {
      * Every entry is a promise rather than an excuse. Shrinking this list is the work; growing it
      * needs a reason written down beside the name, and the second test below makes that deliberate.
      */
-    private val pending =
-        setOf(
-            // Invented rows for a demo catalogue that is referenced only from a test: no user ever
-            // reads these, so translating them into five languages would be churn, not coverage.
-            // The moment it is wired into the app, it has to be translated and taken off this list.
-            "DemoStreamingDiscoveryProvider.kt",
-        )
+    private val pending = emptySet<String>()
 
     /**
      * Words that mark a literal as Portuguese *prose*.
@@ -51,13 +45,38 @@ class NoHardcodedTextTest {
             RegexOption.IGNORE_CASE,
         )
 
+    /**
+     * One-word Portuguese labels, which the sentence test above cannot see.
+     *
+     * It needs a space and six characters, so a bare "Filme" or "Série" written straight into a
+     * screen passed while the same sentence spoken in full would have failed. Found exactly that
+     * way in the search results: every other label on the screen was translated and these three
+     * were not, in a file the suite called clean.
+     */
+    private val portugueseSingleWord =
+        Regex(""""(filme|filmes|série|séries|ao vivo)"""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Files whose quoted words match provider category names instead of being shown.
+     *
+     * `CategoryLabel` and `CategoryBadge` compare lowercase words against what the provider called
+     * a category — "filme", "ao vivo" — to pick an icon or a clean name. Those words are data keys,
+     * not display text, and translating them would break the match. Kept apart from [pending]
+     * because they are a permanent shape, not work waiting to happen.
+     */
+    private val keywordFiles =
+        setOf(
+            "CategoryLabel.kt",
+            "CategoryBadge.kt",
+        )
+
     @Test
     fun `no screen holds its own Portuguese wording`() {
         val offenders = mutableListOf<String>()
 
         sourceRoot.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
-            .filterNot { it.name == "DesktopStrings.kt" || it.name in pending }
+            .filterNot { it.name == "DesktopStrings.kt" || it.name in pending || it.name in keywordFiles }
             .forEach { file ->
                 file.readLines().forEachIndexed { index, line ->
                     val trimmed = line.trim()
@@ -76,6 +95,11 @@ class NoHardcodedTextTest {
                         if (looksLikeProse && portuguese.containsMatchIn(literal)) {
                             offenders += "${file.name}:${index + 1}  \"$literal\""
                         }
+                    }
+                    // The same defect one word long: the sentence test needs a space and six
+                    // characters, and "Filme" has neither.
+                    portugueseSingleWord.find(line)?.let { match ->
+                        offenders += "${file.name}:${index + 1}  ${match.value}"
                     }
                 }
             }
@@ -102,7 +126,12 @@ class NoHardcodedTextTest {
     }
 
     private companion object {
-        /** What it was when the list was written. Lower it as files are cleared; never raise it. */
-        const val PENDING_CEILING = 1
+        /**
+         * What it was when the list was written. Lower it as files are cleared; never raise it.
+         *
+         * Zero since the demo catalogue moved to the test source set: it was the last entry, and a
+         * file only tests read never needed translating in the first place.
+         */
+        const val PENDING_CEILING = 0
     }
 }

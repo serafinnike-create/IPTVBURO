@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.desktop.license
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.lucasserafin94.iptvburo.desktop.DebugLog
 import com.lucasserafin94.iptvburo.domain.model.LicenseBlockReason
 import com.lucasserafin94.iptvburo.domain.model.LicenseDecision
 import com.lucasserafin94.iptvburo.domain.model.LicensePolicy
@@ -68,7 +69,7 @@ class LicenseClient(
         val firstSeen = store.firstSeen()
 
         if (!server.isConfigured) {
-            println("licence check skipped: this build has no server key")
+            DebugLog.d("licence") { "check skipped: this build has no server key" }
             return LicenseStatus(
                 decision = LicenseDecision.Blocked(LicenseBlockReason.NOT_ACTIVATED),
                 deviceId = identity.deviceId,

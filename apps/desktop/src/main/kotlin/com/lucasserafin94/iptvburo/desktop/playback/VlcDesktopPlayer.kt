@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.desktop.playback
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.lucasserafin94.iptvburo.desktop.DebugLog
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
 import com.lucasserafin94.iptvburo.domain.model.PlaybackBuffering
 import com.lucasserafin94.iptvburo.desktop.ui.ScreenStrings
@@ -473,7 +474,7 @@ class VlcDesktopPlayer(
         // Same grace window as the audio switch: subtitles are re-attached to the running chain and
         // can produce the same brief `stopped`.
         switchingTrackUntil = System.currentTimeMillis() + TRACK_SWITCH_GRACE_MILLIS
-        println("[$logTag] subtitle_track -> $trackId")
+        DebugLog.d(logTag) { "subtitle_track -> $trackId" }
         executeCommand("subtitle_track", mapOf("val" to trackId.toString()))
     }
 
@@ -685,7 +686,7 @@ class VlcDesktopPlayer(
         // Handle and surface size, never the input. A zero handle or a zero-sized canvas is the
         // difference between "VLC is running and drawing nowhere" and "VLC never started", and
         // from outside the two look identical: a black window with 00:00 / 00:00.
-        println("[$logTag] starting: handle=$windowHandle surface=${canvas.width}x${canvas.height}")
+        DebugLog.d(logTag) { "starting: handle=$windowHandle surface=${canvas.width}x${canvas.height}" }
         // The password goes in a file this account alone can read, because a command line cannot
         // hold a secret: any process running as this user can read another's. Falls back to the
         // argument only if the file could not be written, since a player that refuses to start
@@ -848,7 +849,7 @@ class VlcDesktopPlayer(
             // the distinction that has cost the most time here.
             if (stateName != lastLoggedState) {
                 lastLoggedState = stateName
-                println("[$logTag] state=$stateName length=${status.long("length")}")
+                DebugLog.d(logTag) { "state=$stateName length=${status.long("length")}" }
             }
             val playing = stateName == "playing"
             val paused = stateName == "paused"

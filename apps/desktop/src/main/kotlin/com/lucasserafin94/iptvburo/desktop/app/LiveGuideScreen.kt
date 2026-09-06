@@ -541,8 +541,12 @@ fun rememberGuideClock(): Long {
     var seconds by remember { mutableStateOf(System.currentTimeMillis() / 1_000L) }
     LaunchedEffect(Unit) {
         while (true) {
-            delay(60_000L)
-            seconds = System.currentTimeMillis() / 1_000L
+            val now = System.currentTimeMillis() / 1_000L
+            seconds = now
+            // Aligned to the next minute rather than sleeping a flat sixty seconds — the same
+            // contract as HeaderClock, so the bar and the "now" mark move when the minute does
+            // instead of drifting up to a minute behind it.
+            delay(((60 - now % 60) * 1_000L).coerceAtLeast(1_000L))
         }
     }
     return seconds

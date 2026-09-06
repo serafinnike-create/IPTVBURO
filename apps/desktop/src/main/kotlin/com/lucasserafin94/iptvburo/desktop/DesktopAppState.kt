@@ -3255,7 +3255,7 @@ class DesktopAppState(
         // Reported once, so whether the selector is showing real marks or falling back to monograms
         // can be read from the log rather than guessed at from a screenshot. Names only — the key is
         // never printed.
-        println("[providers] logos loaded: ${loaded.size} (${loaded.keys.sorted().joinToString(", ")})")
+        DebugLog.d("providers") { "logos loaded: ${loaded.size} (${loaded.keys.sorted().joinToString(", ")})" }
 
         if (loaded.isNotEmpty()) {
             providerLogos = loaded
@@ -3659,7 +3659,7 @@ class DesktopAppState(
         // identical from outside — which is how an empty section survived two builds.
         val catalogue = streamingCatalogue
         if (catalogue == null) {
-            println("[streaming] no catalogue: metadata key missing or blank")
+            DebugLog.d("streaming") { "no catalogue: metadata key missing or blank" }
             streamingLoadFailed = false
             return
         }
@@ -3672,11 +3672,11 @@ class DesktopAppState(
         // session. The in-flight kind is tracked rather than a bare boolean so switching tabs
         // during a load still fetches the one the user asked for.
         if (streamingLoading && loadingKind == kind) {
-            println("[streaming] $kind already loading, skipping")
+            DebugLog.d("streaming") { "$kind already loading, skipping" }
             return
         }
         if (!force && shelfCache[kind]?.isNotEmpty() == true) {
-            println("[streaming] $kind already cached, skipping")
+            DebugLog.d("streaming") { "$kind already cached, skipping" }
             if (streamingKind == kind) streamingLoadFailed = false
             return
         }
@@ -3690,7 +3690,7 @@ class DesktopAppState(
             val region = streamingRegion
             val stored = shelfDiskCache.read(kind, region)
             if (!stored.isNullOrEmpty()) {
-                println("[streaming] $kind restored ${stored.size} shelves from disk")
+                DebugLog.d("streaming") { "$kind restored ${stored.size} shelves from disk" }
                 shelfCache[kind] = stored
                 if (streamingKind == kind) {
                     streamingShelves = stored
@@ -3699,7 +3699,7 @@ class DesktopAppState(
                 return
             }
         }
-        println("[streaming] loading $kind shelves for region $streamingRegion")
+        DebugLog.d("streaming") { "loading $kind shelves for region $streamingRegion" }
 
         streamingLoading = true
         if (streamingKind == kind) streamingLoadFailed = false
@@ -3730,7 +3730,7 @@ class DesktopAppState(
             if (failed) {
                 println("[streaming] shelf load unavailable (key rejected: $keyRejected)")
             }
-            println("[streaming] loaded ${loaded.size} $kind shelves")
+            DebugLog.d("streaming") { "loaded ${loaded.size} $kind shelves" }
             if (!failed) shelfCache[kind] = loaded
             // Kept for tomorrow. The region is the one this request was issued for, read before the
             // suspend rather than after: a user who changes country mid-fetch would otherwise have
@@ -4071,12 +4071,11 @@ class DesktopAppState(
         if (!built.isEmpty) {
             serviceTitleIndex = built
             serviceIndexBuiltFor = cacheKey
-            println(
-                "[servicos] indice: " +
-                    built.services.joinToString(", ") { name -> "$name=${built.countFor(name)}" },
-            )
+            DebugLog.d("services") {
+                "index: " + built.services.joinToString(", ") { name -> "$name=${built.countFor(name)}" }
+            }
         } else {
-            println("[servicos] indice vazio - nenhum titulo da lista casou com o que a TMDb oferece")
+            DebugLog.d("services") { "empty index — no library title matched what TMDb offers" }
         }
     }
 
@@ -4353,7 +4352,7 @@ class DesktopAppState(
         // nothing queued, or queued but nothing resolvable.
         val queued = multiviewChannelIds.size
         val resolvable = multiviewTiles().size
-        println("multiview: opening with $queued queued, $resolvable playable")
+        DebugLog.d("multiview") { "opening with $queued queued, $resolvable playable" }
 
         // Opened whatever the state, so the overlay can explain itself.
         //
@@ -5435,7 +5434,7 @@ class DesktopAppState(
                 // the user is left with "I pressed send and nothing happened". A message that gets
                 // here has already passed the pairing code, so the line separates "the phone never
                 // reached us" from "it did, and the title was not in this list".
-                println("[cast] recebido: ${message.identity.key}")
+                DebugLog.d("cast") { "received: ${message.identity.key}" }
                 // Resolved through the same path a shared link takes: both name a title rather than
                 // a stream, and both have to find it in *this* machine's catalogue.
                 //
@@ -5516,7 +5515,7 @@ class DesktopAppState(
         // phone before the catalogue is ready simply waits here, and from the sofa that is
         // indistinguishable from the send having failed.
         if (xtreamSummary == null) {
-            println("[cast] catálogo ainda não carregado; ${link.identity.key} fica pendente")
+            DebugLog.d("cast") { "catalogue not loaded yet; ${link.identity.key} stays pending" }
             return
         }
 
@@ -5531,11 +5530,11 @@ class DesktopAppState(
 
         pendingShareLink = null
         if (resolved == null) {
-            println("[cast] '${link.title}' não está nesta lista (${link.identity.key})")
+            DebugLog.d("cast") { "'${link.title}' is not in this list (${link.identity.key})" }
             shareLinkOutcome = ShareLinkOutcome.NotInYourList(link.title)
             return
         }
-        println("[cast] abrindo '${resolved.name}'")
+        DebugLog.d("cast") { "opening '${resolved.name}'" }
         destination = DesktopDestination.CATALOG
         favoritesOnly = false
         selectDailyItem(resolved)
@@ -6861,7 +6860,7 @@ class DesktopAppState(
         // Descobrir, and diagnosing it needs the reason on the record rather than inferred.
         val selected = selectedXtreamItem
         if (selected == null) {
-            println("[details] sem item selecionado (destino=$destination)")
+            DebugLog.d("details") { "no item selected (destination=$destination)" }
             return
         }
         if (selected.contentType != XtreamContentType.MOVIE) return
@@ -7465,7 +7464,7 @@ class DesktopAppState(
         // the screen simply changed to something the user did not ask for. Each line below names
         // which guard stopped it — the title only, never an address.
         if (openTitleFromCredit(credit.title)) {
-            println("credit: opened from playlist")
+            DebugLog.d("credit") { "opened from playlist" }
             // The caller has to open its own details page. Selecting the item is not the same as
             // showing it: `detailsOpen` is a flag inside each screen, and setting the selection
             // without it left the user on whatever was underneath — the Home.
@@ -7479,11 +7478,11 @@ class DesktopAppState(
         // an empty screen — which is the one case this function cannot improve on.
         val tmdbId = credit.id
         if (tmdbId == null) {
-            println("credit: no catalogue id, nothing to look up")
+            DebugLog.d("credit") { "no catalogue id, nothing to look up" }
             return CreditDestination.NOWHERE
         }
         if (streamingCatalogue == null) {
-            println("credit: no streaming catalogue — metadata key missing or blank")
+            DebugLog.d("credit") { "no streaming catalogue — metadata key missing or blank" }
             return CreditDestination.NOWHERE
         }
         val external =

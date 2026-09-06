@@ -109,7 +109,13 @@ class LiveGuideWiringTest {
      */
     @Test
     fun `the guide clock ticks`() {
-        assertTrue(screen.contains("delay(60_000L)"), "o relogio do guia nao anda")
+        // Aligned to the minute rather than a flat sixty seconds, the same contract as HeaderClock:
+        // a flat sleep drifts up to a minute behind, and a guide a minute late marks a programme
+        // that has ended as on now.
+        assertTrue(
+            screen.contains("delay(((60 - now % 60) * 1_000L)"),
+            "o relogio do guia nao anda, ou anda defasado de um minuto inteiro",
+        )
         assertTrue(
             app.contains("nowEpochSeconds = rememberGuideClock()"),
             "o ecra nao recebe um relogio que ande",

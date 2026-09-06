@@ -551,10 +551,7 @@ fun DesktopApp(
                                 // flattens to the shape it already expects. A title on two services
                                 // appears twice here and is regrouped onto both shelves.
                                 titles =
-                                    appState.streamingShelves
-                                        .also { shelves ->
-                                            println("[streaming] screen sees ${shelves.size} shelves")
-                                        }.flatMap { shelf ->
+                                    appState.streamingShelves.flatMap { shelf ->
                                         shelf.titles.map { title ->
                                             ExternalTitleDetails(
                                                 title = title,

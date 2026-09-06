@@ -109,7 +109,7 @@ fun SearchWorkspace(
                 // Position in the key: a lazy layout throws when two items share one, and a
                 // provider that files a stream under two categories sends the same id twice.
                 itemsIndexed(results, key = { index, item -> "$index:${item.contentType}:${item.providerId}" }) { _, item ->
-                    SearchResultCover(item = item, onOpen = { onOpenItem(item) })
+                    SearchResultCover(item = item, onOpen = { onOpenItem(item) }, text = text)
                 }
             }
             VerticalScrollbar(
@@ -136,6 +136,7 @@ fun SearchWorkspace(
 private fun SearchResultCover(
     item: XtreamCatalogItem,
     onOpen: () -> Unit,
+    text: DesktopStrings,
 ) {
     Column {
         BuroInteractiveRow(
@@ -171,18 +172,19 @@ private fun SearchResultCover(
             maxLines = 2,
         )
         Text(
-            text = kindLabel(item.contentType),
+            text = kindLabel(item.contentType, text),
             color = BuroColors.TextSubtle,
             style = MaterialTheme.typography.labelSmall,
         )
     }
 }
 
-private fun kindLabel(contentType: XtreamContentType): String =
+/** The kind in the language the app is running in, like every other label on this screen. */
+private fun kindLabel(contentType: XtreamContentType, text: DesktopStrings): String =
     when (contentType) {
-        XtreamContentType.MOVIE -> "Filme"
-        XtreamContentType.SERIES -> "Série"
-        XtreamContentType.LIVE -> "Ao vivo"
+        XtreamContentType.MOVIE -> text.movies
+        XtreamContentType.SERIES -> text.series
+        XtreamContentType.LIVE -> text.live
     }
 
 /** The 2:3 of a film poster, which is what the rest of the app's grids use. */

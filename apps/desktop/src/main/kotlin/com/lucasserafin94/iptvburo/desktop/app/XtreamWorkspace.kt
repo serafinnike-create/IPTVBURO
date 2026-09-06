@@ -1746,7 +1746,7 @@ private fun XtreamCatalogCard(
                 modifier = Modifier.padding(horizontal = CARD_CAPTION_INSET),
             )
             Text(
-                text = itemMetadata(item).ifBlank { if (live) text.onAir else "" },
+                text = itemMetadata(item, text).ifBlank { if (live) text.onAir else "" },
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
@@ -2164,7 +2164,7 @@ internal fun XtreamItemDetail(
                     )
                     Spacer(Modifier.height(BuroSpacing.Xs))
                     Text(
-                        itemMetadata(item).ifBlank { item.contentType.label(text) },
+                        itemMetadata(item, text).ifBlank { item.contentType.label(text) },
                         color = BuroColors.Accent,
                         style = MaterialTheme.typography.titleMedium,
                     )
@@ -2272,7 +2272,7 @@ internal fun XtreamItemDetail(
                         contentPadding = PaddingValues(horizontal = BuroSpacing.Lg),
                     ) {
                         Text(
-                            "▶  ${playbackButtonLabel(resumeDecisionFor(mediaTarget))}",
+                            "▶  ${playbackButtonLabel(resumeDecisionFor(mediaTarget), text)}",
                             fontWeight = FontWeight.Bold,
                         )
                     }
@@ -4221,7 +4221,7 @@ private fun XtreamPaneDivider() {
     Box(Modifier.width(1.dp).fillMaxHeight().background(BuroColors.BorderSoft))
 }
 
-private fun itemMetadata(item: XtreamCatalogItem): String =
+private fun itemMetadata(item: XtreamCatalogItem, text: DesktopStrings): String =
     buildList {
         item.year?.let { add(it.toString()) }
         // Zero means unrated, not nought out of ten. Providers send 0 for anything nobody has
@@ -4230,13 +4230,7 @@ private fun itemMetadata(item: XtreamCatalogItem): String =
         item.rating?.takeIf { value -> value > 0.0 }?.let { add("★ ${"%.1f".format(DISPLAY_LOCALE, it)}") }
         item.containerExtension?.uppercase()?.let(::add)
         if (isEmpty()) {
-            add(
-                when (item.contentType) {
-                    XtreamContentType.LIVE -> "Ao vivo"
-                    XtreamContentType.MOVIE -> "Filme"
-                    XtreamContentType.SERIES -> "Série"
-                },
-            )
+            add(item.contentType.label(text))
         }
     }.joinToString("  •  ")
 
@@ -4251,11 +4245,14 @@ class PendingXtreamExternal(
 private fun resumeStartPosition(decision: ResumeDecision): Long =
     (decision as? ResumeDecision.ResumeFrom)?.positionMs ?: 0L
 
-private fun playbackButtonLabel(decision: ResumeDecision): String =
+private fun playbackButtonLabel(decision: ResumeDecision, text: DesktopStrings): String =
     when (decision) {
-        is ResumeDecision.ResumeFrom -> "Continuar de ${formatPlaybackTime(decision.positionMs)}"
-        ResumeDecision.WatchAgain -> "Assistir novamente"
-        ResumeDecision.StartFromBeginning -> "Assistir no IPTV BURO"
+        is ResumeDecision.ResumeFrom ->
+            text.shareStrings.screens.resumeFromTime.format(formatPlaybackTime(decision.positionMs))
+        ResumeDecision.WatchAgain -> text.shareStrings.screens.watchAgain
+        // Starting over is the same act as the continue-watching button of that name, so it takes
+        // that label rather than one of its own.
+        ResumeDecision.StartFromBeginning -> text.startOver
     }
 
 private fun formatPlaybackTime(positionMs: Long): String {
