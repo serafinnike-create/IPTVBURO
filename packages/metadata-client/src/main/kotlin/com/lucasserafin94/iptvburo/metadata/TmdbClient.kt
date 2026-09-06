@@ -44,8 +44,13 @@ class TmdbClient(
         OkHttpClient.Builder()
             .connectTimeout(Duration.ofSeconds(10))
             .readTimeout(Duration.ofSeconds(15))
+            // readTimeout resets on every byte received, so it never fires against a server
+            // pacing its response just under that interval — a slow-loris trick that would hang
+            // the calling thread. callTimeout bounds the whole call regardless of pacing.
+            .callTimeout(Duration.ofSeconds(60))
             .build(),
     private val baseUrl: HttpUrl = DEFAULT_BASE_URL.toHttpUrl(),
+    private val maximumResponseBytes: Int = DEFAULT_MAXIMUM_RESPONSE_BYTES,
     private val imageBaseUrl: String = DEFAULT_IMAGE_BASE_URL,
     private val language: String = "pt-BR",
     /**
@@ -1071,11 +1076,19 @@ class TmdbClient(
                 // failed request for the catalogue-level retry state.
                 val parsed =
                     runCatching {
-                        JsonParser.parseString(response.body.string()).takeIf { it.isJsonObject }?.asJsonObject
+                        JsonParser.parseString(response.body.boundedString(maximumResponseBytes))
+                            .takeIf { it.isJsonObject }
+                            ?.asJsonObject
                     }.getOrNull()
                 if (parsed == null) recordRequestFailure()
                 parsed
             }
+        } catch (interrupted: InterruptedException) {
+            // Swallowing an interrupt here would erase the cancellation the caller asked for:
+            // restore the flag so whoever interrupted this thread can still see that it was.
+            Thread.currentThread().interrupt()
+            recordRequestFailure()
+            null
         } catch (_: Exception) {
             recordRequestFailure()
             null

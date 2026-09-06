@@ -1,7 +1,6 @@
 package com.lucasserafin94.iptvburo.playlist
 
 import com.lucasserafin94.iptvburo.domain.model.PlaylistHeader
-import java.io.BufferedReader
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.io.InputStreamReader
@@ -51,10 +50,10 @@ class M3uParser(
     ): M3uParseSummary {
         val boundedInput = ByteLimitedInputStream(input, limits.maxBytes)
         val warnings = CappedWarningList(limits.maxWarnings)
-        val reader =
-            BufferedReader(
+        val lineReader =
+            BoundedLineReader(
                 decodedReader(boundedInput, warnings),
-                READER_BUFFER_SIZE,
+                limits.maxLineLength,
             )
         var playlistHeader = PlaylistHeader()
         var headerSeen = false
@@ -66,11 +65,11 @@ class M3uParser(
         val pendingHeaders = linkedMapOf<String, String>()
 
         while (true) {
-            val rawLine = reader.readLine() ?: break
+            // The line number of the line being read is handed over up front: the reader throws
+            // the line-limit exception itself, the moment a line grows past the limit, instead of
+            // materialising the whole line first and measuring it afterwards.
+            val rawLine = lineReader.readLine(lineNumber + 1) ?: break
             lineNumber += 1
-            if (rawLine.length > limits.maxLineLength) {
-                throw M3uLineLimitExceededException(lineNumber, limits.maxLineLength)
-            }
 
             val line =
                 if (lineNumber == 1L) {
@@ -444,6 +443,22 @@ class M3uParser(
                 .map(String::trim)
                 .filter(String::isNotEmpty)
                 .distinct()
+                // These URLs are fetched later by whatever imports the playlist, so they are held
+                // to the same rule as stream URIs: plain http/https with a host. Anything else —
+                // `file:///etc/passwd`, `javascript:...`, an opaque `http:foo` — is dropped with a
+                // warning rather than emitted verbatim into a fetcher.
+                .filter { url ->
+                    val safe = isSafeEpgUrl(url)
+                    if (!safe) {
+                        warnings +=
+                            warning(
+                                M3uWarningCode.UNSAFE_EPG_URL,
+                                lineNumber,
+                                "An EPG URL with an unsupported or unsafe scheme was ignored.",
+                            )
+                    }
+                    safe
+                }
                 .toList()
 
         return PlaylistHeader(
@@ -455,6 +470,17 @@ class M3uParser(
             attributes = attributes,
             requestHeaders = headersFromAttributes(attributes),
         )
+    }
+
+    /** http or https, and hierarchical: an opaque URI names no host to fetch a guide from. */
+    private fun isSafeEpgUrl(value: String): Boolean {
+        val uri =
+            try {
+                URI(value)
+            } catch (_: URISyntaxException) {
+                return false
+            }
+        return uri.scheme?.lowercase(Locale.ROOT) in SAFE_STREAM_SCHEMES && uri.host != null
     }
 
     private fun parseExtInf(
@@ -560,6 +586,18 @@ class M3uParser(
                     M3uWarningCode.UNSAFE_STREAM_URI_SCHEME,
                     lineNumber,
                     "A stream URI with an unsupported or unsafe scheme was skipped.",
+                )
+            return null
+        }
+        // An opaque URI such as `http:foo` passes the scheme check while naming no host at all.
+        // Handed to a player it fails later and somewhere less clear, so it is refused here with
+        // the same warning kind as the other unusable schemes.
+        if (scheme in HIERARCHICAL_STREAM_SCHEMES && uri.host == null) {
+            warnings +=
+                warning(
+                    M3uWarningCode.UNSAFE_STREAM_URI_SCHEME,
+                    lineNumber,
+                    "A stream URI without a host was skipped.",
                 )
             return null
         }
@@ -924,7 +962,6 @@ class M3uParser(
     )
 
     private companion object {
-        const val READER_BUFFER_SIZE = 8 * 1024
         const val ENCODING_PROBE_SIZE = 1024 * 1024
         const val UTF8_VALIDATION_BUFFER_SIZE = 4 * 1024
         const val UTF8_BOM = "\uFEFF"
@@ -947,6 +984,9 @@ class M3uParser(
         const val TVG_SHIFT = "tvg-shift"
 
         val SAFE_STREAM_SCHEMES = setOf("http", "https")
+
+        /** Schemes whose URIs must name a host; an opaque `http:foo` is not a stream address. */
+        val HIERARCHICAL_STREAM_SCHEMES = setOf("http", "https")
         val WINDOWS_1252: Charset = Charset.forName("windows-1252")
         val UTF8_BOM_BYTES =
             byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
@@ -1009,6 +1049,102 @@ private class CappedWarningList(
 
     private companion object {
         const val INITIAL_WARNING_CAPACITY = 16
+    }
+}
+
+/**
+ * Reads lines without ever materialising one whole.
+ *
+ * `BufferedReader.readLine()` builds the entire line as a String before the caller can measure it,
+ * so a hostile playlist could force a line of arbitrary size into memory and only then be told it
+ * was too long. This reader appends into a reusable builder and throws
+ * [M3uLineLimitExceededException] the moment a line grows one character past the limit — the most
+ * a rejected line ever occupies is the limit plus one character.
+ *
+ * Line terminators are `\n`, `\r` and `\r\n`, matching what `readLine()` accepted.
+ */
+private class BoundedLineReader(
+    private val reader: Reader,
+    private val maxLineLength: Int,
+) {
+    private val buffer = CharArray(BUFFER_SIZE)
+    private var offset = 0
+    private var available = 0
+    private var exhausted = false
+
+    /** One character of lookahead, so `\r` not followed by `\n` does not eat the next line. */
+    private var pushedBack = EMPTY
+    private val line = StringBuilder()
+
+    /**
+     * The next line without its terminator, or null at the end of input.
+     *
+     * @param lineNumber the 1-based number of the line being read, used only for the exception.
+     */
+    fun readLine(lineNumber: Long): String? {
+        line.setLength(0)
+        var readAny = false
+        while (true) {
+            val next = take()
+            if (next == EOF) return if (readAny) line.toString() else null
+            when (next.toChar()) {
+                '\n' -> return line.toString()
+                '\r' -> {
+                    val following = take()
+                    if (following != EOF && following.toChar() != '\n') pushedBack = following
+                    return line.toString()
+                }
+                else -> {
+                    readAny = true
+                    line.append(next.toChar())
+                    if (line.length > maxLineLength) {
+                        throw M3uLineLimitExceededException(lineNumber, maxLineLength)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun take(): Int {
+        if (pushedBack != EMPTY) {
+            val value = pushedBack
+            pushedBack = EMPTY
+            return value
+        }
+        if (offset >= available && !fill()) return EOF
+        return buffer[offset++].code
+    }
+
+    private fun fill(): Boolean {
+        if (exhausted) return false
+        offset = 0
+        available = 0
+        while (available < buffer.size) {
+            val count = reader.read(buffer, available, buffer.size - available)
+            when {
+                count == -1 -> {
+                    exhausted = true
+                    break
+                }
+                count == 0 -> {
+                    val single = reader.read()
+                    if (single == -1) {
+                        exhausted = true
+                        break
+                    }
+                    buffer[available] = single.toChar()
+                    available += 1
+                }
+                else -> available += count
+            }
+        }
+        return available > 0
+    }
+
+    private companion object {
+        const val BUFFER_SIZE = 8 * 1024
+        const val EOF = -1
+        const val EMPTY = -2
     }
 }
 

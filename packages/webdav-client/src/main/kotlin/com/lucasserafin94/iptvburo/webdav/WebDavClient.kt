@@ -33,8 +33,17 @@ class WebDavClient(
         OkHttpClient.Builder()
             .connectTimeout(Duration.ofSeconds(15))
             .readTimeout(Duration.ofSeconds(30))
+            // readTimeout resets on every byte received, so it never fires against a server
+            // (hostile or merely congested) that paces its response just under that interval —
+            // a slow-loris trick that would hang the calling thread indefinitely. callTimeout
+            // bounds the whole call's wall-clock duration regardless of pacing.
+            .callTimeout(Duration.ofMinutes(2))
             .build(),
+    private val maximumListingBytes: Int = DEFAULT_MAXIMUM_LISTING_BYTES,
 ) {
+    init {
+        require(maximumListingBytes > 0) { "maximumListingBytes must be positive" }
+    }
     /**
      * Whether the share answers and the credentials are accepted.
      *
@@ -59,21 +68,27 @@ class WebDavClient(
     }
 
     /**
-     * What is inside [path], or an empty list when it cannot be read.
+     * What is inside [path].
      *
      * `Depth: 1` lists the folder's own children and nothing deeper. Asking for `infinity` is what
      * a naive client does, and on a share holding a film library it asks the server to walk tens of
      * thousands of files to answer one request — many servers refuse it outright.
+     *
+     * An empty list means the folder is empty, and only that. A network failure is an
+     * [java.io.IOException], an HTTP refusal is a [WebDavHttpException], and a listing larger than
+     * [maximumListingBytes] is a [WebDavResponseTooLargeException]: collapsing any of them into an
+     * empty list would show a full share as an empty folder, which is a much worse lie than an
+     * error.
      */
     fun list(path: String = "/"): List<WebDavEntry> {
-        val url = resolve(path) ?: return emptyList()
-        return runCatching {
-            client.newCall(propfindRequest(url, depth = 1)).execute().use { response ->
-                if (!response.isSuccessful) return@use emptyList()
-                val body = response.body?.string().orEmpty()
-                WebDavListing.parse(body, requestedPath = url.encodedPath)
-            }
-        }.getOrDefault(emptyList())
+        val url =
+            resolve(path)
+                ?: throw WebDavException("The path cannot be resolved against the share address.")
+        return client.newCall(propfindRequest(url, depth = 1)).execute().use { response ->
+            if (!response.isSuccessful) throw WebDavHttpException(response.code)
+            val body = response.body ?: throw WebDavException("The server returned no listing.")
+            WebDavListing.parse(body.boundedString(maximumListingBytes), requestedPath = url.encodedPath)
+        }
     }
 
     /**
@@ -100,7 +115,50 @@ class WebDavClient(
             .header("Authorization", Credentials.basic(credentials.username, credentials.password))
             .build()
 
+    /**
+     * Reads the whole body, refusing anything past [maximumBytes].
+     *
+     * `string()` alone would materialise whatever the server chooses to send; a declared length is
+     * checked first and the stream is then capped anyway, because a chunked response declares
+     * nothing.
+     */
+    private fun okhttp3.ResponseBody.boundedString(maximumBytes: Int): String {
+        if (contentLength() > maximumBytes) throw WebDavResponseTooLargeException(maximumBytes)
+        val bytes = byteStream().readAtMost(maximumBytes + 1)
+        if (bytes.size > maximumBytes) throw WebDavResponseTooLargeException(maximumBytes)
+        return String(bytes, Charsets.UTF_8)
+    }
+
+    private fun java.io.InputStream.readAtMost(maximumBytes: Int): ByteArray {
+        val output = java.io.ByteArrayOutputStream(minOf(maximumBytes, READ_BUFFER_BYTES))
+        val buffer = ByteArray(READ_BUFFER_BYTES)
+        var remaining = maximumBytes
+        while (remaining > 0) {
+            val read = read(buffer, 0, minOf(buffer.size, remaining))
+            if (read < 0) break
+            if (read == 0) {
+                val singleByte = read()
+                if (singleByte < 0) break
+                output.write(singleByte)
+                remaining -= 1
+            } else {
+                output.write(buffer, 0, read)
+                remaining -= read
+            }
+        }
+        return output.toByteArray()
+    }
+
     private companion object {
+        const val READ_BUFFER_BYTES = 32 * 1024
+
+        /**
+         * Ceiling for one folder listing, held whole in memory. A folder of ten thousand files is
+         * a few megabytes of XML; thirty-two is far past anything legitimate and short of what
+         * would pressure the heap.
+         */
+        const val DEFAULT_MAXIMUM_LISTING_BYTES = 32 * 1024 * 1024
+
         val XML_MEDIA_TYPE = "application/xml; charset=utf-8".toMediaType()
 
         /**
@@ -124,6 +182,27 @@ class WebDavClient(
             """.trimIndent()
     }
 }
+
+/**
+ * A listing could not be read.
+ *
+ * Messages carry a status code or a byte limit, never the share address — the address identifies
+ * the subscriber's account and is redacted everywhere else in this package.
+ */
+open class WebDavException(
+    message: String,
+    cause: Throwable? = null,
+) : java.io.IOException(message, cause)
+
+/** The server answered with a non-success status. [statusCode] is all that is safe to carry. */
+class WebDavHttpException(
+    val statusCode: Int,
+) : WebDavException("The WebDAV server returned HTTP $statusCode.")
+
+/** The listing was larger than the configured ceiling. */
+class WebDavResponseTooLargeException(
+    val maximumBytes: Int,
+) : WebDavException("The WebDAV listing exceeded the configured safety limit ($maximumBytes bytes).")
 
 /** Why a share could not be opened, in terms that point somewhere useful. */
 enum class WebDavProbe {

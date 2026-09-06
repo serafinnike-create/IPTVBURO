@@ -118,6 +118,39 @@ class WebDavListingTest {
         assertEquals("Tom & Jerry <1940>", WebDavListing.parse(xml).single().displayName)
     }
 
+    /**
+     * A tag that merely starts with "collection" is not a folder marker.
+     *
+     * The old pattern matched `<collectionfoo>`: any resourcetype holding such an element would
+     * have been drawn as a folder, and walking into it would 404.
+     */
+    @Test
+    fun `a tag named collectionfoo does not mark a folder`() {
+        val xml =
+            """
+            <d:multistatus xmlns:d="DAV:">
+              <d:response>
+                <d:href>/media/relatorio.xml</d:href>
+                <d:propstat><d:prop>
+                  <d:resourcetype><d:collectionfoo/></d:resourcetype>
+                </d:prop></d:propstat>
+              </d:response>
+              <d:response>
+                <d:href>/media/Pasta/</d:href>
+                <d:propstat><d:prop>
+                  <d:resourcetype><d:collection /></d:resourcetype>
+                </d:prop></d:propstat>
+              </d:response>
+            </d:multistatus>
+            """.trimIndent()
+
+        val entries = WebDavListing.parse(xml)
+
+        assertEquals(2, entries.size)
+        assertFalse(entries[0].isDirectory, "<collectionfoo> must not mark a folder")
+        assertTrue(entries[1].isDirectory, "<collection /> with attributes space must mark a folder")
+    }
+
     /** An unreachable or hostile server may answer with anything; nothing is not a crash. */
     @Test
     fun `a response that is not a listing yields nothing rather than throwing`() {

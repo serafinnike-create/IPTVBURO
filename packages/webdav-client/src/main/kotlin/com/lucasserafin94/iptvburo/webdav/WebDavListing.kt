@@ -102,7 +102,15 @@ object WebDavListing {
     private val RESPONSE =
         Regex("<[^>]*:?response[^>]*>(.*?)</[^>]*:?response>", RegexOption.DOT_MATCHES_ALL)
 
-    private val COLLECTION = Regex("<[^>]*:?collection[^>]*/?>")
+    /**
+     * A `collection` open or self-closing tag, with any namespace prefix.
+     *
+     * The lookahead after the tag name is what keeps `<collectionfoo>` from matching: the name
+     * must end at a `>`, a `/>` or whitespace before attributes, which is where a real tag name
+     * always ends.
+     */
+    private val COLLECTION =
+        Regex("<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?collection(?=[\\s/>])[^>]*/?>")
 
     private val TAG_PATTERNS: Map<String, Regex> =
         listOf("href", "displayname", "getcontentlength", "getcontenttype").associateWith { tag ->

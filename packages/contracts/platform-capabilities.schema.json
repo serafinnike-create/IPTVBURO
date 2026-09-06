@@ -51,6 +51,14 @@
       },
       "additionalProperties": false
     },
+    "audio": {
+      "type": "object",
+      "required": ["supported"],
+      "properties": {
+        "supported": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
     "notes": {
       "type": "array",
       "items": { "type": "string" }

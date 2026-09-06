@@ -220,6 +220,83 @@ class XmltvParserTest {
     }
 
     @Test
+    fun `a gzip bomb is stopped at the decompressed byte ceiling`() {
+        // Highly compressible content: a few kilobytes of gzip expanding far past an injected
+        // ceiling. The caller's own byte limit applies to the compressed stream, so without a
+        // decompressed ceiling this document would be read in full.
+        val xml =
+            guide(
+                """<programme channel="c1" start="20260824200000 +0000" stop="20260824210000 +0000">
+                     <title>Bomba</title><desc>${"d".repeat(100_000)}</desc></programme>""",
+            )
+        val compressed =
+            ByteArrayOutputStream()
+                .also { sink -> GZIPOutputStream(sink).use { it.write(xml.toByteArray()) } }
+                .toByteArray()
+        assertTrue("the fixture must compress well", compressed.size < 10_000)
+
+        val error =
+            org.junit.Assert.assertThrows(Exception::class.java) {
+                XmltvParser.parse(
+                    ByteArrayInputStream(compressed),
+                    maximumDecompressedBytes = 1_024,
+                ) {}
+            }
+
+        assertTrue(
+            "the decompressed ceiling must surface, possibly wrapped by the XML reader: $error",
+            hitsDecompressedCeiling(error),
+        )
+    }
+
+    @Test
+    fun `an uncompressed guide is held to the same decompressed ceiling`() {
+        val xml =
+            guide(
+                """<programme channel="c1" start="20260824200000 +0000" stop="20260824210000 +0000">
+                     <title>Grande</title><desc>${"d".repeat(100_000)}</desc></programme>""",
+            )
+
+        val error =
+            org.junit.Assert.assertThrows(Exception::class.java) {
+                XmltvParser.parse(
+                    xml.byteInputStream(),
+                    maximumDecompressedBytes = 1_024,
+                ) {}
+            }
+
+        assertTrue(hitsDecompressedCeiling(error))
+    }
+
+    @Test
+    fun `a guide exactly under the decompressed ceiling is read whole`() {
+        val xml =
+            guide(
+                """<programme channel="c1" start="20260824200000 +0000" stop="20260824210000 +0000">
+                     <title>Inteiro</title></programme>""",
+            )
+        val collected = mutableListOf<XmltvProgramme>()
+        XmltvParser.parse(
+            xml.byteInputStream(),
+            maximumDecompressedBytes = xml.toByteArray().size.toLong(),
+        ) { collected += it }
+        assertEquals(listOf("Inteiro"), collected.map { it.title })
+    }
+
+    private fun causeChain(error: Throwable): List<Throwable> =
+        generateSequence(error) { it.cause }.toList()
+
+    /**
+     * The JDK's StAX reader reports the failing [java.io.IOException]'s message but does not
+     * always chain it as a cause, so the ceiling is recognised by type or by its unique message.
+     */
+    private fun hitsDecompressedCeiling(error: Throwable): Boolean =
+        causeChain(error).any {
+            it is XmltvDecompressedLimitExceededException ||
+                it.message?.contains("decompressed byte limit") == true
+        }
+
+    @Test
     fun `the ceiling stops a file from filling memory`() {
         val many =
             (1..50).joinToString("") { index ->

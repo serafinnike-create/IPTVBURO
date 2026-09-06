@@ -32,8 +32,13 @@ class CriticScoresClient(
         OkHttpClient.Builder()
             .connectTimeout(Duration.ofSeconds(8))
             .readTimeout(Duration.ofSeconds(10))
+            // readTimeout resets on every byte received, so it never fires against a server
+            // pacing its response just under that interval. callTimeout bounds the whole call
+            // regardless of pacing.
+            .callTimeout(Duration.ofSeconds(30))
             .build(),
     private val baseUrl: HttpUrl = DEFAULT_BASE_URL.toHttpUrl(),
+    private val maximumResponseBytes: Int = DEFAULT_MAXIMUM_RESPONSE_BYTES,
 ) {
     /** Whether lookups can run at all. */
     val isConfigured: Boolean
@@ -125,7 +130,7 @@ class CriticScoresClient(
                 if (!response.isSuccessful) {
                     null
                 } else {
-                    response.body?.string()
+                    response.body?.boundedString(maximumResponseBytes)
                         ?.let { body -> JsonParser.parseString(body) }
                         ?.takeIf { parsed -> parsed.isJsonObject }
                         ?.asJsonObject

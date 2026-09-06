@@ -28,6 +28,17 @@ class StalkerClient(
     httpClient: OkHttpClient = OkHttpClient(),
     private val timeZone: String = "Europe/London",
     private val maximumResponseBytes: Int = DEFAULT_MAXIMUM_RESPONSE_BYTES,
+    private val maximumTransientRetries: Int = DEFAULT_MAXIMUM_TRANSIENT_RETRIES,
+    private val retryDelayMillis: Long = DEFAULT_RETRY_DELAY_MILLIS,
+    /**
+     * Told, once, when a portal address without a scheme falls back to plain `http://`.
+     *
+     * Real Stalker portals are overwhelmingly plain HTTP, so the fallback stays — refusing them
+     * would break most working subscriptions. But an unencrypted connection carries the MAC (the
+     * credential) in a cookie anyone on the path can read, and the viewer deserves one honest line
+     * about that rather than silence. The message never contains the host, the MAC or a token.
+     */
+    private val onInsecurePortal: (String) -> Unit = {},
 ) {
     private val httpClient =
         httpClient.newBuilder()
@@ -46,6 +57,12 @@ class StalkerClient(
 
     init {
         require(maximumResponseBytes > 0) { "maximumResponseBytes must be positive" }
+        require(maximumTransientRetries in 0..MAXIMUM_TRANSIENT_RETRIES) {
+            "maximumTransientRetries is outside the safe range"
+        }
+        require(retryDelayMillis in 0..MAXIMUM_RETRY_DELAY_MILLIS) {
+            "retryDelayMillis is outside the safe range"
+        }
     }
 
     /**
@@ -161,7 +178,9 @@ class StalkerClient(
                     name = name,
                     contentType = contentType,
                     categoryId = obj.optString("category_id") ?: obj.optString("genre_id"),
-                    artworkUrl = obj.optString("screenshot_uri") ?: obj.optString("cover"),
+                    artworkUrl =
+                        obj.optString("screenshot_uri")?.sanitizeArtworkUrl()
+                            ?: obj.optString("cover")?.sanitizeArtworkUrl(),
                     year = obj.optString("year")?.take(4)?.toIntOrNull(),
                     rating = obj.optString("rating_imdb")?.toDoubleOrNull(),
                     command = obj.optString("cmd"),
@@ -258,7 +277,7 @@ class StalkerClient(
 
         val body =
             try {
-                httpClient.newCall(request).execute().use { response ->
+                executeWithTransientRetry(request).use { response ->
                     when {
                         response.code == 401 || response.code == 403 ->
                             throw StalkerClientException(
@@ -308,14 +327,73 @@ class StalkerClient(
     }
 
     /**
+     * Retries only failures that are normally transient, with a strict operation budget.
+     *
+     * A 429 or a 5xx from an overloaded portal, or a dropped connection, usually succeeds on a
+     * second attempt; a 401/403 (a wrong MAC) and ordinary 4xx answers never will, so they are
+     * returned at once. Mirrors the policy the Xtream client documents for the same situation.
+     * Body-read errors are outside this loop on purpose: a response that fails while being read
+     * has already consumed its attempt.
+     */
+    private fun executeWithTransientRetry(request: Request): okhttp3.Response {
+        var attempt = 0
+        var lastNetworkError: IOException? = null
+        while (attempt <= maximumTransientRetries) {
+            val response =
+                try {
+                    httpClient.newCall(request).execute()
+                } catch (error: IOException) {
+                    lastNetworkError = error
+                    null
+                }
+            if (response != null &&
+                (!response.code.isTransientHttpCode() || attempt == maximumTransientRetries)
+            ) {
+                return response
+            }
+            response?.close()
+            if (attempt == maximumTransientRetries) break
+            val delay = (retryDelayMillis * (attempt + 1L)).coerceAtMost(MAXIMUM_RETRY_DELAY_MILLIS)
+            if (delay > 0) {
+                try {
+                    Thread.sleep(delay)
+                } catch (interrupted: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw StalkerClientException(
+                        StalkerFailureReason.NETWORK,
+                        "portal request interrupted",
+                        interrupted,
+                    )
+                }
+            }
+            attempt += 1
+        }
+        // The last IOException is rethrown so the caller's own handling keeps its message policy:
+        // it is the one place that knows the message must not carry the portal host.
+        throw lastNetworkError
+            ?: StalkerClientException(StalkerFailureReason.NETWORK, "portal unreachable")
+    }
+
+    private fun Int.isTransientHttpCode(): Boolean = this == 408 || this == 429 || this in 500..504
+
+    /**
      * Endpoint layouts seen in the wild.
      *
      * `/portal.php` is the modern one and `/server/load.php` the legacy Stalker path; a portal
      * answers on exactly one of them.
      */
+    private val insecurePortalWarned = java.util.concurrent.atomic.AtomicBoolean(false)
+
     private fun candidateBases(portalUrl: String): List<HttpUrl> {
         val root = portalUrl.trim().trimEnd('/')
-        val normalised = if (root.startsWith("http", ignoreCase = true)) root else "http://$root"
+        val hasScheme = root.startsWith("http", ignoreCase = true)
+        if (!hasScheme && insecurePortalWarned.compareAndSet(false, true)) {
+            onInsecurePortal(
+                "The portal address had no scheme, so plain http:// was assumed: " +
+                    "the connection to the portal is not encrypted.",
+            )
+        }
+        val normalised = if (hasScheme) root else "http://$root"
         val parsed = normalised.toHttpUrlOrNull()
             ?: throw StalkerClientException(StalkerFailureReason.MALFORMED, "invalid portal address")
 
@@ -341,6 +419,25 @@ class StalkerClient(
         StalkerMacAddress.normalise(raw)
             ?: throw StalkerClientException(StalkerFailureReason.UNAUTHORISED, "invalid MAC address")
 
+    /**
+     * An artwork address the app can safely load, or null.
+     *
+     * Portals answer `screenshot_uri` and `cover` with whatever the operator configured, and the
+     * value becomes an image request on the viewer's machine. Credentials in the userinfo, a query
+     * string (a tracking token rides one easily) and any scheme but plain http/https are all
+     * refused; the fragment is dropped. Mirrors the rule the Xtream client applies to the same
+     * field, minus the path check — a Stalker credential is a MAC in a cookie, never a path
+     * segment, so there is nothing of the account's to find in one.
+     */
+    private fun String.sanitizeArtworkUrl(): String? {
+        if (length > MAXIMUM_ARTWORK_URL_LENGTH) return null
+        val parsed = trim().toHttpUrlOrNull() ?: return null
+        if (parsed.scheme !in ALLOWED_ARTWORK_SCHEMES) return null
+        if (parsed.username.isNotEmpty() || parsed.password.isNotEmpty()) return null
+        if (parsed.query != null) return null
+        return parsed.newBuilder().fragment(null).build().toString()
+    }
+
     internal companion object {
         /**
          * Portals fingerprint the client and reject anything that is not a set-top box, so this
@@ -362,6 +459,16 @@ class StalkerClient(
          * one setting that bounds total wall-clock duration regardless of pacing.
          */
         const val DEFAULT_CALL_TIMEOUT_MINUTES = 5L
+
+        /** One retry by default, two at most: a portal down for longer is down, not busy. */
+        const val DEFAULT_MAXIMUM_TRANSIENT_RETRIES = 1
+        const val MAXIMUM_TRANSIENT_RETRIES = 2
+        const val DEFAULT_RETRY_DELAY_MILLIS = 250L
+        const val MAXIMUM_RETRY_DELAY_MILLIS = 2_000L
+
+        /** Mirrors the Xtream client's ceiling for the same field. */
+        const val MAXIMUM_ARTWORK_URL_LENGTH = 8 * 1024
+        val ALLOWED_ARTWORK_SCHEMES = setOf("http", "https")
 
         /** Pulls the stream URL out of `ffmpeg http://host/path extra args`. */
         fun extractUrl(command: String): String? =

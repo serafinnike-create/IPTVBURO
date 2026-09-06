@@ -495,10 +495,9 @@ class XtreamClient(
         return runCatching {
             val started = System.nanoTime()
             probe.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    println("[diagnostico] provedor recusou a medicao: ${response.code}")
-                    return null
-                }
+                // A refused measurement is indistinguishable from a thrown one from outside: both
+                // are null, and the screen reports the test as inconclusive either way.
+                if (!response.isSuccessful) return null
                 var read = 0L
                 val buffer = ByteArray(BUFFER_BYTES)
                 val stream = response.body.byteStream()
@@ -513,9 +512,8 @@ class XtreamClient(
                 }
                 val took = (System.nanoTime() - started) / 1_000_000
                 if (read <= 0L) {
-                    // Distinguishes "answered with nothing" from "threw", which look identical
-                    // from outside and need completely different fixes.
-                    println("[diagnostico] provedor respondeu ${response.code} sem corpo em ${took}ms")
+                    // "Answered with nothing" and "threw" both surface as null; nothing is printed
+                    // either way, because a library does not write to stdout.
                     null
                 } else {
                     read to took

@@ -7,6 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
@@ -159,7 +160,9 @@ class StalkerClientTest {
 
     @Test
     fun `errors never leak the portal address or the mac`() {
-        repeat(4) { server.enqueue(MockResponse().setResponseCode(500)) }
+        // Every candidate endpoint is tried, and each transient 500 is retried once: three
+        // candidates times two attempts.
+        repeat(6) { server.enqueue(MockResponse().setResponseCode(500)) }
 
         val failure = assertFailsWith<StalkerClientException> { client.handshake(credentials()) }
 
@@ -207,6 +210,125 @@ class StalkerClientTest {
         } finally {
             redirectTarget.shutdown()
         }
+    }
+
+    @Test
+    fun `a transient 429 is retried within the budget`() {
+        val retrying = StalkerClient(retryDelayMillis = 0)
+        server.enqueue(MockResponse().setResponseCode(429))
+        server.enqueue(MockResponse().setBody("""{"js":{"token":"abc123"}}"""))
+
+        val session = retrying.handshake(credentials())
+
+        assertEquals("abc123", session.token)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `a persistent 500 fails after the retry budget, not before it`() {
+        val retrying = StalkerClient(retryDelayMillis = 0)
+        // Three candidate endpoints, two attempts each: the budget is per request, and a portal
+        // that only ever answers 500 must exhaust all of them before giving up.
+        repeat(6) { server.enqueue(MockResponse().setResponseCode(500)) }
+
+        val failure =
+            assertFailsWith<StalkerClientException> { retrying.handshake(credentials()) }
+
+        assertEquals(StalkerFailureReason.NETWORK, failure.reason)
+        assertEquals(6, server.requestCount)
+    }
+
+    @Test
+    fun `a 403 is never retried`() {
+        val retrying = StalkerClient(retryDelayMillis = 0)
+        // A wrong MAC is wrong on every attempt; retrying it would only triple the traffic.
+        repeat(3) { server.enqueue(MockResponse().setResponseCode(403)) }
+
+        assertFailsWith<StalkerClientException> { retrying.handshake(credentials()) }
+
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test
+    fun `artwork urls carrying credentials or queries are dropped`() {
+        server.enqueue(MockResponse().setBody("""{"js":{"token":"t"}}"""))
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                {"js":{"total_items":"3","data":[
+                  {"id":"1","name":"Com userinfo","cmd":"ffmpeg http://localhost/ch/1_",
+                   "screenshot_uri":"http://user:pass@img.example/a.jpg"},
+                  {"id":"2","name":"Com query","cmd":"ffmpeg http://localhost/ch/2_",
+                   "screenshot_uri":"http://img.example/b.jpg?token=secret"},
+                  {"id":"3","name":"Valida","cmd":"ffmpeg http://localhost/ch/3_",
+                   "screenshot_uri":"http://img.example/c.jpg"}
+                ]}}
+                """.trimIndent(),
+            ),
+        )
+
+        val creds = credentials()
+        val session = client.handshake(creds)
+        val page = client.page(creds, session, StalkerContentType.MOVIE, categoryId = "3", page = 1)
+
+        assertEquals(3, page.items.size)
+        assertNull(page.items[0].artworkUrl, "userinfo is a credential in a URL")
+        assertNull(page.items[1].artworkUrl, "a query rides a tracking token too easily")
+        assertEquals("http://img.example/c.jpg", page.items[2].artworkUrl)
+    }
+
+    @Test
+    fun `a bad screenshot falls back to a valid cover`() {
+        server.enqueue(MockResponse().setBody("""{"js":{"token":"t"}}"""))
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                {"js":{"total_items":"1","data":[
+                  {"id":"1","name":"Filme","cmd":"ffmpeg http://localhost/ch/1_",
+                   "screenshot_uri":"ftp://img.example/a.jpg",
+                   "cover":"http://img.example/cover.jpg"}
+                ]}}
+                """.trimIndent(),
+            ),
+        )
+
+        val creds = credentials()
+        val session = client.handshake(creds)
+        val page = client.page(creds, session, StalkerContentType.MOVIE, categoryId = "3", page = 1)
+
+        assertEquals("http://img.example/cover.jpg", page.items.single().artworkUrl)
+    }
+
+    @Test
+    fun `a portal without a scheme is warned about once, without naming it`() {
+        val warnings = mutableListOf<String>()
+        val warningClient = StalkerClient(onInsecurePortal = { warnings += it })
+        server.enqueue(MockResponse().setBody("""{"js":{"token":"t"}}"""))
+        server.enqueue(MockResponse().setBody("""{"js":{"tariff_plan":"basic"}}"""))
+        val creds =
+            StalkerCredentials(
+                portalUrl = "${server.hostName}:${server.port}",
+                macAddress = "00:1A:79:AB:CD:EF",
+            )
+
+        val session = warningClient.handshake(creds)
+        warningClient.account(creds, session)
+
+        assertEquals(1, warnings.size, "the warning is once per client, not once per call")
+        val message = warnings.single()
+        assertFalse(message.contains(server.hostName), "leaked the host: $message")
+        assertFalse(message.contains("00:1A:79"), "leaked the MAC: $message")
+    }
+
+    @Test
+    fun `a portal with an explicit scheme is not warned about`() {
+        val warnings = mutableListOf<String>()
+        val warningClient = StalkerClient(onInsecurePortal = { warnings += it })
+        server.enqueue(MockResponse().setBody("""{"js":{"token":"t"}}"""))
+
+        warningClient.handshake(credentials())
+
+        assertTrue(warnings.isEmpty())
     }
 
     @Test

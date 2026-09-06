@@ -1,6 +1,8 @@
 package com.lucasserafin94.iptvburo.playlist
 
 import java.io.BufferedInputStream
+import java.io.FilterInputStream
+import java.io.IOException
 import java.io.InputStream
 import java.util.zip.GZIPInputStream
 import javax.xml.stream.XMLInputFactory
@@ -39,18 +41,28 @@ object XmltvParser {
      *
      * @param maximumProgrammes a ceiling, so a malformed or hostile file cannot fill memory through
      *   the callback. Reached quietly: a truncated guide is better than none.
+     * @param maximumDecompressedBytes a ceiling on the bytes read **after** gzip decompression.
+     *   A caller's own byte limit applies to the compressed stream, and a small `.gz` can expand a
+     *   thousandfold — forty kilobytes of gzip is a perfectly good four-hundred-megabyte XML — so
+     *   the compressed ceiling alone does not bound what the parser actually reads. Exceeding the
+     *   ceiling throws [XmltvDecompressedLimitExceededException] (possibly wrapped by the XML
+     *   reader) rather than returning a quietly truncated guide: a guide cut short mid-document is
+     *   indistinguishable from a complete one, and the caller decides what partial data is worth.
      * @return how many programmes were handed over.
      */
     fun parse(
         input: InputStream,
         maximumProgrammes: Int = DEFAULT_MAXIMUM_PROGRAMMES,
+        maximumDecompressedBytes: Long = DEFAULT_MAXIMUM_DECOMPRESSED_BYTES,
         onProgramme: (XmltvProgramme) -> Unit,
     ): Int {
         require(maximumProgrammes > 0) { "maximumProgrammes must be positive" }
+        require(maximumDecompressedBytes > 0) { "maximumDecompressedBytes must be positive" }
         val buffered = BufferedInputStream(input, BUFFER_BYTES)
         val decompressed = if (buffered.looksGzipped()) GZIPInputStream(buffered) else buffered
+        val bounded = DecompressedBytesLimitedInputStream(decompressed, maximumDecompressedBytes)
 
-        val reader = newSecureFactory().createXMLStreamReader(decompressed)
+        val reader = newSecureFactory().createXMLStreamReader(bounded)
         var emitted = 0
         try {
             while (reader.hasNext() && emitted < maximumProgrammes) {
@@ -187,6 +199,62 @@ object XmltvParser {
      */
     const val DEFAULT_MAXIMUM_PROGRAMMES = 400_000
 
+    /**
+     * Ceiling on the decompressed size of a guide, matching the largest compressed body the
+     * Xtream client will accept. A real fortnight guide is tens of megabytes; half a gigabyte of
+     * XML is either a malfunctioning panel or a hostile one, and reading further helps neither.
+     */
+    const val DEFAULT_MAXIMUM_DECOMPRESSED_BYTES = 512L * 1024L * 1024L
+
     private const val MAX_FIELD_LENGTH = 300
     private const val MAX_DESCRIPTION_LENGTH = 2_000
+}
+
+/**
+ * The decompressed byte ceiling of an XMLTV guide was exceeded.
+ *
+ * Carries no content from the file: a guide is downloaded from whatever address a playlist names,
+ * and anything it contains is untrusted.
+ */
+class XmltvDecompressedLimitExceededException(
+    val maximumBytes: Long,
+) : IOException("XMLTV guide exceeds the configured decompressed byte limit ($maximumBytes bytes).")
+
+/**
+ * Counts bytes after any decompression and refuses to read past the ceiling.
+ *
+ * Same shape as the byte-limited streams the other packages carry, duplicated deliberately rather
+ * than shared: the packages must not depend on each other for an internal safety detail.
+ */
+private class DecompressedBytesLimitedInputStream(
+    delegate: InputStream,
+    private val maximumBytes: Long,
+) : FilterInputStream(delegate) {
+    private var bytesRead = 0L
+
+    override fun read(): Int {
+        if (bytesRead >= maximumBytes) return probeOverflow()
+        val value = super.read()
+        if (value >= 0) bytesRead += 1
+        return value
+    }
+
+    override fun read(
+        buffer: ByteArray,
+        offset: Int,
+        length: Int,
+    ): Int {
+        if (length == 0) return 0
+        if (bytesRead >= maximumBytes) return probeOverflow()
+        val allowed = minOf(length.toLong(), maximumBytes - bytesRead).toInt()
+        val count = super.read(buffer, offset, allowed)
+        if (count > 0) bytesRead += count
+        return count
+    }
+
+    private fun probeOverflow(): Int {
+        val value = super.read()
+        if (value == -1) return -1
+        throw XmltvDecompressedLimitExceededException(maximumBytes)
+    }
 }

@@ -36,8 +36,13 @@ class AdultArtworkClient(
         OkHttpClient.Builder()
             .connectTimeout(Duration.ofSeconds(8))
             .readTimeout(Duration.ofSeconds(10))
+            // readTimeout resets on every byte received, so it never fires against a server
+            // pacing its response just under that interval. callTimeout bounds the whole call
+            // regardless of pacing.
+            .callTimeout(Duration.ofSeconds(30))
             .build(),
     private val baseUrl: HttpUrl = DEFAULT_BASE_URL.toHttpUrl(),
+    private val maximumResponseBytes: Int = DEFAULT_MAXIMUM_RESPONSE_BYTES,
 ) {
     /** Whether lookups can run at all. Without a key, nothing here does anything. */
     val isConfigured: Boolean
@@ -108,7 +113,7 @@ class AdultArtworkClient(
                     .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use null
-                JsonParser.parseString(response.body.string()).asJsonObject
+                JsonParser.parseString(response.body.boundedString(maximumResponseBytes)).asJsonObject
             }
         }.getOrNull()
 

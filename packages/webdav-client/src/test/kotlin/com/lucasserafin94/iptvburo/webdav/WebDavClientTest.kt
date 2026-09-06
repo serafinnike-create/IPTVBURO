@@ -5,6 +5,7 @@ import okhttp3.mockwebserver.MockWebServer
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -107,12 +108,96 @@ class WebDavClientTest {
         assertEquals("Duna.mkv", entries.single().displayName)
     }
 
-    /** A failure is an empty folder, never an exception thrown at a screen mid-scroll. */
+    /**
+     * An HTTP refusal is told apart from an empty folder.
+     *
+     * Swallowing a 500 as an empty list would show a full share as an empty folder — the viewer
+     * would think their files were gone rather than that the server is struggling.
+     */
     @Test
-    fun `a failed listing yields nothing rather than throwing`() {
+    fun `a failed listing throws rather than posing as an empty folder`() {
         server.enqueue(MockResponse().setResponseCode(500))
 
+        val failure = assertFailsWith<WebDavHttpException> { clientFor().list("/media/") }
+
+        assertEquals(500, failure.statusCode)
+    }
+
+    /** A network failure surfaces as an IOException, not as an empty folder. */
+    @Test
+    fun `an unreachable share throws rather than posing as an empty folder`() {
+        // A dedicated server, started and stopped here: the shared one must stay up for tearDown.
+        val dead = MockWebServer()
+        dead.start()
+        val client =
+            WebDavClient(
+                WebDavCredentials(
+                    displayName = "Share",
+                    baseUrl = dead.url("/").toString(),
+                    username = "lucas",
+                    password = "hunter2",
+                ),
+            )
+        dead.shutdown()
+
+        assertFailsWith<java.io.IOException> { client.list("/media/") }
+    }
+
+    /** An empty folder is the one case that is an empty list. */
+    @Test
+    fun `an empty folder is an empty list, not an error`() {
+        server.enqueue(MockResponse().setResponseCode(207).setBody(EMPTY_MULTISTATUS))
+
         assertTrue(clientFor().list("/media/").isEmpty())
+    }
+
+    /**
+     * A listing past the byte ceiling is refused.
+     *
+     * Chunked, so no Content-Length is declared: the streaming cap, not the declared-length check,
+     * is what must stop it.
+     */
+    @Test
+    fun `a listing beyond the byte ceiling is refused`() {
+        val client =
+            WebDavClient(
+                WebDavCredentials(
+                    displayName = "Share",
+                    baseUrl = server.url("/").toString(),
+                    username = "lucas",
+                    password = "hunter2",
+                ),
+                maximumListingBytes = 256,
+            )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(207)
+                .setChunkedBody("<d:multistatus>${"x".repeat(4_096)}</d:multistatus>", 64),
+        )
+
+        assertFailsWith<WebDavResponseTooLargeException> { client.list("/media/") }
+    }
+
+    /** A declared length past the ceiling is refused before the body is read. */
+    @Test
+    fun `a listing whose declared length exceeds the ceiling is refused`() {
+        val client =
+            WebDavClient(
+                WebDavCredentials(
+                    displayName = "Share",
+                    baseUrl = server.url("/").toString(),
+                    username = "lucas",
+                    password = "hunter2",
+                ),
+                maximumListingBytes = 256,
+            )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(207)
+                .setBody("<d:multistatus>${"x".repeat(4_096)}</d:multistatus>"),
+        )
+
+        assertFailsWith<WebDavResponseTooLargeException> { client.list("/media/") }
     }
 
     /**

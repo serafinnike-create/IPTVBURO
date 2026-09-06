@@ -214,6 +214,67 @@ class M3uParserTest {
     }
 
     @Test
+    fun `an oversized line is rejected without being read in full`() {
+        // A ten-megabyte line. The old check measured the line after readLine() had already
+        // materialised it; the bounded reader must fail after the encoding probe (at most 1 MB)
+        // plus a handful of buffer refills, long before the line ends.
+        val giantLine = "x".repeat(10 * 1024 * 1024)
+        val playlist = "#EXTM3U\n$giantLine\nhttps://example.invalid/a.m3u8\n"
+        val counting = CountingInputStream(ByteArrayInputStream(playlist.toByteArray(StandardCharsets.UTF_8)))
+
+        val error =
+            assertThrows(M3uLineLimitExceededException::class.java) {
+                M3uParser(M3uParserLimits(maxLineLength = 64)).parse(counting)
+            }
+
+        assertEquals(2L, error.lineNumber)
+        assertTrue(
+            "the giant line must not be read in full (read ${counting.bytesRead} bytes)",
+            counting.bytesRead < 2L * 1024L * 1024L,
+        )
+    }
+
+    @Test
+    fun `an opaque http uri without a host is skipped`() {
+        val playlist =
+            """
+            #EXTM3U
+            #EXTINF:-1,Opaco
+            http:foo
+            #EXTINF:-1,Valido
+            http://example.invalid/ok.m3u8
+            """.trimIndent()
+
+        val result = parse(playlist)
+
+        assertEquals(listOf("Valido"), result.channels.map(ParsedChannel::name))
+        assertEquals("http://example.invalid/ok.m3u8", result.channels.single().streamUri)
+        assertTrue(
+            result.warnings.any { it.code == M3uWarningCode.UNSAFE_STREAM_URI_SCHEME },
+        )
+    }
+
+    @Test
+    fun `epg urls are held to http and https with a host`() {
+        val playlist =
+            """
+            #EXTM3U url-tvg="https://example.invalid/epg.xml,file:///etc/passwd,javascript:alert(1),http:foo"
+            #EXTINF:-1,Canal
+            https://example.invalid/canal.m3u8
+            """.trimIndent()
+
+        val result = parse(playlist)
+
+        assertEquals(listOf("https://example.invalid/epg.xml"), result.header.epgUrls)
+        assertEquals(
+            3,
+            result.warnings.count { it.code == M3uWarningCode.UNSAFE_EPG_URL },
+        )
+        // The URL is attacker-controlled and may carry secrets; the warning must not repeat it.
+        assertFalse(result.warnings.joinToString().contains("passwd"))
+    }
+
+    @Test
     fun `streaming api emits channels without returning a channel collection`() {
         val emitted = mutableListOf<ParsedChannel>()
 
@@ -461,6 +522,29 @@ class M3uParserTest {
         M3uParser().parse(
             ByteArrayInputStream(value.toByteArray(StandardCharsets.UTF_8)),
         )
+
+    private class CountingInputStream(
+        private val delegate: InputStream,
+    ) : InputStream() {
+        var bytesRead = 0L
+            private set
+
+        override fun read(): Int {
+            val value = delegate.read()
+            if (value != -1) bytesRead += 1
+            return value
+        }
+
+        override fun read(
+            buffer: ByteArray,
+            offset: Int,
+            length: Int,
+        ): Int {
+            val count = delegate.read(buffer, offset, length)
+            if (count > 0) bytesRead += count
+            return count
+        }
+    }
 
     private fun fixture(name: String) =
         checkNotNull(javaClass.getResourceAsStream("/fixtures/$name")) {
