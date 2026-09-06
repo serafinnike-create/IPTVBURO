@@ -94,6 +94,10 @@
     <string name="home_rail_series">Featured series</string>
     <string name="home_badge_series">SERIES</string>
     <string name="home_rail_releases">%1$d releases</string>
+    <string name="home_rail_series_releases">Series %1$d</string>
+    <string name="home_editorial_movie">Film</string>
+    <string name="home_editorial_series">Series</string>
+    <string name="home_streaming_synopsis_fallback">Open to see where this title is streaming.</string>
     <string name="home_badge_hero">FEATURED</string>
     <!-- The banner trailer's sound switch. It always starts muted: no engine
          autoplays audio, so the sound is raised once it is already playing. -->

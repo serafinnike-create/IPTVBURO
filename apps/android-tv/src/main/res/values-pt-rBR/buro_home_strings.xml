@@ -95,6 +95,10 @@
     <string name="home_rail_series">Séries em destaque</string>
     <string name="home_badge_series">SÉRIE</string>
     <string name="home_rail_releases">Lançamentos %1$d</string>
+    <string name="home_rail_series_releases">Séries %1$d</string>
+    <string name="home_editorial_movie">Filme</string>
+    <string name="home_editorial_series">Série</string>
+    <string name="home_streaming_synopsis_fallback">Abra para ver onde este título pode ser assistido.</string>
     <string name="home_badge_hero">DESTAQUE</string>
     <!-- The banner trailer's sound switch. It always starts muted: no engine
          autoplays audio, so the sound is raised once it is already playing. -->

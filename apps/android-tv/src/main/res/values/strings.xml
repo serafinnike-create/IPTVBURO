@@ -396,4 +396,19 @@
     <!-- Varias assinaturas mostradas como um so catalogo. -->
     <string name="merge_sources_title">Merge every playlist</string>
     <string name="merge_sources_help">Shows all your playlists as one catalogue. Nothing repeats: the biggest list leads and the others fill the gaps.</string>
+
+    <!-- The details pages: loading, failure and the credits block. -->
+    <string name="details_video_open_error">This video could not be opened.</string>
+    <string name="details_watch">Watch</string>
+    <string name="details_loading_full">Loading the full details…</string>
+    <string name="details_unavailable_title">Details unavailable</string>
+    <string name="details_unavailable_body">The source did not answer with this film\'s details.</string>
+    <string name="details_director">Director</string>
+    <string name="details_country">Country</string>
+    <string name="details_release">Release</string>
+    <string name="catalog_loading_caption">BURO  •  LOCAL CATALOGUE</string>
+    <plurals name="series_episode_count">
+        <item quantity="one">%1$d episode</item>
+        <item quantity="other">%1$d episodes</item>
+    </plurals>
 </resources>

@@ -14,6 +14,7 @@ import com.lucasserafin94.iptvburo.stalker.StalkerCredentials
 import com.lucasserafin94.iptvburo.xtream.XtreamCredentials
 import com.lucasserafin94.iptvburo.data.discovery.ProviderLogoCatalogue
 import com.lucasserafin94.iptvburo.data.discovery.StreamingDiscoveryRepository
+import com.lucasserafin94.iptvburo.data.metadata.MetadataClientsProvider
 import com.lucasserafin94.iptvburo.data.download.AndroidDownloadManager
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseStatus
@@ -1042,7 +1043,9 @@ class MainViewModelNavigationTest {
             // Builds no catalogue: FakeMetadataKeyStore has no key, so every discovery call is a
             // no-op and these navigation assertions never reach the network.
             streamingDiscoveryRepository = StreamingDiscoveryRepository(OkHttpClient(), NoShelfCache, dispatcher),
-            okHttpClient = OkHttpClient(),
+            // No metadata call is made in these assertions — FakeMetadataKeyStore has no key — so
+            // the provider never hands out a client; a plain one over a throwaway OkHttp is enough.
+            metadataClients = MetadataClientsProvider(OkHttpClient()),
             // Never loaded in these assertions: the badge catalogue needs a TMDb key and a
             // network, and navigation does not depend on a logo having arrived.
             providerLogoCatalogue = ProviderLogoCatalogue(OkHttpClient()),

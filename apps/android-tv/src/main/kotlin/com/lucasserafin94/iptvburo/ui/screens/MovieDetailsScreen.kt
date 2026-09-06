@@ -264,7 +264,12 @@ internal fun MovieDetailsScreen(
             if (hasPlaybackError || isResolvingPlayback) {
                 item("playback-state") {
                     Text(
-                        text = if (hasPlaybackError) "Não foi possível abrir este vídeo." else "Preparando reprodução…",
+                        text =
+                            if (hasPlaybackError) {
+                                stringResource(R.string.details_video_open_error)
+                            } else {
+                                stringResource(R.string.playback_resolving)
+                            },
                         color = if (hasPlaybackError) BuroDanger else BuroAccent,
                     )
                 }
@@ -315,7 +320,7 @@ internal fun MovieDetailsScreen(
                         enabled = !isLoading && !isResolvingPlayback,
                     ) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Text("Assistir")
+                        Text(stringResource(R.string.details_watch))
                     }
 
                     val trailerId = details?.youtubeTrailerId
@@ -446,12 +451,12 @@ internal fun MovieDetailsScreen(
 
 
             when {
-                isLoading -> item("loading") { Text("Carregando ficha completa…", color = BuroTextSecondary) }
+                isLoading -> item("loading") { Text(stringResource(R.string.details_loading_full), color = BuroTextSecondary) }
                 hasError -> item("error") {
                     BuroErrorState(
-                        title = "Ficha indisponível",
-                        message = "A fonte não respondeu com os detalhes deste filme.",
-                        actionLabel = "Tentar novamente",
+                        title = stringResource(R.string.details_unavailable_title),
+                        message = stringResource(R.string.details_unavailable_body),
+                        actionLabel = stringResource(R.string.player_retry),
                         onAction = onRetry,
                     )
                 }
@@ -510,10 +515,10 @@ internal fun MovieDetailsScreen(
                                     .padding(18.dp),
                             verticalArrangement = Arrangement.spacedBy(9.dp),
                         ) {
-                            DetailFact("Direção", details.director)
-                            DetailFact("Gênero", details.genre)
-                            DetailFact("País", details.country)
-                            DetailFact("Lançamento", details.releaseDate)
+                            DetailFact(stringResource(R.string.details_director), details.director)
+                            DetailFact(stringResource(R.string.catalogue_filter_genre), details.genre)
+                            DetailFact(stringResource(R.string.details_country), details.country)
+                            DetailFact(stringResource(R.string.details_release), details.releaseDate)
                         }
                     }
                 }

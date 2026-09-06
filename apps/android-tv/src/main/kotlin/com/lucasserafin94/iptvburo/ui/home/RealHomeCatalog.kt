@@ -43,6 +43,8 @@ data class HomeLabels(
     val series: String,
     val seriesBadge: String,
     val heroBadge: String,
+    /** Synopsis for a streaming-shelf card whose overview has not arrived yet. */
+    val streamingSynopsisFallback: String,
     /** Takes the year, so "%1$d releases" reads correctly in every language. */
     val releases: (Int) -> String,
 ) {
@@ -70,6 +72,7 @@ data class HomeLabels(
                 series = "Séries em destaque",
                 seriesBadge = "SÉRIE",
                 heroBadge = "DESTAQUE",
+                streamingSynopsisFallback = "Abra para ver onde este título pode ser assistido.",
                 releases = { year -> "Lançamentos $year" },
             )
     }
@@ -350,7 +353,7 @@ object RealHomeCatalog {
                                         subtitle = shelf.providerName,
                                         synopsis =
                                             title.overview?.takeIf(String::isNotBlank)
-                                                ?: "Abra para ver onde este título pode ser assistido.",
+                                                ?: labels.streamingSynopsisFallback,
                                         metadata = title.year?.toString().orEmpty().ifBlank { shelf.providerName },
                                         badge = shelf.providerName,
                                         kind = HomeItemKind.CATALOG,

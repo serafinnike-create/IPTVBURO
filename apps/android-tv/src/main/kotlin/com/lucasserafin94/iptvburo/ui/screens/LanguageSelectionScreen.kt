@@ -51,8 +51,13 @@ fun LanguageSelectionScreen(
         ) {
             Text("IPTV  BURO", color = BuroTextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
             Spacer(Modifier.height(16.dp))
-            Text("Escolha seu idioma", color = BuroTextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-            Text("Choose your language", color = BuroTextSecondary, fontSize = 16.sp)
+            // This screen runs before any locale is applied, so string resources would resolve to
+            // the device language — exactly what the user is here to change. Every line therefore
+            // speaks each supported language natively, first one large, the rest as echoes.
+            Text(LANGUAGE_PROMPTS.first(), color = BuroTextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            LANGUAGE_PROMPTS.drop(1).forEach { prompt ->
+                Text(prompt, color = BuroTextSecondary, fontSize = 16.sp)
+            }
             Spacer(Modifier.height(30.dp))
             // One row per language rather than five side by side. Sharing a phone's width between
             // five buttons left "Português (Brasil)" broken across three lines and "Español" split
@@ -82,7 +87,31 @@ fun LanguageSelectionScreen(
                 }
             }
             Spacer(Modifier.height(18.dp))
-            Text("Você poderá alterar isso em Configurações.", color = BuroAccent, fontSize = 13.sp)
+            // Same rule as the prompts: pre-locale, so the reassurance is repeated in every
+            // supported language rather than only the one the device happens to be in.
+            LANGUAGE_FOOTER_NOTES.forEach { note ->
+                Text(note, color = BuroAccent, fontSize = 13.sp)
+            }
         }
     }
 }
+
+/** "Choose your language", once per supported language, in the picker\'s own order. */
+private val LANGUAGE_PROMPTS =
+    listOf(
+        "Escolha seu idioma",
+        "Choose your language",
+        "Elige tu idioma",
+        "Wähle deine Sprache",
+        "Scegli la tua lingua",
+    )
+
+/** "You can change this later in Settings.", once per supported language. */
+private val LANGUAGE_FOOTER_NOTES =
+    listOf(
+        "Você poderá alterar isso em Configurações.",
+        "You can change this later in Settings.",
+        "Puedes cambiarlo más tarde en Ajustes.",
+        "Du kannst das später in den Einstellungen ändern.",
+        "Puoi cambiarlo in seguito nelle Impostazioni.",
+    )

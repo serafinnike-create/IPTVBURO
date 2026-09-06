@@ -404,4 +404,19 @@
     <!-- Varias assinaturas mostradas como um so catalogo. -->
     <string name="merge_sources_title">Unisci tutte le liste</string>
     <string name="merge_sources_help">Mostra tutte le liste come un solo catalogo. Niente si ripete: la lista più grande guida e le altre completano.</string>
+
+    <!-- The details pages: loading, failure and the credits block. -->
+    <string name="details_video_open_error">Impossibile aprire questo video.</string>
+    <string name="details_watch">Guarda</string>
+    <string name="details_loading_full">Caricamento della scheda completa…</string>
+    <string name="details_unavailable_title">Scheda non disponibile</string>
+    <string name="details_unavailable_body">La sorgente non ha risposto con i dettagli di questo film.</string>
+    <string name="details_director">Regia</string>
+    <string name="details_country">Paese</string>
+    <string name="details_release">Uscita</string>
+    <string name="catalog_loading_caption">BURO  •  CATALOGO LOCALE</string>
+    <plurals name="series_episode_count">
+        <item quantity="one">%1$d episodio</item>
+        <item quantity="other">%1$d episodi</item>
+    </plurals>
 </resources>

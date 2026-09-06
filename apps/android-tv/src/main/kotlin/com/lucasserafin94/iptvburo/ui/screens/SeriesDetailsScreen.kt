@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -474,7 +475,11 @@ internal fun SeriesDetailsScreen(
                                         .padding(18.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Text("Direção  •  ${details.director}", color = BuroTextSecondary, fontSize = 15.sp)
+                                Text(
+                                    stringResource(R.string.details_director) + "  •  " + details.director,
+                                    color = BuroTextSecondary,
+                                    fontSize = 15.sp,
+                                )
                             }
                         }
                     }
@@ -535,7 +540,12 @@ internal fun SeriesDetailsScreen(
                                             modifier = Modifier.weight(1f),
                                         )
                                         Text(
-                                            text = "${episodes.size} episódios  ${if (expandedSeason == season) "▲" else "▼"}",
+                                            text =
+                                                pluralStringResource(
+                                                    R.plurals.series_episode_count,
+                                                    episodes.size,
+                                                    episodes.size,
+                                                ) + "  " + if (expandedSeason == season) "▲" else "▼",
                                             color = BuroAccent,
                                             fontSize = 14.sp,
                                         )

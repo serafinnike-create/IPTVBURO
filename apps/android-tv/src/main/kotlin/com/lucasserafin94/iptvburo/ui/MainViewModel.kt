@@ -32,6 +32,7 @@ import com.lucasserafin94.iptvburo.data.preferences.BannerSoundSettings
 import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.data.licensing.RedeemOutcome
+import com.lucasserafin94.iptvburo.data.metadata.MetadataClientsProvider
 import com.lucasserafin94.iptvburo.data.security.MetadataKeyStore
 import com.lucasserafin94.iptvburo.data.repository.CatalogRepository
 import com.lucasserafin94.iptvburo.data.diagnostics.ConnectionTester
@@ -89,8 +90,6 @@ import com.lucasserafin94.iptvburo.metadata.TmdbServiceShelf
 import com.lucasserafin94.iptvburo.domain.model.Source
 import com.lucasserafin94.iptvburo.domain.model.SourceType
 import com.lucasserafin94.iptvburo.metadata.CriticScores
-import com.lucasserafin94.iptvburo.metadata.CriticScoresClient
-import com.lucasserafin94.iptvburo.metadata.TmdbClient
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.ArrayDeque
@@ -122,7 +121,6 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -142,7 +140,7 @@ class MainViewModel @Inject constructor(
     private val licenseService: AndroidLicenseService,
     private val metadataKeyStore: MetadataKeyStore,
     private val streamingDiscoveryRepository: StreamingDiscoveryRepository,
-    private val okHttpClient: OkHttpClient,
+    private val metadataClients: MetadataClientsProvider,
     private val providerLogoCatalogue: ProviderLogoCatalogue,
     private val playbackProgressRepository: PlaybackProgressRepository,
     private val catalogueGuardPreferences: CatalogueGuard,
@@ -1662,12 +1660,7 @@ class MainViewModel @Inject constructor(
                 pending.forEach { (_, key) -> castPhotoLookups.remove(key) }
                 return@launch
             }
-            val client =
-                TmdbClient(
-                    apiKey = apiKey,
-                    client = okHttpClient,
-                    language = Locale.getDefault().toLanguageTag(),
-                )
+            val client = metadataClients.tmdb(apiKey = apiKey)
             pending.forEach { (name, key) ->
                 val photo =
                     withContext(ioDispatcher) {
@@ -1842,12 +1835,7 @@ class MainViewModel @Inject constructor(
                     runCatching {
                         withContext(ioDispatcher) {
                             if (apiKey.isNullOrBlank()) return@withContext null
-                            val client =
-                                TmdbClient(
-                                    apiKey = apiKey,
-                                    client = okHttpClient,
-                                    language = Locale.getDefault().toLanguageTag(),
-                                )
+                            val client = metadataClients.tmdb(apiKey = apiKey)
                             val person = client.findPerson(safeName) ?: return@withContext null
                             val details = client.personDetails(person.id)
                             PersonDetailsUi(
@@ -2612,12 +2600,7 @@ class MainViewModel @Inject constructor(
                 heroTrailerLookups.remove(itemId)
                 return@launch
             }
-            val client =
-                TmdbClient(
-                    apiKey = apiKey,
-                    client = okHttpClient,
-                    language = Locale.getDefault().toLanguageTag(),
-                )
+            val client = metadataClients.tmdb(apiKey = apiKey)
             val videoId =
                 withContext(ioDispatcher) {
                     runCatching {
@@ -3279,12 +3262,7 @@ class MainViewModel @Inject constructor(
                     val needsTrailer = providerDetails.youtubeTrailerId.isNullOrBlank()
                     if (!metadataKey.isNullOrBlank()) {
                         withContext(ioDispatcher) {
-                            val client =
-                                TmdbClient(
-                                    apiKey = metadataKey,
-                                    client = okHttpClient,
-                                    language = Locale.getDefault().toLanguageTag(),
-                                )
+                            val client = metadataClients.tmdb(apiKey = metadataKey)
                             val year = providerDetails.releaseDate?.take(4)?.toIntOrNull()
                             // Provider titles carry release tags — "[L]", "4K", "DUAL" — that
                             // TMDb has never heard of, so an exact search on the raw name found
@@ -3420,12 +3398,7 @@ class MainViewModel @Inject constructor(
             val scores =
                 withContext(ioDispatcher) {
                     runCatching {
-                        val tmdb =
-                            TmdbClient(
-                                apiKey = metadataKey,
-                                client = okHttpClient,
-                                language = Locale.getDefault().toLanguageTag(),
-                            )
+                        val tmdb = metadataClients.tmdb(apiKey = metadataKey)
                         val year = releaseDate?.take(4)?.toIntOrNull()
                         val cleaned = title.compatibilityTitlePrefix()
                         // OMDb is keyed by IMDb id, and the playlist has no idea what that is — so
@@ -3436,7 +3409,7 @@ class MainViewModel @Inject constructor(
                                 ?: return@runCatching null
                         val imdbId =
                             tmdb.titleDetails(tmdbId, isSeries)?.imdbId ?: return@runCatching null
-                        CriticScoresClient(apiKey = criticsKey, client = okHttpClient)
+                        metadataClients.criticScores(apiKey = criticsKey)
                             .scoresFor(imdbId)
                             ?.takeIf(CriticScores::hasAny)
                     }.getOrNull()
@@ -3460,12 +3433,7 @@ class MainViewModel @Inject constructor(
             val logo =
                 withContext(ioDispatcher) {
                     runCatching {
-                        val client =
-                            TmdbClient(
-                                apiKey = metadataKey,
-                                client = okHttpClient,
-                                language = Locale.getDefault().toLanguageTag(),
-                            )
+                        val client = metadataClients.tmdb(apiKey = metadataKey)
                         val year = releaseDate?.take(4)?.toIntOrNull()
                         // Provider titles carry release tags — "[L]", "4K", "DUAL" — that TMDb has
                         // never heard of, so the cleaned name is tried first.
@@ -3528,12 +3496,7 @@ class MainViewModel @Inject constructor(
             val similar =
                 withContext(ioDispatcher) {
                     runCatching {
-                        val client =
-                            TmdbClient(
-                                apiKey = metadataKey,
-                                client = okHttpClient,
-                                language = Locale.getDefault().toLanguageTag(),
-                            )
+                        val client = metadataClients.tmdb(apiKey = metadataKey)
                         val year = releaseDate?.take(4)?.toIntOrNull()
                         val cleaned = title.compatibilityTitlePrefix()
                         val tmdbId =
@@ -4099,7 +4062,7 @@ class MainViewModel @Inject constructor(
                 entries.mapNotNull { progress ->
                     val channel = storedContentFor(progress) ?: return@mapNotNull null
                     ContinueWatchingUi(
-                        channel = channel.toCatalogUi("Continue assistindo"),
+                        channel = channel.toCatalogUi(context.getString(R.string.home_rail_continue)),
                         progress = progress.progressPercent.toFloat().coerceIn(0f, 1f),
                     )
                 }.filter { item ->
@@ -4111,7 +4074,7 @@ class MainViewModel @Inject constructor(
                 historyEntries.mapNotNull { progress ->
                     val channel = storedContentFor(progress) ?: return@mapNotNull null
                     WatchHistoryUi(
-                        channel = channel.toCatalogUi("Histórico"),
+                        channel = channel.toCatalogUi(context.getString(R.string.my_buro_history)),
                         progress = progress.progressPercent.toFloat().coerceIn(0f, 1f),
                         completed = progress.completedAtEpochMillis != null,
                         lastWatchedAtEpochMillis = progress.lastWatchedAtEpochMillis,
@@ -5007,12 +4970,12 @@ class MainViewModel @Inject constructor(
                 val releasesMovies =
                     releasesCurrent.filter { it.contentType != CatalogContentType.SERIES }
                 (
-                    releasesMovies.map { it to "Lançamento $currentYear" } +
-                        releasesSeries.map { it to "Série $currentYear" } +
-                        releasesPrevious.map { it to "Lançamento ${currentYear - 1}" } +
-                        recent.map { it to "Adicionado recentemente" } +
-                        movies.map { it to "Filme" } +
-                        series.map { it to "Série" }
+                    releasesMovies.map { it to context.getString(R.string.home_rail_releases, currentYear) } +
+                        releasesSeries.map { it to context.getString(R.string.home_rail_series_releases, currentYear) } +
+                        releasesPrevious.map { it to context.getString(R.string.home_rail_releases, currentYear - 1) } +
+                        recent.map { it to context.getString(R.string.home_rail_recently_added) } +
+                        movies.map { it to context.getString(R.string.home_editorial_movie) } +
+                        series.map { it to context.getString(R.string.home_editorial_series) }
                 )
                     .filter { (channel, _) -> channel.logoUri != null }
                     .distinctBy { (channel, _) -> channel.id }

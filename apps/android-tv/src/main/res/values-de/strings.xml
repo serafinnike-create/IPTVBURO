@@ -396,4 +396,19 @@
     <!-- Varias assinaturas mostradas como um so catalogo. -->
     <string name="merge_sources_title">Alle Listen zusammenführen</string>
     <string name="merge_sources_help">Zeigt alle Listen als einen Katalog. Nichts doppelt sich: die größte Liste führt, die anderen füllen die Lücken.</string>
+
+    <!-- The details pages: loading, failure and the credits block. -->
+    <string name="details_video_open_error">Dieses Video konnte nicht geöffnet werden.</string>
+    <string name="details_watch">Ansehen</string>
+    <string name="details_loading_full">Die vollständigen Details werden geladen…</string>
+    <string name="details_unavailable_title">Details nicht verfügbar</string>
+    <string name="details_unavailable_body">Die Quelle hat keine Details zu diesem Film geliefert.</string>
+    <string name="details_director">Regie</string>
+    <string name="details_country">Land</string>
+    <string name="details_release">Veröffentlichung</string>
+    <string name="catalog_loading_caption">BURO  •  LOKALER KATALOG</string>
+    <plurals name="series_episode_count">
+        <item quantity="one">%1$d Folge</item>
+        <item quantity="other">%1$d Folgen</item>
+    </plurals>
 </resources>

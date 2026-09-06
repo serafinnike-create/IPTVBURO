@@ -94,6 +94,10 @@
     <string name="home_rail_series">Empfohlene Serien</string>
     <string name="home_badge_series">SERIE</string>
     <string name="home_rail_releases">Neuheiten %1$d</string>
+    <string name="home_rail_series_releases">Serien %1$d</string>
+    <string name="home_editorial_movie">Film</string>
+    <string name="home_editorial_series">Serie</string>
+    <string name="home_streaming_synopsis_fallback">Öffnen, um zu sehen, wo dieser Titel gestreamt wird.</string>
     <string name="home_badge_hero">EMPFOHLEN</string>
     <!-- The banner trailer's sound switch. It always starts muted: no engine
          autoplays audio, so the sound is raised once it is already playing. -->

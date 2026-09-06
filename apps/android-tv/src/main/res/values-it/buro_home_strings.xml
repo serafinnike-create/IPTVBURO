@@ -95,6 +95,10 @@
     <string name="home_rail_series">Serie in evidenza</string>
     <string name="home_badge_series">SERIE</string>
     <string name="home_rail_releases">Uscite %1$d</string>
+    <string name="home_rail_series_releases">Serie %1$d</string>
+    <string name="home_editorial_movie">Film</string>
+    <string name="home_editorial_series">Serie</string>
+    <string name="home_streaming_synopsis_fallback">Apri per vedere dove è disponibile questo titolo.</string>
     <string name="home_badge_hero">IN EVIDENZA</string>
     <!-- The banner trailer's sound switch. It always starts muted: no engine
          autoplays audio, so the sound is raised once it is already playing. -->

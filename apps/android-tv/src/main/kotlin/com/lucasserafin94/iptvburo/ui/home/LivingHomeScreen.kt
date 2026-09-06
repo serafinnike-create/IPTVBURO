@@ -151,6 +151,7 @@ fun LivingHomeScreen(
         val seriesLabel = stringResource(R.string.home_rail_series)
         val seriesBadgeLabel = stringResource(R.string.home_badge_series)
         val heroBadgeLabel = stringResource(R.string.home_badge_hero)
+        val streamingSynopsisFallbackLabel = stringResource(R.string.home_streaming_synopsis_fallback)
         val labels =
             remember(continueWatchingLabel, releasesLabel) {
                 HomeLabels(
@@ -169,6 +170,7 @@ fun LivingHomeScreen(
                     series = seriesLabel,
                     seriesBadge = seriesBadgeLabel,
                     heroBadge = heroBadgeLabel,
+                    streamingSynopsisFallback = streamingSynopsisFallbackLabel,
                     releases = { year -> releasesLabel.format(year) },
                 )
             }

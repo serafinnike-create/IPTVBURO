@@ -3430,7 +3430,7 @@ private fun CatalogLoadingState() {
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "BURO  •  CATÁLOGO LOCAL",
+            text = stringResource(R.string.catalog_loading_caption),
             color = BuroTextSecondary,
             fontSize = 12.sp,
             letterSpacing = 1.2.sp,

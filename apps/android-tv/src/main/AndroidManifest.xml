@@ -57,8 +57,16 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.IPTVBURO.Starting"
-        android:networkSecurityConfig="@xml/network_security_config"
-        android:usesCleartextTraffic="true">
+        android:networkSecurityConfig="@xml/network_security_config">
+        <!--
+            No android:usesCleartextTraffic here on purpose.
+
+            The network security config is the single source of truth for cleartext: its
+            base-config permits plain HTTP for the user's own providers (which routinely serve
+            playlists and streams over HTTP) while the domain-config pins the app's own endpoints
+            to HTTPS. When both are present the attribute is ignored in favour of the config, so
+            keeping it only suggested a second, blunter policy that does not exist.
+        -->
 
         <!--
             singleTask so a shared link reaches the app that is already running.
