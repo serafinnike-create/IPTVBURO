@@ -80,3 +80,10 @@ ecdsa.txt
 ecdsa-private.txt
 ed25519-private.txt
 *-signing-key.txt
+
+# Agent tooling scratch space. `.codex-tmp/` holds temporary scripts and logs from coding-agent
+# runs, `.backup-original-site-assets/` keeps local copies of site assets before edits, and
+# `.claude/` is local Claude Code configuration — all machine-local state, never product content.
+.codex-tmp/
+.backup-original-site-assets/
+.claude/

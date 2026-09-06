@@ -2,7 +2,7 @@ name: Android CI
 
 on:
   push:
-    branches: ["main", "agent/**"]
+    branches: ["main", "agent/**", "codex/**"]
   pull_request:
   workflow_dispatch:
 
@@ -31,4 +31,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Verify
-        run: ./gradlew test lint assembleDebug --stacktrace
+        # Same explicit task list as preview-release.yml: a bare `test` runs every module —
+        # including the desktop's Compose UI tests, which need a display and fail on a headless
+        # Linux runner. Lint and the debug assemble stay covered through the android-tv tasks.
+        run: ./gradlew :apps:android-tv:testDebugUnitTest :packages:domain-model:jvmTest :packages:metadata-client:test :apps:android-tv:lintDebug :apps:android-tv:assembleDebug --stacktrace

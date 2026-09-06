@@ -1,0 +1,34 @@
+# Gitleaks configuration for IPTV BURO.
+#
+# The repository deliberately contains SYNTHETIC fixture credentials used by
+# tests (see the repo rule: "Use fixtures sintéticas ou públicas estáveis").
+# They are generated or hardcoded with explicit synthetic/fixture markers and
+# never authenticate against any real service. The allowlist below covers only
+# those clear fixtures; anything else must still be reported.
+
+title = "IPTV BURO gitleaks config"
+
+[allowlist]
+description = "Synthetic test fixtures and example placeholders only"
+
+# Test code and fixtures: every credential in these paths is synthetic by
+# project convention (AGENTS.md: "Use fixtures sintéticas ou públicas estáveis").
+paths = [
+  '''apps/samsung-tizen-tests/.*''',
+  '''services/license-server/test/.*''',
+  '''.*/src/test/.*''',
+  '''.*/fixtures/.*''',
+]
+
+# Explicit synthetic markers used across the test suites, plus the fake
+# TMDB-shaped hex key and the fake JWT fragment documented in the fixtures.
+regexes = [
+  '''synthetic[-_a-zA-Z0-9]*''',
+  '''fixture[-_a-zA-Z0-9]*''',
+  '''local-fixture[-_a-zA-Z0-9]*''',
+  '''never-persist-me''',
+  '''private-fixture''',
+  '''1234567890abcdef1234567890abcdef''',
+  '''visualSyntheticTmdbKey[0-9]+''',
+  '''eyJhbGciOiJIUzI1NiJ9\.synthetic\.token''',
+]
