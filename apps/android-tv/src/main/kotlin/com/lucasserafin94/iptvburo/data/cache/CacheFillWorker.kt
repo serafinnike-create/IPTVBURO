@@ -5,6 +5,8 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.Constraints
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -201,6 +203,18 @@ class CacheFillWorker @AssistedInject constructor(
          */
         private const val MAX_ITEMS = 100_000
 
+        /**
+         * Thousands of images are a long job: it waits for a connection rather than failing
+         * through every one of them offline, and steps aside on a low battery or nearly full
+         * storage, where filling a cache is the wrong thing to spend either on.
+         */
+        private val FILL_CONSTRAINTS =
+            Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .setRequiresBatteryNotLow(true)
+                .setRequiresStorageNotLow(true)
+                .build()
+
         /** Starts the fill, or leaves the running one alone. */
         fun start(context: Context) {
             WorkManager.getInstance(context).enqueueUniqueWork(
@@ -208,7 +222,7 @@ class CacheFillWorker @AssistedInject constructor(
                 // KEEP rather than REPLACE: pressing the button twice must not restart a fill that
                 // is already half-way through the library.
                 ExistingWorkPolicy.KEEP,
-                OneTimeWorkRequestBuilder<CacheFillWorker>().build(),
+                OneTimeWorkRequestBuilder<CacheFillWorker>().setConstraints(FILL_CONSTRAINTS).build(),
             )
         }
 
@@ -223,7 +237,7 @@ class CacheFillWorker @AssistedInject constructor(
             WorkManager.getInstance(context).enqueueUniqueWork(
                 WORK_NAME,
                 ExistingWorkPolicy.REPLACE,
-                OneTimeWorkRequestBuilder<CacheFillWorker>().build(),
+                OneTimeWorkRequestBuilder<CacheFillWorker>().setConstraints(FILL_CONSTRAINTS).build(),
             )
         }
 

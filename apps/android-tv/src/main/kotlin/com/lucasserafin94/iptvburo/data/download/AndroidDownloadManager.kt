@@ -13,6 +13,7 @@ import javax.inject.Provider
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -149,6 +150,8 @@ class AndroidDownloadManager @Inject constructor(
         contentKey: String,
         url: String,
         containerExtension: String?,
+        /** The channel's own headers, the same ones playback sends. Never logged. */
+        requestHeaders: Map<String, String> = emptyMap(),
         onProgress: (bytesRead: Long, totalBytes: Long?) -> Unit,
     ): DownloadResult =
         withContext(ioDispatcher) {
@@ -158,7 +161,15 @@ class AndroidDownloadManager @Inject constructor(
             val partial = File(target.parentFile, target.name + PART_SUFFIX)
             try {
                 target.parentFile?.mkdirs()
-                val request = Request.Builder().url(url).build()
+                // The same identity and headers the player uses. A bare OkHttp request carried
+                // OkHttp's default user agent, which many panels refuse, so a title that played
+                // fine failed to download.
+                val request =
+                    Request.Builder()
+                        .url(url)
+                        .header("User-Agent", DOWNLOAD_USER_AGENT)
+                        .apply { requestHeaders.forEach { (name, value) -> header(name, value) } }
+                        .build()
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
                         return@withContext DownloadResult.Failed(FailureReason.REJECTED)
@@ -166,6 +177,7 @@ class AndroidDownloadManager @Inject constructor(
                     val body = response.body
                     val total = body.contentLength().takeIf { it > 0L }
                     var read = 0L
+                    var lastReportNanos = 0L
                     body.byteStream().use { input ->
                         partial.outputStream().use { output ->
                             val buffer = ByteArray(BUFFER_BYTES)
@@ -174,11 +186,22 @@ class AndroidDownloadManager @Inject constructor(
                                     partial.delete()
                                     return@withContext DownloadResult.Cancelled
                                 }
+                                // The coroutine's own cancellation too, not only the flag: a
+                                // download whose screen was torn down kept reading on an I/O
+                                // thread until the file was done.
+                                ensureActive()
                                 val count = input.read(buffer)
                                 if (count < 0) break
                                 output.write(buffer, 0, count)
                                 read += count
-                                onProgress(read, total)
+                                // A few reports a second, not one per 64 KB chunk. Each report
+                                // rewrites the whole app state, and at 5 MB/s across three slots
+                                // that was hundreds of full redraws a second.
+                                val now = System.nanoTime()
+                                if (now - lastReportNanos >= PROGRESS_INTERVAL_NANOS) {
+                                    lastReportNanos = now
+                                    onProgress(read, total)
+                                }
                             }
                         }
                     }
@@ -196,6 +219,8 @@ class AndroidDownloadManager @Inject constructor(
                         partial.delete()
                         return@withContext DownloadResult.Failed(FailureReason.EMPTY)
                     }
+                    // The last report, which the throttle above may have skipped.
+                    onProgress(read, total)
                     // An older copy in a different container would otherwise survive alongside the
                     // new one and be picked up first by downloadedFile.
                     downloadedFile(contentKey)?.delete()
@@ -259,6 +284,8 @@ class AndroidDownloadManager @Inject constructor(
 
     private companion object {
         const val BUFFER_BYTES = 1 shl 16
+        const val PROGRESS_INTERVAL_NANOS = 250_000_000L
+        const val DOWNLOAD_USER_AGENT = "IPTV BURO/0.2 Android"
         const val PART_SUFFIX = ".part"
         const val VAULT_DIRECTORY = "offline-vault"
         const val METADATA_PREFERENCES = "offline-vault-index"

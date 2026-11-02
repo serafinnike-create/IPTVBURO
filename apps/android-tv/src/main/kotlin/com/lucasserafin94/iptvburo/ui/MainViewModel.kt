@@ -2329,6 +2329,7 @@ class MainViewModel @Inject constructor(
                     contentKey = contentKey,
                     url = resolved.streamUri,
                     containerExtension = resolved.containerExtension,
+                    requestHeaders = resolved.requestHeaders,
                 ) { read, total ->
                     val fraction = if (total != null && total > 0L) read.toFloat() / total else -1f
                     // Measured between consecutive reports rather than averaged from the start, so
