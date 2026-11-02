@@ -116,7 +116,7 @@ CREATE INDEX IF NOT EXISTS devices_by_archive ON devices (archived_at, updated_a
 CREATE TABLE IF NOT EXISTS device_proof_nonces (
     device_id TEXT NOT NULL,
     nonce     TEXT NOT NULL,
-    action    TEXT NOT NULL CHECK (action IN ('register', 'validate', 'redeem', 'google_play_purchase')),
+    action    TEXT NOT NULL CHECK (action IN ('register', 'validate', 'redeem', 'google_play_purchase', 'provisioning')),
     used_at   TEXT NOT NULL,
     PRIMARY KEY (device_id, nonce)
 );

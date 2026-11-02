@@ -947,7 +947,12 @@ async function rememberPendingPayment(env, checkout, deviceId, currency, now) {
  */
 async function handleProvisioningClaim(request, env) {
   const body = await readJson(request);
-  const proof = await verifyRegistrationProof(body, 'provisioning');
+  // The key on file, not the one the request brings, and a nonce that is spent on use. A
+  // registration-style proof only checked that the offered key hashed to the public device code,
+  // which is ~60 bits: grindable by anyone determined enough to read a customer's list, and a
+  // captured request could be sent again. The device is necessarily registered by now — the
+  // panel can only provision a code it has seen — so its pinned key is always there to check.
+  const proof = await authorizeExistingDevice(body ?? {}, 'provisioning', env, new Date());
   if (!proof.ok) return json({ error: proof.error }, proof.status);
   const payload = await claimProvisioning(proof.deviceId, env);
   if (!payload) return new Response(null, { status: 204 });
@@ -963,7 +968,9 @@ async function handleProvisioningClaim(request, env) {
  */
 async function handleProvisioningConfirm(request, env) {
   const body = await readJson(request);
-  const proof = await verifyRegistrationProof(body, 'provisioning');
+  // Same check as the claim: confirming deletes the payload, so a forged confirm could make a
+  // customer's list vanish before their television ever applied it.
+  const proof = await authorizeExistingDevice(body ?? {}, 'provisioning', env, new Date());
   if (!proof.ok) return json({ error: proof.error }, proof.status);
   if (body?.errorCode) {
     await reportProvisioningError(proof.deviceId, body.errorCode, env);
@@ -3112,7 +3119,7 @@ function declaredBodyExceeds(request, maximumBytes) {
  */
 async function enforceRouteRateLimit(request, env, url) {
   if (request.method === 'OPTIONS') return null;
-  const bindingName = rateLimitBindingFor(url.pathname);
+  const bindingName = rateLimitBindingFor(url.pathname, request.method);
   const limiter = bindingName ? env[bindingName] : null;
   if (!limiter || typeof limiter.limit !== 'function') return null;
 
@@ -3122,7 +3129,7 @@ async function enforceRouteRateLimit(request, env, url) {
   if (!actor) return null;
 
   try {
-    const result = await limiter.limit({ key: `${url.pathname}:${actor}` });
+    const result = await limiter.limit({ key: `${rateLimitBucketFor(url.pathname)}:${actor}` });
     if (result?.success !== false) return null;
     return json({ error: 'rate_limited' }, 429, { 'retry-after': '60' });
   } catch (error) {
@@ -3133,8 +3140,27 @@ async function enforceRouteRateLimit(request, env, url) {
   }
 }
 
-function rateLimitBindingFor(pathname) {
+/**
+ * Paths that are one guess at the same secret share one bucket per address.
+ *
+ * The web pairing form and the app's submit endpoint both try a six-digit code; counting them
+ * apart gave a guesser twice the attempts by alternating between them.
+ */
+function rateLimitBucketFor(pathname) {
+  if (pathname === '/pair' || pathname === '/parear' || pathname === '/v1/pair/submit') return 'pair-submit';
+  return pathname;
+}
+
+function rateLimitBindingFor(pathname, method = 'POST') {
   if (pathname === '/v1/register') return 'REGISTRATION_RATE_LIMITER';
+  // The web form behind a pairing link. Opening the page is free; posting a code is a guess at a
+  // six-digit secret and gets the tightest limiter, the same one as the app's own submit — before
+  // this, the form had none, and the code space could be swept from a single address.
+  if ((pathname === '/pair' || pathname === '/parear') && method === 'POST') return 'REGISTRATION_RATE_LIMITER';
+  // Each provisioning request costs a key derivation; unlimited, they were a cheap way to burn CPU.
+  if (pathname === '/v1/provisioning/claim' || pathname === '/v1/provisioning/confirm') {
+    return 'LICENSE_API_RATE_LIMITER';
+  }
   if (pathname === '/v1/validate' || pathname === '/v1/redeem' || pathname === '/v1/key-info') {
     // Same limiter as redeeming, deliberately: describing a key is a cheaper guess than spending
     // one, so it must not be a cheaper way to enumerate them.

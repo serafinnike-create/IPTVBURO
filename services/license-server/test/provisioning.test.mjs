@@ -41,6 +41,7 @@ const MIGRATION = [
   '0010_device_provisioning.sql',
   '0011_provisioning_key_labels.sql',
   '0012_provisioning_list_label.sql',
+  '0013_provisioning_proof_nonces.sql',
 ]
   .map((name) => readFileSync(new URL('../migrations/' + name, import.meta.url), 'utf8'))
   .join('\n');
@@ -79,6 +80,18 @@ class LocalD1 {
 
   prepare(sql) {
     return new LocalD1Statement(this.database, sql);
+  }
+
+  batch(statements) {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const results = statements.map((statement) => statement.run());
+      this.database.exec('COMMIT');
+      return results;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   close() {
@@ -622,4 +635,89 @@ test('a rota registra a trilha pelo auxiliar, nunca lendo o campo direto', () =>
 
   assert.ok(source.includes('provisioningAuditDetail(saved)'), 'a rota usa o auxiliar');
   assert.ok(!source.includes('saved.server.slice'), 'e nunca lê o campo direto');
+});
+
+/*
+  A prova precisa ser feita com a chave que o servidor guardou para o aparelho.
+
+  Antes bastava uma chave qualquer cujo hash batesse com o código público — e o
+  código tem só uns 60 bits, o que alguém determinado consegue forçar para ler a
+  lista de um cliente. Uma requisição capturada também podia ser reenviada.
+*/
+
+async function testIdentity() {
+  const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const spki = new Uint8Array(await crypto.subtle.exportKey('spki', pair.publicKey));
+  return { privateKey: pair.privateKey, publicKey: Buffer.from(spki).toString('base64') };
+}
+
+function pinDevice(env, deviceId, publicKey) {
+  env.DB.prepare(
+    `INSERT INTO devices (device_id, public_key, status, first_seen_at, trial_ends_at, updated_at)
+     VALUES (?, ?, 'TRIAL', '2026-01-01T00:00:00.000Z', '2026-01-08T00:00:00.000Z', '2026-01-01T00:00:00.000Z')`,
+  ).bind(deviceId, publicKey).run();
+}
+
+let nonceCounter = 0;
+async function signedBody(identity, deviceId, nonce = `n${(nonceCounter += 1)}`.padStart(22, '0')) {
+  const canonical = `iptvburo-device-proof-v1\nprovisioning\n${deviceId}\n${nonce}`;
+  const signature = new Uint8Array(await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    identity.privateKey,
+    new TextEncoder().encode(canonical),
+  ));
+  const proof = Buffer.from(signature).toString('base64url');
+  return { deviceId, nonce, proof, publicKey: identity.publicKey, installationId: crypto.randomUUID() };
+}
+
+test('a televisão dona da chave guardada recebe a lista', async () => {
+  const env = createEnv();
+  const owner = await testIdentity();
+  pinDevice(env, DEVICE, owner.publicKey);
+  await saveProvisioning(DEVICE, CREDENTIAL, 'dono@exemplo', env);
+
+  const response = await worker.fetch(post('/v1/provisioning/claim', await signedBody(owner, DEVICE)), env);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).source.password, CREDENTIAL.password);
+  env.DB.close();
+});
+
+test('outra chave não serve, mesmo assinando direito', async () => {
+  const env = createEnv();
+  const owner = await testIdentity();
+  const intruder = await testIdentity();
+  pinDevice(env, DEVICE, owner.publicKey);
+  await saveProvisioning(DEVICE, CREDENTIAL, 'dono@exemplo', env);
+
+  const response = await worker.fetch(post('/v1/provisioning/claim', await signedBody(intruder, DEVICE)), env);
+  assert.equal(response.status, 401);
+  assert.ok(!(await response.text()).includes(CREDENTIAL.password));
+  assert.equal((await provisioningStatus(DEVICE, env)).state, 'PENDING');
+
+  const confirm = await worker.fetch(post('/v1/provisioning/confirm', await signedBody(intruder, DEVICE)), env);
+  assert.equal(confirm.status, 401, 'um intruso também não pode apagar a entrega');
+  assert.equal((await provisioningStatus(DEVICE, env)).state, 'PENDING');
+  env.DB.close();
+});
+
+test('uma requisição capturada não vale duas vezes', async () => {
+  const env = createEnv();
+  const owner = await testIdentity();
+  pinDevice(env, DEVICE, owner.publicKey);
+  await saveProvisioning(DEVICE, CREDENTIAL, 'dono@exemplo', env);
+
+  const body = await signedBody(owner, DEVICE);
+  assert.equal((await worker.fetch(post('/v1/provisioning/claim', body), env)).status, 200);
+  const replay = await worker.fetch(post('/v1/provisioning/claim', body), env);
+  assert.equal(replay.status, 409);
+  assert.ok(!(await replay.text()).includes(CREDENTIAL.password));
+  env.DB.close();
+});
+
+test('um código que o servidor nunca registrou não recebe nada', async () => {
+  const env = createEnv();
+  const stranger = await testIdentity();
+  const response = await worker.fetch(post('/v1/provisioning/claim', await signedBody(stranger, DEVICE)), env);
+  assert.equal(response.status, 404);
+  env.DB.close();
 });

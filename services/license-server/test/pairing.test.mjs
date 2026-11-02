@@ -386,3 +386,33 @@ test('each row gets its own nonce', async () => {
   assert.notEqual(first.nonce, second.nonce, 'a reused nonce with a related key is the failure');
   assert.notEqual(first.payload, second.payload);
 });
+
+test('the web form is rate limited like the app, in one shared bucket', async () => {
+  const env = createEnv();
+  const keys = [];
+  env.REGISTRATION_RATE_LIMITER = {
+    limit: async ({ key }) => {
+      keys.push(key);
+      return { success: false };
+    },
+  };
+  const { code } = await startPairing({ ...env, REGISTRATION_RATE_LIMITER: undefined }, 'tmdb_key');
+
+  /*
+    Sem limite, o formulário deixava varrer os um milhão de códigos de um
+    endereço só. E contando /pair, /parear e /v1/pair/submit em separado, quem
+    alternasse entre eles teria o triplo de tentativas.
+  */
+  for (const path of ['/pair', '/parear']) {
+    const request = form(path, { lang: 'pt', code, value: 'chave-sintetica' });
+    request.headers.set('cf-connecting-ip', '192.0.2.10');
+    const response = await worker.fetch(request, env);
+    assert.equal(response.status, 429, path);
+  }
+  assert.equal(new Set(keys).size, 1, 'one bucket for every way of guessing a code');
+
+  // Opening the page is not a guess.
+  const page = await worker.fetch(new Request('https://iptvburo.test/parear'), env);
+  assert.equal(page.status, 200);
+  env.DB.close();
+});
