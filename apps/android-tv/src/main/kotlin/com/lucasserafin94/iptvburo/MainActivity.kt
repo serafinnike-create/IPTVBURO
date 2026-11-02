@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseEndpoints
+import android.app.PictureInPictureParams
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -56,6 +58,8 @@ import com.lucasserafin94.iptvburo.ui.BootStageUi
 import com.lucasserafin94.iptvburo.ui.formatDownloadRate
 import com.lucasserafin94.iptvburo.ui.LicenseUiState
 import com.lucasserafin94.iptvburo.ui.MainViewModel
+import com.lucasserafin94.iptvburo.ui.neighbourLiveChannel
+import com.lucasserafin94.iptvburo.playback.PictureInPictureRequest
 import com.lucasserafin94.iptvburo.ui.openStreamingOffer
 import com.lucasserafin94.iptvburo.ui.shareTitle
 import com.lucasserafin94.iptvburo.ui.ParentalMessage
@@ -179,6 +183,21 @@ class MainActivity : ComponentActivity() {
         if (intent?.action != Intent.ACTION_VIEW) return
         val link = intent.dataString ?: return
         viewModel.openSharedLink(link)
+    }
+
+    /**
+     * Picture in picture for Android 8 to 11, which has no automatic entry.
+     *
+     * From Android 12 the player arms [PictureInPictureParams.Builder.setAutoEnterEnabled] and the
+     * system does this itself. Before that, pressing Home with a film playing simply stopped it,
+     * because nothing asked for the small window at the moment the user left.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val params = PictureInPictureRequest.pending ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            runCatching { enterPictureInPictureMode(params) }
+        }
     }
 
     override fun onDestroy() {
@@ -378,6 +397,14 @@ private fun IptvBuroRoot(
                 subtitles = state.subtitles,
                 liveSchedule = state.liveSchedule,
                 onBack = { viewModel.goBack() },
+                onPreviousChannel =
+                    neighbourLiveChannel(state.channels, playerContent.channel.id, -1)
+                        ?.let { { viewModel.zapChannel(-1) } },
+                onNextChannel =
+                    neighbourLiveChannel(state.channels, playerContent.channel.id, 1)
+                        ?.let { { viewModel.zapChannel(1) } },
+                nextEpisode = viewModel.nextEpisodeForPlayer(),
+                onPlayNextEpisode = viewModel::playNextEpisode,
             )
         }
 

@@ -2386,6 +2386,8 @@ class MainViewModel @Inject constructor(
         channelId: String,
         categoryName: String?,
         originContent: AppContent,
+        /** True when changing channel from inside the player, which must not stack players on Back. */
+        replacePlayer: Boolean = false,
     ) {
         playbackJob?.cancel()
         mutableState.update {
@@ -2421,7 +2423,7 @@ class MainViewModel @Inject constructor(
                             )
                         }
                         val playbackChannel = resolved.toPlaybackUi(categoryName)
-                        navigate(playbackChannel)
+                        if (replacePlayer) replacePlayerContent(playbackChannel) else navigate(playbackChannel)
                         val providerStreamId = resolved.providerItemId
                         if (resolved.contentType == CatalogContentType.LIVE && providerStreamId != null) {
                             loadLiveEpg(playbackChannel, providerStreamId)
@@ -5065,6 +5067,94 @@ class MainViewModel @Inject constructor(
 
     private fun navigate(channel: ChannelUi) {
         navigate(AppContent.Player(channel))
+    }
+
+    /**
+     * Swaps what the open player shows without adding to the back stack.
+     *
+     * Changing channel or moving to the next episode is still "watching", so Back should leave the
+     * player for where the viewer came from — not step back through every channel they zapped past.
+     */
+    private fun replacePlayerContent(channel: ChannelUi) {
+        val content = AppContent.Player(channel)
+        mutableState.update { it.copy(content = content) }
+        rememberOrForgetPlaybackSession(content)
+    }
+
+    /**
+     * Moves the open live channel [step] places along the list the viewer was browsing.
+     *
+     * Does nothing outside live television or when there is no neighbour to go to; the controls
+     * only offer it when [neighbourLiveChannel] finds one.
+     */
+    fun zapChannel(step: Int) {
+        val state = mutableState.value
+        if (state.isResolvingPlayback) return
+        val player = state.content as? AppContent.Player ?: return
+        if (player.channel.contentType != CatalogContentType.LIVE) return
+        val target = neighbourLiveChannel(state.channels, player.channel.id, step) ?: return
+        resolveCatalogItemForPlayback(target.id, target.categoryName, player, replacePlayer = true)
+    }
+
+    /**
+     * The episode after the one open in the player, or null.
+     *
+     * Only when the player was opened from that series' own page: the loaded episode list belongs
+     * to whichever series was last opened, and an episode started from Continue watching would
+     * otherwise be offered the next episode of a different show with matching numbers.
+     */
+    fun nextEpisodeForPlayer(): EpisodeUi? {
+        val state = mutableState.value
+        val current = (state.content as? AppContent.Player)?.channel ?: return null
+        val series = backStack.lastOrNull() as? AppContent.SeriesDetails ?: return null
+        if (current.seriesId == null || current.seriesId != series.providerSeriesId) return null
+        return nextEpisodeAfter(
+            state.seriesDetails?.episodes.orEmpty(),
+            current.seasonNumber,
+            current.episodeNumber,
+        )?.takeIf { it.id in seriesEpisodes }
+    }
+
+    /**
+     * Plays the episode after the one open in the player, staying in the player.
+     *
+     * The series page is still beneath the player, with its episode list loaded, which is what
+     * makes the next one knowable without asking the provider again.
+     */
+    fun playNextEpisode() {
+        val state = mutableState.value
+        if (state.isResolvingPlayback) return
+        val player = state.content as? AppContent.Player ?: return
+        val series = backStack.lastOrNull() as? AppContent.SeriesDetails ?: return
+        val next = nextEpisodeForPlayer() ?: return
+        val resolved = seriesEpisodes[next.id] ?: return
+        playbackJob?.cancel()
+        mutableState.update { it.copy(isResolvingPlayback = true, hasPlaybackError = false) }
+        playbackJob =
+            viewModelScope.launch {
+                runCatching { catalogRepository.resolveEpisode(resolved) }
+                    .onSuccess { playback ->
+                        if (mutableState.value.content != player) return@onSuccess
+                        mutableState.update {
+                            it.copy(
+                                isResolvingPlayback = false,
+                                hasPlaybackError = playback.streamUri.isBlank(),
+                            )
+                        }
+                        if (playback.streamUri.isBlank()) return@onSuccess
+                        replacePlayerContent(
+                            playback.toPlaybackUi(next.seasonLabel()).copy(
+                                seriesId = series.providerSeriesId,
+                                seasonNumber = next.seasonNumber,
+                                episodeNumber = next.episodeNumber,
+                            ),
+                        )
+                    }.onFailure { error ->
+                        if (error is CancellationException) return@onFailure
+                        logger.error(TAG, "Could not resolve the next episode for playback", null)
+                        mutableState.update { it.copy(isResolvingPlayback = false, hasPlaybackError = true) }
+                    }
+            }
     }
 
     /**

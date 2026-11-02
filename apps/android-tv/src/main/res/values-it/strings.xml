@@ -419,4 +419,12 @@
         <item quantity="one">%1$d episodio</item>
         <item quantity="other">%1$d episodi</item>
     </plurals>
+    <string name="player_gesture_seek_back">−%1$d s</string>
+    <string name="player_gesture_seek_forward">+%1$d s</string>
+    <string name="player_reconnecting">Connessione persa. Riconnessione… (%1$d di %2$d)</string>
+    <string name="player_previous_channel">Canale precedente</string>
+    <string name="player_next_channel">Canale successivo</string>
+    <string name="player_next_episode">Prossimo episodio</string>
+    <string name="player_next_episode_in">Inizia tra %1$d s</string>
+    <string name="player_play_now">Guarda ora</string>
 </resources>

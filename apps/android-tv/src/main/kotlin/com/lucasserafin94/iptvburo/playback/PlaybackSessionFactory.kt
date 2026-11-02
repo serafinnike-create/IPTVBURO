@@ -2,6 +2,8 @@ package com.lucasserafin94.iptvburo.playback
 
 import android.content.Context
 import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
@@ -50,6 +52,18 @@ class PlaybackSessionFactory @Inject constructor(
             .setLoadControl(loadControlFor(channel))
             .setSeekBackIncrementMs(SEEK_BACK_MS)
             .setSeekForwardIncrementMs(SEEK_FORWARD_MS)
+            // Audio focus handled by the player: without it a film kept talking over a phone call,
+            // a voice assistant or another app's audio, because nothing ever asked for the speaker.
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                    .build(),
+                /* handleAudioFocus = */ true,
+            )
+            // Pulling the headphones out pauses, as every other player does, instead of carrying
+            // on out of the phone's speaker in the middle of a bus.
+            .setHandleAudioBecomingNoisy(true)
             .build()
             .apply {
                 setMediaItem(

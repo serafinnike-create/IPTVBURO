@@ -160,6 +160,33 @@ internal fun playbackFailureFromErrorCode(
         else -> PlaybackFailure.UNKNOWN
     }
 
+/**
+ * How long to wait before reopening the stream after a failure, or null when trying again on its
+ * own cannot help and the error should be shown.
+ *
+ * A dropped connection used to end playback on the spot, with an error the viewer had to dismiss
+ * by hand even though the network was back a second later — on live television, where a phone
+ * moving between wifi and mobile data drops the stream all the time, that was most failures.
+ * Only failures a reconnect can cure qualify: a provider refusing the stream (401/403/404/410) or
+ * a file this device cannot decode will fail the same way every time, and retrying them would
+ * only hide the real message behind a spinner. Falling behind the live window is not a failure
+ * at all, so it reconnects at once; the network ones back off, so a provider that is down is not
+ * hammered.
+ */
+internal fun reconnectDelayMillis(
+    errorCode: Int,
+    httpStatus: Int?,
+    attempt: Int,
+): Long? {
+    if (attempt >= RECONNECT_ATTEMPTS) return null
+    if (httpStatus in STREAM_GONE_STATUSES) return null
+    return when (errorCode) {
+        ERROR_CODE_BEHIND_LIVE_WINDOW -> 0L
+        in RECONNECTABLE_IO_ERRORS -> RECONNECT_BASE_DELAY_MS shl attempt.coerceAtMost(4)
+        else -> null
+    }
+}
+
 internal data class PlaybackLifecycleState(
     val resumeAfterStop: Boolean = false,
 )
@@ -208,3 +235,19 @@ internal fun onPlaybackStarted(
 private const val ERROR_CODE_FAMILY_SIZE = 1_000
 private const val IO_ERROR_FAMILY = 2
 private const val DECODER_ERROR_FAMILY = 4
+
+/** How many times a stream is reopened on its own before the error is shown. */
+internal const val RECONNECT_ATTEMPTS = 5
+private const val RECONNECT_BASE_DELAY_MS = 1_000L
+private val STREAM_GONE_STATUSES = setOf(401, 403, 404, 410)
+
+// Media3's PlaybackException codes, repeated as plain numbers so this file stays free of Android
+// types and testable on the JVM.
+private const val ERROR_CODE_BEHIND_LIVE_WINDOW = 1_002
+private val RECONNECTABLE_IO_ERRORS =
+    setOf(
+        2_000, // IO_UNSPECIFIED
+        2_001, // IO_NETWORK_CONNECTION_FAILED
+        2_002, // IO_NETWORK_CONNECTION_TIMEOUT
+        2_004, // IO_BAD_HTTP_STATUS — a 5xx; the refusals are excluded by status above
+    )
