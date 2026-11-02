@@ -3249,15 +3249,27 @@ function json(body, status = 200, extraHeaders = {}) {
   });
 }
 
+/**
+ * One spreadsheet cell, quoted, and defused if it would start a formula.
+ *
+ * The model, manufacturer and version columns are reported by the device itself, so a registration
+ * carrying `=HYPERLINK(...)` would run as a formula the moment an administrator opened the export
+ * in Excel or Sheets. A leading apostrophe makes the spreadsheet read it as text and is not shown.
+ */
+export function csvCell(value) {
+  let text = String(value ?? '');
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
 function devicesCsv(devices) {
   const columns = [
     'device_id', 'display_name', 'status', 'device_type', 'platform', 'manufacturer', 'model',
     'os_version', 'app_version', 'activation_country', 'last_country', 'last_seen_at', 'source',
     'customer_name', 'customer_email', 'order_reference', 'support_note', 'expires_at',
   ];
-  const escape = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
   return `\uFEFF${columns.join(',')}\r\n${devices.map((device) =>
-    columns.map((column) => escape(device[column])).join(','),
+    columns.map((column) => csvCell(device[column])).join(','),
   ).join('\r\n')}\r\n`;
 }
 
