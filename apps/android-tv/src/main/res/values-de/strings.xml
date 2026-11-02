@@ -419,4 +419,5 @@
     <string name="player_next_episode">Nächste Folge</string>
     <string name="player_next_episode_in">Beginnt in %1$d s</string>
     <string name="player_play_now">Jetzt ansehen</string>
+    <string name="search_clear">Suche löschen</string>
 </resources>

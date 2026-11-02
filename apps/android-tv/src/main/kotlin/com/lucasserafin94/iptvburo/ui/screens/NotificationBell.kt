@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Text
+import com.lucasserafin94.iptvburo.ui.designsystem.MIN_TOUCH_TARGET
 import com.lucasserafin94.iptvburo.R
 import com.lucasserafin94.iptvburo.domain.model.AppNotification
 import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
@@ -77,7 +78,7 @@ fun NotificationBell(
                 // the badge up while the viewer is looking straight at the list.
                 onMarkAllRead()
             },
-            modifier = Modifier.size(42.dp),
+            modifier = Modifier.size(MIN_TOUCH_TARGET),
             shape = CircleShape,
             backgroundColor = Color.Transparent,
             contentAlignment = Alignment.Center,
@@ -155,7 +156,7 @@ private fun NotificationPanel(
             )
             FocusSurface(
                 onClick = onClose,
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(MIN_TOUCH_TARGET),
                 shape = CircleShape,
                 backgroundColor = Color.Transparent,
                 contentAlignment = Alignment.Center,
@@ -243,7 +244,7 @@ private fun NotificationRow(
         Spacer(Modifier.width(8.dp))
         FocusSurface(
             onClick = onDismiss,
-            modifier = Modifier.size(34.dp),
+            modifier = Modifier.size(MIN_TOUCH_TARGET),
             shape = CircleShape,
             backgroundColor = Color.Transparent,
             contentAlignment = Alignment.Center,

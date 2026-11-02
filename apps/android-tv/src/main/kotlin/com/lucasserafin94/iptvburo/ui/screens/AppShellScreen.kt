@@ -1,9 +1,13 @@
 package com.lucasserafin94.iptvburo.ui.screens
 
 
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import com.lucasserafin94.iptvburo.ui.designsystem.MIN_TOUCH_TARGET
 import com.lucasserafin94.iptvburo.domain.model.QrCode
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -626,7 +630,11 @@ fun AppShellScreen(
                                 homeContentOwnsBack = false
                                 ribbonFocusRequester.requestFocus()
                             },
-                            interceptBack = homeContentOwnsBack,
+                            // Never on the phone layout. Back on the home there moves focus to the
+                            // ribbon, which the phone does not draw, so the first press did nothing
+                            // visible and leaving the app took two — and Android's predictive back
+                            // preview never appeared at all.
+                            interceptBack = homeContentOwnsBack && !compactNavigation,
                         )
 
                         AppContent.Sources -> SourcesContent(
@@ -1130,7 +1138,7 @@ private fun MobileAppBar(
     ) {
         FocusSurface(
             onClick = onOpenMenu,
-            modifier = Modifier.size(44.dp),
+            modifier = Modifier.size(MIN_TOUCH_TARGET),
             backgroundColor = Color.Transparent,
         ) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1181,7 +1189,7 @@ private fun MobileAppBar(
                     pressedAt = System.currentTimeMillis()
                     refresh()
                 },
-                modifier = Modifier.size(42.dp),
+                modifier = Modifier.size(MIN_TOUCH_TARGET),
                 backgroundColor = Color.Transparent,
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1211,7 +1219,7 @@ private fun MobileAppBar(
         onOpenDiagnostics?.let { openDiagnostics ->
             FocusSurface(
                 onClick = openDiagnostics,
-                modifier = Modifier.size(42.dp),
+                modifier = Modifier.size(MIN_TOUCH_TARGET),
                 backgroundColor = Color.Transparent,
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1236,7 +1244,7 @@ private fun MobileAppBar(
         profile?.let { selectedProfile ->
             FocusSurface(
                 onClick = onOpenProfiles,
-                modifier = Modifier.size(42.dp),
+                modifier = Modifier.size(MIN_TOUCH_TARGET),
                 backgroundColor = Color.Transparent,
             ) {
                 Box(
@@ -1321,7 +1329,7 @@ private fun MobileNavigationDrawer(
                 }
                 FocusSurface(
                     onClick = onDismiss,
-                    modifier = Modifier.size(42.dp),
+                    modifier = Modifier.size(MIN_TOUCH_TARGET),
                     backgroundColor = Color.Transparent,
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -2839,7 +2847,7 @@ private fun MyBuroMediaRow(
                 // be missing on a television.
                 FocusSurface(
                     onClick = remove,
-                    modifier = Modifier.size(44.dp),
+                    modifier = Modifier.size(MIN_TOUCH_TARGET),
                     shape = CircleShape,
                     backgroundColor = Color.Transparent,
                     contentAlignment = Alignment.Center,
@@ -4408,12 +4416,36 @@ private fun SearchContent(
             // Held locally and published on a delay. Typing has to feel immediate, while the
             // database should see one query for a typed title rather than one per character — on a
             // catalogue of forty thousand rows that difference is felt.
-            var typed by remember { mutableStateOf("") }
+            //
+            // Saveable, so what was typed survives Android reclaiming the app in the background —
+            // coming back to an empty box after checking a message was losing the search.
+            var typed by rememberSaveable { mutableStateOf("") }
+            val keyboard = LocalSoftwareKeyboardController.current
             OutlinedTextField(
                 value = typed,
                 onValueChange = { typed = it.take(80) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                // The keyboard's own key says Search and runs it at once, then gets out of the way
+                // so the results underneath can be seen.
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    onQueryChange(typed)
+                    keyboard?.hide()
+                }),
+                trailingIcon =
+                    if (typed.isNotEmpty()) {
+                        {
+                            androidx.compose.material3.IconButton(onClick = { typed = "" }) {
+                                androidx.compose.material3.Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = stringResource(R.string.search_clear),
+                                )
+                            }
+                        }
+                    } else {
+                        null
+                    },
                 label = { androidx.compose.material3.Text(stringResource(R.string.search_label)) },
                 placeholder = {
                     androidx.compose.material3.Text(stringResource(R.string.search_hint))

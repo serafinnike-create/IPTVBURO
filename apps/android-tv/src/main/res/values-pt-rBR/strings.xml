@@ -424,4 +424,5 @@
     <string name="player_next_episode">Próximo episódio</string>
     <string name="player_next_episode_in">Começa em %1$d s</string>
     <string name="player_play_now">Assistir agora</string>
+    <string name="search_clear">Limpar busca</string>
 </resources>

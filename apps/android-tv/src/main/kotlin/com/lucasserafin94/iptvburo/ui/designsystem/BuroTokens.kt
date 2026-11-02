@@ -282,3 +282,12 @@ val BuroTvTypography =
                 lineHeight = 20.sp,
             ),
     )
+
+/**
+ * The smallest a tappable control may be: Material's and Android's accessibility minimum.
+ *
+ * The app bar's icons were 42dp and the notification panel's close buttons 34 to 36dp, sized for a
+ * remote's focus ring rather than a thumb. Below 48dp taps start to miss, and the accessibility
+ * scanner flags every one of them.
+ */
+val MIN_TOUCH_TARGET = 48.dp

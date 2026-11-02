@@ -1,6 +1,7 @@
 package com.lucasserafin94.iptvburo.ui.screens
 
 import android.graphics.Color
+import android.net.ConnectivityManager
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -14,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.lucasserafin94.iptvburo.domain.model.BannerTrailer
 import kotlinx.coroutines.delay
@@ -34,6 +36,15 @@ internal fun MutedTrailerBackdrop(
     soundOn: Boolean = false,
 ) {
     val safeId = youtubeId?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{6,32}")) } ?: return
+    // Never on a metered connection. Every details page and the home banner start one, and on a
+    // phone's mobile data that was video nobody asked for, paid for by the minute of browsing.
+    // The artwork behind is the whole fallback, so skipping costs nothing but the motion.
+    val context = LocalContext.current
+    val metered = remember(context) {
+        runCatching { context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered }
+            .getOrNull() ?: false
+    }
+    if (metered) return
     var visible by remember(safeId) { mutableStateOf(false) }
     var pageReady by remember(safeId) { mutableStateOf(false) }
     /** A trailer that cannot load is dropped entirely: the artwork behind it is the better answer. */
