@@ -5,9 +5,8 @@ import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.util.zip.GZIPInputStream
-import javax.xml.stream.XMLInputFactory
-import javax.xml.stream.XMLStreamConstants
-import javax.xml.stream.XMLStreamReader
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
 
 /** One programme from an XMLTV guide, tied to a channel by the id the playlist uses. */
 data class XmltvProgramme(
@@ -62,19 +61,23 @@ object XmltvParser {
         val decompressed = if (buffered.looksGzipped()) GZIPInputStream(buffered) else buffered
         val bounded = DecompressedBytesLimitedInputStream(decompressed, maximumDecompressedBytes)
 
-        val reader = newSecureFactory().createXMLStreamReader(bounded)
+        val reader = newSecureParser()
+        // Null encoding: the parser reads it from the XML declaration, as StAX did.
+        reader.setInput(bounded, null)
         var emitted = 0
         try {
-            while (reader.hasNext() && emitted < maximumProgrammes) {
-                if (reader.next() != XMLStreamConstants.START_ELEMENT) continue
-                if (reader.localName != "programme") continue
-                reader.readProgramme()?.let { programme ->
-                    onProgramme(programme)
-                    emitted += 1
+            var event = reader.eventType
+            while (event != XmlPullParser.END_DOCUMENT && emitted < maximumProgrammes) {
+                if (event == XmlPullParser.START_TAG && reader.name == "programme") {
+                    reader.readProgramme()?.let { programme ->
+                        onProgramme(programme)
+                        emitted += 1
+                    }
                 }
+                event = reader.next()
             }
         } finally {
-            runCatching { reader.close() }
+            runCatching { bounded.close() }
         }
         return emitted
     }
@@ -86,7 +89,7 @@ object XmltvParser {
      * cannot be attached to anything — so an incomplete entry is dropped rather than guessed at.
      * Guides in the wild carry plenty of them.
      */
-    private fun XMLStreamReader.readProgramme(): XmltvProgramme? {
+    private fun XmlPullParser.readProgramme(): XmltvProgramme? {
         val channelId = getAttributeValue(null, "channel")?.trim().orEmpty()
         val start = parseXmltvTime(getAttributeValue(null, "start"))
         val stop = parseXmltvTime(getAttributeValue(null, "stop"))
@@ -94,23 +97,32 @@ object XmltvParser {
         var title: String? = null
         var description: String? = null
         var depth = 1
-        while (hasNext() && depth > 0) {
+        while (depth > 0) {
             when (next()) {
-                XMLStreamConstants.START_ELEMENT -> {
+                XmlPullParser.START_TAG -> {
                     depth += 1
-                    when (localName) {
+                    when (name) {
                         // The first of each wins. A guide repeats these per language, and the
                         // first is the file's own preferred one; picking the last would silently
                         // prefer whichever translation happens to be ordered last.
-                        "title" -> if (title == null) title = elementText.trim().takeIf(String::isNotEmpty)
-                        "desc" -> if (description == null) description = elementText.trim().takeIf(String::isNotEmpty)
+                        //
+                        // nextText() consumes through the end tag, so the depth it added is given
+                        // back here.
+                        "title" -> {
+                            val text = nextText()
+                            if (title == null) title = text.trim().takeIf(String::isNotEmpty)
+                            depth -= 1
+                        }
+                        "desc" -> {
+                            val text = nextText()
+                            if (description == null) description = text.trim().takeIf(String::isNotEmpty)
+                            depth -= 1
+                        }
                         else -> Unit
                     }
-                    // elementText consumes through the end tag, so the depth it added is already
-                    // gone for the two branches above.
-                    if (localName == "title" || localName == "desc") depth -= 1
                 }
-                XMLStreamConstants.END_ELEMENT -> depth -= 1
+                XmlPullParser.END_TAG -> depth -= 1
+                XmlPullParser.END_DOCUMENT -> break
                 else -> Unit
             }
         }
@@ -167,19 +179,36 @@ object XmltvParser {
     }
 
     /**
-     * A factory that will not fetch anything or expand anything.
+     * A pull parser that will not fetch anything or expand anything.
      *
      * An XMLTV file is downloaded from whatever address a playlist names, so it is untrusted input.
      * External entities are how such a file reads local files or reaches the network on the
      * reader's behalf, and entity expansion is how a few kilobytes becomes gigabytes of memory.
-     * Both are refused outright rather than bounded.
+     * With document declarations left unprocessed (the XmlPull default, stated here so it cannot
+     * drift) a DTD defines nothing, and any entity it would have declared fails to resolve
+     * instead of expanding.
+     *
+     * XmlPull rather than StAX because Android has no `javax.xml.stream`. The StAX version
+     * compiled, failed on every Android device with a class that does not exist there, and the
+     * caller's error handling swallowed it: the phone and the television never had an XMLTV guide,
+     * and the minified release build would not link at all. Android ships an XmlPull
+     * implementation in the platform; the desktop brings kXML2 for the same interface.
      */
-    private fun newSecureFactory(): XMLInputFactory =
-        XMLInputFactory.newInstance().apply {
-            setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false)
-            setProperty(XMLInputFactory.SUPPORT_DTD, false)
-            setProperty(XMLInputFactory.IS_COALESCING, true)
-        }
+    private fun newSecureParser(): XmlPullParser {
+        val parser =
+            runCatching { XmlPullParserFactory.newInstance().newPullParser() }
+                .getOrElse {
+                    // A plain JVM without the factory's service file still finds kXML2 directly.
+                    Class.forName("org.kxml2.io.KXmlParser").getDeclaredConstructor().newInstance() as XmlPullParser
+                }
+        // kXML (on Android and the desktop alike) never processes a document declaration and
+        // refuses even to be told so, so the request is best-effort; the hostile-DTD tests are
+        // what actually hold the line.
+        runCatching { parser.setFeature(XmlPullParser.FEATURE_PROCESS_DOCDECL, false) }
+        check(!parser.getFeature(XmlPullParser.FEATURE_PROCESS_DOCDECL)) { "XML parser would process DTDs" }
+        parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+        return parser
+    }
 
     /** The gzip magic number, read without consuming it. */
     private fun BufferedInputStream.looksGzipped(): Boolean {

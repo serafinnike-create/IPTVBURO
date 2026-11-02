@@ -25,7 +25,11 @@ test('the public site presents the product before asking for payment', () => {
   // image behind a pause button that did nothing. The requirement it was standing in for is that
   // the page shows the actual product above the fold, which is what is asserted now.
   assert.ok(html.includes('assets/app-hero.webp'), 'the page must show the real app above the fold');
-  assert.ok(!/buro-reel\.mp4/.test(html), 'the removed reel came back without its asset');
+  // The reel came back in 4008c83 as a real recording of the app, with its file. What must never
+  // happen again is the page pointing at a video that is not shipped.
+  if (/buro-reel\.mp4/.test(html)) {
+    assert.ok(existsSync(new URL('assets/buro-reel.mp4', siteRoot)), 'the reel is referenced but not shipped');
+  }
   assert.ok(html.includes('7 dias grátis'), 'the trial must be stated before checkout');
   assert.ok(html.includes('730 dias'), 'the real license term must be explicit');
 });
@@ -74,7 +78,9 @@ test('the public site ships security and framing policies', () => {
   assert.ok(headers.includes('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()'));
   assert.ok(headers.includes('X-Content-Type-Options: nosniff'));
   assert.ok(!/\sstyle=/.test(html), 'inline styles would be blocked by the site policy');
-  assert.ok(!script.includes('.style.'), 'runtime inline styles would be blocked by the site policy');
+  // CSSOM writes (`element.style.setProperty`) are not inline styles and `style-src 'self'` allows
+  // them; what the policy blocks is a style attribute, whether in the markup or set from script.
+  assert.ok(!/setAttribute\(\s*['"]style['"]/.test(script), 'a style attribute set from script would be blocked');
 });
 
 test('interactive product tabs expose their relationship to the demo panel', () => {

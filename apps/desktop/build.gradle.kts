@@ -298,6 +298,8 @@ java {
 dependencies {
     implementation(project(":packages:domain-model"))
     implementation(project(":packages:playlist-parser"))
+    // The XMLTV parser speaks XmlPull, which Android provides and a desktop JVM does not.
+    runtimeOnly(libs.kxml2)
     implementation(project(":packages:stalker-client"))
     implementation(project(":packages:xtream-client"))
     implementation(project(":packages:metadata-client"))

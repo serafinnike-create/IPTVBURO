@@ -9,6 +9,9 @@
 -keep class com.lucasserafin94.iptvburo.xtream.** { <fields>; }
 -keep class com.lucasserafin94.iptvburo.stalker.** { <fields>; }
 -keep class com.lucasserafin94.iptvburo.domain.model.** { <fields>; }
+# The "Where to watch" shelves are cached as JSON through Gson too. Unkept, their fields were renamed
+# in every release build, so the cache never parsed back and each launch went to the network again.
+-keep class com.lucasserafin94.iptvburo.metadata.** { <fields>; }
 
 # Generic signatures are how Gson reconstructs List<T> and Map<K, V>.
 -keepattributes Signature

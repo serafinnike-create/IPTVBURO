@@ -16,7 +16,11 @@ java {
 
 dependencies {
     api(project(":packages:domain-model"))
+    // The XmlPull interface only. Android provides the implementation in the platform, and
+    // bundling one there would clash with it; JVM consumers add kXML2 at runtime instead.
+    compileOnly(libs.xmlpull.api)
 
     testImplementation(project(":packages:test-fixtures"))
     testImplementation(libs.junit)
+    testRuntimeOnly(libs.kxml2)
 }

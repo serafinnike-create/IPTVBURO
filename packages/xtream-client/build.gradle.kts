@@ -24,4 +24,5 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver)
+    testRuntimeOnly(libs.kxml2)
 }
