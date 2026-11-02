@@ -420,4 +420,5 @@
     <string name="player_next_episode_in">Empieza en %1$d s</string>
     <string name="player_play_now">Ver ahora</string>
     <string name="search_clear">Borrar búsqueda</string>
+    <string name="live_schedule_replay">Ver desde el principio</string>
 </resources>

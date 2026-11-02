@@ -389,7 +389,11 @@ private fun IptvBuroRoot(
                 // Live television is excluded: a channel is not a title someone returns to from a
                 // favourites list, and the domain files favourites by content identity.
                 onToggleFavorite =
-                    if (playerContent.channel.contentType == CatalogContentType.LIVE) {
+                    // A catch-up replay neither: it is one showing of a live channel, not a title.
+                    if (
+                        playerContent.channel.contentType == CatalogContentType.LIVE ||
+                        playerContent.channel.id.startsWith("catchup:")
+                    ) {
                         null
                     } else {
                         { viewModel.toggleChannelFavorite(playerContent.channel) }
@@ -405,6 +409,7 @@ private fun IptvBuroRoot(
                         ?.let { { viewModel.zapChannel(1) } },
                 nextEpisode = viewModel.nextEpisodeForPlayer(),
                 onPlayNextEpisode = viewModel::playNextEpisode,
+                onReplayProgramme = viewModel::playCatchUp,
             )
         }
 

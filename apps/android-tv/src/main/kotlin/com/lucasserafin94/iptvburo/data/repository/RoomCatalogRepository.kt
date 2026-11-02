@@ -247,6 +247,44 @@ class RoomCatalogRepository @Inject constructor(
         channel.copy(streamUri = url.toString())
     }
 
+    override suspend fun resolveCatchUp(
+        channelId: String,
+        startEpochSeconds: Long,
+        endEpochSeconds: Long,
+    ): Channel? = withContext(ioDispatcher) {
+        val channel = channelDao.getById(channelId)?.toDomain() ?: return@withContext null
+        if (channel.contentType != CatalogContentType.LIVE) return@withContext null
+        val now = System.currentTimeMillis() / 1_000L
+        if (!CatchUpPolicy.isReplayable(channel.catchUpDays, startEpochSeconds, endEpochSeconds, now)) {
+            return@withContext null
+        }
+        val providerItemId = channel.providerItemId ?: return@withContext null
+        // Xtream is the only source with a timeshift endpoint: a Stalker portal has none, and a
+        // playlist file has no server to ask.
+        if (sourceDao.getById(channel.sourceId)?.type != SourceType.XTREAM.name) return@withContext null
+        val credentials = sourceConnectionStore.readXtream(channel.sourceId) ?: return@withContext null
+        val startLocal = CatchUpPolicy.startLocal(startEpochSeconds)
+        val url =
+            xtreamClient.buildTimeshiftUrl(
+                credentials = credentials,
+                providerId = providerItemId,
+                startLocal = startLocal,
+                durationMinutes = CatchUpPolicy.durationMinutes(startEpochSeconds, endEpochSeconds),
+            )
+        channel.copy(
+            // Its own identity: two showings of one programme are two different recordings, and
+            // neither is the live channel the favourites and the guide are filed under.
+            id = "catchup:${channel.id}:$startLocal",
+            streamUri = url.toString(),
+            // Not LIVE: a recording has a beginning and an end and can be scrubbed. UNKNOWN keeps
+            // it out of Continue watching, where a replay of last night's news does not belong.
+            contentType = CatalogContentType.UNKNOWN,
+            // The timeshift endpoint serves a transport stream, the same as the live channel.
+            containerExtension = "ts",
+            catchUpDays = null,
+        )
+    }
+
     override suspend fun findStoredContent(
         sourceId: String,
         providerItemId: String,
@@ -769,6 +807,7 @@ class RoomCatalogRepository @Inject constructor(
             year = year,
             rating = rating,
             addedAtEpochSeconds = addedAtEpochSeconds,
+            catchUpDays = catchUpDays,
         )
     }
 

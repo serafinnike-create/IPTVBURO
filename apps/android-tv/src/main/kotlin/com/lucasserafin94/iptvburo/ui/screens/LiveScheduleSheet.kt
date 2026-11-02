@@ -1,5 +1,10 @@
 package com.lucasserafin94.iptvburo.ui.screens
 
+import androidx.compose.foundation.layout.size
+import androidx.tv.material3.Icon
+import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.Icons
+import com.lucasserafin94.iptvburo.data.repository.CatchUpPolicy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,6 +62,12 @@ internal fun LiveScheduleSheet(
     schedule: List<LiveProgramUi>,
     isLoading: Boolean,
     onDismiss: () -> Unit,
+    /**
+     * Days of recordings the channel's provider keeps, or null when it keeps none. Programmes that
+     * have started inside that window can be replayed through [onReplay].
+     */
+    catchUpDays: Int? = null,
+    onReplay: (LiveProgramUi) -> Unit = {},
 ) {
     val zone = remember { ZoneId.systemDefault() }
     val formatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
@@ -129,6 +140,14 @@ internal fun LiveScheduleSheet(
                         ) { index, programme ->
                             ScheduleRow(
                                 programme = programme,
+                                replayable =
+                                    CatchUpPolicy.isReplayable(
+                                        catchUpDays,
+                                        programme.startEpochSeconds,
+                                        programme.endEpochSeconds,
+                                        nowSeconds,
+                                    ),
+                                onReplay = { onReplay(programme) },
                                 isNow = index == currentIndex,
                                 isPast =
                                     programme.endEpochSeconds?.let { it <= nowSeconds } == true,
@@ -165,6 +184,41 @@ internal fun LiveScheduleSheet(
 @Composable
 private fun ScheduleRow(
     programme: LiveProgramUi,
+    replayable: Boolean,
+    onReplay: () -> Unit,
+    isNow: Boolean,
+    isPast: Boolean,
+    time: String?,
+) {
+    // A replayable row is a button, with the same focus treatment as everything else a remote can
+    // reach; the rest stay plain text, so the guide does not offer what the provider cannot serve.
+    if (replayable) {
+        FocusSurface(
+            onClick = onReplay,
+            backgroundColor = if (isNow) BuroSurface else BuroCanvas.copy(alpha = 0f),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            ScheduleRowContent(programme, replayable = true, isNow = isNow, isPast = isPast, time = time)
+        }
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    if (isNow) BuroSurface else BuroCanvas.copy(alpha = 0f),
+                    RoundedCornerShape(10.dp),
+                ),
+        ) {
+            ScheduleRowContent(programme, replayable = false, isNow = isNow, isPast = isPast, time = time)
+        }
+    }
+}
+
+@Composable
+private fun ScheduleRowContent(
+    programme: LiveProgramUi,
+    replayable: Boolean,
     isNow: Boolean,
     isPast: Boolean,
     time: String?,
@@ -172,11 +226,8 @@ private fun ScheduleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                if (isNow) BuroSurface else BuroCanvas.copy(alpha = 0f),
-                RoundedCornerShape(10.dp),
-            )
             .padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(modifier = Modifier.width(52.dp)) {
             Text(
@@ -214,6 +265,14 @@ private fun ScheduleRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+        }
+        if (replayable) {
+            Icon(
+                imageVector = Icons.Default.Replay,
+                contentDescription = stringResource(R.string.live_schedule_replay),
+                tint = BuroGold,
+                modifier = Modifier.padding(start = 8.dp).size(22.dp),
+            )
         }
     }
 }

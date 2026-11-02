@@ -35,7 +35,7 @@ import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
         ReminderEntity::class,
         SeriesWatchEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 abstract class IptvBuroDatabase : RoomDatabase() {
@@ -234,6 +234,21 @@ abstract class IptvBuroDatabase : RoomDatabase() {
          * refreshed. Null means "not known", which the screens show as nothing at all — never as an
          * expired subscription, which would be a warning invented from a missing field.
          */
+        /**
+         * Remembers how far back each live channel's recordings go, for catch-up on Android.
+         *
+         * Nullable and null for every existing row: a channel imported before this column existed
+         * simply offers no catch-up until its source is refreshed, which is exactly what it
+         * offered before. A default of zero would be indistinguishable from "keeps none" anyway,
+         * but null keeps "never asked" and "said no" apart.
+         */
+        val MIGRATION_11_12: Migration =
+            object : Migration(11, 12) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE channels ADD COLUMN catch_up_days INTEGER")
+                }
+            }
+
         val MIGRATION_10_11: Migration =
             object : Migration(10, 11) {
                 override fun migrate(db: SupportSQLiteDatabase) {

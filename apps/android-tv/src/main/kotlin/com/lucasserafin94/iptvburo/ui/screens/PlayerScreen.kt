@@ -176,6 +176,8 @@ fun PlayerScreen(
     /** The episode after this one, or null for anything that is not a series episode or the last one. */
     nextEpisode: EpisodeUi? = null,
     onPlayNextEpisode: () -> Unit = {},
+    /** Replays a past programme of this live channel from its provider's archive. */
+    onReplayProgramme: (LiveProgramUi) -> Unit = {},
 ) {
     val progressIdentity = remember(channel.id, activeProfileId) {
         playbackProgressIdentity(activeProfileId, channel)
@@ -868,6 +870,11 @@ fun PlayerScreen(
                     schedule = liveSchedule,
                     isLoading = isEpgLoading,
                     onDismiss = { showSchedule = false },
+                    catchUpDays = channel.catchUpDays,
+                    onReplay = { programme ->
+                        showSchedule = false
+                        onReplayProgramme(programme)
+                    },
                 )
             }
 

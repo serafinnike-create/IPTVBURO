@@ -5098,6 +5098,45 @@ class MainViewModel @Inject constructor(
     }
 
     /**
+     * Replays [program] from the open live channel's catch-up archive.
+     *
+     * Pushed on top of the live channel rather than replacing it, so Back returns to the channel
+     * as it is now — the viewer was looking at the live guide when they chose this.
+     */
+    fun playCatchUp(program: LiveProgramUi) {
+        val state = mutableState.value
+        if (state.isResolvingPlayback) return
+        val player = state.content as? AppContent.Player ?: return
+        val live = player.channel
+        val start = program.startEpochSeconds ?: return
+        val end = program.endEpochSeconds ?: return
+        playbackJob?.cancel()
+        mutableState.update { it.copy(isResolvingPlayback = true, hasPlaybackError = false) }
+        playbackJob =
+            viewModelScope.launch {
+                runCatching { catalogRepository.resolveCatchUp(live.id, start, end) }
+                    .onSuccess { recording ->
+                        if (mutableState.value.content != player) return@onSuccess
+                        mutableState.update {
+                            it.copy(isResolvingPlayback = false, hasPlaybackError = recording == null)
+                        }
+                        recording ?: return@onSuccess
+                        navigate(
+                            recording.toPlaybackUi(live.categoryName).copy(
+                                name = "${live.name} \u00b7 ${program.title}",
+                                logoUrl = live.logoUrl,
+                            ),
+                        )
+                    }.onFailure { error ->
+                        if (error is CancellationException) return@onFailure
+                        // The URL carries the account's credentials, so the error is never logged.
+                        logger.error(TAG, "Could not resolve a catch-up recording", null)
+                        mutableState.update { it.copy(isResolvingPlayback = false, hasPlaybackError = true) }
+                    }
+            }
+    }
+
+    /**
      * The episode after the one open in the player, or null.
      *
      * Only when the player was opened from that series' own page: the loaded episode list belongs
@@ -5355,6 +5394,7 @@ class MainViewModel @Inject constructor(
             providerItemId = providerItemId,
             year = year,
             rating = rating,
+            catchUpDays = catchUpDays,
         )
 
     /** Keeps the times, which is what lets the guide print a clock against each programme. */
@@ -5379,6 +5419,7 @@ class MainViewModel @Inject constructor(
             providerItemId = providerItemId,
             year = year,
             rating = rating,
+            catchUpDays = catchUpDays,
         )
 
     private fun List<ChannelUi>.filterKidsContentIfNeeded(profile: ProfileUi?): List<ChannelUi> =

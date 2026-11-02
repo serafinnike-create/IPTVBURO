@@ -67,6 +67,9 @@ data class ChannelEntity(
     val rating: Double? = null,
     @ColumnInfo(name = "added_at_epoch_seconds")
     val addedAtEpochSeconds: Long? = null,
+    /** Days of recordings the provider keeps for a live channel; null when it keeps none. */
+    @ColumnInfo(name = "catch_up_days")
+    val catchUpDays: Int? = null,
 ) {
     /**
      * Stream and artwork URLs may contain provider credentials for legacy M3U sources.

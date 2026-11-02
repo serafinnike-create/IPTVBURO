@@ -85,6 +85,8 @@ data class ChannelUi(
     val episodeNumber: Int? = null,
     val year: Int? = null,
     val rating: Double? = null,
+    /** Days of recordings the provider keeps for this live channel; null when it keeps none. */
+    val catchUpDays: Int? = null,
 ) {
     override fun toString(): String =
         "ChannelUi(" +

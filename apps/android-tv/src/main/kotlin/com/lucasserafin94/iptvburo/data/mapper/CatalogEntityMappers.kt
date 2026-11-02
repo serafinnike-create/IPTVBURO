@@ -54,4 +54,5 @@ fun ChannelEntity.toDomain(): Channel =
         containerExtension = containerExtension,
         year = year,
         rating = rating,
+        catchUpDays = catchUpDays,
     )

@@ -75,6 +75,11 @@ data class Channel(
     val containerExtension: String? = null,
     val year: Int? = null,
     val rating: Double? = null,
+    /**
+     * How many days back the provider still holds recordings of this live channel, or null when it
+     * keeps none. Only Xtream panels report it; everywhere else it stays null.
+     */
+    val catchUpDays: Int? = null,
 ) {
     override fun toString(): String =
         "Channel(" +

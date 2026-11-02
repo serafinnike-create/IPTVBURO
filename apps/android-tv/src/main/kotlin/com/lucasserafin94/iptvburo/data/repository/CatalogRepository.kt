@@ -115,6 +115,16 @@ interface CatalogRepository {
     /** Optional now/next data; an empty result must never block live playback. */
     suspend fun loadShortEpg(sourceId: String, providerStreamId: String): LiveEpg = LiveEpg()
 
+    /**
+     * A past programme of live channel [channelId] from its provider's archive, ready to play, or
+     * null when the channel keeps no recordings or the programme is outside the window.
+     */
+    suspend fun resolveCatchUp(
+        channelId: String,
+        startEpochSeconds: Long,
+        endEpochSeconds: Long,
+    ): Channel? = null
+
     suspend fun importPlaylist(
         displayName: String,
         inputStream: InputStream,

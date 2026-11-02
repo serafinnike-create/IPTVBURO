@@ -428,4 +428,5 @@
     <string name="player_next_episode_in">Inizia tra %1$d s</string>
     <string name="player_play_now">Guarda ora</string>
     <string name="search_clear">Cancella ricerca</string>
+    <string name="live_schedule_replay">Guarda dall\'inizio</string>
 </resources>
