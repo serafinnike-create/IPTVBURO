@@ -2,6 +2,7 @@ package com.lucasserafin94.iptvburo.di
 
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.lucasserafin94.iptvburo.data.network.HttpsDowngradeGuard
 import com.lucasserafin94.iptvburo.data.repository.DownloadRateReporter
 import com.lucasserafin94.iptvburo.stalker.StalkerClient
 import com.lucasserafin94.iptvburo.xtream.XtreamClient
@@ -25,8 +26,10 @@ object NetworkModule {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .followRedirects(true)
-            // Never let a HTTPS playback request cross to cleartext through a redirect.
-            .followSslRedirects(false)
+            // Scheme changes are followed, so a provider moving its streams to HTTPS works; the
+            // guard below still refuses the one direction that matters, HTTPS to cleartext.
+            .followSslRedirects(true)
+            .addNetworkInterceptor(HttpsDowngradeGuard())
             .retryOnConnectionFailure(true)
             .build()
 
