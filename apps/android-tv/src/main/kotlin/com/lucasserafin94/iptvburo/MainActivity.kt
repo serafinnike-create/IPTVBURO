@@ -1,5 +1,10 @@
 package com.lucasserafin94.iptvburo
 
+import com.lucasserafin94.iptvburo.data.tvhome.watchNextEntries
+import com.lucasserafin94.iptvburo.data.tvhome.WatchNextPublisher
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.ui.platform.LocalContext
 import android.content.res.Configuration
 import android.content.Context
 import android.content.Intent
@@ -215,6 +220,16 @@ private fun IptvBuroRoot(
     onRestore: (String) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val rootContext = LocalContext.current
+    val onTelevision =
+        rootContext.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK ==
+            Configuration.UI_MODE_TYPE_TELEVISION
+    // The launcher's own "Continue watching" row, kept in step with the app's on a television.
+    LaunchedEffect(state.continueWatching, onTelevision) {
+        if (!onTelevision) return@LaunchedEffect
+        val entries = watchNextEntries(state.continueWatching)
+        withContext(Dispatchers.IO) { WatchNextPublisher.publish(rootContext.applicationContext, entries) }
+    }
     val activity = LocalActivity.current as MainActivity
     val blockedLicense = state.license as? LicenseUiState.Blocked
     var isShowingPosterReveal by remember { mutableStateOf(false) }
