@@ -27,8 +27,20 @@ import androidx.room.PrimaryKey
         Index(value = ["category_id"]),
         Index(value = ["source_id", "tvg_id"]),
         Index(value = ["source_id", "name"]),
-        Index(value = ["source_id", "content_type", "category_id", "sort_order"]),
+        // (source_id, content_type, category_id, sort_order) used to sit here too. It is a prefix of
+        // the index below, so it served no query the longer one cannot, and cost one more B-tree
+        // write on every row of a hundred-thousand-row import.
         Index(value = ["source_id", "content_type", "category_id", "sort_order", "id"]),
+        // The home's "released this year" and "recently added" rows. Without these each one read
+        // every row of the source and sorted them all to keep two dozen.
+        Index(value = ["source_id", "year"]),
+        // Newest first, then playlist order: matching the row's ORDER BY column for column and
+        // direction for direction is what lets SQLite read the first two dozen straight off the
+        // index and stop, instead of sorting the source. A plain ascending index was ignored.
+        Index(
+            value = ["source_id", "added_at_epoch_seconds", "sort_order", "id"],
+            orders = [Index.Order.ASC, Index.Order.DESC, Index.Order.ASC, Index.Order.ASC],
+        ),
         Index(
             value = ["source_id", "content_type", "provider_item_id"],
             unique = true,

@@ -35,7 +35,7 @@ import com.lucasserafin94.iptvburo.data.local.entity.SourceEntity
         ReminderEntity::class,
         SeriesWatchEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 abstract class IptvBuroDatabase : RoomDatabase() {
@@ -242,6 +242,28 @@ abstract class IptvBuroDatabase : RoomDatabase() {
          * offered before. A default of zero would be indistinguishable from "keeps none" anyway,
          * but null keeps "never asked" and "said no" apart.
          */
+        /**
+         * Indexes for the home's year and recently-added rows, and one redundant index dropped.
+         *
+         * Indexes only: no row is touched, so nothing a profile, favourite or progress row points
+         * at can move. The names are Room's own, so the schema validator finds what it expects.
+         */
+        val MIGRATION_12_13: Migration =
+            object : Migration(12, 13) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "DROP INDEX IF EXISTS index_channels_source_id_content_type_category_id_sort_order",
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_channels_source_id_year ON channels (source_id, year)",
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_channels_source_id_added_at_epoch_seconds_sort_order_id " +
+                            "ON channels (source_id ASC, added_at_epoch_seconds DESC, sort_order ASC, id ASC)",
+                    )
+                }
+            }
+
         val MIGRATION_11_12: Migration =
             object : Migration(11, 12) {
                 override fun migrate(db: SupportSQLiteDatabase) {

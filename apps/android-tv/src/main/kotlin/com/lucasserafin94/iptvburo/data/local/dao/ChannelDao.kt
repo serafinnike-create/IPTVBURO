@@ -310,7 +310,11 @@ interface ChannelDao {
         SELECT * FROM channels
         WHERE source_id = :sourceId
           AND content_type IN ('MOVIE', 'SERIES')
-        ORDER BY COALESCE(added_at_epoch_seconds, 0) DESC, sort_order, id
+        -- The bare column rather than COALESCE(added_at_epoch_seconds, 0): an expression cannot be
+        -- read from the (source_id, added_at_epoch_seconds) index, so the whole source was sorted
+        -- to return two dozen rows. SQLite already orders NULL below every value, so a row with no
+        -- date still sorts last, as before.
+        ORDER BY added_at_epoch_seconds DESC, sort_order, id
         LIMIT :limit
         """,
     )
