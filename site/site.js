@@ -26,6 +26,7 @@
     pricingKicker: 'ATIVAÇÃO SEGURA', pricingTitle: 'Teste primeiro.<br>Pague uma vez.', pricingLead: 'Sem assinatura automática. O código liga o pagamento apenas à instalação mostrada no aplicativo.', priceCheckOne: '7 dias grátis, sem cartão', priceCheckTwo: 'Pagamento processado pela Stripe', priceCheckThree: 'Não guardamos dados do cartão', licenseLabel: 'Licença por dispositivo', singlePayment: 'PAGAMENTO ÚNICO', years: 'anos', regionalPrice: 'O valor final e a moeda são confirmados antes do pagamento.', deviceCode: 'Código do dispositivo', codeHelp: 'Encontre este código na tela de ativação do aplicativo.', continuePayment: 'Continuar para pagamento seguro', or: 'ou', haveKey: 'Já tem uma chave de ativação?', haveKeyBody: 'Use a chave sem pagar novamente.', secureNote: 'Conexão segura. A ativação só acontece depois do webhook confirmado pelo servidor.', invalidCode: 'Digite o código de 12 caracteres mostrado no aplicativo.', validCode: 'Código pronto. Você será encaminhado ao pagamento seguro.',
     stepsKicker: 'DO APP À ATIVAÇÃO', stepsTitle: 'Quatro passos. Alguns segundos.', stepOneTitle: 'Abra o IPTV BURO', stepOneBody: 'O teste começa na primeira abertura e o aplicativo cria um código privado para a instalação.', stepTwoTitle: 'Leia o QR code', stepTwoBody: 'A página já abre com o dispositivo preenchido. Também é possível copiar o código.', stepThreeTitle: 'Confirme na Stripe', stepThreeBody: 'Preço, moeda e período são validados pelo servidor, não pelo navegador.', stepFourTitle: 'Volte ao aplicativo', stepFourBody: 'A compra é reconhecida automaticamente após a confirmação segura.',
     faqKicker: 'SEM LETRAS PEQUENAS', faqTitle: 'Perguntas importantes.', faqContentQ: 'O IPTV BURO fornece canais ou filmes?', faqContentA: 'Não. O IPTV BURO é um player e organizador. Você adiciona apenas fontes de mídia que possui autorização para usar.', faqLifetimeQ: 'A licença é vitalícia?', faqLifetimeA: 'Não. O pagamento libera um dispositivo por 730 dias. Isso financia manutenção contínua para mudanças de formatos, provedores e sistemas.', faqDeviceQ: 'Posso usar em vários dispositivos?', faqDeviceA: 'Cada pagamento ativa uma instalação. Perfis são pessoas dentro do mesmo aparelho; não multiplicam a licença.', faqPrivateQ: 'O site recebe minha lista IPTV?', faqPrivateA: 'Não. O portal de pagamento recebe apenas o código público da instalação. A sua lista e as credenciais ficam no aplicativo.', faqOfflineQ: 'Já posso baixar filmes no celular?', faqOfflineA: 'O Offline Vault está em preparação para uma próxima versão mobile. Quando passar pelos testes de armazenamento, segurança e reprodução, os downloads elegíveis ficarão dentro da biblioteca privada do aplicativo.', faqRefundQ: 'O que acontece num reembolso?', faqRefundA: 'Um reembolso integral confirmado revoga a licença ligada à compra. Reembolsos e disputas são processados pelo servidor de forma auditável.',
+    buildRunning: 'montando', buildDone: 'site montado', buildSection: 'seção',
     closingTitle: 'Sua fonte.<br>Sua tela.<br>Do seu jeito.', footerBody: 'Player e organizador para fontes de mídia autorizadas pelo usuário.', footerProduct: 'Produto', footerActivation: 'Ativação', footerProject: 'Projeto', useKey: 'Usar uma chave', releases: 'Versões ↗', footerLegal: 'Não vende, hospeda ou fornece conteúdo, listas ou credenciais.',
   };
 
@@ -40,6 +41,7 @@
     liveTitle: 'Live TV with context', liveBody: 'Now and next, quick channel switching, and up to four-channel Multiview on Windows.', profilesTitle: 'Profiles and Kids', profilesBody: 'Up to five profiles, separate favorites, and conservative protection for adult content.', continueTitle: 'True continuity', continueBody: 'Stop a movie or episode and resume at the right point in the same profile.', privateTitle: 'Private by design', privateBody: 'System-protected credentials and authenticated URLs resolved only in memory.', formatsTitle: 'Your source, no lock-in', formatsBody: 'M3U/M3U8, Xtream-compatible, and a Stalker/Ministra foundation in one experience.', updatesTitle: 'Built to evolve', updatesBody: 'Verified updates, four languages, and an architecture prepared for new platforms.',
     offlineStatus: 'IN PREPARATION FOR MOBILE', offlineKicker: 'BURO OFFLINE VAULT', offlineTitle: 'The internet may fail.<br>Your session does not have to.', offlineLead: 'Download eligible movies and episodes ahead of time, then watch inside IPTV BURO — ideal for travel, weak signal, or an unstable connection.', offlineOneTitle: 'No buffering', offlineOneBody: 'A local copy does not depend on internet speed while the movie is playing.', offlineTwoTitle: 'Everything inside the app', offlineTwoBody: 'Downloads, artwork, and progress stay organized in IPTV BURO’s private library.', offlineThreeTitle: 'Designed for mobile', offlineThreeBody: 'The experience is being prepared for the mobile app after security and playback validation.', offlineDisclaimer: 'Still hidden in public releases. It will ship only for eligible media, never live TV, and never by bypassing protection.',
     screensKicker: 'ONE LANGUAGE, MANY SCREENS', screensTitle: 'The same calm,<br>wherever you are.', screensBody: 'The experience adapts navigation, density, and controls without losing the product identity.', platformsTitle: 'Start where it already works.', platformsLead: 'Current versions are previews. New platforms are only marked available after real validation.', windowsBody: 'Integrated player, full catalog, Multiview, and verified updates.', androidBody: 'Adaptive Media3 app with profiles, catalog, and playback. Offline Vault is in preparation for mobile.', previewAvailable: 'Preview available', nextPlatforms: 'Other platforms', nextPlatformsBody: 'Fire TV, Apple, Samsung, LG, and more are on the roadmap, not in the current promise.', planned: 'Planned', seeReleases: 'See available releases on GitHub',
+    buildRunning: 'building', buildDone: 'site assembled', buildSection: 'section',
     pricingKicker: 'SECURE ACTIVATION', pricingTitle: 'Try first.<br>Pay once.', pricingLead: 'No automatic subscription. The code links payment only to the installation shown in the app.', priceCheckOne: '7 free days, no card required', priceCheckTwo: 'Payment processed by Stripe', priceCheckThree: 'We do not store card details', licenseLabel: 'Per-device license', singlePayment: 'ONE-TIME PAYMENT', years: 'years', regionalPrice: 'The final amount and currency are confirmed before payment.', deviceCode: 'Device code', codeHelp: 'Find this code on the app activation screen.', continuePayment: 'Continue to secure payment', or: 'or', haveKey: 'Already have an activation key?', haveKeyBody: 'Use the key without paying again.', secureNote: 'Secure connection. Activation happens only after the server confirms the webhook.', invalidCode: 'Enter the 12-character code shown in the app.', validCode: 'Code ready. You will be sent to secure payment.',
     stepsKicker: 'FROM APP TO ACTIVATION', stepsTitle: 'Four steps. A few seconds.', stepOneTitle: 'Open IPTV BURO', stepOneBody: 'The trial starts on first launch and the app creates a private code for this installation.', stepTwoTitle: 'Scan the QR code', stepTwoBody: 'The page opens with the device filled in. You can also copy the code.', stepThreeTitle: 'Confirm with Stripe', stepThreeBody: 'Price, currency, and term are validated by the server, not the browser.', stepFourTitle: 'Return to the app', stepFourBody: 'The purchase is recognized automatically after secure confirmation.',
     faqKicker: 'NO FINE PRINT', faqTitle: 'Important questions.', faqContentQ: 'Does IPTV BURO provide channels or movies?', faqContentA: 'No. IPTV BURO is a player and organizer. You add only media sources you are authorized to use.', faqLifetimeQ: 'Is the license lifetime?', faqLifetimeA: 'No. One payment unlocks one device for 730 days. This supports ongoing maintenance as formats, providers, and systems change.', faqDeviceQ: 'Can I use it on multiple devices?', faqDeviceA: 'Each payment activates one installation. Profiles are people on the same device; they do not multiply the license.', faqPrivateQ: 'Does the site receive my IPTV list?', faqPrivateA: 'No. The payment portal receives only the public installation code. Your list and credentials stay in the app.', faqOfflineQ: 'Can I download movies on my phone yet?', faqOfflineA: 'Offline Vault is being prepared for an upcoming mobile release. Once storage, security, and playback validation pass, eligible downloads will stay inside the app’s private library.', faqRefundQ: 'What happens after a refund?', faqRefundA: 'A confirmed full refund revokes the license linked to the purchase. Refunds and disputes are processed by the server with an audit trail.', closingTitle: 'Your source.<br>Your screen.<br>Your way.', footerBody: 'Player and organizer for user-authorized media sources.', footerProduct: 'Product', footerActivation: 'Activation', footerProject: 'Project', useKey: 'Use a key', releases: 'Releases ↗', footerLegal: 'Does not sell, host, or provide content, lists, or credentials.'
@@ -56,6 +58,7 @@
     liveTitle: 'Live-TV mit Kontext', liveBody: 'Jetzt und danach, schneller Senderwechsel und Multiview mit bis zu vier Sendern unter Windows.', profilesTitle: 'Profile und Kids', profilesBody: 'Bis zu fünf Profile, getrennte Favoriten und vorsichtiger Schutz vor Erwachsenen-Inhalten.', continueTitle: 'Nahtlos weiterschauen', continueBody: 'Film oder Folge stoppen und im selben Profil an der richtigen Stelle fortsetzen.', privateTitle: 'Privat entwickelt', privateBody: 'Vom System geschützte Zugangsdaten; authentifizierte URLs werden nur im Speicher aufgelöst.', formatsTitle: 'Deine Quelle, keine Bindung', formatsBody: 'M3U/M3U8, Xtream-kompatibel und eine Stalker/Ministra-Basis in einem Erlebnis.', updatesTitle: 'Bereit für Weiterentwicklung', updatesBody: 'Verifizierte Updates, vier Sprachen und eine Architektur für weitere Plattformen.',
     offlineStatus: 'FÜR MOBILE IN VORBEREITUNG', offlineKicker: 'BURO OFFLINE VAULT', offlineTitle: 'Das Internet darf ausfallen.<br>Dein Film muss nicht stoppen.', offlineLead: 'Lade geeignete Filme und Folgen vorher herunter und sieh sie später direkt in IPTV BURO — ideal für Reisen, schwaches Signal oder instabile Verbindungen.', offlineOneTitle: 'Ohne Unterbrechungen', offlineOneBody: 'Eine lokale Kopie hängt während des Films nicht von der Internetgeschwindigkeit ab.', offlineTwoTitle: 'Alles innerhalb der App', offlineTwoBody: 'Downloads, Cover und Fortschritt bleiben in der privaten IPTV-BURO-Mediathek geordnet.', offlineThreeTitle: 'Für mobile Geräte gedacht', offlineThreeBody: 'Nach Sicherheits- und Wiedergabetests wird das Erlebnis für die mobile App vorbereitet.', offlineDisclaimer: 'In öffentlichen Versionen noch ausgeblendet. Freigabe nur für geeignete Medien, nie für Live-TV und nie durch Umgehung von Schutz.',
     screensKicker: 'EINE SPRACHE, VIELE BILDSCHIRME', screensTitle: 'Dieselbe Ruhe,<br>wo immer du bist.', screensBody: 'Navigation, Dichte und Steuerung passen sich an, ohne die Identität des Produkts zu verlieren.', platformsTitle: 'Starte dort, wo es bereits funktioniert.', platformsLead: 'Die aktuellen Versionen sind Vorschauen. Neue Plattformen gelten erst nach echter Validierung als verfügbar.', windowsBody: 'Integrierter Player, vollständiger Katalog, Multiview und verifizierte Updates.', androidBody: 'Adaptive Media3-App mit Profilen, Katalog und Wiedergabe. Offline Vault wird für Mobilgeräte vorbereitet.', previewAvailable: 'Vorschau verfügbar', nextPlatforms: 'Weitere Plattformen', nextPlatformsBody: 'Fire TV, Apple, Samsung, LG und weitere stehen auf der Roadmap, sind aber noch kein aktuelles Versprechen.', planned: 'Geplant', seeReleases: 'Verfügbare Versionen auf GitHub ansehen',
+    buildRunning: 'baue', buildDone: 'Seite fertig', buildSection: 'Abschnitt',
     pricingKicker: 'SICHERE AKTIVIERUNG', pricingTitle: 'Erst testen.<br>Einmal zahlen.', pricingLead: 'Kein automatisches Abo. Der Code verbindet die Zahlung nur mit der im App angezeigten Installation.', priceCheckOne: '7 Tage kostenlos, ohne Karte', priceCheckTwo: 'Zahlungsabwicklung durch Stripe', priceCheckThree: 'Wir speichern keine Kartendaten', licenseLabel: 'Lizenz pro Gerät', singlePayment: 'EINMALIGE ZAHLUNG', years: 'Jahre', regionalPrice: 'Endbetrag und Währung werden vor der Zahlung bestätigt.', deviceCode: 'Gerätecode', codeHelp: 'Diesen Code findest du im Aktivierungsbildschirm der App.', continuePayment: 'Weiter zur sicheren Zahlung', or: 'oder', haveKey: 'Du hast bereits einen Aktivierungsschlüssel?', haveKeyBody: 'Nutze den Schlüssel ohne erneut zu zahlen.', secureNote: 'Sichere Verbindung. Die Aktivierung erfolgt erst nach der Webhook-Bestätigung durch den Server.', invalidCode: 'Gib den 12-stelligen Code aus der App ein.', validCode: 'Code ist bereit. Du wirst zur sicheren Zahlung weitergeleitet.',
     stepsKicker: 'VON DER APP ZUR AKTIVIERUNG', stepsTitle: 'Vier Schritte. Wenige Sekunden.', stepOneTitle: 'IPTV BURO öffnen', stepOneBody: 'Der Test beginnt beim ersten Start und die App erstellt einen privaten Code für diese Installation.', stepTwoTitle: 'QR-Code scannen', stepTwoBody: 'Die Seite öffnet sich mit ausgefülltem Gerätecode. Du kannst ihn auch kopieren.', stepThreeTitle: 'Bei Stripe bestätigen', stepThreeBody: 'Preis, Währung und Laufzeit werden vom Server geprüft, nicht vom Browser.', stepFourTitle: 'Zur App zurückkehren', stepFourBody: 'Der Kauf wird nach der sicheren Bestätigung automatisch erkannt.',
     faqKicker: 'KEIN KLEINGEDRUCKTES', faqTitle: 'Wichtige Fragen.', faqContentQ: 'Stellt IPTV BURO Sender oder Filme bereit?', faqContentA: 'Nein. IPTV BURO ist ein Player und Organizer. Du fügst nur Medienquellen hinzu, zu deren Nutzung du berechtigt bist.', faqLifetimeQ: 'Gilt die Lizenz lebenslang?', faqLifetimeA: 'Nein. Eine Zahlung schaltet ein Gerät für 730 Tage frei und finanziert die laufende Pflege bei Änderungen an Formaten, Anbietern und Systemen.', faqDeviceQ: 'Kann ich mehrere Geräte nutzen?', faqDeviceA: 'Jede Zahlung aktiviert eine Installation. Profile sind Personen auf demselben Gerät; sie vervielfachen die Lizenz nicht.', faqPrivateQ: 'Erhält die Website meine IPTV-Liste?', faqPrivateA: 'Nein. Das Zahlungsportal erhält nur den öffentlichen Installationscode. Liste und Zugangsdaten bleiben in der App.', faqOfflineQ: 'Kann ich Filme schon auf dem Handy herunterladen?', faqOfflineA: 'Offline Vault wird für eine kommende mobile Version vorbereitet. Nach erfolgreicher Speicher-, Sicherheits- und Wiedergabeprüfung bleiben geeignete Downloads in der privaten App-Mediathek.', faqRefundQ: 'Was geschieht bei einer Erstattung?', faqRefundA: 'Eine bestätigte vollständige Erstattung widerruft die mit dem Kauf verknüpfte Lizenz. Erstattungen und Streitfälle verarbeitet der Server nachvollziehbar.', closingTitle: 'Deine Quelle.<br>Dein Bildschirm.<br>Deine Art.', footerBody: 'Player und Organizer für vom Benutzer autorisierte Medienquellen.', footerProduct: 'Produkt', footerActivation: 'Aktivierung', footerProject: 'Projekt', useKey: 'Schlüssel verwenden', releases: 'Versionen ↗', footerLegal: 'Verkauft, hostet oder liefert keine Inhalte, Listen oder Zugangsdaten.'
@@ -72,6 +75,7 @@
     liveTitle: 'TV in diretta con contesto', liveBody: 'Ora e dopo, cambio rapido del canale e Multiview fino a quattro canali su Windows.', profilesTitle: 'Profili e Kids', profilesBody: 'Fino a cinque profili, preferiti separati e protezione prudente per i contenuti per adulti.', continueTitle: 'Continuità reale', continueBody: 'Interrompi un film o un episodio e riprendi dal punto giusto nello stesso profilo.', privateTitle: 'Privato per scelta', privateBody: 'Credenziali protette dal sistema e URL autenticati risolti soltanto in memoria.', formatsTitle: 'La tua fonte, senza vincoli', formatsBody: 'M3U/M3U8, compatibilità Xtream e base Stalker/Ministra in un’unica esperienza.', updatesTitle: 'Cresce con te', updatesBody: 'Aggiornamenti verificati, quattro lingue e un’architettura pronta per nuove piattaforme.',
     offlineStatus: 'IN PREPARAZIONE PER MOBILE', offlineKicker: 'BURO OFFLINE VAULT', offlineTitle: 'Internet può mancare.<br>La visione non deve fermarsi.', offlineLead: 'Scarica prima film ed episodi idonei e guardali poi dentro IPTV BURO — ideale in viaggio, con poco segnale o una connessione instabile.', offlineOneTitle: 'Senza interruzioni', offlineOneBody: 'Una copia locale non dipende dalla velocità di internet durante il film.', offlineTwoTitle: 'Tutto dentro l’app', offlineTwoBody: 'Download, copertine e avanzamento restano organizzati nella libreria privata di IPTV BURO.', offlineThreeTitle: 'Pensato per il mobile', offlineThreeBody: 'L’esperienza viene preparata per l’app mobile dopo i test di sicurezza e riproduzione.', offlineDisclaimer: 'Ancora nascosto nelle versioni pubbliche. Sarà disponibile solo per media idonei, mai per la TV in diretta e senza aggirare protezioni.',
     screensKicker: 'UN LINGUAGGIO, PIÙ SCHERMI', screensTitle: 'La stessa calma,<br>ovunque ti trovi.', screensBody: 'L’esperienza adatta navigazione, densità e controlli senza perdere l’identità del prodotto.', platformsTitle: 'Inizia dove funziona già.', platformsLead: 'Le versioni attuali sono anteprime. Le nuove piattaforme vengono indicate come disponibili solo dopo una vera convalida.', windowsBody: 'Player integrato, catalogo completo, Multiview e aggiornamenti verificati.', androidBody: 'App adattiva Media3 con profili, catalogo e riproduzione. Offline Vault è in preparazione per il mobile.', previewAvailable: 'Anteprima disponibile', nextPlatforms: 'Altre piattaforme', nextPlatformsBody: 'Fire TV, Apple, Samsung, LG e altre sono nella roadmap, non nella promessa attuale.', planned: 'Pianificato', seeReleases: 'Vedi le versioni disponibili su GitHub',
+    buildRunning: 'costruisco', buildDone: 'sito pronto', buildSection: 'sezione',
     pricingKicker: 'ATTIVAZIONE SICURA', pricingTitle: 'Prima prova.<br>Poi paga una volta.', pricingLead: 'Nessun abbonamento automatico. Il codice collega il pagamento soltanto all’installazione mostrata nell’app.', priceCheckOne: '7 giorni gratuiti, senza carta', priceCheckTwo: 'Pagamento elaborato da Stripe', priceCheckThree: 'Non conserviamo i dati della carta', licenseLabel: 'Licenza per dispositivo', singlePayment: 'PAGAMENTO UNICO', years: 'anni', regionalPrice: 'Importo finale e valuta sono confermati prima del pagamento.', deviceCode: 'Codice dispositivo', codeHelp: 'Trova questo codice nella schermata di attivazione dell’app.', continuePayment: 'Continua al pagamento sicuro', or: 'oppure', haveKey: 'Hai già una chiave di attivazione?', haveKeyBody: 'Usa la chiave senza pagare di nuovo.', secureNote: 'Connessione sicura. L’attivazione avviene solo dopo la conferma del webhook da parte del server.', invalidCode: 'Inserisci il codice di 12 caratteri mostrato nell’app.', validCode: 'Codice pronto. Verrai indirizzato al pagamento sicuro.',
     stepsKicker: 'DALL’APP ALL’ATTIVAZIONE', stepsTitle: 'Quattro passaggi. Pochi secondi.', stepOneTitle: 'Apri IPTV BURO', stepOneBody: 'La prova inizia al primo avvio e l’app crea un codice privato per questa installazione.', stepTwoTitle: 'Scansiona il QR code', stepTwoBody: 'La pagina si apre con il dispositivo già compilato. Puoi anche copiare il codice.', stepThreeTitle: 'Conferma su Stripe', stepThreeBody: 'Prezzo, valuta e durata vengono convalidati dal server, non dal browser.', stepFourTitle: 'Torna all’app', stepFourBody: 'L’acquisto viene riconosciuto automaticamente dopo la conferma sicura.',
     faqKicker: 'NESSUNA SCRITTA IN PICCOLO', faqTitle: 'Domande importanti.', faqContentQ: 'IPTV BURO fornisce canali o film?', faqContentA: 'No. IPTV BURO è un player e organizzatore. Aggiungi soltanto fonti multimediali che sei autorizzato a usare.', faqLifetimeQ: 'La licenza è a vita?', faqLifetimeA: 'No. Un pagamento sblocca un dispositivo per 730 giorni e sostiene la manutenzione continua quando cambiano formati, provider e sistemi.', faqDeviceQ: 'Posso usarlo su più dispositivi?', faqDeviceA: 'Ogni pagamento attiva una sola installazione. I profili sono persone sullo stesso dispositivo e non moltiplicano la licenza.', faqPrivateQ: 'Il sito riceve la mia lista IPTV?', faqPrivateA: 'No. Il portale di pagamento riceve soltanto il codice pubblico dell’installazione. Lista e credenziali restano nell’app.', faqOfflineQ: 'Posso già scaricare film sul telefono?', faqOfflineA: 'Offline Vault è in preparazione per una prossima versione mobile. Dopo i test di archiviazione, sicurezza e riproduzione, i download idonei resteranno nella libreria privata dell’app.', faqRefundQ: 'Cosa succede con un rimborso?', faqRefundA: 'Un rimborso totale confermato revoca la licenza collegata all’acquisto. Rimborsi e contestazioni sono elaborati dal server in modo verificabile.', closingTitle: 'La tua fonte.<br>Il tuo schermo.<br>A modo tuo.', footerBody: 'Player e organizzatore per fonti multimediali autorizzate dall’utente.', footerProduct: 'Prodotto', footerActivation: 'Attivazione', footerProject: 'Progetto', useKey: 'Usa una chiave', releases: 'Versioni ↗', footerLegal: 'Non vende, ospita o fornisce contenuti, liste o credenziali.'
@@ -373,16 +377,30 @@
    * link. So the threshold is a list: zero fires as soon as any sliver shows,
    * and anything already on screen when we start is revealed immediately.
    */
-  function setupReveal() {
+  function setupReveal(builder) {
     const elements = $$('.reveal');
     if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       elements.forEach((element) => element.classList.add('visible'));
       return;
     }
+    // Every reveal goes through here so the live build can take over the
+    // entrance. The class is added first either way: the builder decorates a
+    // block that is already visible, it never decides whether it appears.
+    const show = (element) => {
+      element.classList.add('visible');
+      if (!builder) return;
+      try {
+        builder.build(element);
+      } catch (_) {
+        // A half-started build must not leave pieces hidden.
+        element.classList.remove('bx-building');
+        $$('.bx-atom', element).forEach((atom) => atom.classList.remove('bx-atom', 'bx-on'));
+      }
+    };
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
-        entry.target.classList.add('visible');
+        show(entry.target);
         observer.unobserve(entry.target);
       });
     }, { threshold: [0, 0.12], rootMargin: '0px 0px -8% 0px' });
@@ -403,7 +421,16 @@
         if (element.classList.contains('visible')) return;
         const box = element.getBoundingClientRect();
         if (box.top < window.innerHeight && box.bottom > 0) {
+          show(element);
+          observer.unobserve(element);
+          return;
+        }
+        // A fast flick or an anchor jump can carry a block past the viewport
+        // between two frames. It is behind the visitor now, so it is simply
+        // there when they scroll back, not assembled again.
+        if (box.bottom <= 0 && box.height > 0) {
           element.classList.add('visible');
+          if (builder) builder.skip(element);
           observer.unobserve(element);
           return;
         }
@@ -420,8 +447,248 @@
 
     elements.forEach((element) => observer.observe(element));
     sweep();
+    // The first screen is simply there; only what the visitor scrolls to is
+    // assembled in front of them.
+    if (builder) builder.arm();
     window.addEventListener('load', sweep, { once: true });
     window.addEventListener('scroll', onScroll, { passive: true });
+  }
+
+  /**
+   * The live build: each block the visitor scrolls to is assembled in front of
+   * them, as if a small team of agents were laying the page out in real time.
+   *
+   * Nothing is actually late. The block is fully rendered before this runs;
+   * what plays is a choreography over it — a blueprint frame, skeleton
+   * placeholders, then each piece snapping into place while a labelled cursor
+   * moves to it, headings typed out, images scanned in. The whole sequence is
+   * capped at under a second per block so it reads as speed, never as waiting.
+   *
+   * It obeys the reveal rule: the builder only ever decorates a block that is
+   * already `.visible`, every piece it hides has a timer that shows it again,
+   * and every class and overlay it adds is removed when the block is done. If
+   * anything here throws, the page is the same page it was without it.
+   */
+  function setupBuild() {
+    if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null;
+
+    const ATOMS = [
+      'h1', 'h2', 'h3', 'p', 'li', 'img', 'video', 'label', 'summary', 'details',
+      '.button', '.text-link', '.pills span', '.feature-icon', '.feature-state', '.number',
+      '.platform-symbol', '.platform-tag', '.demo-tab', '.tour-toggle', '.window-bar',
+      '.content-rail article', '.code-field', '.payment-divider', '.activation-key-link',
+      '.secure-row', '.price-topline', '.price-value', '.roadmap-badge', '.offline-phone',
+      '.offline-signal', '.video-caption', '.hero-facts > span',
+    ].join(',');
+    const MEDIA = 'img, video, .offline-phone';
+    const TYPED = 'h1, h2, h3';
+    const agents = {
+      layout: { name: 'layout' },
+      copy: { name: 'copy' },
+      media: { name: 'media' },
+      ui: { name: 'ui' },
+    };
+
+    document.documentElement.classList.add('bx');
+    const layer = document.createElement('div');
+    layer.className = 'bx-layer';
+    layer.setAttribute('aria-hidden', 'true');
+    document.body.append(layer);
+
+    Object.entries(agents).forEach(([role, agent]) => {
+      const node = document.createElement('div');
+      node.className = `bx-agent bx-agent-${role}`;
+      const label = document.createElement('span');
+      label.textContent = `agent·${agent.name}`;
+      node.append(document.createElement('i'), label);
+      layer.append(node);
+      agent.node = node;
+      agent.idle = 0;
+    });
+
+    const hud = document.createElement('div');
+    hud.className = 'bx-hud';
+    hud.setAttribute('aria-hidden', 'true');
+    const hudStatus = document.createElement('b');
+    const hudLog = document.createElement('code');
+    const hudBar = document.createElement('i');
+    const hudFill = document.createElement('span');
+    hudBar.append(hudFill);
+    hud.append(document.createElement('em'), hudStatus, hudLog, hudBar);
+    document.body.append(hud);
+
+    // Only blocks this layout actually shows: the hero shot is display:none on
+    // phones and would otherwise hold the progress below 100% forever.
+    const total = $$('.reveal').filter((block) => block.getClientRects().length > 0).length || 1;
+    let built = 0;
+    let running = 0;
+    let armed = false;
+    let hudTimer;
+
+    const pageBox = (element) => {
+      const box = element.getBoundingClientRect();
+      return { x: box.left + window.scrollX, y: box.top + window.scrollY, w: box.width, h: box.height };
+    };
+    const place = (node, box) => {
+      node.style.transform = `translate3d(${box.x.toFixed(1)}px, ${box.y.toFixed(1)}px, 0)`;
+      node.style.width = `${box.w.toFixed(1)}px`;
+      node.style.height = `${box.h.toFixed(1)}px`;
+    };
+    const roleOf = (atom) => {
+      if (atom.matches(MEDIA)) return 'media';
+      if (atom.matches('h1, h2, h3, p, li, label, summary')) return 'copy';
+      return 'ui';
+    };
+    const sectionName = (block) => {
+      const section = block.closest('section');
+      const heading = section && $('h1, h2', section);
+      // innerText, not textContent: the headings break lines with <br>, and
+      // only innerText turns those breaks into the spaces between the words.
+      const text = (heading ? heading.innerText : block.className.split(' ')[0]).replace(/\s+/g, ' ').trim();
+      return text.length > 30 ? `${text.slice(0, 29)}…` : text;
+    };
+
+    const moveAgent = (role, box, detail) => {
+      const agent = agents[role];
+      agent.node.style.transform = `translate3d(${(box.x + Math.min(box.w * 0.18, 40)).toFixed(1)}px, ${(box.y + Math.min(box.h * 0.5, 18)).toFixed(1)}px, 0)`;
+      agent.node.classList.add('on');
+      clearTimeout(agent.idle);
+      agent.idle = window.setTimeout(() => agent.node.classList.remove('on'), 900);
+      hudLog.textContent = `${agent.node.lastChild.textContent} ▸ ${detail}`;
+    };
+
+    const updateHud = (block) => {
+      const copy = translations[currentLanguage];
+      clearTimeout(hudTimer);
+      hud.classList.add('on');
+      hudFill.style.transform = `scaleX(${Math.min(1, built / total).toFixed(3)})`;
+      if (running > 0) {
+        hud.classList.remove('done');
+        hudStatus.textContent = `${copy.buildRunning} ${block ? `“${sectionName(block)}”` : ''}`;
+      } else {
+        hud.classList.add('done');
+        const percent = Math.round((built / total) * 100);
+        hudStatus.textContent = percent >= 100 ? `✓ ${copy.buildDone}` : `✓ ${block ? sectionName(block) : copy.buildSection} · ${percent}%`;
+        hudTimer = window.setTimeout(() => hud.classList.remove('on'), 1600);
+      }
+    };
+
+    // Headings are typed into place. The untyped remainder stays in the
+    // layout as a transparent span, so the line breaks are final from the
+    // first frame and nothing below the heading moves while it types.
+    const typeOut = (heading, duration) => {
+      const walker = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT);
+      const parts = [];
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!node.data.trim()) continue;
+        const ghost = document.createElement('span');
+        ghost.className = 'bx-ghost';
+        parts.push({ node, text: node.data, ghost });
+      }
+      if (!parts.length) return;
+      const length = parts.reduce((sum, part) => sum + part.text.length, 0);
+      parts.forEach((part) => { part.node.after(part.ghost); });
+      const start = performance.now();
+      const frame = (now) => {
+        const progress = Math.min(1, (now - start) / duration);
+        let budget = Math.round(length * progress);
+        parts.forEach((part) => {
+          // A language switch or the demo tour may replace these nodes
+          // mid-type; a detached node is simply left alone.
+          if (!part.node.isConnected) return;
+          const shown = Math.max(0, Math.min(part.text.length, budget));
+          budget -= part.text.length;
+          part.node.data = part.text.slice(0, shown);
+          part.ghost.textContent = part.text.slice(shown);
+          part.ghost.classList.toggle('caret', shown > 0 && shown < part.text.length);
+        });
+        if (progress < 1) {
+          requestAnimationFrame(frame);
+          return;
+        }
+        parts.forEach((part) => {
+          if (part.node.isConnected) part.node.data = part.text;
+          part.ghost.remove();
+        });
+      };
+      requestAnimationFrame(frame);
+    };
+
+    const build = (block) => {
+      if (!armed || block.dataset.bx) return;
+      block.dataset.bx = 'done';
+      const atoms = $$(ATOMS, block).filter((atom) => atom.getClientRects().length > 0);
+      if (!atoms.length) return;
+
+      running += 1;
+      const delay = (Number(getComputedStyle(block).getPropertyValue('--stagger')) || 0) * 70;
+      const step = Math.max(26, Math.min(60, 640 / atoms.length));
+      const lead = 140;
+      const finish = delay + lead + step * atoms.length + 420;
+
+      block.classList.add('bx-building');
+      atoms.forEach((atom) => atom.classList.add('bx-atom'));
+
+      // Blueprint first: a measured frame around the block, with its size,
+      // laid down by the layout agent before any content arrives.
+      const frameBox = pageBox(block);
+      const frame = document.createElement('div');
+      frame.className = 'bx-frame';
+      const tag = document.createElement('span');
+      tag.textContent = `${Math.round(frameBox.w)} × ${Math.round(frameBox.h)}`;
+      frame.append(tag);
+      place(frame, frameBox);
+      layer.append(frame);
+
+      const skeletons = atoms.map((atom) => {
+        const skeleton = document.createElement('div');
+        skeleton.className = `bx-skel${atom.matches(MEDIA) ? ' media' : ''}${atom.matches('p, li, summary') ? ' lines' : ''}`;
+        place(skeleton, pageBox(atom));
+        layer.append(skeleton);
+        return skeleton;
+      });
+
+      window.setTimeout(() => {
+        frame.classList.add('on');
+        moveAgent('layout', frameBox, block.className.split(' ')[0]);
+        updateHud(block);
+      }, delay);
+
+      atoms.forEach((atom, index) => {
+        window.setTimeout(() => {
+          atom.classList.add('bx-on');
+          skeletons[index].classList.add('done');
+          const role = roleOf(atom);
+          moveAgent(role, pageBox(atom), atom.tagName.toLowerCase());
+          if (atom.matches(TYPED)) typeOut(atom, Math.min(520, 120 + atom.textContent.length * 9));
+        }, delay + lead + index * step);
+      });
+
+      window.setTimeout(() => {
+        frame.classList.add('done');
+        atoms.forEach((atom) => atom.classList.remove('bx-atom', 'bx-on'));
+        block.classList.remove('bx-building');
+        skeletons.forEach((skeleton) => skeleton.remove());
+        window.setTimeout(() => frame.remove(), 400);
+        running -= 1;
+        built += 1;
+        updateHud(block);
+      }, finish);
+    };
+
+    return {
+      build,
+      skip(block) {
+        if (block.dataset.bx) return;
+        block.dataset.bx = 'done';
+        built += 1;
+      },
+      arm() {
+        // Blocks already on screen at load count as built, without a show.
+        $$('.reveal.visible').forEach((block) => this.skip(block));
+        armed = true;
+      },
+    };
   }
 
   /**
@@ -549,7 +816,6 @@
   setupNavigation();
   setupPayment();
   setupDemo();
-  setupReveal();
   setupMotion();
   // The hero uses the restrained poster wall in CSS. The older WebGL field
   // looked like coloured floating blocks on some GPUs, so it is deliberately
@@ -557,4 +823,9 @@
   setupDownload();
   setupFaq();
   applyLanguage(initialLanguage);
+  // After the language pass, so a heading is typed in the visitor's language
+  // rather than in Portuguese and then swapped underneath the animation.
+  let builder = null;
+  try { builder = setupBuild(); } catch (_) { builder = null; }
+  setupReveal(builder);
 })();

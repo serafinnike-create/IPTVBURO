@@ -1096,6 +1096,146 @@ h1, h2, h3, .stage-copy h3, .feature-card h3 { overflow-wrap: break-word; }
   line-height: 1.6;
 }
 
+/* Live build. The script adds `html.bx` only when it is going to run, so
+   without it every rule below is inert and the page reveals as before.
+
+   In build mode a block does not fade in as a whole: it switches from hidden
+   to present on the frame it is revealed, and its pieces carry the entrance.
+   `translate` and `filter` are used rather than `transform` so the pieces keep
+   their own transforms (the active tab, the raised poster) while they arrive. */
+html.bx .reveal:not(.visible) { visibility: hidden; opacity: 1; transform: none; }
+html.bx .platform-grid.visible > *,
+html.bx .steps-grid.visible > li,
+html.bx .offline-benefits li,
+html.bx .faq-list.visible details { animation: none; }
+
+.bx-building .bx-atom:not(.bx-on) { opacity: 0 !important; translate: 0 10px; filter: blur(6px) !important; transition: none !important; }
+.bx-building .bx-atom.bx-on { transition: opacity 240ms ease, translate 320ms cubic-bezier(.2, .8, .2, 1), filter 260ms ease !important; }
+.bx-building .bx-atom.bx-on:is(img, video, .offline-phone) { animation: bx-scan-in 460ms cubic-bezier(.3, .7, .2, 1) both; }
+
+.bx-ghost { color: transparent; }
+.bx-ghost.caret { box-shadow: inset 2px 0 0 var(--gold-light); }
+
+@keyframes bx-scan-in {
+  from { clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+.bx-layer { position: absolute; top: 0; left: 0; z-index: 90; width: 0; height: 0; pointer-events: none; }
+.bx-layer > * { position: absolute; top: 0; left: 0; }
+
+.bx-frame {
+  border: 1px dashed rgba(240, 200, 119, .55);
+  border-radius: 10px;
+  opacity: 0;
+  background:
+    linear-gradient(rgba(240, 200, 119, .05) 1px, transparent 1px) 0 0 / 100% 24px,
+    linear-gradient(90deg, rgba(240, 200, 119, .05) 1px, transparent 1px) 0 0 / 24px 100%;
+  transition: opacity 180ms ease;
+}
+.bx-frame.on { opacity: 1; }
+.bx-frame.done { opacity: 0; transition-duration: 380ms; }
+.bx-frame span {
+  position: absolute;
+  top: -22px;
+  right: 0;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(214, 169, 86, .16);
+  color: var(--gold-light);
+  font: 600 10px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  letter-spacing: .04em;
+}
+
+.bx-skel {
+  border-radius: 6px;
+  background: linear-gradient(100deg, rgba(246, 247, 250, .04) 30%, rgba(246, 247, 250, .11) 50%, rgba(246, 247, 250, .04) 70%) 0 0 / 300% 100%;
+  outline: 1px solid rgba(246, 247, 250, .06);
+  animation: bx-shimmer 900ms linear infinite;
+  transition: opacity 220ms ease, outline-color 160ms ease;
+}
+.bx-skel.lines {
+  background: repeating-linear-gradient(to bottom, rgba(246, 247, 250, .08) 0 9px, transparent 9px 17px);
+  outline: none;
+  animation: none;
+}
+.bx-skel.media { background-color: rgba(83, 72, 177, .08); }
+.bx-skel.done { opacity: 0; outline-color: var(--gold-light); animation: none; }
+
+@keyframes bx-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -50% 0; }
+}
+
+.bx-agent {
+  --agent: var(--gold-light);
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
+  opacity: 0;
+  transition: transform 260ms cubic-bezier(.2, .8, .2, 1), opacity 200ms ease;
+  will-change: transform;
+}
+.bx-agent.on { opacity: 1; }
+.bx-agent i {
+  width: 13px;
+  height: 17px;
+  background: var(--agent);
+  clip-path: polygon(0 0, 100% 62%, 52% 66%, 30% 100%);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .5));
+}
+.bx-agent span {
+  margin-top: 13px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--agent);
+  color: #111319;
+  font: 700 10px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+}
+.bx-agent-copy { --agent: #8fd3ff; }
+.bx-agent-media { --agent: #b9a7ff; }
+.bx-agent-ui { --agent: #6ee7b0; }
+
+.bx-hud {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 95;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 3px;
+  max-width: min(340px, calc(100vw - 32px));
+  padding: 9px 12px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: rgba(13, 15, 20, .86);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .45);
+  opacity: 0;
+  translate: 0 12px;
+  pointer-events: none;
+  transition: opacity 220ms ease, translate 260ms cubic-bezier(.2, .8, .2, 1);
+}
+.bx-hud.on { opacity: 1; translate: 0 0; }
+.bx-hud em { width: 7px; height: 7px; border-radius: 50%; background: var(--gold-light); box-shadow: 0 0 10px var(--gold); animation: bx-pulse 900ms ease-in-out infinite; }
+.bx-hud.done em { background: var(--success); box-shadow: 0 0 10px var(--success); animation: none; }
+.bx-hud b { overflow: hidden; color: var(--text); font-size: 12px; font-weight: 650; white-space: nowrap; text-overflow: ellipsis; }
+.bx-hud code { grid-column: 1 / -1; overflow: hidden; color: var(--muted); font: 500 10.5px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; white-space: nowrap; text-overflow: ellipsis; }
+.bx-hud i { grid-column: 1 / -1; height: 2px; overflow: hidden; border-radius: 2px; background: rgba(246, 247, 250, .08); }
+.bx-hud i span { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--gold-light)); transform: scaleX(0); transform-origin: left; transition: transform 300ms ease; }
+
+@keyframes bx-pulse { 50% { opacity: .35; } }
+
+@media (max-width: 760px) {
+  .bx-agent span { font-size: 9px; }
+  .bx-hud { left: 12px; bottom: 12px; padding: 7px 10px 8px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
