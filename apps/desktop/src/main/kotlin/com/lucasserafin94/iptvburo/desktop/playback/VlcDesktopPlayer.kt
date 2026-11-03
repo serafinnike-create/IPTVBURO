@@ -774,6 +774,12 @@ class VlcDesktopPlayer(
                 "--extraintf=http",
                 *secretArguments.toTypedArray(),
                 "--drawable-hwnd=$windowHandle",
+                // VLC's video window sits on top of the canvas it was given and took every click
+                // and key itself: clicking the picture did not pause and double-clicking did not
+                // go full screen, because the canvas listeners never heard either. With VLC's own
+                // input handling off, the events reach the canvas underneath.
+                "--no-mouse-events",
+                "--no-keyboard-events",
                 "--no-video-title-show",
                 "--no-qt-error-dialogs",
                 // The buffer, sized for how many streams are competing.

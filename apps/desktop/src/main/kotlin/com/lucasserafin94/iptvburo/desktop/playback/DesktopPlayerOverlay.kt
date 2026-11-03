@@ -189,20 +189,30 @@ fun DesktopPlayerOverlay(
         }
     }
 
-    // Live when the request says so, or when the engine reports no length once it is running: a
-    // channel opened from a plain playlist does not know it is live until VLC tells it.
-    val isLive = request.isLive || (state.ready && state.durationMillis <= 0.0)
+    // The length last reported, kept once known. VLC clears the length when a title reaches its
+    // end, so reading it live made a finished episode look like a channel: the LIVE badge appeared
+    // over the black frame, and the end-of-title handling below — which needs the length — never
+    // ran, so the next episode did not start and the episode was never marked as watched.
+    var knownDurationMillis by remember(controller) { mutableStateOf(0.0) }
+    LaunchedEffect(state.durationMillis) {
+        if (state.durationMillis > 0.0) knownDurationMillis = state.durationMillis
+    }
+
+    // Live when the request says so, or when the engine has never reported a length once it is
+    // running: a channel opened from a plain playlist does not know it is live until VLC tells it.
+    val isLive = request.isLive || (state.ready && state.durationMillis <= 0.0 && knownDurationMillis <= 0.0)
 
     // The next episode, offered over the credits and played when this one ends. Cancelling holds
     // for this title only, so the offer comes back on the next one.
     var upNextCancelled by remember(request) { mutableStateOf(false) }
-    val remainingMillis = (state.durationMillis - state.positionMillis).coerceAtLeast(0.0)
+    val remainingMillis =
+        if (state.ended) 0.0 else (state.durationMillis - state.positionMillis).coerceAtLeast(0.0)
     val upNextOffered =
-        nextEpisodeTitle != null && !upNextCancelled && !isLive && state.durationMillis > 0.0 &&
-            (state.ended || (state.ready && remainingMillis <= UP_NEXT_LEAD_MILLIS))
+        nextEpisodeTitle != null && !upNextCancelled && !isLive && knownDurationMillis > 0.0 &&
+            (state.ended || (state.ready && state.durationMillis > 0.0 && remainingMillis <= UP_NEXT_LEAD_MILLIS))
     LaunchedEffect(state.ended) {
-        if (!state.ended || state.durationMillis <= 0.0) return@LaunchedEffect
-        onEnded(state.durationMillis.toLong())
+        if (!state.ended || knownDurationMillis <= 0.0) return@LaunchedEffect
+        onEnded(knownDurationMillis.toLong())
         if (nextEpisodeTitle != null && !upNextCancelled) onPlayNext()
     }
 
