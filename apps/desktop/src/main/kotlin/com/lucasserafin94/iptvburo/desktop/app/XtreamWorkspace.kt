@@ -1,5 +1,8 @@
 package com.lucasserafin94.iptvburo.desktop.app
 
+import androidx.compose.material3.Icon
+import com.lucasserafin94.iptvburo.desktop.ui.IconLabel
+import com.lucasserafin94.iptvburo.desktop.ui.BuroIcons
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -540,7 +543,7 @@ private fun XtreamToolbar(
                 modifier = Modifier.widthIn(min = 220.dp, max = 340.dp),
                 singleLine = true,
                 placeholder = { Text(text.searchCatalog) },
-                leadingIcon = { Text("⌕", color = BuroColors.TextSubtle) },
+                leadingIcon = { Icon(BuroIcons.Search, contentDescription = null, tint = BuroColors.TextSubtle) },
                 shape = BuroRadius.Small,
                 colors =
                     OutlinedTextFieldDefaults.colors(
@@ -1430,7 +1433,7 @@ private fun XtreamCatalogGrid(
                         colors =
                             ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
                     ) {
-                        Text("‹‹  $jump")
+                        IconLabel(BuroIcons.FirstPage, "$jump")
                     }
                 }
                 OutlinedButton(
@@ -1441,7 +1444,7 @@ private fun XtreamCatalogGrid(
                     colors =
                         ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.TextMuted),
                 ) {
-                    Text("←  ${text.previous}")
+                    IconLabel(BuroIcons.Back, text.previous)
                 }
                 Text(
                     text = "${text.page} ${page.pageIndex + 1} / ${page.pageCount}",
@@ -1858,7 +1861,7 @@ internal fun XtreamInternalDetailsPage(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onBack) {
-                    Text("←  ${strings.backToCatalog}", color = BuroColors.Text)
+                    IconLabel(BuroIcons.Back, strings.backToCatalog, color = BuroColors.Text)
                 }
                 Spacer(Modifier.weight(1f))
                 Text(
@@ -2289,7 +2292,7 @@ internal fun XtreamItemDetail(
                                     contentColor = BuroColors.Text,
                                 ),
                         ) {
-                            Text("▷  Trailer", fontWeight = FontWeight.SemiBold)
+                            IconLabel(BuroIcons.Trailer, "Trailer", fontWeight = FontWeight.SemiBold)
                         }
                     }
                     if (item.contentType == XtreamContentType.MOVIE) {
@@ -2378,7 +2381,7 @@ internal fun XtreamItemDetail(
                                             contentColor = BuroColors.Text,
                                         ),
                                 ) {
-                                    Text("↗  ${text.shareStrings.share}", fontWeight = FontWeight.SemiBold)
+                                    IconLabel(BuroIcons.Share, text.shareStrings.share, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                             onCast?.let { cast ->
@@ -2391,7 +2394,7 @@ internal fun XtreamItemDetail(
                                             contentColor = BuroColors.Text,
                                         ),
                                 ) {
-                                    Text("⇥  ${text.shareStrings.cast.castAction}", fontWeight = FontWeight.SemiBold)
+                                    IconLabel(BuroIcons.Cast, text.shareStrings.cast.castAction, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
@@ -3485,7 +3488,7 @@ private fun SeriesDetailContent(
                         shape = BuroRadius.Small,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
                     ) {
-                        Text("↗  ${text.shareStrings.share}", fontWeight = FontWeight.SemiBold)
+                        IconLabel(BuroIcons.Share, text.shareStrings.share, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 // Same reasoning as on the film page: what is handed over is which title, so the
@@ -3497,7 +3500,7 @@ private fun SeriesDetailContent(
                         shape = BuroRadius.Small,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
                     ) {
-                        Text("⇥  ${text.shareStrings.cast.castAction}", fontWeight = FontWeight.SemiBold)
+                        IconLabel(BuroIcons.Cast, text.shareStrings.cast.castAction, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 // Beside Compartilhar, where the whole series can be asked for at once.
@@ -3519,7 +3522,7 @@ private fun SeriesDetailContent(
                         shape = BuroRadius.Small,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = BuroColors.Text),
                     ) {
-                        Text("⭳  ${text.downloadStrings.downloadSeries}", fontWeight = FontWeight.SemiBold)
+                        IconLabel(BuroIcons.Download, text.downloadStrings.downloadSeries, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 // Always drawn, disabled when the provider gave no trailer id.

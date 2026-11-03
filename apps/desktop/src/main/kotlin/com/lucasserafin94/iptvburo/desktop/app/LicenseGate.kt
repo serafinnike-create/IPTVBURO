@@ -1,5 +1,8 @@
 package com.lucasserafin94.iptvburo.desktop.app
 
+import androidx.compose.material3.Icon
+import com.lucasserafin94.iptvburo.desktop.ui.IconLabel
+import com.lucasserafin94.iptvburo.desktop.ui.BuroIcons
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -447,11 +450,11 @@ private fun DeviceIdentity(
         )
         Spacer(Modifier.height(BuroSpacing.Xxs))
         TextButton(onClick = onCopy) {
-            Text(
-                text = if (copied) text.copied else "⧉",
-                color = if (copied) BuroColors.Success else BuroColors.TextMuted,
-                fontSize = 12.sp,
-            )
+            if (copied) {
+                Text(text = text.copied, color = BuroColors.Success, fontSize = 12.sp)
+            } else {
+                Icon(BuroIcons.Copy, contentDescription = null, tint = BuroColors.TextMuted, modifier = Modifier.size(16.dp))
+            }
         }
     }
 }
@@ -499,11 +502,11 @@ private fun ActivationKeyRow(
             textAlign = TextAlign.Center,
         )
         TextButton(onClick = onCopy) {
-            Text(
-                text = if (copied) text.copied else "⧉",
-                color = if (copied) BuroColors.Success else BuroColors.TextMuted,
-                fontSize = 12.sp,
-            )
+            if (copied) {
+                Text(text = text.copied, color = BuroColors.Success, fontSize = 12.sp)
+            } else {
+                Icon(BuroIcons.Copy, contentDescription = null, tint = BuroColors.TextMuted, modifier = Modifier.size(16.dp))
+            }
         }
     }
 }

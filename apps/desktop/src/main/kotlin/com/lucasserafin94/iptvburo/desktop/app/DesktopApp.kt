@@ -1,5 +1,7 @@
 package com.lucasserafin94.iptvburo.desktop.app
 
+import com.lucasserafin94.iptvburo.desktop.ui.IconLabel
+import com.lucasserafin94.iptvburo.desktop.ui.BuroIcons
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -38,24 +40,25 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddCircle
-import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.LiveTv
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.PlaylistAdd
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Subscriptions
-import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.rounded.AddCircle
+import androidx.compose.material.icons.rounded.Dns
+import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.LiveTv
+import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Subscriptions
+import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -1578,7 +1581,7 @@ private fun SourceSidebar(
         Spacer(Modifier.height(10.dp))
         NavigationItem(
             label = text.home,
-            icon = Icons.Default.Home,
+            icon = Icons.Rounded.Home,
             selected = destination == DesktopDestination.HOME,
             onClick = onHome,
         )
@@ -1587,7 +1590,7 @@ private fun SourceSidebar(
         // buried among them.
         NavigationItem(
             label = text.search,
-            icon = Icons.Default.Search,
+            icon = Icons.Rounded.Search,
             selected = destination == DesktopDestination.SEARCH,
             onClick = onSearch,
         )
@@ -1596,14 +1599,14 @@ private fun SourceSidebar(
         // top, ahead of the shelves you browse when you already have an idea.
         NavigationItem(
             label = text.shareStrings.discovery.title,
-            icon = Icons.Default.Explore,
+            icon = Icons.Rounded.Explore,
             selected = destination == DesktopDestination.DISCOVER,
             onClick = onDiscover,
         )
         Spacer(Modifier.height(12.dp))
         NavigationItem(
             label = text.movies,
-            icon = Icons.Default.Movie,
+            icon = Icons.Rounded.Movie,
             selected =
                 destination == DesktopDestination.CATALOG &&
                     catalogType == XtreamContentType.MOVIE,
@@ -1611,7 +1614,7 @@ private fun SourceSidebar(
         )
         NavigationItem(
             label = text.series,
-            icon = Icons.Default.VideoLibrary,
+            icon = Icons.Rounded.VideoLibrary,
             selected =
                 destination == DesktopDestination.CATALOG &&
                     catalogType == XtreamContentType.SERIES,
@@ -1619,13 +1622,14 @@ private fun SourceSidebar(
         )
         NavigationItem(
             label = text.shareStrings.screens.guideTitle,
-            icon = Icons.Default.LiveTv,
+            // Its own icon: it used to share Live's television, and the two entries read as one.
+            icon = Icons.Rounded.CalendarMonth,
             selected = destination == DesktopDestination.GUIDE,
             onClick = onGuide,
         )
         NavigationItem(
             label = text.live,
-            icon = Icons.Default.LiveTv,
+            icon = Icons.Rounded.LiveTv,
             selected =
                 destination == DesktopDestination.CATALOG &&
                     catalogType == XtreamContentType.LIVE,
@@ -1634,7 +1638,7 @@ private fun SourceSidebar(
         if (hasSubscriptions) {
             NavigationItem(
                 label = text.subscriptions,
-                icon = Icons.Default.Subscriptions,
+                icon = Icons.Rounded.Subscriptions,
                 selected = destination == DesktopDestination.SUBSCRIPTIONS,
                 onClick = onSubscriptions,
             )
@@ -1643,19 +1647,19 @@ private fun SourceSidebar(
         Spacer(Modifier.height(12.dp))
         NavigationItem(
             label = text.continueWatching,
-            icon = Icons.Default.PlayCircle,
+            icon = Icons.Rounded.PlayCircle,
             selected = destination == DesktopDestination.CONTINUE,
             onClick = onContinueWatching,
         )
         NavigationItem(
             label = text.settingsText.historyTitle,
-            icon = Icons.Default.History,
+            icon = Icons.Rounded.History,
             selected = destination == DesktopDestination.HISTORY,
             onClick = onHistory,
         )
         NavigationItem(
             label = text.savedForLater.favorites,
-            icon = Icons.Default.Favorite,
+            icon = Icons.Rounded.Favorite,
             selected = destination == DesktopDestination.FAVORITES,
             onClick = onFavorites,
         )
@@ -1664,14 +1668,14 @@ private fun SourceSidebar(
         // cannot be found by someone looking for where their marks went.
         NavigationItem(
             label = text.savedForLater.remindersTitle,
-            icon = Icons.Default.Notifications,
+            icon = Icons.Rounded.Notifications,
             selected = destination == DesktopDestination.REMINDERS,
             onClick = onReminders,
         )
         if (hasOffline) {
             NavigationItem(
                 label = text.downloads,
-                icon = Icons.Default.Folder,
+                icon = Icons.Rounded.Folder,
                 selected = destination == DesktopDestination.DOWNLOADS,
                 onClick = onDownloads,
             )
@@ -1681,7 +1685,7 @@ private fun SourceSidebar(
         if (hasMusic) {
             NavigationItem(
                 label = text.music,
-                icon = Icons.Default.LibraryMusic,
+                icon = Icons.Rounded.LibraryMusic,
                 selected = destination == DesktopDestination.MUSIC,
                 onClick = onMusic,
             )
@@ -1698,13 +1702,13 @@ private fun SourceSidebar(
             // both read as the row belonging to that person rather than leading to the profiles.
             // Who is watching is answered by the profile screen this opens.
             label = text.profile,
-            icon = Icons.Default.Person,
+            icon = Icons.Rounded.Person,
             selected = false,
             onClick = onProfiles,
         )
         NavigationItem(
             label = text.settings,
-            icon = Icons.Default.Settings,
+            icon = Icons.Rounded.Settings,
             selected = false,
             onClick = onSettings,
         )
@@ -1875,13 +1879,13 @@ private fun SourceSidebar(
         // somebody guess which kind of account they are about to add.
         NavigationItem(
             label = text.connectXtream,
-            icon = Icons.Default.AddCircle,
+            icon = Icons.Rounded.AddCircle,
             selected = false,
             onClick = onConnectXtream,
         )
         NavigationItem(
             label = text.importM3u,
-            icon = Icons.Default.PlaylistAdd,
+            icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
             selected = false,
             onClick = onImportM3u,
         )
@@ -1889,7 +1893,7 @@ private fun SourceSidebar(
         // copied to this machine first.
         NavigationItem(
             label = text.shareStrings.remoteSource.title,
-            icon = Icons.Default.Dns,
+            icon = Icons.Rounded.Dns,
             selected = false,
             onClick = onAddRemoteSource,
         )
@@ -2119,7 +2123,7 @@ private fun SourceItem(
                 },
                 contentPadding = PaddingValues(horizontal = 6.dp),
             ) {
-                Text("✓", color = BuroColors.Primary)
+                Icon(BuroIcons.Check, contentDescription = null, tint = BuroColors.Primary)
             }
             TextButton(
                 onClick = {
@@ -2128,7 +2132,7 @@ private fun SourceItem(
                 },
                 contentPadding = PaddingValues(horizontal = 6.dp),
             ) {
-                Text("✕", color = BuroColors.TextMuted)
+                Icon(BuroIcons.Close, contentDescription = strings.cancel, tint = BuroColors.TextMuted)
             }
         }
         return
@@ -2780,7 +2784,7 @@ private fun CatalogWorkspace(
                 singleLine = true,
                 placeholder = { Text(text.searchChannel) },
                 leadingIcon = {
-                    Text("⌕", color = BuroColors.TextSubtle)
+                    Icon(BuroIcons.Search, contentDescription = null, tint = BuroColors.TextSubtle)
                 },
                 shape = RoundedCornerShape(12.dp),
                 colors =
@@ -3690,10 +3694,11 @@ private fun DeviceCodeDialog(
                     copied = true
                 },
             ) {
-                Text(
-                    text = if (copied) strings.licenseText.copied else "⧉",
-                    color = if (copied) BuroColors.Success else BuroColors.Primary,
-                )
+                if (copied) {
+                    Text(text = strings.licenseText.copied, color = BuroColors.Success)
+                } else {
+                    Icon(BuroIcons.Copy, contentDescription = null, tint = BuroColors.Primary)
+                }
             }
         },
         dismissButton = {
@@ -4019,7 +4024,7 @@ private fun DownloadsWorkspace(
                 modifier = Modifier.weight(1f).widthIn(max = 420.dp),
                 singleLine = true,
                 placeholder = { Text(text.searchCatalog) },
-                leadingIcon = { Text("⌕", color = BuroColors.TextSubtle) },
+                leadingIcon = { Icon(BuroIcons.Search, contentDescription = null, tint = BuroColors.TextSubtle) },
                 shape = BuroRadius.Small,
                 colors =
                     OutlinedTextFieldDefaults.colors(
@@ -4200,7 +4205,7 @@ private fun DownloadLibraryRow(
                         contentColor = BuroColors.OnPrimary,
                     ),
             ) {
-                Text("▶  ${text.watchNow}", fontWeight = FontWeight.Bold)
+                IconLabel(BuroIcons.Play, text.watchNow, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.width(BuroSpacing.Xs))
             OutlinedButton(

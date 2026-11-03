@@ -1,5 +1,9 @@
 package com.lucasserafin94.iptvburo.desktop.ui
 
+import androidx.compose.material.icons.rounded.KeyboardDoubleArrowLeft
+import androidx.compose.material.icons.rounded.Theaters
+import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
@@ -95,6 +99,40 @@ object BuroIcons {
     val Check: ImageVector = Icons.Rounded.Check
     val Download: ImageVector = Icons.Rounded.Download
     val Rating: ImageVector = Icons.Rounded.Star
+    val Share: ImageVector = Icons.Rounded.Share
+    val Cast: ImageVector = Icons.Rounded.Cast
+    val Trailer: ImageVector = Icons.Rounded.Theaters
+    val FirstPage: ImageVector = Icons.Rounded.KeyboardDoubleArrowLeft
+}
+
+/**
+ * An icon followed by its label, for buttons that carry both.
+ *
+ * Replaces labels that began with a text character standing in for an icon ("▶  Assistir",
+ * "↗  Compartilhar"); the icon takes the button's content colour, so it matches the text.
+ */
+@Composable
+fun IconLabel(
+    icon: ImageVector,
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontWeight: androidx.compose.ui.text.font.FontWeight? = null,
+    iconSize: Dp = BuroIconSize.Small,
+) {
+    androidx.compose.foundation.layout.Row(
+        modifier = modifier,
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (color == Color.Unspecified) androidx.compose.material3.LocalContentColor.current else color,
+            modifier = Modifier.size(iconSize),
+        )
+        androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+        Text(text = text, color = color, fontWeight = fontWeight)
+    }
 }
 
 /** The sizes icons come in. Anything else is a one-off, and one-offs are what made the set uneven. */

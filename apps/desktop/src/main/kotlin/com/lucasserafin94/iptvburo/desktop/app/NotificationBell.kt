@@ -20,7 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.window.Popup
@@ -82,7 +82,7 @@ fun NotificationBell(
         ) { state ->
             Box(modifier = Modifier.size(38.dp), contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = Icons.Default.Notifications,
+                    imageVector = Icons.Rounded.Notifications,
                     contentDescription = null,
                     tint =
                         when {
