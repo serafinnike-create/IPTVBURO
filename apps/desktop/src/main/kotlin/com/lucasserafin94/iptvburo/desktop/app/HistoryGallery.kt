@@ -251,6 +251,16 @@ private fun HistoryCover(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
+        // Which episode, as the home row says it: two episodes of one series showed as two
+        // identical covers with the same name, and nothing told them apart.
+        entry.progress.identity.seasonNumber?.let { season ->
+            Text(
+                text = "T$season · E${entry.progress.identity.episodeNumber ?: "—"}",
+                color = BuroColors.TextMuted,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+            )
+        }
         TextButton(onClick = onForget, contentPadding = PaddingValues(0.dp)) {
             Text(
                 text = text.forgetProgress,

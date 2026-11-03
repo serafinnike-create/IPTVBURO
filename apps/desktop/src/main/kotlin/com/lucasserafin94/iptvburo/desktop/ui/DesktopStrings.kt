@@ -567,6 +567,7 @@ data class DesktopStrings(
                 savedForLater =
                     SavedForLaterStrings(
                         favorites = "Favoritos",
+                        favoritesEmpty = "Todavía no hay favoritos aquí. Pulsa el corazón en un título para guardarlo.",
                         reminderAdd = "Recordatorio",
                         reminderActive = "Recordatorio activo",
                         reminderNoNotice = "Guardado en este equipo. El aviso aparece aquí en la app.",
@@ -1358,6 +1359,7 @@ data class DesktopStrings(
                 savedForLater =
                     SavedForLaterStrings(
                         favorites = "Favoritos",
+                        favoritesEmpty = "Ainda não há favoritos aqui. Clique no coração de um título para guardá-lo.",
                         reminderAdd = "Lembrete",
                         reminderActive = "Lembrete ativo",
                         reminderNoNotice = "Salvo neste computador. O aviso aparece aqui no app.",
@@ -2148,6 +2150,7 @@ data class DesktopStrings(
                 savedForLater =
                     SavedForLaterStrings(
                         favorites = "Favorites",
+                        favoritesEmpty = "No favorites here yet. Press the heart on a title to keep it here.",
                         reminderAdd = "Remind me",
                         reminderActive = "Reminder set",
                         reminderNoNotice = "Saved on this computer. The notice appears here in the app.",
@@ -2936,6 +2939,7 @@ data class DesktopStrings(
                 savedForLater =
                     SavedForLaterStrings(
                         favorites = "Favoriten",
+                        favoritesEmpty = "Hier gibt es noch keine Favoriten. Klicke bei einem Titel auf das Herz, um ihn hier zu sammeln.",
                         reminderAdd = "Erinnerung",
                         reminderActive = "Erinnerung aktiv",
                         reminderNoNotice = "Auf diesem Computer gespeichert. Der Hinweis erscheint hier in der App.",
@@ -3732,6 +3736,7 @@ data class DesktopStrings(
                 savedForLater =
                     SavedForLaterStrings(
                         favorites = "Preferiti",
+                        favoritesEmpty = "Ancora nessun preferito qui. Premi il cuore su un titolo per salvarlo.",
                         reminderAdd = "Promemoria",
                         reminderActive = "Promemoria attivo",
                         reminderNoNotice = "Salvato su questo computer. L’avviso appare qui nell’app.",
@@ -4892,6 +4897,8 @@ data class ServiceCatalogueStrings(
 data class SavedForLaterStrings(
     /** The sidebar destination, and the detail-page button when the title is not yet liked. */
     val favorites: String,
+    /** Said on the Favoritos screen before anything has been liked, in place of "nothing matches". */
+    val favoritesEmpty: String,
     /** The button on the detail page, before it is marked. */
     val reminderAdd: String,
     /** The same button once the title is marked, which is also how it is unmarked. */

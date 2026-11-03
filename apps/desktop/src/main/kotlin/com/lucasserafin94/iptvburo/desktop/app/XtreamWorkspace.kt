@@ -1272,7 +1272,14 @@ private fun XtreamCatalogGrid(
         if (page.items.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(
-                    text = text.noMatch,
+                    // Favoritos with nothing liked yet is not a filter that matched nothing: say what
+                    // the screen is for and how something gets onto it.
+                    text =
+                        if (appState.favoritesOnly && appState.xtreamSearchQuery.isBlank() && appState.selectedXtreamCategoryId == null) {
+                            text.savedForLater.favoritesEmpty
+                        } else {
+                            text.noMatch
+                        },
                     color = BuroColors.TextSubtle,
                     style = MaterialTheme.typography.bodyLarge,
                 )

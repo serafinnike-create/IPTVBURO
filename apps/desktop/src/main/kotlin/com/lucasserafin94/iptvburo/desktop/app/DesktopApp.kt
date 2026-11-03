@@ -3476,8 +3476,10 @@ private fun DesktopProfileGate(
                 // nothing behind this to look at yet, and the home screen showed straight through
                 // it: "IPTV BURO" landed on top of a film title and both became unreadable. With a
                 // profile already active the gate is a switcher over a library the viewer knows,
-                // and seeing it dimmed underneath is the point.
-                .background(if (onDismiss == null) BuroColors.Canvas else BuroColors.Scrim),
+                // and a hint of it underneath is the point — a hint, not the 76% scrim: through that
+                // the screen behind stayed readable, and a centred "Nenhuma música ainda" with its
+                // gold button sat inside the profile tiles.
+                .background(if (onDismiss == null) BuroColors.Canvas else BuroColors.Canvas.copy(alpha = 0.94f)),
         contentAlignment = Alignment.Center,
     ) {
         if (onDismiss != null) {
