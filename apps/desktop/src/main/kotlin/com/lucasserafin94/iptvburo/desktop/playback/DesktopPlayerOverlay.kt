@@ -2,7 +2,6 @@ package com.lucasserafin94.iptvburo.desktop.playback
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,13 +12,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,8 +32,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -36,10 +43,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -48,19 +55,34 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.download.DISPLAY_LOCALE
-import com.lucasserafin94.iptvburo.domain.model.PlaybackBuffering
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.desktop.ui.BuroIconButton
+import com.lucasserafin94.iptvburo.desktop.ui.BuroIconSize
+import com.lucasserafin94.iptvburo.desktop.ui.BuroIcons
 import com.lucasserafin94.iptvburo.desktop.ui.strings
+import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.domain.model.AudioOutputMode
+import com.lucasserafin94.iptvburo.domain.model.PlaybackBuffering
+import java.awt.event.KeyEvent as AwtKey
 import kotlinx.coroutines.delay
 
 /** How long the pointer must rest before the controls fade in full screen. */
 private const val CONTROLS_IDLE_MILLIS = 3_000L
 
+/** How long a one-line notice ("Volume 60%", "+10 s") stays in the bar. */
+private const val NOTICE_MILLIS = 1_400L
+
+/** How long before the end the next episode is offered — roughly where the credits begin. */
+private const val UP_NEXT_LEAD_MILLIS = 30_000.0
+
 /** The speeds the button cycles through, in order. */
 private val PLAYBACK_RATES = listOf(1.0, 1.25, 1.5, 2.0, 0.75)
+
+/** Volume step for the arrow keys and the wheel. */
+private const val VOLUME_STEP = 0.05
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -98,8 +120,14 @@ fun DesktopPlayerOverlay(
      * once this returns — see the call site.
      */
     onSelectAudioOutput: (AudioOutputMode, Long) -> Unit = { _, _ -> },
+    /** The language the player's own words are in. */
+    language: DesktopLanguage = DesktopLanguage.PORTUGUESE_BRAZIL,
+    /** The next episode's title, or null for anything that is not a series episode or the last. */
+    nextEpisodeTitle: String? = null,
+    onPlayNext: () -> Unit = {},
     onClose: () -> Unit,
 ) {
+    val text = remember(language) { PlayerText.of(language) }
     // Keyed on the style and the audio mode as well as the request: VLC builds its text renderer
     // and its audio chain with the video chain, so a change to either only reaches the engine
     // through a fresh player.
@@ -122,7 +150,6 @@ fun DesktopPlayerOverlay(
                 // this player is already rebuilt per request — so the size always matches what is
                 // about to play.
                 networkCachingMillis = PlaybackBuffering.millisFor(isLive = request.isLive),
-
             )
         }
     // Keyed on the controller, not on the request. Changing the speaker layout builds a new player
@@ -158,25 +185,56 @@ fun DesktopPlayerOverlay(
             onCheckpoint(state.positionMillis.toLong(), state.durationMillis.toLong())
         }
     }
+
+    // Live when the request says so, or when the engine reports no length once it is running: a
+    // channel opened from a plain playlist does not know it is live until VLC tells it.
+    val isLive = request.isLive || (state.ready && state.durationMillis <= 0.0)
+
+    // The next episode, offered over the credits and played when this one ends. Cancelling holds
+    // for this title only, so the offer comes back on the next one.
+    var upNextCancelled by remember(request) { mutableStateOf(false) }
+    val remainingMillis = (state.durationMillis - state.positionMillis).coerceAtLeast(0.0)
+    val upNextOffered =
+        nextEpisodeTitle != null && !upNextCancelled && !isLive && state.durationMillis > 0.0 &&
+            (state.ended || (state.ready && remainingMillis <= UP_NEXT_LEAD_MILLIS))
     LaunchedEffect(state.ended) {
-        if (state.ended && state.durationMillis > 0.0) onEnded(state.durationMillis.toLong())
+        if (!state.ended || state.durationMillis <= 0.0) return@LaunchedEffect
+        onEnded(state.durationMillis.toLong())
+        if (nextEpisodeTitle != null && !upNextCancelled) onPlayNext()
+    }
+
+    // A one-line notice in the bar, for what a key or the wheel just did. The bar is drawn outside
+    // the video surface, which a native window covers completely, so this is where it can be seen.
+    var notice by remember(request) { mutableStateOf<String?>(null) }
+    var noticeSerial by remember(request) { mutableIntStateOf(0) }
+    LaunchedEffect(noticeSerial) {
+        if (notice == null) return@LaunchedEffect
+        delay(NOTICE_MILLIS)
+        notice = null
     }
 
     // Controls reveal on pointer movement and hide again after a pause, the behaviour every video
     // player uses. Only meaningful in full screen; windowed mode keeps them pinned.
-    var controlsVisible by remember { mutableStateOf(true) }
-    var videoPanel by remember { mutableStateOf<javax.swing.JPanel?>(null) }
-    var wakeCounter by remember { mutableStateOf(0) }
+    var controlsVisible by remember(request) { mutableStateOf(true) }
+    var videoPanel by remember(controller) { mutableStateOf<javax.swing.JPanel?>(null) }
+    var wakeCounter by remember { mutableIntStateOf(0) }
+    // Open menus and the pointer resting on the bar keep it up. Without this a track menu opened
+    // in full screen vanished three seconds later with the bar that held it.
+    var menusOpen by remember(request) { mutableIntStateOf(0) }
+    var pointerOverBar by remember(request) { mutableStateOf(false) }
     // A single loop that watches the clock, rather than an effect restarted by each wake. Keying an
     // effect on the counter meant a wake arriving *while it was already running* was swallowed:
     // Compose only restarts on a changed key, and the canvas fires many moves in a row. That is why
     // the controls never came back in full screen no matter how much the pointer moved.
     var lastWakeAt by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(wakeCounter) { lastWakeAt = System.currentTimeMillis() }
-    LaunchedEffect(isFullScreen) {
+    val keepBarUp by rememberUpdatedState(
+        menusOpen > 0 || pointerOverBar || upNextOffered || state.reconnecting || state.errorMessage != null,
+    )
+    LaunchedEffect(isFullScreen, controller) {
         while (true) {
             val idleFor = System.currentTimeMillis() - lastWakeAt
-            val shouldShow = !isFullScreen || idleFor < CONTROLS_IDLE_MILLIS
+            val shouldShow = !isFullScreen || idleFor < CONTROLS_IDLE_MILLIS || keepBarUp
             if (shouldShow != controlsVisible) {
                 controlsVisible = shouldShow
                 videoPanel?.let { panel -> controller.setPointerVisible(panel, shouldShow) }
@@ -185,11 +243,126 @@ fun DesktopPlayerOverlay(
         }
     }
 
-    val closePlayerRef = {
+    val showNotice: (String) -> Unit = { message ->
+        notice = message
+        noticeSerial++
+        wakeCounter++
+    }
+
+    val closePlayer = {
         if (state.durationMillis > 0.0) {
             onCheckpoint(state.positionMillis.toLong(), state.durationMillis.toLong())
         }
         onClose()
+    }
+
+    // Mute keeps the level it silenced, so un-muting returns to it rather than to a default.
+    var volumeBeforeMute by remember(request) { mutableStateOf<Double?>(null) }
+    val setVolume: (Double) -> Unit = { value ->
+        val safe = value.coerceIn(0.0, 1.0)
+        volumeBeforeMute = null
+        controller.setVolume(safe)
+        showNotice("${text.volume} ${(safe * 100).toInt()}%")
+    }
+    val toggleMute: () -> Unit = {
+        val restore = volumeBeforeMute
+        if (restore != null) {
+            volumeBeforeMute = null
+            controller.setVolume(restore)
+            showNotice("${text.volume} ${(restore * 100).toInt()}%")
+        } else {
+            volumeBeforeMute = state.volume
+            controller.setVolume(0.0, remember = false)
+            showNotice(text.muted)
+        }
+    }
+    val seekBy: (Double) -> Unit = { millis ->
+        if (state.ready && !isLive) {
+            controller.seekBy(millis)
+            val seconds = (millis / 1_000).toInt()
+            showNotice(if (seconds >= 0) "+$seconds s" else "−${-seconds} s")
+        }
+    }
+    val togglePlayback: () -> Unit = {
+        if (state.ready) controller.togglePlayback()
+    }
+    val cycleSpeed: () -> Unit = {
+        val current = PLAYBACK_RATES.minByOrNull { rate -> kotlin.math.abs(rate - state.playbackRate) }
+        val next = PLAYBACK_RATES[(PLAYBACK_RATES.indexOf(current) + 1) % PLAYBACK_RATES.size]
+        controller.setPlaybackRate(next)
+        showNotice("${text.speed} ${formatRate(next)}")
+    }
+    val cycleAspect: () -> Unit = {
+        val values = PlaybackAspectRatio.entries
+        val next = values[(values.indexOf(state.aspectRatio) + 1) % values.size]
+        controller.setAspectRatio(next)
+        showNotice("${text.aspect}: ${text.aspectLabel(next)}")
+    }
+
+    /**
+     * Every key the player understands, in one place.
+     *
+     * Three paths deliver keys — a process-wide dispatcher, Compose, and the video canvas once it
+     * holds focus — and each used to carry its own copy of three keys, so they drifted apart. They
+     * all call this now. Returns whether the key was used.
+     */
+    val handleKey: (Int, Boolean) -> Boolean = { code, shift ->
+        wakeCounter++
+        when (code) {
+            AwtKey.VK_ESCAPE ->
+                // An open menu closes itself on Escape; taking the key here closed the whole player
+                // instead, with the menu still open over nothing.
+                if (menusOpen > 0) {
+                    false
+                } else {
+                    if (isFullScreen) onToggleFullScreen() else closePlayer()
+                    true
+                }
+            AwtKey.VK_F11, AwtKey.VK_F -> {
+                if (!isCompact) onToggleFullScreen()
+                true
+            }
+            AwtKey.VK_SPACE, AwtKey.VK_K -> {
+                togglePlayback()
+                state.ready
+            }
+            AwtKey.VK_LEFT -> {
+                seekBy(if (shift) -60_000.0 else -10_000.0)
+                !isLive
+            }
+            AwtKey.VK_RIGHT -> {
+                seekBy(if (shift) 60_000.0 else 10_000.0)
+                !isLive
+            }
+            AwtKey.VK_UP -> {
+                setVolume((volumeBeforeMute ?: state.volume) + VOLUME_STEP)
+                true
+            }
+            AwtKey.VK_DOWN -> {
+                setVolume((volumeBeforeMute ?: state.volume) - VOLUME_STEP)
+                true
+            }
+            AwtKey.VK_M -> {
+                toggleMute()
+                true
+            }
+            AwtKey.VK_N -> {
+                if (nextEpisodeTitle != null) onPlayNext()
+                nextEpisodeTitle != null
+            }
+            AwtKey.VK_HOME -> {
+                if (state.ready && !isLive) controller.seekToFraction(0.0)
+                !isLive
+            }
+            else ->
+                // 1–9 jump to that tenth of the title, as in most players.
+                if (code in AwtKey.VK_1..AwtKey.VK_9 && state.ready && !isLive && state.durationMillis > 0.0) {
+                    controller.seekToFraction((code - AwtKey.VK_0) / 10.0)
+                    true
+                } else {
+                    false
+                }
+        }
     }
 
     // A global AWT listener, because focus is the whole problem here: the embedded video surface,
@@ -197,62 +370,59 @@ fun DesktopPlayerOverlay(
     // This sees every key in the process before any component does, so Escape always works no
     // matter what has focus - the difference between a player you can leave and one that forces
     // the user to kill the app.
-    DisposableEffect(isFullScreen, state.ready) {
+    val currentHandleKey by rememberUpdatedState(handleKey)
+    DisposableEffect(controller) {
         val dispatcher =
             java.awt.KeyEventDispatcher { event ->
                 if (event.id != java.awt.event.KeyEvent.KEY_PRESSED) return@KeyEventDispatcher false
-                wakeCounter++
-                when (event.keyCode) {
-                    java.awt.event.KeyEvent.VK_ESCAPE -> {
-                        if (isFullScreen) onToggleFullScreen() else closePlayerRef()
-                        true
-                    }
-                    java.awt.event.KeyEvent.VK_F11 -> {
-                        onToggleFullScreen()
-                        true
-                    }
-                    // Space belongs here for the same reason Escape does, and it was left out.
-                    //
-                    // The Compose handler further down is correct and unreachable in the ordinary
-                    // case: pressing space is something you do *after* clicking the picture, and
-                    // clicking the picture hands focus to the embedded video surface. Two testers
-                    // reported the key doing nothing, which is exactly what a focused native
-                    // surface swallowing it looks like.
-                    java.awt.event.KeyEvent.VK_SPACE -> {
-                        if (state.ready) controller.togglePlayback()
-                        state.ready
-                    }
-                    else -> false
-                }
+                currentHandleKey(event.keyCode, event.isShiftDown)
             }
-        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
-            .addKeyEventDispatcher(dispatcher)
+        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(dispatcher)
         onDispose {
-            java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
-                .removeKeyEventDispatcher(dispatcher)
+            java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(dispatcher)
         }
     }
 
     // Likewise for the pointer: a move anywhere in the window wakes the controls, so hovering the
     // strip where the bar belongs brings it back even when the video surface is eating the events.
     DisposableEffect(Unit) {
-        val awtListener =
-            java.awt.event.AWTEventListener { wakeCounter++ }
-        java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(
-            awtListener,
-            java.awt.AWTEvent.MOUSE_MOTION_EVENT_MASK,
-        )
+        val awtListener = java.awt.event.AWTEventListener { wakeCounter++ }
+        java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(awtListener, java.awt.AWTEvent.MOUSE_MOTION_EVENT_MASK)
         onDispose { java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(awtListener) }
     }
 
-    // Nothing requested focus, so key events never reached the handler and F11 did nothing at all.
-    val playerFocus = remember { FocusRequester() }
-    var playerFocusAttached by remember { mutableStateOf(false) }
+    // Keyed on the request, so each title asks for focus again. Remembered once, the next title
+    // started without it and its keys went nowhere until somebody clicked.
+    val playerFocus = remember(request) { FocusRequester() }
+    var playerFocusAttached by remember(request) { mutableStateOf(false) }
     LaunchedEffect(playerFocusAttached) {
-        if (playerFocusAttached) playerFocus.requestFocus()
+        if (playerFocusAttached) runCatching { playerFocus.requestFocus() }
     }
 
-    val closePlayer = closePlayerRef
+    // A stream that fails is asked for from another subscription before the viewer is told
+    // anything. Counted, so a second failure moves on to the next list rather than offering the
+    // same dead stream for ever; once every list has been tried the error is the honest answer.
+    // Decided in an effect, not during composition: looking for an alternative builds a URL, and
+    // doing that on every frame an error was showing was work the screen repeated four times a
+    // second.
+    var alternativesTried by remember(request) { mutableIntStateOf(0) }
+    var lastTried by remember(request) { mutableStateOf(request) }
+    var showError by remember(request) { mutableStateOf(false) }
+    LaunchedEffect(state.errorMessage, request) {
+        if (state.errorMessage == null) {
+            showError = false
+            return@LaunchedEffect
+        }
+        val next = onFindAlternative(request, alternativesTried + 1)
+        if (next == null) {
+            showError = true
+            return@LaunchedEffect
+        }
+        alternativesTried += 1
+        lastTried = next
+        controller.retry(next)
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -260,27 +430,8 @@ fun DesktopPlayerOverlay(
             .onPointerEvent(PointerEventType.Move) { wakeCounter++ }
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                // Any key wakes the controls, not only the ones handled below: reaching for the
-                // keyboard is the user asking to see where they are.
-                wakeCounter++
-                when (event.key) {
-                    Key.F11 -> {
-                        onToggleFullScreen()
-                        true
-                    }
-                    // Escape leaves full screen first and only closes the player when already
-                    // windowed. Closing outright meant the one obvious "get me out of here" key
-                    // ended playback, and with the chrome hidden there was nothing else to press.
-                    Key.Escape -> {
-                        if (isFullScreen) onToggleFullScreen() else closePlayer()
-                        true
-                    }
-                    Key.Spacebar -> {
-                        if (state.ready) controller.togglePlayback()
-                        state.ready
-                    }
-                    else -> false
-                }
+                val native = event.nativeKeyEvent as? java.awt.event.KeyEvent ?: return@onPreviewKeyEvent false
+                handleKey(native.keyCode, event.isShiftPressed)
             }
             .focusRequester(playerFocus)
             // A FocusRequester cannot be used until its modifier is attached. Requesting from a
@@ -289,30 +440,17 @@ fun DesktopPlayerOverlay(
             .onGloballyPositioned { playerFocusAttached = true }
             .focusable(),
     ) {
-        // Hidden in full screen so the picture is not letterboxed by a 64 dp bar. It is not the only
-        // way out: in full screen the same actions appear as a floating bar over the video whenever
-        // the controls are awake, because relying on F11 alone stranded the user when the embedded
-        // video surface held the keyboard focus and the key never arrived.
-        // Hidden in the compact window too. At 480x300 a 64dp bar plus the transport controls left
-        // the video no height at all: the picture-in-picture window showed buttons and nothing else.
+        // Hidden in full screen so the picture is not letterboxed, and in the compact window, where
+        // a 64 dp bar left the video no height at all.
         if (!isFullScreen && !isCompact) {
-            Row(
-                modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(
-                    onClick = closePlayer,
-                ) { Text("Voltar") }
-                Spacer(Modifier.width(16.dp))
-                Text(request.title, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = onToggleCompact) {
-                    Text(if (isCompact) "Voltar ao app" else "Janela pequena")
-                }
-                Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = onToggleFullScreen) {
-                    Text("⛶  Tela cheia (F11)")
-                }
-            }
+            TopBar(
+                title = request.title,
+                isLive = isLive,
+                text = text,
+                onBack = closePlayer,
+                onMiniPlayer = onToggleCompact,
+                onFullScreen = onToggleFullScreen,
+            )
         }
         Box(Modifier.fillMaxWidth().weight(1f)) {
             // `key(controller)` is what makes changing the speaker layout work.
@@ -321,480 +459,610 @@ fun DesktopPlayerOverlay(
             // composition — it is not keyed on anything the lambda captures. Selecting a new layout
             // builds a fresh VlcDesktopPlayer (VLC fixes its audio chain at process start, so there
             // is no other way to apply it) and disposes the old one, killing the process that owned
-            // the canvas on screen. Without this key, `factory` never ran again: the new player was
-            // never given a video surface, so the picture went black and the clock sat at 00:00.
-            //
-            // Keying the subtree discards the old panel and builds the new player its own.
+            // the canvas on screen. Keying the subtree discards the old panel and builds the new
+            // player its own.
             key(controller) {
-            SwingPanel(
-                // Movement over the video surface reaches Compose only through this callback: the
-                // AWT canvas consumes it, so without this the controls never knew the user was
-                // still there and never hid either.
-                factory = {
-                    controller
-                        .createComponent(
-                            request = request,
-                            onPointerActivity = { wakeCounter++ },
-                            // Click the picture to pause, the way every other player behaves.
-                            //
-                            // createComponent has taken an onClick since multiview needed it, and
-                            // the single player simply never passed one — so clicking the video
-                            // woke the controls and did nothing else. Guarded on `ready` for the
-                            // same reason the keys are: toggling before the engine reports a state
-                            // is a command sent into nothing.
-                            onClick = { if (state.ready) controller.togglePlayback() },
-                            // The same three keys the Compose handler owns, wired to the canvas so
-                            // they keep working once it holds the focus - which is exactly when the
-                            // user needs Escape and has no visible control to reach for.
-                            onKey = { keyCode ->
-                                wakeCounter++
-                                when (keyCode) {
-                                    java.awt.event.KeyEvent.VK_F11 -> {
-                                        onToggleFullScreen()
-                                        true
-                                    }
-                                    java.awt.event.KeyEvent.VK_ESCAPE -> {
-                                        if (isFullScreen) onToggleFullScreen() else closePlayer()
-                                        true
-                                    }
-                                    java.awt.event.KeyEvent.VK_SPACE -> {
-                                        // Guarded like the other two paths. This one toggled
-                                        // unconditionally, so a space during start-up sent a
-                                        // pause the engine was not yet in a state to answer.
-                                        if (state.ready) controller.togglePlayback()
-                                        state.ready
-                                    }
-                                    // Everything else still counts as activity, so any key brings
-                                    // the controls back even when it does nothing else.
-                                    else -> false
-                                }
-                            },
-                        ).also { panel -> videoPanel = panel }
-                },
-                update = { panel ->
-                    controller.setPointerVisible(panel, controlsVisible || !isFullScreen)
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-            }
-            // A stream that fails is asked for from another subscription before the viewer is
-            // told anything. Half the value of owning a second list is that a dead stream is not
-            // the end of the evening — and they should never have to know a swap happened.
-            //
-            // Counted, so a second failure moves on to the next list rather than offering the same
-            // dead stream for ever; once every list has been tried the error below is the honest
-            // answer.
-            var alternativesTried by remember(request) { mutableStateOf(0) }
-            LaunchedEffect(state.errorMessage, request) {
-                if (state.errorMessage == null) return@LaunchedEffect
-                val next = onFindAlternative(request, alternativesTried + 1) ?: return@LaunchedEffect
-                alternativesTried += 1
-                controller.retry(next)
-            }
-            state.errorMessage?.takeIf { alternativesTried == 0 || onFindAlternative(request, alternativesTried + 1) == null }?.let { message ->
-                Column(
-                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(message, color = Color.White)
-                    Spacer(Modifier.height(16.dp))
-                    Button(onClick = { controller.retry(request) }) { Text("Tentar novamente") }
-                }
-            }
-            if (state.loading && state.errorMessage == null) {
-                Column(
-                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    CircularProgressIndicator(color = BuroColors.Primary)
-                    Spacer(Modifier.height(12.dp))
-                    Text("Preparando vídeo…", color = Color.White)
-                }
+                SwingPanel(
+                    factory = {
+                        controller
+                            .createComponent(
+                                request = request,
+                                onPointerActivity = { wakeCounter++ },
+                                // Click the picture to pause; double-click for full screen. The
+                                // canvas waits out the double-click interval before pausing, so a
+                                // double click no longer pauses and resumes on the way.
+                                onClick = { togglePlayback() },
+                                onDoubleClick = { if (!isCompact) onToggleFullScreen() },
+                                onWheel = { notches ->
+                                    setVolume((volumeBeforeMute ?: controller.snapshot().volume) - notches * VOLUME_STEP)
+                                },
+                                // The same keys, wired to the canvas so they keep working once it
+                                // holds the focus.
+                                onKey = { keyCode -> currentHandleKey(keyCode, false) },
+                            ).also { panel -> videoPanel = panel }
+                    },
+                    update = { panel ->
+                        controller.setPointerVisible(panel, controlsVisible || !isFullScreen)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
-        // In full screen the transport bar is an overlay that hides itself, so the video keeps the
-        // whole surface. Outside full screen it stays pinned, which is the expected windowed
-        // behaviour and avoids controls that flicker while the user is aiming at them. The compact
-        // window skips it entirely: there is no room for a seek bar, a clock and five buttons in
-        // 300dp of height, and taking that room is what left no picture at all.
+
         if (isCompact) {
-            // A translucent strip over the picture rather than a bar beneath it. At 480x300 every
-            // row of pixels the chrome takes is a row the film loses, and a solid slab across the
-            // bottom was a fifth of the window.
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .background(
-                            androidx.compose.ui.graphics.Brush.verticalGradient(
-                                listOf(Color.Transparent, Color(0xB30A0C0F)),
-                            ),
-                        ).padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                TextButton(
-                    onClick = controller::togglePlayback,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                ) {
-                    Text(
-                        text = if (state.playing) "❚❚" else "▶",
-                        color = Color.White.copy(alpha = 0.9f),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                TextButton(
-                    onClick = onToggleCompact,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                ) {
-                    Text(
-                        text = "Voltar ao app",
-                        color = BuroColors.Primary,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-            }
+            CompactStrip(
+                playing = state.playing,
+                text = text,
+                onTogglePlayback = togglePlayback,
+                onBackToApp = onToggleCompact,
+            )
         } else if (!isFullScreen || controlsVisible) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .background(
-                    androidx.compose.ui.graphics.Brush.verticalGradient(
-                        listOf(Color.Transparent, Color(0xCC0A0C0F), Color(0xE60A0C0F)),
-                    ),
-                ).padding(horizontal = 24.dp, vertical = 14.dp),
-        ) {
-            // Where the thumb is being dragged to, before it is committed. Seeking on every pixel
-            // of the drag flooded VLC with commands and made the picture stutter its way across the
-            // film; the seek now happens once, when the thumb is released.
-            var scrubTo by remember { mutableStateOf<Float?>(null) }
-
-            // Where the pointer is over the bar, whether or not a drag is happening. Only the drag
-            // used to show a time, so a user hovering to find a scene saw nothing — they had to
-            // commit to a drag to learn where they were pointing.
-            var hoverFraction by remember { mutableStateOf<Float?>(null) }
-            var barWidth by remember { mutableStateOf(0) }
-            val playedFraction =
-                if (state.durationMillis > 0.0) {
-                    (state.positionMillis / state.durationMillis).toFloat().coerceIn(0f, 1f)
-                } else {
-                    0f
-                }
-
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .onSizeChanged { size -> barWidth = size.width }
-                        .onPointerEvent(PointerEventType.Move) { event ->
-                            val x = event.changes.firstOrNull()?.position?.x ?: return@onPointerEvent
-                            hoverFraction = if (barWidth > 0) (x / barWidth).coerceIn(0f, 1f) else null
-                        }
-                        .onPointerEvent(PointerEventType.Exit) { hoverFraction = null },
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xCC0A0C0F), Color(0xF20A0C0F)),
+                        ),
+                    )
+                    .onPointerEvent(PointerEventType.Enter) { pointerOverBar = true }
+                    .onPointerEvent(PointerEventType.Exit) { pointerOverBar = false }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
-                Slider(
-                    value = scrubTo ?: playedFraction,
-                    onValueChange = { scrubTo = it },
-                    onValueChangeFinished = {
-                        scrubTo?.let { fraction -> controller.seekToFraction(fraction.toDouble()) }
-                        scrubTo = null
+                // What is happening, in words, above the controls: this is the one place over the
+                // video that can always be seen. An error, a reconnect, the loading state, the next
+                // episode, or what the last key did.
+                StatusLine(
+                    state = state,
+                    showError = showError,
+                    notice = notice,
+                    upNextOffered = upNextOffered,
+                    nextEpisodeTitle = nextEpisodeTitle,
+                    secondsLeft = (remainingMillis / 1_000).toInt(),
+                    text = text,
+                    onRetry = {
+                        showError = false
+                        controller.retry(lastTried)
                     },
-                    enabled = state.ready && state.durationMillis > 0.0,
-                    modifier = Modifier.fillMaxWidth(),
+                    onPlayNext = onPlayNext,
+                    onCancelNext = { upNextCancelled = true },
                 )
-                // The time under the thumb while dragging. A frame preview is not possible here -
-                // VLC's control interface cannot render an arbitrary frame without interrupting
-                // playback - but the timestamp answers the same question: where will this land?
-                // The drag position when dragging, otherwise wherever the pointer is. Both answer
-                // "where will this land?", and a hover is how a user looks for a scene without
-                // committing to a jump.
-                (scrubTo ?: hoverFraction.takeIf { state.durationMillis > 0.0 })?.let { fraction ->
-                    val targetMillis = state.durationMillis * fraction
+                if (!isLive) {
+                    SeekBar(state = state, onSeek = controller::seekToFraction)
+                }
+                ControlsRow(
+                    state = state,
+                    isLive = isLive,
+                    isFullScreen = isFullScreen,
+                    isFavorite = isFavorite,
+                    muted = volumeBeforeMute != null,
+                    audioOutput = audioOutput,
+                    hasNext = nextEpisodeTitle != null,
+                    text = text,
+                    onTogglePlayback = togglePlayback,
+                    onSeekBy = seekBy,
+                    onToggleFavorite = onToggleFavorite,
+                    onToggleMute = toggleMute,
+                    onVolume = { value ->
+                        volumeBeforeMute = null
+                        controller.setVolume(value.toDouble())
+                    },
+                    onCycleSpeed = cycleSpeed,
+                    onCycleAspect = cycleAspect,
+                    onCycleAudioOutput = {
+                        // Two channels assumed, which is what the great majority of provider streams
+                        // carry. Assuming stereo only ever offers one option too many, never one too
+                        // few, and every option remains safe to pick.
+                        val options = AudioOutputMode.optionsFor(channels = 2)
+                        val next = options[(options.indexOf(audioOutput) + 1) % options.size]
+                        // The live position goes with the mode, because the disposal checkpoint is
+                        // written after this returns and the stored one is up to twelve seconds old.
+                        onSelectAudioOutput(next, state.positionMillis.toLong())
+                    },
+                    onBrightness = { controller.setBrightness(it.toDouble()) },
+                    onSelectAudio = controller::selectAudioTrack,
+                    onSelectSubtitle = controller::selectSubtitleTrack,
+                    onMenuOpenChange = { open -> menusOpen = (menusOpen + if (open) 1 else -1).coerceAtLeast(0) },
+                    onPlayNext = onPlayNext,
+                    onMiniPlayer = onToggleCompact,
+                    onFullScreen = onToggleFullScreen,
+                    onClose = closePlayer,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopBar(
+    title: String,
+    isLive: Boolean,
+    text: PlayerText,
+    onBack: () -> Unit,
+    onMiniPlayer: () -> Unit,
+    onFullScreen: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BuroIconButton(icon = BuroIcons.Back, label = text.back, shortcut = "Esc", onClick = onBack)
+        Spacer(Modifier.width(8.dp))
+        if (isLive) {
+            LiveBadge(text.live)
+            Spacer(Modifier.width(10.dp))
+        }
+        Text(
+            title,
+            color = Color.White,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        BuroIconButton(icon = BuroIcons.MiniPlayer, label = text.miniPlayer, onClick = onMiniPlayer)
+        BuroIconButton(icon = BuroIcons.FullScreen, label = text.fullScreen, shortcut = "F", onClick = onFullScreen)
+    }
+}
+
+@Composable
+private fun LiveBadge(label: String) {
+    Row(
+        modifier =
+            Modifier
+                .background(Color(0xFFD64545), RoundedCornerShape(6.dp))
+                .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(BuroIcons.Live, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(label, color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+    }
+}
+
+/**
+ * The line above the controls: an error with its retry, a reconnect, loading, the next episode, or
+ * the last notice — in that order of importance, one at a time.
+ */
+@Composable
+private fun StatusLine(
+    state: DesktopPlaybackSnapshot,
+    showError: Boolean,
+    notice: String?,
+    upNextOffered: Boolean,
+    nextEpisodeTitle: String?,
+    secondsLeft: Int,
+    text: PlayerText,
+    onRetry: () -> Unit,
+    onPlayNext: () -> Unit,
+    onCancelNext: () -> Unit,
+) {
+    val message = state.errorMessage
+    Row(
+        modifier = Modifier.fillMaxWidth().height(36.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        when {
+            showError && message != null -> {
+                Text(message, color = Color(0xFFFF8A80), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Button(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.buttonColors(containerColor = BuroColors.Primary, contentColor = Color.Black),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                ) { Text(text.retry) }
+            }
+            state.reconnecting -> {
+                CircularProgressIndicator(color = BuroColors.Primary, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                Text(text.reconnecting, color = Color.White)
+            }
+            state.loading && message == null -> {
+                CircularProgressIndicator(color = BuroColors.Primary, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                Text(text.loading, color = Color.White.copy(alpha = 0.85f))
+            }
+            upNextOffered && nextEpisodeTitle != null -> {
+                Icon(BuroIcons.Next, contentDescription = null, tint = BuroColors.Primary, modifier = Modifier.size(BuroIconSize.Small))
+                Text(
+                    text = "${text.nextEpisodeIn.format(DISPLAY_LOCALE, secondsLeft.coerceAtLeast(0))} · $nextEpisodeTitle",
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Button(
+                    onClick = onPlayNext,
+                    colors = ButtonDefaults.buttonColors(containerColor = BuroColors.Primary, contentColor = Color.Black),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                ) { Text(text.playNow) }
+                TextButton(onClick = onCancelNext) { Text(text.cancel, color = Color.White.copy(alpha = 0.8f)) }
+            }
+            notice != null -> Text(notice, color = BuroColors.Primary, fontWeight = FontWeight.SemiBold)
+            else -> Unit
+        }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun SeekBar(
+    state: DesktopPlaybackSnapshot,
+    onSeek: (Double) -> Unit,
+) {
+    // Where the thumb is being dragged to, before it is committed. Seeking on every pixel of the
+    // drag flooded VLC with commands; the seek happens once, when the thumb is released.
+    var scrubTo by remember { mutableStateOf<Float?>(null) }
+    // Where the pointer is over the bar, so hovering shows where a click would land.
+    var hoverFraction by remember { mutableStateOf<Float?>(null) }
+    var barWidth by remember { mutableIntStateOf(0) }
+    val playedFraction =
+        if (state.durationMillis > 0.0) (state.positionMillis / state.durationMillis).toFloat().coerceIn(0f, 1f) else 0f
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(formatPlaybackTime(state.positionMillis), color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.labelMedium)
+        Spacer(Modifier.width(12.dp))
+        Box(
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .onSizeChanged { size -> barWidth = size.width }
+                    .onPointerEvent(PointerEventType.Move) { event ->
+                        val x = event.changes.firstOrNull()?.position?.x ?: return@onPointerEvent
+                        hoverFraction = if (barWidth > 0) (x / barWidth).coerceIn(0f, 1f) else null
+                    }
+                    .onPointerEvent(PointerEventType.Exit) { hoverFraction = null },
+        ) {
+            Slider(
+                value = scrubTo ?: playedFraction,
+                onValueChange = { scrubTo = it },
+                onValueChangeFinished = {
+                    scrubTo?.let { fraction -> onSeek(fraction.toDouble()) }
+                    scrubTo = null
+                },
+                enabled = state.ready && state.durationMillis > 0.0,
+                colors =
+                    SliderDefaults.colors(
+                        thumbColor = BuroColors.Primary,
+                        activeTrackColor = BuroColors.Primary,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.22f),
+                    ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            // The time under the pointer or the thumb: VLC's control interface cannot render an
+            // arbitrary frame without interrupting playback, but the timestamp answers the same
+            // question — where will this land?
+            (scrubTo ?: hoverFraction.takeIf { state.durationMillis > 0.0 })?.let { fraction ->
+                val targetMillis = state.durationMillis * fraction
+                Box(Modifier.align(Alignment.TopStart).fillMaxWidth().padding(bottom = 34.dp)) {
                     Box(
                         modifier =
                             Modifier
-                                .align(Alignment.TopStart)
-                                .fillMaxWidth()
-                                .padding(bottom = 34.dp),
+                                .align(Alignment.CenterStart)
+                                .scrubberOffset(fraction)
+                                .background(Color(0xF00A0C0F), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
                     ) {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .align(Alignment.CenterStart)
-                                    .scrubberOffset(fraction)
-                                    .background(
-                                        color = Color(0xF00A0C0F),
-                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                                    ).padding(horizontal = 12.dp, vertical = 6.dp),
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = formatPlaybackTime(targetMillis),
-                                    color = BuroColors.Primary,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                                // How far this jumps, so a small nudge is distinguishable from
-                                // landing twenty minutes away.
-                                val deltaSeconds = ((targetMillis - state.positionMillis) / 1_000.0).toInt()
-                                Text(
-                                    text =
-                                        if (deltaSeconds >= 0) "+${deltaSeconds}s" else "${deltaSeconds}s",
-                                    color = Color.White.copy(alpha = 0.7f),
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = formatPlaybackTime(targetMillis),
+                                color = BuroColors.Primary,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            val deltaSeconds = ((targetMillis - state.positionMillis) / 1_000.0).toInt()
+                            Text(
+                                text = if (deltaSeconds >= 0) "+${deltaSeconds}s" else "${deltaSeconds}s",
+                                color = Color.White.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
                         }
                     }
                 }
             }
-            Row(
-                // Scrollable, because a Row does not shrink children that carry no weight.
-                //
-                // Once the transport buttons, the rate, the subtitle and audio pickers, the
-                // brightness readout and the volume slider are all in here, the row wants more
-                // width than the window has. Without somewhere to overflow to, Compose took it out
-                // of the only flexible thing present — the button labels — and broke "Sair da tela
-                // cheia" one character per line, which stretched the bar to the height of the
-                // screen. Scrolling keeps every control at its natural size and reachable.
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TransportButton("-10 s", state.ready) { controller.seekBy(-10_000.0) }
-                TransportButton(
-                    label = if (state.playing) "Pausar" else "Reproduzir",
-                    enabled = state.ready,
-                    emphasised = true,
-                    onClick = controller::togglePlayback,
-                )
-                TransportButton("+30 s", state.ready) { controller.seekBy(30_000.0) }
-                Text(
-                    "${formatPlaybackTime(state.positionMillis)} / ${formatPlaybackTime(state.durationMillis)}",
-                    color = Color.White,
-                )
-
-                // Filled and gold when the title is a favourite, outlined and grey when it is not —
-                // so the heart answers "is this saved?" before it is pressed, rather than only
-                // acting when it is. Absent entirely for sources that cannot be favourited.
-                isFavorite?.let { favourite ->
-                    Spacer(Modifier.width(12.dp))
-                    TextButton(onClick = onToggleFavorite) {
-                        Text(
-                            text = if (favourite) "♥" else "♡",
-                            color = if (favourite) Color(0xFFD6A956) else Color(0xFFB8B4AC),
-                            style = MaterialTheme.typography.headlineSmall,
-                        )
-                    }
-                }
-
-                Spacer(Modifier.weight(1f))
-                // Stepped through a fixed list rather than matched against overlapping ranges: VLC
-                // reports the rate back as a float, so 1.2499999 fell through every branch and the
-                // button appeared to do nothing. The label is formatted, not the raw double.
-                TransportButton(
-                    label = "%.2fx".format(DISPLAY_LOCALE, state.playbackRate).removeSuffix("0").removeSuffix("0").removeSuffix("."),
-                    enabled = state.ready,
-                ) {
-                    val current = PLAYBACK_RATES.minByOrNull { rate -> kotlin.math.abs(rate - state.playbackRate) }
-                    val nextIndex = (PLAYBACK_RATES.indexOf(current) + 1) % PLAYBACK_RATES.size
-                    controller.setPlaybackRate(PLAYBACK_RATES[nextIndex])
-                }
-                // Speaker layout, cycled like the rate beside it.
-                //
-                // The options offered depend on what the track actually carries: a 5.1 mix is not
-                // offered an upmix to 5.1, because there is nothing to upmix and a control that
-                // claims to add what is already there teaches people the controls mean nothing.
-                //
-                // Changing this restarts the engine — VLC builds the audio chain with the rest of
-                // the pipeline — so the label says which layout is being asked for rather than
-                // pretending the change is instant.
-                TransportButton(
-                    label = audioOutputLabel(audioOutput),
-                    enabled = state.ready,
-                ) {
-                    // Two channels assumed, which is what the great majority of provider streams
-                    // carry and the case the upmix exists for. Reading the real count from VLC is
-                    // worth doing later; assuming stereo only ever offers one option too many,
-                    // never one too few, and every option remains safe to pick.
-                    val options = AudioOutputMode.optionsFor(channels = 2)
-                    val next = options[(options.indexOf(audioOutput) + 1) % options.size]
-                    // The live position goes with the mode, because the caller cannot get it any
-                    // other way in time: the disposal checkpoint is written when the old player is
-                    // torn down, which is *after* this returns, and the stored one is only updated
-                    // every twelve seconds. Reading it there rewound the film by up to twelve
-                    // seconds on every audio change.
-                    onSelectAudioOutput(next, state.positionMillis.toLong())
-                }
-                // Cycles rather than opening a menu: six values, and a viewer fixing a squashed
-                // picture wants to see the next one immediately, not pick from a list.
-                OutlinedButton(
-                    onClick = {
-                        val values = PlaybackAspectRatio.entries
-                        val next = values[(values.indexOf(state.aspectRatio) + 1) % values.size]
-                        controller.setAspectRatio(next)
-                    },
-                    enabled = state.ready,
-                ) {
-                    Text(state.aspectRatio.label)
-                }
-
-                // Shown whenever a track exists, not only when there is a choice. A single-entry
-                // menu still answers "what language is this?", and hiding the control entirely made
-                // the player look as though it had no track support at all — which is how it read
-                // on a film with one audio track and no subtitles.
-                if (state.audioTracks.isNotEmpty()) {
-                    TrackPicker(
-                        label = "Áudio",
-                        tracks = state.audioTracks,
-                        activeId = state.activeAudioTrackId,
-                        onSelect = controller::selectAudioTrack,
-                    )
-                }
-                if (state.subtitleTracks.isNotEmpty()) {
-                    TrackPicker(
-                        label = "Legendas",
-                        tracks = state.subtitleTracks,
-                        activeId = state.activeSubtitleTrackId,
-                        onSelect = controller::selectSubtitleTrack,
-                    )
-                }
-                // Brightness before volume: a film too dark to follow is the more common complaint,
-                // and a viewer reaching for it is usually mid-scene.
-                // Says when it takes effect, because it cannot take effect now.
-                //
-                // VLC builds the adjust filter with the video chain and its control interface has
-                // no command to change it afterwards — the slider moved and the picture did not,
-                // which reads as a broken control rather than as a deferred setting. The subtitle
-                // options carry the same limitation and say so in the same way.
-                Text(
-                    text = "☀ ${(state.brightness * 100).toInt()}%",
-                    color = Color.White,
-                )
-                if (state.brightness != 1.0) {
-                    // Literal, like every other label in this overlay. Introducing the strings
-                    // mechanism for one line would leave the file half-translated, which is worse
-                    // than consistently untranslated; the whole overlay is a separate job.
-                    Text(
-                        text = "vale para o próximo",
-                        color = Color.White.copy(alpha = 0.6f),
-                        maxLines = 1,
-                    )
-                }
-                Slider(
-                    value = state.brightness.toFloat(),
-                    onValueChange = { controller.setBrightness(it.toDouble()) },
-                    valueRange = 0.5f..1.8f,
-                    enabled = state.ready,
-                    modifier = Modifier.width(120.dp),
-                )
-                Text("Volume ${(state.volume * 100).toInt()}%", color = Color.White)
-                Slider(
-                    value = state.volume.toFloat(),
-                    onValueChange = { controller.setVolume(it.toDouble()) },
-                    enabled = state.ready,
-                    modifier = Modifier.width(180.dp),
-                )
-                // The way back, on screen rather than only on a key. In full screen the top bar is
-                // hidden, and the embedded video surface can hold the keyboard focus so F11 and
-                // Escape never arrive - which left closing the whole app as the only way out.
-                if (isFullScreen) {
-                    Spacer(Modifier.width(12.dp))
-                    // Never wrapped.
-                    //
-                    // The controls sit in a Row that runs out of width once the volume slider and
-                    // the brightness readout are in it, and Compose then breaks the label one
-                    // character per line: the button became a tall vertical column of letters and
-                    // pushed the whole bar to the height of the screen.
-                    //
-                    // maxLines alone is not enough — a single line still needs somewhere to go —
-                    // so the label is short and the row is allowed to scroll instead.
-                    OutlinedButton(onClick = onToggleFullScreen) {
-                        Text("⛶  Sair da tela cheia", maxLines = 1, softWrap = false)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = closePlayer) {
-                        Text("Voltar ao app", maxLines = 1, softWrap = false)
-                    }
-                }
-            }
         }
-        }
+        Spacer(Modifier.width(12.dp))
+        Text(formatPlaybackTime(state.durationMillis), color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.labelMedium)
     }
 }
 
 /**
- * A transport control that sits over the picture rather than competing with it.
- *
- * Outlined and translucent by default; only the play/pause button carries the accent, because it is
- * the one the eye should find without looking. Solid gold on all three made the bar shout louder
- * than the film behind it.
+ * The transport row: playback on the left, what is playing in the middle, how it plays on the
+ * right. Every control is an icon with a tooltip naming it and its key; the rarely used ones —
+ * speed, picture shape, speaker layout, brightness — sit in one settings menu, which is what lets
+ * the row fit without scrolling sideways.
  */
 @Composable
-private fun TransportButton(
-    label: String,
-    enabled: Boolean,
-    emphasised: Boolean = false,
-    onClick: () -> Unit,
+private fun ControlsRow(
+    state: DesktopPlaybackSnapshot,
+    isLive: Boolean,
+    isFullScreen: Boolean,
+    isFavorite: Boolean?,
+    muted: Boolean,
+    audioOutput: AudioOutputMode,
+    hasNext: Boolean,
+    text: PlayerText,
+    onTogglePlayback: () -> Unit,
+    onSeekBy: (Double) -> Unit,
+    onToggleFavorite: () -> Unit,
+    onToggleMute: () -> Unit,
+    onVolume: (Float) -> Unit,
+    onCycleSpeed: () -> Unit,
+    onCycleAspect: () -> Unit,
+    onCycleAudioOutput: () -> Unit,
+    onBrightness: (Float) -> Unit,
+    onSelectAudio: (Int) -> Unit,
+    onSelectSubtitle: (Int) -> Unit,
+    onMenuOpenChange: (Boolean) -> Unit,
+    onPlayNext: () -> Unit,
+    onMiniPlayer: () -> Unit,
+    onFullScreen: () -> Unit,
+    onClose: () -> Unit,
 ) {
-    OutlinedButton(
-        onClick = onClick,
-        enabled = enabled,
-        shape = androidx.compose.foundation.shape.CircleShape,
-        colors =
-            androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                containerColor =
-                    if (emphasised) BuroColors.Primary.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.06f),
-                contentColor = if (emphasised) BuroColors.Primary else Color.White.copy(alpha = 0.85f),
-            ),
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Text(label, maxLines = 1)
+        if (!isLive) {
+            BuroIconButton(BuroIcons.Rewind10, text.rewind, { onSeekBy(-10_000.0) }, enabled = state.ready, shortcut = "←")
+        }
+        BuroIconButton(
+            icon = if (state.playing) BuroIcons.Pause else BuroIcons.Play,
+            label = if (state.playing) text.pause else text.play,
+            onClick = onTogglePlayback,
+            enabled = state.ready,
+            shortcut = text.spaceKey,
+            emphasised = true,
+        )
+        if (!isLive) {
+            BuroIconButton(BuroIcons.Forward30, text.forward, { onSeekBy(30_000.0) }, enabled = state.ready, shortcut = "→")
+        }
+        if (hasNext) {
+            BuroIconButton(BuroIcons.Next, text.nextEpisode, onPlayNext, shortcut = "N")
+        }
+        Spacer(Modifier.width(8.dp))
+        BuroIconButton(
+            icon = if (muted || state.volume <= 0.0) BuroIcons.VolumeOff else if (state.volume < 0.5) BuroIcons.VolumeLow else BuroIcons.VolumeHigh,
+            label = if (muted) text.unmute else text.mute,
+            onClick = onToggleMute,
+            shortcut = "M",
+        )
+        Slider(
+            value = if (muted) 0f else state.volume.toFloat(),
+            onValueChange = onVolume,
+            enabled = state.ready,
+            colors =
+                SliderDefaults.colors(
+                    thumbColor = Color.White,
+                    activeTrackColor = Color.White,
+                    inactiveTrackColor = Color.White.copy(alpha = 0.22f),
+                ),
+            modifier = Modifier.width(120.dp),
+        )
+        if (isLive) {
+            Spacer(Modifier.width(10.dp))
+            LiveBadge(text.live)
+        }
+        isFavorite?.let { favourite ->
+            Spacer(Modifier.width(6.dp))
+            BuroIconButton(
+                icon = if (favourite) BuroIcons.Favorite else BuroIcons.NotFavorite,
+                label = if (favourite) text.unfavorite else text.favorite,
+                onClick = onToggleFavorite,
+                tint = if (favourite) BuroColors.Primary else Color.White.copy(alpha = 0.85f),
+            )
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        // Shown whenever a track exists, not only when there is a choice: a single-entry menu still
+        // answers "what language is this?".
+        if (state.subtitleTracks.isNotEmpty()) {
+            TrackMenu(
+                icon = BuroIcons.Subtitles,
+                label = text.subtitles,
+                tracks = state.subtitleTracks,
+                activeId = state.activeSubtitleTrackId,
+                onSelect = onSelectSubtitle,
+                onOpenChange = onMenuOpenChange,
+            )
+        }
+        if (state.audioTracks.isNotEmpty()) {
+            TrackMenu(
+                icon = BuroIcons.Audio,
+                label = text.audio,
+                tracks = state.audioTracks,
+                activeId = state.activeAudioTrackId,
+                onSelect = onSelectAudio,
+                onOpenChange = onMenuOpenChange,
+            )
+        }
+        SettingsMenu(
+            state = state,
+            isLive = isLive,
+            audioOutput = audioOutput,
+            text = text,
+            onCycleSpeed = onCycleSpeed,
+            onCycleAspect = onCycleAspect,
+            onCycleAudioOutput = onCycleAudioOutput,
+            onBrightness = onBrightness,
+            onOpenChange = onMenuOpenChange,
+        )
+        BuroIconButton(BuroIcons.MiniPlayer, text.miniPlayer, onMiniPlayer)
+        BuroIconButton(
+            icon = if (isFullScreen) BuroIcons.ExitFullScreen else BuroIcons.FullScreen,
+            label = if (isFullScreen) text.exitFullScreen else text.fullScreen,
+            onClick = onFullScreen,
+            shortcut = "F",
+        )
+        // The way back, on screen rather than only on a key. In full screen the top bar is hidden,
+        // and the embedded video surface can hold the keyboard focus so Escape never arrives.
+        if (isFullScreen) {
+            BuroIconButton(BuroIcons.Close, text.backToApp, onClose)
+        }
     }
 }
 
 /**
- * Picks one track from the ones the title carries.
- *
- * Labelled with the active track rather than a fixed word, so the bar answers "what am I hearing?"
- * without being opened.
+ * Picks one track from the ones the title carries. The tooltip names the active track, so the bar
+ * answers "what am I hearing?" without being opened.
  */
 @Composable
-private fun TrackPicker(
+private fun TrackMenu(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     tracks: List<MediaTrack>,
     activeId: Int?,
     onSelect: (Int) -> Unit,
+    onOpenChange: (Boolean) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val active = tracks.firstOrNull { it.id == activeId }
-
+    val setExpanded: (Boolean) -> Unit = { value ->
+        if (value != expanded) {
+            expanded = value
+            onOpenChange(value)
+        }
+    }
+    DisposableEffect(Unit) { onDispose { if (expanded) onOpenChange(false) } }
     Box {
-        TransportButton(
-            label = active?.label?.take(14) ?: label,
-            enabled = true,
-        ) { expanded = true }
-        androidx.compose.material3.DropdownMenu(
+        BuroIconButton(
+            icon = icon,
+            label = active?.label?.let { "$label: $it" } ?: label,
+            onClick = { setExpanded(true) },
+        )
+        DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false },
+            onDismissRequest = { setExpanded(false) },
             modifier = Modifier.background(BuroColors.SurfaceRaised),
         ) {
             tracks.forEach { track ->
-                androidx.compose.material3.DropdownMenuItem(
+                DropdownMenuItem(
                     text = {
-                        Text(
-                            text = track.label,
-                            color = if (track.id == activeId) BuroColors.Primary else BuroColors.Text,
-                        )
+                        Text(track.label, color = if (track.id == activeId) BuroColors.Primary else BuroColors.Text)
+                    },
+                    leadingIcon = {
+                        if (track.id == activeId) {
+                            Icon(BuroIcons.Check, contentDescription = null, tint = BuroColors.Primary)
+                        } else {
+                            Spacer(Modifier.size(BuroIconSize.Medium))
+                        }
                     },
                     onClick = {
                         onSelect(track.id)
-                        expanded = false
+                        setExpanded(false)
                     },
                 )
             }
+        }
+    }
+}
+
+/** Speed, picture shape, speaker layout and brightness: set once, rarely changed mid-film. */
+@Composable
+private fun SettingsMenu(
+    state: DesktopPlaybackSnapshot,
+    isLive: Boolean,
+    audioOutput: AudioOutputMode,
+    text: PlayerText,
+    onCycleSpeed: () -> Unit,
+    onCycleAspect: () -> Unit,
+    onCycleAudioOutput: () -> Unit,
+    onBrightness: (Float) -> Unit,
+    onOpenChange: (Boolean) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val setExpanded: (Boolean) -> Unit = { value ->
+        if (value != expanded) {
+            expanded = value
+            onOpenChange(value)
+        }
+    }
+    DisposableEffect(Unit) { onDispose { if (expanded) onOpenChange(false) } }
+    Box {
+        BuroIconButton(icon = BuroIcons.Settings, label = text.settings, onClick = { setExpanded(true) })
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { setExpanded(false) },
+            modifier = Modifier.background(BuroColors.SurfaceRaised),
+        ) {
+            // Each row cycles in place and the menu stays open, so the effect can be watched and
+            // the next value tried without reopening anything.
+            if (!isLive) {
+                SettingsRow(BuroIcons.Speed, text.speed, formatRate(state.playbackRate), enabled = state.ready, onClick = onCycleSpeed)
+            }
+            SettingsRow(BuroIcons.Aspect, text.aspect, text.aspectLabel(state.aspectRatio), enabled = state.ready, onClick = onCycleAspect)
+            SettingsRow(BuroIcons.Speakers, text.audio, text.audioOutputLabel(audioOutput), enabled = state.ready, onClick = onCycleAudioOutput)
+            Column(Modifier.width(280.dp).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(BuroIcons.Brightness, contentDescription = null, tint = BuroColors.TextMuted, modifier = Modifier.size(BuroIconSize.Small))
+                    Spacer(Modifier.width(12.dp))
+                    Text(text.brightness, color = BuroColors.Text, modifier = Modifier.weight(1f))
+                    Text("${(state.brightness * 100).toInt()}%", color = BuroColors.TextMuted)
+                }
+                Slider(
+                    value = state.brightness.toFloat(),
+                    onValueChange = onBrightness,
+                    valueRange = 0.5f..1.8f,
+                    colors = SliderDefaults.colors(thumbColor = BuroColors.Primary, activeTrackColor = BuroColors.Primary),
+                )
+                // Says when it takes effect, because it cannot take effect now: VLC builds the
+                // adjust filter with the video chain and its control interface cannot change it.
+                Text(text.brightnessNextTitle, color = BuroColors.TextMuted, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    DropdownMenuItem(
+        text = {
+            Row(Modifier.width(240.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(label, color = BuroColors.Text, modifier = Modifier.weight(1f))
+                Text(value, color = BuroColors.Primary, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        leadingIcon = { Icon(icon, contentDescription = null, tint = BuroColors.TextMuted, modifier = Modifier.size(BuroIconSize.Small)) },
+        enabled = enabled,
+        onClick = onClick,
+    )
+}
+
+/**
+ * The picture-in-picture window's controls: a translucent strip, because at 480x300 every row the
+ * chrome takes is a row the film loses.
+ */
+@Composable
+private fun CompactStrip(
+    playing: Boolean,
+    text: PlayerText,
+    onTogglePlayback: () -> Unit,
+    onBackToApp: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xB30A0C0F))))
+                .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BuroIconButton(
+            icon = if (playing) BuroIcons.Pause else BuroIcons.Play,
+            label = if (playing) text.pause else text.play,
+            onClick = onTogglePlayback,
+            size = BuroIconSize.Small,
+        )
+        Spacer(Modifier.weight(1f))
+        OutlinedButton(onClick = onBackToApp, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)) {
+            Text(text.backToApp, color = BuroColors.Primary, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -829,17 +1097,6 @@ private fun formatPlaybackTime(valueMillis: Double): String {
     }
 }
 
-/**
- * Short label for the speaker layout button.
- *
- * Names the *output* rather than claiming a format: "5.1" here means "send to six speakers", and
- * the app does not pretend a stereo track became a 5.1 mix by arriving at more of them.
- */
-private fun audioOutputLabel(mode: AudioOutputMode): String =
-    when (mode) {
-        AudioOutputMode.SYSTEM -> "Áudio: padrão"
-        AudioOutputMode.STEREO -> "Áudio: 2.0"
-        AudioOutputMode.SURROUND_51 -> "Áudio: 5.1"
-        AudioOutputMode.SURROUND_71 -> "Áudio: 7.1"
-        AudioOutputMode.HEADPHONES -> "Áudio: fone"
-    }
+/** "1.25×", "2×": VLC reports the rate as a float, so 1.2499999 is formatted rather than shown. */
+private fun formatRate(rate: Double): String =
+    "%.2f".format(DISPLAY_LOCALE, rate).trimEnd('0').trimEnd('.', ',') + "×"

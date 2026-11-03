@@ -43,6 +43,8 @@ data class DesktopPlaybackSnapshot(
     val playbackRate: Double = 1.0,
     val engineName: String = "Windows",
     val ended: Boolean = false,
+    /** A stream that dropped is being reopened. Shown so a still picture does not read as frozen. */
+    val reconnecting: Boolean = false,
     val errorMessage: String? = null,
     /** Audio tracks the current title carries, as the provider supplied them. */
     val audioTracks: List<MediaTrack> = emptyList(),

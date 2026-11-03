@@ -27,6 +27,8 @@ class NoHardcodedTextTest {
      */
     private val pending = emptySet<String>()
 
+    private val TRANSLATION_TABLES = setOf("DesktopStrings.kt", "PlayerText.kt")
+
     /**
      * Words that mark a literal as Portuguese *prose*.
      *
@@ -76,7 +78,9 @@ class NoHardcodedTextTest {
 
         sourceRoot.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
-            .filterNot { it.name == "DesktopStrings.kt" || it.name in pending || it.name in keywordFiles }
+            // The two translation tables. PlayerText carries the player's words in every language,
+            // and FilmDropAndTextTest fails if any language is missing one.
+            .filterNot { it.name in TRANSLATION_TABLES || it.name in pending || it.name in keywordFiles }
             .forEach { file ->
                 file.readLines().forEachIndexed { index, line ->
                     val trimmed = line.trim()

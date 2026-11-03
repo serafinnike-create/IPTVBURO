@@ -931,6 +931,13 @@ fun DesktopApp(
                             appState.checkpointPlayback(request, positionMs, durationMs)
                         },
                         onEnded = { durationMs -> appState.completePlayback(request, durationMs) },
+                        language = appState.language,
+                        // Read per composition: the series page's episode list is state, so the
+                        // offer appears as soon as it has loaded.
+                        nextEpisodeTitle = appState.nextEpisodeAfterPlaying()?.title,
+                        onPlayNext = {
+                            appState.prepareNextEpisode()?.let { next -> activePlayback = next }
+                        },
                         isFullScreen = isFullScreen,
                         onToggleFullScreen = onToggleFullScreen,
                         isCompact = isCompact,
@@ -957,6 +964,9 @@ fun DesktopApp(
                         },
                         onClose = {
                             if (isFullScreen) onToggleFullScreen()
+                            // Closing from the mini player left a 480x300 always-on-top window
+                            // behind with nothing in it; the app goes back to its own size first.
+                            if (isCompact) onToggleCompact()
                             activePlayback = null
                         },
                     )

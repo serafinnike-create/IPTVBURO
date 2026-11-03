@@ -117,7 +117,11 @@ class VlcDesktopPlayer(
     @Volatile
     // Opens showing the brightness that is actually in force, which is the one the last title was
     // given. Starting at 1.0 would put the slider somewhere the picture is not.
-    private var snapshot = DesktopPlaybackSnapshot(engineName = "VLC", brightness = pendingBrightness)
+    // Seeded from the process-wide values rather than the snapshot's defaults. The volume reset to
+    // 80% on every title, because each title builds a new player; and the brightness slider said
+    // 100% while the value carried over from the last title was the one actually applied.
+    private var snapshot =
+        DesktopPlaybackSnapshot(engineName = "VLC", brightness = pendingBrightness, volume = rememberedVolume)
 
     private val disposed = AtomicBoolean(false)
     private val started = AtomicBoolean(false)
@@ -144,6 +148,29 @@ class VlcDesktopPlayer(
 
     @Volatile
     private var everPlayed = false
+
+    /**
+     * Where the title last was while playing, and how long it is.
+     *
+     * Kept because a film that drops mid-way reports `stopped` with neither: VLC clears the time and
+     * often the length with the input. Without them a drop could not be told from the end, was
+     * treated as neither, and the picture simply froze with no error and nothing to press.
+     */
+    @Volatile
+    private var lastKnownPositionSeconds = 0L
+
+    @Volatile
+    private var lastKnownLengthSeconds = 0L
+
+    /**
+     * A seek to apply as soon as the title is actually playing with a known length.
+     *
+     * Resuming used to fire a seek blindly two seconds after start; on a slow provider the stream
+     * was not playing yet, the seek went nowhere, and the episode started from the beginning. A
+     * reconnect after a drop uses the same path to land back where the viewer was.
+     */
+    @Volatile
+    private var pendingSeekMillis: Long? = null
 
     /**
      * Until when a `stopped` report should be ignored, because a track switch caused it.
@@ -251,6 +278,14 @@ class VlcDesktopPlayer(
          */
         onClick: () -> Unit = {},
         onKey: (Int) -> Boolean = { false },
+        /**
+         * A double click, for full screen. When given, a single click waits out the double-click
+         * interval before running [onClick]: otherwise the first click of a double paused the
+         * film and the second resumed it, every time somebody went full screen.
+         */
+        onDoubleClick: (() -> Unit)? = null,
+        /** The wheel over the picture, in notches: negative is away from the user. */
+        onWheel: (Int) -> Unit = {},
     ): JPanel {
         val canvas =
             object : Canvas() {
@@ -299,6 +334,10 @@ class VlcDesktopPlayer(
                         }
                     },
                 )
+                addMouseWheelListener { event ->
+                    onPointerActivity()
+                    onWheel(event.wheelRotation)
+                }
                 // A click on the video counts as activity, so tapping the picture brings the
                 // controls back the way it does in every other player.
                 addMouseListener(
@@ -312,7 +351,29 @@ class VlcDesktopPlayer(
                             // use onPointerActivity for that: activity fires on movement, so the
                             // audio would follow the pointer across the grid — worse than the
                             // control not working at all.
-                            onClick()
+                            if (onDoubleClick == null) onClick()
+                        }
+
+                        private var pendingClick: javax.swing.Timer? = null
+
+                        override fun mouseClicked(event: java.awt.event.MouseEvent) {
+                            val doubleClick = onDoubleClick ?: return
+                            if (!SwingUtilities.isLeftMouseButton(event)) return
+                            if (event.clickCount >= 2) {
+                                pendingClick?.stop()
+                                pendingClick = null
+                                doubleClick()
+                            } else {
+                                val interval =
+                                    (java.awt.Toolkit.getDefaultToolkit()
+                                        .getDesktopProperty("awt.multiClickInterval") as? Int) ?: 400
+                                pendingClick?.stop()
+                                pendingClick =
+                                    javax.swing.Timer(interval) { onClick() }.apply {
+                                        isRepeats = false
+                                        start()
+                                    }
+                            }
                         }
 
                         override fun mouseEntered(event: java.awt.event.MouseEvent) = onPointerActivity()
@@ -387,6 +448,8 @@ class VlcDesktopPlayer(
     }
 
     fun seekBy(millis: Double) {
+        // A live channel has no duration to seek within: clamping to zero sent it to the start.
+        if (snapshot.durationMillis <= 0.0) return
         val target =
             (snapshot.positionMillis + millis)
                 .coerceIn(0.0, snapshot.durationMillis.coerceAtLeast(0.0))
@@ -441,7 +504,11 @@ class VlcDesktopPlayer(
         pendingBrightness = safe
     }
 
-    fun setVolume(value: Double) {
+    /**
+     * [remember] is false for muting: silencing one title must not start the next one silent.
+     */
+    fun setVolume(value: Double, remember: Boolean = true) {
+        if (remember) rememberedVolume = value.coerceIn(0.0, 1.0)
         val safe = value.coerceIn(0.0, 1.0)
         snapshot = snapshot.copy(volume = safe)
         executeCommand("volume", mapOf("val" to (safe * VLC_VOLUME_MAX).toInt().toString()))
@@ -830,10 +897,8 @@ class VlcDesktopPlayer(
         mediaStartedAt = System.currentTimeMillis()
         // Rejected submissions are expected once dispose has shut the executor down; without the
         // guard the closing player threw RejectedExecutionException out of the control thread.
+        if (request.startPositionMillis > 0L) pendingSeekMillis = request.startPositionMillis
         runCatching {
-            if (request.startPositionMillis > 0L) {
-                executor.schedule({ seekToMillis(request.startPositionMillis) }, 2, TimeUnit.SECONDS)
-            }
             executor.scheduleWithFixedDelay(::pollState, 250, 500, TimeUnit.MILLISECONDS)
         }
     }
@@ -889,11 +954,26 @@ class VlcDesktopPlayer(
             // A real ending leaves the position at or near the duration. A track switch leaves it
             // wherever the user was, so the position is what tells the two apart.
             val positionSeconds = status.long("time")
+            if (playing && lengthSeconds > 0L) {
+                lastKnownLengthSeconds = lengthSeconds
+                lastKnownPositionSeconds = positionSeconds
+                pendingSeekMillis?.let { target ->
+                    pendingSeekMillis = null
+                    seekToMillis(target)
+                }
+            }
             val switchingTrack = System.currentTimeMillis() < switchingTrackUntil
+            // Also when the engine has already cleared the time and length on reaching the end: the
+            // last position seen while playing was within a moment of the end, so this finished.
+            // Missing that case is what left an episode sitting on its last frame, with nothing
+            // to start the next one.
             val ended =
                 everPlayed &&
                     !switchingTrack &&
-                    isEnded(stateName, positionSeconds, lengthSeconds)
+                    (
+                        isEnded(stateName, positionSeconds, lengthSeconds) ||
+                            isEnded(stateName, lastKnownPositionSeconds, lastKnownLengthSeconds)
+                    )
             val tracks = status.readTracks()
 
             // The first title of a session often stops without ever playing: VLC has to bring up
@@ -918,9 +998,22 @@ class VlcDesktopPlayer(
             // still working the duration out — neither is a film, and a film always reports one
             // once it has started. Read from the engine rather than carried on the request because
             // the engine is what actually knows.
-            val liveStream = lengthSeconds <= 0L
+            //
+            // A title that has ever reported a length is a film, even if the engine has just cleared
+            // it: VLC drops the length with the input when the connection goes, and reading that as
+            // "live" reopened a film from the beginning.
+            val liveStream = lengthSeconds <= 0L && lastKnownLengthSeconds <= 0L
+            // A film that stopped short of its end lost its connection; it did not finish.
+            val filmDropped =
+                isFilmDrop(
+                    everPlayed = everPlayed,
+                    liveStream = liveStream,
+                    ended = ended,
+                    lastPositionSeconds = lastKnownPositionSeconds,
+                    lastLengthSeconds = lastKnownLengthSeconds,
+                )
 
-            val recoverable = !everPlayed || liveStream
+            val recoverable = !everPlayed || liveStream || filmDropped
 
             // How long this player has looked unhealthy, so a momentary stop is not treated as a
             // drop. Reset the instant playback resumes, so two brief stops minutes apart never add
@@ -1004,8 +1097,11 @@ class VlcDesktopPlayer(
                         control.command("pl_empty")
                         control.command("in_play", mapOf("input" to request.uri.toVlcInput()))
                         mediaStartedAt = System.currentTimeMillis()
+                        // Back to where the viewer was, once the stream is playing again.
+                        if (filmDropped) pendingSeekMillis = lastKnownPositionSeconds * 1_000L
                     }
                 }
+                snapshot = snapshot.copy(reconnecting = everPlayed, playing = false)
                 return@runCatching
             }
 
@@ -1040,11 +1136,19 @@ class VlcDesktopPlayer(
                     subtitleTracks = tracks.subtitles,
                     activeAudioTrackId = tracks.activeAudio,
                     activeSubtitleTrackId = tracks.activeSubtitle,
+                    // Said while a drop is being repaired, so a still picture reads as "working on
+                    // it" rather than as a frozen app.
+                    reconnecting = everPlayed && !healthy && recoverable && !ended,
                     errorMessage =
-                        if (!ready && System.currentTimeMillis() - mediaStartedAt > START_TIMEOUT_MILLIS) {
-                            text.playerStalled
-                        } else {
-                            null
+                        when {
+                            !ready && System.currentTimeMillis() - mediaStartedAt > START_TIMEOUT_MILLIS ->
+                                text.playerStalled
+                            // Out of attempts on a film that dropped: say so and offer the retry,
+                            // instead of sitting on a frozen frame.
+                            filmDropped && !mayReconnect(liveStream = false, consecutiveFailures = startRetries.get()) &&
+                                shouldTreatStopAsDrop(unhealthyForMillis, networkCachingMillis) ->
+                                text.playerStopped
+                            else -> null
                         },
                 )
         }.onFailure {
@@ -1460,6 +1564,29 @@ internal const val DEFAULT_NETWORK_CACHING_MILLIS = 1_500
  */
 @Volatile
 internal var pendingBrightness: Double = 1.0
+
+/** The volume the viewer last chose, carried to the next title for the rest of the session. */
+@Volatile
+internal var rememberedVolume: Double = 0.8
+
+/**
+ * Whether a film that stopped had in fact lost its connection rather than finished.
+ *
+ * Judged on the last position seen while playing, because the engine clears both the time and the
+ * length when the input goes.
+ */
+internal fun isFilmDrop(
+    everPlayed: Boolean,
+    liveStream: Boolean,
+    ended: Boolean,
+    lastPositionSeconds: Long,
+    lastLengthSeconds: Long,
+): Boolean =
+    everPlayed &&
+        !liveStream &&
+        !ended &&
+        lastLengthSeconds > 0L &&
+        lastPositionSeconds < lastLengthSeconds - END_TOLERANCE_SECONDS
 
 /**
  * The buffer each multiview tile asks for.

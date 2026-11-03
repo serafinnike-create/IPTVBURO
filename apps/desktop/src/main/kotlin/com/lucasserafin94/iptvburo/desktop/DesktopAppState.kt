@@ -126,6 +126,7 @@ import com.lucasserafin94.iptvburo.domain.model.Reminder
 import com.lucasserafin94.iptvburo.domain.model.ReminderDigest
 import com.lucasserafin94.iptvburo.domain.model.ReminderPolicy
 import com.lucasserafin94.iptvburo.domain.model.ResumeDecision
+import com.lucasserafin94.iptvburo.xtream.XtreamEpisode
 import com.lucasserafin94.iptvburo.domain.model.SeasonalCollection
 import com.lucasserafin94.iptvburo.domain.model.SeasonalCollections
 import com.lucasserafin94.iptvburo.domain.model.SeriesChange
@@ -1310,6 +1311,39 @@ class DesktopAppState(
 
     /** What is playing, so a failed stream can be asked for from a different list. */
     private var lastPlaybackTarget: XtreamPlaybackTarget? = null
+
+    /**
+     * The episode after the one playing, or null.
+     *
+     * Only from the series page that is open: its episode list is the one loaded, and an episode
+     * started from Continue watching may belong to a different series than the page on screen.
+     */
+    fun nextEpisodeAfterPlaying(): XtreamEpisode? {
+        val playing = lastPlaybackTarget as? XtreamPlaybackTarget.Episode ?: return null
+        val details = (seriesDetailsStatus as? SeriesDetailsStatus.Loaded)?.details ?: return null
+        if (details.providerId != playing.seriesId) return null
+        return nextEpisodeIn(details.episodes, playing.episode)
+    }
+
+    /**
+     * A playback request for [nextEpisodeAfterPlaying], or null at the end of the series.
+     *
+     * The content key is the playing one with its season and episode replaced, which is exactly the
+     * key the series page would have built: progress and Continue watching then agree with it.
+     */
+    fun prepareNextEpisode(): DesktopPlaybackRequest? {
+        val playing = lastPlaybackTarget as? XtreamPlaybackTarget.Episode ?: return null
+        val next = nextEpisodeAfterPlaying() ?: return null
+        val seriesKey = playing.contentKey.substringBeforeLast("|s")
+        val target =
+            XtreamPlaybackTarget.Episode(
+                seriesId = playing.seriesId,
+                episode = next,
+                contentKey = "$seriesKey|s${next.seasonNumber}e${next.episodeNumber ?: 0}",
+            )
+        val resumeAt = (resumeDecision(target) as? ResumeDecision.ResumeFrom)?.positionMs ?: 0L
+        return prepareXtreamPlayback(target, next.title, resumeAt)
+    }
 
     /**
      * The saved list the open session is, so the merge does not add it again.
@@ -8579,3 +8613,23 @@ data class DownloadEntry(
     val artworkUrl: String?,
     val state: DownloadState,
 )
+
+/**
+ * The episode after [current] in [episodes], by season and then episode number, or null.
+ *
+ * Ordered by number rather than list position because providers do not reliably send episodes in
+ * order; an episode without a number cannot be placed in the sequence.
+ */
+internal fun nextEpisodeIn(
+    episodes: List<XtreamEpisode>,
+    current: XtreamEpisode,
+): XtreamEpisode? {
+    val currentNumber = current.episodeNumber ?: return null
+    val ordered =
+        episodes
+            .filter { it.episodeNumber != null }
+            .sortedWith(compareBy<XtreamEpisode>({ it.seasonNumber }, { it.episodeNumber }))
+    val index = ordered.indexOfFirst { it.seasonNumber == current.seasonNumber && it.episodeNumber == currentNumber }
+    if (index < 0) return null
+    return ordered.getOrNull(index + 1)
+}
