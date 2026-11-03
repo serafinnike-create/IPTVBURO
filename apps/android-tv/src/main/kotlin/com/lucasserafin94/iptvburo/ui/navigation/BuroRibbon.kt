@@ -54,6 +54,7 @@ private val allRibbonDestinations =
         RibbonDestination(AppSection.CONTINUE_WATCHING, R.string.nav_continue_watching),
         RibbonDestination(AppSection.HISTORY, R.string.nav_history),
         RibbonDestination(AppSection.SUBSCRIPTIONS, R.string.nav_subscriptions),
+        RibbonDestination(AppSection.WEB_SERVICES, R.string.nav_godorama),
         RibbonDestination(AppSection.DOWNLOADS, R.string.buro_nav_downloads),
         RibbonDestination(AppSection.PROFILE, R.string.buro_nav_profile),
         RibbonDestination(AppSection.SOURCES, R.string.nav_sources),
@@ -70,12 +71,15 @@ private val allRibbonDestinations =
 internal fun availableRibbonSections(
     offlineSupported: Boolean = AndroidPlatformCapabilities.offlineSupported,
     subscriptionsVisible: Boolean = false,
+    /** GoDorama, for adult profiles only. */
+    webServicesVisible: Boolean = false,
 ): List<AppSection> =
     allRibbonDestinations
         .asSequence()
         .map(RibbonDestination::section)
         .filter { section -> section != AppSection.DOWNLOADS || offlineSupported }
         .filter { section -> section != AppSection.SUBSCRIPTIONS || subscriptionsVisible }
+        .filter { section -> section != AppSection.WEB_SERVICES || webServicesVisible }
         .toList()
 
 /**
@@ -95,12 +99,14 @@ fun BuroRibbon(
     activeProfileName: String? = null,
     isKidsProfile: Boolean = false,
     subscriptionsVisible: Boolean = false,
+    webServicesVisible: Boolean = false,
 ) {
     val colors = BuroTheme.colors
     val availableSections =
         availableRibbonSections(
             offlineSupported = offlineSupported,
             subscriptionsVisible = subscriptionsVisible,
+            webServicesVisible = webServicesVisible,
         )
     val availableDestinations =
         allRibbonDestinations.filter { destination -> destination.section in availableSections }

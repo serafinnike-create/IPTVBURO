@@ -600,6 +600,7 @@ private fun IptvBuroRoot(
                 onOpenWebService = viewModel::openWebService,
                 onSetWebServiceEnabled = viewModel::setWebServiceEnabled,
                 onWebServiceSignedOut = viewModel::onWebServiceSignedOut,
+                onEnableAndOpenWebService = viewModel::enableAndOpenWebService,
                 onOpenHomeItem = viewModel::openStory,
                 onRememberHomeFocus = viewModel::rememberLastFocusedHomeItem,
                 onBack = { viewModel.goBack() },

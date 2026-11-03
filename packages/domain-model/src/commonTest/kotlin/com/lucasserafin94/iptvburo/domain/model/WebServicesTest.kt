@@ -94,6 +94,13 @@ class WebServicesTest {
     }
 
     @Test
+    fun `GoDorama turns on without the 18+ question but stays off Kids`() {
+        assertFalse(godorama.asksAgeConfirmation)
+        assertFalse(WebServicePolicy.isOfferedTo(godorama, ViewerKind.KIDS))
+        assertTrue(godorama.copy(asksAgeConfirmation = true).asksAgeConfirmation)
+    }
+
+    @Test
     fun `a brand must open over https`() {
         assertFailsWith<IllegalArgumentException> { godorama.copy(homeUrl = "http://godorama.com/") }
     }

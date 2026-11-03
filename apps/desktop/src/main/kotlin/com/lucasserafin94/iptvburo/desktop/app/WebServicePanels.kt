@@ -187,7 +187,7 @@ fun WebServiceSettingsSection(appState: DesktopAppState) {
                 androidx.compose.material3.Switch(
                     checked = enabled,
                     onCheckedChange = { on ->
-                        if (on && brand.minimumAge > 0) {
+                        if (on && brand.asksAgeConfirmation) {
                             confirming = brand
                         } else {
                             appState.setWebServiceEnabled(brand.id, on)
@@ -262,7 +262,16 @@ fun WebServicesPage(
                 Spacer(Modifier.height(BuroSpacing.Xs))
                 Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm)) {
                     Button(
-                        onClick = { if (enabled) open(brand) else confirming = brand },
+                        onClick = {
+                            when {
+                                enabled -> open(brand)
+                                brand.asksAgeConfirmation -> confirming = brand
+                                else -> {
+                                    appState.setWebServiceEnabled(brand.id, true)
+                                    open(brand)
+                                }
+                            }
+                        },
                         modifier = Modifier.height(48.dp),
                         shape = BuroRadius.Small,
                         colors =

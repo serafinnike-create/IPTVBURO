@@ -114,6 +114,7 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.HeartBroken
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.OndemandVideo
 import androidx.compose.material.icons.rounded.Router
 import androidx.compose.material.icons.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.Refresh
@@ -223,6 +224,8 @@ fun AppShellScreen(
     onSetWebServiceEnabled: (String, Boolean) -> Unit = { _, _ -> },
     /** The browser view cleared its cookies after the user signed out of the service. */
     onWebServiceSignedOut: () -> Unit = {},
+    /** Turns a service on (18+ already answered) and opens it straight away. */
+    onEnableAndOpenWebService: (String) -> Unit = {},
     onOpenCategory: (CategoryUi) -> Unit,
     onOpenChannel: (ChannelUi) -> Unit,
     /** Moves the guide to a channel, which fetches its schedule and those around it. */
@@ -596,6 +599,7 @@ fun AppShellScreen(
                         activeProfileName = state.activeProfile?.name,
                         isKidsProfile = state.activeProfile?.isKids == true,
                         subscriptionsVisible = state.subscriptions.capability.isVisible,
+                        webServicesVisible = state.canUseWebServices,
                     )
                 }
 
@@ -656,6 +660,20 @@ fun AppShellScreen(
                             webServices = state.visibleWebServices,
                             onOpenWebService = onOpenWebService,
                         ) }
+
+                        AppContent.WebServices ->
+                            WebServicesPage(
+                                services =
+                                    if (state.canUseWebServices) {
+                                        com.lucasserafin94.iptvburo.domain.model.WebServices.all
+                                    } else {
+                                        emptyList()
+                                    },
+                                enabledIds = state.enabledWebServiceIds,
+                                onEnableAndOpen = onEnableAndOpenWebService,
+                                onOpen = onOpenWebService,
+                                onDisable = { id -> onSetWebServiceEnabled(id, false) },
+                            )
 
                         is AppContent.WebService ->
                             // Re-checked against what this profile may see, so a stale destination
@@ -1006,6 +1024,7 @@ fun AppShellScreen(
                 subscriptionDaysLeft = state.subscriptionDaysLeft,
                 subscriptionExpiresOn = state.subscriptionExpiresOn,
                 subscriptionsVisible = state.subscriptions.capability.isVisible,
+                webServicesVisible = state.canUseWebServices,
                 offlineSupported = offlineSupported,
                 onSelect = { section ->
                     showMobileNavigation = false
@@ -1147,6 +1166,7 @@ private fun AppSection.isRibbonDestination(offlineSupported: Boolean): Boolean =
         AppSection.HISTORY,
         AppSection.REMINDERS,
         AppSection.SUBSCRIPTIONS,
+        AppSection.WEB_SERVICES,
         AppSection.SOURCES,
         AppSection.SETTINGS,
         -> true
@@ -1332,6 +1352,7 @@ private fun MobileNavigationDrawer(
     /** The day that subscription ends, as the viewer would write it. */
     subscriptionExpiresOn: String?,
     subscriptionsVisible: Boolean,
+    webServicesVisible: Boolean = false,
     offlineSupported: Boolean,
     onSelect: (AppSection) -> Unit,
     onDismiss: () -> Unit,
@@ -1408,7 +1429,7 @@ private fun MobileNavigationDrawer(
                     .weight(1f)
                     .verticalScroll(rememberScrollState()),
             ) {
-                mobileDestinations(subscriptionsVisible, offlineSupported).forEach { destination ->
+                mobileDestinations(subscriptionsVisible, offlineSupported, webServicesVisible).forEach { destination ->
                     MobileDrawerItem(
                         label = stringResource(destination.section.ribbonLabelResource()),
                         icon = destination.icon,
@@ -1460,6 +1481,7 @@ private data class MobileDestination(val section: AppSection, val icon: ImageVec
 private fun mobileDestinations(
     subscriptionsVisible: Boolean,
     offlineSupported: Boolean,
+    webServicesVisible: Boolean = false,
 ): List<MobileDestination> =
     buildList {
         add(MobileDestination(AppSection.HOME, Icons.Rounded.Home))
@@ -1483,6 +1505,9 @@ private fun mobileDestinations(
         // here is missing outright — this is where Assinaturas has to appear once it is real.
         if (subscriptionsVisible) {
             add(MobileDestination(AppSection.SUBSCRIPTIONS, Icons.Rounded.VideoLibrary))
+        }
+        if (webServicesVisible) {
+            add(MobileDestination(AppSection.WEB_SERVICES, Icons.Rounded.OndemandVideo))
         }
         if (offlineSupported) {
             add(MobileDestination(AppSection.DOWNLOADS, Icons.Rounded.Folder))
@@ -1582,6 +1607,7 @@ private fun AppSection.ribbonLabelResource(): Int =
         AppSection.HISTORY -> R.string.nav_history
         AppSection.REMINDERS -> R.string.nav_reminders
         AppSection.SUBSCRIPTIONS -> R.string.nav_subscriptions
+        AppSection.WEB_SERVICES -> R.string.nav_godorama
         AppSection.DOWNLOADS -> R.string.buro_nav_downloads
         AppSection.SEARCH -> R.string.buro_nav_search
         AppSection.PROFILE -> R.string.buro_nav_profile

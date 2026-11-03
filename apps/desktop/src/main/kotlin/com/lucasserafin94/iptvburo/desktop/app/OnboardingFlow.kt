@@ -747,7 +747,13 @@ fun AccountSetupGate(
             com.lucasserafin94.iptvburo.domain.model.WebServices.all.forEach { brand ->
                 Spacer(Modifier.height(BuroSpacing.Md))
                 OutlinedButton(
-                    onClick = { confirmingService = brand },
+                    onClick = {
+                        if (brand.asksAgeConfirmation) {
+                            confirmingService = brand
+                        } else {
+                            onUseOnlyWebService(profileName, avatarIndex, brand.id)
+                        }
+                    },
                     enabled = profileName.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(46.dp),
                     shape = BuroRadius.Small,

@@ -423,6 +423,14 @@ enum class AppSection {
     HISTORY,
     REMINDERS,
     SUBSCRIPTIONS,
+
+    /**
+     * GoDorama: turn it on, open it.
+     *
+     * Its own destination rather than only a row inside Fontes, which is where nobody looked for
+     * it. Shown to adult profiles only.
+     */
+    WEB_SERVICES,
     DOWNLOADS,
     SEARCH,
     PROFILE,
@@ -563,6 +571,9 @@ sealed interface AppContent {
     ) : AppContent
 
     data object Settings : AppContent
+
+    /** The GoDorama destination: what the service is, and the button that turns it on or opens it. */
+    data object WebServices : AppContent
 
     /**
      * A web service's own page, open in BURO's browser view.

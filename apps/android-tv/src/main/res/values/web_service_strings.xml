@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="nav_godorama" translatable="false">GoDorama</string>
     <string name="web_service_section_title">Services</string>
     <string name="web_service_tagline">Short vertical drama series · sign in with your own account</string>
     <string name="web_service_open">Open %1$s</string>

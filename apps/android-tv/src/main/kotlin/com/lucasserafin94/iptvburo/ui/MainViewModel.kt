@@ -412,6 +412,25 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Turns a service on and opens it in one step, once the 18+ question has been answered.
+     *
+     * Written and then opened in order rather than through [openWebService], which reads the
+     * observed state — that would not have caught up with the write yet, and the first press would
+     * turn the service on without opening it.
+     */
+    fun enableAndOpenWebService(serviceId: String) {
+        val profile = mutableState.value.activeProfile ?: return
+        val brand = WebServices.byId(serviceId) ?: return
+        if (!WebServicePolicy.isOfferedTo(brand, profile.viewerKind())) return
+        if (!brand.supports(WebServiceCapability.EMBEDDED_PAGE)) return
+        viewModelScope.launch {
+            webServiceSettings.setEnabled(profile.id, brand.id, true)
+            val clearFirst = runCatching { webServiceSettings.claimSession(profile.id) }.getOrDefault(true)
+            navigate(AppContent.WebService(serviceId = brand.id, clearSessionFirst = clearFirst))
+        }
+    }
+
     /** The view cleared its cookies after the user signed out; nobody owns the session now. */
     fun onWebServiceSignedOut() {
         viewModelScope.launch { runCatching { webServiceSettings.releaseSession() } }
@@ -873,6 +892,12 @@ class MainViewModel @Inject constructor(
             }
 
             AppSection.SEARCH -> updateDestination(section, AppContent.SectionPlaceholder(section))
+
+            // Adult profiles only, here as well as in the menus that offer it.
+            AppSection.WEB_SERVICES ->
+                if (mutableState.value.canUseWebServices) {
+                    updateDestination(section, AppContent.WebServices)
+                }
         }
     }
 

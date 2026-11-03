@@ -46,6 +46,14 @@ data class WebServiceBrand(
     /** The age the service's own terms ask for. 0 when it asks for none. */
     val minimumAge: Int,
     val capabilities: Set<WebServiceCapability>,
+    /**
+     * Whether turning the service on asks "Tenho 18 anos ou mais" first.
+     *
+     * Separate from [minimumAge], which keeps the service away from Kids and Guest whatever this
+     * says: the confirmation is a product choice the owner can make, the age in the service's own
+     * terms is not.
+     */
+    val asksAgeConfirmation: Boolean = minimumAge > 0,
 ) {
     init {
         require(id.isNotBlank()) { "A web service needs an id" }
@@ -66,7 +74,11 @@ object WebServices {
      * Embedded page and account history only. Its terms (godorama.com/termos) allow watching "pelo
      * site ou pelo app instalado a partir dele", forbid robots, scripts and automated access, and
      * forbid downloading — so there are no native rails, no native playback and no offline copies
-     * until the service offers an official feed. Its terms also say the service is for adults.
+     * until the service offers an official feed.
+     *
+     * Its terms (1 October 2026) say the service is for adults, so it stays off Kids and Guest
+     * profiles. The owner reports the catalogue is general audience now and asked for no 18+
+     * question, so an adult profile turns it on without one.
      */
     val GODORAMA =
         WebServiceBrand(
@@ -76,6 +88,7 @@ object WebServices {
             allowedHosts = setOf("godorama.com"),
             minimumAge = 18,
             capabilities = setOf(WebServiceCapability.EMBEDDED_PAGE, WebServiceCapability.ACCOUNT_HISTORY),
+            asksAgeConfirmation = false,
         )
 
     val all: List<WebServiceBrand> = listOf(GODORAMA)
