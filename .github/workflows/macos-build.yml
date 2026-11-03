@@ -31,7 +31,8 @@ jobs:
           # each one architecture, and an Intel build on Apple Silicon would run under Rosetta.
           - runner: macos-14
             arch: arm64
-          - runner: macos-13
+          # macos-13 is retired and its jobs queue for ever; this is GitHub's Intel image now.
+          - runner: macos-15-intel
             arch: x64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -56,6 +57,7 @@ jobs:
       - name: Bundle libVLC and run the Mac checks
         run: |
           chmod +x gradlew
+          set -o pipefail
           # The player drawing real frames through the bundled libVLC, the Keychain round trip,
           # and the updater choosing this machine's disk image. The full desktop suite stays on
           # Windows, where its Windows-only parts can run.
@@ -65,11 +67,33 @@ jobs:
               --tests '*LocalSecretProtectorTest*' \
               --tests '*GitHubReleaseUpdaterTest*' \
               --tests '*TmdbImageSizes*' \
-            --stacktrace
+            --stacktrace 2>&1 | tee gradle-checks.log
+
+      # The logs need a signed-in account to read; annotations do not. On a failure the reason is
+      # copied into them, so a failed Mac build can be diagnosed from the public run page.
+      - name: Report why the checks failed
+        if: failure()
+        run: |
+          if [ -f gradle-checks.log ]; then
+            reason=$(grep -E "What went wrong|FAILED|Exception|error:|e: " -A4 gradle-checks.log | head -60 | tr '\n' ' ' | cut -c1-3500)
+            echo "::error title=gradle::${reason}"
+          fi
+          for f in apps/desktop/build/test-results/test/*.xml; do
+            [ -f "$f" ] || continue
+            if grep -q "<failure" "$f"; then
+              msg=$(grep -o '<failure message="[^"]*"' "$f" | head -3 | cut -c1-1500 | tr '\n' ' ')
+              echo "::error title=$(basename "$f")::$msg"
+            fi
+          done
 
       - name: Build the disk image
         run: |
-          ./gradlew :apps:desktop:packageDmg --stacktrace
+          set -o pipefail
+          ./gradlew :apps:desktop:packageDmg --stacktrace 2>&1 | tee gradle-dmg.log || {
+            reason=$(grep -E "What went wrong|FAILED|Exception|error" -A4 gradle-dmg.log | head -60 | tr '\n' ' ' | cut -c1-3500)
+            echo "::error title=packageDmg::${reason}"
+            exit 1
+          }
           mkdir -p artifacts
           image=$(ls apps/desktop/build/compose/binaries/main/dmg/*.dmg | head -n 1)
           test -n "$image"
