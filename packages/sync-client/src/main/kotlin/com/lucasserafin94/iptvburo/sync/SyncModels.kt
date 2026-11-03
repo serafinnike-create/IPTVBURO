@@ -28,6 +28,13 @@ sealed interface SyncEntry {
     val title: String
     val year: Int?
 
+    /**
+     * When this was last changed on the device that holds it: when the favourite was added, when
+     * the film was last watched. It is what the server compares to decide which edit wins, so an
+     * old edit synced late never overwrites a newer one.
+     */
+    val changedAtMillis: Long
+
     /** A title marked as a favourite by [profile]. */
     data class Favorite(
         override val profile: String,
@@ -35,6 +42,7 @@ sealed interface SyncEntry {
         override val title: String,
         override val year: Int?,
         val kind: String,
+        override val changedAtMillis: Long = 0L,
     ) : SyncEntry
 
     /** Where [profile] left a film or an episode. */
@@ -47,6 +55,7 @@ sealed interface SyncEntry {
         val positionMillis: Long,
         val durationMillis: Long,
         val completed: Boolean,
+        override val changedAtMillis: Long = 0L,
     ) : SyncEntry
 
     /** The record key: a hash of what this is, for whom and for which title — so it names no title. */
