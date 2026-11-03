@@ -667,11 +667,23 @@ class DesktopAppState(
      * or a Windows machine whose engine failed to start — in the system browser, which is what the
      * service's own terms describe anyway.
      */
-    fun openWebService(serviceId: String): ExternalOpenResult? {
+    fun openWebService(serviceId: String): ExternalOpenResult? =
+        openWebService(serviceId, engineAvailable = WebServiceBrowser.isAvailable())
+
+    /** [engineAvailable] is a parameter so tests can open the page without starting Chromium. */
+    internal fun openWebService(
+        serviceId: String,
+        engineAvailable: Boolean,
+    ): ExternalOpenResult? {
         val brand = visibleWebServices.firstOrNull { it.id == serviceId } ?: return ExternalOpenResult.Failed
         if (!brand.supports(WebServiceCapability.EMBEDDED_PAGE)) return ExternalOpenResult.Failed
-        if (WebServiceBrowser.isAvailable()) {
+        if (engineAvailable) {
             openedWebService = brand
+            // The page belongs to the GoDorama tab, wherever it was opened from — the Home card
+            // included — so the sidebar shows where the viewer is and every other tab stays
+            // reachable.
+            favoritesOnly = false
+            destination = DesktopDestination.WEB_SERVICES
             return null
         }
         return runCatching { openUriExternally(URI(brand.homeUrl)) }.getOrDefault(ExternalOpenResult.Failed)
@@ -680,6 +692,17 @@ class DesktopAppState(
     fun closeWebService() {
         openedWebService = null
     }
+
+    /**
+     * Whether the service's page is what the content area shows.
+     *
+     * Only while the GoDorama tab is the one selected. It used to be drawn whenever a page was open,
+     * over every destination: once signed in, Início, Filmes, Séries and Pesquisa all showed
+     * GoDorama, and the only way back was its own Fechar button — reported as every tab being stuck
+     * on GoDorama. Leaving the tab now leaves the page; its sign-in is saved as the page goes.
+     */
+    val showsWebServicePage: Boolean
+        get() = openedWebService != null && destination == DesktopDestination.WEB_SERVICES
 
     /**
      * The GoDorama tab: straight to the service's page, where the user signs in once.

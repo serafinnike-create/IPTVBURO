@@ -592,10 +592,10 @@ fun DesktopApp(
                         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         // Music is checked before the source, because it is fed by its own playlist
                         // and does not need the video provider to be connected at all.
-                        // The service's page takes the whole content area while it is open, so no
-                        // other native surface — the banner trailer above all — is composed under
-                        // it and drawn through it.
-                        if (appState.openedWebService != null) {
+                        // The service's page takes the whole content area while its tab is selected,
+                        // so no other native surface — the banner trailer above all — is composed
+                        // under it and drawn through it. Any other tab replaces it.
+                        if (appState.showsWebServicePage) {
                             WebServiceOverlay(appState)
                         } else if (visibleDestination == DesktopDestination.WEB_SERVICES && appState.canUseWebServices) {
                             WebServicesPage(

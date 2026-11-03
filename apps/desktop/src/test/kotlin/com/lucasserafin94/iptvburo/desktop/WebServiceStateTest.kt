@@ -73,6 +73,29 @@ class WebServiceStateTest {
             assertEquals(listOf(WebServices.GODORAMA), state.visibleWebServices)
         }
 
+    /**
+     * Once GoDorama was open, every other tab showed it too — Início, Filmes, Séries, Pesquisa —
+     * until its own Fechar button was found. Leaving the tab must leave the page.
+     */
+    @Test
+    fun `other tabs stay reachable after GoDorama is opened`() =
+        withState { state, _ ->
+            state.openWebService(WebServices.GODORAMA.id, engineAvailable = true)
+            assertEquals(DesktopDestination.WEB_SERVICES, state.destination)
+            assertTrue(state.showsWebServicePage)
+
+            state.openHome()
+            assertEquals(DesktopDestination.HOME, state.destination)
+            assertFalse(state.showsWebServicePage, "Início still showed GoDorama")
+
+            state.openSearch()
+            assertFalse(state.showsWebServicePage, "Pesquisa still showed GoDorama")
+
+            // And the tab takes the viewer straight back to the page.
+            state.openWebService(WebServices.GODORAMA.id, engineAvailable = true)
+            assertTrue(state.showsWebServicePage)
+        }
+
     private fun withState(block: (DesktopAppState, DesktopUserStore) -> Unit) {
         val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
         val temporary = Files.createTempDirectory("iptvburo-web-services")
