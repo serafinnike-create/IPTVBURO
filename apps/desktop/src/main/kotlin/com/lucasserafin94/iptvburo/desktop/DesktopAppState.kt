@@ -52,6 +52,7 @@ import com.lucasserafin94.iptvburo.desktop.model.XtreamSessionSummary
 import com.lucasserafin94.iptvburo.desktop.platform.CastReceiver
 import com.lucasserafin94.iptvburo.desktop.platform.CastTarget
 import com.lucasserafin94.iptvburo.desktop.platform.ExternalOpenResult
+import com.lucasserafin94.iptvburo.desktop.platform.AppWindowLauncher
 import com.lucasserafin94.iptvburo.desktop.platform.openUriExternally
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackProgressCoordinator
 import com.lucasserafin94.iptvburo.desktop.playback.DesktopPlaybackRequest
@@ -665,16 +666,43 @@ class DesktopAppState(
     }
 
     /**
-     * Opens a service this profile may see.
+     * Opens a service this profile may see, in a window of its own (see [AppWindowLauncher]).
      *
-     * In the app's own window where the embedded browser exists (Windows); otherwise — a Mac today,
-     * or a Windows machine whose engine failed to start — in the system browser, which is what the
-     * service's own terms describe anyway.
+     * Not in the embedded browser: that engine has no licensed video codecs and no Widevine, and
+     * the service refused to play anything there — "Este vídeo não pode ser reproduzido neste
+     * navegador". Edge or Chrome in app mode plays it, keeps this profile's sign-in in a folder of
+     * its own, and looks like part of the app. With neither installed, the default browser opens.
      */
-    fun openWebService(serviceId: String): ExternalOpenResult? =
-        openWebService(serviceId, engineAvailable = WebServiceBrowser.isAvailable())
+    fun openWebService(serviceId: String): ExternalOpenResult? {
+        val brand = visibleWebServices.firstOrNull { it.id == serviceId } ?: return ExternalOpenResult.Failed
+        if (!brand.supports(WebServiceCapability.EMBEDDED_PAGE)) return ExternalOpenResult.Failed
+        val profileId = activeProfileId ?: return ExternalOpenResult.Failed
+        favoritesOnly = false
+        destination = DesktopDestination.WEB_SERVICES
+        if (AppWindowLauncher.open(brand.homeUrl, webServiceProfileDirectory(profileId, brand.id))) return null
+        return runCatching { openUriExternally(URI(brand.homeUrl)) }.getOrDefault(ExternalOpenResult.Failed)
+    }
 
-    /** [engineAvailable] is a parameter so tests can open the page without starting Chromium. */
+    /**
+     * The browser profile folder one BURO profile uses for one service.
+     *
+     * Both parts are ours — a UUID and a constant — but they become a folder name, so anything that
+     * is not plainly safe is replaced rather than trusted.
+     */
+    private fun webServiceProfileDirectory(
+        profileId: String,
+        serviceId: String,
+    ): java.nio.file.Path {
+        val safe = { value: String -> value.replace(Regex("[^A-Za-z0-9-]"), "_").take(64) }
+        return DesktopStorage.localData().resolve("web-profiles").resolve("${safe(profileId)}-${safe(serviceId)}")
+    }
+
+    /**
+     * The page inside the app's own embedded browser.
+     *
+     * Kept for a service that plays in it — it does not need licensed codecs — and for the tests,
+     * which open the page without starting Chromium. GoDorama goes through [openWebService].
+     */
     internal fun openWebService(
         serviceId: String,
         engineAvailable: Boolean,

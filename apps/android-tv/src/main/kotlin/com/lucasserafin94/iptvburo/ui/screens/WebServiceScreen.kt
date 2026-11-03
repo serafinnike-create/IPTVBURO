@@ -230,6 +230,26 @@ internal fun WebServiceScreen(
                                 }
                             webChromeClient =
                                 object : WebChromeClient() {
+                                    /**
+                                     * Protected playback, for the service's own pages only.
+                                     *
+                                     * A page that plays licensed episodes asks for the device's
+                                     * DRM; refused, it tells the viewer this browser cannot play
+                                     * the video. Granted only that one resource, and only to the
+                                     * service — never the camera, the microphone or anything an
+                                     * unknown page asks for.
+                                     */
+                                    override fun onPermissionRequest(request: android.webkit.PermissionRequest) {
+                                        val protectedMedia = android.webkit.PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID
+                                        val fromService =
+                                            WebServicePolicy.navigation(brand, request.origin.toString()) == WebNavigation.StayInside
+                                        if (fromService && protectedMedia in request.resources) {
+                                            request.grant(arrayOf(protectedMedia))
+                                        } else {
+                                            request.deny()
+                                        }
+                                    }
+
                                     override fun onShowCustomView(view: View, callback: CustomViewCallback) {
                                         fullScreenView = view
                                         fullScreenCallback = callback
