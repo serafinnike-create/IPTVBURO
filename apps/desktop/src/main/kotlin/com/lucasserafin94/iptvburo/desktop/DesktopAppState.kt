@@ -1057,7 +1057,21 @@ class DesktopAppState(
                 onboarding = OnboardingStep.Failed(status.message)
                 return
             }
-            val source = sourceLibrary.create(listLabel.ifBlank { profileName })
+            // The same account already saved is reused, not added again. Creating a fresh entry on
+            // every setup is how a machine ended up with a column of identical lists, and with the
+            // library full the next setup failed outright.
+            val source =
+                sourceLibrary.findMatching(server, username)
+                    ?: if (sourceLibrary.isFull()) {
+                        onboarding =
+                            OnboardingStep.Failed(
+                                DesktopStrings.of(language).settingsText.sourceLimitReached
+                                    .format(sourceLibrary.limit),
+                            )
+                        return
+                    } else {
+                        sourceLibrary.create(listLabel.ifBlank { profileName })
+                    }
             sourceLibrary.store(source.id).save(server, username, password)
 
             // Editing an existing profile rather than creating one.

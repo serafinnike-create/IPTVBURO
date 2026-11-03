@@ -3442,7 +3442,6 @@ private fun DesktopProfileGate(
 ) {
     var newName by remember { mutableStateOf("") }
     var kids by remember { mutableStateOf(false) }
-    var avatar by remember { mutableStateOf(0) }
     var confirmingReset by remember { mutableStateOf(false) }
     var showingDeviceCode by remember { mutableStateOf(false) }
     // Which profile is one tap away from being removed. Held here so tapping a second profile
@@ -3597,30 +3596,18 @@ private fun DesktopProfileGate(
             }
             if (profiles.size < 5) {
                 Spacer(Modifier.height(24.dp))
-                // Avatar is chosen before the name so the row reads left to right as one action.
-                // Wrapped rather than in one line: sixteen circles overflow the gate's width.
-                FlowRow(
-                    modifier = Modifier.width(360.dp),
-                    horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
-                    verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs),
-                ) {
-                    BURO_AVATARS.forEachIndexed { index, option ->
-                        BuroInteractiveRow(
-                            onClick = { avatar = index },
-                            selected = avatar == index,
-                            shape = CircleShape,
-                            contentDescription = option.id,
-                        ) {
-                            Box(
-                                modifier = Modifier.size(44.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                BuroProfileAvatar(index = index, size = 38.dp)
-                            }
-                        }
-                    }
+                // No avatar row here. It used to sit above this button, but the profile form it
+                // opens has its own picker, so whatever was chosen here was thrown away — sixteen
+                // circles that did nothing when clicked, on the very first screen of a new install.
+                if (profiles.isEmpty()) {
+                    Text(
+                        text = strings.setupSubtitle,
+                        color = BuroColors.TextMuted,
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(BuroSpacing.Md))
                 }
-                Spacer(Modifier.height(BuroSpacing.Sm))
                 // Adding a profile goes through the account step, where a playlist can be reused or
                 // a new one added. The gate used to create a name-only profile, which then had no
                 // playlist of its own and no way to be given one.

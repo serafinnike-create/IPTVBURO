@@ -160,6 +160,8 @@ data class SettingsStrings(
      */
     val startupAuthenticating: String,
     val startupOrganising: String,
+    /** "%d" is the most lists the app keeps. */
+    val sourceLimitReached: String,
     /** The per-profile TMDb key: what it is for, and that leaving it empty shares the other one. */
     val profileKeyLabel: String,
     val profileKeyHint: String,
@@ -1187,6 +1189,7 @@ data class DesktopStrings(
                                 "de API y pégala en BURO.",
                         startupAuthenticating = "Autenticando…",
                         startupOrganising = "Organizando tu lista…",
+                        sourceLimitReached = "Ya tienes %d listas guardadas, el máximo. Quita una para añadir otra.",
                         profileKeyLabel = "Clave solo de este perfil",
                         profileKeyHint =
                             "Déjalo vacío para usar la misma clave que los demás perfiles. " +
@@ -1971,6 +1974,7 @@ data class DesktopStrings(
                                 "de API e cole-a no BURO.",
                         startupAuthenticating = "Autenticando…",
                         startupOrganising = "Organizando a sua lista…",
+                        sourceLimitReached = "Você já tem %d listas salvas, o máximo. Remova uma para adicionar outra.",
                         profileKeyLabel = "Chave só deste perfil",
                         profileKeyHint =
                             "Deixe em branco para usar a mesma chave dos outros perfis. " +
@@ -2755,6 +2759,7 @@ data class DesktopStrings(
                                 "paste it into BURO.",
                         startupAuthenticating = "Signing in…",
                         startupOrganising = "Organising your list…",
+                        sourceLimitReached = "You already have %d saved lists, the most the app keeps. Remove one to add another.",
                         profileKeyLabel = "Key for this profile only",
                         profileKeyHint =
                             "Leave blank to use the same key as the other profiles. Fill it in for " +
@@ -3537,6 +3542,7 @@ data class DesktopStrings(
                                 "themoviedb.org anlegen, API-Schlüssel anfordern und in BURO einfügen.",
                         startupAuthenticating = "Anmeldung läuft…",
                         startupOrganising = "Ihre Liste wird geordnet…",
+                        sourceLimitReached = "Sie haben bereits %d gespeicherte Listen, das Maximum. Entfernen Sie eine, um eine weitere hinzuzufügen.",
                         profileKeyLabel = "Schlüssel nur für dieses Profil",
                         profileKeyHint =
                             "Leer lassen, um denselben Schlüssel wie die anderen Profile zu " +
@@ -4327,6 +4333,7 @@ data class DesktopStrings(
                                 "API e incollala in BURO.",
                         startupAuthenticating = "Accesso in corso…",
                         startupOrganising = "Organizzazione della tua lista…",
+                        sourceLimitReached = "Hai già %d liste salvate, il massimo. Rimuovine una per aggiungerne un'altra.",
                         profileKeyLabel = "Chiave solo per questo profilo",
                         profileKeyHint =
                             "Lascia vuoto per usare la stessa chiave degli altri profili. " +

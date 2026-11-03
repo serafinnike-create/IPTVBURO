@@ -152,4 +152,17 @@ class XtreamSourceLibraryTest {
             assertTrue(library.sources().isEmpty())
         }
     }
+
+    /**
+     * A full library refuses a new list with a type the setup screen can explain, rather than the
+     * bare `require` that surfaced as "Failed requirement." in a system dialog on first run.
+     */
+    @Test
+    fun `a full library says so instead of failing a requirement`() =
+        withLibrary { library ->
+            repeat(library.limit) { index -> library.create("Lista $index") }
+            assertTrue(library.isFull())
+            kotlin.test.assertFailsWith<SourceLimitReachedException> { library.create("Uma a mais") }
+            assertEquals(library.limit, library.sources().size)
+        }
 }
