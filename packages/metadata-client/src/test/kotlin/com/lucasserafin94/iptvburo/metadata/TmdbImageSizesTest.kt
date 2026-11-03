@@ -43,13 +43,67 @@ class TmdbImageSizesTest {
         }
     }
 
-    /** Beyond the ladder there is nothing better to ask for, so the largest is used. */
+    /** Beyond the ladder the master file is the only thing sharper, so `original` is asked for. */
     @Test
-    fun `a target beyond the ladder takes the largest available`() {
+    fun `a target beyond the ladder takes the original`() {
         assertEquals(
-            "https://image.tmdb.org/t/p/w780/abc123.jpg",
+            "https://image.tmdb.org/t/p/original/abc123.jpg",
             TmdbImageSizes.resizedForWidth(poster, targetWidthPx = 4000),
         )
+    }
+
+    /**
+     * The fault reported as "low quality" backgrounds: a banner 2560 pixels wide was handed the
+     * 1280 backdrop, or — with no hint passed — a 780 poster width, and stretched over the window.
+     */
+    @Test
+    fun `a full-width backdrop takes the original without being told it is one`() {
+        assertEquals(
+            "https://image.tmdb.org/t/p/original/xyz789.jpg",
+            TmdbImageSizes.resizedForWidth(backdrop, targetWidthPx = 2560),
+        )
+    }
+
+    /** A w1280 URL is a backdrop by its own width, so a small slot steps down its own ladder. */
+    @Test
+    fun `a backdrop is recognised from its url`() {
+        assertEquals(
+            "https://image.tmdb.org/t/p/w300/xyz789.jpg",
+            TmdbImageSizes.resizedForWidth(backdrop, targetWidthPx = 280),
+        )
+    }
+
+    /** Providers often send TMDb's cropped sizes; they are read by their own proportions. */
+    @Test
+    fun `cropped provider sizes are understood`() {
+        val tall = "https://image.tmdb.org/t/p/w600_and_h900_bestv2/abc123.jpg"
+        val wide = "https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/xyz789.jpg"
+
+        assertEquals(
+            "https://image.tmdb.org/t/p/w342/abc123.jpg",
+            TmdbImageSizes.resizedForWidth(tall, targetWidthPx = 300),
+        )
+        assertEquals(
+            "https://image.tmdb.org/t/p/original/xyz789.jpg",
+            TmdbImageSizes.resizedForWidth(wide, targetWidthPx = 3000),
+        )
+    }
+
+    /** An image whose kind cannot be told only moves to the width both ladders have. */
+    @Test
+    fun `an original url in a small slot comes down to the shared width`() {
+        assertEquals(
+            "https://image.tmdb.org/t/p/w780/abc123.jpg",
+            TmdbImageSizes.resizedForWidth("https://image.tmdb.org/t/p/original/abc123.jpg", targetWidthPx = 400),
+        )
+    }
+
+    /** A provider path that merely looks like a TMDb size is not TMDb's, and is not rewritten. */
+    @Test
+    fun `a provider url with a width-like segment is left alone`() {
+        val providerArt = "http://provider.example:8080/w500/12345.jpg"
+
+        assertEquals(providerArt, TmdbImageSizes.resizedForWidth(providerArt, targetWidthPx = 900))
     }
 
     /** Backdrops have their own ladder; w500 is not one of its rungs. */

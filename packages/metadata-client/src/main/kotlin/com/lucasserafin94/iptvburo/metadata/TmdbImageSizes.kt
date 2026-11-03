@@ -16,6 +16,12 @@ package com.lucasserafin94.iptvburo.metadata
  * Upscaling is what makes a poster wall look soft and a backdrop look blocky. The backdrop is the
  * worst of the three because a Ken Burns transform magnifies it further.
  *
+ * Above the top of a ladder the request goes to `original`, which for a backdrop is usually the
+ * 3840×2160 master: the home banner and a title's background fill a 2560- or 3840-pixel window,
+ * and capping them at `w1280` stretched every one of them two or three times over. That is the
+ * only place it happens — a slot wider than 1280 real pixels — and the image is still decoded at
+ * the slot's size, so the cost is the download, not the heap.
+ *
  * The obvious fix — ask for `original` everywhere — is a trap. A shelf of twenty posters at full
  * resolution is tens of megabytes against a 768 MB heap, which is the same memory pressure that has
  * already frozen this app once. So the width is chosen *proportionally*: a 1080p machine keeps
@@ -29,14 +35,32 @@ object TmdbImageSizes {
     private val BACKDROP_LADDER = intArrayOf(300, 780, 1280)
 
     /**
-     * Rewrites the width segment of a TMDb image URL to suit [targetWidthPx].
+     * The width both ladders share, for an image whose kind cannot be told.
+     *
+     * Asking a backdrop for a poster-only width — or the reverse — returns nothing at all, so a URL
+     * that says neither (`w780`, `original`) only ever moves between this and `original`.
+     */
+    private val SHARED_LADDER = intArrayOf(780)
+
+    /** Widths that exist on one ladder only, and so say which kind of image a URL is. */
+    private val POSTER_ONLY = setOf(92, 154, 185, 342, 500)
+    private val BACKDROP_ONLY = setOf(300, 1280)
+
+    /**
+     * Rewrites the size segment of a TMDb image URL to suit [targetWidthPx].
      *
      * Returns [url] unchanged when it is not a TMDb image path, so a provider's own artwork — which
      * has no size ladder and must not be touched — passes straight through.
      *
      * The next width *at or above* the target is chosen, never one below: a slightly larger image
      * scaled down is sharp, while a smaller one scaled up is exactly the fault being fixed. Above
-     * the ladder's top the largest available is used, because there is nothing better to ask for.
+     * the ladder's top, `original`.
+     *
+     * [isBackdrop] is a hint; the URL usually says itself. `w1280` and `w300` exist only for
+     * backdrops, `w342` and the rest below 780 only for posters, and the cropped sizes providers
+     * send (`w600_and_h900_bestv2`, `w1920_and_h800_multi_faces`) are tall or wide by their own
+     * numbers. Only one screen ever passed the hint, so the home banner, the loading wall and every
+     * title's background were sized as posters and stopped at 780 pixels across the whole window.
      */
     fun resizedForWidth(
         url: String,
@@ -44,23 +68,43 @@ object TmdbImageSizes {
         isBackdrop: Boolean = false,
     ): String {
         if (targetWidthPx <= 0) return url
-        val match = TMDB_WIDTH_SEGMENT.find(url) ?: return url
-        val ladder = if (isBackdrop) BACKDROP_LADDER else POSTER_LADDER
-        val chosen = ladder.firstOrNull { candidate -> candidate >= targetWidthPx } ?: ladder.last()
+        val match = TMDB_SIZE_SEGMENT.find(url) ?: return url
+        val segment = match.groupValues[1]
+        val width = LEADING_WIDTH.find(segment)?.groupValues?.get(1)?.toIntOrNull()
+        val height = CROP_HEIGHT.find(segment)?.groupValues?.get(1)?.toIntOrNull()
+        // `h632` and anything else that is not a width: a different ladder, left alone.
+        if (segment != ORIGINAL && width == null) return url
 
-        // Left alone when the URL already asks for the right width, so an unchanged string is
+        val backdrop =
+            isBackdrop || width in BACKDROP_ONLY || (width != null && height != null && width > height)
+        val poster =
+            !backdrop && (width in POSTER_ONLY || (width != null && height != null && height > width))
+        val ladder =
+            when {
+                backdrop -> BACKDROP_LADDER
+                poster -> POSTER_LADDER
+                else -> SHARED_LADDER
+            }
+        val chosen = ladder.firstOrNull { candidate -> candidate >= targetWidthPx }
+        val replacement = if (chosen == null) ORIGINAL else "w$chosen"
+
+        // Left alone when the URL already asks for the right size, so an unchanged string is
         // returned identically and Coil's cache key does not move for no reason.
-        val current = match.groupValues[1].toIntOrNull()
-        if (current == chosen) return url
-        return url.replaceRange(match.range, "/w$chosen/")
+        if (replacement == segment) return url
+        return url.replaceRange(match.groups[1]!!.range, replacement)
     }
 
+    private const val ORIGINAL = "original"
+
     /**
-     * The `/wNNN/` segment of a TMDb image path.
+     * The size segment of a TMDb image path: `/t/p/<size>/`.
      *
-     * Anchored on the slashes so it cannot match a width-like number inside a filename, and only
-     * `w` sizes are rewritten — `original` is already the largest there is, and `h632` is a height
-     * whose ladder is a different one.
+     * Anchored on TMDb's image host, so a provider's own URL that happens to contain `/w500/` is
+     * never rewritten into a path that server does not have.
      */
-    private val TMDB_WIDTH_SEGMENT = Regex("""/w(\d{2,4})/""")
+    private val TMDB_SIZE_SEGMENT = Regex("""image\.tmdb\.org/t/p/([A-Za-z0-9_]+)/""")
+
+    private val LEADING_WIDTH = Regex("""^w(\d{2,4})""")
+
+    private val CROP_HEIGHT = Regex("""_and_h(\d{2,4})""")
 }

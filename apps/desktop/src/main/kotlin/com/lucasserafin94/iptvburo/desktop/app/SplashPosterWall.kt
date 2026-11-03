@@ -178,9 +178,12 @@ private fun LocalCinematicPosterWall(modifier: Modifier) {
 
     Box(modifier = modifier.fillMaxSize().clipToBounds().testTag(LOCAL_POSTER_WALL_TAG)) {
         Image(
-            painter = painterResource("brand/buro-cinematic-poster-wall.png"),
+            bitmap = com.lucasserafin94.iptvburo.desktop.ui.rememberBundledBitmap("brand/buro-cinematic-poster-wall.png"),
             contentDescription = null,
             contentScale = ContentScale.Crop,
+            // Smoothed rather than bilinear: the picture is enlarged to fill the window and then
+            // zoomed a further tenth for the drift, and the default filter showed every step of it.
+            filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
             modifier =
                 Modifier
                     .fillMaxSize()

@@ -2701,11 +2701,12 @@ private fun EmptyLibrary(
         modifier = Modifier.fillMaxSize().padding(24.dp).clip(RoundedCornerShape(24.dp)),
     ) {
         Image(
-            painter = painterResource("brand/buro-nocturne-hero.png"),
+            bitmap = com.lucasserafin94.iptvburo.desktop.ui.rememberBundledBitmap("brand/buro-nocturne-hero.png"),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             alignment = Alignment.CenterEnd,
             contentScale = ContentScale.Crop,
+            filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
         )
         Box(
             modifier =

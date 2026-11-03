@@ -92,6 +92,10 @@ fun BuroRemoteArtwork(
                 contentDescription = contentDescription,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = contentScale,
+                // The highest filter for whatever scaling is left between the decoded image and
+                // the slot — a crop, a Ken Burns zoom, a hover lift. The default is bilinear, which
+                // softens a sharp backdrop the moment it is scaled at all.
+                filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
             )
         }
     }
