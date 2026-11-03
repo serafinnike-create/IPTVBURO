@@ -1,12 +1,5 @@
 package com.lucasserafin94.iptvburo.desktop
 
-import com.lucasserafin94.iptvburo.desktop.playback.WebServiceBrowser
-import com.lucasserafin94.iptvburo.desktop.security.WebServiceSessionStore
-import com.lucasserafin94.iptvburo.domain.model.ViewerKind
-import com.lucasserafin94.iptvburo.domain.model.WebServiceBrand
-import com.lucasserafin94.iptvburo.domain.model.WebServiceCapability
-import com.lucasserafin94.iptvburo.domain.model.WebServicePolicy
-import com.lucasserafin94.iptvburo.domain.model.WebServices
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -616,71 +609,6 @@ class DesktopAppState(
         private set
 
     /**
-     * Web services (GoDorama) the active profile turned on, as stored.
-     *
-     * The stored choice, not what is drawn — [visibleWebServices] filters it by who is watching, so
-     * a profile made Kids later loses the service everywhere while the choice survives.
-     */
-    var webServiceIds by mutableStateOf(userStore.webServiceIds(initialUserSnapshot.activeProfileId.orEmpty()))
-        private set
-
-    /** The service whose page is open in the app's own window, or null. */
-    var openedWebService by mutableStateOf<WebServiceBrand?>(null)
-        private set
-
-    /** The desktop has adult and Kids profiles only; anything not Kids is the adult. */
-    private val viewerKind: ViewerKind
-        get() = if (activeProfile?.isKids == false) ViewerKind.ADULT else ViewerKind.KIDS
-
-    val visibleWebServices: List<WebServiceBrand>
-        get() = WebServicePolicy.visibleServices(webServiceIds, viewerKind)
-
-    /** Whether this profile may turn web services on at all. No profile yet counts as no. */
-    val canUseWebServices: Boolean
-        get() = activeProfile?.isKids == false
-
-    /**
-     * Turns a web service on or off for the active profile.
-     *
-     * Refused for a Kids profile and for an unknown id here as well as on screen. The 18+ question
-     * is the screen's; this runs once it has been answered.
-     */
-    fun setWebServiceEnabled(
-        serviceId: String,
-        enabled: Boolean,
-    ) {
-        val profileId = activeProfileId ?: return
-        val brand = WebServices.byId(serviceId) ?: return
-        if (enabled && !WebServicePolicy.isOfferedTo(brand, viewerKind)) return
-        userStore.setWebServiceEnabled(profileId, brand.id, enabled)
-        webServiceIds = userStore.webServiceIds(profileId)
-        // Off means off: the saved sign-in goes with it, so turning it back on asks again.
-        if (!enabled) WebServiceSessionStore().clear(profileId, brand)
-        if (!enabled && openedWebService?.id == brand.id) openedWebService = null
-    }
-
-    /**
-     * Opens a service this profile may see.
-     *
-     * In the app's own window where the embedded browser exists (Windows); otherwise — a Mac today,
-     * or a Windows machine whose engine failed to start — in the system browser, which is what the
-     * service's own terms describe anyway.
-     */
-    fun openWebService(serviceId: String): ExternalOpenResult? {
-        val brand = visibleWebServices.firstOrNull { it.id == serviceId } ?: return ExternalOpenResult.Failed
-        if (!brand.supports(WebServiceCapability.EMBEDDED_PAGE)) return ExternalOpenResult.Failed
-        if (WebServiceBrowser.isAvailable()) {
-            openedWebService = brand
-            return null
-        }
-        return runCatching { openUriExternally(URI(brand.homeUrl)) }.getOrDefault(ExternalOpenResult.Failed)
-    }
-
-    fun closeWebService() {
-        openedWebService = null
-    }
-
-    /**
      * Titles this profile asked to be reminded about, newest concerns first as stored.
      *
      * Read from the store rather than the boot snapshot, which predates reminders and would have to
@@ -853,9 +781,6 @@ class DesktopAppState(
         activeProfileId = nextProfileId
         userStore.setActiveProfile(activeProfileId)
         favoriteKeys = userStore.favoritesForProfile(activeProfileId)
-        webServiceIds = activeProfileId?.let(userStore::webServiceIds).orEmpty()
-        // Another profile's page must not stay open over this one's screen.
-        openedWebService = null
         // Alongside favourites: a reminder belongs to whoever asked for it, so the new profile must
         // not inherit the previous one's marked titles.
         reminders = userStore.remindersForProfile(activeProfileId)
@@ -1073,54 +998,15 @@ class DesktopAppState(
         when {
             !userStore.hasChosenLanguage() -> OnboardingStep.Language
             !userStore.hasAcceptedTerms() -> OnboardingStep.Terms
-            // A profile with no playlist and no saved source means setup never finished — unless
-            // somebody chose to use only GoDorama, which needs no list at all.
-            sourceLibrary.sources().isEmpty() && !hasWebServiceOnlySetup() -> OnboardingStep.Account
+            // A profile with no playlist and no saved source means setup never finished.
+            sourceLibrary.sources().isEmpty() -> OnboardingStep.Account
             else -> OnboardingStep.Done
         }
-
-    /** Whether an adult profile finished setup with a web service instead of a list. */
-    private fun hasWebServiceOnlySetup(): Boolean =
-        profiles.any { profile -> !profile.isKids && userStore.webServiceIds(profile.id).isNotEmpty() }
 
     fun acceptTerms() {
         userStore.setAcceptedTerms()
         onboarding =
-            if (sourceLibrary.sources().isEmpty() && !hasWebServiceOnlySetup()) {
-                OnboardingStep.Account
-            } else {
-                OnboardingStep.Done
-            }
-    }
-
-    /**
-     * Finishes setup with a web service and no list: "só GoDorama".
-     *
-     * The profile is an ordinary adult one with no playlist; the service is turned on for it, and
-     * the 18+ question has been answered on the form before this runs. A list can still be added
-     * later from the profile screen, exactly as for anyone else.
-     */
-    fun completeSetupWithWebServiceOnly(
-        profileName: String,
-        avatarIndex: Int,
-        serviceId: String,
-    ) {
-        val brand = WebServices.byId(serviceId) ?: return
-        val profile =
-            DesktopProfile(
-                id = UUID.randomUUID().toString(),
-                name = profileName.trim().ifBlank { "Meu perfil" },
-                isKids = false,
-                avatarIndex = avatarIndex,
-                sourceId = null,
-            )
-        profiles = profiles + profile
-        editingProfileId = null
-        userStore.saveProfiles(profiles)
-        attachPendingPhoto(profile.id)
-        userStore.setWebServiceEnabled(profile.id, brand.id, true)
-        selectProfile(profile.id)
-        onboarding = OnboardingStep.Done
+            if (sourceLibrary.sources().isEmpty()) OnboardingStep.Account else OnboardingStep.Done
     }
 
     fun advanceOnboardingAfterLanguage() {

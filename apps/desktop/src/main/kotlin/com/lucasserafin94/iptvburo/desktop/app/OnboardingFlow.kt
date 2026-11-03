@@ -42,7 +42,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -325,14 +324,6 @@ fun AccountSetupGate(
     /** Whether every configured list is browsed as one catalogue. */
     mergeSources: Boolean = false,
     onToggleMergeSources: (Boolean) -> Unit = {},
-    /**
-     * Finishes setup with a web service and no list — "Usar só GoDorama".
-     *
-     * Null hides the choice, which is what editing an existing profile's list wants. The 18+
-     * question is asked here before this is called.
-     */
-    onUseOnlyWebService: ((profileName: String, avatarIndex: Int, serviceId: String) -> Unit)? = null,
-    webServiceStrings: com.lucasserafin94.iptvburo.desktop.ui.WebServiceStrings? = null,
 ) {
     // Hoisted out of this composable so a failed connection can return here with everything the
     // user typed still in place. Held in remember alone, the state died with the screen and the
@@ -735,44 +726,6 @@ fun AccountSetupGate(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
-        }
-
-        // The other way in: no list at all, only a service the user subscribes to separately.
-        // Needs a profile name and nothing else; the list fields are simply not used.
-        val serviceText = webServiceStrings
-        if (onUseOnlyWebService != null && serviceText != null) {
-            var confirmingService by remember {
-                mutableStateOf<com.lucasserafin94.iptvburo.domain.model.WebServiceBrand?>(null)
-            }
-            com.lucasserafin94.iptvburo.domain.model.WebServices.all.forEach { brand ->
-                Spacer(Modifier.height(BuroSpacing.Md))
-                OutlinedButton(
-                    onClick = { confirmingService = brand },
-                    enabled = profileName.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().height(46.dp),
-                    shape = BuroRadius.Small,
-                ) {
-                    Text(serviceText.format(serviceText.setupOnly, brand.displayName), color = BuroColors.Text)
-                }
-                Text(
-                    text = serviceText.format(serviceText.setupOnlyHint, brand.displayName),
-                    color = BuroColors.TextMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(top = BuroSpacing.Xxs),
-                )
-            }
-            confirmingService?.let { brand ->
-                WebServiceAgeDialog(
-                    text = serviceText,
-                    brand = brand,
-                    onConfirm = {
-                        confirmingService = null
-                        onUseOnlyWebService(profileName, avatarIndex, brand.id)
-                    },
-                    onDismiss = { confirmingService = null },
-                )
-            }
         }
     }
 }

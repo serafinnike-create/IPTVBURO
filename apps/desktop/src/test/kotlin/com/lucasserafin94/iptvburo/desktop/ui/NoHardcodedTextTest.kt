@@ -27,9 +27,7 @@ class NoHardcodedTextTest {
      */
     private val pending = emptySet<String>()
 
-    // WebServiceStrings.kt is a table like PlayerText.kt: every language side by side, kept out of
-    // DesktopStrings so one small feature does not grow each of its five constructors.
-    private val TRANSLATION_TABLES = setOf("DesktopStrings.kt", "PlayerText.kt", "WebServiceStrings.kt")
+    private val TRANSLATION_TABLES = setOf("DesktopStrings.kt", "PlayerText.kt")
 
     /**
      * Words that mark a literal as Portuguese *prose*.

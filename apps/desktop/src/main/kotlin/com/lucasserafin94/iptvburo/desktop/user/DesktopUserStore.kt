@@ -821,31 +821,6 @@ class DesktopUserStore(
     private fun favoritesKey(profileId: String): String = "favorites.$profileId"
 
     /**
-     * The web services (GoDorama) this profile turned on.
-     *
-     * Ids only. Nothing about the account is kept here: the user signs in on the service's own
-     * page, and whatever that page keeps lives in the browser engine, not in these preferences.
-     */
-    fun webServiceIds(profileId: String): Set<String> =
-        preferences.get(webServicesKey(profileId), "")
-            .split(',')
-            .map(String::trim)
-            .filter(String::isNotEmpty)
-            .toSet()
-
-    fun setWebServiceEnabled(
-        profileId: String,
-        serviceId: String,
-        enabled: Boolean,
-    ) {
-        val current = webServiceIds(profileId)
-        val next = if (enabled) current + serviceId else current - serviceId
-        preferences.put(webServicesKey(profileId), next.sorted().joinToString(","))
-    }
-
-    private fun webServicesKey(profileId: String): String = "web-services.$profileId"
-
-    /**
      * The titles this profile asked to be reminded about.
      *
      * Per profile like favourites, and for the same reason: a reminder is one person's interest in
