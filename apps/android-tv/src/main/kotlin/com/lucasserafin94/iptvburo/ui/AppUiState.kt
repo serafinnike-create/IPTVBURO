@@ -572,9 +572,6 @@ sealed interface AppContent {
 
     data object Settings : AppContent
 
-    /** The GoDorama destination: what the service is, and the button that turns it on or opens it. */
-    data object WebServices : AppContent
-
     /**
      * A web service's own page, open in BURO's browser view.
      *
@@ -909,13 +906,12 @@ data class AppUiState(
     val castRequest: CastRequestUi? = null,
 ) {
     /**
-     * The web services to draw for whoever is watching: turned on by this profile and allowed for
-     * its kind. A Kids profile gets none of the age-restricted ones, whatever is stored.
+     * The web services to draw for whoever is watching. Nothing to turn on: every service allowed
+     * for this kind of profile is simply there. A Kids profile gets none of the age-restricted ones.
      */
     val visibleWebServices: List<WebServiceBrand>
         get() =
-            WebServicePolicy.visibleServices(
-                enabledIds = enabledWebServiceIds,
+            WebServicePolicy.availableServices(
                 viewer = if (activeProfile?.isKids == false) ViewerKind.ADULT else ViewerKind.KIDS,
             )
 

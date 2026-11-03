@@ -632,8 +632,9 @@ class DesktopAppState(
     private val viewerKind: ViewerKind
         get() = if (activeProfile?.isKids == false) ViewerKind.ADULT else ViewerKind.KIDS
 
+    /** Every service this profile is offered — there is nothing to turn on first. */
     val visibleWebServices: List<WebServiceBrand>
-        get() = WebServicePolicy.visibleServices(webServiceIds, viewerKind)
+        get() = WebServicePolicy.availableServices(viewerKind)
 
     /** Whether this profile may turn web services on at all. No profile yet counts as no. */
     val canUseWebServices: Boolean
@@ -681,35 +682,15 @@ class DesktopAppState(
     }
 
     /**
-     * Whether to tell this profile, once, that GoDorama exists.
+     * The GoDorama tab: straight to the service's page, where the user signs in once.
      *
-     * For somebody who already had a list when the service arrived: setup — the only other place it
-     * is offered — never runs again for them. Adult profiles only, and not when it is already on.
+     * No activation step — the tab is the service. Where the embedded browser is missing (a Mac
+     * today) the page goes to the system browser and the tab shows a button to open it again.
      */
-    val shouldOfferWebServices: Boolean
-        get() {
-            val profileId = activeProfileId ?: return false
-            webServiceOfferRevision
-            return canUseWebServices &&
-                webServiceIds.isEmpty() &&
-                onboarding == OnboardingStep.Done &&
-                !userStore.webServicesOffered(profileId)
-        }
-
-    private var webServiceOfferRevision by mutableStateOf(0)
-
-    /** The notice was answered, either way. It does not come back for this profile. */
-    fun dismissWebServiceOffer(openPage: Boolean) {
-        activeProfileId?.let(userStore::markWebServicesOffered)
-        webServiceOfferRevision++
-        if (openPage) openWebServicesPage()
-    }
-
-    /** Opens the GoDorama page of the sidebar. */
-    fun openWebServicesPage() {
+    fun openWebServicesPage(): ExternalOpenResult? {
         favoritesOnly = false
-        openedWebService = null
         destination = DesktopDestination.WEB_SERVICES
+        return openWebService(WebServices.GODORAMA.id)
     }
 
     /**

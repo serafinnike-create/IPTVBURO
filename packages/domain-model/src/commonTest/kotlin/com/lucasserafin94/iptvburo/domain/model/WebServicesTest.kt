@@ -33,6 +33,13 @@ class WebServicesTest {
     }
 
     @Test
+    fun `GoDorama is there for an adult with nothing to turn on, and never for Kids`() {
+        assertEquals(listOf(godorama), WebServicePolicy.availableServices(ViewerKind.ADULT))
+        assertEquals(emptyList(), WebServicePolicy.availableServices(ViewerKind.KIDS))
+        assertEquals(emptyList(), WebServicePolicy.availableServices(ViewerKind.GUEST))
+    }
+
+    @Test
     fun `an unknown stored id is ignored`() {
         assertEquals(emptyList(), WebServicePolicy.visibleServices(setOf("noprivado"), ViewerKind.ADULT))
         assertEquals(null, WebServices.byId("noprivado"))

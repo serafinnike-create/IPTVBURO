@@ -893,11 +893,23 @@ class MainViewModel @Inject constructor(
 
             AppSection.SEARCH -> updateDestination(section, AppContent.SectionPlaceholder(section))
 
-            // Adult profiles only, here as well as in the menus that offer it.
-            AppSection.WEB_SERVICES ->
-                if (mutableState.value.canUseWebServices) {
-                    updateDestination(section, AppContent.WebServices)
+            // The tab is the service: straight to its page, where the user signs in once. Adult
+            // profiles only, here as well as in the menus that offer it.
+            AppSection.WEB_SERVICES -> {
+                val state = mutableState.value
+                val profile = state.activeProfile
+                val brand = state.visibleWebServices.firstOrNull()
+                if (profile != null && brand != null) {
+                    viewModelScope.launch {
+                        // Remembered as used, which is what lets a profile with no list open on
+                        // Home next time instead of Fontes.
+                        runCatching { webServiceSettings.setEnabled(profile.id, brand.id, true) }
+                        val clearFirst =
+                            runCatching { webServiceSettings.claimSession(profile.id) }.getOrDefault(true)
+                        updateDestination(section, AppContent.WebService(brand.id, clearFirst))
+                    }
                 }
+            }
         }
     }
 
@@ -906,6 +918,7 @@ class MainViewModel @Inject constructor(
             val profile = userLibraryRepository.getProfile(profileId) ?: return@launch
             onboardingPreferences.selectProfile(profile.id)
             // Somebody who uses only GoDorama has no list and still has a home: the service's card.
+            // "Uses" means has opened it — a new profile with no list is still sent to Fontes.
             val hasWebService =
                 runCatching { webServiceSettings.enabledIds(profile.id).first() }
                     .getOrDefault(emptySet())

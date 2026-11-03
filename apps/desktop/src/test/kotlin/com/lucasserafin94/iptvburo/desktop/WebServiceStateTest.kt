@@ -28,16 +28,16 @@ import okhttp3.OkHttpClient
  */
 class WebServiceStateTest {
     @Test
-    fun `the adult profile turns GoDorama on and the Kids profile never sees it`() =
+    fun `the adult profile has GoDorama with nothing to turn on, and Kids never sees it`() =
         withState { state, store ->
-            state.setWebServiceEnabled(WebServices.GODORAMA.id, true)
             assertEquals(listOf(WebServices.GODORAMA), state.visibleWebServices)
+            assertTrue(state.canUseWebServices)
 
             // Stored for the Kids profile by any route at all, it is still not drawn.
             store.setWebServiceEnabled(KIDS.id, WebServices.GODORAMA.id, true)
             state.selectProfile(KIDS.id)
 
-            assertTrue(state.visibleWebServices.isEmpty(), "a Kids profile was offered an 18+ service")
+            assertTrue(state.visibleWebServices.isEmpty(), "a Kids profile was offered GoDorama")
             assertFalse(state.canUseWebServices)
             assertEquals(null, state.openedWebService)
         }
@@ -50,16 +50,6 @@ class WebServiceStateTest {
             state.setWebServiceEnabled(WebServices.GODORAMA.id, true)
 
             assertTrue(store.webServiceIds(KIDS.id).isEmpty())
-        }
-
-    @Test
-    fun `another profile does not inherit the service`() =
-        withState { state, _ ->
-            state.setWebServiceEnabled(WebServices.GODORAMA.id, true)
-
-            state.selectProfile(SECOND_ADULT.id)
-
-            assertTrue(state.visibleWebServices.isEmpty())
         }
 
     @Test
@@ -81,24 +71,6 @@ class WebServiceStateTest {
             assertEquals(created.id, state.activeProfileId)
             assertEquals(setOf(WebServices.GODORAMA.id), store.webServiceIds(created.id))
             assertEquals(listOf(WebServices.GODORAMA), state.visibleWebServices)
-        }
-
-    @Test
-    fun `the GoDorama notice opens its page and does not come back`() =
-        withState { state, store ->
-            state.dismissWebServiceOffer(openPage = true)
-
-            assertEquals(DesktopDestination.WEB_SERVICES, state.destination)
-            assertTrue(store.webServicesOffered(ADULT.id))
-            assertFalse(state.shouldOfferWebServices)
-        }
-
-    @Test
-    fun `the Kids profile is never told about GoDorama`() =
-        withState { state, _ ->
-            state.selectProfile(KIDS.id)
-
-            assertFalse(state.shouldOfferWebServices)
         }
 
     private fun withState(block: (DesktopAppState, DesktopUserStore) -> Unit) {

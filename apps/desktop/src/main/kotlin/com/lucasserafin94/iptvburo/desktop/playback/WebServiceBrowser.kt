@@ -17,6 +17,7 @@ import org.cef.CefClient
 import org.cef.browser.CefBrowser
 import org.cef.browser.CefFrame
 import org.cef.handler.CefLifeSpanHandlerAdapter
+import org.cef.handler.CefLoadHandlerAdapter
 import org.cef.handler.CefRequestHandlerAdapter
 import org.cef.network.CefCookie
 import org.cef.network.CefCookieManager
@@ -92,6 +93,20 @@ class WebServiceBrowser(
                     }
                 },
             )
+            cefClient.addLoadHandler(
+                object : CefLoadHandlerAdapter() {
+                    // Saved after every page the service finishes loading, not only when the window
+                    // closes: signing in is a page load, and a user who then quits the app with the
+                    // window still open must find themselves still signed in next time.
+                    override fun onLoadEnd(
+                        browser: CefBrowser?,
+                        frame: CefFrame?,
+                        httpStatusCode: Int,
+                    ) {
+                        if (frame?.isMain == true && !disposed.get()) saveSession(clearAfter = false)
+                    }
+                },
+            )
             val cefBrowser = cefClient.createBrowser(brand.homeUrl, false, false).also { browser = it }
             JPanel(BorderLayout()).apply {
                 background = Color.BLACK
@@ -118,21 +133,7 @@ class WebServiceBrowser(
      */
     fun dispose() {
         if (!disposed.compareAndSet(false, true)) return
-        val manager = CefCookieManager.getGlobalManager()
-        if (manager != null) {
-            val collected = mutableListOf<StoredWebCookie>()
-            val visiting =
-                manager.visitUrlCookies(brand.homeUrl, true) { cookie, count, total, _ ->
-                    collected += cookie.toStored()
-                    if (count + 1 >= total) {
-                        sessions.save(profileId, brand, collected.toList())
-                        deleteEngineCookies()
-                    }
-                    true
-                }
-            // No visit at all means no cookie for the service: nobody is signed in.
-            if (!visiting) deleteEngineCookies()
-        }
+        saveSession(clearAfter = true)
         browser?.let { live ->
             runCatching { live.stopLoad() }
             runCatching { live.close(true) }
@@ -140,6 +141,29 @@ class WebServiceBrowser(
         browser = null
         runCatching { client?.dispose() }
         client = null
+    }
+
+    /**
+     * Reads the service's cookies from the engine and seals them for this profile.
+     *
+     * [clearAfter] removes them from the engine once saved, for when the window is closing and the
+     * next profile must start from nothing but its own.
+     */
+    private fun saveSession(clearAfter: Boolean) {
+        val manager = CefCookieManager.getGlobalManager() ?: return
+        val collected = mutableListOf<StoredWebCookie>()
+        val visiting =
+            manager.visitUrlCookies(brand.homeUrl, true) { cookie, count, total, _ ->
+                collected += cookie.toStored()
+                if (count + 1 >= total) {
+                    sessions.save(profileId, brand, collected.toList())
+                    if (clearAfter) deleteEngineCookies()
+                }
+                true
+            }
+        // No visit at all means no cookie for the service. Nothing is saved over the stored session
+        // here — a page that loaded before the cookies arrived must not sign the user out.
+        if (!visiting && clearAfter) deleteEngineCookies()
     }
 
     private fun restoreSession() {

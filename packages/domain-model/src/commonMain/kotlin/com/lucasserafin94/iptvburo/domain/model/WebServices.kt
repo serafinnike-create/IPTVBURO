@@ -133,6 +133,13 @@ object WebServicePolicy {
     ): List<WebServiceBrand> =
         WebServices.all.filter { brand -> brand.id in enabledIds && isOfferedTo(brand, viewer) }
 
+    /**
+     * The services this viewer has, with nothing to turn on: GoDorama is simply there, as a tab,
+     * for every profile it is offered to.
+     */
+    fun availableServices(viewer: ViewerKind): List<WebServiceBrand> =
+        WebServices.all.filter { brand -> isOfferedTo(brand, viewer) }
+
     /** Decides a top-level navigation. Sub-resources (images, video) are the page's business. */
     fun navigation(
         brand: WebServiceBrand,

@@ -167,17 +167,15 @@ class MainViewModelNavigationTest {
      * engine autoplays audio, so every one begins muted and the sound is raised once it is playing.
      */
     @Test
-    fun `GoDorama turned on by the adult profile opens its page inside the app`() = runTest {
+    fun `the GoDorama tab opens its page straight away, with nothing to turn on`() = runTest {
         val viewModel = createViewModel(FakeCatalogRepository())
         runCurrent()
         assertTrue("o perfil adulto padrao nao chegou", viewModel.state.value.canUseWebServices)
-
-        viewModel.setWebServiceEnabled(WebServices.GODORAMA.id, true)
-        runCurrent()
         assertEquals(listOf(WebServices.GODORAMA), viewModel.state.value.visibleWebServices)
 
-        viewModel.openWebService(WebServices.GODORAMA.id)
+        viewModel.selectSection(AppSection.WEB_SERVICES)
         runCurrent()
+
         assertEquals(
             AppContent.WebService(serviceId = WebServices.GODORAMA.id, clearSessionFirst = false),
             viewModel.state.value.content,
@@ -185,17 +183,15 @@ class MainViewModelNavigationTest {
     }
 
     @Test
-    fun `a service that was not turned on does not open`() = runTest {
+    fun `an unknown service does not open`() = runTest {
         val viewModel = createViewModel(FakeCatalogRepository())
         runCurrent()
         val before = viewModel.state.value.content
 
-        viewModel.openWebService(WebServices.GODORAMA.id)
-        viewModel.setWebServiceEnabled("noprivado", true)
+        viewModel.openWebService("noprivado")
         runCurrent()
 
         assertEquals(before, viewModel.state.value.content)
-        assertTrue(viewModel.state.value.enabledWebServiceIds.isEmpty())
     }
 
     @Test
@@ -204,9 +200,7 @@ class MainViewModelNavigationTest {
         val viewModel = createViewModel(FakeCatalogRepository(), webServiceSettings = settings)
         runCurrent()
 
-        viewModel.setWebServiceEnabled(WebServices.GODORAMA.id, true)
-        runCurrent()
-        viewModel.openWebService(WebServices.GODORAMA.id)
+        viewModel.selectSection(AppSection.WEB_SERVICES)
         runCurrent()
 
         assertEquals(
@@ -220,7 +214,6 @@ class MainViewModelNavigationTest {
         val kids =
             AppUiState(
                 activeProfile = ProfileUi(id = "k", name = "K", avatarKey = "a", isKids = true),
-                enabledWebServiceIds = setOf(WebServices.GODORAMA.id),
             )
 
         assertTrue(kids.visibleWebServices.isEmpty())

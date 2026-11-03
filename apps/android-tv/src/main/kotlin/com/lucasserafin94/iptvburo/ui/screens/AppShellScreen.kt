@@ -661,20 +661,6 @@ fun AppShellScreen(
                             onOpenWebService = onOpenWebService,
                         ) }
 
-                        AppContent.WebServices ->
-                            WebServicesPage(
-                                services =
-                                    if (state.canUseWebServices) {
-                                        com.lucasserafin94.iptvburo.domain.model.WebServices.all
-                                    } else {
-                                        emptyList()
-                                    },
-                                enabledIds = state.enabledWebServiceIds,
-                                onEnableAndOpen = onEnableAndOpenWebService,
-                                onOpen = onOpenWebService,
-                                onDisable = { id -> onSetWebServiceEnabled(id, false) },
-                            )
-
                         is AppContent.WebService ->
                             // Re-checked against what this profile may see, so a stale destination
                             // left from an adult profile never draws for a Kids one.
@@ -1944,16 +1930,6 @@ private fun SourcesContent(
             }
 
             Spacer(Modifier.height(if (phonePortrait) 18.dp else 28.dp))
-
-            if (webServices.isNotEmpty()) {
-                WebServiceSourcesSection(
-                    services = webServices,
-                    enabledIds = enabledWebServiceIds,
-                    onSetEnabled = onSetWebServiceEnabled,
-                    onOpen = onOpenWebService,
-                )
-                Spacer(Modifier.height(if (phonePortrait) 18.dp else 24.dp))
-            }
 
             if (sources.isEmpty()) {
                 EmptySources()

@@ -531,7 +531,9 @@ fun DesktopApp(
                             hasSubscriptions = appState.streamingDiscoveryCapability.isVisible,
                             onSubscriptions = appState::openSubscriptions,
                             hasWebServices = appState.canUseWebServices,
-                            onWebServices = appState::openWebServicesPage,
+                            onWebServices = {
+                                appState.openWebServicesPage()?.let { result -> externalOpenResult = result }
+                            },
                             collapsed = sidebarCollapsed,
                             onToggleCollapsed = { sidebarCollapsed = !sidebarCollapsed },
                         )
@@ -1199,12 +1201,6 @@ fun DesktopApp(
                                 null
                             },
                     )
-                }
-
-                // Once per adult profile, after start-up has finished: the one moment somebody who
-                // already had a list hears that GoDorama is here.
-                if (!appState.isStarting && !showProfileGate && appState.shouldOfferWebServices) {
-                    WebServiceOfferDialog(appState)
                 }
 
                 // Drawn outside the step chain so it sits over the form rather than replacing
