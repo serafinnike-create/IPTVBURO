@@ -20,8 +20,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -130,7 +130,7 @@ fun RemindersScreen(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     icon = {
                         Icon(
-                            Icons.Default.Notifications,
+                            Icons.Rounded.Notifications,
                             contentDescription = null,
                             tint = colors.textSecondary,
                             modifier = Modifier.size(44.dp),
@@ -330,7 +330,7 @@ private fun ReminderRow(
         Spacer(Modifier.width(8.dp))
         BuroButton(onClick = onRemove, style = BuroButtonStyle.Ghost) {
             Icon(
-                Icons.Default.Delete,
+                Icons.Rounded.Delete,
                 contentDescription = stringResource(R.string.reminders_remove),
                 tint = colors.textSecondary,
             )

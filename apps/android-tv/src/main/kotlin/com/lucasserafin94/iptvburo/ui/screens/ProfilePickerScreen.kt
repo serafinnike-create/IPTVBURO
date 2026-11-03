@@ -19,15 +19,15 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.NightlightRound
-import androidx.compose.material.icons.filled.Park
-import androidx.compose.material.icons.filled.Waves
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.ChildCare
+import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.NightlightRound
+import androidx.compose.material.icons.rounded.Park
+import androidx.compose.material.icons.rounded.Waves
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -133,7 +133,7 @@ fun ProfilePickerScreen(
                 if (profiles.size < 5) {
                     FocusSurface(onClick = { adding = true }, modifier = Modifier.size(128.dp)) {
                         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = BuroAccent, modifier = Modifier.size(42.dp))
+                            Icon(Icons.Rounded.Add, contentDescription = null, tint = BuroAccent, modifier = Modifier.size(42.dp))
                             Text(stringResource(R.string.profile_picker_add), color = BuroTextPrimary, fontSize = 13.sp)
                         }
                     }
@@ -198,7 +198,7 @@ fun ProfilePickerScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         FocusSurface(onClick = { isKids = !isKids }, modifier = Modifier.height(52.dp).weight(1f)) {
                             Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.ChildCare, null, tint = if (isKids) BuroAccent else BuroTextSecondary)
+                                Icon(Icons.Rounded.ChildCare, null, tint = if (isKids) BuroAccent else BuroTextSecondary)
                                 Text(
                                     if (isKids) stringResource(R.string.profile_picker_child) else stringResource(R.string.profile_picker_adult),
                                     color = BuroTextPrimary,
@@ -236,7 +236,7 @@ fun ProfilePickerScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Icon(Icons.Default.Settings, contentDescription = null, tint = BuroAccent)
+                        Icon(Icons.Rounded.Settings, contentDescription = null, tint = BuroAccent)
                         Column {
                             Text(
                                 text = stringResource(R.string.settings_metadata_section),
@@ -364,12 +364,12 @@ internal fun avatarIcon(
     isKids: Boolean,
 ): ImageVector =
     when {
-        isKids -> Icons.Default.ChildCare
-        key == "ember" -> Icons.Default.LocalFireDepartment
-        key == "forest" -> Icons.Default.Park
-        key == "ocean" -> Icons.Default.Waves
-        key == "moon" -> Icons.Default.NightlightRound
-        else -> Icons.Default.AutoAwesome
+        isKids -> Icons.Rounded.ChildCare
+        key == "ember" -> Icons.Rounded.LocalFireDepartment
+        key == "forest" -> Icons.Rounded.Park
+        key == "ocean" -> Icons.Rounded.Waves
+        key == "moon" -> Icons.Rounded.NightlightRound
+        else -> Icons.Rounded.AutoAwesome
     }
 
 /** One playlist choice on the creation form, drawn as the editor's pills are. */

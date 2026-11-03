@@ -26,18 +26,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Cast
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.NotificationsNone
-import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.NotificationsNone
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -214,7 +214,7 @@ internal fun SeriesDetailsScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                                 contentDescription = stringResource(R.string.common_back),
                                 tint = BuroAccent,
                             )
@@ -297,9 +297,9 @@ internal fun SeriesDetailsScreen(
                                     BuroAction(
                                         icon =
                                             if (isFavorite) {
-                                                Icons.Default.Favorite
+                                                Icons.Rounded.Favorite
                                             } else {
-                                                Icons.Default.FavoriteBorder
+                                                Icons.Rounded.FavoriteBorder
                                             },
                                         label =
                                             stringResource(
@@ -319,9 +319,9 @@ internal fun SeriesDetailsScreen(
                                     BuroAction(
                                         icon =
                                             if (hasReminder) {
-                                                Icons.Default.Notifications
+                                                Icons.Rounded.Notifications
                                             } else {
-                                                Icons.Default.NotificationsNone
+                                                Icons.Rounded.NotificationsNone
                                             },
                                         label =
                                             stringResource(
@@ -342,7 +342,7 @@ internal fun SeriesDetailsScreen(
                                 // phone, and it now sits among glyphs that do something small.
                                 add(
                                     BuroAction(
-                                        icon = Icons.Default.Download,
+                                        icon = Icons.Rounded.Download,
                                         label = stringResource(R.string.series_download_all),
                                         onClick = { pendingBulkDownload = BulkDownload.WholeSeries },
                                         enabled = onDownloadSeries != null && anythingLeftToDownload,
@@ -350,7 +350,7 @@ internal fun SeriesDetailsScreen(
                                 )
                                 add(
                                     BuroAction(
-                                        icon = Icons.Default.PlayCircle,
+                                        icon = Icons.Rounded.PlayCircle,
                                         label = stringResource(R.string.details_trailer),
                                         onClick = {
                                             trailerId?.let { id ->
@@ -371,7 +371,7 @@ internal fun SeriesDetailsScreen(
                                 )
                                 add(
                                     BuroAction(
-                                        icon = Icons.Default.Share,
+                                        icon = Icons.Rounded.Share,
                                         label = stringResource(R.string.details_share),
                                         onClick = { onShare?.invoke() },
                                         enabled = onShare != null,
@@ -379,7 +379,7 @@ internal fun SeriesDetailsScreen(
                                 )
                                 add(
                                     BuroAction(
-                                        icon = Icons.Default.Cast,
+                                        icon = Icons.Rounded.Cast,
                                         label = stringResource(R.string.cast_action),
                                         onClick = { onCast?.invoke() },
                                         enabled = onCast != null,
@@ -570,7 +570,7 @@ internal fun SeriesDetailsScreen(
                                         style = BuroButtonStyle.Secondary,
                                         modifier = Modifier.padding(top = 8.dp),
                                     ) {
-                                        Icon(Icons.Default.Download, contentDescription = null)
+                                        Icon(Icons.Rounded.Download, contentDescription = null)
                                         Text(stringResource(R.string.series_download_season, season))
                                     }
                                 }
@@ -723,7 +723,7 @@ private fun BulkDownloadDialog(
                     Text(stringResource(R.string.common_cancel))
                 }
                 BuroButton(onClick = onConfirm, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.Download, contentDescription = null)
+                    Icon(Icons.Rounded.Download, contentDescription = null)
                     // One line, always. Equal weights leave each button about half the card, and
                     // the icon eats into that, so "Baixar" was wrapping into "Baix / ar".
                     Text(stringResource(R.string.download_action), maxLines = 1)
@@ -784,14 +784,14 @@ private fun EpisodeCard(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.Default.CheckCircle,
+                            imageVector = Icons.Rounded.CheckCircle,
                             contentDescription = stringResource(R.string.series_episode_watched),
                             tint = BuroGold,
                         )
                     }
                 } else {
                     Icon(
-                        imageVector = Icons.Default.PlayArrow,
+                        imageVector = Icons.Rounded.PlayArrow,
                         contentDescription = null,
                         tint = BuroTextPrimary,
                     )
@@ -866,8 +866,8 @@ private fun EpisodeCard(
                             Icon(
                                 imageVector =
                                     when (downloadState) {
-                                        DownloadStateUi.Completed -> Icons.Default.DownloadDone
-                                        else -> Icons.Default.Download
+                                        DownloadStateUi.Completed -> Icons.Rounded.DownloadDone
+                                        else -> Icons.Rounded.Download
                                     },
                                 contentDescription =
                                     when (downloadState) {

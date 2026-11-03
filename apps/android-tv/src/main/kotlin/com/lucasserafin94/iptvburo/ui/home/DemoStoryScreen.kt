@@ -20,9 +20,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -168,7 +168,7 @@ private fun StoryHeader(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                     contentDescription = stringResource(R.string.buro_home_back),
                     tint = BuroAccent,
                     modifier = Modifier.size(24.dp),
@@ -294,7 +294,7 @@ private fun StoryCopy(
                 horizontalArrangement = Arrangement.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
+                    imageVector = Icons.Rounded.Add,
                     contentDescription = null,
                     tint = BuroCanvas,
                     modifier = Modifier.size(21.dp),
@@ -328,7 +328,7 @@ private fun StorySafetyNote() {
         verticalAlignment = Alignment.Top,
     ) {
         Icon(
-            imageVector = Icons.Default.Info,
+            imageVector = Icons.Rounded.Info,
             contentDescription = null,
             tint = BuroAccent,
             modifier = Modifier.size(22.dp),
@@ -384,7 +384,7 @@ private fun MissingStory(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
-            imageVector = Icons.Default.Info,
+            imageVector = Icons.Rounded.Info,
             contentDescription = null,
             tint = BuroAccent,
             modifier = Modifier.size(44.dp),
@@ -415,7 +415,7 @@ private fun MissingStory(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
+                    imageVector = Icons.Rounded.Add,
                     contentDescription = null,
                     tint = BuroCanvas,
                 )

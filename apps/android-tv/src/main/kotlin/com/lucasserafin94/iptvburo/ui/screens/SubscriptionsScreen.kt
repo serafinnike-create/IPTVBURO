@@ -27,10 +27,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.NotificationsNone
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -464,9 +464,9 @@ private fun OfferList(
                     BuroButton(onClick = toggle, style = BuroButtonStyle.Ghost) {
                         Icon(
                             if (hasReminder) {
-                                Icons.Default.Notifications
+                                Icons.Rounded.Notifications
                             } else {
-                                Icons.Default.NotificationsNone
+                                Icons.Rounded.NotificationsNone
                             },
                             contentDescription = null,
                             tint = if (hasReminder) BuroAccent else BuroTextPrimary,
@@ -742,7 +742,7 @@ private fun SeeMoreCard(onClick: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                 contentDescription = null,
                 tint = BuroAccent,
                 modifier = Modifier.size(28.dp),

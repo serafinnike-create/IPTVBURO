@@ -17,8 +17,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -84,7 +84,7 @@ fun NotificationBell(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.Default.Notifications,
+                imageVector = Icons.Rounded.Notifications,
                 contentDescription = stringResource(R.string.notifications_open),
                 tint = BuroTextPrimary,
                 modifier = Modifier.size(22.dp),
@@ -162,7 +162,7 @@ private fun NotificationPanel(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.Default.Close,
+                    Icons.Rounded.Close,
                     contentDescription = stringResource(R.string.common_close),
                     tint = BuroTextSecondary,
                     modifier = Modifier.size(18.dp),
@@ -250,7 +250,7 @@ private fun NotificationRow(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                Icons.Default.Close,
+                Icons.Rounded.Close,
                 contentDescription = stringResource(R.string.notifications_dismiss),
                 tint = BuroTextSecondary,
                 modifier = Modifier.size(16.dp),

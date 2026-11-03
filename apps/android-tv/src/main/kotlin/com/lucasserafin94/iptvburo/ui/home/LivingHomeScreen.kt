@@ -27,11 +27,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.HourglassTop
-import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.HourglassTop
+import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -537,7 +537,7 @@ private fun HomeLoadingState(metrics: HomeLayoutMetrics) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Icon(
-                    imageVector = Icons.Default.HourglassTop,
+                    imageVector = Icons.Rounded.HourglassTop,
                     contentDescription = null,
                     tint = BuroAccent,
                 )
@@ -616,11 +616,11 @@ private fun HomeEmptyState(
 ) {
     HomeStatePanel(
         metrics = metrics,
-        icon = Icons.Default.Inbox,
+        icon = Icons.Rounded.Inbox,
         title = stringResource(R.string.buro_home_empty_title),
         body = stringResource(R.string.buro_home_empty_body),
         primaryLabel = stringResource(R.string.buro_home_import_source),
-        primaryIcon = Icons.Default.Add,
+        primaryIcon = Icons.Rounded.Add,
         onPrimary = onImportSource,
         secondaryLabel = stringResource(R.string.buro_home_view_sources),
         onSecondary = onOpenSources,
@@ -638,13 +638,13 @@ private fun HomeErrorState(
 ) {
     HomeStatePanel(
         metrics = metrics,
-        icon = Icons.Default.ErrorOutline,
+        icon = Icons.Rounded.ErrorOutline,
         title = stringResource(R.string.buro_home_error_title),
         body = message
             ?.takeIf(String::isNotBlank)
             ?: stringResource(R.string.buro_home_error_body),
         primaryLabel = stringResource(R.string.buro_home_view_sources),
-        primaryIcon = Icons.Default.FolderOpen,
+        primaryIcon = Icons.Rounded.FolderOpen,
         onPrimary = onOpenSources,
         secondaryLabel = stringResource(R.string.buro_home_import_source),
         onSecondary = onImportSource,
@@ -735,7 +735,7 @@ private fun HomeStatePanel(
                     )
                     StateAction(
                         label = secondaryLabel,
-                        icon = Icons.Default.FolderOpen,
+                        icon = Icons.Rounded.FolderOpen,
                         primary = false,
                         onClick = onSecondary,
                         onFocused = {
@@ -761,7 +761,7 @@ private fun HomeStatePanel(
                     )
                     StateAction(
                         label = secondaryLabel,
-                        icon = Icons.Default.FolderOpen,
+                        icon = Icons.Rounded.FolderOpen,
                         primary = false,
                         onClick = onSecondary,
                         onFocused = {

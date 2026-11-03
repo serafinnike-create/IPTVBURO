@@ -12,7 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -71,7 +71,7 @@ fun CastSheet(
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Cast, contentDescription = null)
+            Icon(Icons.Rounded.Cast, contentDescription = null)
             Spacer(Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.cast_title),

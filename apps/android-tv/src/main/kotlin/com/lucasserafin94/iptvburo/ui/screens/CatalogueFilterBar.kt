@@ -16,9 +16,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.ViewModule
+import androidx.compose.material.icons.automirrored.rounded.List
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.ViewModule
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -170,9 +170,9 @@ private fun LayoutPicker(
             Icon(
                 imageVector =
                     when (selected) {
-                        CatalogueLayout.POSTER -> Icons.Default.GridView
-                        CatalogueLayout.COMPACT -> Icons.Default.ViewModule
-                        CatalogueLayout.LIST -> Icons.AutoMirrored.Filled.List
+                        CatalogueLayout.POSTER -> Icons.Rounded.GridView
+                        CatalogueLayout.COMPACT -> Icons.Rounded.ViewModule
+                        CatalogueLayout.LIST -> Icons.AutoMirrored.Rounded.List
                     },
                 contentDescription = stringResource(R.string.catalogue_layout),
                 tint = BuroTextSecondary,

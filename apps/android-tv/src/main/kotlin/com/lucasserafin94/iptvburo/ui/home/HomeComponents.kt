@@ -20,10 +20,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -242,7 +242,7 @@ fun BuroHero(
                         } else {
                             stringResource(R.string.buro_home_view_details)
                         },
-                    icon = Icons.Default.Info,
+                    icon = Icons.Rounded.Info,
                     primary = true,
                     onClick = { onOpenItem(item.id) },
                     onFocused = { onItemFocused(item.id) },
@@ -259,9 +259,9 @@ fun BuroHero(
                             },
                         icon =
                             if (trailerSoundOn) {
-                                Icons.AutoMirrored.Filled.VolumeOff
+                                Icons.AutoMirrored.Rounded.VolumeOff
                             } else {
-                                Icons.AutoMirrored.Filled.VolumeUp
+                                Icons.AutoMirrored.Rounded.VolumeUp
                             },
                         primary = false,
                         onClick = onToggleTrailerSound,

@@ -21,10 +21,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -150,7 +150,7 @@ fun DiscoverScreen(
                         modifier = Modifier.fillMaxWidth().weight(1f),
                         icon = {
                             Icon(
-                                Icons.Default.Explore,
+                                Icons.Rounded.Explore,
                                 contentDescription = null,
                                 tint = BuroTextSecondary,
                                 modifier = Modifier.size(44.dp),
@@ -403,7 +403,7 @@ private fun DiscoverCard(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = if (keeping) Icons.Default.Check else Icons.Default.Close,
+                        imageVector = if (keeping) Icons.Rounded.Check else Icons.Rounded.Close,
                         contentDescription = null,
                         tint = BuroTextPrimary,
                         modifier = Modifier.size(96.dp),
@@ -474,7 +474,7 @@ private fun DiscoverActions(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         VerdictButton(
-            icon = Icons.Default.Close,
+            icon = Icons.Rounded.Close,
             tint = BuroDanger,
             label = stringResource(R.string.discover_skip),
             onClick = onSkip,
@@ -482,7 +482,7 @@ private fun DiscoverActions(
         )
         Spacer(Modifier.width(if (compact) 24.dp else 42.dp))
         VerdictButton(
-            icon = Icons.Default.Check,
+            icon = Icons.Rounded.Check,
             tint = BuroGold,
             label = stringResource(R.string.discover_keep),
             onClick = onKeep,
@@ -490,7 +490,7 @@ private fun DiscoverActions(
         )
         Spacer(Modifier.width(if (compact) 24.dp else 42.dp))
         VerdictButton(
-            icon = Icons.Default.Info,
+            icon = Icons.Rounded.Info,
             tint = BuroTextSecondary,
             label = stringResource(R.string.discover_details),
             onClick = onOpenDetails,

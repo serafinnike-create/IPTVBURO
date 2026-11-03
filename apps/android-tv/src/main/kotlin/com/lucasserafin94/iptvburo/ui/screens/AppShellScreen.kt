@@ -92,36 +92,36 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.NetworkCheck
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.NetworkCheck
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LiveTv
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Cast
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.HeartBroken
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Router
-import androidx.compose.material.icons.filled.HelpOutline
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Subscriptions
-import androidx.compose.material.icons.filled.WorkspacePremium
-import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.LiveTv
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.VideoLibrary
+import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.HeartBroken
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Router
+import androidx.compose.material.icons.rounded.HelpOutline
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Subscriptions
+import androidx.compose.material.icons.rounded.WorkspacePremium
+import androidx.compose.material.icons.rounded.EventBusy
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.tv.material3.Button
@@ -1155,7 +1155,7 @@ private fun MobileAppBar(
         ) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Icon(
-                    Icons.Default.Menu,
+                    Icons.Rounded.Menu,
                     contentDescription = stringResource(R.string.mobile_menu_open),
                     tint = BuroTextPrimary,
                 )
@@ -1215,7 +1215,7 @@ private fun MobileAppBar(
                         )
                     } else {
                         Icon(
-                            Icons.Default.Refresh,
+                            Icons.Rounded.Refresh,
                             contentDescription = stringResource(R.string.common_refresh),
                             tint = BuroTextPrimary,
                         )
@@ -1236,7 +1236,7 @@ private fun MobileAppBar(
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Icon(
-                        Icons.Default.NetworkCheck,
+                        Icons.Rounded.NetworkCheck,
                         contentDescription = stringResource(R.string.diagnostics_action),
                         tint = BuroTextPrimary,
                     )
@@ -1346,7 +1346,7 @@ private fun MobileNavigationDrawer(
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Icon(
-                            Icons.Default.Close,
+                            Icons.Rounded.Close,
                             contentDescription = stringResource(R.string.mobile_menu_close),
                             tint = BuroTextPrimary,
                         )
@@ -1431,34 +1431,34 @@ private fun mobileDestinations(
     offlineSupported: Boolean,
 ): List<MobileDestination> =
     buildList {
-        add(MobileDestination(AppSection.HOME, Icons.Default.Home))
+        add(MobileDestination(AppSection.HOME, Icons.Rounded.Home))
         // Second, straight after Home: searching is how anyone finds a specific title in a
         // catalogue of tens of thousands, and the destination existed with no way in.
-        add(MobileDestination(AppSection.SEARCH, Icons.Default.Search))
-        add(MobileDestination(AppSection.LIVE, Icons.Default.LiveTv))
-        add(MobileDestination(AppSection.MOVIES, Icons.Default.Movie))
-        add(MobileDestination(AppSection.SERIES, Icons.Default.VideoLibrary))
+        add(MobileDestination(AppSection.SEARCH, Icons.Rounded.Search))
+        add(MobileDestination(AppSection.LIVE, Icons.Rounded.LiveTv))
+        add(MobileDestination(AppSection.MOVIES, Icons.Rounded.Movie))
+        add(MobileDestination(AppSection.SERIES, Icons.Rounded.VideoLibrary))
         // Above Meu BURO rather than below: Descobrir is what fills the favourites list, so it
         // belongs beside the catalogue it draws from rather than after the shelf it feeds.
-        add(MobileDestination(AppSection.DISCOVER, Icons.Default.Explore))
-        add(MobileDestination(AppSection.MY_BURO, Icons.Default.Favorite))
-        add(MobileDestination(AppSection.CONTINUE_WATCHING, Icons.Default.PlayCircle))
-        add(MobileDestination(AppSection.HISTORY, Icons.Default.History))
+        add(MobileDestination(AppSection.DISCOVER, Icons.Rounded.Explore))
+        add(MobileDestination(AppSection.MY_BURO, Icons.Rounded.Favorite))
+        add(MobileDestination(AppSection.CONTINUE_WATCHING, Icons.Rounded.PlayCircle))
+        add(MobileDestination(AppSection.HISTORY, Icons.Rounded.History))
         // Beside Histórico rather than inside Settings: the destination answers "what did I mark",
         // which is a library question, and the daily-notice controls ride along on that page
         // because the only reason to open it is the same list they act on.
-        add(MobileDestination(AppSection.REMINDERS, Icons.Default.Notifications))
+        add(MobileDestination(AppSection.REMINDERS, Icons.Rounded.Notifications))
         // The phone drawer is the primary navigation on a small screen, so a destination missing
         // here is missing outright — this is where Assinaturas has to appear once it is real.
         if (subscriptionsVisible) {
-            add(MobileDestination(AppSection.SUBSCRIPTIONS, Icons.Default.VideoLibrary))
+            add(MobileDestination(AppSection.SUBSCRIPTIONS, Icons.Rounded.VideoLibrary))
         }
         if (offlineSupported) {
-            add(MobileDestination(AppSection.DOWNLOADS, Icons.Default.Folder))
+            add(MobileDestination(AppSection.DOWNLOADS, Icons.Rounded.Folder))
         }
-        add(MobileDestination(AppSection.SOURCES, Icons.Default.Router))
-        add(MobileDestination(AppSection.PROFILE, Icons.Default.Person))
-        add(MobileDestination(AppSection.SETTINGS, Icons.Default.Settings))
+        add(MobileDestination(AppSection.SOURCES, Icons.Rounded.Router))
+        add(MobileDestination(AppSection.PROFILE, Icons.Rounded.Person))
+        add(MobileDestination(AppSection.SETTINGS, Icons.Rounded.Settings))
     }
 
 private fun SourceUi.toHomeSummary(): HomeSourceSummary =
@@ -1600,19 +1600,19 @@ private fun Sidebar(
 
         SidebarItem(
             label = stringResource(R.string.nav_home),
-            icon = Icons.Default.Home,
+            icon = Icons.Rounded.Home,
             selected = selected == AppSection.HOME,
             onClick = { onSelect(AppSection.HOME) },
         )
         SidebarItem(
             label = stringResource(R.string.buro_nav_live),
-            icon = Icons.Default.LiveTv,
+            icon = Icons.Rounded.LiveTv,
             selected = selected == AppSection.LIVE,
             onClick = { onSelect(AppSection.LIVE) },
         )
         SidebarItem(
             label = stringResource(R.string.nav_sources),
-            icon = Icons.Default.Folder,
+            icon = Icons.Rounded.Folder,
             selected = selected == AppSection.SOURCES,
             onClick = { onSelect(AppSection.SOURCES) },
         )
@@ -1621,7 +1621,7 @@ private fun Sidebar(
 
         SidebarItem(
             label = stringResource(R.string.nav_settings),
-            icon = Icons.Default.Settings,
+            icon = Icons.Rounded.Settings,
             selected = selected == AppSection.SETTINGS,
             onClick = { onSelect(AppSection.SETTINGS) },
         )
@@ -1739,7 +1739,7 @@ private fun HomeContent(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Add,
+                        imageVector = Icons.Rounded.Add,
                         contentDescription = null,
                         tint = BuroCanvas,
                         modifier = Modifier.size(48.dp),
@@ -2056,7 +2056,7 @@ private fun SourceImportActions(
             modifier =
                 fileModifier.then(if (stack) Modifier.fillMaxWidth() else Modifier),
         ) {
-            Icon(Icons.Default.Add, contentDescription = null)
+            Icon(Icons.Rounded.Add, contentDescription = null)
             Text(
                 text =
                     stringResource(
@@ -2078,7 +2078,7 @@ private fun SourceImportActions(
             enabled = !isImporting,
             modifier = if (stack) Modifier.fillMaxWidth() else Modifier,
         ) {
-            Icon(Icons.Default.LiveTv, contentDescription = null)
+            Icon(Icons.Rounded.LiveTv, contentDescription = null)
             Text(text = stringResource(R.string.sources_xtream_action))
         }
     }
@@ -2089,7 +2089,7 @@ private fun SourceImportActions(
             style = BuroButtonStyle.Secondary,
             modifier = if (stack) Modifier.fillMaxWidth() else Modifier,
         ) {
-            Icon(Icons.Default.Router, contentDescription = null)
+            Icon(Icons.Rounded.Router, contentDescription = null)
             Text(
                 text =
                     stringResource(
@@ -2138,7 +2138,7 @@ private fun EmptySources() {
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(
-            imageVector = Icons.Default.Folder,
+            imageVector = Icons.Rounded.Folder,
             contentDescription = null,
             tint = BuroAccent,
             modifier = Modifier.size(58.dp),
@@ -2186,7 +2186,7 @@ private fun SourceCard(
                     .background(BuroGold.copy(alpha = 0.25f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Default.Folder, contentDescription = null, tint = BuroAccent)
+                Icon(Icons.Rounded.Folder, contentDescription = null, tint = BuroAccent)
             }
             Spacer(Modifier.width(20.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -2208,7 +2208,7 @@ private fun SourceCard(
                     fontSize = 14.sp,
                 )
             }
-            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = BuroAccent)
+            Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = BuroAccent)
         }
     }
 }
@@ -2867,7 +2867,7 @@ private fun MyBuroMediaRow(
                     Icon(
                         // A broken heart rather than a bin: this removes a mark, it does not delete
                         // the title, and a bin on a row of films suggests otherwise.
-                        imageVector = Icons.Default.HeartBroken,
+                        imageVector = Icons.Rounded.HeartBroken,
                         contentDescription = stringResource(R.string.favorites_remove),
                         tint = BuroTextSecondary,
                         modifier = Modifier.size(20.dp),
@@ -3143,7 +3143,7 @@ private fun DownloadEntryRow(
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Icon(
-                        Icons.Default.Delete,
+                        Icons.Rounded.Delete,
                         contentDescription = stringResource(R.string.download_delete),
                         tint = colors.textSecondary,
                     )
@@ -3486,7 +3486,7 @@ internal fun ScreenHeader(
             ) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                         contentDescription = stringResource(R.string.common_back),
                         tint = BuroAccent,
                     )
@@ -3520,7 +3520,7 @@ internal fun ScreenHeader(
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Default.Refresh,
+                            imageVector = Icons.Rounded.Refresh,
                             contentDescription = stringResource(R.string.catalog_refresh),
                             tint = BuroAccent,
                         )
@@ -3849,7 +3849,7 @@ private fun CastReceiveCard(
                 Spacer(Modifier.height(8.dp))
             }
             BuroButton(onClick = onStart, style = BuroButtonStyle.Ghost) {
-                Icon(Icons.Default.Cast, contentDescription = null)
+                Icon(Icons.Rounded.Cast, contentDescription = null)
                 Text(stringResource(R.string.cast_receive_action))
             }
         }
@@ -3914,7 +3914,7 @@ private fun TmdbSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp),
             ) {
                 Icon(
-                    Icons.Default.HelpOutline,
+                    Icons.Rounded.HelpOutline,
                     contentDescription = null,
                     tint = BuroGold,
                     modifier = Modifier.size(18.dp),
@@ -4450,7 +4450,7 @@ private fun SearchContent(
                         {
                             androidx.compose.material3.IconButton(onClick = { typed = "" }) {
                                 androidx.compose.material3.Icon(
-                                    Icons.Default.Close,
+                                    Icons.Rounded.Close,
                                     contentDescription = stringResource(R.string.search_clear),
                                 )
                             }
@@ -4643,7 +4643,7 @@ private fun LicenseChip(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Icon(
-                imageVector = Icons.Default.WorkspacePremium,
+                imageVector = Icons.Rounded.WorkspacePremium,
                 contentDescription = null,
                 tint = if (urgent) colors.error else BuroGold,
             )
@@ -4702,7 +4702,7 @@ private fun SubscriptionChip(daysLeft: Int?, expiresOn: String?) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Icon(
-            imageVector = Icons.Default.EventBusy,
+            imageVector = Icons.Rounded.EventBusy,
             contentDescription = null,
             tint = if (urgent) colors.error else BuroTextSecondary,
         )

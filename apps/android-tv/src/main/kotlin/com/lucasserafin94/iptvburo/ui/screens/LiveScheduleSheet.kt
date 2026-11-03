@@ -2,7 +2,7 @@ package com.lucasserafin94.iptvburo.ui.screens
 
 import androidx.compose.foundation.layout.size
 import androidx.tv.material3.Icon
-import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.Icons
 import com.lucasserafin94.iptvburo.data.repository.CatchUpPolicy
 import androidx.compose.foundation.background
@@ -268,7 +268,7 @@ private fun ScheduleRowContent(
         }
         if (replayable) {
             Icon(
-                imageVector = Icons.Default.Replay,
+                imageVector = Icons.Rounded.Replay,
                 contentDescription = stringResource(R.string.live_schedule_replay),
                 tint = BuroGold,
                 modifier = Modifier.padding(start = 8.dp).size(22.dp),

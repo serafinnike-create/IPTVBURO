@@ -22,17 +22,17 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.NotificationsNone
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Cast
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.NotificationsNone
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -201,7 +201,7 @@ internal fun MovieDetailsScreen(
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = stringResource(R.string.common_back),
                             tint = BuroTextPrimary,
                         )
@@ -319,7 +319,7 @@ internal fun MovieDetailsScreen(
                         onClick = onPlay,
                         enabled = !isLoading && !isResolvingPlayback,
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Icon(Icons.Rounded.PlayArrow, contentDescription = null)
                         Text(stringResource(R.string.details_watch))
                     }
 
@@ -331,9 +331,9 @@ internal fun MovieDetailsScreen(
                                     BuroAction(
                                         icon =
                                             if (isFavorite) {
-                                                Icons.Default.Favorite
+                                                Icons.Rounded.Favorite
                                             } else {
-                                                Icons.Default.FavoriteBorder
+                                                Icons.Rounded.FavoriteBorder
                                             },
                                         // The label follows the state, as the pill's did: the button
                                         // says what the title *is*, not what pressing would do.
@@ -355,9 +355,9 @@ internal fun MovieDetailsScreen(
                                     BuroAction(
                                         icon =
                                             if (hasReminder) {
-                                                Icons.Default.Notifications
+                                                Icons.Rounded.Notifications
                                             } else {
-                                                Icons.Default.NotificationsNone
+                                                Icons.Rounded.NotificationsNone
                                             },
                                         label =
                                             stringResource(
@@ -380,8 +380,8 @@ internal fun MovieDetailsScreen(
                                         BuroAction(
                                             icon =
                                                 when (downloadState) {
-                                                    DownloadStateUi.Completed -> Icons.Default.DownloadDone
-                                                    else -> Icons.Default.Download
+                                                    DownloadStateUi.Completed -> Icons.Rounded.DownloadDone
+                                                    else -> Icons.Rounded.Download
                                                 },
                                             label = downloadState.label(),
                                             onClick =
@@ -410,7 +410,7 @@ internal fun MovieDetailsScreen(
                                 // everything after it.
                                 add(
                                     BuroAction(
-                                        icon = Icons.Default.PlayCircle,
+                                        icon = Icons.Rounded.PlayCircle,
                                         label = stringResource(R.string.details_trailer),
                                         onClick = {
                                             trailerId?.let { id ->
@@ -430,7 +430,7 @@ internal fun MovieDetailsScreen(
                                 // the catalogue row, so a share is complete without it.
                                 add(
                                     BuroAction(
-                                        icon = Icons.Default.Share,
+                                        icon = Icons.Rounded.Share,
                                         label = stringResource(R.string.details_share),
                                         onClick = { onShare?.invoke() },
                                         enabled = onShare != null,
@@ -438,7 +438,7 @@ internal fun MovieDetailsScreen(
                                 )
                                 add(
                                     BuroAction(
-                                        icon = Icons.Default.Cast,
+                                        icon = Icons.Rounded.Cast,
                                         label = stringResource(R.string.cast_action),
                                         onClick = { onCast?.invoke() },
                                         enabled = onCast != null,

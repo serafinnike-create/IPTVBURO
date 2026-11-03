@@ -14,11 +14,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.AspectRatio
-import androidx.compose.material.icons.filled.BrightnessHigh
-import androidx.compose.material.icons.filled.FastForward
-import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.BrightnessHigh
+import androidx.compose.material.icons.rounded.FastForward
+import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -205,7 +205,7 @@ internal fun GestureFeedbackBadge(
         when (feedback) {
             is GestureFeedback.Seek -> {
                 Icon(
-                    imageVector = if (feedback.seconds < 0) Icons.Default.FastRewind else Icons.Default.FastForward,
+                    imageVector = if (feedback.seconds < 0) Icons.Rounded.FastRewind else Icons.Rounded.FastForward,
                     contentDescription = null,
                     tint = BuroTextPrimary,
                     modifier = Modifier.size(34.dp),
@@ -227,9 +227,9 @@ internal fun GestureFeedbackBadge(
                 Icon(
                     imageVector =
                         if (feedback.side == LevelSide.VOLUME) {
-                            Icons.AutoMirrored.Filled.VolumeUp
+                            Icons.AutoMirrored.Rounded.VolumeUp
                         } else {
-                            Icons.Default.BrightnessHigh
+                            Icons.Rounded.BrightnessHigh
                         },
                     contentDescription =
                         stringResource(
@@ -261,7 +261,7 @@ internal fun GestureFeedbackBadge(
 
             is GestureFeedback.Scale -> {
                 Icon(
-                    imageVector = Icons.Default.AspectRatio,
+                    imageVector = Icons.Rounded.AspectRatio,
                     contentDescription = null,
                     tint = BuroTextPrimary,
                     modifier = Modifier.size(30.dp),

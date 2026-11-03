@@ -12,11 +12,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Slider
@@ -109,7 +109,7 @@ fun CacheSettingsCard(
         if (bytesUsed > 0) {
             Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
             BuroButton(onClick = onClearCache, style = BuroButtonStyle.Ghost) {
-                Icon(Icons.Default.Delete, contentDescription = null)
+                Icon(Icons.Rounded.Delete, contentDescription = null)
                 Text(stringResource(R.string.cache_settings_clear))
             }
         }
@@ -210,7 +210,7 @@ private fun CacheFillSection(
     if (progress.isRunning) {
         Spacer(Modifier.height(10.dp))
         BuroButton(onClick = onStopFill, style = BuroButtonStyle.Ghost) {
-            Icon(Icons.Default.Pause, contentDescription = null)
+            Icon(Icons.Rounded.Pause, contentDescription = null)
             Text(stringResource(R.string.cache_fill_pause))
         }
         return
@@ -235,7 +235,7 @@ private fun CacheFillSection(
             if (progress.state == CacheFillState.COMPLETE) onRefreshFill else onStartFill
         BuroButton(onClick = primaryAction, style = BuroButtonStyle.Ghost) {
             Icon(
-                if (progress.isResumable) Icons.Default.PlayArrow else Icons.Default.CloudDownload,
+                if (progress.isResumable) Icons.Rounded.PlayArrow else Icons.Rounded.CloudDownload,
                 contentDescription = null,
             )
             Text(
@@ -252,7 +252,7 @@ private fun CacheFillSection(
         // of continuing an old one against a list that has since changed.
         if (progress.isResumable) {
             BuroButton(onClick = onRefreshFill, style = BuroButtonStyle.Ghost) {
-                Icon(Icons.Default.Refresh, contentDescription = null)
+                Icon(Icons.Rounded.Refresh, contentDescription = null)
                 // Held to one line: beside "Continuar" there is not room for two words to wrap, and
                 // "Atualizar novament / e" broken across three lines is worse than a shorter label.
                 Text(stringResource(R.string.cache_fill_refresh), maxLines = 1)
@@ -387,7 +387,7 @@ fun CacheFirstRunOffer(
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 BuroButton(onClick = { onAccept(chosen.toInt()) }, style = BuroButtonStyle.Primary) {
-                    Icon(Icons.Default.CloudDownload, contentDescription = null)
+                    Icon(Icons.Rounded.CloudDownload, contentDescription = null)
                     Text(stringResource(R.string.cache_offer_accept))
                 }
                 BuroButton(onClick = onDecline, style = BuroButtonStyle.Ghost) {

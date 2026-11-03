@@ -31,26 +31,26 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.FastForward
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.FastRewind
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.AspectRatio
-import androidx.compose.material.icons.filled.BrightnessHigh
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.ClosedCaption
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.PictureInPicture
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.FastForward
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.FullscreenExit
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.BrightnessHigh
+import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.ClosedCaption
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.LockOpen
+import androidx.compose.material.icons.rounded.PictureInPicture
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
@@ -843,7 +843,7 @@ fun PlayerScreen(
                     },
                     icon = {
                         Icon(
-                            Icons.Default.LockOpen,
+                            Icons.Rounded.LockOpen,
                             contentDescription = stringResource(R.string.player_unlock_controls),
                             tint = BuroTextPrimary,
                         )
@@ -1224,7 +1224,7 @@ private fun PlayerTopBar(
             onClick = onBack,
             icon = {
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
+                    Icons.AutoMirrored.Rounded.ArrowBack,
                     contentDescription = stringResource(R.string.player_back),
                     tint = BuroTextPrimary,
                 )
@@ -1317,7 +1317,7 @@ private fun PlayerControls(
                     onClick = previous,
                     icon = {
                         Icon(
-                            Icons.Default.SkipPrevious,
+                            Icons.Rounded.SkipPrevious,
                             contentDescription = stringResource(R.string.player_previous_channel),
                             tint = BuroTextPrimary,
                         )
@@ -1330,7 +1330,7 @@ private fun PlayerControls(
                     onClick = onSeekBack,
                     icon = {
                         Icon(
-                            Icons.Default.FastRewind,
+                            Icons.Rounded.FastRewind,
                             contentDescription = stringResource(R.string.player_seek_back_10),
                             tint = BuroTextPrimary,
                         )
@@ -1345,9 +1345,9 @@ private fun PlayerControls(
                 icon = {
                     Icon(
                         imageVector = if (state.isPlaying) {
-                            Icons.Default.Pause
+                            Icons.Rounded.Pause
                         } else {
-                            Icons.Default.PlayArrow
+                            Icons.Rounded.PlayArrow
                         },
                         contentDescription = stringResource(if (state.isPlaying) R.string.player_pause else R.string.player_play),
                         tint = BuroCanvas,
@@ -1361,7 +1361,7 @@ private fun PlayerControls(
                     onClick = onSeekForward,
                     icon = {
                         Icon(
-                            Icons.Default.FastForward,
+                            Icons.Rounded.FastForward,
                             contentDescription = stringResource(R.string.player_seek_forward_30),
                             tint = BuroTextPrimary,
                         )
@@ -1374,7 +1374,7 @@ private fun PlayerControls(
                     onClick = next,
                     icon = {
                         Icon(
-                            Icons.Default.SkipNext,
+                            Icons.Rounded.SkipNext,
                             contentDescription =
                                 stringResource(
                                     if (onNextChannel != null) R.string.player_next_channel else R.string.player_next_episode,
@@ -1389,7 +1389,7 @@ private fun PlayerControls(
                 onClick = onCycleSpeed,
                 icon = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Speed, contentDescription = stringResource(R.string.player_speed), tint = BuroTextPrimary, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Rounded.Speed, contentDescription = stringResource(R.string.player_speed), tint = BuroTextPrimary, modifier = Modifier.size(22.dp))
                         Text("${speed}x", color = BuroTextPrimary, fontSize = 10.sp)
                     }
                 },
@@ -1401,7 +1401,7 @@ private fun PlayerControls(
                     onClick = onOpenSchedule,
                     icon = {
                         Icon(
-                            Icons.Default.CalendarMonth,
+                            Icons.Rounded.CalendarMonth,
                             contentDescription = stringResource(R.string.live_schedule_title),
                             tint = BuroTextPrimary,
                         )
@@ -1417,7 +1417,7 @@ private fun PlayerControls(
                 icon = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            Icons.Default.AspectRatio,
+                            Icons.Rounded.AspectRatio,
                             contentDescription = stringResource(R.string.player_aspect_ratio),
                             tint = BuroTextPrimary,
                             modifier = Modifier.size(22.dp),
@@ -1429,14 +1429,14 @@ private fun PlayerControls(
             if (canUsePictureInPicture) {
                 ControlButton(
                     onClick = onPictureInPicture,
-                    icon = { Icon(Icons.Default.PictureInPicture, contentDescription = stringResource(R.string.player_picture_in_picture), tint = BuroTextPrimary) },
+                    icon = { Icon(Icons.Rounded.PictureInPicture, contentDescription = stringResource(R.string.player_picture_in_picture), tint = BuroTextPrimary) },
                 )
             }
             ControlButton(
                 onClick = onToggleFullscreen,
                 icon = {
                     Icon(
-                        if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                        if (isFullscreen) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen,
                         contentDescription = stringResource(if (isFullscreen) R.string.player_exit_fullscreen else R.string.player_enter_fullscreen),
                         tint = BuroTextPrimary,
                     )
@@ -1444,7 +1444,7 @@ private fun PlayerControls(
             )
             ControlButton(
                 onClick = onLock,
-                icon = { Icon(Icons.Default.Lock, contentDescription = stringResource(R.string.player_lock_controls), tint = BuroTextPrimary) },
+                icon = { Icon(Icons.Rounded.Lock, contentDescription = stringResource(R.string.player_lock_controls), tint = BuroTextPrimary) },
             )
             // Only where there is a genuine choice. A stream with one audio track and no subtitles
             // would open an empty sheet, which reads as the feature being broken.
@@ -1453,7 +1453,7 @@ private fun PlayerControls(
                     onClick = onOpenTracks,
                     icon = {
                         Icon(
-                            Icons.Default.ClosedCaption,
+                            Icons.Rounded.ClosedCaption,
                             contentDescription = stringResource(R.string.player_tracks),
                             tint = BuroTextPrimary,
                         )
@@ -1467,7 +1467,7 @@ private fun PlayerControls(
                     onClick = toggleFavorite,
                     icon = {
                         Icon(
-                            if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                             contentDescription =
                                 stringResource(
                                     if (isFavorite) {
@@ -1540,13 +1540,13 @@ private fun PlayerControls(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     LevelStepper(
-                        icon = Icons.Default.BrightnessHigh,
+                        icon = Icons.Rounded.BrightnessHigh,
                         contentDescription = stringResource(R.string.player_brightness),
                         value = brightness,
                         onValueChange = { value -> onBrightnessChanged(value.coerceIn(0.05f, 1f)) },
                     )
                     LevelStepper(
-                        icon = Icons.AutoMirrored.Filled.VolumeUp,
+                        icon = Icons.AutoMirrored.Rounded.VolumeUp,
                         contentDescription = stringResource(R.string.player_volume),
                         value = volume,
                         onValueChange = { value -> onVolumeChanged(value.coerceIn(0f, 1f)) },
