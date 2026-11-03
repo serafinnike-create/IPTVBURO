@@ -714,7 +714,7 @@ fun DesktopApp(
                             )
                         } else if (visibleDestination == DesktopDestination.GUIDE) {
                             LiveGuideScreen(
-                                channels = appState.guideChannels,
+                                allChannels = appState.guideChannels,
                                 focusedChannelId = appState.guideFocusedChannelId,
                                 scheduleFor = appState::guideScheduleFor,
                                 isLoading = appState::guideIsLoading,

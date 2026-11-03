@@ -7806,6 +7806,7 @@ class DesktopAppState(
         xtreamSearchQuery = ""
         appliedXtreamSearch = null
         xtreamPage = XtreamCatalogPage.empty()
+        guideAllChannels = emptyList()
         selectedXtreamItemId = null
         seriesDetailsStatus = SeriesDetailsStatus.Idle
         movieDetailsStatus = MovieDetailsStatus.Idle
@@ -8073,9 +8074,53 @@ class DesktopAppState(
     /** Channels whose schedule is being fetched now, so the same one is not asked for twice. */
     private val guideInFlight = mutableSetOf<String>()
 
-    /** The channels the guide lists: whatever the live catalogue currently holds. */
+    /**
+     * Every live channel, read for the guide when it opens.
+     *
+     * The guide used to list the catalogue's current page — the first 80 channels of a subscription
+     * carrying thousands — so most stations were missing from it altogether and its filter found
+     * nothing past the letter A.
+     */
+    private var guideAllChannels by mutableStateOf<List<XtreamCatalogItem>>(emptyList())
+
+    /** The channels the guide lists; the current page until the full list has been read. */
     val guideChannels: List<XtreamCatalogItem>
-        get() = if (xtreamContentType == XtreamContentType.LIVE) xtreamPage.items else emptyList()
+        get() =
+            when {
+                xtreamContentType != XtreamContentType.LIVE -> emptyList()
+                guideAllChannels.isNotEmpty() -> guideAllChannels
+                else -> xtreamPage.items
+            }
+
+    /**
+     * Reads every live channel, page by page, under the same Kids and locked-category rules as the
+     * catalogue, so the guide never shows a channel the catalogue would have hidden.
+     */
+    private suspend fun loadGuideChannels() {
+        val lockedCategories = lockedCategoryIdsForBrowsing()
+        val kidsMode = activeProfile?.isKids == true
+        guideAllChannels =
+            withContext(Dispatchers.Default) {
+                buildList {
+                    var pageIndex = 0
+                    while (pageIndex < GUIDE_MAX_PAGES) {
+                        val page =
+                            xtreamRepository.page(
+                                contentType = XtreamContentType.LIVE,
+                                categoryId = null,
+                                query = "",
+                                requestedPage = pageIndex,
+                                pageSize = GUIDE_PAGE_SIZE,
+                                kidsMode = kidsMode,
+                                lockedCategoryIds = lockedCategories,
+                            )
+                        addAll(page.items)
+                        pageIndex += 1
+                        if (page.items.isEmpty() || pageIndex >= page.pageCount) break
+                    }
+                }
+            }
+    }
 
     /** The schedule for [channelId], or null while it is still being fetched. */
     fun guideScheduleFor(channelId: String): List<EpgEntry>? = guideSchedules[channelId]?.entries
@@ -8143,12 +8188,21 @@ class DesktopAppState(
         if (xtreamContentType != XtreamContentType.LIVE) {
             selectXtreamContentType(XtreamContentType.LIVE)
         }
+        // Read again on every visit: cheap next to the network, and a refreshed list, another source
+        // or a profile switch since the last visit all change what belongs in it.
+        runCatching { loadGuideChannels() }
         val first = guideFocusedChannelId ?: guideChannels.firstOrNull()?.providerId
         if (first != null) focusGuideChannel(first)
     }
 
     private companion object {
         const val MAX_SEARCH_LENGTH = 120
+
+        /** The guide reads the live list in the largest pages the repository allows. */
+        const val GUIDE_PAGE_SIZE = 200
+
+        /** A ceiling on the guide's read, at 200 000 channels, so a broken page count cannot spin. */
+        const val GUIDE_MAX_PAGES = 1_000
 
         /** Shortest query worth walking a catalogue for; one letter matches most of it. */
         const val MIN_GLOBAL_SEARCH_QUERY = 2

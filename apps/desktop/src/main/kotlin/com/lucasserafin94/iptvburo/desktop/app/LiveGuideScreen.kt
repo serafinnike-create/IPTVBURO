@@ -3,7 +3,6 @@ package com.lucasserafin94.iptvburo.desktop.app
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +21,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,9 +46,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.unit.dp
 import com.lucasserafin94.iptvburo.desktop.ui.BuroColors
+import com.lucasserafin94.iptvburo.desktop.ui.BuroIconButton
+import com.lucasserafin94.iptvburo.desktop.ui.BuroIcons
 import com.lucasserafin94.iptvburo.desktop.ui.BuroInteractiveRow
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
@@ -76,7 +78,8 @@ import kotlinx.coroutines.delay
  */
 @Composable
 fun LiveGuideScreen(
-    channels: List<XtreamCatalogItem>,
+    /** Every channel; the screen narrows it with its own filter. */
+    allChannels: List<XtreamCatalogItem>,
     focusedChannelId: String?,
     scheduleFor: (String) -> List<EpgEntry>?,
     isLoading: (String) -> Boolean,
@@ -100,19 +103,26 @@ fun LiveGuideScreen(
 ) {
     val text = strings
     val labels = text.shareStrings.screens
+
+    // A real subscription sends thousands of channels in one alphabetical run, every quality of the
+    // same station on its own row; reaching "ESPN" was a long scroll. Typing a few letters is how
+    // somebody who knows what they want gets there.
+    var filter by remember { mutableStateOf("") }
+    val channels = remember(allChannels, filter) { filterGuideChannels(allChannels, filter) }
     val focused = channels.firstOrNull { it.providerId == focusedChannelId } ?: channels.firstOrNull()
 
     // The first channel is focused on arrival rather than leaving the schedule column empty until
-    // something is clicked — an empty half-screen reads as a guide that failed to load.
+    // something is clicked — an empty half-screen reads as a guide that failed to load. The same
+    // when the filter hides the channel that was focused: the first one left takes its place.
     LaunchedEffect(channels.firstOrNull()?.providerId) {
-        val first = focusedChannelId ?: channels.firstOrNull()?.providerId
+        val stillShown = channels.any { it.providerId == focusedChannelId }
+        val first = if (stillShown) focusedChannelId else channels.firstOrNull()?.providerId
         if (first != null) onFocusChannel(first)
     }
 
     val keyboard = remember { FocusRequester() }
-    // The list takes the keyboard as soon as the guide opens, so the arrows work without a click
-    // first — on a guide the arrows are how somebody moves, and asking for a click to enable them
-    // is a step nobody expects.
+    // The filter takes the keyboard as soon as the guide opens: letters narrow the list, and the
+    // arrows still move through it, caught above the field before it sees them.
     LaunchedEffect(Unit) { runCatching { keyboard.requestFocus() } }
 
     Row(
@@ -120,8 +130,6 @@ fun LiveGuideScreen(
             Modifier
                 .fillMaxSize()
                 .padding(BuroSpacing.Md)
-                .focusRequester(keyboard)
-                .focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     val index = channels.indexOfFirst { it.providerId == focused?.providerId }
@@ -164,6 +172,29 @@ fun LiveGuideScreen(
                 color = BuroColors.Text,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(BuroSpacing.Sm))
+            OutlinedTextField(
+                value = filter,
+                onValueChange = { filter = it },
+                modifier = Modifier.fillMaxWidth().padding(end = 12.dp).focusRequester(keyboard),
+                singleLine = true,
+                placeholder = { Text(labels.guideFilter) },
+                leadingIcon = {
+                    Icon(BuroIcons.Search, contentDescription = null, tint = BuroColors.TextSubtle)
+                },
+                trailingIcon =
+                    if (filter.isEmpty()) {
+                        null
+                    } else {
+                        {
+                            BuroIconButton(
+                                icon = BuroIcons.Close,
+                                label = text.cancel,
+                                onClick = { filter = "" },
+                            )
+                        }
+                    },
             )
             Spacer(Modifier.height(BuroSpacing.Sm))
             val listState = rememberLazyListState()
@@ -372,6 +403,29 @@ fun LiveGuideScreen(
  * that stopping on a channel feels like it starts at once.
  */
 private const val PREVIEW_SETTLE_MILLIS = 900L
+
+/**
+ * The channels whose name holds every word typed, ignoring case and accents.
+ *
+ * Word by word rather than as one phrase, so "sport hd" finds "SporTV 2 HD"; accents folded, so
+ * "nacoes" finds "Nações" on a keyboard without them.
+ */
+internal fun filterGuideChannels(
+    channels: List<XtreamCatalogItem>,
+    filter: String,
+): List<XtreamCatalogItem> {
+    val words = foldForFilter(filter).split(' ').filter { it.isNotBlank() }
+    if (words.isEmpty()) return channels
+    return channels.filter { channel ->
+        val name = foldForFilter(channel.name)
+        words.all { name.contains(it) }
+    }
+}
+
+private fun foldForFilter(value: String): String =
+    java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "")
+        .lowercase()
 
 /**
  * One channel playing inside the guide.

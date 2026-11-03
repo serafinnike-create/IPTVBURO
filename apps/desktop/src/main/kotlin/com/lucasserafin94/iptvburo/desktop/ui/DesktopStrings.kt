@@ -670,6 +670,7 @@ data class DesktopStrings(
                             guideTitle = "Guía",
                             guideNoSchedule = "Este canal no envió programación.",
                             guideWatch = "Ver este canal",
+                            guideFilter = "Filtrar canales",
                             diagnosticsLatencyGood = "Latencia baja: los canales cambian sin espera",
                             diagnosticsLatencyFair = "Latencia alta: puede cortar y tardar al cambiar de canal",
                             diagnosticsLatencyUnstable = "Latencia muy alta: va a causar cortes y congelamientos",
@@ -1459,6 +1460,7 @@ data class DesktopStrings(
                             guideTitle = "Guia",
                             guideNoSchedule = "Este canal não enviou programação.",
                             guideWatch = "Ver este canal",
+                            guideFilter = "Filtrar canais",
                             diagnosticsLatencyGood = "Latência baixa: os canais trocam sem espera",
                             diagnosticsLatencyFair = "Latência alta: pode travar e demorar ao trocar de canal",
                             diagnosticsLatencyUnstable = "Latência muito alta: vai causar travamentos e cortes",
@@ -2248,6 +2250,7 @@ data class DesktopStrings(
                             guideTitle = "Guide",
                             guideNoSchedule = "This channel sent no schedule.",
                             guideWatch = "Watch this channel",
+                            guideFilter = "Filter channels",
                             diagnosticsLatencyGood = "Low latency: channels change without waiting",
                             diagnosticsLatencyFair = "High latency: this can stall and slow channel changes",
                             diagnosticsLatencyUnstable = "Very high latency: this will cause freezing and stalls",
@@ -3036,6 +3039,7 @@ data class DesktopStrings(
                             guideTitle = "Programm",
                             guideNoSchedule = "Dieser Sender hat kein Programm gesendet.",
                             guideWatch = "Diesen Sender ansehen",
+                            guideFilter = "Sender filtern",
                             diagnosticsLatencyGood = "Niedrige Latenz: Kanäle wechseln ohne Wartezeit",
                             diagnosticsLatencyFair = "Hohe Latenz: kann stocken und Kanalwechsel verzögern",
                             diagnosticsLatencyUnstable = "Sehr hohe Latenz: verursacht Ruckeln und Aussetzer",
@@ -3829,6 +3833,7 @@ data class DesktopStrings(
                             guideTitle = "Guida",
                             guideNoSchedule = "Questo canale non ha inviato la programmazione.",
                             guideWatch = "Guarda questo canale",
+                            guideFilter = "Filtra i canali",
                             diagnosticsLatencyGood = "Latenza bassa: i canali cambiano senza attesa",
                             diagnosticsLatencyFair = "Latenza alta: può bloccarsi e rallentare il cambio canale",
                             diagnosticsLatencyUnstable = "Latenza molto alta: causerà blocchi e interruzioni",
@@ -5018,6 +5023,8 @@ data class ScreenStrings(
     val guideNoSchedule: String,
     /** The button that plays the channel the guide is sitting on. */
     val guideWatch: String,
+    /** The placeholder of the box that narrows the guide's channel list by name. */
+    val guideFilter: String,
     /**
      * Why Continuar is disabled.
      *
