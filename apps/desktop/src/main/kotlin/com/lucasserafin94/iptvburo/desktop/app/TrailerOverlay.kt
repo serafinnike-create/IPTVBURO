@@ -150,7 +150,7 @@ fun TrailerOverlay(
                         .clip(BuroRadius.Medium)
                         .background(Color.Black),
             ) {
-                SwingPanel(
+                com.lucasserafin94.iptvburo.desktop.ui.NativeSwingPanel(
                     factory = { panel },
                     modifier = Modifier.fillMaxSize(),
                     background = Color.Black,

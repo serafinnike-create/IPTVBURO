@@ -673,7 +673,7 @@ internal fun HeroTrailer(
     // Compose paints that behind the embedded component, and it is what shows wherever the browser
     // has not drawn — which on this panel is the whole rectangle until the video arrives, and
     // apparently for longer. It is the one white in this chain that is ours rather than Chromium's.
-    SwingPanel(
+    com.lucasserafin94.iptvburo.desktop.ui.NativeSwingPanel(
         factory = { panel },
         // At its real size from the start.
         //

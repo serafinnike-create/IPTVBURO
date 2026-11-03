@@ -196,7 +196,7 @@ fun MultiviewOverlay(
                     .fillMaxWidth()
                     .background(BuroColors.Canvas),
             ) {
-                SwingPanel(
+                com.lucasserafin94.iptvburo.desktop.ui.NativeSwingPanel(
                     // The seams are this, and nothing else.
                     //
                     // SwingPanel's `background` defaults to Color.White, and it does not merely sit

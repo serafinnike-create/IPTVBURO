@@ -123,6 +123,23 @@ fun SettingsDialog(
     // shown "Em uso: 0 B" and had no reason to believe anything was being kept.
     LaunchedEffect(Unit) { appState.refreshCacheUsage() }
 
+    // Escape closes it, as it does every other panel in the app. Listened for process-wide because
+    // the panel holds no focus of its own: a key handler on it never heard the key.
+    val currentDismiss by androidx.compose.runtime.rememberUpdatedState(onDismiss)
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val dispatcher =
+            java.awt.KeyEventDispatcher { event ->
+                if (event.id == java.awt.event.KeyEvent.KEY_PRESSED && event.keyCode == java.awt.event.KeyEvent.VK_ESCAPE) {
+                    currentDismiss()
+                    true
+                } else {
+                    false
+                }
+            }
+        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(dispatcher)
+        onDispose { java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(dispatcher) }
+    }
+
     Box(
         modifier =
             Modifier

@@ -291,6 +291,8 @@ fun DesktopApp(
     BuroDesktopTheme {
         CompositionLocalProvider(
             androidx.compose.ui.platform.LocalDensity provides scaledDensity,
+            // The real one too, for the native surfaces — see NativeSwingPanel.
+            com.lucasserafin94.iptvburo.desktop.ui.LocalSystemDensity provides systemDensity,
             LocalDesktopStrings provides DesktopStrings.of(appState.language),
             LocalProviderLogos provides appState.providerLogos,
         ) {

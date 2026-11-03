@@ -1515,7 +1515,7 @@ private fun XtreamCatalogGrid(
                         .size(width = 320.dp, height = 180.dp)
                         .border(1.dp, BuroColors.Primary, BuroRadius.Small),
             ) {
-                SwingPanel(
+                com.lucasserafin94.iptvburo.desktop.ui.NativeSwingPanel(
                     background = MultiviewSurface.SEAM_COLOUR,
                     factory = { previewSurface.component() },
                     modifier = Modifier.fillMaxSize(),

@@ -392,7 +392,7 @@ private fun GuidePreview(
     LaunchedEffect(tile.providerId) {
         surface.sync(tiles = listOf(tile), onTileClicked = {}, text = previewText)
     }
-    SwingPanel(
+    com.lucasserafin94.iptvburo.desktop.ui.NativeSwingPanel(
         background = MultiviewSurface.SEAM_COLOUR,
         factory = { surface.component() },
         modifier = Modifier.fillMaxSize(),

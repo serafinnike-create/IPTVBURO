@@ -492,7 +492,7 @@ fun DesktopPlayerOverlay(
             // the canvas on screen. Keying the subtree discards the old panel and builds the new
             // player its own.
             key(controller) {
-                SwingPanel(
+                com.lucasserafin94.iptvburo.desktop.ui.NativeSwingPanel(
                     factory = {
                         controller
                             .createComponent(
