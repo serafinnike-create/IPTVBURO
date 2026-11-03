@@ -92,9 +92,14 @@ internal fun WebServiceScreen(
 
     BackHandler {
         val live = webView
+        val history = live?.copyBackForwardList()
+        val previous =
+            history
+                ?.takeIf { list -> list.currentIndex > 0 }
+                ?.let { list -> list.getItemAtIndex(list.currentIndex - 1)?.url }
         when {
             fullScreenView != null -> fullScreenCallback?.onCustomViewHidden()
-            live != null && live.canGoBack() -> live.goBack()
+            live != null && !leavesWebServiceOnBack(previous, live.url) -> live.goBack()
             else -> onClose()
         }
     }
@@ -258,6 +263,29 @@ internal fun WebServiceScreen(
         }
     }
 }
+
+/**
+ * Whether Back should leave the service instead of going back a page inside it.
+ *
+ * Leaves when there is no earlier page, when the earlier page is the same page, or when it is the
+ * sign-in page. That last one is the trap this exists for: after signing in, the page before is the
+ * sign-in form, which a signed-in user is sent straight on from — so Back reopened the same page
+ * every time and a television remote, which has no other way out, could never leave GoDorama.
+ */
+internal fun leavesWebServiceOnBack(
+    previousUrl: String?,
+    currentUrl: String?,
+): Boolean {
+    val previous = previousUrl?.pageOnly() ?: return true
+    if (previous == currentUrl?.pageOnly()) return true
+    val path = previous.substringAfter("://").substringAfter('/', "").lowercase()
+    return SIGN_IN_PATHS.any { segment -> path == segment || path.startsWith("$segment/") }
+}
+
+/** The address without its query or fragment, so a page that only changed those counts as the same. */
+private fun String.pageOnly(): String = substringBefore('#').substringBefore('?').trimEnd('/')
+
+private val SIGN_IN_PATHS = listOf("login", "entrar", "signin", "sign-in", "auth")
 
 /**
  * Clears the browser view's cookies and site storage, then runs [then] on the main thread.
