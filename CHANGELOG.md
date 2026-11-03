@@ -2,6 +2,60 @@
 
 Todas as mudanças relevantes do IPTV BURO serão registradas neste arquivo.
 
+## [4.1.0] - 2026-11-03 (Windows, Android)
+
+### Windows
+
+#### Adicionado
+
+- **Player renovado.** Ícones de verdade no lugar de letras e símbolos, com dica
+  ao passar o mouse dizendo o que cada botão faz e qual tecla faz o mesmo.
+  Velocidade, formato da imagem, alto-falantes e brilho ficam num menu de ajustes.
+- **Teclado completo:** Espaço/K pausa, ←/→ 10 s (Shift: 60 s), ↑/↓ volume,
+  M sem som, F tela cheia, N próximo episódio, 1–9 pula para 10–90 %.
+- **Mouse:** duplo clique entra/sai da tela cheia; a roda ajusta o volume.
+- **Próximo episódio automático:** oferecido nos últimos 30 segundos, com
+  "Assistir agora" e "Cancelar", e iniciado sozinho no fim do episódio.
+- **Avisos na barra:** reconectando, carregando, erro com "Tentar novamente",
+  e o que a última tecla fez (volume, avanço, velocidade).
+- Ao vivo mostra o selo AO VIVO e esconde avanço e velocidade, que não se aplicam.
+- Textos do player em português, inglês, espanhol, alemão e italiano.
+
+#### Corrigido
+
+- Um filme cuja conexão caía no meio ficava parado sem aviso; agora reconecta e
+  volta ao ponto onde estava.
+- A retomada ("continuar de onde parou") falhava quando o vídeo demorava a abrir.
+- O fim do episódio não era reconhecido quando o VLC limpava a duração.
+- O volume voltava para 80 % a cada título.
+- −10 s/+30 s num canal ao vivo levavam ao início.
+- Esc fechava o player com um menu de áudio ou legenda aberto.
+- Duplo clique pausava e despausava.
+- Fechar o player pela janela pequena deixava uma janela vazia sobre as outras.
+
+### Android
+
+#### Adicionado
+
+- Gestos no player: toque duplo nas laterais avança/volta 10 s; arrastar à
+  esquerda muda o brilho e à direita o volume; pinça preenche a tela.
+- Próximo episódio e troca de canal dentro do player (também CH+/CH− no controle).
+- Catch-up: programas que já passaram podem ser vistos desde o início pelo guia.
+- Reconexão automática quando a rede cai; PiP no formato do vídeo e também no
+  Android 8–11; pausa ao tirar o fone e em ligações.
+- Na TV, os filmes em andamento aparecem em "Continuar assistindo" da tela inicial.
+- Puxar para atualizar na Home do celular, que agora mantém a posição de rolagem.
+
+#### Corrigido
+
+- O guia XMLTV nunca carregava no Android.
+- Um único "Voltar" sai da Home no celular; botões com área de toque de 48 dp.
+- Trailers automáticos não usam mais os dados móveis.
+
+### Ícones
+
+- Os dois apps passam a usar uma única família de ícones (Material Rounded).
+
 ## [3.3.0] - 2026-08-24 (Windows)
 
 ### Windows
