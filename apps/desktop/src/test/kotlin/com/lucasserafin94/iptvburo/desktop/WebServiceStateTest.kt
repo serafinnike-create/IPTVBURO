@@ -83,6 +83,24 @@ class WebServiceStateTest {
             assertEquals(listOf(WebServices.GODORAMA), state.visibleWebServices)
         }
 
+    @Test
+    fun `the GoDorama notice opens its page and does not come back`() =
+        withState { state, store ->
+            state.dismissWebServiceOffer(openPage = true)
+
+            assertEquals(DesktopDestination.WEB_SERVICES, state.destination)
+            assertTrue(store.webServicesOffered(ADULT.id))
+            assertFalse(state.shouldOfferWebServices)
+        }
+
+    @Test
+    fun `the Kids profile is never told about GoDorama`() =
+        withState { state, _ ->
+            state.selectProfile(KIDS.id)
+
+            assertFalse(state.shouldOfferWebServices)
+        }
+
     private fun withState(block: (DesktopAppState, DesktopUserStore) -> Unit) {
         val node = Preferences.userRoot().node("com/lucasserafin94/iptvburo/test-${UUID.randomUUID()}")
         val temporary = Files.createTempDirectory("iptvburo-web-services")

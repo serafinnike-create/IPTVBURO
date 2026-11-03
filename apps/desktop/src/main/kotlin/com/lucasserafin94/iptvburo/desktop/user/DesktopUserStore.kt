@@ -845,6 +845,11 @@ class DesktopUserStore(
 
     private fun webServicesKey(profileId: String): String = "web-services.$profileId"
 
+    /** Whether this profile was already told about the web services, so the notice shows once. */
+    fun webServicesOffered(profileId: String): Boolean = preferences.getBoolean("web-services-offered.$profileId", false)
+
+    fun markWebServicesOffered(profileId: String) = preferences.putBoolean("web-services-offered.$profileId", true)
+
     /**
      * The titles this profile asked to be reminded about.
      *

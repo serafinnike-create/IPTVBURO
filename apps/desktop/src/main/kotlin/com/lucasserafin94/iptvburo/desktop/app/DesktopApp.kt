@@ -57,6 +57,7 @@ import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.OndemandVideo
 import androidx.compose.material.icons.rounded.Subscriptions
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.AlertDialog
@@ -529,6 +530,8 @@ fun DesktopApp(
                             onMusic = appState::openMusic,
                             hasSubscriptions = appState.streamingDiscoveryCapability.isVisible,
                             onSubscriptions = appState::openSubscriptions,
+                            hasWebServices = appState.canUseWebServices,
+                            onWebServices = appState::openWebServicesPage,
                             collapsed = sidebarCollapsed,
                             onToggleCollapsed = { sidebarCollapsed = !sidebarCollapsed },
                         )
@@ -592,6 +595,11 @@ fun DesktopApp(
                         // it and drawn through it.
                         if (appState.openedWebService != null) {
                             WebServiceOverlay(appState)
+                        } else if (visibleDestination == DesktopDestination.WEB_SERVICES && appState.canUseWebServices) {
+                            WebServicesPage(
+                                appState = appState,
+                                onExternalResult = { result -> externalOpenResult = result },
+                            )
                         } else if (visibleDestination == DesktopDestination.MUSIC) {
                             MusicWorkspace(
                                 appState = appState,
@@ -1193,6 +1201,12 @@ fun DesktopApp(
                     )
                 }
 
+                // Once per adult profile, after start-up has finished: the one moment somebody who
+                // already had a list hears that GoDorama is here.
+                if (!appState.isStarting && !showProfileGate && appState.shouldOfferWebServices) {
+                    WebServiceOfferDialog(appState)
+                }
+
                 // Drawn outside the step chain so it sits over the form rather than replacing
                 // it: somebody reading out their code is in the middle of filling those fields in.
                 if (setupShowingDeviceCode) {
@@ -1511,6 +1525,9 @@ private fun SourceSidebar(
     onMusic: () -> Unit,
     hasSubscriptions: Boolean,
     onSubscriptions: () -> Unit,
+    /** Whether this profile may use web services at all — adult profiles only. */
+    hasWebServices: Boolean = false,
+    onWebServices: () -> Unit = {},
     collapsed: Boolean,
     onToggleCollapsed: () -> Unit,
 ) {
@@ -1710,6 +1727,16 @@ private fun SourceSidebar(
                 icon = Icons.Rounded.Subscriptions,
                 selected = destination == DesktopDestination.SUBSCRIPTIONS,
                 onClick = onSubscriptions,
+            )
+        }
+        // Named after the service rather than "Serviços": there is one, and its name is what
+        // somebody who bought it looks for. Never for a Kids profile.
+        if (hasWebServices) {
+            NavigationItem(
+                label = com.lucasserafin94.iptvburo.domain.model.WebServices.GODORAMA.displayName,
+                icon = Icons.Rounded.OndemandVideo,
+                selected = destination == DesktopDestination.WEB_SERVICES,
+                onClick = onWebServices,
             )
         }
 

@@ -681,6 +681,38 @@ class DesktopAppState(
     }
 
     /**
+     * Whether to tell this profile, once, that GoDorama exists.
+     *
+     * For somebody who already had a list when the service arrived: setup — the only other place it
+     * is offered — never runs again for them. Adult profiles only, and not when it is already on.
+     */
+    val shouldOfferWebServices: Boolean
+        get() {
+            val profileId = activeProfileId ?: return false
+            webServiceOfferRevision
+            return canUseWebServices &&
+                webServiceIds.isEmpty() &&
+                onboarding == OnboardingStep.Done &&
+                !userStore.webServicesOffered(profileId)
+        }
+
+    private var webServiceOfferRevision by mutableStateOf(0)
+
+    /** The notice was answered, either way. It does not come back for this profile. */
+    fun dismissWebServiceOffer(openPage: Boolean) {
+        activeProfileId?.let(userStore::markWebServicesOffered)
+        webServiceOfferRevision++
+        if (openPage) openWebServicesPage()
+    }
+
+    /** Opens the GoDorama page of the sidebar. */
+    fun openWebServicesPage() {
+        favoritesOnly = false
+        openedWebService = null
+        destination = DesktopDestination.WEB_SERVICES
+    }
+
+    /**
      * Titles this profile asked to be reminded about, newest concerns first as stored.
      *
      * Read from the store rather than the boot snapshot, which predates reminders and would have to
@@ -8643,6 +8675,14 @@ enum class DesktopDestination {
      * substitute for it.
      */
     GUIDE,
+
+    /**
+     * The services watched on their own page (GoDorama): turn one on, open it.
+     *
+     * Its own entry in the sidebar rather than only a switch in Settings, which is where nobody
+     * looked for it — reported as "não tem nenhuma guia mostrando o GoDorama".
+     */
+    WEB_SERVICES,
 }
 
 /**
