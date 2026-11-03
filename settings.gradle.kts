@@ -34,4 +34,5 @@ include(
     ":packages:media-source-spi",
     ":packages:webdav-client",
     ":packages:xtream-client",
+    ":packages:sync-client",
 )
