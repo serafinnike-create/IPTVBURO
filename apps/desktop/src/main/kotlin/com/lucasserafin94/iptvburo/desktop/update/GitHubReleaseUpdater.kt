@@ -617,7 +617,7 @@ private fun openMacDiskImage(path: Path): Boolean =
     runCatching { ProcessBuilder("/usr/bin/open", path.toAbsolutePath().toString()).start().waitFor() == 0 }
         .getOrDefault(false)
 
-private fun isWindowsInstallerName(value: String): Boolean =
+internal fun isWindowsInstallerName(value: String): Boolean =
     value.matches(Regex("(?i)IPTV[-_]?BURO[-_A-Za-z0-9.]*\\.msi"))
 
 /** The explicit marker emitted by preview-release.yml when no Authenticode certificate is present. */

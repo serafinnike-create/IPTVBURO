@@ -673,6 +673,13 @@ fun SettingsDialog(
                         }
                     }
 
+                    // Services watched on their own page (GoDorama). Beside the parental lock
+                    // because both answer who may see what; the section draws nothing for Kids.
+                    if (tab == SettingsTab.CONTENT && appState.canUseWebServices) item(key = "web-services") {
+                        HorizontalDivider(color = BuroColors.BorderSoft)
+                        WebServiceSettingsSection(appState)
+                    }
+
                     if (tab == SettingsTab.CONTENT) item(key = "parental") {
                         HorizontalDivider(color = BuroColors.BorderSoft)
                         ParentalControlPanel(appState)

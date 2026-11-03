@@ -101,6 +101,8 @@ class GitHubReleaseUpdaterTest {
             )
             val updater =
                 GitHubReleaseUpdater(
+                    // These releases carry MSIs, so the test plays a Windows machine on every host.
+                    installerName = ::isWindowsInstallerName,
                     releasesUrl = server.url("/releases").toString(),
                     currentVersion = "0.2.0-alpha.4",
                 )
@@ -136,6 +138,8 @@ class GitHubReleaseUpdaterTest {
 
             val result =
                 GitHubReleaseUpdater(
+                    // These releases carry MSIs, so the test plays a Windows machine on every host.
+                    installerName = ::isWindowsInstallerName,
                     releasesUrl = server.url("/releases").toString(),
                     currentVersion = "2.0.0",
                 ).check()
@@ -171,6 +175,8 @@ class GitHubReleaseUpdaterTest {
 
             val result =
                 GitHubReleaseUpdater(
+                    // These releases carry MSIs, so the test plays a Windows machine on every host.
+                    installerName = ::isWindowsInstallerName,
                     releasesUrl = server.url("/releases").toString(),
                     currentVersion = "2.0.0",
                 ).check()
@@ -217,6 +223,8 @@ class GitHubReleaseUpdaterTest {
 
             val result =
                 GitHubReleaseUpdater(
+                    // These releases carry MSIs, so the test plays a Windows machine on every host.
+                    installerName = ::isWindowsInstallerName,
                     releasesUrl = server.url("/releases").toString(),
                     currentVersion = "2.0.0",
                 ).check()
@@ -249,6 +257,8 @@ class GitHubReleaseUpdaterTest {
 
             val result =
                 GitHubReleaseUpdater(
+                    // These releases carry MSIs, so the test plays a Windows machine on every host.
+                    installerName = ::isWindowsInstallerName,
                     releasesUrl = server.url("/releases").toString(),
                     currentVersion = "2.0.0",
                 ).check()
@@ -290,6 +300,8 @@ class GitHubReleaseUpdaterTest {
             )
             val updater =
                 GitHubReleaseUpdater(
+                    // These releases carry MSIs, so the test plays a Windows machine on every host.
+                    installerName = ::isWindowsInstallerName,
                     releasesUrl = server.url("/releases").toString(),
                     currentVersion = "0.2.0-alpha.5",
                 )
@@ -326,6 +338,8 @@ class GitHubReleaseUpdaterTest {
 
             val result =
                 GitHubReleaseUpdater(
+                    // These releases carry MSIs, so the test plays a Windows machine on every host.
+                    installerName = ::isWindowsInstallerName,
                     releasesUrl = server.url("/releases").toString(),
                     currentVersion = "2.0.0-alpha.1",
                 ).check()

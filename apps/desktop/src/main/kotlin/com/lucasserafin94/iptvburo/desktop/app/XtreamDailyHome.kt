@@ -440,6 +440,16 @@ fun XtreamDailyHome(
                             },
                         )
                     }
+                    // Right under the banner: a service is something the viewer chose to have, and
+                    // scrolling past a dozen rails to reach it would hide it.
+                    if (appState.visibleWebServices.isNotEmpty()) {
+                        item(key = "web-services") {
+                            WebServiceHomeCards(
+                                appState = appState,
+                                modifier = Modifier.padding(horizontal = metrics.gutter),
+                            )
+                        }
+                    }
                     // Read once. This is a computed property that resolves every entry against the
                     // catalogue and applies the parental policy to each, so asking twice — once to
                     // decide whether to draw the row and once to fill it — did all of that work

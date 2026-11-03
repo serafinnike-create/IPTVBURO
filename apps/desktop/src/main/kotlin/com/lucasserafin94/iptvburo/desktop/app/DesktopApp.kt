@@ -587,7 +587,12 @@ fun DesktopApp(
                         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         // Music is checked before the source, because it is fed by its own playlist
                         // and does not need the video provider to be connected at all.
-                        if (visibleDestination == DesktopDestination.MUSIC) {
+                        // The service's page takes the whole content area while it is open, so no
+                        // other native surface — the banner trailer above all — is composed under
+                        // it and drawn through it.
+                        if (appState.openedWebService != null) {
+                            WebServiceOverlay(appState)
+                        } else if (visibleDestination == DesktopDestination.MUSIC) {
                             MusicWorkspace(
                                 appState = appState,
                                 onPlay = { request -> activePlayback = request },
@@ -682,14 +687,27 @@ fun DesktopApp(
                                 },
                             )
                         } else if (!appState.hasSelectedSource) {
-                            EmptyLibrary(
-                                onImport = {
-                                    chooseLocalPlaylist(ownerWindow)?.let { path ->
-                                        scope.launch { appState.importLocalPlaylist(path) }
-                                    }
-                                },
-                                onConnectXtream = { showXtreamLogin = true },
-                            )
+                            // Somebody who uses only GoDorama has no list, and this is their home:
+                            // the service first, the invitation to add a list below it.
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                if (appState.visibleWebServices.isNotEmpty()) {
+                                    WebServiceHomeCards(
+                                        appState = appState,
+                                        onExternalResult = { result -> externalOpenResult = result },
+                                        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+                                    )
+                                }
+                                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                    EmptyLibrary(
+                                        onImport = {
+                                            chooseLocalPlaylist(ownerWindow)?.let { path ->
+                                                scope.launch { appState.importLocalPlaylist(path) }
+                                            }
+                                        },
+                                        onConnectXtream = { showXtreamLogin = true },
+                                    )
+                                }
+                            }
                         } else if (visibleDestination == DesktopDestination.CONTINUE) {
                             ContinueWatchingWorkspace(
                                 entries = appState.continueWatchingEntries,
@@ -1091,6 +1109,15 @@ fun DesktopApp(
                                 null
                             },
                         onPickMusicPlaylist = { chooseM3uFile(ownerWindow, text.musicPlaylistTitle) },
+                        // A new profile only: editing an existing one's list is about the list.
+                        onUseOnlyWebService =
+                            if (appState.editingProfileId == null) {
+                                appState::completeSetupWithWebServiceOnly
+                            } else {
+                                null
+                            },
+                        webServiceStrings =
+                            com.lucasserafin94.iptvburo.desktop.ui.WebServiceStrings.of(appState.language),
                         onCreate = {
                             profileName, avatarIndex, listLabel, server, username, password,
                             musicPlaylist, metadataKey,

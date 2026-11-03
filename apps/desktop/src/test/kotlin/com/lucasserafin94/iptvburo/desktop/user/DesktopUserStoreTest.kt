@@ -28,6 +28,19 @@ class DesktopUserStoreTest {
         }
     }
 
+    @Test
+    fun `web services are turned on per profile`() {
+        withStore { store ->
+            store.setWebServiceEnabled("adult", "godorama", true)
+
+            assertEquals(setOf("godorama"), store.webServiceIds("adult"))
+            assertTrue(store.webServiceIds("other").isEmpty())
+
+            store.setWebServiceEnabled("adult", "godorama", false)
+            assertTrue(store.webServiceIds("adult").isEmpty())
+        }
+    }
+
     /**
      * Reminders belong to whoever asked for them, exactly as favourites do.
      *
