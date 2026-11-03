@@ -288,7 +288,7 @@ var BuroApp = (function () {
         { tag: 'it', name: 'Italiano' },
         { tag: 'es', name: 'Español' }
     ];
-    var APP_VERSION_FALLBACK = '4.3.1';
+    var APP_VERSION_FALLBACK = '4.3.2';
 
     /*
       Quanto tempo o teste fica visivel mesmo quando acaba antes.
