@@ -1,5 +1,8 @@
 package com.lucasserafin94.iptvburo.desktop.playback
 
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -626,7 +629,7 @@ private fun LiveBadge(label: String) {
  * the last notice — in that order of importance, one at a time.
  */
 @Composable
-private fun StatusLine(
+internal fun StatusLine(
     state: DesktopPlaybackSnapshot,
     showError: Boolean,
     notice: String?,
@@ -685,7 +688,7 @@ private fun StatusLine(
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun SeekBar(
+internal fun SeekBar(
     state: DesktopPlaybackSnapshot,
     onSeek: (Double) -> Unit,
 ) {
@@ -712,7 +715,7 @@ private fun SeekBar(
                     }
                     .onPointerEvent(PointerEventType.Exit) { hoverFraction = null },
         ) {
-            Slider(
+            ThinSlider(
                 value = scrubTo ?: playedFraction,
                 onValueChange = { scrubTo = it },
                 onValueChangeFinished = {
@@ -720,12 +723,7 @@ private fun SeekBar(
                     scrubTo = null
                 },
                 enabled = state.ready && state.durationMillis > 0.0,
-                colors =
-                    SliderDefaults.colors(
-                        thumbColor = BuroColors.Primary,
-                        activeTrackColor = BuroColors.Primary,
-                        inactiveTrackColor = Color.White.copy(alpha = 0.22f),
-                    ),
+                accent = BuroColors.Primary,
                 modifier = Modifier.fillMaxWidth(),
             )
             // The time under the pointer or the thumb: VLC's control interface cannot render an
@@ -772,7 +770,7 @@ private fun SeekBar(
  * the row fit without scrolling sideways.
  */
 @Composable
-private fun ControlsRow(
+internal fun ControlsRow(
     state: DesktopPlaybackSnapshot,
     isLive: Boolean,
     isFullScreen: Boolean,
@@ -827,17 +825,12 @@ private fun ControlsRow(
             onClick = onToggleMute,
             shortcut = "M",
         )
-        Slider(
+        ThinSlider(
             value = if (muted) 0f else state.volume.toFloat(),
             onValueChange = onVolume,
             enabled = state.ready,
-            colors =
-                SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = Color.White,
-                    inactiveTrackColor = Color.White.copy(alpha = 0.22f),
-                ),
-            modifier = Modifier.width(120.dp),
+            accent = Color.White,
+            modifier = Modifier.width(110.dp),
         )
         if (isLive) {
             Spacer(Modifier.width(10.dp))
@@ -1000,11 +993,11 @@ private fun SettingsMenu(
                     Text(text.brightness, color = BuroColors.Text, modifier = Modifier.weight(1f))
                     Text("${(state.brightness * 100).toInt()}%", color = BuroColors.TextMuted)
                 }
-                Slider(
+                ThinSlider(
                     value = state.brightness.toFloat(),
                     onValueChange = onBrightness,
                     valueRange = 0.5f..1.8f,
-                    colors = SliderDefaults.colors(thumbColor = BuroColors.Primary, activeTrackColor = BuroColors.Primary),
+                    accent = BuroColors.Primary,
                 )
                 // Says when it takes effect, because it cannot take effect now: VLC builds the
                 // adjust filter with the video chain and its control interface cannot change it.
@@ -1065,6 +1058,63 @@ private fun CompactStrip(
             Text(text.backToApp, color = BuroColors.Primary, style = MaterialTheme.typography.labelSmall)
         }
     }
+}
+
+/**
+ * A slim slider: a 4 dp track and a round thumb.
+ *
+ * Material's current default is a thick track split by a gap around a tall bar-shaped thumb, which
+ * suits a phone settings screen and looked heavy across the bottom of a film.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ThinSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    onValueChangeFinished: (() -> Unit)? = null,
+) {
+    val colors =
+        SliderDefaults.colors(
+            thumbColor = accent,
+            activeTrackColor = accent,
+            inactiveTrackColor = Color.White.copy(alpha = 0.22f),
+            disabledThumbColor = Color.White.copy(alpha = 0.3f),
+            disabledActiveTrackColor = Color.White.copy(alpha = 0.3f),
+            disabledInactiveTrackColor = Color.White.copy(alpha = 0.12f),
+        )
+    val interaction = remember { MutableInteractionSource() }
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        onValueChangeFinished = onValueChangeFinished,
+        enabled = enabled,
+        valueRange = valueRange,
+        interactionSource = interaction,
+        colors = colors,
+        thumb = {
+            SliderDefaults.Thumb(
+                interactionSource = interaction,
+                colors = colors,
+                enabled = enabled,
+                thumbSize = DpSize(14.dp, 14.dp),
+            )
+        },
+        track = { sliderState ->
+            SliderDefaults.Track(
+                sliderState = sliderState,
+                colors = colors,
+                enabled = enabled,
+                modifier = Modifier.height(4.dp),
+                thumbTrackGapSize = 0.dp,
+                drawStopIndicator = null,
+            )
+        },
+        modifier = modifier,
+    )
 }
 
 /**
