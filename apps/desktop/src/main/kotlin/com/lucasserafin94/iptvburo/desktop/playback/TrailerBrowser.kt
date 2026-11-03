@@ -662,6 +662,14 @@ class TrailerBrowser {
         fun isAvailable(): Boolean = sharedApp() != null
 
         /**
+         * The process-wide engine, for the other embedded page the app shows (WebServiceBrowser).
+         *
+         * One engine per process is all Chromium allows, so a second caller must share this one
+         * rather than start its own.
+         */
+        internal fun engine(): CefApp? = sharedApp()
+
+        /**
          * Starts Chromium ahead of the first trailer, off the interface thread.
          *
          * Only the first trailer of a session is slow, and this is why: it pays for starting an

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_service_section_title">Services</string>
+    <string name="web_service_tagline">Short vertical drama series · sign in with your own account</string>
+    <string name="web_service_open">Open %1$s</string>
+    <string name="web_service_enable">Turn on %1$s</string>
+    <string name="web_service_disable">Turn off</string>
+    <string name="web_service_age_title">For adults only</string>
+    <string name="web_service_age_body">By its own terms, %1$s is for people aged 18 or over. You sign in with your own account on the service\'s page; BURO never stores your password.</string>
+    <string name="web_service_age_confirm">I am 18 or older</string>
+    <string name="web_service_age_cancel">Cancel</string>
+    <string name="web_service_sign_out">Sign out</string>
+    <string name="web_service_close">Close</string>
+    <string name="web_service_load_error">Could not open %1$s. Check the connection.</string>
+    <string name="web_service_retry">Try again</string>
+    <string name="web_service_history_note">What you watch is saved in your %1$s account.</string>
+    <string name="home_web_services">Your services</string>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_service_section_title">Servicios</string>
+    <string name="web_service_tagline">Microdramas en vídeo vertical · entra con tu cuenta</string>
+    <string name="web_service_open">Abrir %1$s</string>
+    <string name="web_service_enable">Activar %1$s</string>
+    <string name="web_service_disable">Desactivar</string>
+    <string name="web_service_age_title">Solo para mayores de 18</string>
+    <string name="web_service_age_body">Según sus propios términos, %1$s es para mayores de 18 años. Entras con tu cuenta en la página del servicio; BURO nunca guarda tu contraseña.</string>
+    <string name="web_service_age_confirm">Tengo 18 años o más</string>
+    <string name="web_service_age_cancel">Cancelar</string>
+    <string name="web_service_sign_out">Cerrar sesión</string>
+    <string name="web_service_close">Cerrar</string>
+    <string name="web_service_load_error">No se pudo abrir %1$s. Revisa la conexión.</string>
+    <string name="web_service_retry">Reintentar</string>
+    <string name="web_service_history_note">Lo que ves queda guardado en tu cuenta de %1$s.</string>
+    <string name="home_web_services">Tus servicios</string>
+</resources>

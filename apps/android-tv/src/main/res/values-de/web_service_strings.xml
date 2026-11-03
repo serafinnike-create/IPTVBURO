@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_service_section_title">Dienste</string>
+    <string name="web_service_tagline">Kurze Hochformat-Serien · mit dem eigenen Konto anmelden</string>
+    <string name="web_service_open">%1$s öffnen</string>
+    <string name="web_service_enable">%1$s aktivieren</string>
+    <string name="web_service_disable">Deaktivieren</string>
+    <string name="web_service_age_title">Nur für Erwachsene</string>
+    <string name="web_service_age_body">Laut seinen eigenen Bedingungen ist %1$s erst ab 18 Jahren. Du meldest dich auf der Seite des Dienstes mit deinem eigenen Konto an; BURO speichert dein Passwort nie.</string>
+    <string name="web_service_age_confirm">Ich bin 18 oder älter</string>
+    <string name="web_service_age_cancel">Abbrechen</string>
+    <string name="web_service_sign_out">Abmelden</string>
+    <string name="web_service_close">Schließen</string>
+    <string name="web_service_load_error">%1$s konnte nicht geöffnet werden. Prüfe die Verbindung.</string>
+    <string name="web_service_retry">Erneut versuchen</string>
+    <string name="web_service_history_note">Was du schaust, wird in deinem %1$s-Konto gespeichert.</string>
+    <string name="home_web_services">Deine Dienste</string>
+</resources>

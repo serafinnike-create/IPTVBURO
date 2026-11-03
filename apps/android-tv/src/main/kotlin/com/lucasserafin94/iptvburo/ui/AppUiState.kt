@@ -2,6 +2,9 @@ package com.lucasserafin94.iptvburo.ui
 
 import com.lucasserafin94.iptvburo.metadata.CriticScores
 import com.lucasserafin94.iptvburo.domain.model.BrowsableItem
+import com.lucasserafin94.iptvburo.domain.model.ViewerKind
+import com.lucasserafin94.iptvburo.domain.model.WebServiceBrand
+import com.lucasserafin94.iptvburo.domain.model.WebServicePolicy
 import com.lucasserafin94.iptvburo.domain.model.CacheBudget
 import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
 import com.lucasserafin94.iptvburo.domain.model.CatalogContentType
@@ -560,6 +563,17 @@ sealed interface AppContent {
     ) : AppContent
 
     data object Settings : AppContent
+
+    /**
+     * A web service's own page, open in BURO's browser view.
+     *
+     * [clearSessionFirst] is true when another profile signed in through the view last: its cookies
+     * are cleared before the page loads, so nobody lands in somebody else's account.
+     */
+    data class WebService(
+        val serviceId: String,
+        val clearSessionFirst: Boolean = false,
+    ) : AppContent
 }
 
 data class AppUiState(
@@ -733,6 +747,13 @@ data class AppUiState(
      * not asked for this should not find their library silently rearranged.
      */
     val mergeEverySource: Boolean = false,
+    /**
+     * Web services (GoDorama) the active profile turned on, as stored.
+     *
+     * The stored choice, not what is drawn: [visibleWebServices] filters it by who is watching, so a
+     * profile turned into Kids loses the service everywhere while the choice survives.
+     */
+    val enabledWebServiceIds: Set<String> = emptySet(),
     val homeItems: List<ChannelUi> = emptyList(),
     val continueWatching: List<ContinueWatchingUi> = emptyList(),
     val watchHistory: List<WatchHistoryUi> = emptyList(),
@@ -876,6 +897,21 @@ data class AppUiState(
     /** The title the open cast sheet would send. Null whenever [cast] is Idle. */
     val castRequest: CastRequestUi? = null,
 ) {
+    /**
+     * The web services to draw for whoever is watching: turned on by this profile and allowed for
+     * its kind. A Kids profile gets none of the age-restricted ones, whatever is stored.
+     */
+    val visibleWebServices: List<WebServiceBrand>
+        get() =
+            WebServicePolicy.visibleServices(
+                enabledIds = enabledWebServiceIds,
+                viewer = if (activeProfile?.isKids == false) ViewerKind.ADULT else ViewerKind.KIDS,
+            )
+
+    /** Whether this profile may turn web services on at all. No profile yet counts as no. */
+    val canUseWebServices: Boolean
+        get() = activeProfile?.isKids == false
+
     /**
      * [channels] narrowed and ordered by [catalogueFilter].
      *

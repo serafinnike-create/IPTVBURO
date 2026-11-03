@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_service_section_title">Servizi</string>
+    <string name="web_service_tagline">Serie brevi in verticale · accedi con il tuo account</string>
+    <string name="web_service_open">Apri %1$s</string>
+    <string name="web_service_enable">Attiva %1$s</string>
+    <string name="web_service_disable">Disattiva</string>
+    <string name="web_service_age_title">Solo per maggiorenni</string>
+    <string name="web_service_age_body">Secondo i suoi stessi termini, %1$s è riservato ai maggiori di 18 anni. Accedi con il tuo account sulla pagina del servizio; BURO non salva mai la tua password.</string>
+    <string name="web_service_age_confirm">Ho 18 anni o più</string>
+    <string name="web_service_age_cancel">Annulla</string>
+    <string name="web_service_sign_out">Esci dall\'account</string>
+    <string name="web_service_close">Chiudi</string>
+    <string name="web_service_load_error">Impossibile aprire %1$s. Controlla la connessione.</string>
+    <string name="web_service_retry">Riprova</string>
+    <string name="web_service_history_note">Ciò che guardi resta salvato nel tuo account %1$s.</string>
+    <string name="home_web_services">I tuoi servizi</string>
+</resources>

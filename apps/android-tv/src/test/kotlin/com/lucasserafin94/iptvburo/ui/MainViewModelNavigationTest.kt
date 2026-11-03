@@ -31,6 +31,8 @@ import com.lucasserafin94.iptvburo.data.local.entity.PlaybackProgressEntity
 import com.lucasserafin94.iptvburo.data.local.entity.ProfileEntity
 import com.lucasserafin94.iptvburo.data.preferences.CatalogueGuard
 import com.lucasserafin94.iptvburo.data.preferences.BannerSoundSettings
+import com.lucasserafin94.iptvburo.data.preferences.WebServiceSettings
+import com.lucasserafin94.iptvburo.domain.model.WebServices
 import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
 import com.lucasserafin94.iptvburo.data.local.dao.SeriesWatchDao
 import com.lucasserafin94.iptvburo.data.local.entity.SeriesWatchEntity
@@ -86,6 +88,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -163,6 +166,67 @@ class MainViewModelNavigationTest {
      * on is worse than a quiet one. What the switch cannot change is how a trailer *starts*: no
      * engine autoplays audio, so every one begins muted and the sound is raised once it is playing.
      */
+    @Test
+    fun `GoDorama turned on by the adult profile opens its page inside the app`() = runTest {
+        val viewModel = createViewModel(FakeCatalogRepository())
+        runCurrent()
+        assertTrue("o perfil adulto padrao nao chegou", viewModel.state.value.canUseWebServices)
+
+        viewModel.setWebServiceEnabled(WebServices.GODORAMA.id, true)
+        runCurrent()
+        assertEquals(listOf(WebServices.GODORAMA), viewModel.state.value.visibleWebServices)
+
+        viewModel.openWebService(WebServices.GODORAMA.id)
+        runCurrent()
+        assertEquals(
+            AppContent.WebService(serviceId = WebServices.GODORAMA.id, clearSessionFirst = false),
+            viewModel.state.value.content,
+        )
+    }
+
+    @Test
+    fun `a service that was not turned on does not open`() = runTest {
+        val viewModel = createViewModel(FakeCatalogRepository())
+        runCurrent()
+        val before = viewModel.state.value.content
+
+        viewModel.openWebService(WebServices.GODORAMA.id)
+        viewModel.setWebServiceEnabled("noprivado", true)
+        runCurrent()
+
+        assertEquals(before, viewModel.state.value.content)
+        assertTrue(viewModel.state.value.enabledWebServiceIds.isEmpty())
+    }
+
+    @Test
+    fun `another profile's sign-in is cleared before the page loads`() = runTest {
+        val settings = FakeWebServiceSettings().apply { owner = "another-profile" }
+        val viewModel = createViewModel(FakeCatalogRepository(), webServiceSettings = settings)
+        runCurrent()
+
+        viewModel.setWebServiceEnabled(WebServices.GODORAMA.id, true)
+        runCurrent()
+        viewModel.openWebService(WebServices.GODORAMA.id)
+        runCurrent()
+
+        assertEquals(
+            AppContent.WebService(serviceId = WebServices.GODORAMA.id, clearSessionFirst = true),
+            viewModel.state.value.content,
+        )
+    }
+
+    @Test
+    fun `a Kids profile sees no age-restricted service whatever is stored`() {
+        val kids =
+            AppUiState(
+                activeProfile = ProfileUi(id = "k", name = "K", avatarKey = "a", isKids = true),
+                enabledWebServiceIds = setOf(WebServices.GODORAMA.id),
+            )
+
+        assertTrue(kids.visibleWebServices.isEmpty())
+        assertFalse(kids.canUseWebServices)
+    }
+
     @Test
     fun `the banner trailer is silent until somebody asks for sound`() = runTest {
         val viewModel = createViewModel(FakeCatalogRepository())
@@ -986,6 +1050,7 @@ class MainViewModelNavigationTest {
         isTelevision: Boolean = false,
         licenseService: AndroidLicenseService = FakeLicenseService,
         metadataKeyStore: MetadataKeyStore = FakeMetadataKeyStore,
+        webServiceSettings: WebServiceSettings = FakeWebServiceSettings(),
     ): MainViewModel {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
@@ -1057,6 +1122,7 @@ class MainViewModelNavigationTest {
             sourceMergeSettings = NoSourceMerge,
             subtitlePreferences = FakeSubtitleSettings,
             bannerSoundPreferences = FakeBannerSoundSettings(),
+            webServiceSettings = webServiceSettings,
             logger = logger,
             // A real tester over fakes: these assertions never open the diagnostics screen, and a
             // null context degrades its local readings to "unknown" exactly as a device with no
@@ -1142,6 +1208,32 @@ private data object FakeSubtitleSettings : SubtitleSettings {
  * A store that always says "off" would let a toggle that saves nothing pass every test — the state
  * would read false before and after, exactly as if it worked and the viewer had turned it back.
  */
+/** Remembers each profile's services and the session owner, like the DataStore it stands in for. */
+private class FakeWebServiceSettings : WebServiceSettings {
+    private val enabled = MutableStateFlow<Map<String, Set<String>>>(emptyMap())
+    var owner: String? = null
+
+    override fun enabledIds(profileId: String): Flow<Set<String>> =
+        enabled.map { it[profileId].orEmpty() }
+
+    override suspend fun setEnabled(profileId: String, serviceId: String, enabled: Boolean) {
+        this.enabled.update { all ->
+            val current = all[profileId].orEmpty()
+            all + (profileId to if (enabled) current + serviceId else current - serviceId)
+        }
+    }
+
+    override suspend fun claimSession(profileId: String): Boolean {
+        val changed = owner != null && owner != profileId
+        owner = profileId
+        return changed
+    }
+
+    override suspend fun releaseSession() {
+        owner = null
+    }
+}
+
 private class FakeBannerSoundSettings : BannerSoundSettings {
     private val state = MutableStateFlow(false)
 

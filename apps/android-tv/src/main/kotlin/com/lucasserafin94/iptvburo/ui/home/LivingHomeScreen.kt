@@ -1,5 +1,7 @@
 package com.lucasserafin94.iptvburo.ui.home
 
+import com.lucasserafin94.iptvburo.domain.model.WebServiceBrand
+import com.lucasserafin94.iptvburo.ui.screens.HomeWebServicesRow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -117,6 +119,9 @@ fun LivingHomeScreen(
      * thrown away with it: coming back from a film put the viewer at the top of the page again.
      */
     listState: LazyListState? = null,
+    /** Web services this profile turned on and may see, drawn as cards under the banner. */
+    webServices: List<WebServiceBrand> = emptyList(),
+    onOpenWebService: (String) -> Unit = {},
 ) {
     BackHandler(
         enabled = interceptBack,
@@ -236,6 +241,8 @@ fun LivingHomeScreen(
                     onOpenSources = onOpenSources,
                     onOpenSource = onOpenSource,
                     showDemonstrationNotice = catalogItems.isEmpty() && continueWatching.isEmpty(),
+                    webServices = webServices,
+                    onOpenWebService = onOpenWebService,
                 )
             }
 
@@ -276,13 +283,15 @@ private fun ReadyHome(
     onOpenSources: () -> Unit,
     onOpenSource: (String) -> Unit,
     showDemonstrationNotice: Boolean,
+    webServices: List<WebServiceBrand> = emptyList(),
+    onOpenWebService: (String) -> Unit = {},
 ) {
     val columnState = listState ?: rememberLazyListState()
     val initialRailIndex = section.rails.indexOfFirst { rail ->
         rail.items.any { item -> item.id == initialFocusedItemId }
     }
     val heroIndex = if (showDemonstrationNotice) 1 else 0
-    val firstRailIndex = heroIndex + 1
+    val firstRailIndex = heroIndex + 1 + if (webServices.isEmpty()) 0 else 1
 
     LaunchedEffect(initialFocusedItemId, section.id, showDemonstrationNotice) {
         // Only from the top. A list already scrolled somewhere is a position being restored, and
@@ -360,6 +369,14 @@ private fun ReadyHome(
                     .fillMaxWidth()
                     .height(metrics.heroHeight),
             )
+        }
+
+        // Right under the banner: somebody who uses only GoDorama has nothing else of their own on
+        // this screen, and somebody with a list should not have to scroll past it to find it.
+        if (webServices.isNotEmpty()) {
+            item(key = "home:web-services") {
+                HomeWebServicesRow(services = webServices, onOpen = onOpenWebService)
+            }
         }
 
         items(

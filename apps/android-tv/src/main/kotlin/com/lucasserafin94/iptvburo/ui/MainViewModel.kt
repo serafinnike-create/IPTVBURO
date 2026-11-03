@@ -30,6 +30,11 @@ import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
 import com.lucasserafin94.iptvburo.data.preferences.PlaybackSessionStore
 import com.lucasserafin94.iptvburo.data.preferences.BannerSoundSettings
 import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
+import com.lucasserafin94.iptvburo.data.preferences.WebServiceSettings
+import com.lucasserafin94.iptvburo.domain.model.WebServiceCapability
+import com.lucasserafin94.iptvburo.domain.model.WebServicePolicy
+import com.lucasserafin94.iptvburo.domain.model.WebServices
+import com.lucasserafin94.iptvburo.domain.model.ViewerKind
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
 import com.lucasserafin94.iptvburo.data.licensing.RedeemOutcome
 import com.lucasserafin94.iptvburo.data.metadata.MetadataClientsProvider
@@ -112,6 +117,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
@@ -147,6 +155,7 @@ class MainViewModel @Inject constructor(
     private val sourceMergeSettings: SourceMergeSettings,
     private val subtitlePreferences: SubtitleSettings,
     private val bannerSoundPreferences: BannerSoundSettings,
+    private val webServiceSettings: WebServiceSettings,
     private val logger: AppLogger,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
@@ -268,6 +277,7 @@ class MainViewModel @Inject constructor(
         observeSources()
         observeCatalogueGuard()
         observeSubtitles()
+        observeWebServices()
         observeBannerSound()
         // Device-wide, like the notification hour below and unlike the bell: the cache is a
         // property of this machine's storage, not of whoever happens to be signed in.
@@ -340,6 +350,71 @@ class MainViewModel @Inject constructor(
                 mutableState.update { it.copy(hasParentalPin = hasPin) }
             }
         }
+    }
+
+    /**
+     * The web services the active profile turned on, re-read whenever the profile changes.
+     *
+     * Follows [AppUiState.activeProfile] — the profile the screens are drawn for — so the services
+     * shown always belong to the same profile as everything else on the screen.
+     */
+    private fun observeWebServices() {
+        viewModelScope.launch {
+            state.map { it.activeProfile?.id }.distinctUntilChanged().collectLatest { profileId ->
+                if (profileId == null) {
+                    mutableState.update { it.copy(enabledWebServiceIds = emptySet()) }
+                    return@collectLatest
+                }
+                webServiceSettings.enabledIds(profileId)
+                    .catch { error ->
+                        logger.error(TAG, "Could not read the web services", error)
+                        emit(emptySet())
+                    }.collect { ids ->
+                        mutableState.update { it.copy(enabledWebServiceIds = ids) }
+                    }
+            }
+        }
+    }
+
+    /**
+     * Turns a web service on or off for the active profile.
+     *
+     * Refused for a Kids profile and for an unknown id here as well as in the screen, so no other
+     * route can store a choice the policy would never draw. The 18+ confirmation is the screen's;
+     * this only runs once it has been given.
+     */
+    fun setWebServiceEnabled(
+        serviceId: String,
+        enabled: Boolean,
+    ) {
+        val profile = mutableState.value.activeProfile ?: return
+        val brand = WebServices.byId(serviceId) ?: return
+        if (enabled && !WebServicePolicy.isOfferedTo(brand, profile.viewerKind())) return
+        viewModelScope.launch { webServiceSettings.setEnabled(profile.id, brand.id, enabled) }
+    }
+
+    /**
+     * Opens a web service's own page in the browser view.
+     *
+     * Only a service this profile may see and that really opens inside BURO. The session is claimed
+     * first: when another profile signed in last, the screen clears the cookies before loading.
+     */
+    fun openWebService(serviceId: String) {
+        val state = mutableState.value
+        val profile = state.activeProfile ?: return
+        val brand = state.visibleWebServices.firstOrNull { it.id == serviceId } ?: return
+        if (!brand.supports(WebServiceCapability.EMBEDDED_PAGE)) return
+        viewModelScope.launch {
+            // Clearing is the safe answer when the owner cannot be read: a sign-in to retype is a
+            // nuisance, landing in another adult's account is not.
+            val clearFirst = runCatching { webServiceSettings.claimSession(profile.id) }.getOrDefault(true)
+            navigate(AppContent.WebService(serviceId = brand.id, clearSessionFirst = clearFirst))
+        }
+    }
+
+    /** The view cleared its cookies after the user signed out; nobody owns the session now. */
+    fun onWebServiceSignedOut() {
+        viewModelScope.launch { runCatching { webServiceSettings.releaseSession() } }
     }
 
     private fun observeSubtitles() {
@@ -805,7 +880,12 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             val profile = userLibraryRepository.getProfile(profileId) ?: return@launch
             onboardingPreferences.selectProfile(profile.id)
-            if (mutableState.value.sources.isEmpty()) {
+            // Somebody who uses only GoDorama has no list and still has a home: the service's card.
+            val hasWebService =
+                runCatching { webServiceSettings.enabledIds(profile.id).first() }
+                    .getOrDefault(emptySet())
+                    .let { ids -> WebServicePolicy.visibleServices(ids, profile.toUi().viewerKind()).isNotEmpty() }
+            if (mutableState.value.sources.isEmpty() && !hasWebService) {
                 updateDestination(AppSection.SOURCES, AppContent.Sources)
             } else {
                 updateDestination(AppSection.HOME, AppContent.Home)
@@ -5786,3 +5866,6 @@ private fun ContentIdentity.withoutYear(): ContentIdentity {
  * narrowing that was intended.
  */
 internal fun String.withoutTrailingYear(): String = replace(TRAILING_YEAR, "")
+
+/** Android has adult and Kids profiles only; anything not Kids is the adult. */
+internal fun ProfileUi.viewerKind(): ViewerKind = if (isKids) ViewerKind.KIDS else ViewerKind.ADULT

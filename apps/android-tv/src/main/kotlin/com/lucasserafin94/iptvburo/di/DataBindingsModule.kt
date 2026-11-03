@@ -15,6 +15,8 @@ import com.lucasserafin94.iptvburo.data.preferences.SubtitlePreferences
 import com.lucasserafin94.iptvburo.data.preferences.BannerSoundPreferences
 import com.lucasserafin94.iptvburo.data.preferences.BannerSoundSettings
 import com.lucasserafin94.iptvburo.data.preferences.SubtitleSettings
+import com.lucasserafin94.iptvburo.data.preferences.WebServicePreferences
+import com.lucasserafin94.iptvburo.data.preferences.WebServiceSettings
 import com.lucasserafin94.iptvburo.data.preferences.OnboardingPreferences
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseClient
 import com.lucasserafin94.iptvburo.data.licensing.AndroidLicenseService
@@ -97,6 +99,11 @@ abstract class DataBindingsModule {
     abstract fun bindSubtitleSettings(
         implementation: SubtitlePreferences,
     ): SubtitleSettings
+
+    @Binds
+    abstract fun bindWebServiceSettings(
+        implementation: WebServicePreferences,
+    ): WebServiceSettings
 
     @Binds
     abstract fun bindBannerSoundSettings(

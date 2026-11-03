@@ -217,6 +217,12 @@ fun AppShellScreen(
     onOpenSource: (SourceUi) -> Unit,
     /** Whether every configured list is browsed as one catalogue. */
     onToggleMergeSources: (Boolean) -> Unit = {},
+    /** Opens a web service's page (GoDorama) in the browser view. */
+    onOpenWebService: (String) -> Unit = {},
+    /** Turns a web service on or off for the active profile, once the 18+ question is answered. */
+    onSetWebServiceEnabled: (String, Boolean) -> Unit = { _, _ -> },
+    /** The browser view cleared its cookies after the user signed out of the service. */
+    onWebServiceSignedOut: () -> Unit = {},
     onOpenCategory: (CategoryUi) -> Unit,
     onOpenChannel: (ChannelUi) -> Unit,
     /** Moves the guide to a channel, which fetches its schedule and those around it. */
@@ -647,7 +653,23 @@ fun AppShellScreen(
                             // preview never appeared at all.
                             interceptBack = homeContentOwnsBack && !compactNavigation,
                             listState = rememberedHomeListState,
+                            webServices = state.visibleWebServices,
+                            onOpenWebService = onOpenWebService,
                         ) }
+
+                        is AppContent.WebService ->
+                            // Re-checked against what this profile may see, so a stale destination
+                            // left from an adult profile never draws for a Kids one.
+                            state.visibleWebServices
+                                .firstOrNull { brand -> brand.id == content.serviceId }
+                                ?.let { brand ->
+                                    WebServiceScreen(
+                                        brand = brand,
+                                        clearSessionFirst = content.clearSessionFirst,
+                                        onClose = onBack,
+                                        onSignedOut = onWebServiceSignedOut,
+                                    )
+                                }
 
                         AppContent.Sources -> SourcesContent(
                             sources = state.sources,
@@ -670,6 +692,15 @@ fun AppShellScreen(
                                 showStalkerModal = true
                             },
                             onOpenSource = onOpenSource,
+                            webServices =
+                                if (state.canUseWebServices) {
+                                    com.lucasserafin94.iptvburo.domain.model.WebServices.all
+                                } else {
+                                    emptyList()
+                                },
+                            enabledWebServiceIds = state.enabledWebServiceIds,
+                            onSetWebServiceEnabled = onSetWebServiceEnabled,
+                            onOpenWebService = onOpenWebService,
                         )
 
                         // Search has a real screen now; the other placeholder sections still show
@@ -1811,6 +1842,10 @@ private fun SourcesContent(
     onOpenXtream: () -> Unit,
     onOpenStalker: () -> Unit,
     onOpenSource: (SourceUi) -> Unit,
+    webServices: List<com.lucasserafin94.iptvburo.domain.model.WebServiceBrand> = emptyList(),
+    enabledWebServiceIds: Set<String> = emptySet(),
+    onSetWebServiceEnabled: (String, Boolean) -> Unit = { _, _ -> },
+    onOpenWebService: (String) -> Unit = {},
 ) {
     val initialFocusRequester = remember { FocusRequester() }
     LaunchedEffect(sources.firstOrNull()?.id, isImporting) {
@@ -1883,6 +1918,16 @@ private fun SourcesContent(
             }
 
             Spacer(Modifier.height(if (phonePortrait) 18.dp else 28.dp))
+
+            if (webServices.isNotEmpty()) {
+                WebServiceSourcesSection(
+                    services = webServices,
+                    enabledIds = enabledWebServiceIds,
+                    onSetEnabled = onSetWebServiceEnabled,
+                    onOpen = onOpenWebService,
+                )
+                Spacer(Modifier.height(if (phonePortrait) 18.dp else 24.dp))
+            }
 
             if (sources.isEmpty()) {
                 EmptySources()
