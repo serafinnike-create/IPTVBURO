@@ -201,6 +201,7 @@ dependencies {
     implementation(project(":packages:metadata-client"))
     implementation(project(":packages:stalker-client"))
     implementation(project(":packages:xtream-client"))
+    implementation(project(":packages:sync-client"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

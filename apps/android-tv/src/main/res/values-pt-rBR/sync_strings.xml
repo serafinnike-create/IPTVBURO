@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_title">Sincronizar aparelhos</string>
+    <string name="sync_hint">Os mesmos favoritos no celular, na TV, no PC e no Mac. Sem conta nem senha: um aparelho mostra um código e o outro digita. Os perfis são combinados pelo nome.</string>
+    <string name="sync_show_code">Mostrar código</string>
+    <string name="sync_code">Código: %1$s</string>
+    <string name="sync_code_hint">Digite este código no outro aparelho, em Sincronizar aparelhos. Vale por 10 minutos.</string>
+    <string name="sync_join_field">Código do outro aparelho</string>
+    <string name="sync_join">Entrar</string>
+    <string name="sync_members">%1$d aparelhos sincronizados</string>
+    <string name="sync_now">Sincronizar agora</string>
+    <string name="sync_syncing">Sincronizando…</string>
+    <string name="sync_leave">Parar de sincronizar</string>
+    <string name="sync_received">%1$d favoritos recebidos dos outros aparelhos</string>
+    <string name="sync_error_licence">A sincronização precisa de uma licença ativa neste aparelho.</string>
+    <string name="sync_error_not_in_group">Este aparelho não está sincronizado com nenhum outro.</string>
+    <string name="sync_error_code">Código errado ou expirado. Peça um código novo no outro aparelho.</string>
+    <string name="sync_error_full">Já há 10 aparelhos sincronizados, que é o máximo.</string>
+    <string name="sync_error_network">Sem conexão com o servidor. Tente de novo daqui a pouco.</string>
+    <string name="sync_error_rejected">O servidor recusou o pedido. Tente de novo.</string>
+</resources>

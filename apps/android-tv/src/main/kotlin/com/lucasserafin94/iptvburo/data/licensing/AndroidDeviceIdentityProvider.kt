@@ -20,6 +20,9 @@ enum class AndroidDeviceProofAction(val wireValue: String) {
 
     /** Claiming or confirming a playlist the seller assigned from the admin panel. */
     PROVISIONING("provisioning"),
+
+    /** Keeping favourites in step with the household's other devices. Verified as `sync`. */
+    SYNC("sync"),
 }
 
 /**

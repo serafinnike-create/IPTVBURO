@@ -2037,6 +2037,7 @@ class MainViewModel @Inject constructor(
         val currentlyFavorite = channelId in mutableState.value.favoriteIds
         viewModelScope.launch {
             userLibraryRepository.toggleFavorite(profileId, channelId, currentlyFavorite)
+            requestFavoriteSync()
         }
     }
 
@@ -2045,6 +2046,21 @@ class MainViewModel @Inject constructor(
         val currentlyFavorite = channel.id in mutableState.value.favoriteIds
         viewModelScope.launch {
             userLibraryRepository.toggleFavorite(profileId, channel.id, currentlyFavorite)
+            requestFavoriteSync()
+        }
+    }
+
+    /**
+     * A favourite changed: let the household know a few seconds from now.
+     *
+     * Only on a device that joined one. Caught whole, because it is a convenience — a favourite
+     * that saved must never fail because the background exchange could not be booked.
+     */
+    private fun requestFavoriteSync() {
+        runCatching {
+            if (com.lucasserafin94.iptvburo.data.sync.isFavoriteSyncMember(context)) {
+                com.lucasserafin94.iptvburo.data.sync.FavoriteSyncWorker.requestSoon(context)
+            }
         }
     }
 

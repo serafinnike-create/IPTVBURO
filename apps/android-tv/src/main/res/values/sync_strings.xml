@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_title">Sync devices</string>
+    <string name="sync_hint">The same favourites on phone, TV, PC and Mac. No account or password: one device shows a code and the other types it. Profiles are matched by name.</string>
+    <string name="sync_show_code">Show code</string>
+    <string name="sync_code">Code: %1$s</string>
+    <string name="sync_code_hint">Type this code on the other device, under Sync devices. It works for 10 minutes.</string>
+    <string name="sync_join_field">Code from the other device</string>
+    <string name="sync_join">Join</string>
+    <string name="sync_members">%1$d devices in sync</string>
+    <string name="sync_now">Sync now</string>
+    <string name="sync_syncing">Syncing…</string>
+    <string name="sync_leave">Stop syncing</string>
+    <string name="sync_received">%1$d favourites received from the other devices</string>
+    <string name="sync_error_licence">Sync needs an active licence on this device.</string>
+    <string name="sync_error_not_in_group">This device is not in sync with any other.</string>
+    <string name="sync_error_code">Wrong or expired code. Ask the other device for a new one.</string>
+    <string name="sync_error_full">10 devices are already in sync, which is the most allowed.</string>
+    <string name="sync_error_network">No connection to the server. Try again in a moment.</string>
+    <string name="sync_error_rejected">The server refused the request. Try again.</string>
+</resources>

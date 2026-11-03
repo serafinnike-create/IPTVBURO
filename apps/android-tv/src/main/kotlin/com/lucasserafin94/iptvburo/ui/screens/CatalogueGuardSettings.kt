@@ -81,6 +81,8 @@ internal fun CatalogueGuardSections(
     guard: CatalogueGuardUi,
     compact: Boolean,
 ) {
+    SyncSettingsCard(compact = compact)
+    Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
     SubtitleSettingsCard(
         presentation = guard.subtitles,
         compact = compact,
@@ -482,7 +484,7 @@ private fun PinField(
 }
 
 @Composable
-private fun SettingsCard(
+internal fun SettingsCard(
     compact: Boolean,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {

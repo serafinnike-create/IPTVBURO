@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_title">Sincronizar dispositivos</string>
+    <string name="sync_hint">Los mismos favoritos en el móvil, la TV, el PC y el Mac. Sin cuenta ni contraseña: un dispositivo muestra un código y el otro lo escribe. Los perfiles se emparejan por nombre.</string>
+    <string name="sync_show_code">Mostrar código</string>
+    <string name="sync_code">Código: %1$s</string>
+    <string name="sync_code_hint">Escribe este código en el otro dispositivo, en Sincronizar dispositivos. Vale 10 minutos.</string>
+    <string name="sync_join_field">Código del otro dispositivo</string>
+    <string name="sync_join">Unirse</string>
+    <string name="sync_members">%1$d dispositivos sincronizados</string>
+    <string name="sync_now">Sincronizar ahora</string>
+    <string name="sync_syncing">Sincronizando…</string>
+    <string name="sync_leave">Dejar de sincronizar</string>
+    <string name="sync_received">%1$d favoritos recibidos de los otros dispositivos</string>
+    <string name="sync_error_licence">La sincronización necesita una licencia activa en este dispositivo.</string>
+    <string name="sync_error_not_in_group">Este dispositivo no está sincronizado con ningún otro.</string>
+    <string name="sync_error_code">Código incorrecto o caducado. Pide uno nuevo en el otro dispositivo.</string>
+    <string name="sync_error_full">Ya hay 10 dispositivos sincronizados, que es el máximo.</string>
+    <string name="sync_error_network">Sin conexión con el servidor. Inténtalo de nuevo en un momento.</string>
+    <string name="sync_error_rejected">El servidor rechazó la solicitud. Inténtalo de nuevo.</string>
+</resources>

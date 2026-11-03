@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_title">Geräte synchronisieren</string>
+    <string name="sync_hint">Dieselben Favoriten auf Handy, TV, PC und Mac. Ohne Konto und Passwort: Ein Gerät zeigt einen Code, das andere gibt ihn ein. Profile werden über den Namen zugeordnet.</string>
+    <string name="sync_show_code">Code anzeigen</string>
+    <string name="sync_code">Code: %1$s</string>
+    <string name="sync_code_hint">Gib diesen Code auf dem anderen Gerät unter Geräte synchronisieren ein. Er gilt 10 Minuten.</string>
+    <string name="sync_join_field">Code vom anderen Gerät</string>
+    <string name="sync_join">Beitreten</string>
+    <string name="sync_members">%1$d Geräte synchronisiert</string>
+    <string name="sync_now">Jetzt synchronisieren</string>
+    <string name="sync_syncing">Wird synchronisiert…</string>
+    <string name="sync_leave">Synchronisierung beenden</string>
+    <string name="sync_received">%1$d Favoriten von den anderen Geräten erhalten</string>
+    <string name="sync_error_licence">Die Synchronisierung braucht eine aktive Lizenz auf diesem Gerät.</string>
+    <string name="sync_error_not_in_group">Dieses Gerät ist mit keinem anderen synchronisiert.</string>
+    <string name="sync_error_code">Falscher oder abgelaufener Code. Lass dir auf dem anderen Gerät einen neuen geben.</string>
+    <string name="sync_error_full">Es sind bereits 10 Geräte synchronisiert, das ist das Maximum.</string>
+    <string name="sync_error_network">Keine Verbindung zum Server. Versuche es gleich noch einmal.</string>
+    <string name="sync_error_rejected">Der Server hat die Anfrage abgelehnt. Versuche es erneut.</string>
+</resources>

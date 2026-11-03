@@ -79,7 +79,7 @@ class DesktopSyncTest {
 
             val result = sync.exchange(local, localProfiles = listOf("Ana"))
 
-            val outcome = assertIs<SyncResult.Success<DesktopSync.Outcome>>(result).value
+            val outcome = assertIs<SyncResult.Success<com.lucasserafin94.iptvburo.sync.FavoriteSyncSession.Outcome>>(result).value
             assertEquals(listOf("series:dark"), outcome.add.map { it.identityKey })
             val pushed = JsonParser.parseString(server.takeRequest().body.readUtf8()).asJsonObject
             assertEquals(1, pushed.getAsJsonArray("records").size(), "this computer's favourite was not pushed")
