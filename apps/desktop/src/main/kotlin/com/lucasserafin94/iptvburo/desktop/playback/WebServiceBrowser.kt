@@ -103,7 +103,7 @@ class WebServiceBrowser(
                         frame: CefFrame?,
                         httpStatusCode: Int,
                     ) {
-                        if (frame?.isMain == true && !disposed.get()) saveSession(clearAfter = false)
+                        if (frame?.isMain == true && !disposed.get()) saveSession()
                     }
                 },
             )
@@ -118,6 +118,8 @@ class WebServiceBrowser(
             null
         }
 
+    private val ownerKey: String get() = "$profileId/${brand.id}"
+
     /** Signs out: forgets the saved session, clears the engine's cookies and reloads the start page. */
     fun signOut() {
         sessions.clear(profileId, brand)
@@ -128,12 +130,15 @@ class WebServiceBrowser(
     /**
      * Saves the session and closes the page.
      *
-     * The cookies are read before the browser goes away, and the engine's copies are then removed,
-     * so the next profile to open the service starts from nothing but its own.
+     * The engine keeps its copies of the cookies. Removing them here, and putting them back from
+     * disk on the next open, is what signed the viewer out: the removal ran asynchronously and could
+     * land after the next open had already restored them, and a cookie the save had missed was gone
+     * for good. The engine's cookies are replaced only when a *different* profile opens the service
+     * (see [restoreSession]).
      */
     fun dispose() {
         if (!disposed.compareAndSet(false, true)) return
-        saveSession(clearAfter = true)
+        saveSession()
         browser?.let { live ->
             runCatching { live.stopLoad() }
             runCatching { live.close(true) }
@@ -144,30 +149,40 @@ class WebServiceBrowser(
     }
 
     /**
-     * Reads the service's cookies from the engine and seals them for this profile.
+     * Reads the service's cookies from the engine and seals them for this profile, for the next
+     * time the app starts.
      *
-     * [clearAfter] removes them from the engine once saved, for when the window is closing and the
-     * next profile must start from nothing but its own.
+     * Every cookie the engine holds for the service's hosts, whatever its path: asking by the start
+     * page's address returned only the cookies that page would be sent, and a sign-in cookie scoped
+     * to another path was never saved. Skipped once another profile owns the engine's cookies, so a
+     * late visit can never file one profile's session under another.
      */
-    private fun saveSession(clearAfter: Boolean) {
+    private fun saveSession() {
         val manager = CefCookieManager.getGlobalManager() ?: return
         val collected = mutableListOf<StoredWebCookie>()
-        val visiting =
-            manager.visitUrlCookies(brand.homeUrl, true) { cookie, count, total, _ ->
-                collected += cookie.toStored()
-                if (count + 1 >= total) {
-                    sessions.save(profileId, brand, collected.toList())
-                    if (clearAfter) deleteEngineCookies()
-                }
-                true
+        manager.visitAllCookies { cookie, count, total, _ ->
+            val candidate = cookie.toStored()
+            if (WebServiceSessionStore.belongsTo(candidate, brand)) collected += candidate
+            if (count + 1 >= total && engineCookieOwner == ownerKey && collected.isNotEmpty()) {
+                sessions.save(profileId, brand, collected.toList())
             }
-        // No visit at all means no cookie for the service. Nothing is saved over the stored session
-        // here — a page that loaded before the cookies arrived must not sign the user out.
-        if (!visiting && clearAfter) deleteEngineCookies()
+            true
+        }
+        // No visit, or nothing for the service: nothing is saved over the stored session. A page
+        // that loaded before its cookies arrived must not sign the user out.
     }
 
+    /**
+     * Gives the engine this profile's cookies, unless it already holds them.
+     *
+     * The same profile coming back finds its cookies exactly where it left them — nothing is
+     * removed, nothing re-added. Only a different profile, or the first open since the app started,
+     * clears the service's cookies and puts this profile's saved ones in.
+     */
     private fun restoreSession() {
         val manager = CefCookieManager.getGlobalManager() ?: return
+        if (engineCookieOwner == ownerKey) return
+        engineCookieOwner = ownerKey
         deleteEngineCookies()
         sessions.load(profileId, brand).forEach { stored ->
             val host = stored.domain.trimStart('.')
@@ -190,6 +205,15 @@ class WebServiceBrowser(
     companion object {
         /** Whether the page can be shown in the app on this machine. */
         fun isAvailable(): Boolean = TrailerBrowser.isAvailable()
+
+        /**
+         * Whose GoDorama cookies the process-wide engine holds now, as "profile/service".
+         *
+         * One engine serves every profile, so this is what keeps one adult out of another's account
+         * without throwing away the cookies of the profile that simply came back.
+         */
+        @Volatile
+        private var engineCookieOwner: String? = null
     }
 }
 

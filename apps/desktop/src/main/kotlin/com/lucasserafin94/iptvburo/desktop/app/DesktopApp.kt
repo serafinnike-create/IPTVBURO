@@ -596,7 +596,8 @@ fun DesktopApp(
                         // so no other native surface — the banner trailer above all — is composed
                         // under it and drawn through it. Any other tab replaces it.
                         if (appState.showsWebServicePage) {
-                            WebServiceOverlay(appState)
+                            // Nothing else is composed while the page is on screen; the page itself
+                            // is drawn below, outside this chain, so it survives leaving the tab.
                         } else if (visibleDestination == DesktopDestination.WEB_SERVICES && appState.canUseWebServices) {
                             WebServicesPage(
                                 appState = appState,
@@ -923,6 +924,13 @@ fun DesktopApp(
                                 appState = appState,
                                 onOpenExternal = { pendingExternalChannel = it },
                             )
+                        }
+                        // Kept composed for as long as the page is open, and only shrunk out of the
+                        // way while another tab is shown. Removing it closed the browser every time
+                        // the viewer went to Assinaturas or Início, and coming back meant signing in
+                        // to GoDorama again — reported exactly like that.
+                        if (appState.openedWebService != null) {
+                            WebServiceOverlay(appState, visible = appState.showsWebServicePage)
                         }
                         }
                     }

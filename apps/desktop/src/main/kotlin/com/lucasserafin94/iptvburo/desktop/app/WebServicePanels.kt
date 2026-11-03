@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -43,9 +44,16 @@ import com.lucasserafin94.iptvburo.domain.model.WebServiceBrand
  * Drawn only while [DesktopAppState.openedWebService] is set, which the state sets only for a
  * service this profile may see and only where the engine exists. Closing saves the sign-in for this
  * profile (see WebServiceBrowser.dispose).
+ *
+ * While another tab is selected ([visible] false) the page stays alive at one pixel rather than
+ * being closed, the way the app's other native surfaces step aside: the browser, its page and its
+ * sign-in are all still there when the viewer comes back to the tab.
  */
 @Composable
-fun WebServiceOverlay(appState: DesktopAppState) {
+fun WebServiceOverlay(
+    appState: DesktopAppState,
+    visible: Boolean = true,
+) {
     val brand = appState.openedWebService ?: return
     val profileId = appState.activeProfileId ?: return
     val text = WebServiceStrings.of(appState.language)
@@ -53,10 +61,15 @@ fun WebServiceOverlay(appState: DesktopAppState) {
     DisposableEffect(browser) { onDispose { browser.dispose() } }
     val panel = remember(browser) { browser.createComponent() }
 
-    com.lucasserafin94.iptvburo.desktop.ui.EscapeToDismiss(appState::closeWebService)
+    if (visible) com.lucasserafin94.iptvburo.desktop.ui.EscapeToDismiss(appState::closeWebService)
 
     Column(
-        modifier = Modifier.fillMaxSize().background(BuroColors.Canvas),
+        modifier =
+            if (visible) {
+                Modifier.fillMaxSize().background(BuroColors.Canvas)
+            } else {
+                Modifier.size(1.dp)
+            },
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = BuroSpacing.Lg, vertical = BuroSpacing.Sm),

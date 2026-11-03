@@ -87,6 +87,12 @@ class WebServiceStateTest {
             state.openHome()
             assertEquals(DesktopDestination.HOME, state.destination)
             assertFalse(state.showsWebServicePage, "Início still showed GoDorama")
+            // Kept open behind the other tab, so its browser — and the sign-in — survive. Closing
+            // it on every tab change is what made the viewer sign in again on each return.
+            assertEquals(WebServices.GODORAMA, state.openedWebService)
+
+            state.openSubscriptions()
+            assertEquals(WebServices.GODORAMA, state.openedWebService, "Assinaturas closed the GoDorama page")
 
             state.openSearch()
             assertFalse(state.showsWebServicePage, "Pesquisa still showed GoDorama")
@@ -94,6 +100,16 @@ class WebServiceStateTest {
             // And the tab takes the viewer straight back to the page.
             state.openWebService(WebServices.GODORAMA.id, engineAvailable = true)
             assertTrue(state.showsWebServicePage)
+        }
+
+    @Test
+    fun `switching profile closes the previous profile's GoDorama page`() =
+        withState { state, _ ->
+            state.openWebService(WebServices.GODORAMA.id, engineAvailable = true)
+
+            state.selectProfile(SECOND_ADULT.id)
+
+            assertEquals(null, state.openedWebService, "one adult's GoDorama stayed open for another")
         }
 
     private fun withState(block: (DesktopAppState, DesktopUserStore) -> Unit) {
