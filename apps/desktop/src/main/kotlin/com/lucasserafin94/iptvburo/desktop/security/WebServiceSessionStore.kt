@@ -119,6 +119,25 @@ class WebServiceSessionStore(
         fun defaultDirectory(): Path =
             com.lucasserafin94.iptvburo.desktop.DesktopStorage.localData().resolve("web-sessions")
 
+        /**
+         * The saved cookies as they go back into the engine: one per name, host and path, each
+         * scoped to its own host only.
+         *
+         * GoDorama signs in with a host-only cookie. Put back as a domain cookie (which is what
+         * giving the engine a domain does), it sat beside the fresh one the sign-in set under the
+         * same name, the browser sent both, and the server read the stale one first, so the
+         * viewer signed in and was shown the page as if nobody had. Saves made before this fix
+         * may hold both copies; the host-only one is the one the site itself set, and it wins.
+         */
+        fun forRestore(saved: List<StoredWebCookie>): List<StoredWebCookie> =
+            saved
+                .groupBy { cookie ->
+                    Triple(cookie.name, cookie.domain.trim().trimStart('.').lowercase(), cookie.path.ifBlank { "/" })
+                }.values
+                .map { copies -> copies.firstOrNull { !it.domain.trim().startsWith('.') } ?: copies.first() }
+                .map { cookie -> cookie.copy(domain = cookie.domain.trim().trimStart('.'), path = cookie.path.ifBlank { "/" }) }
+                .filter { cookie -> cookie.domain.isNotBlank() }
+
         /** Whether [cookie] was set for one of the service's own hosts. */
         fun belongsTo(
             cookie: StoredWebCookie,

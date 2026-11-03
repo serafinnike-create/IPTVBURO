@@ -211,9 +211,9 @@ class WebServiceBrowser(
         deleteEngineCookies("restore")
         val saved = sessions.load(profileId, brand)
         trace("restore ${saved.size} saved cookies (${saved.cookieNames()})")
-        saved.forEach { stored ->
-            val host = stored.domain.trimStart('.')
-            manager.setCookie("https://$host${stored.path.ifBlank { "/" }}", stored.toCef())
+        // Host-only, the way the site set them: an empty domain is how the engine is told so.
+        WebServiceSessionStore.forRestore(saved).forEach { stored ->
+            manager.setCookie("https://${stored.domain}${stored.path}", stored.toCef(domain = ""))
         }
     }
 
@@ -278,7 +278,7 @@ private fun CefCookie.toStored(): StoredWebCookie =
         expiresEpochMillis = if (hasExpires) expires?.time else null,
     )
 
-private fun StoredWebCookie.toCef(): CefCookie {
+private fun StoredWebCookie.toCef(domain: String = this.domain): CefCookie {
     val now = Date()
     return CefCookie(
         name,

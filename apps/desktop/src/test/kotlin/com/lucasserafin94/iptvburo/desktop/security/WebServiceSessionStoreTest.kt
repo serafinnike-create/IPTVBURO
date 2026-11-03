@@ -107,6 +107,20 @@ class WebServiceSessionStoreTest {
     }
 
     @Test
+    fun `the sign-in cookie goes back once, host-only, and the site's own copy wins`() {
+        // A save from before the fix: the stale copy the app had put back as a domain cookie, and
+        // the fresh one the sign-in set on the host itself.
+        val stale = cookie(name = "godorama_web", value = "stale", domain = ".godorama.com")
+        val fresh = cookie(name = "godorama_web", value = "fresh", domain = "godorama.com")
+        val other = cookie(name = "pref", value = "dark", domain = ".godorama.com")
+
+        val restored = WebServiceSessionStore.forRestore(listOf(stale, fresh, other))
+
+        assertEquals(listOf("fresh", "dark"), restored.map(StoredWebCookie::value))
+        assertTrue(restored.none { it.domain.startsWith(".") })
+    }
+
+    @Test
     fun `a damaged file reads as no sign-in`() {
         assertTrue(WebServiceSessionStore.decode("garbage".toByteArray()).isEmpty())
         assertTrue(WebServiceSessionStore.decode("v1\nnot base64 at all".toByteArray()).isEmpty())
