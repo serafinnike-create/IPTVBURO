@@ -1,5 +1,8 @@
 package com.lucasserafin94.iptvburo.ui.components
 
+import androidx.compose.material3.ripple
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -50,7 +53,11 @@ fun FocusSurface(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val motion = BuroTheme.motion
-    val isVisuallyFocused = focused && enabled
+    // The ring and the zoom belong to a remote or a keyboard. On a touch screen a screen that
+    // places focus on open drew a ring around whatever it chose — the back button, the first
+    // card — as if the user had selected it. Touch gets the platform's ripple instead.
+    val touchMode = LocalInputModeManager.current.inputMode == InputMode.Touch
+    val isVisuallyFocused = focused && enabled && !touchMode
     val targetScale =
         when {
             !motion.allowsFocusZoom -> 1f
@@ -93,7 +100,7 @@ fun FocusSurface(
                 .onFocusChanged { focused = it.isFocused }
                 .clickable(
                     interactionSource = interactionSource,
-                    indication = null,
+                    indication = if (touchMode) ripple() else null,
                     enabled = enabled,
                     role = Role.Button,
                     onClick = onClick,

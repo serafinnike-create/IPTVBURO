@@ -111,6 +111,12 @@ fun LivingHomeScreen(
     uiState: LivingHomeUiState = LivingHomeUiState.Ready,
     initialFocusedItemId: String? = null,
     interceptBack: Boolean = true,
+    /**
+     * The scroll position, owned by the caller so it outlives this screen. The home leaves
+     * composition entirely while a title's details are open, and a position remembered in here was
+     * thrown away with it: coming back from a film put the viewer at the top of the page again.
+     */
+    listState: LazyListState? = null,
 ) {
     BackHandler(
         enabled = interceptBack,
@@ -216,6 +222,7 @@ fun LivingHomeScreen(
                 val resolvedInitialFocusedItemId =
                     section.resolveInitialFocusId(initialFocusedItemId)
                 ReadyHome(
+                    listState = listState,
                     heroTrailerFor = heroTrailerFor,
                     bannerTrailerSound = bannerTrailerSound,
                     onToggleBannerTrailerSound = onToggleBannerTrailerSound,
@@ -253,6 +260,7 @@ fun LivingHomeScreen(
 
 @Composable
 private fun ReadyHome(
+    listState: LazyListState?,
     section: HomeSection,
     sourceCount: Int,
     metrics: HomeLayoutMetrics,
@@ -269,7 +277,7 @@ private fun ReadyHome(
     onOpenSource: (String) -> Unit,
     showDemonstrationNotice: Boolean,
 ) {
-    val columnState = rememberLazyListState()
+    val columnState = listState ?: rememberLazyListState()
     val initialRailIndex = section.rails.indexOfFirst { rail ->
         rail.items.any { item -> item.id == initialFocusedItemId }
     }
@@ -277,6 +285,11 @@ private fun ReadyHome(
     val firstRailIndex = heroIndex + 1
 
     LaunchedEffect(initialFocusedItemId, section.id, showDemonstrationNotice) {
+        // Only from the top. A list already scrolled somewhere is a position being restored, and
+        // jumping it to the remembered focus — on a phone, always the banner — undid the restore.
+        if (columnState.firstVisibleItemIndex != 0 || columnState.firstVisibleItemScrollOffset != 0) {
+            return@LaunchedEffect
+        }
         when {
             initialFocusedItemId == section.hero.id -> columnState.scrollToItem(heroIndex)
             initialRailIndex >= 0 -> columnState.scrollToItem(

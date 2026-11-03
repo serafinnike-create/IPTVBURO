@@ -1,6 +1,9 @@
 package com.lucasserafin94.iptvburo.ui.screens
 
 
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -391,6 +394,8 @@ fun AppShellScreen(
     val rememberedChannelsGridState = rememberSaveable(channelsKey, saver = LazyGridState.Saver) {
         LazyGridState()
     }
+    // The home's scroll position, hoisted for the same reason as the grid's above.
+    val rememberedHomeListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
 
     BackHandler(enabled = showMobileNavigation) { showMobileNavigation = false }
 
@@ -598,7 +603,13 @@ fun AppShellScreen(
                     // each composable on the way there.
                     CompositionLocalProvider(LocalProviderLogos provides state.providerLogos) {
                     when (content) {
-                        AppContent.Home -> LivingHomeScreen(
+                        AppContent.Home -> HomePullToRefresh(
+                            // Touch layouts only: a television has no finger to pull with, and the
+                            // gesture's own spinner would sit over the banner a remote navigates.
+                            enabled = compactNavigation && state.sources.isNotEmpty(),
+                            refreshing = state.subscriptions.isLoading || state.isCatalogLoading,
+                            onRefresh = onRefreshCatalog,
+                        ) { LivingHomeScreen(
                             sources = state.sources.map(SourceUi::toHomeSummary),
                             catalogItems = state.homeItems,
                             continueWatching = state.continueWatching,
@@ -635,7 +646,8 @@ fun AppShellScreen(
                             // visible and leaving the app took two — and Android's predictive back
                             // preview never appeared at all.
                             interceptBack = homeContentOwnsBack && !compactNavigation,
-                        )
+                            listState = rememberedHomeListState,
+                        ) }
 
                         AppContent.Sources -> SourcesContent(
                             sources = state.sources,
@@ -4994,5 +5006,32 @@ private fun PlatformShortcuts(
                 }
             }
         }
+    }
+}
+
+/**
+ * Pull down to refresh the home, the gesture every phone app has taught people.
+ *
+ * The same action as the refresh button in the bar, which stays: the gesture is undiscoverable
+ * until someone tries it, and the button is what tells them refreshing exists at all.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomePullToRefresh(
+    enabled: Boolean,
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    if (!enabled) {
+        content()
+        return
+    }
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = onRefresh,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        content()
     }
 }
