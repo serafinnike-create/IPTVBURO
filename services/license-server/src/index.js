@@ -31,6 +31,14 @@ import {
 } from './pairing.js';
 import { adminPage } from './admin-page.js';
 import {
+  createInvite,
+  exchange as syncExchange,
+  joinWithCode,
+  leaveGroup,
+  licenceCoversSync,
+  syncStatus,
+} from './sync.js';
+import {
   saveProvisioning,
   provisioningStatus,
   claimProvisioning,
@@ -184,6 +192,13 @@ export default {
           return withCors(await handleProvisioningClaim(request, env));
         case '/v1/provisioning/confirm':
           return withCors(await handleProvisioningConfirm(request, env));
+        // Sync between a household's devices. See src/sync.js.
+        case '/v1/sync/status':
+        case '/v1/sync/invite':
+        case '/v1/sync/join':
+        case '/v1/sync/leave':
+        case '/v1/sync/exchange':
+          return withCors(await handleSync(url.pathname, request, env));
         case '/v1/signing-key-check':
           return await handleSigningKeyCheck(request, env);
         case '/v1/stripe-webhook':
@@ -978,6 +993,37 @@ async function handleProvisioningConfirm(request, env) {
   }
   const applied = await confirmProvisioning(proof.deviceId, env);
   return json({ ok: true, state: applied ? 'APPLIED' : 'NONE' });
+}
+
+/**
+ * Every sync call: the device proves its pinned key over a fresh nonce, and its licence must be in
+ * force. Leaving and asking for status stay open to an expired device, so it can always see where
+ * it stands and get out of a group; adding to one or exchanging data is part of what is paid for.
+ */
+async function handleSync(pathname, request, env) {
+  if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
+  const body = await readJson(request);
+  const now = new Date();
+  const proof = await authorizeExistingDevice(body ?? {}, 'sync', env, now);
+  if (!proof.ok) return json({ error: proof.error }, proof.status);
+  const licensed = licenceCoversSync(proof.device, now);
+
+  let outcome;
+  switch (pathname) {
+    case '/v1/sync/status':
+      return json({ ...(await syncStatus(proof.deviceId, env)), licensed });
+    case '/v1/sync/leave':
+      outcome = await leaveGroup(proof.deviceId, env);
+      break;
+    default:
+      if (!licensed) return json({ error: 'licence_required' }, 402);
+      if (pathname === '/v1/sync/invite') outcome = await createInvite(proof.deviceId, env, now);
+      else if (pathname === '/v1/sync/join') outcome = await joinWithCode(proof.deviceId, body?.code, env, now);
+      else outcome = await syncExchange(proof.deviceId, body, env, now);
+  }
+  if (!outcome.ok) return json({ error: outcome.error }, outcome.status);
+  const { ok, ...rest } = outcome;
+  return json({ ok, ...rest });
 }
 
 async function handleRegister(request, env) {
@@ -3157,6 +3203,9 @@ function rateLimitBindingFor(pathname, method = 'POST') {
   // six-digit secret and gets the tightest limiter, the same one as the app's own submit — before
   // this, the form had none, and the code space could be swept from a single address.
   if ((pathname === '/pair' || pathname === '/parear') && method === 'POST') return 'REGISTRATION_RATE_LIMITER';
+  // Joining is a guess at an invite code; the rest of sync is ordinary device traffic.
+  if (pathname === '/v1/sync/join') return 'REGISTRATION_RATE_LIMITER';
+  if (pathname.startsWith('/v1/sync/')) return 'LICENSE_API_RATE_LIMITER';
   // Each provisioning request costs a key derivation; unlimited, they were a cheap way to burn CPU.
   if (pathname === '/v1/provisioning/claim' || pathname === '/v1/provisioning/confirm') {
     return 'LICENSE_API_RATE_LIMITER';
@@ -3282,6 +3331,12 @@ const PUBLIC_CORS_PATHS = new Set([
   '/v1/redeem',
   '/v1/key-info',
   '/v1/price',
+  // The Samsung build is a web app and reaches these from its own origin.
+  '/v1/sync/status',
+  '/v1/sync/invite',
+  '/v1/sync/join',
+  '/v1/sync/leave',
+  '/v1/sync/exchange',
 ]);
 
 /** Adds browser access only after routing has established that this is a public app endpoint. */

@@ -13,6 +13,8 @@
 #                                                        # a customer's Xtream password from the admin
 #                                                        # panel fails closed rather than encrypting
 #                                                        # with a key derivable from public data
+#   npx wrangler secret put SYNC_ENCRYPTION_KEY # 32+ random bytes; encrypts synced favourites and
+#                                                # positions at rest. Without it, sync fails closed
 #   npx wrangler deploy
 #
 # Secrets are set with `wrangler secret`, never in this file. This file is committed; the signing
