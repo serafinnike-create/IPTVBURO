@@ -184,8 +184,15 @@ jobs:
           path: artifacts/*.msi
           if-no-files-found: error
 
+  # The Mac disk images, one per processor, built and checked by the same workflow that guards
+  # every push to the working branch.
+  build-macos:
+    uses: ./.github/workflows/macos-build.yml
+    with:
+      tag: ${{ inputs.tag || github.ref_name }}
+
   publish:
-    needs: [build-android, build-windows]
+    needs: [build-android, build-windows, build-macos]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -222,11 +229,12 @@ jobs:
         run: |
           mapfile -t apk_files < <(find artifacts -maxdepth 1 -type f -name '*.apk')
           mapfile -t msi_files < <(find artifacts -maxdepth 1 -type f -name '*.msi')
-          if [[ "${#apk_files[@]}" -ne 1 || "${#msi_files[@]}" -ne 1 ]]; then
-            echo "Expected exactly one APK and one MSI." >&2
+          mapfile -t dmg_files < <(find artifacts -maxdepth 1 -type f -name '*.dmg')
+          if [[ "${#apk_files[@]}" -ne 1 || "${#msi_files[@]}" -ne 1 || "${#dmg_files[@]}" -ne 2 ]]; then
+            echo "Expected exactly one APK, one MSI and two DMGs (arm64 and x64)." >&2
             exit 1
           fi
-          sha256sum "${apk_files[0]}" "${msi_files[0]}" > artifacts/SHA256SUMS.txt
+          sha256sum "${apk_files[0]}" "${msi_files[0]}" "${dmg_files[@]}" > artifacts/SHA256SUMS.txt
 
       - name: Publish complete preview release
         shell: bash
@@ -234,12 +242,16 @@ jobs:
           APK_PATH="artifacts/IPTV-BURO-${RELEASE_TAG}-android-debug.apk"
           mapfile -t msi_files < <(find artifacts -maxdepth 1 -type f -name '*.msi')
           MSI_PATH="${msi_files[0]}"
+          mapfile -t DMG_PATHS < <(find artifacts -maxdepth 1 -type f -name '*.dmg' | sort)
           SUM_PATH="artifacts/SHA256SUMS.txt"
           if [[ "$MSI_PATH" == *-unsigned.msi ]]; then
-            RELEASE_NOTES="Windows and Android packages. The MSI is not code-signed, so Windows may display an Unknown publisher or SmartScreen warning on install. The package passed the clean-data privacy audit."
+            RELEASE_NOTES="Windows, macOS and Android packages. The MSI is not code-signed, so Windows may display an Unknown publisher or SmartScreen warning on install. The package passed the clean-data privacy audit."
           else
-            RELEASE_NOTES="Signed Windows package and Android debug package."
+            RELEASE_NOTES="Signed Windows package, macOS and Android packages."
           fi
+          # The Mac images are not signed with an Apple Developer ID yet, so macOS refuses the first
+          # open. Saying how to get past it is the difference between "it is broken" and an app.
+          RELEASE_NOTES="${RELEASE_NOTES} macOS: choose arm64 for Apple Silicon (M1 or newer) or x64 for Intel. The app is not signed by Apple yet: after dragging it to Applications, right-click it and choose Open (on macOS 15: System Settings > Privacy & Security > Open Anyway)."
           # A suffixed tag is a preview; a bare v1.2.3 is a final release and is published as one,
           # because marking a finished release "pre-release" tells everyone who downloads it that
           # it is not ready.
@@ -250,12 +262,12 @@ jobs:
           fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" \
-              "$APK_PATH" "$MSI_PATH" "$SUM_PATH" \
+              "$APK_PATH" "$MSI_PATH" "${DMG_PATHS[@]}" "$SUM_PATH" \
               --clobber
             gh release edit "$RELEASE_TAG" --notes "$RELEASE_NOTES"
           else
             gh release create "$RELEASE_TAG" \
-              "$APK_PATH" "$MSI_PATH" "$SUM_PATH" \
+              "$APK_PATH" "$MSI_PATH" "${DMG_PATHS[@]}" "$SUM_PATH" \
               --title "IPTV BURO $RELEASE_TAG" \
               --notes "$RELEASE_NOTES" \
               $MATURITY_FLAG \
