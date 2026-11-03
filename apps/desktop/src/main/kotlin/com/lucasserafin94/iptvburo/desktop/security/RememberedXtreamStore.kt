@@ -151,11 +151,7 @@ class RememberedXtreamStore internal constructor(
         const val ZERO_BYTE: Byte = 0
 
         fun defaultFile(): Path {
-            val localAppData = System.getenv("LOCALAPPDATA")?.takeIf(String::isNotBlank)
-            val root =
-                localAppData?.let(Path::of)
-                    ?: Path.of(System.getProperty("user.home"), "AppData", "Local")
-            return root.resolve("lucasserafin94").resolve("IPTVBURO").resolve("remembered-source.dpapi")
+            return com.lucasserafin94.iptvburo.desktop.DesktopStorage.localData().resolve("remembered-source.dpapi")
         }
 
         fun legacyDefaultFile(): Path {

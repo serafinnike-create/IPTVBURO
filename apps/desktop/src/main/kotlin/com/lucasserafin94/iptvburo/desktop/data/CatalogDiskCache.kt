@@ -204,7 +204,7 @@ internal class CatalogDiskCache(
         private const val MAX_ITEMS = 2_000_000
 
         fun defaultDirectory(): Path =
-            Path.of(System.getProperty("user.home"), ".iptvburo", "catalog-cache")
+            com.lucasserafin94.iptvburo.desktop.DesktopStorage.homeData("catalog-cache")
     }
 }
 

@@ -500,6 +500,16 @@ tasks.matching { it.name in setOf("packageMsi", "packageReleaseMsi") }.configure
 
 tasks.test {
     useJUnitPlatform()
+    // Every store the app keeps — saved lists, profiles, progress, licence, caches — goes under a
+    // separate root while tests run (see DesktopStorage). Without it the suite wrote into the real
+    // Windows profile, and a developer's own app showed the tests' "localhost" lists. The opt-in
+    // probes below, which exist to read the real machine, are the one deliberate exception.
+    if (System.getProperty("buroLicenceProbe") == null &&
+        System.getProperty("buroProvisioningProbe") == null &&
+        System.getProperty("buroSeriesProbe") == null
+    ) {
+        systemProperty("iptvburo.storage.root", "iptvburo-test-storage")
+    }
     // Gradle's own -D properties do not reach the forked test JVM, so the live-updater probe
     // opt-in has to be forwarded explicitly.
     System.getProperty("buroLiveUpdaterProbe")?.let { value ->

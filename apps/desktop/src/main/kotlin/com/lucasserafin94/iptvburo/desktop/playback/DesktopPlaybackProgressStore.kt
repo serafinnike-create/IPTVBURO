@@ -11,7 +11,7 @@ import java.util.prefs.Preferences
 
 /** Local, non-secret playback progress. Resolved URLs and credentials are never accepted here. */
 class DesktopPlaybackProgressStore(
-    private val preferences: Preferences = Preferences.userRoot().node("com/lucasserafin94/iptvburo/playback-progress-v1"),
+    private val preferences: Preferences = com.lucasserafin94.iptvburo.desktop.DesktopStorage.preferences("com/lucasserafin94/iptvburo/playback-progress-v1"),
 ) : PlaybackProgressRepository {
     override fun find(identity: PlaybackProgressIdentity): PlaybackProgress? =
         synchronized(preferences) { preferences.get(storageKey(identity), null)?.let(::decode) }

@@ -465,6 +465,4 @@ fun main(args: Array<String>) {
  * place somebody can find, inspect and delete without needing the app's help.
  */
 private fun artworkCacheDirectory(): java.io.File =
-    java.nio.file.Path
-        .of(System.getProperty("user.home"), ".iptvburo", "artwork-cache")
-        .toFile()
+    DesktopStorage.homeData("artwork-cache").toFile()

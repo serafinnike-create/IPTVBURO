@@ -18,7 +18,7 @@ import java.util.prefs.Preferences
  */
 class MusicCorrectionStore(
     private val preferences: Preferences =
-        Preferences.userRoot().node("com/lucasserafin94/iptvburo/music-corrections-v2"),
+        com.lucasserafin94.iptvburo.desktop.DesktopStorage.preferences("com/lucasserafin94/iptvburo/music-corrections-v2"),
 ) {
     /** Every readable correction for [profileId], keyed by the original track id. */
     fun correctionsFor(profileId: String?): Map<String, MusicCorrection> {

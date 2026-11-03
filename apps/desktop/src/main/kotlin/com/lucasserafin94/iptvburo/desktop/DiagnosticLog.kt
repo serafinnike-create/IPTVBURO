@@ -189,7 +189,7 @@ internal object DiagnosticLog {
             }
         }
 
-    fun defaultDirectory(): Path = Path.of(System.getProperty("user.home"), ".iptvburo", "logs")
+    fun defaultDirectory(): Path = com.lucasserafin94.iptvburo.desktop.DesktopStorage.homeData("logs")
 
     /** Time of day only. The date is in the session banner, and a full stamp per line is noise. */
     private val STAMP_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")

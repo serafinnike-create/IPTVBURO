@@ -35,7 +35,7 @@ import java.util.prefs.Preferences
 class LicenseStore(
     private val appDirectory: Path = defaultAppDirectory(),
     private val homeMarker: Path = defaultHomeMarker(),
-    private val preferences: Preferences = Preferences.userRoot().node(PREFERENCES_NODE),
+    private val preferences: Preferences = com.lucasserafin94.iptvburo.desktop.DesktopStorage.preferences(PREFERENCES_NODE),
 ) {
     /**
      * The stored licence, or null when this machine has none.
@@ -135,7 +135,7 @@ class LicenseStore(
         private const val PREFERENCES_NODE = "com/lucasserafin94/iptvburo/licence"
 
         fun defaultAppDirectory(): Path =
-            Path.of(System.getProperty("user.home"), ".iptvburo", "licence")
+            com.lucasserafin94.iptvburo.desktop.DesktopStorage.homeData("licence")
 
         /**
          * Outside the app's own directory, so deleting the install folder does not take it.

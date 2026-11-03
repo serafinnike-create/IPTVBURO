@@ -83,7 +83,7 @@ internal object ArtworkCache {
 
     /** Beside the catalogue cache, so everything this app writes is in one place. */
     fun directory(): Path =
-        Path.of(System.getProperty("user.home"), ".iptvburo", "artwork-cache")
+        com.lucasserafin94.iptvburo.desktop.DesktopStorage.homeData("artwork-cache")
 }
 
 /**

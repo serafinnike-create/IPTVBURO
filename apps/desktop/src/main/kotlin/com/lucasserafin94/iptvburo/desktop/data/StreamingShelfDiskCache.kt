@@ -215,6 +215,6 @@ internal class StreamingShelfDiskCache(
         private const val MAX_TITLES_PER_SHELF = 500
 
         fun defaultDirectory(): Path =
-            Path.of(System.getProperty("user.home"), ".iptvburo", "shelf-cache")
+            com.lucasserafin94.iptvburo.desktop.DesktopStorage.homeData("shelf-cache")
     }
 }

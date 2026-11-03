@@ -17,7 +17,7 @@ import java.util.prefs.Preferences
  */
 class MusicPlayCountStore(
     private val preferences: Preferences =
-        Preferences.userRoot().node("com/lucasserafin94/iptvburo/music-v1"),
+        com.lucasserafin94.iptvburo.desktop.DesktopStorage.preferences("com/lucasserafin94/iptvburo/music-v1"),
 ) {
     /**
      * Counts for [profileId], keyed by track id.

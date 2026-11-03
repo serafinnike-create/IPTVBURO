@@ -63,11 +63,7 @@ class ProfilePhotoStore(
         val UNSAFE = Regex("""[^A-Za-z0-9._-]""")
 
         fun defaultDirectory(): Path {
-            val localAppData = System.getenv("LOCALAPPDATA")?.takeIf(String::isNotBlank)
-            val root =
-                localAppData?.let(Path::of)
-                    ?: Path.of(System.getProperty("user.home"), "AppData", "Local")
-            return root.resolve("lucasserafin94").resolve("IPTVBURO").resolve("avatars")
+            return com.lucasserafin94.iptvburo.desktop.DesktopStorage.localData().resolve("avatars")
         }
     }
 }

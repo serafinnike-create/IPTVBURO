@@ -23,7 +23,7 @@ import java.util.prefs.Preferences
  */
 class ListeningHistoryStore(
     private val preferences: Preferences =
-        Preferences.userRoot().node("com/lucasserafin94/iptvburo/listening-v1"),
+        com.lucasserafin94.iptvburo.desktop.DesktopStorage.preferences("com/lucasserafin94/iptvburo/listening-v1"),
     /**
      * The legacy count store, read once per profile so existing rankings survive the change.
      *

@@ -20,7 +20,7 @@ import java.util.prefs.Preferences
  */
 class MusicPlaylistStore(
     private val preferences: Preferences =
-        Preferences.userRoot().node("com/lucasserafin94/iptvburo/music-playlists-v1"),
+        com.lucasserafin94.iptvburo.desktop.DesktopStorage.preferences("com/lucasserafin94/iptvburo/music-playlists-v1"),
 ) {
     /**
      * Every stored playlist for [profileId], in creation order.

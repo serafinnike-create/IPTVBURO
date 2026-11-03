@@ -1440,11 +1440,11 @@ data class DesktopStrings(
                             mergeSourcesRestart = "As listas sao reorganizadas na hora.",
                             mergeSourcesFailed = "%1${'$'}s não respondeu. As outras listas continuam a funcionar.",
                             mergeSourcesOffline = "Não responde",
-                            mergeSourcesRemoveOffline = "Remover as listas que nao respondem (%1${'$'}d)",
+                            mergeSourcesRemoveOffline = "Remover as listas que não respondem (%1${'$'}d)",
                             trailerUnmute = "Ligar o som",
                             trailerMute = "Silenciar",
                             guideTitle = "Guia",
-                            guideNoSchedule = "Este canal nao enviou programacao.",
+                            guideNoSchedule = "Este canal não enviou programação.",
                             guideWatch = "Ver este canal",
                             diagnosticsLatencyGood = "Latência baixa: os canais trocam sem espera",
                             diagnosticsLatencyFair = "Latência alta: pode travar e demorar ao trocar de canal",
@@ -1583,7 +1583,7 @@ data class DesktopStrings(
                             another = "Buscar mais",
                             loading = "Montando sua seleção...",
                             kept = "Guardado nos favoritos",
-                            noTrailer = "Sem trailer disponivel.",
+                            noTrailer = "Sem trailer disponível.",
                         ),
                     settingsTabs =
                         SettingsTabStrings(
@@ -1603,7 +1603,7 @@ data class DesktopStrings(
                             disabled = "Não guardar",
                             estimate = "Sua lista precisa de aproximadamente %s.",
                             start = "Começar",
-                            skip = "Agora nao",
+                            skip = "Agora não",
                             filling = "Guardando capas",
                             progress = "%1${'$'}d de %2${'$'}d",
                             pause = "Pausar",
@@ -1821,7 +1821,7 @@ data class DesktopStrings(
                 downloadFailed = "Falha no download",
                 removeDownload = "Remover download",
                 downloads = "Downloads",
-                resetSettings = "Redefinir configuracoes",
+                resetSettings = "Redefinir configurações",
                 resetConfirm = "Apagar tudo",
                 resetWarning = "Isso apaga perfis, favoritos e progresso. Os arquivos baixados sao mantidos.",
                 settings = "Configurações",
@@ -1830,7 +1830,7 @@ data class DesktopStrings(
                 downloadPaused = "Pausado",
                 downloadsEmptyTitle = "Nenhuma copia offline",
                 downloadsEmptyBody = "Abra um filme e escolha Baixar. As copias salvas aparecem aqui e tocam sem internet.",
-                updateReadyBody = "A atualizacao foi baixada e verificada. O aplicativo vai fechar, o Windows instala a nova versao e o aplicativo abre sozinho. Pode levar cerca de um minuto.",
+                updateReadyBody = "A atualização foi baixada e verificada. O aplicativo vai fechar, o Windows instala a nova versão e o aplicativo abre sozinho. Pode levar cerca de um minuto.",
                 updateRestartNow = "Fechar e atualizar",
                 updateLater = "Depois",
                 music = "Músicas",
@@ -2011,7 +2011,7 @@ data class DesktopStrings(
                         licenseExpiredBody = "Renove para continuar usando o IPTV BURO neste dispositivo.",
                         licenseRevokedTitle = "Licença cancelada",
                         licenseRevokedBody =
-                            "Esta licença foi cancelada. Se acha que houve um engano, fale connosco.",
+                            "Esta licença foi cancelada. Se acha que houve um engano, fale conosco.",
                         licenseVerifyTitle = "Precisamos verificar sua licença",
                         licenseVerifyBody =
                             "Já faz um tempo desde a última verificação. Conecte-se à internet " +

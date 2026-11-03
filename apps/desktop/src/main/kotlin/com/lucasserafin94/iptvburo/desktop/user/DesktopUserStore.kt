@@ -193,7 +193,7 @@ data class StoredNotification(
 private const val USER_NODE_PATH = "com/lucasserafin94/iptvburo/user-v1"
 
 class DesktopUserStore(
-    initialPreferences: Preferences = Preferences.userRoot().node(USER_NODE_PATH),
+    initialPreferences: Preferences = com.lucasserafin94.iptvburo.desktop.DesktopStorage.preferences(USER_NODE_PATH),
 ) {
     /**
      * The preferences node, re-acquired after a reset.
