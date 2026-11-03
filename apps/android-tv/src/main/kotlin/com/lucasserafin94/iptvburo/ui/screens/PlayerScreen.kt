@@ -1,5 +1,7 @@
 package com.lucasserafin94.iptvburo.ui.screens
 
+import com.lucasserafin94.iptvburo.playback.ExternalPlayerLauncher
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.Context
@@ -246,6 +248,11 @@ fun PlayerScreen(
     // start-up would find nothing on exactly the streams that have the most to offer.
     var tracks by remember(player) { mutableStateOf(androidx.media3.common.Tracks.EMPTY) }
     var showTrackSheet by remember(player) { mutableStateOf(false) }
+    /** The question asked before the address leaves BURO for another player. */
+    var confirmExternalPlayer by remember(player) { mutableStateOf(false) }
+    /** Said once when no installed app can play the address — common on a television. */
+    var noExternalPlayer by remember(player) { mutableStateOf(false) }
+    val canOpenExternally = remember(channel.streamUrl) { ExternalPlayerLauncher.isPlayableAddress(channel.streamUrl) }
     DisposableEffect(player) {
         val listener =
             object : Player.Listener {
@@ -831,6 +838,7 @@ fun PlayerScreen(
                         controlsLocked = true
                         controlsVisible = false
                     },
+                    onOpenExternalPlayer = if (canOpenExternally) ({ confirmExternalPlayer = true }) else null,
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
             }
@@ -874,6 +882,38 @@ fun PlayerScreen(
                     onReplay = { programme ->
                         showSchedule = false
                         onReplayProgramme(programme)
+                    },
+                )
+            }
+
+            if (confirmExternalPlayer) {
+                val chooserTitle = stringResource(R.string.player_external_chooser)
+                ExternalPlayerDialog(
+                    onConfirm = {
+                        confirmExternalPlayer = false
+                        // Paused rather than released: the viewer may come back, and the position
+                        // they left is where this player should still be.
+                        player.pause()
+                        when (ExternalPlayerLauncher.open(context, channel, chooserTitle)) {
+                            ExternalPlayerLauncher.Result.NoPlayer -> noExternalPlayer = true
+                            ExternalPlayerLauncher.Result.Opened,
+                            ExternalPlayerLauncher.Result.Unavailable,
+                            -> Unit
+                        }
+                    },
+                    onDismiss = { confirmExternalPlayer = false },
+                )
+            }
+
+            if (noExternalPlayer) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { noExternalPlayer = false },
+                    title = { Text(stringResource(R.string.player_external_none_title)) },
+                    text = { Text(stringResource(R.string.player_external_none_body)) },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = { noExternalPlayer = false }) {
+                            Text(stringResource(R.string.player_external_ok))
+                        }
                     },
                 )
             }
@@ -1296,6 +1336,8 @@ private fun PlayerControls(
     /** False when the stream carries a single audio track and no subtitles. */
     hasSelectableTracks: Boolean,
     onOpenTracks: () -> Unit,
+    /** Hands the stream to another installed player; null for something with no network address. */
+    onOpenExternalPlayer: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1446,6 +1488,21 @@ private fun PlayerControls(
                 onClick = onLock,
                 icon = { Icon(Icons.Rounded.Lock, contentDescription = stringResource(R.string.player_lock_controls), tint = BuroTextPrimary) },
             )
+            // Beside the other "how this is playing" controls: some people simply prefer VLC or MX,
+            // and some streams play better there. Not for a downloaded file, which has no address
+            // another app could open.
+            onOpenExternalPlayer?.let { openExternal ->
+                ControlButton(
+                    onClick = openExternal,
+                    icon = {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.OpenInNew,
+                            contentDescription = stringResource(R.string.player_external_open),
+                            tint = BuroTextPrimary,
+                        )
+                    },
+                )
+            }
             // Only where there is a genuine choice. A stream with one audio track and no subtitles
             // would open an empty sheet, which reads as the feature being broken.
             if (hasSelectableTracks) {
@@ -1748,4 +1805,30 @@ internal fun formatPlaybackClock(millis: Long): String {
     } else {
         "%02d:%02d".format(minutes, seconds)
     }
+}
+
+/**
+ * Asked before the stream leaves BURO. The address carries the list's account, and once another
+ * app holds it BURO cannot take it back, so the viewer is told that in plain words, every time.
+ */
+@Composable
+private fun ExternalPlayerDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.player_external_open)) },
+        text = { Text(stringResource(R.string.player_external_warning)) },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.player_external_continue))
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.player_external_cancel))
+            }
+        },
+    )
 }

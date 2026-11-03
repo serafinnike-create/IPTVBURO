@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_external_open">Abrir em outro player</string>
+    <string name="player_external_chooser">Abrir com</string>
+    <string name="player_external_warning">O endereço do vídeo, com o acesso à sua lista, será enviado ao app que você escolher. Use só players em que você confia.</string>
+    <string name="player_external_continue">Continuar</string>
+    <string name="player_external_cancel">Cancelar</string>
+    <string name="player_external_none_title">Nenhum outro player instalado</string>
+    <string name="player_external_none_body">Instale um player de vídeo, como o VLC ou o MX Player, e tente de novo.</string>
+    <string name="player_external_ok">OK</string>
+</resources>
