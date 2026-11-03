@@ -296,6 +296,13 @@ fun DesktopApp(
             androidx.compose.ui.platform.LocalDensity provides scaledDensity,
             // The real one too, for the native surfaces — see NativeSwingPanel.
             com.lucasserafin94.iptvburo.desktop.ui.LocalSystemDensity provides systemDensity,
+            // Every panel drawn over the screens. Native video and the trailer browser are always
+            // drawn above Compose, so while one of these is open they step out of the way — see
+            // NativeSwingPanel.
+            com.lucasserafin94.iptvburo.desktop.ui.LocalNativeSurfacesCovered provides (
+                settingsOpen || diagnosticsOpen || showXtreamLogin || showLicenseDetails ||
+                    showProfileGate || editingProfile != null || updateRelease != null
+            ),
             LocalDesktopStrings provides DesktopStrings.of(appState.language),
             LocalProviderLogos provides appState.providerLogos,
         ) {
