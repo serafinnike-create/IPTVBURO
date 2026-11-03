@@ -21,9 +21,14 @@ class SeasonsStartCollapsedTest {
 
     @Test
     fun `nothing is open when there is a choice to make`() {
+        // Closed unless the viewer is part-way through an episode: then the season holding it opens,
+        // because that is the list they came back for. A single season is open regardless.
+        val initial = source.substringAfter("var openSeason by remember(details.providerId) {").take(600)
         assertTrue(
-            source.contains("mutableStateOf(if (seasons.size > 1) null else seasons.keys.firstOrNull())"),
-            "Several seasons start closed; a single season stays open because it is not a choice.",
+            initial.contains("if (seasons.size > 1) {") &&
+                initial.contains("resumeDecisionForEpisode(it) is ResumeDecision.ResumeFrom") &&
+                initial.contains("seasons.keys.firstOrNull()"),
+            "Several seasons start closed except the one in progress; a single season stays open.",
         )
     }
 

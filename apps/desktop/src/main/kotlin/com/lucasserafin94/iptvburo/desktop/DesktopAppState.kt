@@ -1327,6 +1327,38 @@ class DesktopAppState(
     private var lastPlaybackTarget: XtreamPlaybackTarget? = null
 
     /**
+     * The live channel [step] places from the one playing, among the channels on screen, or null.
+     *
+     * The list is the page the viewer was browsing, so changing channel from the player walks the
+     * same order they saw, as a remote's channel buttons do. Wraps at either end.
+     */
+    fun prepareNeighbourChannel(step: Int): DesktopPlaybackRequest? {
+        val playing = lastPlaybackTarget as? XtreamPlaybackTarget.CatalogItem ?: return null
+        if (playing.contentType != XtreamContentType.LIVE) return null
+        val channels = xtreamPage.items.filter { it.contentType == XtreamContentType.LIVE }
+        if (channels.size < 2) return null
+        val index = channels.indexOfFirst { it.providerId == playing.providerId }
+        if (index < 0) return null
+        val next = channels[(index + step).mod(channels.size)]
+        val target =
+            XtreamPlaybackTarget.CatalogItem(
+                providerId = next.providerId,
+                contentType = next.contentType,
+                containerExtension = next.containerExtension,
+                contentKey = next.contentIdentity().key,
+            )
+        return prepareXtreamPlayback(target, next.name)
+    }
+
+    /** Whether the playing channel has neighbours to step to. */
+    fun canStepChannel(): Boolean {
+        val playing = lastPlaybackTarget as? XtreamPlaybackTarget.CatalogItem ?: return false
+        if (playing.contentType != XtreamContentType.LIVE) return false
+        val channels = xtreamPage.items.filter { it.contentType == XtreamContentType.LIVE }
+        return channels.size > 1 && channels.any { it.providerId == playing.providerId }
+    }
+
+    /**
      * The episode after the one playing, or null.
      *
      * Only from the series page that is open: its episode list is the one loaded, and an episode
@@ -7844,6 +7876,22 @@ class DesktopAppState(
     /** Whether the clock reads 24-hour. */
     var uses24HourClock by mutableStateOf(userStore.uses24HourClock())
         private set
+
+    /**
+     * How large the interface is drawn, on top of Windows' own scaling.
+     *
+     * A 27-inch 1440p screen at Windows' default 100% drew the whole app at a size meant for a
+     * laptop: the profile gate, the onboarding and every list were small islands in the middle of a
+     * mostly empty window. Windows' scaling changes every program on the machine; this changes only
+     * the app.
+     */
+    var uiScale by mutableStateOf(userStore.uiScale())
+        private set
+
+    fun changeUiScale(value: Float) {
+        uiScale = value
+        userStore.setUiScale(value)
+    }
 
     /** Named `change…` because `set…` collides on the JVM with the property's own setter. */
     fun changeClockFormat(use24Hour: Boolean) {

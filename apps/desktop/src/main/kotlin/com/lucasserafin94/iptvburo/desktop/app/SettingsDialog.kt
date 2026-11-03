@@ -473,6 +473,21 @@ fun SettingsDialog(
                         }
                     }
 
+                    if (tab == SettingsTab.GENERAL) item(key = "ui-scale") {
+                        HorizontalDivider(color = BuroColors.BorderSoft)
+                        SettingsSection(text.settingsText.uiScaleLabel, text.settingsText.uiScaleHint) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
+                                UI_SCALE_STEPS.forEach { step ->
+                                    SettingsPill(
+                                        label = "${(step * 100).toInt()}%",
+                                        selected = kotlin.math.abs(appState.uiScale - step) < 0.01f,
+                                        onClick = { appState.changeUiScale(step) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     if (tab == SettingsTab.GENERAL) item(key = "clock") {
                         HorizontalDivider(color = BuroColors.BorderSoft)
                         SettingsSection(text.settingsText.clockLabel, text.settingsText.clockHint) {
@@ -1080,3 +1095,6 @@ private fun regionDisplayName(code: String): String =
         "IT" -> "Itália"
         else -> code
     }
+
+/** The interface sizes offered, from slightly smaller than Windows draws it to half again larger. */
+private val UI_SCALE_STEPS = listOf(0.9f, 1f, 1.15f, 1.3f, 1.5f)

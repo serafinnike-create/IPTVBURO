@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.Replay10
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Star
@@ -74,6 +75,7 @@ object BuroIcons {
     val Rewind10: ImageVector = Icons.Rounded.Replay10
     val Forward30: ImageVector = Icons.Rounded.Forward30
     val Next: ImageVector = Icons.Rounded.SkipNext
+    val Previous: ImageVector = Icons.Rounded.SkipPrevious
     val VolumeHigh: ImageVector = Icons.AutoMirrored.Rounded.VolumeUp
     val VolumeLow: ImageVector = Icons.AutoMirrored.Rounded.VolumeDown
     val VolumeOff: ImageVector = Icons.AutoMirrored.Rounded.VolumeOff

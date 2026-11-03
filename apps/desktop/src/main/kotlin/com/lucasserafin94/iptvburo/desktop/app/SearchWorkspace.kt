@@ -1,5 +1,8 @@
 package com.lucasserafin94.iptvburo.desktop.app
 
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.layout.Arrangement
@@ -69,12 +72,23 @@ fun SearchWorkspace(
         )
         Spacer(Modifier.height(BuroSpacing.Md))
 
+        // Focused on arrival: opening Search is asking to type, and the field used to sit unfocused
+        // so the first letters went nowhere until it was clicked.
+        val fieldFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+        LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp),
+            modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp).focusRequester(fieldFocus),
             singleLine = true,
             placeholder = { Text(text.searchCatalog) },
+            leadingIcon = {
+                androidx.compose.material3.Icon(
+                    com.lucasserafin94.iptvburo.desktop.ui.BuroIcons.Search,
+                    contentDescription = null,
+                    tint = BuroColors.TextSubtle,
+                )
+            },
         )
         Spacer(Modifier.height(BuroSpacing.Md))
 
@@ -86,11 +100,15 @@ fun SearchWorkspace(
             // Phrased from the query itself rather than from new translated strings: DesktopStrings
             // sits at its enforced constructor-argument ceiling, and a quoted search term reads
             // clearly in every language this app ships.
-            Text(
-                text = if (trimmed.length < MIN_QUERY) text.searchCatalog else "${text.search}: \"$trimmed\" — 0",
-                color = BuroColors.TextSubtle,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            // Nothing under an empty field: the placeholder already says what it is for, and the
+            // same words repeated beneath it read as an echo.
+            if (trimmed.length >= MIN_QUERY) {
+                Text(
+                    text = "${text.search}: \"$trimmed\" — 0",
+                    color = BuroColors.TextSubtle,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             return@Column
         }
 

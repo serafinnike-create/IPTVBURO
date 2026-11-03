@@ -1816,7 +1816,9 @@ internal fun XtreamInternalDetailsPage(
         ?: movie?.details?.artworkUrl
         ?: series?.details?.backdropUrls?.firstOrNull()
         ?: series?.details?.artworkUrl
-        ?: item.artworkUrl
+        // Never a channel's own image: for live television that is the station logo, and blown up
+        // behind the page it covered the buttons and the title with a giant "amc".
+        ?: item.artworkUrl.takeIf { item.contentType != XtreamContentType.LIVE }
     Box(Modifier.fillMaxSize().background(BuroColors.Canvas)) {
         // Slow Ken Burns drift on the backdrop. The GDD asks for a living detail page; a muted
         // trailer needs a trailer field the provider rarely supplies, and a static backdrop would
@@ -3563,8 +3565,20 @@ private fun SeriesDetailContent(
                 // everything below it, so a series with several seasons pushed the rest of the page
                 // — the shelf included — a long scroll away. With one season there is nothing to
                 // choose, so it stays open and the tabs are not drawn at all.
+                //
+                // Except where the viewer is part-way through: the season holding the episode they
+                // were watching opens by itself, because that is the list they came back for.
                 var openSeason by remember(details.providerId) {
-                    mutableStateOf(if (seasons.size > 1) null else seasons.keys.firstOrNull())
+                    mutableStateOf(
+                        if (seasons.size > 1) {
+                            seasons.entries
+                                .firstOrNull { (_, inSeason) ->
+                                    inSeason.any { resumeDecisionForEpisode(it) is ResumeDecision.ResumeFrom }
+                                }?.key
+                        } else {
+                            seasons.keys.firstOrNull()
+                        },
+                    )
                 }
                 if (seasons.size > 1) {
                     FlowRow(
@@ -4253,9 +4267,9 @@ private fun playbackButtonLabel(decision: ResumeDecision, text: DesktopStrings):
         is ResumeDecision.ResumeFrom ->
             text.shareStrings.screens.resumeFromTime.format(formatPlaybackTime(decision.positionMs))
         ResumeDecision.WatchAgain -> text.shareStrings.screens.watchAgain
-        // Starting over is the same act as the continue-watching button of that name, so it takes
-        // that label rather than one of its own.
-        ResumeDecision.StartFromBeginning -> text.startOver
+        // Nothing watched yet, so there is nothing to start *over*: "Do início" on a film nobody had
+        // opened read as if the app remembered a viewing that never happened.
+        ResumeDecision.StartFromBeginning -> text.watchNow
     }
 
 private fun formatPlaybackTime(positionMs: Long): String {

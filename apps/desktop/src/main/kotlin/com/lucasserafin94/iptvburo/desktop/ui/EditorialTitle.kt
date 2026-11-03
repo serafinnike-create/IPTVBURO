@@ -33,6 +33,36 @@ fun String.editorialTitle(): String {
     return result.ifBlank { trim() }
 }
 
+/**
+ * The decoration [editorialTitle] removes, as a short label — "FHD", "HD · H265" — or null when
+ * there was none.
+ *
+ * For lists where the decoration is the only difference between two rows. A channel list carried
+ * "A&E", "A&E", "A&E": the provider's FHD, HD and SD feeds, made identical by the cleaning that
+ * makes a film's title readable.
+ */
+fun String.editorialMarkers(): String? {
+    val markers = mutableListOf<String>()
+    BRACKETED_TAG.findAll(this).forEach { match -> markers += match.value.trim().removePrefix("[").removeSuffix("]") }
+    var rest = replace(BRACKETED_TAG, " ").replace(WHITESPACE, " ").trim()
+    val trailing = mutableListOf<String>()
+    while (true) {
+        val trimmed = rest.trimEnd(' ', '-', '·', '|', '.')
+        val lastWord = trimmed.substringAfterLast(' ', "")
+        if (lastWord.isEmpty() || lastWord.lowercase() !in TRAILING_MARKERS) break
+        trailing.add(0, lastWord)
+        rest = trimmed.substringBeforeLast(' ', trimmed).trim()
+    }
+    markers += trailing
+    return markers
+        .map { it.uppercase() }
+        .filter(String::isNotBlank)
+        .distinct()
+        .take(3)
+        .joinToString(" · ")
+        .ifBlank { null }
+}
+
 private val BRACKETED_TAG = Regex("""\s*\[[^]]{1,12}]\s*""")
 private val WHITESPACE = Regex("""\s+""")
 

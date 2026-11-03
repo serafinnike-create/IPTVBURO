@@ -61,6 +61,8 @@ object WindowChrome {
     fun setBorderlessFullScreen(
         window: Window?,
         fullScreen: Boolean,
+        /** On leaving full screen, maximise again — the way the window was before entering. */
+        restoreMaximized: Boolean = false,
     ) {
         if (window == null) return
         if (!System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)) return
@@ -118,9 +120,15 @@ object WindowChrome {
                         SWP_FRAMECHANGED or SWP_NOMOVE or SWP_NOSIZE or SWP_NOZORDER or SWP_NOOWNERZORDER,
                     )
                 }
+                // Back to maximised when that is how the window was. Restoring to the work area
+                // alone left a maximised app as a floating window one inset smaller than the
+                // screen after every film watched in full screen.
+                if (restoreMaximized) user32.ShowWindow(hwnd, SW_MAXIMIZE)
             }
         }
     }
+
+    private const val SW_MAXIMIZE = 3
 
     private const val ATTRIBUTE_MODERN = 20
     private const val ATTRIBUTE_LEGACY = 19
@@ -151,6 +159,8 @@ object WindowChrome {
 
     private interface User32Ex : com.sun.jna.win32.StdCallLibrary {
         fun GetWindowLong(hwnd: WinDef.HWND, index: Int): Int
+
+        fun ShowWindow(hwnd: WinDef.HWND, command: Int): Boolean
 
         fun SetWindowLong(hwnd: WinDef.HWND, index: Int, value: Int): Int
 

@@ -408,13 +408,17 @@ fun main(args: Array<String>) {
             // that restore *undoes the maximise* — the app opened at half the screen and had to be
             // maximised by hand every launch. Nothing needs applying until the user asks for it.
             var fullScreenApplied by remember { mutableStateOf(false) }
+            // Whether the window was maximised when full screen began, so leaving it can maximise
+            // again rather than leave a floating window behind.
+            var maximizedBeforeFullScreen by remember { mutableStateOf(true) }
             LaunchedEffect(fullScreen) {
                 if (!fullScreen && !fullScreenApplied) {
                     fullScreenApplied = true
                     return@LaunchedEffect
                 }
                 fullScreenApplied = true
-                WindowChrome.setBorderlessFullScreen(window, fullScreen)
+                if (fullScreen) maximizedBeforeFullScreen = windowState.placement == WindowPlacement.Maximized
+                WindowChrome.setBorderlessFullScreen(window, fullScreen, restoreMaximized = !fullScreen && maximizedBeforeFullScreen)
                 if (!fullScreen) WindowChrome.applyDarkTitleBar(window)
             }
             DesktopApp(

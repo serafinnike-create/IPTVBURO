@@ -126,6 +126,8 @@ fun DesktopPlayerOverlay(
     /** The next episode's title, or null for anything that is not a series episode or the last. */
     nextEpisodeTitle: String? = null,
     onPlayNext: () -> Unit = {},
+    /** Changes to the neighbouring live channel; null when there is none to go to. */
+    onChannelStep: ((Int) -> Unit)? = null,
     onClose: () -> Unit,
 ) {
     val text = remember(language) { PlayerText.of(language) }
@@ -362,6 +364,14 @@ fun DesktopPlayerOverlay(
                 if (nextEpisodeTitle != null) onPlayNext()
                 nextEpisodeTitle != null
             }
+            AwtKey.VK_PAGE_UP -> {
+                onChannelStep?.invoke(1)
+                onChannelStep != null
+            }
+            AwtKey.VK_PAGE_DOWN -> {
+                onChannelStep?.invoke(-1)
+                onChannelStep != null
+            }
             AwtKey.VK_CLOSE_BRACKET -> {
                 if (state.ready && !isLive) cycleSpeed()
                 !isLive
@@ -592,6 +602,7 @@ fun DesktopPlayerOverlay(
                     },
                     openPanel = openPanel,
                     onTogglePanel = { panel -> openPanel = if (openPanel == panel) null else panel },
+                    onChannelStep = onChannelStep,
                     onPlayNext = onPlayNext,
                     onMiniPlayer = onToggleCompact,
                     onFullScreen = onToggleFullScreen,
@@ -813,6 +824,7 @@ internal fun ControlsRow(
     openPanel: PlayerPanel?,
     onTogglePanel: (PlayerPanel) -> Unit,
     onPlayNext: () -> Unit,
+    onChannelStep: ((Int) -> Unit)? = null,
     onMiniPlayer: () -> Unit,
     onFullScreen: () -> Unit,
     onClose: () -> Unit,
@@ -824,6 +836,9 @@ internal fun ControlsRow(
     ) {
         if (!isLive) {
             BuroIconButton(BuroIcons.Rewind10, text.rewind, { onSeekBy(-10_000.0) }, enabled = state.ready, shortcut = "←")
+        }
+        onChannelStep?.let { step ->
+            BuroIconButton(BuroIcons.Previous, text.previousChannel, { step(-1) }, shortcut = "PgDn")
         }
         BuroIconButton(
             icon = if (state.playing) BuroIcons.Pause else BuroIcons.Play,
@@ -839,6 +854,9 @@ internal fun ControlsRow(
         if (hasNext) {
             BuroIconButton(BuroIcons.Next, text.nextEpisode, onPlayNext, shortcut = "N")
         }
+        onChannelStep?.let { step ->
+            BuroIconButton(BuroIcons.Next, text.nextChannel, { step(1) }, shortcut = "PgUp")
+        }
         Spacer(Modifier.width(8.dp))
         BuroIconButton(
             icon = if (muted || state.volume <= 0.0) BuroIcons.VolumeOff else if (state.volume < 0.5) BuroIcons.VolumeLow else BuroIcons.VolumeHigh,
@@ -853,7 +871,8 @@ internal fun ControlsRow(
             accent = Color.White,
             modifier = Modifier.width(110.dp),
         )
-        if (isLive) {
+        // In full screen only: windowed, the top bar already carries the badge beside the title.
+        if (isLive && isFullScreen) {
             Spacer(Modifier.width(10.dp))
             LiveBadge(text.live)
         }

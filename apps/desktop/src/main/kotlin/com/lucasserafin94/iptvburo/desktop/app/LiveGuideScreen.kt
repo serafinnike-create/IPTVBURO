@@ -53,6 +53,7 @@ import com.lucasserafin94.iptvburo.desktop.ui.BuroRadius
 import com.lucasserafin94.iptvburo.desktop.ui.BuroRemoteArtwork
 import com.lucasserafin94.iptvburo.desktop.ui.BuroSpacing
 import com.lucasserafin94.iptvburo.desktop.ui.DesktopStrings
+import com.lucasserafin94.iptvburo.desktop.ui.editorialMarkers
 import com.lucasserafin94.iptvburo.desktop.ui.editorialTitle
 import com.lucasserafin94.iptvburo.desktop.playback.MultiviewSurface
 import com.lucasserafin94.iptvburo.desktop.playback.MultiviewTile
@@ -420,15 +421,33 @@ private fun ChannelRow(
         contentDescription = channel.name,
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp)) {
-            Text(
-                // The same cleaning the catalogue does: a viewer reading a channel list does not
-                // need "[FHD]" on every row to know their subscription carries HD.
-                text = channel.name.editorialTitle(),
-                color = if (selected) BuroColors.Primary else BuroColors.Text,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    // The same cleaning the catalogue does: a viewer reading a channel list does
+                    // not need "[FHD]" woven into every name to know their subscription carries HD.
+                    text = channel.name.editorialTitle(),
+                    color = if (selected) BuroColors.Primary else BuroColors.Text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                // ...but the quality does come back, small, beside it. Without it the provider's
+                // FHD, HD and SD feeds of one channel were three identical rows.
+                channel.name.editorialMarkers()?.let { markers ->
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = markers,
+                        color = BuroColors.TextMuted,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        modifier =
+                            Modifier
+                                .background(BuroColors.SurfaceRaised, androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                                .padding(horizontal = 5.dp, vertical = 1.dp),
+                    )
+                }
+            }
             // Nothing rather than a placeholder while the schedule is being fetched: a line saying
             // "loading" on forty rows at once is noise, and the row is readable without it.
             if (onNow != null) {

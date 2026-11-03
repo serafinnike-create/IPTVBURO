@@ -279,8 +279,18 @@ fun DesktopApp(
         appState.ensureProviderLogos()
     }
 
+    // The interface size chosen in settings, applied to everything below: a density on top of the
+    // one Windows reports, so every dp and sp grows together and nothing has to know about it.
+    val systemDensity = androidx.compose.ui.platform.LocalDensity.current
+    val scaledDensity =
+        androidx.compose.ui.unit.Density(
+            density = systemDensity.density * appState.uiScale,
+            fontScale = systemDensity.fontScale,
+        )
+
     BuroDesktopTheme {
         CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalDensity provides scaledDensity,
             LocalDesktopStrings provides DesktopStrings.of(appState.language),
             LocalProviderLogos provides appState.providerLogos,
         ) {
@@ -941,6 +951,12 @@ fun DesktopApp(
                         onPlayNext = {
                             appState.prepareNextEpisode()?.let { next -> activePlayback = next }
                         },
+                        onChannelStep =
+                            if (request.isLive && appState.canStepChannel()) {
+                                { step -> appState.prepareNeighbourChannel(step)?.let { next -> activePlayback = next } }
+                            } else {
+                                null
+                            },
                         isFullScreen = isFullScreen,
                         onToggleFullScreen = onToggleFullScreen,
                         isCompact = isCompact,
@@ -2387,7 +2403,8 @@ private fun TopBar(
                 } else {
                     Text(
                         updateMessage
-                            ?: "$sourceCount ${text.sourcesCount}  ·  $channelCount ${text.items}  ·  " +
+                            ?: "$sourceCount ${if (sourceCount == 1) text.settingsText.sourceOne else text.sourcesCount}  ·  " +
+                            "$channelCount ${if (channelCount == 1) text.settingsText.itemOne else text.items}  ·  " +
                             "IPTV BURO v$DESKTOP_VERSION",
                         color = BuroColors.TextSubtle,
                         style = MaterialTheme.typography.bodyMedium,

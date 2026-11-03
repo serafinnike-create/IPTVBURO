@@ -638,6 +638,11 @@ class DesktopUserStore(
 
     fun uses24HourClock(): Boolean = preferences.getBoolean(KEY_CLOCK_24H, true)
 
+    /** How large the interface is drawn, as a factor of the system's own scale. */
+    fun uiScale(): Float = preferences.getFloat(KEY_UI_SCALE, 1f).coerceIn(MIN_UI_SCALE, MAX_UI_SCALE)
+
+    fun setUiScale(value: Float) = preferences.putFloat(KEY_UI_SCALE, value.coerceIn(MIN_UI_SCALE, MAX_UI_SCALE))
+
     fun setUses24HourClock(value: Boolean) = preferences.putBoolean(KEY_CLOCK_24H, value)
 
     /**
@@ -1132,6 +1137,9 @@ class DesktopUserStore(
         const val KEY_REMINDERS_ANNOUNCED = "reminders-announced"
         const val KEY_REMINDER_LAST_SHOWN = "reminder-last-shown"
         const val KEY_CLOCK_24H = "clock-24h"
+        const val KEY_UI_SCALE = "ui-scale"
+        const val MIN_UI_SCALE = 0.85f
+        const val MAX_UI_SCALE = 1.6f
         const val KEY_COLLAPSE_DUPLICATES = "collapse-duplicate-titles"
         const val KEY_SUBTITLE_SIZE = "subtitle-size"
         const val KEY_SUBTITLE_COLOUR = "subtitle-colour"
