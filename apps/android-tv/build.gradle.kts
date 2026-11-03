@@ -62,8 +62,8 @@ android {
         applicationId = "com.lucasserafin94.iptvburo"
         minSdk = 23
         targetSdk = 36
-        versionCode = 21
-        versionName = "4.3.0"
+        versionCode = 22
+        versionName = "4.3.1"
 
         buildConfigField("boolean", "OFFLINE_SUPPORTED", androidOfflineSupported.toString())
         // Production builds must never embed a developer-owned TMDB credential. Users can provide
