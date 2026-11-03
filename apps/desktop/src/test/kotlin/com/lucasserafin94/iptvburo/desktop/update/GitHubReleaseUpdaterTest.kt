@@ -144,8 +144,12 @@ class GitHubReleaseUpdaterTest {
         }
     }
 
+    /**
+     * Every release so far has been unsigned. Refusing unsigned stable installers left stable
+     * installs with no update path at all, so one is taken when no signed installer is published.
+     */
     @Test
-    fun `stable installs ignore unsigned stable assets`() = runBlocking {
+    fun `stable installs take an unsigned stable installer when no signed one exists`() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(
                 MockResponse().setBody(
@@ -171,7 +175,45 @@ class GitHubReleaseUpdaterTest {
                     currentVersion = "2.0.0",
                 ).check()
 
-            assertIs<UpdateCheckResult.UpToDate>(result)
+            val available = assertIs<UpdateCheckResult.Available>(result)
+            kotlin.test.assertEquals("IPTV-BURO-v2.0.1-windows-x64-unsigned.msi", available.release.assetName)
+        }
+    }
+
+    @Test
+    fun `a signed installer is preferred over an unsigned one in the same release`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """
+                    [{
+                      "draft": false,
+                      "prerelease": false,
+                      "tag_name": "v2.0.1",
+                      "assets": [{
+                        "name": "IPTV-BURO-v2.0.1-windows-x64-unsigned.msi",
+                        "browser_download_url": "https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.1/IPTV-BURO-v2.0.1-windows-x64-unsigned.msi",
+                        "size": 1234,
+                        "digest": "sha256:${"2".repeat(64)}"
+                      }, {
+                        "name": "IPTV-BURO-v2.0.1-windows-x64.msi",
+                        "browser_download_url": "https://github.com/serafinnike-create/IPTVBURO/releases/download/v2.0.1/IPTV-BURO-v2.0.1-windows-x64.msi",
+                        "size": 1234,
+                        "digest": "sha256:${"3".repeat(64)}"
+                      }]
+                    }]
+                    """.trimIndent(),
+                ),
+            )
+
+            val result =
+                GitHubReleaseUpdater(
+                    releasesUrl = server.url("/releases").toString(),
+                    currentVersion = "2.0.0",
+                ).check()
+
+            val available = assertIs<UpdateCheckResult.Available>(result)
+            kotlin.test.assertEquals("IPTV-BURO-v2.0.1-windows-x64.msi", available.release.assetName)
         }
     }
 

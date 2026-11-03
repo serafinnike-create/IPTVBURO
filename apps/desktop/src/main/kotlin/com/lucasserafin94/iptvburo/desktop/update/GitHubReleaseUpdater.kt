@@ -102,17 +102,23 @@ class GitHubReleaseUpdater(
                             // and a legacy name from the packaging task. Picking the first match
                             // would sometimes install an older build than the tag advertises, so
                             // the version-stamped asset is preferred explicitly.
-                            val installers =
+                            val verified =
                                 release["assets"]?.asJsonArray
                                     ?.map { it.asJsonObject }
                                     ?.filter { candidate ->
-                                        candidate["name"]?.asString?.let { name ->
-                                            isWindowsInstallerName(name) &&
-                                                (runningPreview || !isUnsignedPreviewInstaller(name))
-                                        } == true &&
+                                        candidate["name"]?.asString?.let(::isWindowsInstallerName) == true &&
                                             candidate["digest"]?.asString?.startsWith("sha256:") == true
                                     }
                                     .orEmpty()
+                            // A signed installer whenever the release has one. Without one, the
+                            // unsigned MSI is taken on every channel: no release has ever been
+                            // signed, and refusing unsigned ones on a stable build meant a stable
+                            // install was never offered an update at all — 4.0.0 never saw 4.1.0.
+                            // The digest GitHub publishes for the asset is still checked below
+                            // before anything runs.
+                            val installers =
+                                verified.filterNot { isUnsignedPreviewInstaller(it["name"].asString) }
+                                    .ifEmpty { verified }
                             val asset =
                                 installers.firstOrNull { candidate ->
                                     candidate["name"].asString.contains(tag, ignoreCase = true)

@@ -658,6 +658,7 @@ data class DesktopStrings(
                             subscriptionDaysLeft = "Lista: %1${'$'}d días · %2${'$'}s",
                             subscriptionLastDay = "Lista: último día · %s",
                             subscriptionExpired = "Lista vencida · %s",
+                            updateAvailable = "Nueva versión %s · Actualizar",
                             diagnosticsAction = "Diagnóstico",
                             diagnosticsTitle = "Diagnóstico de conexión",
                             mergeSourcesTitle = "Unir todas las listas",
@@ -1449,6 +1450,7 @@ data class DesktopStrings(
                             subscriptionDaysLeft = "Lista: %1${'$'}d dias · %2${'$'}s",
                             subscriptionLastDay = "Lista: último dia · %s",
                             subscriptionExpired = "Lista vencida · %s",
+                            updateAvailable = "Nova versão %s · Atualizar",
                             diagnosticsAction = "Diagnóstico",
                             diagnosticsTitle = "Diagnóstico da ligação",
                             mergeSourcesTitle = "Juntar todas as listas",
@@ -2240,6 +2242,7 @@ data class DesktopStrings(
                             subscriptionDaysLeft = "Playlist: %1${'$'}d days · %2${'$'}s",
                             subscriptionLastDay = "Playlist: last day · %s",
                             subscriptionExpired = "Playlist expired · %s",
+                            updateAvailable = "New version %s · Update",
                             diagnosticsAction = "Diagnostics",
                             diagnosticsTitle = "Connection diagnostics",
                             mergeSourcesTitle = "Merge every playlist",
@@ -3030,6 +3033,7 @@ data class DesktopStrings(
                             subscriptionDaysLeft = "Liste: %1${'$'}d Tage · %2${'$'}s",
                             subscriptionLastDay = "Liste: letzter Tag · %s",
                             subscriptionExpired = "Liste abgelaufen · %s",
+                            updateAvailable = "Neue Version %s · Aktualisieren",
                             diagnosticsAction = "Diagnose",
                             diagnosticsTitle = "Verbindungsdiagnose",
                             mergeSourcesTitle = "Alle Listen zusammenführen",
@@ -3825,6 +3829,7 @@ data class DesktopStrings(
                             subscriptionDaysLeft = "Lista: %1${'$'}d giorni · %2${'$'}s",
                             subscriptionLastDay = "Lista: ultimo giorno · %s",
                             subscriptionExpired = "Lista scaduta · %s",
+                            updateAvailable = "Nuova versione %s · Aggiorna",
                             diagnosticsAction = "Diagnostica",
                             diagnosticsTitle = "Diagnostica della connessione",
                             mergeSourcesTitle = "Unisci tutte le liste",
@@ -5045,6 +5050,8 @@ data class ScreenStrings(
     val subscriptionDaysLeft: String,
     val subscriptionLastDay: String,
     val subscriptionExpired: String,
+    /** The header chip that says a newer app version exists; takes the version. Clicking it updates. */
+    val updateAvailable: String,
     /**
      * The connection test, beside the button that refreshes the lists.
      *

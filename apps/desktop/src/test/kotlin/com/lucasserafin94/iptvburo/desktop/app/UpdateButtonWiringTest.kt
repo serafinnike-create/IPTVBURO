@@ -18,11 +18,15 @@ class UpdateButtonWiringTest {
             Regex("onUpdate\\s*=\\s*::checkAndDownloadUpdate").findAll(source).count(),
             "Both visible update buttons must use the same action.",
         )
+        // Two checks: the buttons' one, and the quiet background one that only lights the header
+        // chip — which itself calls the buttons' action. Anything more is a path that can diverge.
         assertEquals(
-            1,
+            2,
             Regex("releaseUpdater\\s*\\.check\\(").findAll(source).count(),
             "A duplicated check path can diverge and leave one button broken.",
         )
+        // And one download: the background check must never install anything on its own.
+        assertEquals(1, Regex("\\.downloadAndLaunch\\(").findAll(source).count())
         assertTrue(source.contains(".downloadAndLaunch(result.release)"))
     }
 }

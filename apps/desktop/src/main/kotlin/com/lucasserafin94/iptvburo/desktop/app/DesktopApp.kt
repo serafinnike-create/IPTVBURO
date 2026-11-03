@@ -157,6 +157,7 @@ import com.lucasserafin94.iptvburo.desktop.update.DESKTOP_VERSION
 import com.lucasserafin94.iptvburo.desktop.update.DesktopRelease
 import com.lucasserafin94.iptvburo.desktop.update.GitHubReleaseUpdater
 import com.lucasserafin94.iptvburo.desktop.update.UpdateCheckResult
+import kotlinx.coroutines.delay
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
 import com.lucasserafin94.iptvburo.desktop.user.DesktopProfile
 import com.lucasserafin94.iptvburo.domain.model.CacheFillProgress
@@ -246,6 +247,8 @@ fun DesktopApp(
     val updateRateTracker = remember { DownloadRateTracker() }
     var updateRelease by remember { mutableStateOf<DesktopRelease?>(null) }
     var updateReadyToRestart by remember { mutableStateOf(false) }
+    // A newer version found by the background check, shown as a header chip until acted on.
+    var availableUpdate by remember { mutableStateOf<DesktopRelease?>(null) }
     // Owned here rather than inside the setup screen, which is replaced by the connecting and
     // failure screens: state held there was discarded, so a wrong password emptied the whole form
     // and hid which field was actually wrong.
@@ -319,6 +322,29 @@ fun DesktopApp(
         }
 
         val text = strings
+
+        // Looked for by itself: shortly after the library opens, then twice a day for an app that is
+        // left running. Quietly — a failure or "up to date" says nothing, and nothing downloads
+        // until the chip is clicked.
+        LaunchedEffect(releaseUpdater) {
+            delay(BACKGROUND_UPDATE_FIRST_CHECK_MILLIS)
+            while (true) {
+                if (!updateBusy) {
+                    (releaseUpdater.check() as? UpdateCheckResult.Available)?.let { availableUpdate = it.release }
+                }
+                delay(BACKGROUND_UPDATE_INTERVAL_MILLIS)
+            }
+        }
+
+        // "Up to date" and failures are answers to a click, not a status: they used to replace the
+        // library counts in the header for good. Gone again after a few seconds.
+        LaunchedEffect(updateMessage) {
+            if (updateMessage != null && !updateBusy) {
+                delay(UPDATE_MESSAGE_MILLIS)
+                if (!updateBusy) updateMessage = null
+            }
+        }
+
         fun checkAndDownloadUpdate() {
             if (updateBusy) return
             scope.launch {
@@ -343,6 +369,7 @@ fun DesktopApp(
                     }
                     is UpdateCheckResult.Available -> {
                         updateMessage = null
+                        availableUpdate = null
                         updateRelease = result.release
                         // downloadAndLaunch performs I/O on Dispatchers.IO. Marshal progress back
                         // through the composition scope instead of mutating snapshot state there.
@@ -539,6 +566,10 @@ fun DesktopApp(
                             subscriptionDaysLeft = appState.subscriptionDaysLeft,
                             subscriptionExpiresOn = appState.subscriptionExpiresOn,
                             onUpdate = ::checkAndDownloadUpdate,
+                            availableUpdateLabel =
+                                availableUpdate?.let { release ->
+                                    text.shareStrings.screens.updateAvailable.format("v${release.version}")
+                                },
                         )
 
                         HorizontalDivider(color = BuroColors.BorderSoft)
@@ -2274,6 +2305,8 @@ private fun TopBar(
     subscriptionDaysLeft: Int?,
     /** The day the list's subscription ends, as the viewer would write it. */
     subscriptionExpiresOn: String?,
+    /** Set when a newer version is out; the chip it labels starts the update. */
+    availableUpdateLabel: String? = null,
 ) {
     val text = strings
     // A Row does not shrink unweighted children: once their intrinsic widths exceed the space they
@@ -2406,6 +2439,10 @@ private fun TopBar(
             // discovers their trial is over by finding the app locked has been ambushed. Absent
             // entirely once a paid licence has more than a month to run: a permanent countdown on
             // something already paid for reads as nagging.
+            availableUpdateLabel?.let { label ->
+                UpdateChip(label = label, onClick = onUpdate)
+                Spacer(Modifier.width(BuroSpacing.Md))
+            }
             licenseStatus?.let { status ->
                 LicenseChip(
                     status = status,
@@ -4341,3 +4378,12 @@ private fun UpdateOverlay(
         }
     }
 }
+
+/** Long enough that the check never competes with the library opening. */
+private const val BACKGROUND_UPDATE_FIRST_CHECK_MILLIS = 20_000L
+
+/** Twice a day, for an app left open on a living-room PC. */
+private const val BACKGROUND_UPDATE_INTERVAL_MILLIS = 12L * 60L * 60L * 1_000L
+
+/** How long "up to date" or a failure stays in the header after a manual check. */
+private const val UPDATE_MESSAGE_MILLIS = 6_000L
