@@ -27,7 +27,7 @@ import java.util.Arrays
 import java.util.Base64
 import java.util.UUID
 
-/** The three operations whose requests must prove possession of the installation key. */
+/** The operations whose requests must prove possession of the installation key. */
 enum class DeviceProofAction(val wireValue: String) {
     REGISTER("register"),
     VALIDATE("validate"),
@@ -41,6 +41,14 @@ enum class DeviceProofAction(val wireValue: String) {
      * credentials. The server verifies against this same string.
      */
     PROVISIONING("provisioning"),
+
+    /**
+     * Keeping favourites in step with the household's other devices.
+     *
+     * Its own action for the same reason as the others: a proof taken from a sync call can be
+     * replayed against nothing but sync, and the server verifies against this same string.
+     */
+    SYNC("sync"),
 }
 
 /**

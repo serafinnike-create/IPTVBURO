@@ -194,6 +194,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.toLocalDateTime
 
@@ -215,6 +216,9 @@ class DesktopAppState(
     private val xtreamRepository: CatalogueRepository,
     private val rememberedXtreamStore: RememberedXtreamStore,
     private val userStore: DesktopUserStore = DesktopUserStore(),
+    /** Favourites kept in step with the household's other devices. Idle until this device joins one. */
+    private val sync: com.lucasserafin94.iptvburo.desktop.sync.DesktopSync =
+        com.lucasserafin94.iptvburo.desktop.sync.DesktopSync(),
     private val playbackProgressCoordinator: DesktopPlaybackProgressCoordinator = DesktopPlaybackProgressCoordinator(),
     private val downloadManager: DesktopDownloadManager = DesktopDownloadManager(),
     private val sourceLibrary: XtreamSourceLibrary = XtreamSourceLibrary(),
@@ -1759,6 +1763,7 @@ class DesktopAppState(
         val key = favoriteKey(item)
         favoriteKeys = if (key in favoriteKeys) favoriteKeys - key else favoriteKeys + key
         userStore.setFavorites(profileId, favoriteKeys)
+        scheduleSync()
         if (favoritesOnly && favoriteKey(item) !in favoriteKeys) {
             xtreamPage =
                 xtreamPage.copy(
@@ -3870,6 +3875,7 @@ class DesktopAppState(
      */
     fun dispose() {
         streamingScope.cancel()
+        syncScope.cancel()
         // The download scope too.
         //
         // It was left running, and its coroutines write Compose state when they finish — a cast
@@ -8325,7 +8331,167 @@ class DesktopAppState(
         // failure it fixes is mundane: the phone searches, finds nothing, and reports an empty
         // network — when the only thing missing was a switch on this side nobody had flipped.
         if (castReceiverAutoStart) startCastReceiver()
+        // Only on a device that already joined a household: one that never asked for sync never
+        // touches the network for it.
+        if (sync.isMember) startSyncLoop()
     }
+
+    /** What the sync settings show. */
+    data class SyncUi(
+        val member: Boolean = false,
+        val members: Int? = null,
+        val busy: Boolean = false,
+        /** The code this device is showing, and until when it can be typed. */
+        val code: String? = null,
+        val codeExpiresAtIso: String? = null,
+        val problem: com.lucasserafin94.iptvburo.desktop.sync.SyncProblem? = null,
+        val lastSyncedAtMillis: Long? = null,
+        /** Favourites that arrived from the other devices on the last exchange. */
+        val lastReceived: Int = 0,
+    )
+
+    var syncUi by mutableStateOf(SyncUi(member = sync.isMember))
+        private set
+
+    private val syncScope =
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+    private var syncLoopJob: kotlinx.coroutines.Job? = null
+    private var pendingSyncJob: kotlinx.coroutines.Job? = null
+    private val syncLock = kotlinx.coroutines.sync.Mutex()
+
+    /** Asks the server where this device stands. */
+    fun refreshSyncStatus() {
+        syncScope.launch {
+            runSyncCall { sync.status() }?.let { status ->
+                syncUi = syncUi.copy(member = status.inGroup, members = status.members.takeIf { status.inGroup })
+            }
+        }
+    }
+
+    /** Shows a code for another device to type, putting this device in a household if it has none. */
+    fun createSyncCode() {
+        syncScope.launch {
+            busy {
+                runSyncCall { sync.invite() }?.let { invite ->
+                    syncUi = syncUi.copy(member = true, code = invite.code, codeExpiresAtIso = invite.expiresAtIso)
+                    startSyncLoop()
+                }
+            }
+        }
+    }
+
+    /** Joins the household another device's code belongs to, then fetches its favourites. */
+    fun joinSync(code: String) {
+        syncScope.launch {
+            busy {
+                runSyncCall { sync.join(code) }?.let { members ->
+                    syncUi = syncUi.copy(member = true, members = members, code = null)
+                    exchangeNow()
+                    startSyncLoop()
+                }
+            }
+        }
+    }
+
+    /** Leaves the household. Every favourite stays on this computer. */
+    fun leaveSync() {
+        syncScope.launch {
+            busy {
+                runSyncCall { sync.leave() }?.let {
+                    syncLoopJob?.cancel()
+                    syncUi = SyncUi(member = false)
+                }
+            }
+        }
+    }
+
+    fun syncNow() {
+        syncScope.launch { busy { exchangeNow() } }
+    }
+
+    /** A favourite changed: exchange a few seconds later, so a burst of taps is one exchange. */
+    private fun scheduleSync() {
+        if (!sync.isMember) return
+        pendingSyncJob?.cancel()
+        pendingSyncJob =
+            syncScope.launch {
+                kotlinx.coroutines.delay(SYNC_DEBOUNCE_MILLIS)
+                exchangeNow()
+            }
+    }
+
+    private fun startSyncLoop() {
+        if (syncLoopJob?.isActive == true) return
+        syncLoopJob =
+            syncScope.launch {
+                while (true) {
+                    exchangeNow()
+                    kotlinx.coroutines.delay(SYNC_INTERVAL_MILLIS)
+                }
+            }
+    }
+
+    /**
+     * One exchange: every profile's favourites up, the household's down, applied here.
+     *
+     * Profiles are matched by name, because a profile id means nothing on another device. A
+     * favourite for a name this computer has no profile for is left on the server for whichever
+     * device does.
+     */
+    private suspend fun exchangeNow() {
+        if (!sync.isMember) return
+        syncLock.withLock {
+            val current =
+                profiles.flatMap { profile ->
+                    userStore.favoritesForProfile(profile.id).mapNotNull { key -> syncFavoriteFor(profile.name, key) }
+                }
+            val outcome = runSyncCall { sync.exchange(current, profiles.map(DesktopProfile::name)) } ?: return
+            if (outcome.add.isNotEmpty() || outcome.remove.isNotEmpty()) {
+                profiles.forEach { profile ->
+                    val name = com.lucasserafin94.iptvburo.sync.SyncEntry.normaliseProfile(profile.name)
+                    val added = outcome.add.filter { com.lucasserafin94.iptvburo.sync.SyncEntry.normaliseProfile(it.profile) == name }
+                    val removed = outcome.remove.filter { com.lucasserafin94.iptvburo.sync.SyncEntry.normaliseProfile(it.profile) == name }
+                    if (added.isEmpty() && removed.isEmpty()) return@forEach
+                    val next =
+                        userStore.favoritesForProfile(profile.id) +
+                            added.map { it.identityKey } -
+                            removed.map { it.identityKey }.toSet()
+                    userStore.setFavorites(profile.id, next)
+                    if (profile.id == activeProfileId) favoriteKeys = next
+                }
+            }
+            syncUi =
+                syncUi.copy(
+                    member = sync.isMember,
+                    lastSyncedAtMillis = System.currentTimeMillis(),
+                    lastReceived = outcome.add.size,
+                    problem = null,
+                )
+        }
+    }
+
+    private suspend fun busy(block: suspend () -> Unit) {
+        syncUi = syncUi.copy(busy = true, problem = null)
+        try {
+            block()
+        } finally {
+            syncUi = syncUi.copy(busy = false)
+        }
+    }
+
+    /** The call's value, or null after recording why it failed for the screen. */
+    private fun <T> runSyncCall(call: () -> com.lucasserafin94.iptvburo.sync.SyncResult<T>): T? =
+        when (val result = runCatching(call).getOrElse { com.lucasserafin94.iptvburo.sync.SyncResult.Failure(com.lucasserafin94.iptvburo.sync.SyncFailure.NETWORK) }) {
+            is com.lucasserafin94.iptvburo.sync.SyncResult.Success -> result.value
+            is com.lucasserafin94.iptvburo.sync.SyncResult.Failure -> {
+                syncUi =
+                    syncUi.copy(
+                        problem = com.lucasserafin94.iptvburo.desktop.sync.SyncProblem.of(result.reason),
+                        member = sync.isMember,
+                    )
+                null
+            }
+        }
 
     private fun Throwable.rethrowIfCancellation() {
         if (this is CancellationException) throw this
@@ -9056,4 +9222,33 @@ internal fun nextEpisodeIn(
     val index = ordered.indexOfFirst { it.seasonNumber == current.seasonNumber && it.episodeNumber == currentNumber }
     if (index < 0) return null
     return ordered.getOrNull(index + 1)
+}
+
+/** A burst of favourite taps becomes one exchange. */
+private const val SYNC_DEBOUNCE_MILLIS = 5_000L
+
+/** How often a member device checks in with the household when nothing changed here. */
+private const val SYNC_INTERVAL_MILLIS = 10 * 60 * 1000L
+
+/**
+ * A stored favourite key as a sync entry.
+ *
+ * The key is a [ContentIdentity] — `kind:slug[:year]` — which is exactly what the other devices
+ * match on. The slug stands in for the title, which this store does not keep; the identity is what
+ * decides the match, the title only labels it.
+ */
+internal fun syncFavoriteFor(
+    profileName: String,
+    key: String,
+): com.lucasserafin94.iptvburo.sync.FavoriteSync.Local? {
+    val parts = key.split(':')
+    if (parts.size < 2 || parts[0].isBlank() || parts[1].isBlank()) return null
+    val year = parts.getOrNull(2)?.toIntOrNull()
+    return com.lucasserafin94.iptvburo.sync.FavoriteSync.Local(
+        profile = profileName,
+        identityKey = key,
+        title = parts[1].replace('-', ' '),
+        year = year,
+        kind = parts[0],
+    )
 }

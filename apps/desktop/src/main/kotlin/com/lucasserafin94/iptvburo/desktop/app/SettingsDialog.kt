@@ -232,6 +232,12 @@ fun SettingsDialog(
                         }
                     }
 
+                    // Beside the language: both are about this whole app rather than one list, and
+                    // pairing a device is something people look for under "Geral".
+                    if (tab == SettingsTab.GENERAL) item(key = "sync") {
+                        SyncSettingsSection(appState)
+                    }
+
                     if (tab == SettingsTab.GENERAL) item(key = "region") {
                         SettingsSection(text.subscriptionsRegion, text.regionHint) {
                             FlowRow(

@@ -377,6 +377,7 @@ dependencies {
     implementation(project(":packages:stalker-client"))
     implementation(project(":packages:xtream-client"))
     implementation(project(":packages:metadata-client"))
+    implementation(project(":packages:sync-client"))
     // Chromium, for playing trailers inside the app. YouTube refuses to play anywhere except a real
     // browser engine: VLC's own youtube module reports "Couldn't extract youtube video URL" against
     // the current site, and no amount of URL handling gets around that.
