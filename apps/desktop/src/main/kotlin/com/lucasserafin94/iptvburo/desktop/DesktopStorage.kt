@@ -24,6 +24,11 @@ object DesktopStorage {
     /** The per-user data folder: `%LOCALAPPDATA%\lucasserafin94\IPTVBURO`. */
     fun localData(): Path {
         testRoot?.let { root -> return Path.of(System.getProperty("java.io.tmpdir"), root, "local") }
+        // Where a Mac keeps an app's data, rather than a Windows-shaped AppData folder created in the
+        // user's home.
+        if (com.sun.jna.Platform.isMac()) {
+            return Path.of(System.getProperty("user.home"), "Library", "Application Support", "IPTVBURO")
+        }
         val localAppData = System.getenv("LOCALAPPDATA")?.takeIf(String::isNotBlank)
         val base = localAppData?.let(Path::of) ?: Path.of(System.getProperty("user.home"), "AppData", "Local")
         return base.resolve("lucasserafin94").resolve("IPTVBURO")

@@ -98,7 +98,7 @@ class VlcDesktopPlayer(
      */
     private val text: ScreenStrings =
         DesktopStrings.of(DesktopLanguage.PORTUGUESE_BRAZIL).shareStrings.screens,
-) {
+) : DesktopVideoPlayer {
     init {
         require(startupDelayMillis in 0L..MAX_STARTUP_DELAY_MILLIS) {
             "startupDelayMillis is outside the safe range"
@@ -266,9 +266,9 @@ class VlcDesktopPlayer(
     @Volatile
     private var configFile: File? = null
 
-    fun createComponent(
+    override fun createComponent(
         request: DesktopPlaybackRequest,
-        onPointerActivity: () -> Unit = {},
+        onPointerActivity: () -> Unit,
         /**
          * A deliberate press on the picture, as distinct from mere activity.
          *
@@ -276,16 +276,16 @@ class VlcDesktopPlayer(
          * [onPointerActivity] for that: activity fires on movement, so the audio would follow the
          * pointer across the grid — worse than the control not working at all.
          */
-        onClick: () -> Unit = {},
-        onKey: (Int) -> Boolean = { false },
+        onClick: () -> Unit,
+        onKey: (Int) -> Boolean,
         /**
          * A double click, for full screen. When given, a single click waits out the double-click
          * interval before running [onClick]: otherwise the first click of a double paused the
          * film and the second resumed it, every time somebody went full screen.
          */
-        onDoubleClick: (() -> Unit)? = null,
+        onDoubleClick: (() -> Unit)?,
         /** The wheel over the picture, in notches: negative is away from the user. */
-        onWheel: (Int) -> Unit = {},
+        onWheel: (Int) -> Unit,
     ): JPanel {
         val canvas =
             object : Canvas() {
@@ -398,11 +398,11 @@ class VlcDesktopPlayer(
      * Returning the canvas itself makes each video surface a direct child of the interop component,
      * which is the arrangement the single-title player has always used and the reason it works.
      */
-    fun createCanvas(
+    override fun createCanvas(
         request: DesktopPlaybackRequest,
-        onPointerActivity: () -> Unit = {},
-        onClick: () -> Unit = {},
-        onKey: (Int) -> Boolean = { false },
+        onPointerActivity: () -> Unit,
+        onClick: () -> Unit,
+        onKey: (Int) -> Boolean,
     ): Canvas =
         createComponent(
             request = request,
@@ -423,7 +423,7 @@ class VlcDesktopPlayer(
      * A blank cursor rather than a real hide: AWT has no "hide" and this is how every Java video
      * player does it.
      */
-    fun setPointerVisible(component: JPanel, visible: Boolean) {
+    override fun setPointerVisible(component: JPanel, visible: Boolean) {
         val canvas = component.components.firstOrNull() as? Canvas ?: return
         canvas.cursor =
             if (visible) {
@@ -437,17 +437,17 @@ class VlcDesktopPlayer(
             }
     }
 
-    fun snapshot(): DesktopPlaybackSnapshot = snapshot
+    override fun snapshot(): DesktopPlaybackSnapshot = snapshot
 
-    fun togglePlayback() = executeCommand("pl_pause")
+    override fun togglePlayback() = executeCommand("pl_pause")
 
-    fun seekToFraction(fraction: Double) {
+    override fun seekToFraction(fraction: Double) {
         if (snapshot.durationMillis > 0.0) {
             seekToMillis((snapshot.durationMillis * fraction.coerceIn(0.0, 1.0)).toLong())
         }
     }
 
-    fun seekBy(millis: Double) {
+    override fun seekBy(millis: Double) {
         // A live channel has no duration to seek within: clamping to zero sent it to the start.
         if (snapshot.durationMillis <= 0.0) return
         val target =
@@ -464,7 +464,7 @@ class VlcDesktopPlayer(
      * left over from a previous title would otherwise survive a change of aspect ratio and produce
      * a shape neither setting asked for.
      */
-    fun setAspectRatio(ratio: PlaybackAspectRatio) {
+    override fun setAspectRatio(ratio: PlaybackAspectRatio) {
         snapshot = snapshot.copy(aspectRatio = ratio)
         when (ratio) {
             // Default clears both: the source's own shape, letterboxed as the film intends.
@@ -498,7 +498,7 @@ class VlcDesktopPlayer(
      * which is where the adjust filter is actually built. This is the same limitation the subtitle
      * appearance settings have, and it is handled the same way rather than with a second mechanism.
      */
-    fun setBrightness(value: Double) {
+    override fun setBrightness(value: Double) {
         val safe = value.coerceIn(BRIGHTNESS_MIN, BRIGHTNESS_MAX)
         snapshot = snapshot.copy(brightness = safe)
         pendingBrightness = safe
@@ -507,7 +507,7 @@ class VlcDesktopPlayer(
     /**
      * [remember] is false for muting: silencing one title must not start the next one silent.
      */
-    fun setVolume(value: Double, remember: Boolean = true) {
+    override fun setVolume(value: Double, remember: Boolean) {
         if (remember) rememberedVolume = value.coerceIn(0.0, 1.0)
         val safe = value.coerceIn(0.0, 1.0)
         snapshot = snapshot.copy(volume = safe)
@@ -522,7 +522,7 @@ class VlcDesktopPlayer(
      * that window alone, so a track change is not mistaken for the film ending or for a start that
      * failed. Without it, choosing Portuguese closed the player mid-film.
      */
-    fun selectAudioTrack(trackId: Int) {
+    override fun selectAudioTrack(trackId: Int) {
         switchingTrackUntil = System.currentTimeMillis() + TRACK_SWITCH_GRACE_MILLIS
         executeCommand("audio_track", mapOf("val" to trackId.toString()))
     }
@@ -537,7 +537,7 @@ class VlcDesktopPlayer(
      * Logged because "I pressed off and nothing happened" has two very different causes: the command
      * never left, or it left and the stream ignored it. The response tells them apart.
      */
-    fun selectSubtitleTrack(trackId: Int) {
+    override fun selectSubtitleTrack(trackId: Int) {
         // Same grace window as the audio switch: subtitles are re-attached to the running chain and
         // can produce the same brief `stopped`.
         switchingTrackUntil = System.currentTimeMillis() + TRACK_SWITCH_GRACE_MILLIS
@@ -545,7 +545,7 @@ class VlcDesktopPlayer(
         executeCommand("subtitle_track", mapOf("val" to trackId.toString()))
     }
 
-    fun setPlaybackRate(value: Double) {
+    override fun setPlaybackRate(value: Double) {
         val safe = value.coerceIn(0.5, 2.0)
         snapshot = snapshot.copy(playbackRate = safe)
         executeCommand("rate", mapOf("val" to safe.toString()))
@@ -560,7 +560,7 @@ class VlcDesktopPlayer(
      * flipped to `loading` before either command ran, so a no-op retry replaced the error with a
      * spinner that nothing could clear: pollState returns immediately while `remote` is null.
      */
-    fun retry(request: DesktopPlaybackRequest) {
+    override fun retry(request: DesktopPlaybackRequest) {
         if (disposed.get()) return
         runCatching {
             executor.execute { retryOnControlThread(request) }
@@ -610,7 +610,7 @@ class VlcDesktopPlayer(
         }
     }
 
-    fun dispose() {
+    override fun dispose() {
         if (!disposed.compareAndSet(false, true)) return
         canvas = null
         val (control, child) = synchronized(processLock) { remote to process }

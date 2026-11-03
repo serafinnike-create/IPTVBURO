@@ -49,6 +49,18 @@ val windowsPackageVersion =
         ?: error("Cannot derive an MSI version from '$desktopReleaseVersion'.")
 
 val vlcVersion = "3.0.23"
+
+// The macOS player runs libVLC inside the app (see LibVlcDesktopPlayer), so a Mac build ships the
+// library and plugins from the official VLC.app for its own processor. The checksums are the ones
+// VideoLAN publishes beside each image, checked against a real download before being pinned here.
+val isMacHost = System.getProperty("os.name").orEmpty().startsWith("Mac", ignoreCase = true)
+val isWindowsHost = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
+val macArchitecture = if (System.getProperty("os.arch").orEmpty().contains("aarch64")) "arm64" else "intel64"
+val macVlcSha256 =
+    mapOf(
+        "arm64" to "fc6fac08d87f538517d44aca0c5e7a244b67c8c4cb589bf478363a7315fd5e0d",
+        "intel64" to "ec01530ce69d849dd057fba8876e68ac39bf279dc28de4e9c04e4aec11fc98db",
+    )
 val vlcArchiveSha256 = "992d19dbd0b8a7cde9167d2f7780b1ef6f92acc8a71acfa736101a21f35181e1"
 val vlcArchive = layout.buildDirectory.file("downloads/vlc-$vlcVersion-win64.zip")
 val generatedAppResources = layout.buildDirectory.dir("generated/app-resources")
@@ -143,6 +155,8 @@ val bundledVlcDirectory = generatedAppResources.map { it.dir("windows/vlc") }
 val prepareBundledVlc by tasks.registering {
     description = "Downloads and verifies the official VLC runtime used by the Windows player."
     notCompatibleWithConfigurationCache("Downloads and extracts a verified third-party runtime.")
+    // Windows binaries only belong in a Windows build; a Mac build used to download 150 MB of them.
+    onlyIf { isWindowsHost }
     outputs.dir(bundledVlcDirectory)
 
     doLast {
@@ -201,11 +215,71 @@ val prepareBundledVlc by tasks.registering {
     }
 }
 
+val bundledMacVlcDirectory = generatedAppResources.map { it.dir("macos/vlc") }
+
+val prepareBundledMacVlc by tasks.registering {
+    description = "Downloads the official VLC.app for this Mac's processor and keeps its libVLC and plugins."
+    notCompatibleWithConfigurationCache("Downloads and extracts a verified third-party runtime.")
+    onlyIf { isMacHost }
+    outputs.dir(bundledMacVlcDirectory)
+
+    doLast {
+        val destination = bundledMacVlcDirectory.get().asFile
+        if (destination.resolve("lib/libvlc.dylib").exists() && destination.resolve("plugins").isDirectory) return@doLast
+        val expected = requireNotNull(macVlcSha256[macArchitecture])
+        val image = layout.buildDirectory.file("downloads/vlc-$vlcVersion-$macArchitecture.dmg").get().asFile
+        image.parentFile.mkdirs()
+
+        fun File.sha256(): String =
+            inputStream().buffered().use { input ->
+                val digest = MessageDigest.getInstance("SHA-256")
+                val buffer = ByteArray(1 shl 20)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+                digest.digest().joinToString("") { "%02x".format(it) }
+            }
+
+        if (!image.isFile || image.sha256() != expected) {
+            image.delete()
+            URI("https://download.videolan.org/pub/videolan/vlc/$vlcVersion/macosx/vlc-$vlcVersion-$macArchitecture.dmg")
+                .toURL()
+                .openStream()
+                .use { input -> image.outputStream().buffered().use(input::copyTo) }
+        }
+        check(image.sha256() == expected) { "Official VLC macOS image checksum did not match." }
+
+        val mountPoint = layout.buildDirectory.dir("tmp/vlc-mount").get().asFile
+        mountPoint.mkdirs()
+        fun run(vararg command: String) {
+            val process = ProcessBuilder(*command).inheritIO().start()
+            check(process.waitFor() == 0) { "${command.first()} failed" }
+        }
+        run("hdiutil", "attach", "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", mountPoint.absolutePath, image.absolutePath)
+        try {
+            val macOs = mountPoint.resolve("VLC.app/Contents/MacOS")
+            check(macOs.resolve("lib/libvlc.dylib").exists()) { "VLC.app has no libvlc.dylib" }
+            destination.deleteRecursively()
+            destination.mkdirs()
+            // ditto, not a plain copy: it keeps the dylib symlinks and the code signatures intact,
+            // and a broken signature is a library macOS will refuse to load.
+            run("ditto", macOs.resolve("lib").absolutePath, destination.resolve("lib").absolutePath)
+            run("ditto", macOs.resolve("plugins").absolutePath, destination.resolve("plugins").absolutePath)
+        } finally {
+            run("hdiutil", "detach", mountPoint.absolutePath, "-force")
+        }
+        check(destination.resolve("lib/libvlc.dylib").exists()) { "libVLC extraction failed." }
+    }
+}
+
 val bundledJcefDirectory = generatedAppResources.map { it.dir("windows/jcef") }
 
 val prepareBundledJcef by tasks.registering {
     description = "Downloads and verifies the Chromium runtime the trailer player embeds."
     notCompatibleWithConfigurationCache("Downloads and extracts a verified third-party runtime.")
+    onlyIf { isWindowsHost }
     outputs.dir(bundledJcefDirectory)
 
     doLast {
@@ -387,6 +461,26 @@ compose.desktop {
             // system browser — a failure that looks like a Chromium problem and is not.
             modules("java.desktop", "java.prefs", "jdk.httpserver")
 
+            macOS {
+                bundleID = "com.lucasserafin94.iptvburo"
+                dockName = "IPTV BURO"
+                iconFile.set(project.file("src/main/resources/brand/buro.icns"))
+                infoPlist {
+                    // Share links open the app (iptvburo://), and the phone remote finds it on the
+                    // local network, which macOS 15 asks permission for in these words.
+                    extraKeysRawXml =
+                        """
+                        <key>CFBundleURLTypes</key>
+                        <array><dict>
+                          <key>CFBundleURLName</key><string>IPTV BURO</string>
+                          <key>CFBundleURLSchemes</key><array><string>iptvburo</string></array>
+                        </dict></array>
+                        <key>NSLocalNetworkUsageDescription</key>
+                        <string>IPTV BURO procura o celular na mesma rede para usá-lo como controle remoto.</string>
+                        """.trimIndent()
+                }
+            }
+
             windows {
                 menuGroup = "IPTV BURO"
                 // `--win-shortcut` in jpackage's own terms, which is the *desktop* icon; the Start
@@ -412,7 +506,7 @@ compose.desktop {
 tasks.matching {
     it.name in setOf("run", "runDistributable", "createDistributable", "packageMsi", "prepareAppResources")
 }.configureEach {
-    dependsOn(prepareBundledVlc, prepareBundledJcef)
+    dependsOn(prepareBundledVlc, prepareBundledJcef, prepareBundledMacVlc)
 }
 
 tasks.matching {

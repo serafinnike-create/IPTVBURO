@@ -427,7 +427,8 @@ class DesktopDownloadManager(
                 .build()
 
         fun defaultRootDirectory(): Path =
-            Path.of(System.getProperty("user.home"), "Videos", "IPTV BURO")
+            // Filmes is ~/Movies on a Mac; ~/Videos is a Windows folder that does not exist there.
+            Path.of(System.getProperty("user.home"), if (com.sun.jna.Platform.isMac()) "Movies" else "Videos", "IPTV BURO")
     }
 }
 

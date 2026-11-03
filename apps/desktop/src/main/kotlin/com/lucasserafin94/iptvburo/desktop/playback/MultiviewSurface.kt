@@ -70,8 +70,8 @@ class MultiviewSurface {
     private var keyHandler: (Int) -> Boolean = { false }
 
     private data class MountedTile(
-        val player: VlcDesktopPlayer,
-        val component: Canvas,
+        val player: DesktopVideoPlayer,
+        val component: Component,
     )
 
     /**
@@ -140,7 +140,7 @@ class MultiviewSurface {
                     // available Windows hardware decoder; the single-title player keeps its
                     // compatibility-first software default.
                     val player =
-                        VlcDesktopPlayer(
+                        DesktopVideoPlayer.create(
                             hardwareDecoding = VlcHardwareDecoding.AUTOMATIC,
                             startupDelayMillis = multiviewStartupDelay(index),
                             // A deeper buffer than a single title needs. Four streams share one
@@ -178,7 +178,7 @@ class MultiviewSurface {
     }
 
     /** Which player owns a tile, so the overlay can mute every one but the focused tile. */
-    fun playerFor(providerId: String): VlcDesktopPlayer? = mounted[providerId]?.player
+    fun playerFor(providerId: String): DesktopVideoPlayer? = mounted[providerId]?.player
 
     /** Shuts every player down. Called when the overlay closes. */
     fun dispose() {

@@ -2013,8 +2013,8 @@ function normaliseDeviceProfile(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const deviceType = boundedLabel(value.deviceType, 32)?.toUpperCase();
   const platform = boundedLabel(value.platform, 24)?.toUpperCase();
-  const allowedTypes = new Set(['WINDOWS_PC', 'ANDROID_PHONE', 'ANDROID_TABLET', 'ANDROID_TV', 'TV']);
-  const allowedPlatforms = new Set(['WINDOWS', 'ANDROID', 'TIZEN', 'WEBOS']);
+  const allowedTypes = new Set(['WINDOWS_PC', 'MAC_COMPUTER', 'ANDROID_PHONE', 'ANDROID_TABLET', 'ANDROID_TV', 'TV']);
+  const allowedPlatforms = new Set(['WINDOWS', 'MACOS', 'ANDROID', 'TIZEN', 'WEBOS']);
 
   return {
     deviceType: allowedTypes.has(deviceType) ? deviceType : null,

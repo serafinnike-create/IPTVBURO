@@ -16,8 +16,9 @@ import com.sun.jna.platform.win32.WinReg
 internal object WindowsDeviceProfile {
     fun report(): JsonObject =
         JsonObject().apply {
-            addProperty("deviceType", "WINDOWS_PC")
-            addProperty("platform", "WINDOWS")
+            // A Mac says so, rather than reporting itself as a Windows PC to the licence panel.
+            addProperty("deviceType", if (Platform.isMac()) "MAC_COMPUTER" else "WINDOWS_PC")
+            addProperty("platform", if (Platform.isMac()) "MACOS" else "WINDOWS")
             manufacturer()?.let { addProperty("manufacturer", it) }
             model()?.let { addProperty("model", it) }
             addProperty(

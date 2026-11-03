@@ -1,7 +1,6 @@
 package com.lucasserafin94.iptvburo.desktop.license
 
 import com.sun.jna.Platform
-import com.sun.jna.platform.win32.Crypt32Util
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -326,17 +325,24 @@ internal interface DeviceIdentityProtector {
     fun unprotect(protected: ByteArray): ByteArray
 }
 
+/**
+ * DPAPI on Windows, the Keychain-held key on macOS — see LocalSecretProtector.
+ *
+ * Named for the platform it was written for; on a Mac it used to report itself unavailable, and the
+ * licence then had no identity to send, which locked the whole app behind the licence screen.
+ */
 internal object WindowsDpapiIdentityProtector : DeviceIdentityProtector {
-    override val isAvailable: Boolean get() = Platform.isWindows()
+    override val isAvailable: Boolean
+        get() = com.lucasserafin94.iptvburo.desktop.security.LocalSecretProtector.isAvailable
 
     override fun protect(plaintext: ByteArray): ByteArray {
         check(isAvailable)
-        return Crypt32Util.cryptProtectData(plaintext)
+        return com.lucasserafin94.iptvburo.desktop.security.LocalSecretProtector.protect(plaintext)
     }
 
     override fun unprotect(protected: ByteArray): ByteArray {
         check(isAvailable)
-        return Crypt32Util.cryptUnprotectData(protected)
+        return com.lucasserafin94.iptvburo.desktop.security.LocalSecretProtector.unprotect(protected)
     }
 }
 

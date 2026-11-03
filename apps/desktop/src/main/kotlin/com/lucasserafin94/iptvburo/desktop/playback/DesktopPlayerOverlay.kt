@@ -140,9 +140,9 @@ fun DesktopPlayerOverlay(
     val screenText = strings.shareStrings.screens
     val controller =
         remember(request, subtitleStyle, audioOutput, screenText) {
-            VlcDesktopPlayer(
-                subtitleStyle,
-                audioOutput,
+            DesktopVideoPlayer.create(
+                subtitleStyle = subtitleStyle,
+                audioOutput = audioOutput,
                 text = screenText,
                 // Two minutes ahead for a film or an episode, so a connection that drops and comes
                 // back never reaches the picture. A live channel keeps its small reservoir: what

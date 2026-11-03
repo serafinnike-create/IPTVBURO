@@ -45,7 +45,10 @@ class GitHubReleaseUpdater(
     private val releasesUrl: String = DESKTOP_RELEASES_URL,
     private val currentVersion: String = DESKTOP_VERSION,
     private val updatesDirectory: Path = defaultUpdatesDirectory(),
-    private val installerLauncher: (Path) -> Boolean = ::launchWindowsInstaller,
+    private val installerLauncher: (Path) -> Boolean =
+        if (com.sun.jna.Platform.isMac()) ::openMacDiskImage else ::launchWindowsInstaller,
+    /** Which installers this machine can use: the MSI on Windows, this architecture's DMG on a Mac. */
+    private val installerName: (String) -> Boolean = ::isInstallerForThisMachine,
     /**
      * The failure text, in the language the app is running in.
      *
@@ -106,7 +109,7 @@ class GitHubReleaseUpdater(
                                 release["assets"]?.asJsonArray
                                     ?.map { it.asJsonObject }
                                     ?.filter { candidate ->
-                                        candidate["name"]?.asString?.let(::isWindowsInstallerName) == true &&
+                                        candidate["name"]?.asString?.let(installerName) == true &&
                                             candidate["digest"]?.asString?.startsWith("sha256:") == true
                                     }
                                     .orEmpty()
@@ -155,7 +158,7 @@ class GitHubReleaseUpdater(
     ): Result<Path> =
         withContext(Dispatchers.IO) {
             runCatching {
-                require(isWindowsInstallerName(release.assetName))
+                require(installerName(release.assetName))
                 require(release.sha256.matches(Regex("[a-f0-9]{64}")))
                 requireTrustedDownloadUrl(release.downloadUrl)
                 Files.createDirectories(updatesDirectory)
@@ -204,6 +207,9 @@ class GitHubReleaseUpdater(
         const val MAX_INSTALLER_BYTES = 1_000_000_000L
 
         fun defaultUpdatesDirectory(): Path {
+            if (com.sun.jna.Platform.isMac()) {
+                return Path.of(System.getProperty("user.home"), "Library", "Caches", "IPTVBURO", "updates")
+            }
             val localAppData = System.getenv("LOCALAPPDATA")?.takeIf(String::isNotBlank)
             val root = localAppData?.let(Path::of) ?: Path.of(System.getProperty("user.home"), "AppData", "Local")
             return root.resolve("IPTVBURO").resolve("updates")
@@ -478,7 +484,8 @@ internal val PRODUCT_CODE = Regex("\\{[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-F
  * opinion" and falls back to the running version.
  */
 internal fun installedVersion(): String? =
-    UNINSTALL_KEYS.firstNotNullOfOrNull { key ->
+    // The registry is Windows'; on a Mac the running build is the installed one.
+    if (com.sun.jna.Platform.isMac()) null else UNINSTALL_KEYS.firstNotNullOfOrNull { key ->
         runCatching {
             val process =
                 ProcessBuilder("reg", "query", key, "/s", "/f", "IPTVBURO")
@@ -579,6 +586,36 @@ private fun comparePreRelease(left: String, right: String): Int {
     }
     return 0
 }
+
+/**
+ * The installer this machine runs.
+ *
+ * A Mac was offered the Windows MSI — 300 MB downloaded, then "Windows Installer could not be
+ * started". It now takes only the DMG built for its own processor: an Intel build on Apple Silicon
+ * runs under translation, and an Apple Silicon one on Intel does not run at all.
+ */
+internal fun isInstallerForThisMachine(value: String): Boolean =
+    if (com.sun.jna.Platform.isMac()) {
+        isMacInstallerName(value, if (com.sun.jna.Platform.isARM()) "arm64" else "x64")
+    } else {
+        isWindowsInstallerName(value)
+    }
+
+internal fun isMacInstallerName(
+    value: String,
+    architecture: String,
+): Boolean = value.matches(Regex("(?i)IPTV[-_]?BURO[-_A-Za-z0-9.]*-macos-$architecture[-_A-Za-z0-9.]*\\.dmg"))
+
+/**
+ * Opens the downloaded disk image in Finder, where the new app is dragged over the old one.
+ *
+ * A DMG cannot be installed silently the way an MSI can, and copying into /Applications from here
+ * would need the user's password for anything installed by another account. Finder's own window is
+ * the step every Mac user knows.
+ */
+private fun openMacDiskImage(path: Path): Boolean =
+    runCatching { ProcessBuilder("/usr/bin/open", path.toAbsolutePath().toString()).start().waitFor() == 0 }
+        .getOrDefault(false)
 
 private fun isWindowsInstallerName(value: String): Boolean =
     value.matches(Regex("(?i)IPTV[-_]?BURO[-_A-Za-z0-9.]*\\.msi"))

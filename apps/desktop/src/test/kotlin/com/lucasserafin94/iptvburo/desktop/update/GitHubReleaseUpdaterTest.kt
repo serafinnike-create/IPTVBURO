@@ -180,6 +180,15 @@ class GitHubReleaseUpdaterTest {
         }
     }
 
+    /** A Mac takes only the disk image built for its own processor, never the MSI. */
+    @Test
+    fun `a mac installer name matches only its own architecture`() {
+        kotlin.test.assertTrue(isMacInstallerName("IPTV-BURO-v4.3.0-macos-arm64.dmg", "arm64"))
+        kotlin.test.assertTrue(isMacInstallerName("IPTV-BURO-v4.3.0-macos-x64-unsigned.dmg", "x64"))
+        kotlin.test.assertFalse(isMacInstallerName("IPTV-BURO-v4.3.0-macos-x64.dmg", "arm64"))
+        kotlin.test.assertFalse(isMacInstallerName("IPTV-BURO-v4.3.0-windows-x64.msi", "arm64"))
+    }
+
     @Test
     fun `a signed installer is preferred over an unsigned one in the same release`() = runBlocking {
         MockWebServer().use { server ->

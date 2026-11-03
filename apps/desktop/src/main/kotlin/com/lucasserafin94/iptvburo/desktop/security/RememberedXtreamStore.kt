@@ -1,7 +1,6 @@
 package com.lucasserafin94.iptvburo.desktop.security
 
 import com.sun.jna.Platform
-import com.sun.jna.platform.win32.Crypt32Util
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -31,7 +30,7 @@ class RememberedXtreamStore internal constructor(
         username: CharArray,
         password: CharArray,
     ) {
-        if (!Platform.isWindows()) return
+        if (!LocalSecretProtector.isAvailable) return
         require(server.size in 1..MAX_SERVER_CHARS)
         require(username.size in 1..MAX_CREDENTIAL_CHARS)
         require(password.size in 1..MAX_CREDENTIAL_CHARS)
@@ -39,7 +38,7 @@ class RememberedXtreamStore internal constructor(
         val plaintext = encode(server, username, password)
         var protected = ByteArray(0)
         try {
-            protected = Crypt32Util.cryptProtectData(plaintext)
+            protected = LocalSecretProtector.protect(plaintext)
             require(protected.size <= MAX_PROTECTED_BYTES)
             Files.createDirectories(file.parent)
             val temporary = file.resolveSibling("${file.fileName}.tmp")
@@ -68,7 +67,7 @@ class RememberedXtreamStore internal constructor(
     }
 
     fun load(): XtreamLoginInput? {
-        if (!Platform.isWindows()) return null
+        if (!LocalSecretProtector.isAvailable) return null
         val sourceFile = sourceFileAfterMigration() ?: return null
         val protected = runCatching { Files.readAllBytes(sourceFile) }.getOrNull() ?: return null
         if (protected.isEmpty() || protected.size > MAX_PROTECTED_BYTES) {
@@ -79,7 +78,7 @@ class RememberedXtreamStore internal constructor(
 
         var plaintext = ByteArray(0)
         return try {
-            plaintext = Crypt32Util.cryptUnprotectData(protected)
+            plaintext = LocalSecretProtector.unprotect(protected)
             decode(plaintext)
         } catch (_: RuntimeException) {
             clear()

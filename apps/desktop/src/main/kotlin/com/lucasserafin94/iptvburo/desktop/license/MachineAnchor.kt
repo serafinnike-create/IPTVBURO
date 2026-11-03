@@ -89,6 +89,7 @@ internal object MachineAnchor {
      */
     private fun machineAnchor(): String? =
         runCatching {
+            if (com.sun.jna.Platform.isMac()) return macPlatformUuid()
             if (!System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)) {
                 return null
             }
@@ -106,4 +107,22 @@ internal object MachineAnchor {
      * two unrelated products could produce the same identifier for the same machine.
      */
     private const val SALT = "iptvburo-machine-anchor-v1"
+
+    /**
+     * The Mac's hardware UUID, the macOS counterpart of MachineGuid.
+     *
+     * Read from the I/O Registry with `ioreg`, which every macOS ships; it survives app reinstalls
+     * and user changes and moves only with the logic board. Null on any failure, like the Windows
+     * read: losing the anti-reset property must never cost the ability to run.
+     */
+    private fun macPlatformUuid(): String? =
+        runCatching {
+            val process =
+                ProcessBuilder("/usr/sbin/ioreg", "-rd1", "-c", "IOPlatformExpertDevice")
+                    .redirectErrorStream(true)
+                    .start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            process.waitFor()
+            Regex(""""IOPlatformUUID"\s*=\s*"([0-9A-Fa-f-]{36})"""").find(output)?.groupValues?.get(1)
+        }.getOrNull()
 }

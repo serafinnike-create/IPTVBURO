@@ -1,0 +1,99 @@
+name: macOS build
+
+# Builds and checks the Mac app without publishing anything: the release workflow calls the same
+# steps on a tag. Run on pushes to the working branch and by hand, so a Mac change is proven on a
+# real Mac before a release depends on it.
+on:
+  push:
+    branches:
+      - site/live-build-scroll
+    paths:
+      - "apps/desktop/**"
+      - "packages/**"
+      - ".github/workflows/macos-build.yml"
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag:
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon and Intel are separate builds: the bundled Java runtime and libVLC are
+          # each one architecture, and an Intel build on Apple Silicon would run under Rosetta.
+          - runner: macos-14
+            arch: arm64
+          - runner: macos-13
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Bundle libVLC and run the Mac checks
+        run: |
+          chmod +x gradlew
+          # The player drawing real frames through the bundled libVLC, the Keychain round trip,
+          # and the updater choosing this machine's disk image. The full desktop suite stays on
+          # Windows, where its Windows-only parts can run.
+          ./gradlew :apps:desktop:prepareBundledMacVlc \
+            :apps:desktop:test \
+              --tests '*MacPlaybackSmokeTest*' \
+              --tests '*LocalSecretProtectorTest*' \
+              --tests '*GitHubReleaseUpdaterTest*' \
+              --tests '*TmdbImageSizes*' \
+            --stacktrace
+
+      - name: Build the disk image
+        run: |
+          ./gradlew :apps:desktop:packageDmg --stacktrace
+          mkdir -p artifacts
+          image=$(ls apps/desktop/build/compose/binaries/main/dmg/*.dmg | head -n 1)
+          test -n "$image"
+          # Unsigned: there is no Apple Developer ID yet. The name says so, the way the MSI's does.
+          cp "$image" "artifacts/IPTV-BURO-${RELEASE_TAG//\//-}-macos-${{ matrix.arch }}-unsigned.dmg"
+          ls -la artifacts
+
+      - name: Check the app inside the image
+        run: |
+          mount=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mount" artifacts/*.dmg
+          app=$(ls -d "$mount"/*.app | head -n 1)
+          test -f "$app/Contents/app/resources/vlc/lib/libvlc.dylib" || test -f "$app/Contents/app/vlc/lib/libvlc.dylib" || {
+            echo "libVLC is missing from the app bundle" >&2
+            find "$app/Contents" -maxdepth 3 -type d | head -50
+            hdiutil detach "$mount"
+            exit 1
+          }
+          codesign --verify --deep --verbose=2 "$app" || echo "::warning::bundle signature did not verify (ad-hoc build)"
+          hdiutil detach "$mount"
+
+      - name: Upload disk image
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-macos-${{ matrix.arch }}
+          path: artifacts/*.dmg
+          if-no-files-found: error

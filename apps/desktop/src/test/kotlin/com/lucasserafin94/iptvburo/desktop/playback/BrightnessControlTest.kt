@@ -68,7 +68,12 @@ class BrightnessControlTest {
      */
     @Test
     fun `no brightness command is issued to the control interface`() {
-        val setter = source.substringAfter("fun setBrightness(").substringBefore("\n    fun ")
+        // Up to the next member, which now reads `override fun` as well as `fun`.
+        val setter =
+            source.substringAfter("fun setBrightness(")
+                .substringBefore("\n    fun ")
+                .substringBefore("\n    override fun ")
+                .substringBefore("\r\n    override fun ")
 
         assertFalse(
             "executeCommand" in setter,

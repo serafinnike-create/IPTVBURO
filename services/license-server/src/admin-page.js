@@ -947,6 +947,7 @@ export function adminPage() {
   function deviceType(value) {
     return esc({
       WINDOWS_PC: 'Computador Windows',
+      MAC_COMPUTER: 'Computador Mac',
       ANDROID_PHONE: 'Celular Android',
       ANDROID_TABLET: 'Tablet Android',
       ANDROID_TV: 'Android TV',

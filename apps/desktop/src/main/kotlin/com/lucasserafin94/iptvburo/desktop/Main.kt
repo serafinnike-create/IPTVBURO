@@ -418,6 +418,18 @@ fun main(args: Array<String>) {
                 }
                 fullScreenApplied = true
                 if (fullScreen) maximizedBeforeFullScreen = windowState.placement == WindowPlacement.Maximized
+                // macOS has its own full screen, in a Space of its own; the borderless trick below
+                // is Win32 and did nothing there, so F and double-click changed state and not the
+                // window.
+                if (com.sun.jna.Platform.isMac()) {
+                    windowState.placement =
+                        when {
+                            fullScreen -> WindowPlacement.Fullscreen
+                            maximizedBeforeFullScreen -> WindowPlacement.Maximized
+                            else -> WindowPlacement.Floating
+                        }
+                    return@LaunchedEffect
+                }
                 WindowChrome.setBorderlessFullScreen(window, fullScreen, restoreMaximized = !fullScreen && maximizedBeforeFullScreen)
                 if (!fullScreen) WindowChrome.applyDarkTitleBar(window)
             }
