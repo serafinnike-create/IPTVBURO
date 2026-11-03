@@ -839,6 +839,7 @@ fun DesktopApp(
                                 },
                                 onCancel = appState::cancelDownload,
                                 onDelete = appState::deleteDownload,
+                                onResume = { key -> scope.launch { appState.resumeDownload(key) } },
                             )
                         } else if (appState.cacheChoicePending && appState.isXtreamSelected &&
                             visibleDestination == DesktopDestination.HOME &&
@@ -3971,6 +3972,7 @@ private fun DownloadsWorkspace(
     onPlay: (String) -> Unit,
     onCancel: (String) -> Unit,
     onDelete: (String) -> Unit,
+    onResume: (String) -> Unit,
 ) {
     val text = strings
     Column(modifier = Modifier.fillMaxSize().padding(BuroSpacing.Lg)) {
@@ -4114,6 +4116,7 @@ private fun DownloadsWorkspace(
                     onPlay = { onPlay(entry.contentKey) },
                     onCancel = { onCancel(entry.contentKey) },
                     onDelete = { onDelete(entry.contentKey) },
+                    onResume = { onResume(entry.contentKey) },
                     compact = density == DownloadDensity.COMPACT,
                 )
             }
@@ -4127,6 +4130,8 @@ private fun DownloadLibraryRow(
     onPlay: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
+    /** Picks a paused or failed download up again, from where its partial file stopped. */
+    onResume: () -> Unit,
     /**
      * Tighter rows, for scanning a long list.
      *
@@ -4257,6 +4262,21 @@ private fun DownloadLibraryRow(
                 Text(text.cancel, maxLines = 1)
             }
         } else {
+            // A paused or failed download could only be removed: "Cancelar" paused it, and the row
+            // then said "Pausado" with no way to carry on. The partial file is kept on disk and the
+            // download resumes from it.
+            Button(
+                onClick = onResume,
+                shape = BuroRadius.Small,
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = BuroColors.Primary,
+                        contentColor = BuroColors.OnPrimary,
+                    ),
+            ) {
+                IconLabel(BuroIcons.Download, text.resumeFrom, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(BuroSpacing.Xs))
             OutlinedButton(
                 onClick = onDelete,
                 shape = BuroRadius.Small,

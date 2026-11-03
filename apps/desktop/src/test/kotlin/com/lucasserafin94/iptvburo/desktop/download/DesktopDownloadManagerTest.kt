@@ -47,6 +47,26 @@ class DesktopDownloadManagerTest {
     private fun body(bytes: Int): MockResponse =
         MockResponse().setBody(Buffer().write(ByteArray(bytes) { 7 }))
 
+    /**
+     * Removing a paused download removes its partial copy.
+     *
+     * Only finished files were deleted, so a removed paused download left hundreds of megabytes of
+     * `.part` behind with nothing in the app pointing at them.
+     */
+    @Test
+    fun `removing a paused download deletes its partial file`() =
+        withManager { manager, directory, _ ->
+            val key = "movie:resident-evil:2026"
+            val partial = directory.resolve(manager.safeName(key) + ".mp4.part")
+            Files.write(partial, ByteArray(1024))
+            val unrelated = directory.resolve(manager.safeName("movie:other:2026") + ".mp4.part")
+            Files.write(unrelated, ByteArray(16))
+
+            assertTrue(manager.delete(key))
+            assertTrue(Files.notExists(partial), "the partial copy must go with the download")
+            assertTrue(Files.exists(unrelated), "another title's partial copy must be left alone")
+        }
+
     /** An episode is downloadable; only live has no end and must be refused. */
     @Test
     fun `an episode may be downloaded`() {

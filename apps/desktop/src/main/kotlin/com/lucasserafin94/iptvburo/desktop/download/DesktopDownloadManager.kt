@@ -179,11 +179,30 @@ class DesktopDownloadManager(
 
     fun delete(contentKey: String): Boolean {
         val removed = downloadedFile(contentKey)?.let(Files::deleteIfExists) ?: false
+        // The partial copy too. Removing a paused download only deleted finished files, so the
+        // row went away and 770 MB of `.part` stayed in Vídeos until the startup sweep found it.
+        // Skipped while a transfer still owns the file: it is cancelled first, and deleting under
+        // a writer on Windows fails or leaves the writer recreating it.
+        val partialRemoved =
+            if (cancelled.containsKey(contentKey)) {
+                false
+            } else {
+                runCatching {
+                    if (!Files.isDirectory(rootDirectory)) return@runCatching false
+                    val safe = safeName(contentKey)
+                    Files.list(rootDirectory).use { stream ->
+                        stream.toList().filter { path ->
+                            val name = path.fileName.toString()
+                            name.endsWith(".part") && name.removeSuffix(".part").substringBeforeLast('.') == safe
+                        }
+                    }.map(Files::deleteIfExists).any { it }
+                }.getOrDefault(false)
+            }
         runCatching {
             val remaining = readIndex() - safeName(contentKey)
             Files.writeString(rootDirectory.resolve(INDEX_FILE), gson.toJson(remaining))
         }
-        return removed
+        return removed || partialRemoved
     }
 
     fun cancel(contentKey: String) {

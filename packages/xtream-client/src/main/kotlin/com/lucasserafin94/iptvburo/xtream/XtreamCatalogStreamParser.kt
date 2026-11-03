@@ -126,8 +126,11 @@ internal class XtreamCatalogStreamParser(
                 artworkField -> artworkUrl = reader.readScalarString()
                 "year" -> year = reader.readScalarString()?.toIntOrNull()
                 "rating_5based" -> rating = reader.readScalarString()?.toDoubleOrNull()
+                // `rating` is out of ten and `rating_5based` out of five; the catalogue keeps five.
+                // Taken as it came, a provider sending only `rating` put 7,4 beside titles scored
+                // 3,7 by the others, and the "★ 4+" filter let every one of them through.
                 "rating" -> {
-                    val fallback = reader.readScalarString()?.toDoubleOrNull()
+                    val fallback = reader.readScalarString()?.toDoubleOrNull()?.let { it / 2.0 }
                     if (rating == null) rating = fallback
                 }
                 // Both halves of catch-up. Providers spell the flag as 0/1 and sometimes as a

@@ -2802,7 +2802,10 @@ private fun MovieDetailContent(
                     // Providers send 0 for anything unrated, and a title released days ago is
                     // unrated by definition — so a brand-new series showed "★ 0,0" twice over,
                     // which reads as the worst score there is rather than as the absence of one.
-                    details.rating?.takeIf { value -> value > 0.0 }?.let { "★ ${"%.1f".format(DISPLAY_LOCALE, it)}" },
+                    // No rating here any more. The line under the title already shows the list's
+                    // score out of five, and this one is the provider's out of ten: a page said
+                    // "★ 3,7" and "★ 7,3" for the same film, which reads as two verdicts.
+                    null,
                 )
             if (facts.isNotEmpty()) {
                 Text(
@@ -3402,7 +3405,10 @@ private fun SeriesDetailContent(
                     // Providers send 0 for anything unrated, and a title released days ago is
                     // unrated by definition — so a brand-new series showed "★ 0,0" twice over,
                     // which reads as the worst score there is rather than as the absence of one.
-                    details.rating?.takeIf { value -> value > 0.0 }?.let { "★ ${"%.1f".format(DISPLAY_LOCALE, it)}" },
+                    // No rating here any more. The line under the title already shows the list's
+                    // score out of five, and this one is the provider's out of ten: a page said
+                    // "★ 3,7" and "★ 7,3" for the same film, which reads as two verdicts.
+                    null,
                 )
             if (facts.isNotEmpty()) {
                 Text(

@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.lucasserafin94.iptvburo.desktop.build.BUNDLED_TMDB_KEY
 import com.lucasserafin94.iptvburo.desktop.data.episodeContentKey
+import com.lucasserafin94.iptvburo.desktop.data.toContentKind
 import com.lucasserafin94.iptvburo.desktop.data.ArtworkCache
 import com.lucasserafin94.iptvburo.desktop.data.CatalogLoadProgress
 import com.lucasserafin94.iptvburo.desktop.data.FtpPlaylistReader
@@ -1336,7 +1337,7 @@ class DesktopAppState(
     fun prepareNeighbourChannel(step: Int): DesktopPlaybackRequest? {
         val playing = lastPlaybackTarget as? XtreamPlaybackTarget.CatalogItem ?: return null
         if (playing.contentType != XtreamContentType.LIVE) return null
-        val channels = xtreamPage.items.filter { it.contentType == XtreamContentType.LIVE }
+        val channels = stepChannels()
         if (channels.size < 2) return null
         val index = channels.indexOfFirst { it.providerId == playing.providerId }
         if (index < 0) return null
@@ -1351,11 +1352,19 @@ class DesktopAppState(
         return prepareXtreamPlayback(target, next.name)
     }
 
+    /**
+     * The channels PgUp and PgDn walk through: the whole live list once the guide has read it, the
+     * catalogue's page otherwise. The page alone stopped at the 80th channel and wrapped round, so a
+     * channel opened from the guide past that point had no neighbours at all.
+     */
+    private fun stepChannels(): List<XtreamCatalogItem> =
+        guideAllChannels.ifEmpty { xtreamPage.items }.filter { it.contentType == XtreamContentType.LIVE }
+
     /** Whether the playing channel has neighbours to step to. */
     fun canStepChannel(): Boolean {
         val playing = lastPlaybackTarget as? XtreamPlaybackTarget.CatalogItem ?: return false
         if (playing.contentType != XtreamContentType.LIVE) return false
-        val channels = xtreamPage.items.filter { it.contentType == XtreamContentType.LIVE }
+        val channels = stepChannels()
         return channels.size > 1 && channels.any { it.providerId == playing.providerId }
     }
 
@@ -2638,6 +2647,21 @@ class DesktopAppState(
     suspend fun setFavoritesOnly(enabled: Boolean) {
         favoritesOnly = enabled
         destination = if (enabled) DesktopDestination.FAVORITES else DesktopDestination.CATALOG
+        // Onto a tab that has favourites. Favoritos opened on whatever tab the catalogue was last on
+        // — usually Ao vivo — and somebody whose favourites are films met an empty screen first.
+        if (enabled && isXtreamSelected) {
+            val kinds = favoriteKeys.map { key -> key.substringBefore(':') }.toSet()
+            fun has(type: XtreamContentType) = type.toContentKind().name.lowercase() in kinds
+            val tab =
+                listOf(xtreamContentType, XtreamContentType.MOVIE, XtreamContentType.SERIES, XtreamContentType.LIVE)
+                    .firstOrNull(::has)
+            if (tab != null && tab != xtreamContentType) {
+                selectXtreamContentType(tab)
+                // It returns without loading while another list is still on its way in.
+                if (xtreamContentType != tab) refreshXtreamPage(pageIndex = 0)
+                return
+            }
+        }
         if (isXtreamSelected) refreshXtreamPage(pageIndex = 0)
     }
 
@@ -7196,6 +7220,52 @@ class DesktopAppState(
 
     fun cancelDownload(contentKey: String) {
         downloadManager.cancel(contentKey)
+    }
+
+    /**
+     * Starts a paused or failed download again, from the partial file it left.
+     *
+     * The library row holds only the content key, so the title is found again from it: a film by its
+     * own key, an episode through its series and the episode list. Marked failed when the title is no
+     * longer in the catalogue, rather than doing nothing.
+     */
+    suspend fun resumeDownload(contentKey: String) {
+        val stored = downloadMetadata[contentKey]
+        val target: XtreamPlaybackTarget? =
+            if ("|s" in contentKey) {
+                val seriesKey = contentKey.substringBefore("|s")
+                val code = contentKey.substringAfter("|s")
+                val season = code.substringBefore("e").toIntOrNull()
+                val episodeNumber = code.substringAfter("e").toIntOrNull()
+                val series = xtreamRepository.itemByContentKey(XtreamContentType.SERIES, seriesKey)
+                val details =
+                    series?.let {
+                        runCatching { withContext(Dispatchers.IO) { xtreamRepository.seriesDetails(it.providerId) } }.getOrNull()
+                    }
+                val episode =
+                    details?.episodes?.firstOrNull {
+                        it.seasonNumber == season && (it.episodeNumber ?: 0) == episodeNumber
+                    }
+                if (series != null && episode != null) {
+                    XtreamPlaybackTarget.Episode(series.providerId, episode, series.episodeContentKey(episode))
+                } else {
+                    null
+                }
+            } else {
+                xtreamRepository.itemByContentKey(XtreamContentType.MOVIE, contentKey)?.let { item ->
+                    XtreamPlaybackTarget.CatalogItem(
+                        providerId = item.providerId,
+                        contentType = item.contentType,
+                        containerExtension = item.containerExtension,
+                        contentKey = item.contentIdentity().key,
+                    )
+                }
+            }
+        if (target == null || target.contentKey != contentKey) {
+            downloads = downloads + (contentKey to DownloadState.Failed)
+            return
+        }
+        startDownload(target, stored?.title ?: contentKey.toReadableTitle(), stored?.artworkUrl)
     }
 
     /**
