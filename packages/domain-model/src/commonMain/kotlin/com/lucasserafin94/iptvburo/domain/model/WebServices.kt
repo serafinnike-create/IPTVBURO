@@ -159,6 +159,25 @@ object WebServicePolicy {
      */
     fun loggable(url: String): String = parse(url)?.let { "${it.scheme}://${it.host}" } ?: "<unparsable>"
 
+    /**
+     * Host and path, for following a sign-in through the log: which pages it went through, and in
+     * what order. Never the query or fragment, which is where a session or a signed address would
+     * travel, and any path segment long enough to be a token is replaced by "…".
+     */
+    fun loggablePage(url: String): String {
+        val address = parse(url) ?: return "<unparsable>"
+        val afterHost = url.trim().substringAfter("://").dropWhile { it != '/' && it != '?' && it != '#' }
+        val path = afterHost.substringBefore('?').substringBefore('#')
+        val segments =
+            path.split('/').filter(String::isNotEmpty).map { segment ->
+                if (segment.length > MAX_LOGGED_SEGMENT) "…" else segment
+            }
+        return "${address.host}/${segments.joinToString("/")}"
+    }
+
+    /** Longer than any page name the service uses, shorter than any token worth hiding. */
+    private const val MAX_LOGGED_SEGMENT = 40
+
     private class Address(val scheme: String, val host: String, val hasUserInfo: Boolean)
 
     private fun parse(url: String): Address? {

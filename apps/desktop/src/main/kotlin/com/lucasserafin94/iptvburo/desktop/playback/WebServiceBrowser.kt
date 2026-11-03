@@ -17,6 +17,7 @@ import org.cef.CefClient
 import org.cef.browser.CefBrowser
 import org.cef.browser.CefFrame
 import org.cef.handler.CefLifeSpanHandlerAdapter
+import org.cef.handler.CefLoadHandler
 import org.cef.handler.CefLoadHandlerAdapter
 import org.cef.handler.CefRequestHandlerAdapter
 import org.cef.network.CefCookie
@@ -62,7 +63,12 @@ class WebServiceBrowser(
                         // itself navigates to is decided here.
                         if (frame?.isMain != true) return false
                         val url = request?.url ?: return true
-                        return when (val decision = WebServicePolicy.navigation(brand, url)) {
+                        val decision = WebServicePolicy.navigation(brand, url)
+                        trace(
+                            "navigate ${request.method} ${WebServicePolicy.loggablePage(url)} " +
+                                "redirect=$isRedirect gesture=$userGesture -> ${decision.label()}",
+                        )
+                        return when (decision) {
                             WebNavigation.StayInside -> false
                             is WebNavigation.OpenOutside -> {
                                 openOutside(decision.url)
@@ -84,7 +90,9 @@ class WebServiceBrowser(
                         targetFrameName: String?,
                     ): Boolean {
                         val url = targetUrl ?: return true
-                        when (val decision = WebServicePolicy.navigation(brand, url)) {
+                        val decision = WebServicePolicy.navigation(brand, url)
+                        trace("popup ${WebServicePolicy.loggablePage(url)} -> ${decision.label()}")
+                        when (decision) {
                             WebNavigation.StayInside -> browser?.loadURL(url)
                             is WebNavigation.OpenOutside -> openOutside(decision.url)
                             WebNavigation.Block -> Unit
@@ -103,7 +111,20 @@ class WebServiceBrowser(
                         frame: CefFrame?,
                         httpStatusCode: Int,
                     ) {
-                        if (frame?.isMain == true && !disposed.get()) saveSession()
+                        if (frame?.isMain != true) return
+                        trace("loaded ${WebServicePolicy.loggablePage(frame.url.orEmpty())} status=$httpStatusCode")
+                        if (!disposed.get()) saveSession()
+                    }
+
+                    override fun onLoadError(
+                        browser: CefBrowser?,
+                        frame: CefFrame?,
+                        errorCode: CefLoadHandler.ErrorCode?,
+                        errorText: String?,
+                        failedUrl: String?,
+                    ) {
+                        if (frame?.isMain != true) return
+                        trace("load failed ${WebServicePolicy.loggablePage(failedUrl.orEmpty())} error=$errorCode")
                     }
                 },
             )
@@ -123,7 +144,7 @@ class WebServiceBrowser(
     /** Signs out: forgets the saved session, clears the engine's cookies and reloads the start page. */
     fun signOut() {
         sessions.clear(profileId, brand)
-        deleteEngineCookies()
+        deleteEngineCookies("signed out")
         browser?.loadURL(brand.homeUrl)
     }
 
@@ -165,6 +186,7 @@ class WebServiceBrowser(
             if (WebServiceSessionStore.belongsTo(candidate, brand)) collected += candidate
             if (count + 1 >= total && engineCookieOwner == ownerKey && collected.isNotEmpty()) {
                 sessions.save(profileId, brand, collected.toList())
+                trace("saved ${collected.size} cookies (${collected.cookieNames()})")
             }
             true
         }
@@ -181,22 +203,48 @@ class WebServiceBrowser(
      */
     private fun restoreSession() {
         val manager = CefCookieManager.getGlobalManager() ?: return
-        if (engineCookieOwner == ownerKey) return
+        if (engineCookieOwner == ownerKey) {
+            trace("restore skipped: the engine already holds this profile's cookies")
+            return
+        }
         engineCookieOwner = ownerKey
-        deleteEngineCookies()
-        sessions.load(profileId, brand).forEach { stored ->
+        deleteEngineCookies("restore")
+        val saved = sessions.load(profileId, brand)
+        trace("restore ${saved.size} saved cookies (${saved.cookieNames()})")
+        saved.forEach { stored ->
             val host = stored.domain.trimStart('.')
             manager.setCookie("https://$host${stored.path.ifBlank { "/" }}", stored.toCef())
         }
     }
 
-    private fun deleteEngineCookies() {
+    private fun deleteEngineCookies(reason: String) {
+        trace("engine cookies cleared: $reason")
         val manager = CefCookieManager.getGlobalManager() ?: return
         brand.allowedHosts.forEach { host ->
             manager.deleteCookies("https://$host/", "")
             manager.deleteCookies("https://www.$host/", "")
         }
     }
+
+    /**
+     * One line of the sign-in's path through the log, always written: a sign-in that "goes through
+     * and then shows the page as if nobody signed in" can only be followed from the outside this
+     * way. Addresses are reduced to host and path ([WebServicePolicy.loggablePage]); cookies are
+     * counted and named, never their values.
+     */
+    private fun trace(line: String) {
+        println("[web-service] $line")
+    }
+
+    private fun List<StoredWebCookie>.cookieNames(): String =
+        joinToString(",") { cookie -> cookie.name.take(MAX_COOKIE_NAME) }.ifEmpty { "none" }
+
+    private fun WebNavigation.label(): String =
+        when (this) {
+            WebNavigation.StayInside -> "inside"
+            is WebNavigation.OpenOutside -> "system browser"
+            WebNavigation.Block -> "blocked"
+        }
 
     private fun openOutside(url: String) {
         SwingUtilities.invokeLater { runCatching { openUriExternally(URI(url)) } }
@@ -214,6 +262,8 @@ class WebServiceBrowser(
          */
         @Volatile
         private var engineCookieOwner: String? = null
+
+        private const val MAX_COOKIE_NAME = 32
     }
 }
 

@@ -108,6 +108,19 @@ class WebServicesTest {
     }
 
     @Test
+    fun `a page reaches the log as host and path only`() {
+        assertEquals("godorama.com/login", WebServicePolicy.loggablePage("https://godorama.com/login?next=%2F&token=abc"))
+        assertEquals("godorama.com/", WebServicePolicy.loggablePage("https://godorama.com/#sessao"))
+        assertEquals("godorama.com/serie/a-filha-de-zeus", WebServicePolicy.loggablePage("https://godorama.com/serie/a-filha-de-zeus"))
+        assertEquals(
+            "godorama.com/reset/…",
+            WebServicePolicy.loggablePage("https://godorama.com/reset/" + "a1b2c3d4".repeat(8)),
+        )
+        assertEquals("godorama.com/", WebServicePolicy.loggablePage("https://user:secret@godorama.com/"))
+        assertEquals("<unparsable>", WebServicePolicy.loggablePage("not a url"))
+    }
+
+    @Test
     fun `a brand must open over https`() {
         assertFailsWith<IllegalArgumentException> { godorama.copy(homeUrl = "http://godorama.com/") }
     }
