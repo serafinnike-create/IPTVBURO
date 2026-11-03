@@ -2,7 +2,7 @@
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
         id="http://iptvburo.com/tizen"
-        version="4.2.0"
+        version="4.2.1"
         viewmodes="maximized">
     <name>IPTV BURO</name>
     <description>Player e organizador de midia para fontes autorizadas pelo usuario.</description>
