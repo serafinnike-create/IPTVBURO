@@ -175,7 +175,9 @@ fun BuroIconButton(
             )
         },
         delayMillis = 450,
-        tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, (-36).dp)),
+        // Beside the pointer rather than above it. Above, a tooltip on the player's bar landed over
+        // the video — a native window nothing can be drawn over — and was never seen.
+        tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(18.dp, (-10).dp)),
         modifier = modifier,
     ) {
         IconButton(

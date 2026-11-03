@@ -40,9 +40,9 @@ class PlayerBarRenderTest {
             activeSubtitleTrackId = 3,
         )
 
-    private fun render(name: String, state: DesktopPlaybackSnapshot, live: Boolean, next: String?) {
+    private fun render(name: String, state: DesktopPlaybackSnapshot, live: Boolean, next: String?, panel: PlayerPanel? = null) {
         val text = PlayerText.of(DesktopLanguage.PORTUGUESE_BRAZIL)
-        ImageComposeScene(width = 1366, height = 180).use { scene ->
+        ImageComposeScene(width = 1366, height = if (panel != null) 380 else 180).use { scene ->
             scene.setContent {
                 MaterialTheme(colorScheme = darkColorScheme()) {
                     Column(Modifier.fillMaxWidth().background(Color(0xF20A0C0F)).padding(horizontal = 20.dp, vertical = 10.dp)) {
@@ -58,13 +58,18 @@ class PlayerBarRenderTest {
                             onPlayNext = {},
                             onCancelNext = {},
                         )
+                        panel?.let {
+                            PanelContent(
+                                panel = it, state = state, isLive = live, audioOutput = AudioOutputMode.SYSTEM, text = text,
+                                onSelectSubtitle = {}, onSelectAudio = {}, onSpeed = {}, onAspect = {}, onAudioOutput = {}, onBrightness = {},
+                            )
+                        }
                         if (!live) SeekBar(state = state, onSeek = {})
                         ControlsRow(
                             state = state, isLive = live, isFullScreen = false, isFavorite = !live, muted = false,
                             audioOutput = AudioOutputMode.SYSTEM, hasNext = next != null, text = text,
                             onTogglePlayback = {}, onSeekBy = {}, onToggleFavorite = {}, onToggleMute = {},
-                            onVolume = {}, onCycleSpeed = {}, onCycleAspect = {}, onCycleAudioOutput = {},
-                            onBrightness = {}, onSelectAudio = {}, onSelectSubtitle = {}, onMenuOpenChange = {},
+                            onVolume = {}, openPanel = panel, onTogglePanel = {},
                             onPlayNext = {}, onMiniPlayer = {}, onFullScreen = {}, onClose = {},
                         )
                     }
@@ -81,6 +86,10 @@ class PlayerBarRenderTest {
     @Test
     fun `the bar lays out for a film with the next episode offered`() =
         render("film-up-next", film, live = false, next = "Episódio 5 · O retorno")
+
+    @Test
+    fun `the settings panel lays out above the controls`() =
+        render("settings-panel", film, live = false, next = null, panel = PlayerPanel.SETTINGS)
 
     @Test
     fun `the bar lays out for a live channel`() =

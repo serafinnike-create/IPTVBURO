@@ -133,15 +133,6 @@ private fun leaveForGood() {
 private const val EXIT_GRACE_MILLIS = 10_000L
 
 fun main(args: Array<String>) {
-    // Menus, tooltips and dialogs as windows of their own, above everything.
-    //
-    // The video is a native window VLC draws into, and native windows paint over anything Compose
-    // draws in the same window. With Compose's default in-window layers, the player's settings and
-    // track menus opened *behind* the picture — only the slice that hung below the video was
-    // visible, so speed, picture shape and the subtitle list could not be reached while a film
-    // played. Must be set before the first window is created.
-    System.setProperty("compose.layers.type", "WINDOW")
-
     // A share link, when the app was started by clicking one. Windows launches the registered
     // handler with the URI as its first argument; anything else on the command line is ignored.
     val startupShareLink = args.firstOrNull()?.let(TitleShareLink::parse)

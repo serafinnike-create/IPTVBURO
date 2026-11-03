@@ -21,8 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -233,7 +231,8 @@ fun DesktopPlayerOverlay(
     var wakeCounter by remember { mutableIntStateOf(0) }
     // Open menus and the pointer resting on the bar keep it up. Without this a track menu opened
     // in full screen vanished three seconds later with the bar that held it.
-    var menusOpen by remember(request) { mutableIntStateOf(0) }
+    // Which of the bar's panels is open — subtitles, audio or settings — or null.
+    var openPanel by remember(request) { mutableStateOf<PlayerPanel?>(null) }
     var pointerOverBar by remember(request) { mutableStateOf(false) }
     // A single loop that watches the clock, rather than an effect restarted by each wake. Keying an
     // effect on the counter meant a wake arriving *while it was already running* was swallowed:
@@ -242,7 +241,7 @@ fun DesktopPlayerOverlay(
     var lastWakeAt by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(wakeCounter) { lastWakeAt = System.currentTimeMillis() }
     val keepBarUp by rememberUpdatedState(
-        menusOpen > 0 || pointerOverBar || upNextOffered || state.reconnecting || state.errorMessage != null,
+        openPanel != null || pointerOverBar || upNextOffered || state.reconnecting || state.errorMessage != null,
     )
     LaunchedEffect(isFullScreen, controller) {
         while (true) {
@@ -323,10 +322,10 @@ fun DesktopPlayerOverlay(
         wakeCounter++
         when (code) {
             AwtKey.VK_ESCAPE ->
-                // An open menu closes itself on Escape; taking the key here closed the whole player
-                // instead, with the menu still open over nothing.
-                if (menusOpen > 0) {
-                    false
+                // An open panel closes first; only then does Escape leave full screen or the player.
+                if (openPanel != null) {
+                    openPanel = null
+                    true
                 } else {
                     if (isFullScreen) onToggleFullScreen() else closePlayer()
                     true
@@ -362,6 +361,14 @@ fun DesktopPlayerOverlay(
             AwtKey.VK_N -> {
                 if (nextEpisodeTitle != null) onPlayNext()
                 nextEpisodeTitle != null
+            }
+            AwtKey.VK_CLOSE_BRACKET -> {
+                if (state.ready && !isLive) cycleSpeed()
+                !isLive
+            }
+            AwtKey.VK_Z -> {
+                if (state.ready) cycleAspect()
+                true
             }
             AwtKey.VK_HOME -> {
                 if (state.ready && !isLive) controller.seekToFraction(0.0)
@@ -540,6 +547,29 @@ fun DesktopPlayerOverlay(
                     onPlayNext = onPlayNext,
                     onCancelNext = { upNextCancelled = true },
                 )
+                openPanel?.let { panel ->
+                    PanelContent(
+                        panel = panel,
+                        state = state,
+                        isLive = isLive,
+                        audioOutput = audioOutput,
+                        text = text,
+                        onSelectSubtitle = controller::selectSubtitleTrack,
+                        onSelectAudio = controller::selectAudioTrack,
+                        onSpeed = { rate ->
+                            controller.setPlaybackRate(rate)
+                            showNotice("${text.speed} ${formatRate(rate)}")
+                        },
+                        onAspect = { ratio ->
+                            controller.setAspectRatio(ratio)
+                            showNotice("${text.aspect}: ${text.aspectLabel(ratio)}")
+                        },
+                        // The live position goes with the mode, because the disposal checkpoint is
+                        // written after this returns and the stored one is up to twelve seconds old.
+                        onAudioOutput = { mode -> onSelectAudioOutput(mode, state.positionMillis.toLong()) },
+                        onBrightness = { controller.setBrightness(it.toDouble()) },
+                    )
+                }
                 if (!isLive) {
                     SeekBar(state = state, onSeek = controller::seekToFraction)
                 }
@@ -560,22 +590,8 @@ fun DesktopPlayerOverlay(
                         volumeBeforeMute = null
                         controller.setVolume(value.toDouble())
                     },
-                    onCycleSpeed = cycleSpeed,
-                    onCycleAspect = cycleAspect,
-                    onCycleAudioOutput = {
-                        // Two channels assumed, which is what the great majority of provider streams
-                        // carry. Assuming stereo only ever offers one option too many, never one too
-                        // few, and every option remains safe to pick.
-                        val options = AudioOutputMode.optionsFor(channels = 2)
-                        val next = options[(options.indexOf(audioOutput) + 1) % options.size]
-                        // The live position goes with the mode, because the disposal checkpoint is
-                        // written after this returns and the stored one is up to twelve seconds old.
-                        onSelectAudioOutput(next, state.positionMillis.toLong())
-                    },
-                    onBrightness = { controller.setBrightness(it.toDouble()) },
-                    onSelectAudio = controller::selectAudioTrack,
-                    onSelectSubtitle = controller::selectSubtitleTrack,
-                    onMenuOpenChange = { open -> menusOpen = (menusOpen + if (open) 1 else -1).coerceAtLeast(0) },
+                    openPanel = openPanel,
+                    onTogglePanel = { panel -> openPanel = if (openPanel == panel) null else panel },
                     onPlayNext = onPlayNext,
                     onMiniPlayer = onToggleCompact,
                     onFullScreen = onToggleFullScreen,
@@ -794,13 +810,8 @@ internal fun ControlsRow(
     onToggleFavorite: () -> Unit,
     onToggleMute: () -> Unit,
     onVolume: (Float) -> Unit,
-    onCycleSpeed: () -> Unit,
-    onCycleAspect: () -> Unit,
-    onCycleAudioOutput: () -> Unit,
-    onBrightness: (Float) -> Unit,
-    onSelectAudio: (Int) -> Unit,
-    onSelectSubtitle: (Int) -> Unit,
-    onMenuOpenChange: (Boolean) -> Unit,
+    openPanel: PlayerPanel?,
+    onTogglePanel: (PlayerPanel) -> Unit,
     onPlayNext: () -> Unit,
     onMiniPlayer: () -> Unit,
     onFullScreen: () -> Unit,
@@ -858,39 +869,16 @@ internal fun ControlsRow(
 
         Spacer(Modifier.weight(1f))
 
-        // Shown whenever a track exists, not only when there is a choice: a single-entry menu still
-        // answers "what language is this?".
+        // Shown whenever a track exists, not only when there is a choice: a single-entry panel still
+        // answers "what language is this?". Each opens a panel inside the bar rather than a pop-up
+        // menu, because the video is a native window that pop-ups cannot be drawn over.
         if (state.subtitleTracks.isNotEmpty()) {
-            TrackMenu(
-                icon = BuroIcons.Subtitles,
-                label = text.subtitles,
-                tracks = state.subtitleTracks,
-                activeId = state.activeSubtitleTrackId,
-                onSelect = onSelectSubtitle,
-                onOpenChange = onMenuOpenChange,
-            )
+            PanelButton(BuroIcons.Subtitles, text.subtitles, PlayerPanel.SUBTITLES, openPanel, onTogglePanel)
         }
         if (state.audioTracks.isNotEmpty()) {
-            TrackMenu(
-                icon = BuroIcons.Audio,
-                label = text.audio,
-                tracks = state.audioTracks,
-                activeId = state.activeAudioTrackId,
-                onSelect = onSelectAudio,
-                onOpenChange = onMenuOpenChange,
-            )
+            PanelButton(BuroIcons.Audio, text.audio, PlayerPanel.AUDIO, openPanel, onTogglePanel)
         }
-        SettingsMenu(
-            state = state,
-            isLive = isLive,
-            audioOutput = audioOutput,
-            text = text,
-            onCycleSpeed = onCycleSpeed,
-            onCycleAspect = onCycleAspect,
-            onCycleAudioOutput = onCycleAudioOutput,
-            onBrightness = onBrightness,
-            onOpenChange = onMenuOpenChange,
-        )
+        PanelButton(BuroIcons.Settings, text.settings, PlayerPanel.SETTINGS, openPanel, onTogglePanel)
         BuroIconButton(BuroIcons.MiniPlayer, text.miniPlayer, onMiniPlayer)
         BuroIconButton(
             icon = if (isFullScreen) BuroIcons.ExitFullScreen else BuroIcons.FullScreen,
@@ -906,137 +894,151 @@ internal fun ControlsRow(
     }
 }
 
-/**
- * Picks one track from the ones the title carries. The tooltip names the active track, so the bar
- * answers "what am I hearing?" without being opened.
- */
+/** The panels the bar can open above its controls. */
+internal enum class PlayerPanel { SUBTITLES, AUDIO, SETTINGS }
+
 @Composable
-private fun TrackMenu(
+private fun PanelButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    tracks: List<MediaTrack>,
-    activeId: Int?,
-    onSelect: (Int) -> Unit,
-    onOpenChange: (Boolean) -> Unit,
+    panel: PlayerPanel,
+    openPanel: PlayerPanel?,
+    onToggle: (PlayerPanel) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val active = tracks.firstOrNull { it.id == activeId }
-    val setExpanded: (Boolean) -> Unit = { value ->
-        if (value != expanded) {
-            expanded = value
-            onOpenChange(value)
-        }
-    }
-    DisposableEffect(Unit) { onDispose { if (expanded) onOpenChange(false) } }
-    Box {
-        BuroIconButton(
-            icon = icon,
-            label = active?.label?.let { "$label: $it" } ?: label,
-            onClick = { setExpanded(true) },
-        )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { setExpanded(false) },
-            modifier = Modifier.background(BuroColors.SurfaceRaised),
-        ) {
-            tracks.forEach { track ->
-                DropdownMenuItem(
-                    text = {
-                        Text(track.label, color = if (track.id == activeId) BuroColors.Primary else BuroColors.Text)
-                    },
-                    leadingIcon = {
-                        if (track.id == activeId) {
-                            Icon(BuroIcons.Check, contentDescription = null, tint = BuroColors.Primary)
-                        } else {
-                            Spacer(Modifier.size(BuroIconSize.Medium))
-                        }
-                    },
-                    onClick = {
-                        onSelect(track.id)
-                        setExpanded(false)
-                    },
-                )
-            }
-        }
-    }
+    BuroIconButton(
+        icon = icon,
+        label = label,
+        onClick = { onToggle(panel) },
+        tint = if (openPanel == panel) BuroColors.Primary else Color.White.copy(alpha = 0.92f),
+    )
 }
 
-/** Speed, picture shape, speaker layout and brightness: set once, rarely changed mid-film. */
+/**
+ * The open panel: every choice laid out at once, one click to pick.
+ *
+ * Inside the bar rather than in a pop-up. The video is a native window, and anything Compose draws
+ * over it is hidden — the pop-up menus these replaced opened behind the picture, with only the
+ * slice below it visible. Laid out here, the choices are always on screen, and seeing them all at
+ * once is quicker than cycling through them one press at a time.
+ */
 @Composable
-private fun SettingsMenu(
+internal fun PanelContent(
+    panel: PlayerPanel,
     state: DesktopPlaybackSnapshot,
     isLive: Boolean,
     audioOutput: AudioOutputMode,
     text: PlayerText,
-    onCycleSpeed: () -> Unit,
-    onCycleAspect: () -> Unit,
-    onCycleAudioOutput: () -> Unit,
+    onSelectSubtitle: (Int) -> Unit,
+    onSelectAudio: (Int) -> Unit,
+    onSpeed: (Double) -> Unit,
+    onAspect: (PlaybackAspectRatio) -> Unit,
+    onAudioOutput: (AudioOutputMode) -> Unit,
     onBrightness: (Float) -> Unit,
-    onOpenChange: (Boolean) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val setExpanded: (Boolean) -> Unit = { value ->
-        if (value != expanded) {
-            expanded = value
-            onOpenChange(value)
-        }
-    }
-    DisposableEffect(Unit) { onDispose { if (expanded) onOpenChange(false) } }
-    Box {
-        BuroIconButton(icon = BuroIcons.Settings, label = text.settings, onClick = { setExpanded(true) })
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { setExpanded(false) },
-            modifier = Modifier.background(BuroColors.SurfaceRaised),
-        ) {
-            // Each row cycles in place and the menu stays open, so the effect can be watched and
-            // the next value tried without reopening anything.
-            if (!isLive) {
-                SettingsRow(BuroIcons.Speed, text.speed, formatRate(state.playbackRate), enabled = state.ready, onClick = onCycleSpeed)
-            }
-            SettingsRow(BuroIcons.Aspect, text.aspect, text.aspectLabel(state.aspectRatio), enabled = state.ready, onClick = onCycleAspect)
-            SettingsRow(BuroIcons.Speakers, text.audio, text.audioOutputLabel(audioOutput), enabled = state.ready, onClick = onCycleAudioOutput)
-            Column(Modifier.width(280.dp).padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp)
+                .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        when (panel) {
+            PlayerPanel.SUBTITLES ->
+                ChoiceRow(BuroIcons.Subtitles, text.subtitles) {
+                    state.subtitleTracks.forEach { track ->
+                        Choice(track.label, selected = track.id == state.activeSubtitleTrackId) { onSelectSubtitle(track.id) }
+                    }
+                }
+            PlayerPanel.AUDIO ->
+                ChoiceRow(BuroIcons.Audio, text.audio) {
+                    state.audioTracks.forEach { track ->
+                        Choice(track.label, selected = track.id == state.activeAudioTrackId) { onSelectAudio(track.id) }
+                    }
+                }
+            PlayerPanel.SETTINGS -> {
+                if (!isLive) {
+                    ChoiceRow(BuroIcons.Speed, text.speed) {
+                        PANEL_RATES.forEach { rate ->
+                            Choice(formatRate(rate), selected = kotlin.math.abs(rate - state.playbackRate) < 0.01) { onSpeed(rate) }
+                        }
+                    }
+                }
+                ChoiceRow(BuroIcons.Aspect, text.aspect) {
+                    PlaybackAspectRatio.entries.forEach { ratio ->
+                        Choice(text.aspectLabel(ratio), selected = ratio == state.aspectRatio) { onAspect(ratio) }
+                    }
+                }
+                ChoiceRow(BuroIcons.Speakers, text.speakers) {
+                    // Two channels assumed, which is what the great majority of provider streams
+                    // carry; assuming stereo only ever offers one option too many, never one too few.
+                    AudioOutputMode.optionsFor(channels = 2).forEach { mode ->
+                        Choice(text.audioOutputLabel(mode), selected = mode == audioOutput) { onAudioOutput(mode) }
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(BuroIcons.Brightness, contentDescription = null, tint = BuroColors.TextMuted, modifier = Modifier.size(BuroIconSize.Small))
-                    Spacer(Modifier.width(12.dp))
-                    Text(text.brightness, color = BuroColors.Text, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(10.dp))
+                    Text(text.brightness, color = BuroColors.Text, maxLines = 1, modifier = Modifier.width(180.dp))
+                    ThinSlider(
+                        value = state.brightness.toFloat(),
+                        onValueChange = onBrightness,
+                        valueRange = 0.5f..1.8f,
+                        accent = BuroColors.Primary,
+                        modifier = Modifier.width(220.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
                     Text("${(state.brightness * 100).toInt()}%", color = BuroColors.TextMuted)
+                    Spacer(Modifier.width(14.dp))
+                    // Says when it takes effect, because it cannot take effect now: VLC builds the
+                    // adjust filter with the video chain and its control interface cannot change it.
+                    Text(text.brightnessNextTitle, color = BuroColors.TextMuted, style = MaterialTheme.typography.labelSmall)
                 }
-                ThinSlider(
-                    value = state.brightness.toFloat(),
-                    onValueChange = onBrightness,
-                    valueRange = 0.5f..1.8f,
-                    accent = BuroColors.Primary,
-                )
-                // Says when it takes effect, because it cannot take effect now: VLC builds the
-                // adjust filter with the video chain and its control interface cannot change it.
-                Text(text.brightnessNextTitle, color = BuroColors.TextMuted, style = MaterialTheme.typography.labelSmall)
             }
         }
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun SettingsRow(
+private fun ChoiceRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    value: String,
-    enabled: Boolean,
+    choices: @Composable () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = BuroColors.TextMuted, modifier = Modifier.size(BuroIconSize.Small))
+        Spacer(Modifier.width(10.dp))
+        Text(label, color = BuroColors.Text, maxLines = 1, modifier = Modifier.width(180.dp))
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) { choices() }
+    }
+}
+
+@Composable
+private fun Choice(
+    label: String,
+    selected: Boolean,
     onClick: () -> Unit,
 ) {
-    DropdownMenuItem(
-        text = {
-            Row(Modifier.width(240.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(label, color = BuroColors.Text, modifier = Modifier.weight(1f))
-                Text(value, color = BuroColors.Primary, fontWeight = FontWeight.SemiBold)
-            }
-        },
-        leadingIcon = { Icon(icon, contentDescription = null, tint = BuroColors.TextMuted, modifier = Modifier.size(BuroIconSize.Small)) },
-        enabled = enabled,
+    OutlinedButton(
         onClick = onClick,
-    )
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+        colors =
+            ButtonDefaults.outlinedButtonColors(
+                containerColor = if (selected) BuroColors.Primary.copy(alpha = 0.22f) else Color.Transparent,
+                contentColor = if (selected) BuroColors.Primary else Color.White.copy(alpha = 0.85f),
+            ),
+    ) {
+        Text(label, maxLines = 1, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+    }
 }
+
+/** The speeds offered in the settings panel, slowest first. */
+private val PANEL_RATES = listOf(0.75, 1.0, 1.25, 1.5, 2.0)
 
 /**
  * The picture-in-picture window's controls: a translucent strip, because at 480x300 every row the
