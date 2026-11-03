@@ -656,20 +656,10 @@ fun DesktopApp(
                             ContinueWatchingWorkspace(
                                 entries = appState.continueWatchingEntries,
                                 onResume = { entry ->
-                                    activePlayback =
-                                        appState.prepareXtreamPlayback(
-                                            entry.playbackTarget(),
-                                            entry.item.name,
-                                            entry.progress.positionMs,
-                                        )
+                                    scope.launch { activePlayback = appState.prepareResume(entry) }
                                 },
                                 onRestart = { entry ->
-                                    activePlayback =
-                                        appState.prepareXtreamPlayback(
-                                            entry.playbackTarget(),
-                                            entry.item.name,
-                                            0L,
-                                        )
+                                    scope.launch { activePlayback = appState.prepareResume(entry, fromStart = true) }
                                 },
                                 onForget = appState::forgetProgress,
                             )
@@ -702,12 +692,7 @@ fun DesktopApp(
                             HistoryGallery(
                                 entries = appState.historyEntries,
                                 onResume = { entry ->
-                                    activePlayback =
-                                        appState.prepareXtreamPlayback(
-                                            entry.playbackTarget(),
-                                            entry.item.name,
-                                            entry.progress.positionMs,
-                                        )
+                                    scope.launch { activePlayback = appState.prepareResume(entry) }
                                 },
                                 onForget = appState::forgetHistoryEntry,
                                 onClearAll = appState::clearHistory,
@@ -3482,6 +3467,9 @@ private fun DesktopProfileGate(
                 .background(if (onDismiss == null) BuroColors.Canvas else BuroColors.Canvas.copy(alpha = 0.94f)),
         contentAlignment = Alignment.Center,
     ) {
+        // Escape as well as the cross, like every other panel; only while there is somewhere to
+        // go back to.
+        if (onDismiss != null) com.lucasserafin94.iptvburo.desktop.ui.EscapeToDismiss(onDismiss)
         if (onDismiss != null) {
             BuroInteractiveRow(
                 onClick = onDismiss,

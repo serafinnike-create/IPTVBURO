@@ -256,14 +256,21 @@ private fun ContinueRow(
                 )
             }
             Spacer(Modifier.height(6.dp))
+            // The episode first, as History and the home row show it: two episodes of one series
+            // were otherwise two identical rows.
+            val episode =
+                entry.progress.identity.seasonNumber?.let { season ->
+                    "T$season · E${entry.progress.identity.episodeNumber ?: "—"}  ·  "
+                }.orEmpty()
             Text(
                 text =
-                    if (duration > 0L) {
-                        "${formatWatchTime(entry.progress.positionMs)} / " +
-                            "${formatWatchTime(duration)}  ·  ${(fraction * 100).toInt()}%"
-                    } else {
-                        formatWatchTime(entry.progress.positionMs)
-                    },
+                    episode +
+                        if (duration > 0L) {
+                            "${formatWatchTime(entry.progress.positionMs)} / " +
+                                "${formatWatchTime(duration)}  ·  ${(fraction * 100).toInt()}%"
+                        } else {
+                            formatWatchTime(entry.progress.positionMs)
+                        },
                 color = BuroColors.TextSubtle,
                 style = MaterialTheme.typography.labelMedium,
             )

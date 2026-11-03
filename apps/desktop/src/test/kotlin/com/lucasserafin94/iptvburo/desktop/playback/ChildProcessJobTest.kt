@@ -90,6 +90,28 @@ class ChildProcessJobTest {
     }
 
     /**
+     * The job exists and an adopted child is really inside it.
+     *
+     * The checks above only asked whether the child kept running, which a job that was never
+     * created passes perfectly. It was never created: JNA could not build the private structure
+     * classes, the exception was swallowed, and VLC was found alive after the app was killed.
+     */
+    @Test
+    fun `an adopted process is held by the job`() {
+        if (!Platform.isWindows()) return
+        assertTrue(ChildProcessJob.isActive, "the job could not be created, so nothing protects VLC")
+
+        val child = sleeper()
+        try {
+            ChildProcessJob.adopt(child)
+            assertTrue(ChildProcessJob.holds(child) == true, "the child must be inside the app's job")
+        } finally {
+            child.destroyForcibly()
+            child.waitFor(5, TimeUnit.SECONDS)
+        }
+    }
+
+    /**
      * Adopting is safe to call for a process that has already exited.
      *
      * There is a real race here: a VLC that fails to start can be gone before the assignment runs,

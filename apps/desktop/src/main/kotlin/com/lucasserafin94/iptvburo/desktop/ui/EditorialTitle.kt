@@ -81,3 +81,28 @@ private val TRAILING_MARKERS =
         "l", "d", "s", "ptbr", "pt", "br", "en", "es", "lat", "latino",
         "1080p", "1080", "720p", "720", "480p", "2160p", "2160",
     )
+
+/**
+ * What the player shows as the title of an episode.
+ *
+ * Providers commonly name an episode "S01E02" and nothing else, so the player's title bar said
+ * exactly that, with no hint of which series was playing. The series and the episode come first;
+ * the provider's own name follows only when it says something more, and replaces the lot when it
+ * already carries the series name.
+ */
+fun episodePlayerTitle(
+    seriesName: String,
+    seasonNumber: Int,
+    episodeNumber: Int?,
+    episodeTitle: String,
+): String {
+    val series = seriesName.editorialTitle()
+    val own = episodeTitle.trim()
+    if (series.isNotBlank() && own.contains(series, ignoreCase = true)) return own
+    val code = "T${seasonNumber}E${episodeNumber ?: "—"}"
+    val bare = own.isEmpty() || BARE_EPISODE_CODE.matches(own)
+    return if (bare) "$series · $code" else "$series · $code · $own"
+}
+
+/** "S01E02", "s1 e2", "T01E02" — a name that is only the episode's number. */
+private val BARE_EPISODE_CODE = Regex("(?i)^[st]\\d+\\s*[ex]\\s*\\d+$")

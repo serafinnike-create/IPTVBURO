@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.lucasserafin94.iptvburo.desktop.build.BUNDLED_TMDB_KEY
+import com.lucasserafin94.iptvburo.desktop.data.episodeContentKey
 import com.lucasserafin94.iptvburo.desktop.data.ArtworkCache
 import com.lucasserafin94.iptvburo.desktop.data.CatalogLoadProgress
 import com.lucasserafin94.iptvburo.desktop.data.FtpPlaylistReader
@@ -1366,9 +1367,61 @@ class DesktopAppState(
      */
     fun nextEpisodeAfterPlaying(): XtreamEpisode? {
         val playing = lastPlaybackTarget as? XtreamPlaybackTarget.Episode ?: return null
-        val details = (seriesDetailsStatus as? SeriesDetailsStatus.Loaded)?.details ?: return null
-        if (details.providerId != playing.seriesId) return null
+        val details =
+            listOfNotNull((seriesDetailsStatus as? SeriesDetailsStatus.Loaded)?.details, resumedSeriesDetails)
+                .firstOrNull { it.providerId == playing.seriesId }
+                ?: return null
         return nextEpisodeIn(details.episodes, playing.episode)
+    }
+
+    /**
+     * The episode list fetched to resume a series from Continue watching or History.
+     *
+     * Kept apart from the series page's own state, which belongs to whatever page is on screen, so
+     * the player can still offer the next episode of a series that was never opened.
+     */
+    private var resumedSeriesDetails: XtreamSeriesDetails? = null
+
+    /**
+     * A playback request that picks up [entry] where it stopped, or from the start.
+     *
+     * A film plays its own stream. An episode cannot: the entry carries the series, and asking the
+     * provider for a "series" stream played nothing at all, so resuming a series from Continue
+     * watching or History silently did nothing. The episode list is fetched and the episode the
+     * progress names is played instead.
+     */
+    suspend fun prepareResume(
+        entry: DesktopContinueWatchingEntry,
+        fromStart: Boolean = false,
+    ): DesktopPlaybackRequest? {
+        val position = if (fromStart) 0L else entry.progress.positionMs
+        if (entry.item.contentType != XtreamContentType.SERIES) {
+            return prepareXtreamPlayback(entry.playbackTarget(), entry.item.name, position)
+        }
+        val identity = entry.progress.identity
+        val season = identity.seasonNumber ?: return null
+        val details =
+            runCatching { withContext(Dispatchers.IO) { xtreamRepository.seriesDetails(entry.item.providerId) } }
+                .getOrNull()
+                ?: return null
+        val episode =
+            details.episodes.firstOrNull { it.seasonNumber == season && it.episodeNumber == identity.episodeNumber }
+                ?: return null
+        resumedSeriesDetails = details
+        val target =
+            XtreamPlaybackTarget.Episode(
+                seriesId = entry.item.providerId,
+                episode = episode,
+                contentKey = entry.item.episodeContentKey(episode),
+            )
+        val title =
+            com.lucasserafin94.iptvburo.desktop.ui.episodePlayerTitle(
+                entry.item.name,
+                episode.seasonNumber,
+                episode.episodeNumber,
+                episode.title,
+            )
+        return prepareXtreamPlayback(target, title, position)
     }
 
     /**
@@ -1388,7 +1441,19 @@ class DesktopAppState(
                 contentKey = "$seriesKey|s${next.seasonNumber}e${next.episodeNumber ?: 0}",
             )
         val resumeAt = (resumeDecision(target) as? ResumeDecision.ResumeFrom)?.positionMs ?: 0L
-        return prepareXtreamPlayback(target, next.title, resumeAt)
+        val seriesName =
+            listOfNotNull((seriesDetailsStatus as? SeriesDetailsStatus.Loaded)?.details, resumedSeriesDetails)
+                .firstOrNull { it.providerId == playing.seriesId }
+                ?.title
+                .orEmpty()
+        val title =
+            com.lucasserafin94.iptvburo.desktop.ui.episodePlayerTitle(
+                seriesName,
+                next.seasonNumber,
+                next.episodeNumber,
+                next.title,
+            )
+        return prepareXtreamPlayback(target, title, resumeAt)
     }
 
     /**
@@ -2798,6 +2863,23 @@ class DesktopAppState(
                 historyEntries.map { entry -> entry.item.categoryIds },
             )
 
+    /**
+     * The series an episode's progress belongs to.
+     *
+     * By the provider's series id when that id still names the same series, and by the series' own
+     * key otherwise. Ids are numbers each provider hands out for itself: after a change of list the
+     * old id named another series altogether, and an episode of one show was listed — and resumed —
+     * under another. The content key starts with the series' key, which is what settles it.
+     */
+    private fun seriesForEpisodeProgress(identity: PlaybackProgressIdentity): XtreamCatalogItem? {
+        val seriesKey = identity.contentId.substringBefore("|s")
+        val byId =
+            identity.seriesId
+                ?.let { xtreamRepository.itemByProviderId(XtreamContentType.SERIES, it) }
+                ?.takeIf { it.contentIdentity().key == seriesKey }
+        return byId ?: xtreamRepository.itemByContentKey(XtreamContentType.SERIES, seriesKey)
+    }
+
     val historyEntries: List<DesktopContinueWatchingEntry>
         get() {
             // Read so Compose re-runs this when an entry is forgotten; the store is not observable.
@@ -2820,10 +2902,7 @@ class DesktopAppState(
                                     XtreamContentType.MOVIE,
                                     progress.identity.contentId,
                                 )
-                            PlaybackContentType.EPISODE ->
-                                progress.identity.seriesId?.let { seriesId ->
-                                    xtreamRepository.itemByProviderId(XtreamContentType.SERIES, seriesId)
-                                }
+                            PlaybackContentType.EPISODE -> seriesForEpisodeProgress(progress.identity)
                         }
                     item
                         ?.takeIf { found ->
@@ -2882,10 +2961,7 @@ class DesktopAppState(
                                 XtreamContentType.MOVIE,
                                 progress.identity.contentId,
                             )
-                        PlaybackContentType.EPISODE ->
-                            progress.identity.seriesId?.let {
-                                xtreamRepository.itemByProviderId(XtreamContentType.SERIES, it)
-                            }
+                        PlaybackContentType.EPISODE -> seriesForEpisodeProgress(progress.identity)
                     }
                     item
                         ?.takeIf { found ->
@@ -7060,8 +7136,12 @@ class DesktopAppState(
         runCatching {
             // Remembered so a stream that fails can be asked for from another subscription.
             lastPlaybackTarget = target
+            val isLiveChannel = target is XtreamPlaybackTarget.CatalogItem && target.contentType == XtreamContentType.LIVE
             DesktopPlaybackRequest(
-                title = title.take(180),
+                // Without the provider's "4K [DV][HDR]": the bar said "A Hipótese do Amor 4K
+                // [DV][HDR]" over the film. A channel keeps them, since there they say which of the
+                // station's several streams is the one playing.
+                title = (if (isLiveChannel) title else title.editorialTitle().ifBlank { title }).take(180),
                 uri = xtreamRepository.buildConfirmedPlaybackUri(target),
                 progressIdentity = playbackIdentity(target),
                 startPositionMillis = startPositionMillis.coerceAtLeast(0L),

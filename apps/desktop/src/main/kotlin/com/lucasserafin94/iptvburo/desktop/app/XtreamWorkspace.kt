@@ -2217,7 +2217,13 @@ internal fun XtreamItemDetail(
                     onOpenEpisode = { episode, startPositionMillis ->
                         onOpenExternal(
                             PendingXtreamExternal(
-                                displayName = episode.title,
+                                displayName =
+                                    com.lucasserafin94.iptvburo.desktop.ui.episodePlayerTitle(
+                                        item.name,
+                                        episode.seasonNumber,
+                                        episode.episodeNumber,
+                                        episode.title,
+                                    ),
                                 target = targetForEpisode(episode),
                                 startPositionMillis = startPositionMillis,
                             ),

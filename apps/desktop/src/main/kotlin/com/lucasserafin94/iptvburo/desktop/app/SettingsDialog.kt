@@ -123,22 +123,7 @@ fun SettingsDialog(
     // shown "Em uso: 0 B" and had no reason to believe anything was being kept.
     LaunchedEffect(Unit) { appState.refreshCacheUsage() }
 
-    // Escape closes it, as it does every other panel in the app. Listened for process-wide because
-    // the panel holds no focus of its own: a key handler on it never heard the key.
-    val currentDismiss by androidx.compose.runtime.rememberUpdatedState(onDismiss)
-    androidx.compose.runtime.DisposableEffect(Unit) {
-        val dispatcher =
-            java.awt.KeyEventDispatcher { event ->
-                if (event.id == java.awt.event.KeyEvent.KEY_PRESSED && event.keyCode == java.awt.event.KeyEvent.VK_ESCAPE) {
-                    currentDismiss()
-                    true
-                } else {
-                    false
-                }
-            }
-        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(dispatcher)
-        onDispose { java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(dispatcher) }
-    }
+    com.lucasserafin94.iptvburo.desktop.ui.EscapeToDismiss(onDismiss)
 
     Box(
         modifier =
@@ -165,9 +150,12 @@ fun SettingsDialog(
                     // A floor as well as a ceiling. Sized only as a fraction, the panel came out
                     // narrow enough that the language pills stacked one per line and every hint
                     // broke across three — the settings were readable but the screen was not.
-                    .widthIn(min = 520.dp, max = 720.dp)
-                    .fillMaxWidth(0.55f)
-                    .heightIn(max = 760.dp)
+                    .widthIn(min = 520.dp, max = 880.dp)
+                    .fillMaxWidth(0.6f)
+                    // Most of the window's height. Sized to its content up to 760 dp, the panel was
+                    // a small box in the middle of a large screen with every tab scrolling inside it.
+                    .fillMaxHeight(0.86f)
+                    .heightIn(max = 960.dp)
                     .clip(BuroRadius.Large)
                     // The canvas colour, not Surface.
                     //

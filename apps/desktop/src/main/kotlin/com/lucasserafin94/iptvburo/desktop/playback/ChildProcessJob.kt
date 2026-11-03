@@ -65,6 +65,21 @@ internal object ChildProcessJob {
         }
     }
 
+    /** Whether this host could make the job at all; false on anything but Windows. */
+    internal val isActive: Boolean get() = handle != null
+
+    /** Whether [process] is under this app's job, for the regression test. Null where there is no job. */
+    internal fun holds(process: Process): Boolean? {
+        val job = handle ?: return null
+        val child = Kernel32.INSTANCE.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process.pid().toInt()) ?: return false
+        return try {
+            val result = com.sun.jna.ptr.IntByReference()
+            Kernel32Job.INSTANCE.IsProcessInJob(child, job, result) && result.value != 0
+        } finally {
+            Kernel32.INSTANCE.CloseHandle(child)
+        }
+    }
+
     private fun createJob(): WinNT.HANDLE? {
         if (!Platform.isWindows()) return null
         return runCatching {
@@ -114,6 +129,12 @@ internal object ChildProcessJob {
             process: WinNT.HANDLE,
         ): Boolean
 
+        fun IsProcessInJob(
+            process: WinNT.HANDLE,
+            job: WinNT.HANDLE,
+            result: com.sun.jna.ptr.IntByReference,
+        ): Boolean
+
         companion object {
             val INSTANCE: Kernel32Job =
                 Native.load("kernel32", Kernel32Job::class.java, W32APIOptions.DEFAULT_OPTIONS)
@@ -131,7 +152,10 @@ internal object ChildProcessJob {
         "PriorityClass",
         "SchedulingClass",
     )
-    private open class JobObjectBasicLimitInformation : Structure() {
+    // Internal, not private: JNA builds nested structures by reflection and needs a public class
+    // and constructor to do it. As private classes the job was never created — createJob() threw,
+    // runCatching swallowed it, and every VLC ran with no protection at all.
+    internal open class JobObjectBasicLimitInformation : Structure() {
         @JvmField var PerProcessUserTimeLimit = WinNT.LARGE_INTEGER()
         @JvmField var PerJobUserTimeLimit = WinNT.LARGE_INTEGER()
         @JvmField var LimitFlags: Int = 0
@@ -151,7 +175,7 @@ internal object ChildProcessJob {
         "PeakProcessMemoryUsed",
         "PeakJobMemoryUsed",
     )
-    private class JobObjectExtendedLimitInformation : Structure() {
+    internal class JobObjectExtendedLimitInformation : Structure() {
         @JvmField var BasicLimitInformation = JobObjectBasicLimitInformation()
         @JvmField var IoInfo = WinNT.IO_COUNTERS()
         @JvmField var ProcessMemoryLimit = BaseTSD.SIZE_T()
@@ -162,6 +186,7 @@ internal object ChildProcessJob {
 
     private const val PROCESS_SET_QUOTA = 0x0100
     private const val PROCESS_TERMINATE = 0x0001
+    private const val PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
     private const val JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
     private const val JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
 }
