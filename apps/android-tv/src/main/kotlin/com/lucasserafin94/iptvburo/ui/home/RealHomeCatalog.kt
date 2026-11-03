@@ -134,7 +134,7 @@ object RealHomeCatalog {
             (
                 seasonalPicks +
                     distinct.filter { it.year == currentYear } +
-                    distinct.filter { (it.rating ?: 0.0) >= 7.0 } +
+                    distinct.filter { (it.rating ?: 0.0) >= WELL_RATED } +
                     distinct
             ).asSequence()
                 .filter { it.id !in continueById }
@@ -150,7 +150,7 @@ object RealHomeCatalog {
         val leadHero =
             seasonalPicks.firstOrNull { it.id !in continueById }
                 ?: heroCandidates.firstOrNull { it.year == currentYear }
-                ?: heroCandidates.firstOrNull { (it.rating ?: 0.0) >= 7.0 }
+                ?: heroCandidates.firstOrNull { (it.rating ?: 0.0) >= WELL_RATED }
                 ?: heroCandidates.firstOrNull()
         val rotationSource =
             (
@@ -485,3 +485,11 @@ private fun String.toBannerSynopsis(): String {
 
 /** Two lines at the banner's text size, which is as much as the artwork can carry. */
 private const val BANNER_SYNOPSIS_LIMIT = 180
+
+/**
+ * "Well rated" on the catalogue's scale, which is out of five.
+ *
+ * Was 7.0, a ten-point threshold applied to five-point scores: almost nothing ever passed it, so the
+ * well-rated pool behind the home banner was empty and it fell straight through to "anything".
+ */
+private const val WELL_RATED = 3.5
