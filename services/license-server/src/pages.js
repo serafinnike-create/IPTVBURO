@@ -119,6 +119,23 @@ const COPY = {
     pairTitlePageSent: 'Título enviado. Confira a televisão.',
     pairTitlePageTaken: 'Este código já recebeu um título.',
     pairTitlePageBadValue: 'Cole um link de título antes de enviar.',
+    // The activation pages' frame, added with the redesign.
+    language: 'Idioma',
+    years: 'anos',
+    buyKicker: 'LICENÇA POR DISPOSITIVO',
+    keyKicker: 'CÓDIGO DE ATIVAÇÃO',
+    noSubscription: 'Pagamento único. Sem renovação automática.',
+    enterDevice: 'Digite o código do dispositivo',
+    enterDeviceBody:
+      'Ele aparece na tela de ativação do aplicativo, no formato XXXX-XXXX-XXXX. Ler o código QR '
+      + 'dessa tela abre esta página já preenchida.',
+    continueToPrice: 'Ver preço e pagar',
+    deviceHint: 'Na tela de ativação do aplicativo.',
+    keyHint: 'Cada código ativa um único dispositivo.',
+    buyInstead: 'Não tem um código? Comprar com cartão',
+    keyInstead: 'Recebeu um código de ativação? Use aqui',
+    activeAlready: 'Este dispositivo já está ativo. Não é preciso pagar de novo.',
+    safetyTitle: 'Antes de pagar',
   },
   en: {
     title: 'Activate IPTV BURO',
@@ -214,6 +231,23 @@ const COPY = {
     pairTitlePageSent: 'Title sent. Check the television.',
     pairTitlePageTaken: 'This code already received a title.',
     pairTitlePageBadValue: 'Paste a title link before sending.',
+    // The activation pages' frame, added with the redesign.
+    language: 'Language',
+    years: 'years',
+    buyKicker: 'ONE LICENCE PER DEVICE',
+    keyKicker: 'ACTIVATION CODE',
+    noSubscription: 'One payment. No automatic renewal.',
+    enterDevice: 'Enter the device code',
+    enterDeviceBody:
+      'It is shown on the app’s activation screen, as XXXX-XXXX-XXXX. Scanning the QR code on that '
+      + 'screen opens this page already filled in.',
+    continueToPrice: 'See the price and pay',
+    deviceHint: 'On the app’s activation screen.',
+    keyHint: 'Each code activates a single device.',
+    buyInstead: 'No code? Buy by card',
+    keyInstead: 'Received an activation code? Use it here',
+    activeAlready: 'This device is already active. There is nothing to pay.',
+    safetyTitle: 'Before you pay',
   },
   de: {
     title: 'IPTV BURO aktivieren',
@@ -309,6 +343,23 @@ const COPY = {
     pairTitlePageSent: 'Titel gesendet. Sieh auf den Fernseher.',
     pairTitlePageTaken: 'Dieser Code hat bereits einen Titel erhalten.',
     pairTitlePageBadValue: 'Füge vor dem Senden einen Titellink ein.',
+    // The activation pages' frame, added with the redesign.
+    language: 'Sprache',
+    years: 'Jahre',
+    buyKicker: 'EINE LIZENZ PRO GERÄT',
+    keyKicker: 'AKTIVIERUNGSCODE',
+    noSubscription: 'Einmalzahlung. Keine automatische Verlängerung.',
+    enterDevice: 'Gerätecode eingeben',
+    enterDeviceBody:
+      'Er steht auf dem Aktivierungsbildschirm der App, im Format XXXX-XXXX-XXXX. Wer den QR-Code '
+      + 'dort scannt, landet hier mit bereits ausgefülltem Code.',
+    continueToPrice: 'Preis ansehen und bezahlen',
+    deviceHint: 'Auf dem Aktivierungsbildschirm der App.',
+    keyHint: 'Jeder Code aktiviert genau ein Gerät.',
+    buyInstead: 'Kein Code? Mit Karte kaufen',
+    keyInstead: 'Aktivierungscode erhalten? Hier einlösen',
+    activeAlready: 'Dieses Gerät ist bereits aktiv. Es ist nichts zu bezahlen.',
+    safetyTitle: 'Vor dem Bezahlen',
   },
   it: {
     title: 'Attiva IPTV BURO',
@@ -403,6 +454,23 @@ const COPY = {
     pairTitlePageSent: 'Titolo inviato. Controlla il televisore.',
     pairTitlePageTaken: 'Questo codice ha già ricevuto un titolo.',
     pairTitlePageBadValue: 'Incolla un link del titolo prima di inviare.',
+    // The activation pages' frame, added with the redesign.
+    language: 'Lingua',
+    years: 'anni',
+    buyKicker: 'UNA LICENZA PER DISPOSITIVO',
+    keyKicker: 'CODICE DI ATTIVAZIONE',
+    noSubscription: 'Pagamento unico. Nessun rinnovo automatico.',
+    enterDevice: 'Inserisci il codice del dispositivo',
+    enterDeviceBody:
+      'Compare nella schermata di attivazione dell’app, nel formato XXXX-XXXX-XXXX. Inquadrando il '
+      + 'codice QR di quella schermata questa pagina si apre già compilata.',
+    continueToPrice: 'Vedi il prezzo e paga',
+    deviceHint: 'Nella schermata di attivazione dell’app.',
+    keyHint: 'Ogni codice attiva un solo dispositivo.',
+    buyInstead: 'Nessun codice? Acquista con carta',
+    keyInstead: 'Hai ricevuto un codice di attivazione? Usalo qui',
+    activeAlready: 'Questo dispositivo è già attivo. Non c’è nulla da pagare.',
+    safetyTitle: 'Prima di pagare',
   },
 };
 
@@ -460,55 +528,84 @@ export function languageForRequest(request, url) {
   return languageFrom(request.headers.get('accept-language'));
 }
 
-/** The purchase page. */
+/**
+ * The purchase page.
+ *
+ * Two columns on a wide screen: what is being bought and the button on the left, how it works on the
+ * right. Someone who scanned the QR code has done the first two steps already and wants the button;
+ * someone who arrived another way reads across. On a phone the columns stack in that same order.
+ */
 export function buyPage({ deviceId, device, language, price, currency }) {
   const t = copyFor(language);
 
+  // No device: ask for one. This used to be a sentence and nothing else — a dead end for anybody
+  // who reached /comprar from a bookmark or a forwarded link, with the code sitting on their screen
+  // and nowhere to type it.
   if (!deviceId) {
     return shell(t.title, language, `
-      <div class="card">
-        <h1>${t.title}</h1>
-        <p class="muted">${escape(t.missingDevice)}</p>
-      </div>
-    `);
+      <main class="page narrow">
+        <section class="panel">
+          <p class="kicker">${escape(t.buyKicker)}</p>
+          <h1>${escape(t.title)}</h1>
+          <p class="lead">${escape(t.missingDevice)}</p>
+          <form method="GET" action="/comprar" class="stack">
+            <input type="hidden" name="lang" value="${escape(language)}">
+            <label>
+              <span>${escape(t.enterDevice)}</span>
+              <input name="device" placeholder="XXXX-XXXX-XXXX" maxlength="14" required
+                     autocomplete="off" autocapitalize="characters" spellcheck="false"
+                     aria-describedby="device-hint">
+              <small id="device-hint">${escape(t.enterDeviceBody)}</small>
+            </label>
+            <button type="submit">${escape(t.continueToPrice)}</button>
+          </form>
+          <p class="alt-link"><a href="/ativar?lang=${escape(language)}">${escape(t.keyInstead)} <span aria-hidden="true">→</span></a></p>
+        </section>
+      </main>
+    `, { path: '/comprar' });
   }
 
-  const statusLabel = statusLabelFor(device?.status, t);
   // An already-active device is told so rather than sold to again. Taking a second payment for
   // something the customer already owns is the fastest route to a chargeback.
   const alreadyActive = device?.status === 'ACTIVE';
 
   return shell(t.title, language, `
-    <div class="card">
-      ${header()}
-      <h1>${t.title}</h1>
-      <p class="lead">${escape(t.lead)}</p>
+    <main class="page">
+      <div class="split">
+        <section class="primary">
+          <p class="kicker">${escape(t.buyKicker)}</p>
+          <h1>${escape(t.title)}</h1>
+          <p class="lead">${escape(t.lead)}</p>
 
-      <div class="device">
-        <div class="row"><span>${escape(t.device)}</span><code>${escape(deviceId)}</code></div>
-        <div class="row"><span>${escape(t.status)}</span><strong>${escape(statusLabel)}</strong></div>
-        ${device?.expires_at ? `<div class="row"><span>${escape(t.expires)}</span><strong><time datetime="${escape(device.expires_at)}">${escape(formatDate(device.expires_at, language))}</time></strong></div>` : ''}
+          ${deviceSummary(t, language, deviceId, device?.status, device?.expires_at)}
+
+          ${alreadyActive ? `<p class="notice ok" role="status">${escape(t.activeAlready)}</p>` : `
+            <div class="price-block">
+              <div class="price">${escape(price.label)}<span class="period"> / 2 ${escape(t.years)}</span></div>
+              <p class="small">${escape(t.noSubscription)}</p>
+            </div>
+            <form method="POST" action="/checkout">
+              <input type="hidden" name="device" value="${escape(deviceId)}">
+              <input type="hidden" name="lang" value="${escape(language)}">
+              <button type="submit">${escape(t.buy)}</button>
+            </form>
+            <p class="secure">${lockIcon()}<span>${escape(t.secure)}</span></p>
+            <p class="alt-link"><a href="/ativar?device=${escape(deviceId)}&amp;lang=${escape(language)}">${escape(t.keyInstead)} <span aria-hidden="true">→</span></a></p>
+          `}
+        </section>
+
+        <aside class="secondary">
+          ${alreadyActive ? '' : howItWorks(t)}
+          <div class="notes">
+            ${alreadyActive ? '' : `<h2>${escape(t.safetyTitle)}</h2>`}
+            <p>${escape(t.oneDevice)}</p>
+            <p>${escape(t.whyNotLifetime)}</p>
+            <p class="disclaimer">${escape(t.noContent)}</p>
+          </div>
+        </aside>
       </div>
-
-      ${alreadyActive ? '' : `
-        <div class="price">${escape(price.label)}<span class="period"> / 2 ${language === 'pt' ? 'anos' : language === 'de' ? 'Jahre' : language === 'it' ? 'anni' : 'years'}</span></div>
-        <form method="POST" action="/checkout">
-          <input type="hidden" name="device" value="${escape(deviceId)}">
-          <input type="hidden" name="lang" value="${escape(language)}">
-          <button type="submit">${escape(t.buy)}</button>
-        </form>
-        <p class="secure">${escape(t.secure)}</p>
-      `}
-
-      ${alreadyActive ? '' : howItWorks(t)}
-
-      <div class="notes">
-        <p>${escape(t.oneDevice)}</p>
-        <p>${escape(t.whyNotLifetime)}</p>
-        <p class="disclaimer">${escape(t.noContent)}</p>
-      </div>
-    </div>
-  `);
+    </main>
+  `, { path: '/comprar', params: { device: deviceId } });
 }
 
 /** The return from Checkout. Only a server-verified ledger row may render the success state. */
@@ -525,31 +622,32 @@ export function thanksPage({
   const title = paid ? t.thanks : processing ? t.thanksProcessing : t.thanksUnverified;
   const body = paid ? t.thanksBody : processing ? t.thanksProcessingBody : t.thanksUnverifiedBody;
   const symbol = paid ? '✓' : processing ? '…' : '!';
-  const actionUrl = processing && retryUrl ? retryUrl : '/';
+  const tone = paid ? 'ok' : processing ? 'wait' : 'bad';
+  const actionUrl = processing && retryUrl ? retryUrl : `/?lang=${language}`;
   const actionLabel = processing ? t.thanksRetry : t.thanksBack;
+  // The language links keep the session, so switching language while waiting still checks the
+  // same payment rather than dropping to "not confirmed".
+  const retryParams = retryUrl ? Object.fromEntries(new URL(retryUrl, 'https://local').searchParams) : {};
 
   return shell(title, language, `
-    <div class="card" role="status">
-      ${header()}
-      <h1>${symbol} ${escape(title)}</h1>
-      <p class="lead">${escape(body)}</p>
-      ${deviceId ? `
-        <div class="device">
-          <div class="row"><span>${escape(t.device)}</span><code>${escape(deviceId)}</code></div>
-          ${expiresAt ? `<div class="row"><span>${escape(t.expires)}</span><strong><time datetime="${escape(expiresAt)}">${escape(formatDate(expiresAt, language))}</time></strong></div>` : ''}
-        </div>
-      ` : ''}
-      <a class="cta" href="${escape(actionUrl)}">${escape(actionLabel)}</a>
-    </div>
-  `);
+    <main class="page narrow">
+      <section class="panel" role="status">
+        <div class="state-icon ${tone}" aria-hidden="true">${symbol}</div>
+        <h1>${escape(title)}</h1>
+        <p class="lead">${escape(body)}</p>
+        ${deviceId ? deviceSummary(t, language, deviceId, null, expiresAt) : ''}
+        <a class="cta" href="${escape(actionUrl)}">${escape(actionLabel)}</a>
+      </section>
+    </main>
+  `, { path: '/obrigado', params: { device: deviceId, ...retryParams } });
 }
 
 /**
  * The four steps, drawn.
  *
- * Placed below the price rather than above it. Someone who arrived by scanning the QR code has
- * already done steps one and two and wants the button; someone who found the site another way needs
- * the explanation. Putting the button first serves the first without failing the second.
+ * Beside the price rather than above it. Someone who arrived by scanning the QR code has already
+ * done steps one and two and wants the button; someone who found the site another way needs the
+ * explanation. Putting the button first serves the first without failing the second.
  */
 function howItWorks(t) {
   const steps = [
@@ -574,49 +672,73 @@ function howItWorks(t) {
     </section>`;
 }
 
+/** The device code, its state and its end date, in the one panel every page shows them in. */
+function deviceSummary(t, language, deviceId, status, expiresAt) {
+  return `
+    <div class="device">
+      <div class="row"><span>${escape(t.device)}</span><code>${escape(deviceId)}</code></div>
+      ${status !== null ? `<div class="row"><span>${escape(t.status)}</span><strong class="pill ${escape(statusTone(status))}">${escape(statusLabelFor(status, t))}</strong></div>` : ''}
+      ${expiresAt ? `<div class="row"><span>${escape(t.expires)}</span><strong><time datetime="${escape(expiresAt)}">${escape(formatDate(expiresAt, language))}</time></strong></div>` : ''}
+    </div>`;
+}
+
 /**
  * Redeeming a key that was handed out by hand.
  *
  * Separate from the purchase page because the two audiences do not overlap: someone with a key is
  * not deciding whether to buy, and putting a "or enter a code" field next to a price invites the
- * customer to go looking for one on the internet instead of paying.
+ * customer to go looking for one on the internet instead of paying. Each page links to the other
+ * once, quietly, for the customer who opened the wrong one.
  */
 export function activatePage({ deviceId, language, message, done }) {
   const t = copyFor(language);
 
   if (done) {
     return shell(t.activated, language, `
-      <div class="card">
-        ${header()}
-        <h1>✓ ${escape(t.activated)}</h1>
-        <p class="lead">${escape(t.activatedBody)}</p>
-      </div>
-    `);
+      <main class="page narrow">
+        <section class="panel" role="status">
+          <div class="state-icon ok" aria-hidden="true">✓</div>
+          <h1>${escape(t.activated)}</h1>
+          <p class="lead">${escape(t.activatedBody)}</p>
+        </section>
+      </main>
+    `, { path: '/ativar' });
   }
 
+  const buyLink = deviceId
+    ? `/comprar?device=${escape(deviceId)}&amp;lang=${escape(language)}`
+    : `/comprar?lang=${escape(language)}`;
+
   return shell(t.haveKey, language, `
-    <div class="card">
-      ${header()}
-      <h1>${escape(t.haveKey)}</h1>
-      <p class="lead">${escape(t.haveKeyBody)}</p>
+    <main class="page narrow">
+      <section class="panel">
+        <p class="kicker">${escape(t.keyKicker)}</p>
+        <h1>${escape(t.haveKey)}</h1>
+        <p class="lead">${escape(t.haveKeyBody)}</p>
 
-      ${message ? `<p class="error">${escape(message)}</p>` : ''}
+        ${message ? `<p class="notice bad" role="alert">${escape(message)}</p>` : ''}
 
-      <form method="POST" action="/ativar" class="stack">
-        <input type="hidden" name="lang" value="${escape(language)}">
-        <label>
-          <span>${escape(t.device)}</span>
-          <input name="device" value="${escape(deviceId ?? '')}" placeholder="XXXX-XXXX-XXXX"
-                 required autocomplete="off" spellcheck="false">
-        </label>
-        <label>
-          <span>${escape(t.keyLabel)}</span>
-          <input name="key" placeholder="XXXX-XXXX" required autocomplete="off" spellcheck="false">
-        </label>
-        <button type="submit">${escape(t.activate)}</button>
-      </form>
-    </div>
-  `);
+        <form method="POST" action="/ativar" class="stack">
+          <input type="hidden" name="lang" value="${escape(language)}">
+          <label>
+            <span>${escape(t.device)}</span>
+            <input name="device" value="${escape(deviceId ?? '')}" placeholder="XXXX-XXXX-XXXX"
+                   maxlength="14" required autocomplete="off" autocapitalize="characters"
+                   spellcheck="false" aria-describedby="device-hint">
+            <small id="device-hint">${escape(t.deviceHint)}</small>
+          </label>
+          <label>
+            <span>${escape(t.keyLabel)}</span>
+            <input name="key" placeholder="XXXX-XXXX" required autocomplete="off"
+                   autocapitalize="characters" spellcheck="false" aria-describedby="key-hint">
+            <small id="key-hint">${escape(t.keyHint)}</small>
+          </label>
+          <button type="submit">${escape(t.activate)}</button>
+        </form>
+        <p class="alt-link"><a href="${buyLink}">${escape(t.buyInstead)} <span aria-hidden="true">→</span></a></p>
+      </section>
+    </main>
+  `, { path: '/ativar', params: { device: deviceId } });
 }
 
 /**
@@ -638,42 +760,46 @@ export function pairPage({ language, message, sent, code, kind }) {
   const valueLabel = titleMode ? t.pairTitlePageValue : t.pairPageValue;
   const valueHint = titleMode ? t.pairTitlePageValueHint : t.pairPageValueHint;
   const sentCopy = titleMode ? t.pairTitlePageSent : t.pairPageSent;
+  const here = { path: '/parear', params: { kind: titleMode ? 'open_title' : null } };
 
   if (sent) {
     return shell(pageTitle, language, `
-      <div class="card">
-        ${header()}
-        <h1>✓ ${escape(sentCopy)}</h1>
-      </div>
-    `);
+      <main class="page narrow">
+        <section class="panel" role="status">
+          <div class="state-icon ok" aria-hidden="true">✓</div>
+          <h1>${escape(sentCopy)}</h1>
+        </section>
+      </main>
+    `, here);
   }
 
   return shell(pageTitle, language, `
-    <div class="card">
-      ${header()}
-      <h1>${escape(pageTitle)}</h1>
-      <p class="lead">${escape(pageLead)}</p>
+    <main class="page narrow">
+      <section class="panel">
+        <h1>${escape(pageTitle)}</h1>
+        <p class="lead">${escape(pageLead)}</p>
 
-      ${message ? `<p class="error">${escape(message)}</p>` : ''}
+        ${message ? `<p class="notice bad" role="alert">${escape(message)}</p>` : ''}
 
-      <form method="POST" action="/parear" class="stack">
-        <input type="hidden" name="lang" value="${escape(language)}">
-        ${titleMode ? '<input type="hidden" name="kind" value="open_title">' : ''}
-        <label>
-          <span>${escape(t.pairPageCode)}</span>
-          <input name="code" value="${escape(code ?? '')}" placeholder="000000"
-                 inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
-                 required autocomplete="off" spellcheck="false">
-        </label>
-        <label>
-          <span>${escape(valueLabel)}</span>
-          <input name="value" placeholder="${escape(valueHint)}"
-                 required autocomplete="off" spellcheck="false">
-        </label>
-        <button type="submit">${escape(t.pairPageSend)}</button>
-      </form>
-    </div>
-  `);
+        <form method="POST" action="/parear" class="stack">
+          <input type="hidden" name="lang" value="${escape(language)}">
+          ${titleMode ? '<input type="hidden" name="kind" value="open_title">' : ''}
+          <label>
+            <span>${escape(t.pairPageCode)}</span>
+            <input name="code" value="${escape(code ?? '')}" placeholder="000000"
+                   inputmode="numeric" pattern="[0-9]{6}" maxlength="6" class="digits"
+                   required autocomplete="off" spellcheck="false">
+          </label>
+          <label>
+            <span>${escape(valueLabel)}</span>
+            <input name="value" placeholder="${escape(valueHint)}" class="free"
+                   required autocomplete="off" spellcheck="false">
+          </label>
+          <button type="submit">${escape(t.pairPageSend)}</button>
+        </form>
+      </section>
+    </main>
+  `, { ...here, params: { ...here.params, code } });
 }
 
 /**
@@ -687,45 +813,41 @@ export function homePage({ language }) {
   const t = copyFor(language);
 
   return shell('IPTV BURO', language, `
-    <main class="card landing">
-      <section class="hero">
-        <div class="hero-copy">
-          ${header()}
-          <p class="eyebrow">${escape(t.homeEyebrow)}</p>
-          <h1>IPTV BURO</h1>
-          <p class="lead">${escape(t.homeLead)}</p>
-          <p class="trial">${escape(t.trialNote)}</p>
-          <div class="actions">
-            <a class="cta" href="/ativar?lang=${escape(language)}">${escape(t.homeActivate)}</a>
-            <a class="cta secondary" href="#como-funciona">${escape(t.homeHow)}</a>
+    <main class="page">
+      <div class="card landing">
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">${escape(t.homeEyebrow)}</p>
+            <h1>IPTV BURO</h1>
+            <p class="lead">${escape(t.homeLead)}</p>
+            <p class="trial">${escape(t.trialNote)}</p>
+            <div class="actions">
+              <a class="cta" href="/ativar?lang=${escape(language)}">${escape(t.homeActivate)}</a>
+              <a class="cta secondary" href="#como-funciona">${escape(t.homeHow)}</a>
+            </div>
+            <p class="platform-note">${escape(t.homePlatform)}</p>
           </div>
-          <p class="platform-note">${escape(t.homePlatform)}</p>
-        </div>
-        <div class="hero-art" aria-hidden="true">
-          <img src="/assets/buro-cinematic-multiscreen-hero.webp" alt="" width="1600" height="900">
-        </div>
-      </section>
+          <div class="hero-art" aria-hidden="true">
+            <img src="/assets/buro-cinematic-multiscreen-hero.webp" alt="" width="1600" height="900">
+          </div>
+        </section>
 
-      <section class="proof" aria-label="${escape(t.trialNote)}">
-        <div><strong aria-hidden="true">7</strong><span>${escape(t.proofTrial)}</span></div>
-        <div><strong aria-hidden="true">2</strong><span>${escape(t.proofTerm)}</span></div>
-        <div><strong aria-hidden="true">✓</strong><span>${escape(t.proofPrivate)}</span></div>
-      </section>
+        <section class="proof" aria-label="${escape(t.trialNote)}">
+          <div><strong aria-hidden="true">7</strong><span>${escape(t.proofTrial)}</span></div>
+          <div><strong aria-hidden="true">2</strong><span>${escape(t.proofTerm)}</span></div>
+          <div><strong aria-hidden="true">✓</strong><span>${escape(t.proofPrivate)}</span></div>
+        </section>
 
-      <div class="landing-body">
-        ${howItWorks(t)}
-        <div class="notes">
-          <p>${escape(t.missingDevice)}</p>
-          <p class="disclaimer">${escape(t.noContent)}</p>
+        <div class="landing-body">
+          ${howItWorks(t)}
+          <div class="notes">
+            <p>${escape(t.missingDevice)}</p>
+            <p class="disclaimer">${escape(t.noContent)}</p>
+          </div>
         </div>
       </div>
     </main>
-  `);
-}
-
-/** The mark and wordmark, on every page. */
-function header() {
-  return `<div class="brand">${buroMark(30)}<span>IPTV <b>BURO</b></span></div>`;
+  `, { path: '/' });
 }
 
 /**
@@ -738,18 +860,20 @@ function header() {
 export function checkoutUnavailablePage({ language, deviceId }) {
   const t = copyFor(language);
   return shell(t.unavailable, language, `
-    <div class="card">
-      ${header()}
-      <h1>${escape(t.unavailable)}</h1>
-      <p class="lead">${escape(t.unavailableBody)}</p>
-      ${deviceId ? `<div class="device"><code>${escape(deviceId)}</code></div>` : ''}
-      <form method="GET" action="/comprar">
-        <input type="hidden" name="device" value="${escape(deviceId ?? '')}">
-        <input type="hidden" name="lang" value="${escape(language)}">
-        <button type="submit">${escape(t.tryAgain)}</button>
-      </form>
-    </div>
-  `);
+    <main class="page narrow">
+      <section class="panel" role="alert">
+        <div class="state-icon bad" aria-hidden="true">!</div>
+        <h1>${escape(t.unavailable)}</h1>
+        <p class="lead">${escape(t.unavailableBody)}</p>
+        ${deviceId ? deviceSummary(t, language, deviceId, null, null) : ''}
+        <form method="GET" action="/comprar">
+          <input type="hidden" name="device" value="${escape(deviceId ?? '')}">
+          <input type="hidden" name="lang" value="${escape(language)}">
+          <button type="submit">${escape(t.tryAgain)}</button>
+        </form>
+      </section>
+    </main>
+  `, { path: '/comprar', params: { device: deviceId } });
 }
 
 function statusLabelFor(status, t) {
@@ -769,6 +893,14 @@ function statusLabelFor(status, t) {
     default:
       return t.statusUnknown;
   }
+}
+
+/** The colour a state is shown in: green in force, gold on trial, red stopped, grey unknown. */
+function statusTone(status) {
+  if (status === 'ACTIVE') return 'ok';
+  if (status === 'TRIAL' || status === 'GRACE') return 'wait';
+  if (status === 'EXPIRED' || status === 'REVOKED' || status === 'REFUNDED') return 'bad';
+  return 'none';
 }
 
 function formatDate(iso, language) {
@@ -794,21 +926,60 @@ function escape(value) {
     .replaceAll("'", '&#39;');
 }
 
-/** The page frame: the app's own dark palette, so the two do not look like different products. */
-function shell(title, language, body) {
+/** A padlock beside the payment note. Drawn inline: the page policy loads nothing. */
+function lockIcon() {
+  return '<svg class="lock" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">'
+    + '<rect x="3" y="7" width="10" height="7" rx="1.6" fill="currentColor"/>'
+    + '<path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+}
+
+/**
+ * The four languages, as links back to this same page.
+ *
+ * Plain links rather than a select: these pages run no script, and a link works on every browser a
+ * customer might be holding. Each keeps the page's own parameters — the device, the pairing code —
+ * so changing language never loses the thing the customer came to do.
+ */
+function languageSwitcher(current, here) {
+  const t = copyFor(current);
+  const links = ['pt', 'en', 'de', 'it'].map((code) => {
+    const query = new URLSearchParams();
+    for (const [name, value] of Object.entries(here.params ?? {})) {
+      if (value) query.set(name, String(value));
+    }
+    query.set('lang', code);
+    const href = `${here.path}?${query}`;
+    const currentMark = code === current ? ' aria-current="page"' : '';
+    return `<a href="${escape(href)}" hreflang="${code}" lang="${code}"${currentMark}>${code.toUpperCase()}</a>`;
+  }).join('');
+  return `<nav class="languages" aria-label="${escape(t.language)}">${links}</nav>`;
+}
+
+/**
+ * The page frame: the app's own dark palette, so the two do not look like different products.
+ *
+ * The brand sits in a bar of its own, with the language links opposite, instead of inside each
+ * card; every page gets both without repeating them. [here] is the page's path and the parameters a
+ * language link must keep — null for a page that should not offer the switch.
+ */
+function shell(title, language, body, here = null) {
   return `<!doctype html>
 <html lang="${escape(language)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escape(title)}</title>
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0b0d">
+<title>${escape(title === 'IPTV BURO' ? title : `${title} · IPTV BURO`)}</title>
 <style>
   :root {
     --canvas: #0b0b0d;
-    --surface: #17171b;
+    --surface: #141418;
+    --surface-2: #101013;
     --text: #f2f0ec;
-    --muted: #a8a49c;
+    --muted: #b3afa7;
     --subtle: #9a968e;
+    --border: #2c2a30;
     --gold: #d6a956;
     --gold-strong: #f0c877;
     /* Used by the drawings in illustrations.js, which reference these rather than carrying their
@@ -819,57 +990,188 @@ function shell(title, language, body) {
     --bad: #e08585;
   }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0;
     min-height: 100vh;
-    display: grid;
-    place-items: center;
-    padding: 24px;
+    display: flex;
+    flex-direction: column;
     background:
-      radial-gradient(circle at 80% 5%, rgba(214, 169, 86, .08), transparent 28rem),
+      radial-gradient(60rem 30rem at 85% -10%, rgba(214, 169, 86, .10), transparent 70%),
+      radial-gradient(40rem 24rem at -10% 110%, rgba(214, 169, 86, .05), transparent 70%),
       var(--canvas);
     color: var(--text);
-    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
-  .card {
+  a { color: var(--gold-strong); }
+
+  /* The bar. */
+  .topbar {
     width: 100%;
-    max-width: 460px;
-    background: var(--surface);
-    border: 1px solid #45424a;
-    border-radius: 18px;
-    padding: 32px;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
   }
-  .card.wide { max-width: 720px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
+  .brand span { font-size: 15px; letter-spacing: .14em; color: var(--text); font-weight: 500; }
+  .brand b { color: var(--gold); font-weight: 800; }
+  .languages { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: rgba(20, 20, 24, .7); }
+  .languages a {
+    min-width: 38px; min-height: 30px; display: grid; place-items: center;
+    padding: 0 8px; border-radius: 999px;
+    color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-decoration: none;
+  }
+  .languages a:hover { color: var(--text); }
+  .languages a[aria-current] { background: var(--gold); color: #1a1509; }
+
+  /* The page. */
+  .page { width: 100%; max-width: 1120px; margin: 0 auto; padding: 8px 24px 48px; flex: 1; }
+  .page.narrow { max-width: 560px; display: flex; flex-direction: column; justify-content: center; }
+  .panel, .split {
+    background: linear-gradient(180deg, rgba(31, 31, 36, .55), rgba(20, 20, 24, .92) 160px), var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .04);
+  }
+  .panel { padding: 36px; }
+  .split { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); overflow: hidden; }
+  .primary { padding: 40px; }
+  .secondary { padding: 40px; background: var(--surface-2); border-left: 1px solid var(--border); }
+
+  .kicker { margin: 0 0 10px; color: var(--gold-strong); font-size: 12px; font-weight: 800; letter-spacing: .14em; }
+  h1 { margin: 0 0 8px; font-size: clamp(26px, 3.2vw, 34px); line-height: 1.15; letter-spacing: -.02em; }
+  .lead { margin: 0 0 24px; color: var(--muted); }
+  .small { margin: 2px 0 0; color: var(--subtle); font-size: 13.5px; }
+
+  .state-icon {
+    width: 52px; height: 52px; margin-bottom: 18px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 24px; font-weight: 800;
+  }
+  .state-icon.ok { background: rgba(111, 191, 115, .14); color: var(--ok); box-shadow: inset 0 0 0 1px rgba(111, 191, 115, .4); }
+  .state-icon.wait { background: rgba(214, 169, 86, .14); color: var(--gold-strong); box-shadow: inset 0 0 0 1px rgba(214, 169, 86, .4); }
+  .state-icon.bad { background: rgba(224, 133, 133, .14); color: var(--bad); box-shadow: inset 0 0 0 1px rgba(224, 133, 133, .4); }
+
+  .device { background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 10px 16px; margin-bottom: 24px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0; font-size: 14px; }
+  .row + .row { border-top: 1px solid var(--border); }
+  .row span { color: var(--subtle); }
+  code {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 15px;
+    letter-spacing: .06em;
+    /* Selectable and easy to copy: this is the value a customer may need to read out. */
+    user-select: all;
+  }
+  .pill { padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
+  .pill.ok { background: rgba(111, 191, 115, .14); color: var(--ok); }
+  .pill.wait { background: rgba(214, 169, 86, .14); color: var(--gold-strong); }
+  .pill.bad { background: rgba(224, 133, 133, .14); color: var(--bad); }
+  .pill.none { background: rgba(154, 150, 142, .14); color: var(--muted); }
+
+  .price-block { margin-bottom: 20px; }
+  .price { font-size: 44px; font-weight: 800; line-height: 1.1; color: var(--gold-strong); letter-spacing: -.02em; }
+  .period { font-size: 16px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+
+  button, .cta {
+    width: 100%;
+    min-height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 18px;
+    font: inherit;
+    font-weight: 800;
+    color: #1a1509;
+    background: linear-gradient(180deg, var(--gold-strong), var(--gold));
+    border: 0;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(214, 169, 86, .18);
+    cursor: pointer;
+    text-decoration: none;
+  }
+  button:hover, .cta:hover { filter: brightness(1.07); }
+  .cta.secondary { width: auto; border: 1px solid var(--line); background: rgba(23, 23, 27, .82); color: var(--text); box-shadow: none; }
+  a:focus-visible, button:focus-visible, input:focus-visible {
+    outline: 3px solid var(--gold-strong);
+    outline-offset: 3px;
+  }
+  .secure { display: flex; gap: 8px; align-items: flex-start; justify-content: center; margin: 14px 0 0; font-size: 12.5px; color: var(--subtle); text-align: left; }
+  .lock { flex: none; margin-top: 2px; color: var(--ok); }
+  .alt-link { margin: 22px 0 0; padding-top: 18px; border-top: 1px solid var(--border); font-size: 14px; text-align: center; }
+  .alt-link a { text-decoration: none; font-weight: 600; }
+  .alt-link a:hover { text-decoration: underline; }
+
+  .notice { border-radius: 12px; padding: 12px 14px; font-size: 14px; margin: 0 0 20px; }
+  .notice.ok { background: rgba(111, 191, 115, .1); border: 1px solid rgba(111, 191, 115, .35); color: #bfe3c1; }
+  .notice.bad { background: #2a1618; border: 1px solid #4a2428; color: #f0b3b3; }
+
+  .notes { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .notes h2, .how h2 {
+    font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--subtle); font-weight: 700; margin: 0 0 14px;
+  }
+  .notes p { margin: 0 0 12px; font-size: 13.5px; color: var(--subtle); }
+  .disclaimer { color: var(--muted); }
+  .muted { color: var(--muted); }
+
+  /* The four steps. */
+  .how { scroll-margin-top: 20px; }
+  .steps {
+    list-style: none; margin: 0; padding: 0;
+    display: grid; gap: 22px 18px;
+    /* Two across on a phone and in the side column, four on the wide front page: the minimum width decides. */
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  }
+  .steps li { margin: 0; }
+  .steps h3 { font-size: 14px; margin: 10px 0 3px; }
+  .steps p { font-size: 12.5px; color: var(--subtle); margin: 0; line-height: 1.45; }
+  .art-frame { position: relative; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+  .secondary .art-frame { background: #17171b; }
+  .art { display: block; width: 100%; height: auto; }
+  .step-number {
+    position: absolute; top: -8px; left: -8px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--gold); color: #1a1509;
+    font-size: 12px; font-weight: 800;
+    display: grid; place-items: center;
+  }
+
+  /* Forms. */
+  .stack { display: grid; gap: 16px; }
+  .stack label { display: grid; gap: 7px; }
+  .stack label > span { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .stack small { font-size: 12.5px; color: var(--subtle); line-height: 1.45; }
+  .stack input {
+    font: inherit;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 17px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 14px 16px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    color: var(--text);
+  }
+  .stack input.free { text-transform: none; letter-spacing: 0; font-size: 15px; }
+  .stack input.digits { letter-spacing: .4em; font-size: 22px; }
+  .stack input::placeholder { color: #5f5c66; }
+  .stack input:focus { border-color: var(--gold); }
+  .stack button { margin-top: 4px; }
+
+  /* The front page. */
   .card.landing {
-    max-width: 1180px;
-    padding: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
     overflow: hidden;
     box-shadow: 0 28px 80px rgba(0, 0, 0, .38);
   }
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 20px;
-  }
-  .brand span {
-    font-size: 15px;
-    letter-spacing: 0.14em;
-    color: var(--text);
-    font-weight: 500;
-  }
-  .brand b { color: var(--gold); font-weight: 800; }
-  h1 { margin: 0 0 8px; font-size: 26px; line-height: 1.2; }
-  .lead { margin: 0 0 24px; color: var(--muted); }
-  .hero {
-    min-height: 500px;
-    position: relative;
-    display: flex;
-    align-items: center;
-    isolation: isolate;
-    overflow: hidden;
-    background: #0f1013;
-  }
+  .hero { min-height: 500px; position: relative; display: flex; align-items: center; isolation: isolate; overflow: hidden; background: #0f1013; }
   .hero::after {
     content: '';
     position: absolute;
@@ -877,178 +1179,55 @@ function shell(title, language, body) {
     z-index: -1;
     background: linear-gradient(90deg, #101014 0%, rgba(16, 16, 20, .96) 38%, rgba(16, 16, 20, .32) 72%, rgba(16, 16, 20, .08));
   }
-  .hero-copy {
-    width: min(54%, 600px);
-    padding: 52px;
-  }
-  .hero-copy h1 {
-    max-width: 12ch;
-    margin-bottom: 14px;
-    font-size: clamp(38px, 5vw, 62px);
-    letter-spacing: -.035em;
-  }
+  .hero-copy { width: min(54%, 600px); padding: 52px; }
+  .hero-copy h1 { max-width: 12ch; margin-bottom: 14px; font-size: clamp(38px, 5vw, 62px); letter-spacing: -.035em; }
   .hero-copy .lead { max-width: 48ch; font-size: clamp(17px, 2vw, 20px); }
   .hero-art { position: absolute; inset: 0; z-index: -2; }
   .hero-art img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: center right; }
-  .eyebrow {
-    margin: 0 0 16px;
-    color: var(--gold-strong);
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: .14em;
-  }
+  .eyebrow { margin: 0 0 16px; color: var(--gold-strong); font-size: 12px; font-weight: 800; letter-spacing: .14em; }
   .actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 26px 0 20px; }
-  .cta {
-    min-height: 48px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 12px 18px;
-    border-radius: 10px;
-    background: linear-gradient(180deg, var(--gold-strong), var(--gold));
-    color: #1a1509;
-    font-weight: 800;
-    text-decoration: none;
-  }
-  .cta.secondary { border: 1px solid var(--line); background: rgba(23, 23, 27, .82); color: var(--text); }
-  .cta:hover { filter: brightness(1.08); }
-  .cta:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
-    outline: 3px solid var(--gold-strong);
-    outline-offset: 3px;
-  }
+  .actions .cta { width: auto; }
   .platform-note { max-width: 48ch; margin: 0; color: var(--subtle); font-size: 13px; }
-  .proof {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    border-block: 1px solid #45424a;
-    background: #111115;
-  }
+  .trial { color: var(--gold); font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+  .proof { display: grid; grid-template-columns: repeat(3, 1fr); border-block: 1px solid var(--border); background: #111115; }
   .proof div { min-height: 104px; display: grid; place-items: center; align-content: center; gap: 3px; padding: 18px; text-align: center; }
-  .proof div + div { border-left: 1px solid #45424a; }
+  .proof div + div { border-left: 1px solid var(--border); }
   .proof strong { color: var(--gold-strong); font-size: 24px; line-height: 1; }
   .proof span { color: var(--muted); font-size: 13px; }
-  .landing-body { padding: 0 48px 42px; }
-  .device {
-    background: #101014;
-    border-radius: 12px;
-    padding: 14px 16px;
-    margin-bottom: 24px;
-  }
-  .row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 5px 0;
-    font-size: 14px;
-  }
-  .row span { color: var(--subtle); }
-  code {
-    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-    font-size: 15px;
-    letter-spacing: 0.04em;
-    /* Selectable and easy to copy: this is the value a customer may need to read out. */
-    user-select: all;
-  }
-  .price {
-    font-size: 38px;
-    font-weight: 800;
-    color: var(--gold);
-    margin-bottom: 18px;
-  }
-  .period { font-size: 15px; font-weight: 500; color: var(--muted); }
-  button {
-    width: 100%;
-    padding: 15px;
-    font: inherit;
-    font-weight: 700;
-    color: #1a1509;
-    background: linear-gradient(180deg, var(--gold-strong), var(--gold));
-    border: 0;
-    border-radius: 10px;
-    cursor: pointer;
-  }
-  button:hover { filter: brightness(1.06); }
-  .secure { margin: 12px 0 0; font-size: 12.5px; color: var(--subtle); text-align: center; }
-  .notes { margin-top: 26px; border-top: 1px solid #262429; padding-top: 18px; }
-  .notes p { margin: 0 0 12px; font-size: 13px; color: var(--subtle); }
-  .disclaimer { color: var(--muted); }
-  .muted { color: var(--muted); }
-  .trial { color: var(--gold); font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+  .landing-body { padding: 32px 48px 42px; }
 
-  /* The four steps. */
-  .how { margin-top: 30px; border-top: 1px solid #45424a; padding-top: 24px; scroll-margin-top: 20px; }
-  .how h2 {
-    font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--subtle); font-weight: 600; margin: 0 0 20px;
+  @media (max-width: 860px) {
+    .split { grid-template-columns: 1fr; }
+    .secondary { border-left: 0; border-top: 1px solid var(--border); }
   }
-  .steps {
-    list-style: none; margin: 0; padding: 0;
-    display: grid; gap: 22px;
-    /* Two across on a phone, four on a desktop, without a media query: the minimum width decides. */
-    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  }
-  .steps li { margin: 0; }
-  .steps h3 { font-size: 14px; margin: 10px 0 3px; }
-  .steps p { font-size: 12.5px; color: var(--subtle); margin: 0; line-height: 1.45; }
-  .art-frame {
-    position: relative;
-    background: #101014;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 10px;
-  }
-  .art { display: block; width: 100%; height: auto; }
-  .step-number {
-    position: absolute; top: -8px; left: -8px;
-    width: 22px; height: 22px; border-radius: 50%;
-    background: var(--gold); color: #1a1509;
-    font-size: 12px; font-weight: 800;
-    display: grid; place-items: center;
-  }
-
-  /* The activation form. */
-  .stack { display: grid; gap: 14px; }
-  .stack label { display: grid; gap: 6px; }
-  .stack label span { font-size: 12.5px; color: var(--subtle); }
-  .stack input {
-    font: inherit;
-    font-family: ui-monospace, Consolas, monospace;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    padding: 13px 14px;
-    background: #101014;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    color: var(--text);
-  }
-  .stack input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
-  .error {
-    background: #2a1618; border: 1px solid #4a2428; color: #f0b3b3;
-    border-radius: 10px; padding: 11px 14px; font-size: 13.5px; margin: 0 0 18px;
-  }
-  @media (max-width: 760px) {
-    body { padding: 12px; }
-    .card { padding: 24px; }
-    .card.landing { padding: 0; }
+  @media (max-width: 560px) {
+    .topbar { padding: 14px 16px; }
+    .brand span { font-size: 13px; }
+    .page { padding: 4px 12px 32px; }
+    .panel, .primary, .secondary { padding: 24px 20px; }
+    .price { font-size: 38px; }
     .hero { min-height: 610px; align-items: flex-end; }
-    .hero::after {
-      background: linear-gradient(0deg, #101014 0%, rgba(16, 16, 20, .96) 48%, rgba(16, 16, 20, .34) 100%);
-    }
+    .hero::after { background: linear-gradient(0deg, #101014 0%, rgba(16, 16, 20, .96) 48%, rgba(16, 16, 20, .34) 100%); }
     .hero-art img { object-position: 68% center; }
     .hero-copy { width: 100%; padding: 30px 24px; }
     .hero-copy h1 { font-size: 42px; }
     .actions { display: grid; }
     .proof { grid-template-columns: 1fr; }
     .proof div { min-height: 84px; }
-    .proof div + div { border-left: 0; border-top: 1px solid #45424a; }
-    .landing-body { padding: 0 24px 28px; }
+    .proof div + div { border-left: 0; border-top: 1px solid var(--border); }
+    .landing-body { padding: 24px 20px 28px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
   }
 </style>
 </head>
-<body>${body}</body>
+<body>
+<header class="topbar">
+  <a class="brand" href="/?lang=${escape(language)}">${buroMark(30)}<span>IPTV <b>BURO</b></span></a>
+  ${here ? languageSwitcher(language, here) : ''}
+</header>
+${body}
+</body>
 </html>`;
 }

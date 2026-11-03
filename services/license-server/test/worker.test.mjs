@@ -2123,7 +2123,8 @@ test('every admin data route refuses an unauthenticated caller', async () => {
  *
  * A customer reinstalled, their device id changed, and the key they had paid for came back
  * "already used" — against their own licence, bought hours earlier. The only way out was to buy it
- * a second time. Re-redeeming must extend the licence they already own.
+ * a second time. Re-redeeming must answer with the licence they already own — without adding to
+ * it, which test/redemption-abuse.test.mjs pins.
  */
 test('the device that owns a key may redeem it again', async () => {
   const env = environment();

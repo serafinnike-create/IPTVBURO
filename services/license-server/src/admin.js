@@ -438,7 +438,8 @@ export async function summary(env) {
     `SELECT COUNT(*) AS n FROM devices
      WHERE archived_at IS NULL AND status IN ('ACTIVE', 'TRIAL')
        AND COALESCE(expires_at, trial_ends_at) IS NOT NULL
-       AND COALESCE(expires_at, trial_ends_at) BETWEEN datetime('now') AND datetime('now', '+7 days')`,
+       AND COALESCE(expires_at, trial_ends_at) BETWEEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                                                   AND strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+7 days')`,
   ).first();
   return {
     active: active?.n ?? 0,
@@ -523,7 +524,7 @@ export async function recordSecurityAlert(deviceId, kind, severity, detail, env)
   const existing = await env.DB.prepare(
     `SELECT id FROM security_alerts
      WHERE COALESCE(device_id, '') = COALESCE(?, '') AND kind = ? AND resolved_at IS NULL
-       AND observed_at >= datetime('now', '-24 hours') LIMIT 1`,
+       AND observed_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-24 hours') LIMIT 1`,
   ).bind(deviceId || null, kind).first();
   if (existing) return false;
   const cleanSeverity = ['INFO', 'WARNING', 'CRITICAL'].includes(severity) ? severity : 'INFO';
@@ -591,7 +592,7 @@ export async function recordFailedAdminLogin(reason, country, env) {
 
   const recent = await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM admin_audit
-     WHERE action = 'ADMIN_LOGIN_REJECTED' AND created_at >= datetime('now', '-15 minutes')`,
+     WHERE action = 'ADMIN_LOGIN_REJECTED' AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-15 minutes')`,
   ).first();
   if (Number(recent?.n ?? 0) >= 5) {
     await recordSecurityAlert(
@@ -606,10 +607,14 @@ export async function recordFailedRedemption(deviceId, reason, env) {
   await env.DB.prepare(
     'INSERT INTO events (device_id, kind, detail, created_at) VALUES (?, ?, ?, ?)',
   ).bind(deviceId, 'redeem_failed', supportText(reason, 100), now).run();
+  // The cutoff in the same ISO shape as created_at. SQLite's datetime() writes a space where ISO
+  // has a "T", and as text every ISO time sorts after it — so the window was "since midnight UTC",
+  // not fifteen minutes, and one bad attempt in the morning plus four in the evening raised an alert.
+  const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   const recent = await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM events WHERE device_id = ? AND kind = 'redeem_failed'
-       AND created_at >= datetime('now', '-15 minutes')`,
-  ).bind(deviceId).first();
+       AND created_at >= ?`,
+  ).bind(deviceId, since).first();
   if (Number(recent?.n ?? 0) >= 5) {
     await recordSecurityAlert(
       deviceId, 'REPEATED_INVALID_KEYS', 'WARNING',

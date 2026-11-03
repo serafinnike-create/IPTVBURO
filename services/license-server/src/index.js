@@ -696,6 +696,9 @@ async function handleActivatePage(request, env) {
   const outcome = await redeemKey(deviceId, keyCode, env, new Date());
 
   if (outcome.ok) return html(activatePage({ language, done: true }));
+  // The app's redemption has always been counted; this form, which needs no proof at all, was the
+  // one place a run of guessed codes left no trace for the alerts to find.
+  if (outcome.error !== 'not_registered') await recordFailedRedemption(deviceId, outcome.error, env);
 
   // Each failure says which one it was. "Invalid" for all three sends somebody to support who could
   // have worked it out — a used key and a mistyped key call for completely different next steps.
@@ -1812,7 +1815,9 @@ async function redeemKey(deviceId, keyCode, env, now) {
 
   // The phone portal may redeem for a public code, but it may only mutate an identity the Windows
   // app already registered and pinned. It never creates a row or supplies a key of its own.
-  const device = await env.DB.prepare('SELECT public_key FROM devices WHERE device_id = ?')
+  const device = await env.DB.prepare(
+    'SELECT public_key, status, expires_at, note FROM devices WHERE device_id = ?',
+  )
     .bind(deviceId)
     .first();
   if (!device) return { ok: false, error: 'not_registered', status: 404 };
@@ -1837,6 +1842,19 @@ async function redeemKey(deviceId, keyCode, env, now) {
   if (key.redeemed_by && key.redeemed_by !== deviceId) {
     return { ok: false, error: 'already_used', status: 409 };
   }
+
+  // Already this device's: answer, but change nothing.
+  //
+  // Re-redeeming used to run the full redemption again, which restarted the term from today and set
+  // the device ACTIVE. A thirty-day key redeemed again on day twenty-nine was sixty days, and again
+  // was ninety — for ever, from one key. And a device revoked by hand, or refunded, came straight
+  // back to ACTIVE by typing the code it already had. The owner is still never told their own key
+  // is "used by someone else"; they are told what it already gave them.
+  if (key.redeemed_by === deviceId) {
+    return device.status === 'ACTIVE'
+      ? { ok: true, alreadyRedeemed: true }
+      : { ok: false, error: 'already_used', status: 409 };
+  }
   if (key.valid_until && new Date(key.valid_until) < now) {
     return { ok: false, error: 'key_expired', status: 410 };
   }
@@ -1846,26 +1864,46 @@ async function redeemKey(deviceId, keyCode, env, now) {
     return { ok: false, error: 'invalid_key', status: 409 };
   }
 
+  // A key adds to a licence in force rather than replacing it.
+  //
+  // The website redeems against a public device code, so replacing was a way to damage somebody
+  // else: anyone who had seen a customer's code could spend a one-day key on it and cut their paid
+  // two years down to a day. Counting from the later of today and the current expiry means a key
+  // can only ever give time.
+  //
+  // When it adds to a purchase, the purchase stays linked to the device. Clearing the link, as
+  // replacing did, would let a buyer redeem any small key and then refund the card: the refund
+  // looks for the device by its checkout session and would no longer find it.
+  const currentExpiry = device.status === 'ACTIVE' ? Date.parse(device.expires_at ?? '') : Number.NaN;
+  const stacking = Number.isFinite(currentExpiry) && currentExpiry > now.getTime();
   const redeemedAt = iso(now);
-  const expiresAt = addDays(now, grantDays);
+  const expiresAt = addDays(stacking ? new Date(currentExpiry) : now, grantDays);
+  const note = stacking && device.note ? `${device.note}; key:${keyCode}`.slice(0, 200) : `key:${keyCode}`;
+  // The device as it was read above. A purchase or a revocation landing between that read and this
+  // batch changes it, and then nothing here applies — the key stays free to be tried again rather
+  // than being spent on a calculation made from a state that no longer exists.
+  const unchangedDevice =
+    `EXISTS (SELECT 1 FROM devices
+       WHERE device_id = ? AND public_key = ? AND status = ? AND COALESCE(expires_at, '') = ?)`;
+  const unchangedBindings = [deviceId, device.public_key, device.status, device.expires_at ?? ''];
   const results = await env.DB.batch([
     env.DB.prepare(
-      // Free, or already this device's.
+      // Free.
       //
       // This is the statement that makes single use real: two machines racing for the same key
-      // both reach here, and only one changes a row. Admitting `redeemed_by = ?` alongside NULL
-      // lets the owner re-redeem without weakening that — a second device still finds the row
-      // claimed by an id that is not its own, and still changes nothing.
+      // both reach here, and only one changes a row.
       `UPDATE redemption_keys
        SET redeemed_by = ?, redeemed_at = ?
        WHERE key_code = ?
-         AND (redeemed_by IS NULL OR redeemed_by = ?)
-         AND (valid_until IS NULL OR valid_until >= ?)`,
-    ).bind(deviceId, redeemedAt, keyCode, deviceId, redeemedAt),
+         AND redeemed_by IS NULL
+         AND (valid_until IS NULL OR valid_until >= ?)
+         AND ${unchangedDevice}`,
+    ).bind(deviceId, redeemedAt, keyCode, redeemedAt, ...unchangedBindings),
     env.DB.prepare(
       `UPDATE devices
        SET status = 'ACTIVE', purchased_at = ?, expires_at = ?,
-           stripe_session_id = NULL, google_purchase_token_hash = NULL,
+           stripe_session_id = CASE WHEN ? = 1 THEN stripe_session_id ELSE NULL END,
+           google_purchase_token_hash = CASE WHEN ? = 1 THEN google_purchase_token_hash ELSE NULL END,
            note = ?, updated_at = ?
        WHERE device_id = ? AND public_key = ?
          AND EXISTS (
@@ -1875,7 +1913,9 @@ async function redeemKey(deviceId, keyCode, env, now) {
     ).bind(
       iso(now),
       iso(expiresAt),
-      `key:${keyCode}`,
+      stacking ? 1 : 0,
+      stacking ? 1 : 0,
+      note,
       iso(now),
       deviceId,
       device.public_key,
@@ -3194,11 +3234,20 @@ async function enforceRouteRateLimit(request, env, url) {
  */
 function rateLimitBucketFor(pathname) {
   if (pathname === '/pair' || pathname === '/parear' || pathname === '/v1/pair/submit') return 'pair-submit';
+  // Every way of trying a redemption key is one guess at the same secret, so they count together.
+  if (KEY_GUESS_PATHS.has(pathname)) return 'key-guess';
   return pathname;
 }
 
+/** The app's redemption, the app's key description, and the website's redemption form. */
+const KEY_GUESS_PATHS = new Set(['/v1/redeem', '/v1/key-info', '/ativar', '/activate']);
+
 function rateLimitBindingFor(pathname, method = 'POST') {
   if (pathname === '/v1/register') return 'REGISTRATION_RATE_LIMITER';
+  // Redemption keys are eight characters. The website form needs no device proof, and it had no
+  // limiter at all, so it answered "unknown", "used" or "expired" for as many codes as anyone cared
+  // to send. A person types a key a handful of times; the tightest limiter is plenty for that.
+  if (KEY_GUESS_PATHS.has(pathname) && method === 'POST') return 'REGISTRATION_RATE_LIMITER';
   // The web form behind a pairing link. Opening the page is free; posting a code is a guess at a
   // six-digit secret and gets the tightest limiter, the same one as the app's own submit — before
   // this, the form had none, and the code space could be swept from a single address.
@@ -3210,11 +3259,7 @@ function rateLimitBindingFor(pathname, method = 'POST') {
   if (pathname === '/v1/provisioning/claim' || pathname === '/v1/provisioning/confirm') {
     return 'LICENSE_API_RATE_LIMITER';
   }
-  if (pathname === '/v1/validate' || pathname === '/v1/redeem' || pathname === '/v1/key-info') {
-    // Same limiter as redeeming, deliberately: describing a key is a cheaper guess than spending
-    // one, so it must not be a cheaper way to enumerate them.
-    return 'LICENSE_API_RATE_LIMITER';
-  }
+  if (pathname === '/v1/validate') return 'LICENSE_API_RATE_LIMITER';
   // Submitting is where a six-digit code would be guessed, so it shares the tightest limiter the
   // account has. Claiming is polled by the television every couple of seconds while a code is on
   // screen, so it takes the roomier one — throttling it would break the normal case.
