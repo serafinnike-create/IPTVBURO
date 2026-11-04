@@ -51,6 +51,7 @@ import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayCircle
@@ -172,6 +173,7 @@ import com.lucasserafin94.iptvburo.domain.model.NotificationCentre
 import com.lucasserafin94.iptvburo.domain.model.OfferType
 import com.lucasserafin94.iptvburo.domain.model.ProviderDeepLinks
 import com.lucasserafin94.iptvburo.domain.model.StreamingOffer
+import com.lucasserafin94.iptvburo.domain.model.WebServices
 import com.lucasserafin94.iptvburo.metadata.TmdbStreamingCatalogue
 import com.lucasserafin94.iptvburo.xtream.XtreamContentType
 import java.awt.Frame
@@ -531,8 +533,9 @@ fun DesktopApp(
                             hasSubscriptions = appState.streamingDiscoveryCapability.isVisible,
                             onSubscriptions = appState::openSubscriptions,
                             hasWebServices = appState.canUseWebServices,
-                            onWebServices = {
-                                appState.openWebServicesPage()?.let { result -> externalOpenResult = result }
+                            activeWebServiceId = appState.lastOpenedWebServiceId,
+                            onOpenWebService = { id ->
+                                appState.openWebServicesPage(id)?.let { result -> externalOpenResult = result }
                             },
                             collapsed = sidebarCollapsed,
                             onToggleCollapsed = { sidebarCollapsed = !sidebarCollapsed },
@@ -896,6 +899,9 @@ fun DesktopApp(
                         } else if (appState.isXtreamSelected && visibleDestination == DesktopDestination.HOME) {
                             XtreamDailyHome(
                                 appState = appState,
+                                onResume = { entry ->
+                                    scope.launch { activePlayback = appState.prepareResume(entry) }
+                                },
                                 onOpenExternal = { pending ->
                                     activePlayback =
                                         appState.prepareXtreamPlayback(
@@ -1540,11 +1546,25 @@ private fun SourceSidebar(
     onSubscriptions: () -> Unit,
     /** Whether this profile may use web services at all — adult profiles only. */
     hasWebServices: Boolean = false,
-    onWebServices: () -> Unit = {},
+    /** Which service tab is selected; null before any page was opened (falls back to GoDorama). */
+    activeWebServiceId: String? = null,
+    onOpenWebService: (String) -> Unit = {},
     collapsed: Boolean,
     onToggleCollapsed: () -> Unit,
 ) {
     val text = strings
+
+    val librarySelected = destination in setOf(
+        DesktopDestination.CONTINUE,
+        DesktopDestination.HISTORY,
+        DesktopDestination.FAVORITES,
+        DesktopDestination.REMINDERS,
+        DesktopDestination.DOWNLOADS,
+    )
+    var libraryExpanded by remember { mutableStateOf(librarySelected) }
+    LaunchedEffect(destination) {
+        if (librarySelected) libraryExpanded = true
+    }
 
     // The list waiting on a yes before it is forgotten.
     //
@@ -1676,8 +1696,6 @@ private fun SourceSidebar(
                     // Room for the bar, so it sits beside the rows rather than over their labels.
                     .padding(end = 8.dp),
         ) {
-        SectionLabel(text.library)
-        Spacer(Modifier.height(10.dp))
         NavigationItem(
             label = text.home,
             icon = Icons.Rounded.Home,
@@ -1704,6 +1722,21 @@ private fun SourceSidebar(
         )
         Spacer(Modifier.height(12.dp))
         NavigationItem(
+            label = text.live,
+            icon = Icons.Rounded.LiveTv,
+            selected =
+                destination == DesktopDestination.CATALOG &&
+                    catalogType == XtreamContentType.LIVE,
+            onClick = onLive,
+        )
+        NavigationItem(
+            label = text.shareStrings.screens.guideTitle,
+            // Its own icon: it used to share Live's television, and the two entries read as one.
+            icon = Icons.Rounded.CalendarMonth,
+            selected = destination == DesktopDestination.GUIDE,
+            onClick = onGuide,
+        )
+        NavigationItem(
             label = text.movies,
             icon = Icons.Rounded.Movie,
             selected =
@@ -1719,21 +1752,6 @@ private fun SourceSidebar(
                     catalogType == XtreamContentType.SERIES,
             onClick = onSeries,
         )
-        NavigationItem(
-            label = text.shareStrings.screens.guideTitle,
-            // Its own icon: it used to share Live's television, and the two entries read as one.
-            icon = Icons.Rounded.CalendarMonth,
-            selected = destination == DesktopDestination.GUIDE,
-            onClick = onGuide,
-        )
-        NavigationItem(
-            label = text.live,
-            icon = Icons.Rounded.LiveTv,
-            selected =
-                destination == DesktopDestination.CATALOG &&
-                    catalogType == XtreamContentType.LIVE,
-            onClick = onLive,
-        )
         if (hasSubscriptions) {
             NavigationItem(
                 label = text.subscriptions,
@@ -1742,52 +1760,93 @@ private fun SourceSidebar(
                 onClick = onSubscriptions,
             )
         }
-        // Named after the service rather than "Serviços": there is one, and its name is what
-        // somebody who bought it looks for. Never for a Kids profile.
+        // Named after each service rather than "Serviços": their names are what somebody who
+        // bought them looks for. Never for a Kids profile.
         if (hasWebServices) {
             NavigationItem(
-                label = com.lucasserafin94.iptvburo.domain.model.WebServices.GODORAMA.displayName,
+                label = WebServices.GODORAMA.displayName,
                 icon = Icons.Rounded.OndemandVideo,
-                selected = destination == DesktopDestination.WEB_SERVICES,
-                onClick = onWebServices,
+                selected = destination == DesktopDestination.WEB_SERVICES &&
+                    (activeWebServiceId ?: WebServices.GODORAMA.id) == WebServices.GODORAMA.id,
+                onClick = { onOpenWebService(WebServices.GODORAMA.id) },
+            )
+            NavigationItem(
+                label = WebServices.NO_PRIVADO.displayName,
+                icon = Icons.Rounded.Lock,
+                selected = destination == DesktopDestination.WEB_SERVICES &&
+                    (activeWebServiceId ?: WebServices.GODORAMA.id) == WebServices.NO_PRIVADO.id,
+                onClick = { onOpenWebService(WebServices.NO_PRIVADO.id) },
             )
         }
 
         Spacer(Modifier.height(12.dp))
-        NavigationItem(
-            label = text.continueWatching,
-            icon = Icons.Rounded.PlayCircle,
-            selected = destination == DesktopDestination.CONTINUE,
-            onClick = onContinueWatching,
-        )
-        NavigationItem(
-            label = text.settingsText.historyTitle,
-            icon = Icons.Rounded.History,
-            selected = destination == DesktopDestination.HISTORY,
-            onClick = onHistory,
-        )
-        NavigationItem(
-            label = text.savedForLater.favorites,
-            icon = Icons.Rounded.Favorite,
-            selected = destination == DesktopDestination.FAVORITES,
-            onClick = onFavorites,
-        )
-        // Straight after Favoritos, the other list of titles marked for later. Always present
-        // rather than hidden while empty: a destination that appears only once you have used it
-        // cannot be found by someone looking for where their marks went.
-        NavigationItem(
-            label = text.savedForLater.remindersTitle,
-            icon = Icons.Rounded.Notifications,
-            selected = destination == DesktopDestination.REMINDERS,
-            onClick = onReminders,
-        )
-        if (hasOffline) {
-            NavigationItem(
-                label = text.downloads,
-                icon = Icons.Rounded.Folder,
-                selected = destination == DesktopDestination.DOWNLOADS,
-                onClick = onDownloads,
-            )
+        BuroInteractiveRow(
+            onClick = { libraryExpanded = !libraryExpanded },
+            selected = librarySelected,
+            modifier = Modifier.fillMaxWidth(),
+            contentDescription = text.library,
+        ) { state ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.VideoLibrary,
+                    contentDescription = null,
+                    tint = if (librarySelected || state.active) BuroColors.Primary else BuroColors.TextSubtle,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = text.library,
+                    color = BuroColors.Text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = if (libraryExpanded) "▾" else "▸",
+                    color = BuroColors.TextMuted,
+                )
+            }
+        }
+        if (libraryExpanded) {
+            Column(modifier = Modifier.padding(start = 12.dp)) {
+                NavigationItem(
+                    label = text.continueWatching,
+                    icon = Icons.Rounded.PlayCircle,
+                    selected = destination == DesktopDestination.CONTINUE,
+                    onClick = onContinueWatching,
+                )
+                NavigationItem(
+                    label = text.settingsText.historyTitle,
+                    icon = Icons.Rounded.History,
+                    selected = destination == DesktopDestination.HISTORY,
+                    onClick = onHistory,
+                )
+                NavigationItem(
+                    label = text.savedForLater.favorites,
+                    icon = Icons.Rounded.Favorite,
+                    selected = destination == DesktopDestination.FAVORITES,
+                    onClick = onFavorites,
+                )
+                // Straight after Favoritos, the other list of titles marked for later. Always present
+                // rather than hidden while empty: a destination that appears only once you have used it
+                // cannot be found by someone looking for where their marks went.
+                NavigationItem(
+                    label = text.savedForLater.remindersTitle,
+                    icon = Icons.Rounded.Notifications,
+                    selected = destination == DesktopDestination.REMINDERS,
+                    onClick = onReminders,
+                )
+                if (hasOffline) {
+                    NavigationItem(
+                        label = text.downloads,
+                        icon = Icons.Rounded.Folder,
+                        selected = destination == DesktopDestination.DOWNLOADS,
+                        onClick = onDownloads,
+                    )
+                }
+            }
         }
         // Last, after Downloads, and only when the user actually supplied a music playlist. An
         // entry leading to an empty section is worse than no entry at all.

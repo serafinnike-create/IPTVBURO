@@ -165,6 +165,7 @@ private val HERO_SCROLLBAR_LANE = 18.dp
 fun XtreamDailyHome(
     appState: DesktopAppState,
     onOpenExternal: (PendingXtreamExternal) -> Unit,
+    onResume: (DesktopContinueWatchingEntry) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val text = strings
@@ -440,16 +441,9 @@ fun XtreamDailyHome(
                             },
                         )
                     }
-                    // Right under the banner: a service is something the viewer chose to have, and
-                    // scrolling past a dozen rails to reach it would hide it.
-                    if (appState.visibleWebServices.isNotEmpty()) {
-                        item(key = "web-services") {
-                            WebServiceHomeCards(
-                                appState = appState,
-                                modifier = Modifier.padding(horizontal = metrics.gutter),
-                            )
-                        }
-                    }
+                    // Straight under the banner, never above it: the banner is the top of Início,
+                    // always, and what the viewer was watching follows it.
+                    //
                     // Read once. This is a computed property that resolves every entry against the
                     // catalogue and applies the parental policy to each, so asking twice — once to
                     // decide whether to draw the row and once to fill it — did all of that work
@@ -461,7 +455,17 @@ fun XtreamDailyHome(
                                 entries = resumable,
                                 metrics = metrics,
                                 text = text,
-                            ) { entry -> openDetails(entry.item) }
+                            ) { entry -> onResume(entry) }
+                        }
+                    }
+                    // Right under the banner: a service is something the viewer chose to have, and
+                    // scrolling past a dozen rails to reach it would hide it.
+                    if (appState.visibleWebServices.isNotEmpty()) {
+                        item(key = "web-services") {
+                            WebServiceHomeCards(
+                                appState = appState,
+                                modifier = Modifier.padding(horizontal = metrics.gutter),
+                            )
                         }
                     }
                     // Above the daily picks: the seasonal rail is the reason the home screen looks
@@ -1334,7 +1338,7 @@ private fun ContinueWatchingRow(
                     onClick = { onClick(entry) },
                     modifier = Modifier.width(cardWidth),
                     shape = BuroRadius.Medium,
-                    contentDescription = title,
+                    contentDescription = "${text.resumeFrom} · $title",
                 ) { state ->
                     Column {
                         Box(
@@ -1351,19 +1355,17 @@ private fun ContinueWatchingRow(
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop,
                             ) { CardArtFallback(title) }
-                            if (state.active) {
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .align(Alignment.Center)
-                                            .size(46.dp)
-                                            .clip(CircleShape)
-                                            .background(BuroColors.Canvas.copy(alpha = 0.78f))
-                                            .border(1.dp, BuroColors.Primary.copy(alpha = 0.7f), CircleShape),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text("▶", color = BuroColors.Primary, style = MaterialTheme.typography.titleLarge)
-                                }
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .align(Alignment.Center)
+                                        .size(if (state.active) 50.dp else 46.dp)
+                                        .clip(CircleShape)
+                                        .background(BuroColors.Canvas.copy(alpha = 0.78f))
+                                        .border(1.dp, BuroColors.Primary.copy(alpha = 0.7f), CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("▶", color = BuroColors.Primary, style = MaterialTheme.typography.titleLarge)
                             }
                             Box(
                                 Modifier

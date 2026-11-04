@@ -8,6 +8,7 @@ import kotlin.test.assertTrue
 
 class WebServicesTest {
     private val godorama = WebServices.GODORAMA
+    private val noprivado = WebServices.NO_PRIVADO
 
     @Test
     fun `an age-restricted service is offered to the adult profile only`() {
@@ -33,17 +34,45 @@ class WebServicesTest {
     }
 
     @Test
-    fun `GoDorama is there for an adult with nothing to turn on, and never for Kids`() {
-        assertEquals(listOf(godorama), WebServicePolicy.availableServices(ViewerKind.ADULT))
+    fun `both services are there for an adult with nothing to turn on, and never for Kids`() {
+        assertEquals(listOf(godorama, noprivado), WebServicePolicy.availableServices(ViewerKind.ADULT))
         assertEquals(emptyList(), WebServicePolicy.availableServices(ViewerKind.KIDS))
         assertEquals(emptyList(), WebServicePolicy.availableServices(ViewerKind.GUEST))
     }
 
     @Test
     fun `an unknown stored id is ignored`() {
-        assertEquals(emptyList(), WebServicePolicy.visibleServices(setOf("noprivado"), ViewerKind.ADULT))
-        assertEquals(null, WebServices.byId("noprivado"))
+        assertEquals(emptyList(), WebServicePolicy.visibleServices(setOf("privatissimo"), ViewerKind.ADULT))
+        assertEquals(null, WebServices.byId("privatissimo"))
         assertEquals(godorama, WebServices.byId("godorama"))
+        assertEquals(noprivado, WebServices.byId("noprivado"))
+    }
+
+    @Test
+    fun `No Privado is adult-only and asks the 18+ question`() {
+        assertTrue(WebServicePolicy.isOfferedTo(noprivado, ViewerKind.ADULT))
+        assertFalse(WebServicePolicy.isOfferedTo(noprivado, ViewerKind.KIDS))
+        assertFalse(WebServicePolicy.isOfferedTo(noprivado, ViewerKind.GUEST))
+        assertTrue(noprivado.asksAgeConfirmation)
+    }
+
+    @Test
+    fun `No Privado claims only what its terms allow`() {
+        assertTrue(noprivado.supports(WebServiceCapability.EMBEDDED_PAGE))
+        assertTrue(noprivado.supports(WebServiceCapability.ACCOUNT_HISTORY))
+        assertFalse(noprivado.supports(WebServiceCapability.NATIVE_RAILS))
+        assertFalse(noprivado.supports(WebServiceCapability.NATIVE_PLAYBACK))
+        assertFalse(noprivado.supports(WebServiceCapability.OFFLINE_DOWNLOAD))
+    }
+
+    @Test
+    fun `No Privado's own pages stay inside the view`() {
+        assertEquals(WebNavigation.StayInside, WebServicePolicy.navigation(noprivado, "https://noprivado.com/"))
+        assertEquals(WebNavigation.StayInside, WebServicePolicy.navigation(noprivado, "https://www.noprivado.com/permission?age=18"))
+        assertEquals(
+            WebNavigation.OpenOutside("https://notnoprivado.com/"),
+            WebServicePolicy.navigation(noprivado, "https://notnoprivado.com/"),
+        )
     }
 
     @Test

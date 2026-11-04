@@ -11,7 +11,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -113,7 +112,6 @@ fun BuroInteractiveSurface(
                 .background(surfaceColor)
                 .border(BuroInteraction.RingWidth, ringColor.copy(alpha = ringAlpha), shape)
                 .hoverable(interactionSource, enabled = enabled)
-                .focusable(enabled = enabled, interactionSource = interactionSource)
                 .clickable(
                     interactionSource = interactionSource,
                     indication = null,
@@ -171,7 +169,6 @@ fun BuroInteractiveRow(
                 .background(surfaceColor)
                 .border(1.dp, BuroColors.Focus.copy(alpha = ringAlpha), shape)
                 .hoverable(interactionSource, enabled = enabled)
-                .focusable(enabled = enabled, interactionSource = interactionSource)
                 .clickable(
                     enabled = enabled,
                     interactionSource = interactionSource,

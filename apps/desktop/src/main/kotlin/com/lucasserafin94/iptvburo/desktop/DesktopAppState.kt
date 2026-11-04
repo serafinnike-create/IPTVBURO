@@ -633,6 +633,16 @@ class DesktopAppState(
     var openedWebService by mutableStateOf<WebServiceBrand?>(null)
         private set
 
+    /**
+     * Which service was last opened from this app — for the sidebar.
+     *
+     * The service tabs share one destination, so only the name can say which tab is selected. Set
+     * wherever a page is opened (the embedded window or the system browser) and cleared when the
+     * profile changes, whose pages do not carry over.
+     */
+    var lastOpenedWebServiceId by mutableStateOf<String?>(null)
+        private set
+
     /** The desktop has adult and Kids profiles only; anything not Kids is the adult. */
     private val viewerKind: ViewerKind
         get() = if (activeProfile?.isKids == false) ViewerKind.ADULT else ViewerKind.KIDS
@@ -679,6 +689,7 @@ class DesktopAppState(
         val brand = visibleWebServices.firstOrNull { it.id == serviceId } ?: return ExternalOpenResult.Failed
         if (!brand.supports(WebServiceCapability.EMBEDDED_PAGE)) return ExternalOpenResult.Failed
         val profileId = activeProfileId ?: return ExternalOpenResult.Failed
+        lastOpenedWebServiceId = brand.id
         favoritesOnly = false
         destination = DesktopDestination.WEB_SERVICES
         // Inside BURO's own window where the service plays there — Edge WebView2 on Windows — and
@@ -717,10 +728,11 @@ class DesktopAppState(
     ): ExternalOpenResult? {
         val brand = visibleWebServices.firstOrNull { it.id == serviceId } ?: return ExternalOpenResult.Failed
         if (!brand.supports(WebServiceCapability.EMBEDDED_PAGE)) return ExternalOpenResult.Failed
+        lastOpenedWebServiceId = brand.id
         if (engineAvailable) {
             openedWebService = brand
-            // The page belongs to the GoDorama tab, wherever it was opened from — the Home card
-            // included — so the sidebar shows where the viewer is and every other tab stays
+            // The page belongs to the service's own tab, wherever it was opened from — the Home
+            // card included — so the sidebar shows where the viewer is and every other tab stays
             // reachable.
             favoritesOnly = false
             destination = DesktopDestination.WEB_SERVICES
@@ -764,24 +776,25 @@ class DesktopAppState(
     /**
      * Whether the service's page is what the content area shows.
      *
-     * Only while the GoDorama tab is the one selected. It used to be drawn whenever a page was open,
-     * over every destination: once signed in, Início, Filmes, Séries and Pesquisa all showed
-     * GoDorama, and the only way back was its own Fechar button — reported as every tab being stuck
-     * on GoDorama. Leaving the tab now leaves the page; its sign-in is saved as the page goes.
+     * Only while that service's own tab is the one selected. It used to be drawn whenever a page
+     * was open, over every destination: once signed in, Início, Filmes, Séries and Pesquisa all
+     * showed GoDorama, and the only way back was its own Fechar button — reported as every tab
+     * being stuck on GoDorama. Leaving the tab now leaves the page; its sign-in is saved as the
+     * page goes.
      */
     val showsWebServicePage: Boolean
         get() = openedWebService != null && destination == DesktopDestination.WEB_SERVICES
 
     /**
-     * The GoDorama tab: straight to the service's page, where the user signs in once.
+     * A service tab: straight to that service's page, where the user signs in once.
      *
      * No activation step — the tab is the service. Where the embedded browser is missing (a Mac
      * today) the page goes to the system browser and the tab shows a button to open it again.
      */
-    fun openWebServicesPage(): ExternalOpenResult? {
+    fun openWebServicesPage(serviceId: String = WebServices.GODORAMA.id): ExternalOpenResult? {
         favoritesOnly = false
         destination = DesktopDestination.WEB_SERVICES
-        return openWebService(WebServices.GODORAMA.id)
+        return openWebService(serviceId)
     }
 
     /**
@@ -958,8 +971,10 @@ class DesktopAppState(
         userStore.setActiveProfile(activeProfileId)
         favoriteKeys = userStore.favoritesForProfile(activeProfileId)
         webServiceIds = activeProfileId?.let(userStore::webServiceIds).orEmpty()
-        // Another profile's page must not stay open over this one's screen.
+        // Another profile's page must not stay open over this one's screen — and its tab must not
+        // keep showing as selected, whose sign-in it is not.
         openedWebService = null
+        lastOpenedWebServiceId = null
         // Alongside favourites: a reminder belongs to whoever asked for it, so the new profile must
         // not inherit the previous one's marked titles.
         reminders = userStore.remindersForProfile(activeProfileId)

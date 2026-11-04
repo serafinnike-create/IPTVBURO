@@ -171,13 +171,31 @@ class MainViewModelNavigationTest {
         val viewModel = createViewModel(FakeCatalogRepository())
         runCurrent()
         assertTrue("o perfil adulto padrao nao chegou", viewModel.state.value.canUseWebServices)
-        assertEquals(listOf(WebServices.GODORAMA), viewModel.state.value.visibleWebServices)
+        assertEquals(
+            listOf(WebServices.GODORAMA, WebServices.NO_PRIVADO),
+            viewModel.state.value.visibleWebServices,
+        )
 
-        viewModel.selectSection(AppSection.WEB_SERVICES)
+        viewModel.selectSection(AppSection.GODORAMA)
         runCurrent()
 
         assertEquals(
             AppContent.WebService(serviceId = WebServices.GODORAMA.id, clearSessionFirst = false),
+            viewModel.state.value.content,
+        )
+    }
+
+    /** The No Privado tab opens its own page, not GoDorama's — the tabs are separate services. */
+    @Test
+    fun `the No Privado tab opens its own page straight away`() = runTest {
+        val viewModel = createViewModel(FakeCatalogRepository())
+        runCurrent()
+
+        viewModel.selectSection(AppSection.NO_PRIVADO)
+        runCurrent()
+
+        assertEquals(
+            AppContent.WebService(serviceId = WebServices.NO_PRIVADO.id, clearSessionFirst = false),
             viewModel.state.value.content,
         )
     }
@@ -188,7 +206,7 @@ class MainViewModelNavigationTest {
         runCurrent()
         val before = viewModel.state.value.content
 
-        viewModel.openWebService("noprivado")
+        viewModel.openWebService("privatissimo")
         runCurrent()
 
         assertEquals(before, viewModel.state.value.content)
@@ -200,7 +218,7 @@ class MainViewModelNavigationTest {
         val viewModel = createViewModel(FakeCatalogRepository(), webServiceSettings = settings)
         runCurrent()
 
-        viewModel.selectSection(AppSection.WEB_SERVICES)
+        viewModel.selectSection(AppSection.GODORAMA)
         runCurrent()
 
         assertEquals(

@@ -894,22 +894,28 @@ class MainViewModel @Inject constructor(
             AppSection.SEARCH -> updateDestination(section, AppContent.SectionPlaceholder(section))
 
             // The tab is the service: straight to its page, where the user signs in once. Adult
-            // profiles only, here as well as in the menus that offer it.
-            AppSection.WEB_SERVICES -> {
-                val state = mutableState.value
-                val profile = state.activeProfile
-                val brand = state.visibleWebServices.firstOrNull()
-                if (profile != null && brand != null) {
-                    viewModelScope.launch {
-                        // Remembered as used, which is what lets a profile with no list open on
-                        // Home next time instead of Fontes.
-                        runCatching { webServiceSettings.setEnabled(profile.id, brand.id, true) }
-                        val clearFirst =
-                            runCatching { webServiceSettings.claimSession(profile.id) }.getOrDefault(true)
-                        updateDestination(section, AppContent.WebService(brand.id, clearFirst))
-                    }
-                }
-            }
+            // profiles only, here as well as in the menus that offer it. Each tab opens its own
+            // brand — GoDorama and No Privado are separate services with separate sign-ins.
+            AppSection.GODORAMA -> openWebServiceTab(AppSection.GODORAMA, WebServices.GODORAMA.id)
+            AppSection.NO_PRIVADO -> openWebServiceTab(AppSection.NO_PRIVADO, WebServices.NO_PRIVADO.id)
+        }
+    }
+
+    /**
+     * A service tab pressed on the ribbon or in the drawer: straight to that service's page.
+     *
+     * Remembered as used, which is what lets a profile with no list open on Home next time instead
+     * of Fontes; the session claim decides whether another profile's sign-in must be cleared first.
+     */
+    private fun openWebServiceTab(section: AppSection, serviceId: String) {
+        val state = mutableState.value
+        val profile = state.activeProfile ?: return
+        val brand = state.visibleWebServices.firstOrNull { it.id == serviceId } ?: return
+        viewModelScope.launch {
+            runCatching { webServiceSettings.setEnabled(profile.id, brand.id, true) }
+            val clearFirst =
+                runCatching { webServiceSettings.claimSession(profile.id) }.getOrDefault(true)
+            updateDestination(section, AppContent.WebService(brand.id, clearFirst))
         }
     }
 

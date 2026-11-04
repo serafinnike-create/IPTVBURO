@@ -430,7 +430,10 @@ enum class AppSection {
      * Its own destination rather than only a row inside Fontes, which is where nobody looked for
      * it. Shown to adult profiles only.
      */
-    WEB_SERVICES,
+    GODORAMA,
+
+    /** No Privado: the same deal as GoDorama — its own tab, straight to its page. Adult profiles only. */
+    NO_PRIVADO,
     DOWNLOADS,
     SEARCH,
     PROFILE,

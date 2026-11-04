@@ -599,7 +599,7 @@ private fun DiscoveryDecisionActions(
             onClick = { onDecide(DiscoveryVerdict.KEPT) },
         )
         DecisionButton(
-            label = "▶",
+            label = "ⓘ",
             caption = text.details,
             tint = BuroColors.TextMuted,
             onClick = onOpenDetails,

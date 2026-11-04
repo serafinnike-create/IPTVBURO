@@ -1,18 +1,20 @@
 package com.lucasserafin94.iptvburo.desktop.ui
 
 import com.lucasserafin94.iptvburo.desktop.user.DesktopLanguage
+import com.lucasserafin94.iptvburo.domain.model.WebServices
 
 /**
- * Words for the web services (GoDorama): the settings switch, the 18+ question, the home card, the
- * page's own window and the "only GoDorama" choice at setup.
+ * Words for the web services (GoDorama and No Privado): the settings switch, the 18+ question,
+ * the home card, the page's own window and the "only %s" choice at setup.
  *
  * Kept apart from [DesktopStrings] so one small feature does not add a field to each of its five
- * very large constructors. Every `%s` is the service's name.
+ * very large constructors. Every `%s` is the service's name; [taglines] is keyed by the service's
+ * id, because each brand has its own line and they share every other word.
  */
 data class WebServiceStrings(
     val sectionTitle: String,
     val sectionHint: String,
-    val tagline: String,
+    val taglines: Map<String, String>,
     val open: String,
     val enable: String,
     val disable: String,
@@ -31,6 +33,9 @@ data class WebServiceStrings(
     val offerBody: String,
     val offerLater: String,
 ) {
+    /** The one-line description of a service's card; empty where this language has none. */
+    fun taglineFor(brandId: String): String = taglines[brandId].orEmpty()
+
     fun format(
         template: String,
         name: String,
@@ -50,7 +55,10 @@ data class WebServiceStrings(
             WebServiceStrings(
                 sectionTitle = "Serviços",
                 sectionHint = "Serviços que você assina à parte e assiste na página deles, dentro do BURO. Você entra com a sua conta; o BURO não guarda a sua senha.",
-                tagline = "Microdramas em vídeo vertical",
+                taglines = mapOf(
+                    WebServices.GODORAMA.id to "Microdramas em vídeo vertical",
+                    WebServices.NO_PRIVADO.id to "Conteúdo de criadoras privadas, tudo em um só lugar",
+                ),
                 open = "Abrir %s",
                 enable = "Ativar %s",
                 disable = "Desativar",
@@ -74,7 +82,10 @@ data class WebServiceStrings(
             WebServiceStrings(
                 sectionTitle = "Services",
                 sectionHint = "Services you subscribe to separately and watch on their own page, inside BURO. You sign in with your own account; BURO never stores your password.",
-                tagline = "Short vertical drama series",
+                taglines = mapOf(
+                    WebServices.GODORAMA.id to "Short vertical drama series",
+                    WebServices.NO_PRIVADO.id to "Private creator content, all in one place",
+                ),
                 open = "Open %s",
                 enable = "Turn on %s",
                 disable = "Turn off",
@@ -98,7 +109,10 @@ data class WebServiceStrings(
             WebServiceStrings(
                 sectionTitle = "Dienste",
                 sectionHint = "Dienste, die du separat abonnierst und auf ihrer eigenen Seite in BURO ansiehst. Du meldest dich mit deinem eigenen Konto an; BURO speichert dein Passwort nie.",
-                tagline = "Kurze Serien im Hochformat",
+                taglines = mapOf(
+                    WebServices.GODORAMA.id to "Kurze Serien im Hochformat",
+                    WebServices.NO_PRIVADO.id to "Erwachseneninhalte von privaten Creatorn, an einem Ort",
+                ),
                 open = "%s öffnen",
                 enable = "%s aktivieren",
                 disable = "Deaktivieren",
@@ -122,7 +136,10 @@ data class WebServiceStrings(
             WebServiceStrings(
                 sectionTitle = "Servizi",
                 sectionHint = "Servizi a cui ti abboni a parte e che guardi sulla loro pagina, dentro BURO. Accedi con il tuo account; BURO non salva mai la tua password.",
-                tagline = "Serie brevi in verticale",
+                taglines = mapOf(
+                    WebServices.GODORAMA.id to "Serie brevi in verticale",
+                    WebServices.NO_PRIVADO.id to "Contenuti di creator privati, tutto in un unico posto",
+                ),
                 open = "Apri %s",
                 enable = "Attiva %s",
                 disable = "Disattiva",
@@ -146,7 +163,10 @@ data class WebServiceStrings(
             WebServiceStrings(
                 sectionTitle = "Servicios",
                 sectionHint = "Servicios que contratas aparte y ves en su propia página, dentro de BURO. Entras con tu cuenta; BURO nunca guarda tu contraseña.",
-                tagline = "Microdramas en vídeo vertical",
+                taglines = mapOf(
+                    WebServices.GODORAMA.id to "Microdramas en vídeo vertical",
+                    WebServices.NO_PRIVADO.id to "Contenido de creadoras privadas, todo en un solo lugar",
+                ),
                 open = "Abrir %s",
                 enable = "Activar %s",
                 disable = "Desactivar",

@@ -214,7 +214,11 @@ fun WebServicesPage(
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                 )
-                Text(text = text.tagline, color = BuroColors.TextMuted, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = text.taglineFor(brand.id),
+                    color = BuroColors.TextMuted,
+                    style = MaterialTheme.typography.titleMedium,
+                )
                 Text(
                     text = text.format(text.historyNote, brand.displayName),
                     color = BuroColors.TextMuted,

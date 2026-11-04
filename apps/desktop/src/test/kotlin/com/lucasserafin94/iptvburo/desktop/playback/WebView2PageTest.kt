@@ -9,8 +9,11 @@ import kotlin.test.assertTrue
 
 class WebView2PageTest {
     @Test
-    fun `only GoDorama opens inside the app`() {
-        assertEquals(setOf(WebServices.GODORAMA.id), WebView2Page.IN_APP_SERVICES)
+    fun `GoDorama and No Privado open inside the app, nothing else by default`() {
+        assertEquals(
+            setOf(WebServices.GODORAMA.id, WebServices.NO_PRIVADO.id),
+            WebView2Page.IN_APP_SERVICES,
+        )
         val other = WebServices.GODORAMA.copy(id = "another", homeUrl = "https://another.example/", allowedHosts = setOf("another.example"))
 
         assertFalse(WebView2Page.usableFor(other), "a service nobody added was given an in-app window")

@@ -27,11 +27,11 @@ import javax.swing.JPanel
 import javax.swing.SwingUtilities
 
 /**
- * GoDorama inside the app on Windows, through Microsoft Edge WebView2.
+ * A web service's page inside the app on Windows, through Microsoft Edge WebView2.
  *
  * The embedded Chromium the trailers use is the open-source build: no licensed video codecs, no
  * Widevine, and GoDorama refuses to play there. WebView2 is the Edge engine Windows itself ships,
- * with both, so the episodes play inside BURO's own window.
+ * with both, so the episodes play inside BURO's own window; No Privado opens through it as well.
  *
  * Each BURO profile gets its own WebView2 data folder, which keeps its sign-in between launches and
  * keeps one adult out of another's account. Nothing in that folder is read by BURO; the engine owns
@@ -124,10 +124,10 @@ internal class WebView2Page(
         /**
          * The services that open inside the app.
          *
-         * GoDorama only. A service is added here deliberately, one at a time, rather than every
-         * registered service inheriting an in-app window by default.
+         * GoDorama and No Privado only. A service is added here deliberately, one at a time,
+         * rather than every registered service inheriting an in-app window by default.
          */
-        internal val IN_APP_SERVICES: Set<String> = setOf(WebServices.GODORAMA.id)
+        internal val IN_APP_SERVICES: Set<String> = setOf(WebServices.GODORAMA.id, WebServices.NO_PRIVADO.id)
 
         private const val USER_DATA_FOLDER_VARIABLE = "WEBVIEW2_USER_DATA_FOLDER"
         private const val SIGN_OUT_PATH = "/logout"

@@ -53,6 +53,8 @@ Revender por créditos o acesso a conteúdo que as criadoras vendem nas própria
 
 A proteção adulta não resolve, porque o problema é a origem do conteúdo, não quem o vê. A decisão será revista se houver documento de licença ou contrato com as criadoras ou estúdios.
 
+> **Revisão — 4 de novembro de 2026**: o dono aceitou o risco jurídico e pediu a integração do NoPrivado com o mesmo padrão de página embutida: login na própria página, senha nunca vista pelo BURO. Ele agora é um segundo serviço web ao lado do GoDorama — guia própria no Android/TV e item próprio na barra lateral do desktop —, com a confirmação 18+ mantida por padrão. A questão da origem do conteúdo segue em aberto.
+
 ## Limitações conhecidas
 
 - **Mac**: abre no navegador do sistema, porque o Chromium embutido só existe no instalador Windows.

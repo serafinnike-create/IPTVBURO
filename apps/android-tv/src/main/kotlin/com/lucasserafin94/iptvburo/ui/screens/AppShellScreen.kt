@@ -101,6 +101,7 @@ import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Close
@@ -1152,7 +1153,8 @@ private fun AppSection.isRibbonDestination(offlineSupported: Boolean): Boolean =
         AppSection.HISTORY,
         AppSection.REMINDERS,
         AppSection.SUBSCRIPTIONS,
-        AppSection.WEB_SERVICES,
+        AppSection.GODORAMA,
+        AppSection.NO_PRIVADO,
         AppSection.SOURCES,
         AppSection.SETTINGS,
         -> true
@@ -1493,7 +1495,9 @@ private fun mobileDestinations(
             add(MobileDestination(AppSection.SUBSCRIPTIONS, Icons.Rounded.VideoLibrary))
         }
         if (webServicesVisible) {
-            add(MobileDestination(AppSection.WEB_SERVICES, Icons.Rounded.OndemandVideo))
+            // One entry per service: each tab opens its own page, where the user signs in once.
+            add(MobileDestination(AppSection.GODORAMA, Icons.Rounded.OndemandVideo))
+            add(MobileDestination(AppSection.NO_PRIVADO, Icons.Rounded.Lock))
         }
         if (offlineSupported) {
             add(MobileDestination(AppSection.DOWNLOADS, Icons.Rounded.Folder))
@@ -1593,7 +1597,8 @@ private fun AppSection.ribbonLabelResource(): Int =
         AppSection.HISTORY -> R.string.nav_history
         AppSection.REMINDERS -> R.string.nav_reminders
         AppSection.SUBSCRIPTIONS -> R.string.nav_subscriptions
-        AppSection.WEB_SERVICES -> R.string.nav_godorama
+        AppSection.GODORAMA -> R.string.nav_godorama
+        AppSection.NO_PRIVADO -> R.string.nav_noprivado
         AppSection.DOWNLOADS -> R.string.buro_nav_downloads
         AppSection.SEARCH -> R.string.buro_nav_search
         AppSection.PROFILE -> R.string.buro_nav_profile

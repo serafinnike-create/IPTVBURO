@@ -21,16 +21,20 @@ import kotlin.test.assertTrue
 import okhttp3.OkHttpClient
 
 /**
- * GoDorama through [DesktopAppState]: who sees it, and the "only GoDorama" setup.
+ * Web services (GoDorama and No Privado) through [DesktopAppState]: who sees them, which service's
+ * tab stays selected, and the "use only one" setup.
  *
- * No network and no browser engine: what is asserted is who the state lets near the service, which
+ * No network and no browser engine: what is asserted is who the state lets near the services, which
  * is decided before either is touched.
  */
 class WebServiceStateTest {
     @Test
     fun `the adult profile has GoDorama with nothing to turn on, and Kids never sees it`() =
         withState { state, store ->
-            assertEquals(listOf(WebServices.GODORAMA), state.visibleWebServices)
+            assertEquals(
+                listOf(WebServices.GODORAMA, WebServices.NO_PRIVADO),
+                state.visibleWebServices,
+            )
             assertTrue(state.canUseWebServices)
 
             // Stored for the Kids profile by any route at all, it is still not drawn.
@@ -55,7 +59,7 @@ class WebServiceStateTest {
     @Test
     fun `an unknown service id is refused`() =
         withState { state, store ->
-            state.setWebServiceEnabled("noprivado", true)
+            state.setWebServiceEnabled("privatissimo", true)
 
             assertTrue(store.webServiceIds(ADULT.id).isEmpty())
         }
@@ -70,7 +74,11 @@ class WebServiceStateTest {
             assertEquals(null, created.sourceId)
             assertEquals(created.id, state.activeProfileId)
             assertEquals(setOf(WebServices.GODORAMA.id), store.webServiceIds(created.id))
-            assertEquals(listOf(WebServices.GODORAMA), state.visibleWebServices)
+            // Both services are visible to an adult profile; only GoDorama was enabled.
+            assertEquals(
+                listOf(WebServices.GODORAMA, WebServices.NO_PRIVADO),
+                state.visibleWebServices,
+            )
         }
 
     /**
@@ -110,6 +118,31 @@ class WebServiceStateTest {
             state.selectProfile(SECOND_ADULT.id)
 
             assertEquals(null, state.openedWebService, "one adult's GoDorama stayed open for another")
+        }
+
+    /**
+     * The two service tabs share one destination; the name of what was last opened is what tells
+     * them apart in the sidebar.
+     */
+    @Test
+    fun `the last opened service keeps its tab selected and clears on profile switch`() =
+        withState { state, _ ->
+            assertEquals(null, state.lastOpenedWebServiceId)
+
+            state.openWebService(WebServices.NO_PRIVADO.id, engineAvailable = true)
+            assertEquals(DesktopDestination.WEB_SERVICES, state.destination)
+            assertEquals(WebServices.NO_PRIVADO.id, state.lastOpenedWebServiceId)
+
+            // GoDorama's tab still opens its own page and takes the highlight back.
+            state.openWebService(WebServices.GODORAMA.id, engineAvailable = true)
+            assertEquals(WebServices.GODORAMA.id, state.lastOpenedWebServiceId)
+
+            state.selectProfile(SECOND_ADULT.id)
+            assertEquals(
+                null,
+                state.lastOpenedWebServiceId,
+                "the previous profile's service kept showing as selected",
+            )
         }
 
     private fun withState(block: (DesktopAppState, DesktopUserStore) -> Unit) {

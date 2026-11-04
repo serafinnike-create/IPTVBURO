@@ -91,7 +91,25 @@ object WebServices {
             asksAgeConfirmation = false,
         )
 
-    val all: List<WebServiceBrand> = listOf(GODORAMA)
+    /**
+     * Adult content from private creators, watched on noprivado.com.
+     *
+     * The same shape as GoDorama: embedded page and account history only — the user signs in with
+     * their own account on the service's page, and BURO never sees the password. Its terms ask for
+     * 18 or over, so it stays off Kids and Guest profiles; unlike GoDorama it keeps the default
+     * 18+ confirmation when turning it on, which is a product choice the owner made for this one.
+     */
+    val NO_PRIVADO =
+        WebServiceBrand(
+            id = "noprivado",
+            displayName = "No Privado",
+            homeUrl = "https://noprivado.com/",
+            allowedHosts = setOf("noprivado.com"),
+            minimumAge = 18,
+            capabilities = setOf(WebServiceCapability.EMBEDDED_PAGE, WebServiceCapability.ACCOUNT_HISTORY),
+        )
+
+    val all: List<WebServiceBrand> = listOf(GODORAMA, NO_PRIVADO)
 
     fun byId(id: String?): WebServiceBrand? = all.firstOrNull { brand -> brand.id == id }
 }
