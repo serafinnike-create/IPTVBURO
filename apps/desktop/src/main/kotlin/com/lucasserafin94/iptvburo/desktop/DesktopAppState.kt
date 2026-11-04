@@ -666,12 +666,14 @@ class DesktopAppState(
     }
 
     /**
-     * Opens a service this profile may see, in a window of its own (see [AppWindowLauncher]).
+     * Opens a service this profile may see.
      *
-     * Not in the embedded browser: that engine has no licensed video codecs and no Widevine, and
-     * the service refused to play anything there — "Este vídeo não pode ser reproduzido neste
-     * navegador". Edge or Chrome in app mode plays it, keeps this profile's sign-in in a folder of
-     * its own, and looks like part of the app. With neither installed, the default browser opens.
+     * Not in the embedded Chromium: it has no licensed video codecs and no Widevine, and the
+     * service refused to play anything there — "Este vídeo não pode ser reproduzido neste
+     * navegador". Inside the app through Edge WebView2 where that is available (see
+     * [WebServiceBrowser.playsInApp]); otherwise Edge or Chrome in app mode (see
+     * [AppWindowLauncher]), which plays it, keeps this profile's sign-in in a folder of its own, and
+     * looks like part of the app. With neither installed, the default browser opens.
      */
     fun openWebService(serviceId: String): ExternalOpenResult? {
         val brand = visibleWebServices.firstOrNull { it.id == serviceId } ?: return ExternalOpenResult.Failed
@@ -679,6 +681,12 @@ class DesktopAppState(
         val profileId = activeProfileId ?: return ExternalOpenResult.Failed
         favoritesOnly = false
         destination = DesktopDestination.WEB_SERVICES
+        // Inside BURO's own window where the service plays there — Edge WebView2 on Windows — and
+        // in an Edge or Chrome window of its own everywhere else.
+        if (WebServiceBrowser.playsInApp(brand)) {
+            openedWebService = brand
+            return null
+        }
         if (AppWindowLauncher.open(brand.homeUrl, webServiceProfileDirectory(profileId, brand.id))) return null
         return runCatching { openUriExternally(URI(brand.homeUrl)) }.getOrDefault(ExternalOpenResult.Failed)
     }

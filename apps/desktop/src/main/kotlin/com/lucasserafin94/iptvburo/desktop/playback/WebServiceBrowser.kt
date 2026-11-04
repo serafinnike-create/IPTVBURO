@@ -44,8 +44,17 @@ class WebServiceBrowser(
     private var client: CefClient? = null
     private var browser: CefBrowser? = null
 
+    /** Edge WebView2, where the service plays in it on this machine; see [WebView2Page]. */
+    private val webView2: WebView2Page? =
+        if (WebView2Page.usableFor(brand)) WebView2Page(brand, profileId) else null
+
     /** The panel showing the service, or null when the engine is unavailable. */
-    fun createComponent(): JPanel? =
+    fun createComponent(): JPanel? {
+        webView2?.let { page -> return page.createComponent() }
+        return createChromiumComponent()
+    }
+
+    private fun createChromiumComponent(): JPanel? =
         runCatching {
             val app = TrailerBrowser.engine() ?: return null
             restoreSession()
@@ -143,6 +152,10 @@ class WebServiceBrowser(
 
     /** Signs out: forgets the saved session, clears the engine's cookies and reloads the start page. */
     fun signOut() {
+        webView2?.let { page ->
+            page.signOut()
+            return
+        }
         sessions.clear(profileId, brand)
         deleteEngineCookies("signed out")
         browser?.loadURL(brand.homeUrl)
@@ -159,6 +172,10 @@ class WebServiceBrowser(
      */
     fun dispose() {
         if (!disposed.compareAndSet(false, true)) return
+        webView2?.let { page ->
+            page.dispose()
+            return
+        }
         saveSession()
         browser?.let { live ->
             runCatching { live.stopLoad() }
@@ -253,6 +270,12 @@ class WebServiceBrowser(
     companion object {
         /** Whether the page can be shown in the app on this machine. */
         fun isAvailable(): Boolean = TrailerBrowser.isAvailable()
+
+        /**
+         * Whether [brand] plays inside the app here: only through WebView2, because the embedded
+         * Chromium has no licensed video codecs and the service refuses to play in it.
+         */
+        fun playsInApp(brand: WebServiceBrand): Boolean = WebView2Page.usableFor(brand)
 
         /**
          * Whose GoDorama cookies the process-wide engine holds now, as "profile/service".

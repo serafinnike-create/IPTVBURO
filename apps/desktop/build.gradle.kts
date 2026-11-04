@@ -378,6 +378,11 @@ dependencies {
     implementation(project(":packages:xtream-client"))
     implementation(project(":packages:metadata-client"))
     implementation(project(":packages:sync-client"))
+    // Edge WebView2 inside a Swing panel, for a web service that has to play licensed video in the
+    // app (GoDorama): the embedded Chromium has no H.264/AAC and no Widevine. MIT. 1.12.0 rather
+    // than an older one: earlier releases hang when a view is removed or disposed, which is what
+    // leaving the tab or switching profile does.
+    implementation("ca.weblite:webview:1.12.0")
     // Chromium, for playing trailers inside the app. YouTube refuses to play anywhere except a real
     // browser engine: VLC's own youtube module reports "Couldn't extract youtube video URL" against
     // the current site, and no amount of URL handling gets around that.
