@@ -734,6 +734,34 @@ class DesktopAppState(
     }
 
     /**
+     * The services this profile is signed in to, for Home.
+     *
+     * A service's tile appears on Início only once the viewer has an account with it — the way a
+     * streaming service does — rather than as an offer to everyone. Recorded when the service's own
+     * page sees a sign-in complete, and cleared by "Sair da conta" (see WebServiceSignIns).
+     */
+    val signedInWebServices: List<WebServiceBrand>
+        get() =
+            visibleWebServices.filter { brand ->
+                brand.id in webServiceIds &&
+                    // Only where the app itself saw the sign-in, which is the services that open in
+                    // its own WebView2 page; a stored switch alone does not put a tile on Home.
+                    brand.id in com.lucasserafin94.iptvburo.desktop.playback.WebView2Page.IN_APP_SERVICES
+            }
+
+    /** A profile signed in to a service, or out of it, on the service's own page. */
+    private fun recordWebServiceSignIn(
+        profileId: String,
+        serviceId: String,
+        signedIn: Boolean,
+    ) {
+        if (profiles.none { profile -> profile.id == profileId }) return
+        if (WebServices.byId(serviceId) == null) return
+        userStore.setWebServiceEnabled(profileId, serviceId, signedIn)
+        if (profileId == activeProfileId) webServiceIds = userStore.webServiceIds(profileId)
+    }
+
+    /**
      * Whether the service's page is what the content area shows.
      *
      * Only while the GoDorama tab is the one selected. It used to be drawn whenever a page was open,
@@ -8370,6 +8398,8 @@ class DesktopAppState(
         // Only on a device that already joined a household: one that never asked for sync never
         // touches the network for it.
         if (sync.isMember) startSyncLoop()
+        // The service pages report a sign-in here, which is what puts a service's tile on Home.
+        com.lucasserafin94.iptvburo.desktop.playback.WebServiceSignIns.listener = ::recordWebServiceSignIn
     }
 
     /** What the sync settings show. */

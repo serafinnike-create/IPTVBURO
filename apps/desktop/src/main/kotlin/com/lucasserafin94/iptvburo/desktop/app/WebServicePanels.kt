@@ -26,6 +26,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -115,7 +116,9 @@ fun WebServiceOverlay(
 }
 
 /**
- * The services on Home, one card each. Nothing for a profile that has none — Kids included.
+ * The services this profile is signed in to, on Home: one tile each, the way a streaming service
+ * is shown once you have an account with it. Nothing for a profile signed in to none, Kids
+ * included — there is no offer here, only a way back to what the viewer already uses.
  *
  * [onExternalResult] receives what happened when the page had to go to the system browser, so the
  * screen can say so when even that failed.
@@ -126,7 +129,7 @@ fun WebServiceHomeCards(
     onExternalResult: (ExternalOpenResult) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val services = appState.visibleWebServices
+    val services = appState.signedInWebServices
     if (services.isEmpty()) return
     val text = WebServiceStrings.of(appState.language)
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(BuroSpacing.Xs)) {
@@ -138,29 +141,39 @@ fun WebServiceHomeCards(
         )
         Row(horizontalArrangement = Arrangement.spacedBy(BuroSpacing.Sm)) {
             services.forEach { brand ->
-                Column(
+                Box(
                     modifier =
                         Modifier
-                            .width(300.dp)
-                            .background(BuroColors.SurfaceRaised, BuroRadius.Medium)
+                            .width(220.dp)
+                            .height(124.dp)
+                            .clip(BuroRadius.Medium)
+                            .background(
+                                androidx.compose.ui.graphics.Brush.linearGradient(
+                                    listOf(Color(0xFF3A0D24), Color(0xFF12060C)),
+                                ),
+                            )
                             .border(1.dp, BuroColors.BorderSoft, BuroRadius.Medium)
-                            .clickable { appState.openWebService(brand.id)?.let(onExternalResult) }
-                            .padding(BuroSpacing.Md),
+                            .clickable { appState.openWebService(brand.id)?.let(onExternalResult) },
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = brand.displayName,
-                        color = BuroColors.Text,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold,
                     )
-                    Text(text = text.tagline, color = BuroColors.TextMuted, style = MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.height(BuroSpacing.Xs))
-                    Text(
-                        text = text.format(text.open, brand.displayName),
-                        color = BuroColors.Primary,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Box(
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(BuroSpacing.Sm)
+                                .size(34.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(BuroColors.Canvas.copy(alpha = 0.72f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("▶", color = BuroColors.Primary, style = MaterialTheme.typography.titleMedium)
+                    }
                 }
             }
         }

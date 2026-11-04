@@ -43,10 +43,11 @@ import javax.swing.SwingUtilities
  */
 internal class WebView2Page(
     private val brand: WebServiceBrand,
-    profileId: String,
+    private val profileId: String,
 ) {
     private val dataFolder: Path = dataFolderFor(profileId, brand.id)
     private var view: WebViewComponent? = null
+    private val signIn = SignInWatcher()
 
     /** The panel showing the service, or null when WebView2 could not be created. */
     fun createComponent(): JPanel? =
@@ -60,7 +61,13 @@ internal class WebView2Page(
             created.setNavigationHandler(
                 WebViewNavigationHandler { event: WebViewNavigationEvent ->
                     when (val decision = WebServicePolicy.navigation(brand, event.url().orEmpty())) {
-                        WebNavigation.StayInside -> true
+                        WebNavigation.StayInside -> {
+                            // Home shows the service's tile once this profile is signed in to it.
+                            if (signIn.observe(event.url().orEmpty())) {
+                                WebServiceSignIns.report(profileId, brand.id, signedIn = true)
+                            }
+                            true
+                        }
                         is WebNavigation.OpenOutside -> {
                             openOutside(decision.url)
                             false
@@ -99,6 +106,7 @@ internal class WebView2Page(
 
     /** Signs out through the service's own sign-out page, which clears its session for this profile. */
     fun signOut() {
+        WebServiceSignIns.report(profileId, brand.id, signedIn = false)
         val signOut = runCatching { URI(brand.homeUrl).resolve(SIGN_OUT_PATH).toString() }.getOrNull() ?: return
         view?.setUrl(signOut)
     }
