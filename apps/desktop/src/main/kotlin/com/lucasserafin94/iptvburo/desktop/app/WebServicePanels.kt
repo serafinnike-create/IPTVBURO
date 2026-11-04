@@ -57,6 +57,10 @@ fun WebServiceOverlay(
 ) {
     val brand = appState.openedWebService ?: return
     val profileId = appState.activeProfileId ?: return
+    // WebView2 is closed for real while another tab is shown, and made again on the way back.
+    // Shrunk to a pixel and grown again, it kept its old size and showed a white rectangle; it needs
+    // no keeping alive either, since it holds the sign-in in this profile's own data folder.
+    if (!visible && WebServiceBrowser.playsInApp(brand)) return
     val text = WebServiceStrings.of(appState.language)
     val browser = remember(brand.id, profileId) { WebServiceBrowser(brand, profileId) }
     DisposableEffect(browser) { onDispose { browser.dispose() } }
