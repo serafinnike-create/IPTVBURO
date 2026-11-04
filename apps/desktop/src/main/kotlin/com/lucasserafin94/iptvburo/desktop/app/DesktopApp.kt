@@ -1136,6 +1136,15 @@ fun DesktopApp(
                             },
                         webServiceStrings =
                             com.lucasserafin94.iptvburo.desktop.ui.WebServiceStrings.of(appState.language),
+                        // Optional, beside the list; a new profile only, like "Usar só".
+                        onAlsoWebService =
+                            if (appState.editingProfileId == null) {
+                                appState::chooseWebServiceAfterSetup
+                            } else {
+                                null
+                            },
+                        setupServiceStrings =
+                            com.lucasserafin94.iptvburo.desktop.ui.SetupServiceStrings.of(appState.language),
                         onCreate = {
                             profileName, avatarIndex, listLabel, server, username, password,
                             musicPlaylist, metadataKey,

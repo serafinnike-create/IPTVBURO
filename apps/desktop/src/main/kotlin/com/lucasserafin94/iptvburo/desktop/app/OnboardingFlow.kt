@@ -332,6 +332,14 @@ fun AccountSetupGate(
      * question is asked here before this is called.
      */
     onUseOnlyWebService: ((profileName: String, avatarIndex: Int, serviceId: String) -> Unit)? = null,
+    /**
+     * "Também tenho GoDorama": the service to open once the list is set up, or null for none.
+     *
+     * Optional and beside the list, never instead of it — the list is what is required for IPTV.
+     * Null hides the line, which is what editing an existing profile's list wants.
+     */
+    onAlsoWebService: ((serviceId: String?) -> Unit)? = null,
+    setupServiceStrings: com.lucasserafin94.iptvburo.desktop.ui.SetupServiceStrings? = null,
     webServiceStrings: com.lucasserafin94.iptvburo.desktop.ui.WebServiceStrings? = null,
 ) {
     // Hoisted out of this composable so a failed connection can return here with everything the
@@ -690,6 +698,48 @@ fun AccountSetupGate(
                 onValueChange = { metadataKey = it.trim() },
                 label = text.metadataKeyPlaceholder,
             )
+        }
+
+        // Optional services the viewer already pays for, set up beside the list. Ticking one does
+        // nothing now: once the list is ready the service's own page opens, and the viewer signs
+        // in there — BURO never asks for that password.
+        val setupText = setupServiceStrings
+        if (onAlsoWebService != null && setupText != null) {
+            var alsoService by remember { mutableStateOf<String?>(null) }
+            Spacer(Modifier.height(BuroSpacing.Md))
+            Text(
+                text = setupText.optionalTitle,
+                color = BuroColors.TextMuted,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            listOf(com.lucasserafin94.iptvburo.domain.model.WebServices.GODORAMA).forEach { brand ->
+                val chosen = alsoService == brand.id
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = BuroSpacing.Xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = chosen,
+                        onCheckedChange = { checked ->
+                            alsoService = if (checked) brand.id else null
+                            onAlsoWebService(alsoService)
+                        },
+                    )
+                    Spacer(Modifier.width(BuroSpacing.Sm))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = setupText.format(setupText.alsoHave, brand.displayName),
+                            color = BuroColors.Text,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = setupText.format(setupText.alsoHaveHint, brand.displayName),
+                            color = BuroColors.TextMuted,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(BuroSpacing.Lg))

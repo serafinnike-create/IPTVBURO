@@ -1204,6 +1204,24 @@ class DesktopAppState(
      * the 18+ question has been answered on the form before this runs. A list can still be added
      * later from the profile screen, exactly as for anyone else.
      */
+    /**
+     * The service ticked as "Também tenho" during setup, opened once the list is ready.
+     *
+     * Held here rather than acted on at once: the profile it belongs to does not exist until setup
+     * succeeds, and a failed connection must not leave a service page open over the setup form.
+     */
+    private var webServiceAfterSetup: String? = null
+
+    fun chooseWebServiceAfterSetup(serviceId: String?) {
+        webServiceAfterSetup = serviceId?.takeIf { WebServices.byId(it) != null }
+    }
+
+    private fun openWebServiceChosenAtSetup() {
+        val serviceId = webServiceAfterSetup ?: return
+        webServiceAfterSetup = null
+        openWebService(serviceId)
+    }
+
     fun completeSetupWithWebServiceOnly(
         profileName: String,
         avatarIndex: Int,
@@ -1222,9 +1240,12 @@ class DesktopAppState(
         editingProfileId = null
         userStore.saveProfiles(profiles)
         attachPendingPhoto(profile.id)
+        // Also what marks this as a finished setup with no list (see hasWebServiceOnlySetup).
         userStore.setWebServiceEnabled(profile.id, brand.id, true)
         selectProfile(profile.id)
         onboarding = OnboardingStep.Done
+        // Straight to the service's page: signing in there is the one thing left to do.
+        openWebService(brand.id)
     }
 
     fun advanceOnboardingAfterLanguage() {
@@ -1327,6 +1348,7 @@ class DesktopAppState(
             selectProfile(profile.id)
             loadMusicLibrary()
             onboarding = OnboardingStep.Done
+            openWebServiceChosenAtSetup()
         } finally {
             Arrays.fill(server, ZERO_CHAR)
             Arrays.fill(username, ZERO_CHAR)
@@ -1804,6 +1826,7 @@ class DesktopAppState(
         selectProfile(profile.id)
         loadMusicLibrary()
         onboarding = OnboardingStep.Done
+        openWebServiceChosenAtSetup()
     }
 
     fun isFavorite(item: XtreamCatalogItem): Boolean = favoriteKey(item) in favoriteKeys
